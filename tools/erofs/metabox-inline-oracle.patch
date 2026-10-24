@@ -1,0 +1,66 @@
+--- a/lib/data.c
++++ b/lib/data.c
+@@ -70,8 +70,12 @@
+ void erofs_init_metabuf(struct erofs_buf *buf, struct erofs_sb_info *sbi,
+ 			bool in_mbox)
+ {
++	struct erofs_vfile *vf = in_mbox ? NULL : &sbi->bdev;
++
++	if (buf->sbi != sbi || buf->vf != vf)
++		buf->blocknr = ~0ULL;
+ 	buf->sbi = sbi;
+-	buf->vf = in_mbox ? NULL : &sbi->bdev;
++	buf->vf = vf;
+ }
+ 
+ void *erofs_read_metabuf(struct erofs_buf *buf, struct erofs_sb_info *sbi,
+@@ -208,12 +212,37 @@
+ 	return 0;
+ }
+ 
++/* Read a mapped inline payload from its inode metadata address space. */
++static int vort_erofs_read_metabox_data(struct erofs_inode *inode,
++                                      void *output, u64 offset, size_t len)
++{
++    struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
++    const size_t block_size = erofs_blksiz(inode->sbi);
++    char *dst = output;
++
++    while (len) {
++        void *src = erofs_read_metabuf(&buf, inode->sbi, offset, true);
++        size_t size = min_t(size_t, len, block_size - erofs_blkoff(inode->sbi, offset));
++        if (IS_ERR(src))
++            return PTR_ERR(src);
++        memcpy(dst, src, size);
++        dst += size;
++        offset += size;
++        len -= size;
++    }
++    erofs_put_metabuf(&buf);
++    return 0;
++}
++
+ int erofs_read_one_data(struct erofs_inode *inode, struct erofs_map_blocks *map,
+ 			char *buffer, u64 offset, size_t len)
+ {
+ 	struct erofs_sb_info *sbi = inode->sbi;
+ 	struct erofs_map_dev mdev;
+ 	int ret;
++
++	if ((map->m_flags & EROFS_MAP_META) && erofs_inode_in_metabox(inode))
++		return vort_erofs_read_metabox_data(inode, buffer, map->m_pa + offset, len);
+ 
+ 	mdev = (struct erofs_map_dev) {
+ 		.m_deviceid = map->m_deviceid,
+@@ -320,7 +349,10 @@
+ 		return ret;
+ 	}
+ 
+-	ret = erofs_dev_read(sbi, mdev.m_deviceid, raw, mdev.m_pa, map->m_plen);
++	if ((map->m_flags & EROFS_MAP_META) && erofs_inode_in_metabox(inode))
++		ret = vort_erofs_read_metabox_data(inode, raw, map->m_pa, map->m_plen);
++	else
++		ret = erofs_dev_read(sbi, mdev.m_deviceid, raw, mdev.m_pa, map->m_plen);
+ 	if (ret < 0)
+ 		return ret;
+ 

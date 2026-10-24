@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+ANTI_NAMES = ("deleted.txt", "deleted-folder")
+
 
 def run(
     program: Path, *args: str, check: bool = True, cwd: Path | None = None
@@ -54,6 +56,56 @@ def verify_with_seven_zip(
             raise AssertionError(f"7-Zip could not extract Vort entry {name!r}")
 
 
+def verify_with_seven_zip_anti(
+    tool: str, archive: Path, password: str | None = None
+) -> None:
+    password_args = [f"-p{password}"] if password is not None else []
+    listing = subprocess.run(
+        [tool, "l", "-slt", "-bd", *password_args, str(archive)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.splitlines()
+    for name in ANTI_NAMES:
+        starts = [index for index, line in enumerate(listing) if line == f"Path = {name}"]
+        if len(starts) != 1:
+            raise AssertionError(f"7-Zip listing omitted anti-item {name!r}")
+        start = starts[0]
+        end = next(
+            (index for index in range(start + 1, len(listing)) if listing[index].startswith("Path = ")),
+            len(listing),
+        )
+        if "Anti = +" not in listing[start:end]:
+            raise AssertionError(f"7-Zip did not recognize anti-item {name!r}")
+
+
+def verify_with_seven_zip_position(
+    tool: str,
+    archive: Path,
+    expected: int,
+    password: str | None = None,
+) -> None:
+    password_args = [f"-p{password}"] if password is not None else []
+    listing = subprocess.run(
+        [tool, "l", "-slt", "-bd", *password_args, str(archive)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.splitlines()
+    starts = [index for index, line in enumerate(listing) if line == "Path = plain.txt"]
+    if len(starts) != 1:
+        raise AssertionError("7-Zip listing omitted start-position entry")
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(listing)) if listing[index].startswith("Path = ")),
+        len(listing),
+    )
+    if f"Position = {expected}" not in listing[start:end]:
+        raise AssertionError("7-Zip did not recognize Vort StartPos metadata")
+
+
 def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -> None:
     names = ["hello.txt", "second.txt", "empty.txt", "folder", "数据.txt"]
     subprocess.run(
@@ -89,6 +141,45 @@ def create_reference_payload(
     )
 
 
+def create_reference_anti(tool: str, tree: Path, archive: Path) -> None:
+    (tree / "deleted-folder").mkdir()
+    (tree / "deleted.txt").write_bytes(b"")
+    base = tree / "anti-base.7z"
+    subprocess.run(
+        [
+            tool,
+            "a",
+            "-bd",
+            "-y",
+            "-t7z",
+            str(base),
+            "deleted.txt",
+            "deleted-folder",
+        ],
+        check=True,
+        cwd=tree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    (tree / "deleted.txt").rename(tree / "deleted.txt.gone")
+    (tree / "deleted-folder").rename(tree / "deleted-folder.gone")
+    subprocess.run(
+        [
+            tool,
+            "u",
+            "-bd",
+            "-y",
+            str(base),
+            "-u-",
+            f"-up0q3r0x0y0z0w0!{archive.name}",
+        ],
+        check=True,
+        cwd=tree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
 def verify_with_vort(
     cli: Path,
     archive: Path,
@@ -116,14 +207,148 @@ def verify_with_vort(
             raise AssertionError(f"Vort 7z extraction mismatch for {name!r}")
 
 
+def verify_with_vort_anti(
+    cli: Path, archive: Path, password: str | None = None, source: bool = False
+) -> None:
+    command = "list-7z-source-file" if source else "list-7z-file"
+    extract_command = "extract-7z-source-stream-file" if source else "extract-7z-file"
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, command, *list_args).stdout
+    for name in ANTI_NAMES:
+        line = next((item for item in listing.splitlines() if f"name={name}" in item), None)
+        if line is None or "anti=true" not in line:
+            raise AssertionError(f"Vort listing omitted anti-item semantics for {name!r}")
+        output = archive.with_name(f"{archive.stem}-{name}.out")
+        extracted = run(
+            cli,
+            extract_command,
+            str(archive),
+            name,
+            str(output),
+            "0",
+            *(() if password is None else ("536870912", "536870912", password)),
+            check=False,
+        )
+        if extracted.returncode == 0:
+            raise AssertionError(f"Vort extracted anti-item {name!r} as an empty file")
+
+
+def verify_with_vort_source(
+    cli: Path,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, "list-7z-source-file", *list_args).stdout
+    if "seven_zip_source_reads=" not in listing:
+        raise AssertionError("7z source listing omitted positional-read diagnostics")
+    for name in payloads:
+        if f"name={name}" not in listing:
+            raise AssertionError(f"7z source listing omitted {name!r}: {listing}")
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = archive.with_name(f"{archive.stem}-source-{index}.out")
+        extract_args = [
+            "extract-7z-source-file",
+            str(archive),
+            name,
+            str(output),
+            str(len(payload)),
+        ]
+        if password is not None:
+            extract_args.extend(("536870912", "536870912", password))
+        result = run(cli, *extract_args).stdout
+        if "seven_zip_source_reads=" not in result:
+            raise AssertionError("7z source extraction omitted read diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort source extraction mismatch for {name!r}")
+
+
+def verify_with_vort_source_stream(
+    cli: Path,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = archive.with_name(f"{archive.stem}-source-stream-{index}.out")
+        extract_args = [
+            "extract-7z-source-stream-file",
+            str(archive),
+            name,
+            str(output),
+            str(len(payload)),
+        ]
+        if password is not None:
+            extract_args.extend(("536870912", "536870912", password))
+        result = run(cli, *extract_args).stdout
+        if "seven_zip_source_stream_reads=" not in result:
+            raise AssertionError("7z source stream extraction omitted diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort source stream mismatch for {name!r}")
+
+
+def split_bytes(archive: Path, temp: Path, prefix: str, part_size: int) -> list[Path]:
+    raw = archive.read_bytes()
+    parts: list[Path] = []
+    for index, offset in enumerate(range(0, len(raw), part_size), 1):
+        part = temp / f"{prefix}.{index:03d}"
+        part.write_bytes(raw[offset : offset + part_size])
+        parts.append(part)
+    if len(parts) < 2:
+        raise AssertionError("7z split differential requires at least two parts")
+    return parts
+
+
+def verify_with_vort_volumes(
+    cli: Path,
+    parts: list[Path],
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    if len(parts) < 2:
+        raise AssertionError("7z volume differential requires at least two parts")
+    password_arg = password if password is not None else "-"
+    listing = run(
+        cli,
+        "list-7z-volumes",
+        password_arg,
+        *(str(part) for part in parts),
+    ).stdout
+    if f"seven_zip_volume_parts={len(parts)}" not in listing:
+        raise AssertionError("7z volume listing omitted part diagnostics")
+    for name in payloads:
+        if f"name={name}" not in listing:
+            raise AssertionError(f"7z volume listing omitted {name!r}")
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = parts[0].with_name(f"{parts[0].stem}-volume-{index}.out")
+        result = run(
+            cli,
+            "extract-7z-volumes",
+            name,
+            str(output),
+            str(len(payload)),
+            "536870912",
+            "536870912",
+            password_arg,
+            *(str(part) for part in parts),
+        ).stdout
+        if f"seven_zip_volume_parts={len(parts)}" not in result:
+            raise AssertionError("7z volume extraction omitted part diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort volume extraction mismatch for {name!r}")
+
+
 def verify_vort_metadata(
     cli: Path,
     archive: Path,
     name: str,
     expected: dict[str, int],
     defined: tuple[str, ...] = (),
+    password: str | None = None,
 ) -> None:
-    listing = run(cli, "list-7z-file", str(archive)).stdout
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, "list-7z-file", *list_args).stdout
     line = next((item for item in listing.splitlines() if f"name={name}" in item), None)
     if line is None:
         raise AssertionError(f"7z listing omitted metadata entry {name!r}: {listing}")
@@ -140,6 +365,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
     parser.add_argument("--modern-seven-zip", type=Path)
     args = parser.parse_args()
@@ -163,6 +389,11 @@ def main() -> None:
         modern_branch_filters = "ARM64" in methods_output and "RISCV" in methods_output
     external_variants = 0
     vort_writer_variants = 1
+    incremental_writer_variants = 0
+    source_variants = 1
+    stream_variants = 1
+    volume_variants = 1
+    start_position_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -178,6 +409,32 @@ def main() -> None:
             "utf8-目录/数据.txt": "Vort 7z UTF-8\n".encode(),
         }
         verify_with_vort(args.cli, first, expected_vort)
+        verify_with_vort_source(args.cli, first, expected_vort)
+        verify_with_vort_anti(args.cli, first)
+        verify_with_vort_anti(args.cli, first, source=True)
+        verify_with_vort_source_stream(args.cli, first, expected_vort)
+        first_parts = split_bytes(first, temp, "vort-first.7z", 31)
+        verify_with_vort_volumes(args.cli, first_parts, expected_vort)
+        missing = run(
+            args.cli,
+            "list-7z-volumes",
+            "-",
+            *(str(part) for part in first_parts[1:]),
+            check=False,
+        )
+        if missing.returncode == 0:
+            raise AssertionError("7z volume reader accepted a missing first part")
+        reordered = run(
+            args.cli,
+            "list-7z-volumes",
+            "-",
+            str(first_parts[1]),
+            str(first_parts[0]),
+            *(str(part) for part in first_parts[2:]),
+            check=False,
+        )
+        if reordered.returncode == 0:
+            raise AssertionError("7z volume reader accepted reordered parts")
         filetime_epoch = 116_444_736_000_000_000
         verify_vort_metadata(
             args.cli,
@@ -187,17 +444,186 @@ def main() -> None:
                 "creation": filetime_epoch + 10_000_000,
                 "access": filetime_epoch + 20_000_000,
                 "modification": filetime_epoch + 30_000_000,
+                "start_position": 0x1_0000_0001,
                 "attributes": 0x81A4_0020,
             },
         )
 
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
+            verify_with_seven_zip_anti(seven_zip_tool, first)
+            verify_with_seven_zip_position(seven_zip_tool, first, 0x1_0000_0001)
+            start_position_cases += 1
+            anti_tree = temp / "reference-anti"
+            anti_tree.mkdir()
+            reference_anti = anti_tree / "reference-anti.7z"
+            create_reference_anti(seven_zip_tool, anti_tree, reference_anti)
+            verify_with_seven_zip_anti(seven_zip_tool, reference_anti)
+            verify_with_vort_anti(args.cli, reference_anti)
+            verify_with_vort_anti(args.cli, reference_anti, source=True)
+            external_variants += 1
             for compression in ("deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-multi.7z"
                 run(args.writer, str(archive), compression)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 5
+
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, password in (
+                    ("independent", "plain", None),
+                    ("solid", "encrypted", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        f"vort-incremental-{compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        f"vort-incremental-{compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (compression, mode, encryption_mode)
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental 7z output is not deterministic: "
+                            f"{compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    if compression == "copy" and mode == "independent" and password is None:
+                        verify_with_vort_anti(args.cli, archive)
+                        verify_with_seven_zip_anti(seven_zip_tool, archive)
+                        verify_with_seven_zip_position(
+                            seven_zip_tool,
+                            archive,
+                            0x1_0000_0001,
+                        )
+                        start_position_cases += 1
+                    incremental_writer_variants += 1
+
+            for terminal_compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, password in (
+                    ("independent", "plain", None),
+                    ("solid", "encrypted", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        "vort-incremental-terminal-"
+                        f"{terminal_compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        "vort-incremental-terminal-"
+                        f"{terminal_compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (
+                        "lzma2",
+                        mode,
+                        encryption_mode,
+                        terminal_compression,
+                    )
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental terminal metadata is not deterministic: "
+                            f"{terminal_compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    verify_vort_metadata(
+                        args.cli,
+                        archive,
+                        "plain.txt",
+                        {
+                            "creation": filetime_epoch + 10_000_000,
+                            "access": filetime_epoch + 20_000_000,
+                            "modification": filetime_epoch + 30_000_000,
+                            "start_position": 0x1_0000_0001,
+                            "attributes": 0x81A4_0020,
+                        },
+                        password=password,
+                    )
+                    incremental_writer_variants += 1
+
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, terminal_mode, password in (
+                    ("independent", "plain", "inline", None),
+                    ("solid", "encrypted", "lzma2", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        f"vort-incremental-bcj2-{compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        "vort-incremental-bcj2-"
+                        f"{compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (
+                        compression,
+                        mode,
+                        encryption_mode,
+                        terminal_mode,
+                        "bcj2",
+                    )
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental BCJ2 output is not deterministic: "
+                            f"{compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    verify_vort_metadata(
+                        args.cli,
+                        archive,
+                        "plain.txt",
+                        {
+                            "creation": filetime_epoch + 10_000_000,
+                            "access": filetime_epoch + 20_000_000,
+                            "modification": filetime_epoch + 30_000_000,
+                            "start_position": 0x1_0000_0001,
+                            "attributes": 0x81A4_0020,
+                        },
+                        password=password,
+                    )
+                    incremental_writer_variants += 1
 
             for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-solid.7z"
@@ -229,6 +655,8 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             encryption_password = "vort-password-密码"
@@ -328,6 +756,33 @@ def main() -> None:
                 expected_vort,
                 encryption_password,
             )
+            verify_with_vort_source(
+                args.cli,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            stream_variants += 1
+            combined_parts = split_bytes(
+                combined_encrypted,
+                temp,
+                "vort-encrypted-volumes.7z",
+                127,
+            )
+            verify_with_vort_volumes(
+                args.cli,
+                combined_parts,
+                expected_vort,
+                encryption_password,
+            )
+            volume_variants += 1
             vort_writer_variants += 1
 
             for name_compression in (
@@ -357,6 +812,8 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             for metadata_compression in (
@@ -397,6 +854,7 @@ def main() -> None:
                         "creation": filetime_epoch + 10_000_000,
                         "access": filetime_epoch + 20_000_000,
                         "modification": filetime_epoch + 30_000_000,
+                        "start_position": 0x1_0000_0001,
                         "attributes": 0x81A4_0020,
                     },
                 )
@@ -436,6 +894,8 @@ def main() -> None:
                     raise AssertionError(f"Vort BCJ2 {compression} output is not deterministic")
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             tree = temp / "tree"
@@ -489,6 +949,23 @@ def main() -> None:
                 archive = temp / f"{variant}.7z"
                 create_reference(seven_zip_tool, tree, archive, options)
                 verify_with_vort(args.cli, archive, payloads)
+                if variant == "lzma2-solid-encoded":
+                    verify_with_vort_source(args.cli, archive, payloads)
+                    source_variants += 1
+                if variant in (
+                    "copy-plain",
+                    "deflate-plain",
+                    "bzip2-plain",
+                    "lzma-plain",
+                    "lzma2-plain",
+                    "lzma-solid-encoded",
+                    "lzma2-solid-encoded",
+                    "ppmd-order2-plain",
+                    "ppmd-order6-solid",
+                    "ppmd-order16-plain",
+                ):
+                    verify_with_vort_source_stream(args.cli, archive, payloads)
+                    stream_variants += 1
                 if variant == "copy-plain":
                     verify_vort_metadata(
                         args.cli,
@@ -620,6 +1097,12 @@ def main() -> None:
                 )
                 create_reference_payload(reference_tool, filter_tree, archive, payload, options)
                 verify_with_vort(args.cli, archive, {"payload.bin": payload})
+                verify_with_vort_source_stream(
+                    args.cli,
+                    archive,
+                    {"payload.bin": payload},
+                )
+                stream_variants += 1
             external_variants += len(filter_variants)
 
             encrypted_payload = b"7-Zip AES reference payload\n" * 37
@@ -660,7 +1143,112 @@ def main() -> None:
                     {"payload.bin": encrypted_payload},
                     "seven-zip-password",
                 )
+                if variant == "aes-header":
+                    verify_with_vort_source(
+                        args.cli,
+                        archive,
+                        {"payload.bin": encrypted_payload},
+                        "seven-zip-password",
+                    )
+                    source_variants += 1
+                if variant in ("aes-data", "aes-header", "aes-ppmd"):
+                    verify_with_vort_source_stream(
+                        args.cli,
+                        archive,
+                        {"payload.bin": encrypted_payload},
+                        "seven-zip-password",
+                    )
+                    stream_variants += 1
             external_variants += len(encrypted_references)
+
+            encrypted_bcj2_archive = temp / "aes-bcj2.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                encrypted_bcj2_archive,
+                x86_payload,
+                [
+                    "-m0=bcj2",
+                    "-m1=lzma2",
+                    "-mx=5",
+                    "-mhc=off",
+                    "-mhe=off",
+                    "-pseven-zip-password",
+                ],
+            )
+            verify_with_vort(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
+            verify_with_vort_source(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
+            external_variants += 1
+            source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
+            stream_variants += 1
+
+            volume_payload = bytes(range(256)) * 64
+            system_volume_base = temp / "system-volumes.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                system_volume_base,
+                volume_payload,
+                ["-mx=0", "-mhc=off", "-v1k"],
+            )
+            system_parts = sorted(temp.glob("system-volumes.7z.*"))
+            verify_with_vort_volumes(
+                args.cli,
+                system_parts,
+                {"payload.bin": volume_payload},
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                system_parts[0],
+                {"payload.bin": volume_payload},
+            )
+            volume_variants += 1
+
+            encrypted_volume_base = temp / "system-encrypted-volumes.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                encrypted_volume_base,
+                volume_payload,
+                [
+                    "-mx=0",
+                    "-mhe=on",
+                    "-pseven-zip-password",
+                    "-v1k",
+                ],
+            )
+            encrypted_system_parts = sorted(
+                temp.glob("system-encrypted-volumes.7z.*")
+            )
+            verify_with_vort_volumes(
+                args.cli,
+                encrypted_system_parts,
+                {"payload.bin": volume_payload},
+                "seven-zip-password",
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                encrypted_system_parts[0],
+                {"payload.bin": volume_payload},
+                "seven-zip-password",
+            )
+            volume_variants += 1
 
             wrong_password = run(
                 args.cli,
@@ -711,7 +1299,67 @@ def main() -> None:
                 {"payload.bin": x86_payload},
                 encryption_password,
             )
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_filter_archive,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
             vort_writer_variants += 1
+            stream_variants += 1
+
+            encrypted_bcj2_output = temp / "vort-aes-bcj2.7z"
+            run(
+                args.cli,
+                "create-7z-file",
+                str(encrypted_bcj2_output),
+                "payload.bin",
+                str(encrypted_filter_input),
+                "lzma2",
+                "none",
+                "non-solid",
+                "plain",
+                "bcj2",
+                "0",
+                "inline-names",
+                "inline-metadata",
+                "-",
+                "-",
+                "-",
+                "-",
+                encryption_password,
+                "42424242424242424242424242424242",
+                "2424242424242424",
+                "63",
+                "plain-header",
+            )
+            verify_with_vort(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            verify_with_vort_source(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            vort_writer_variants += 1
+            source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            stream_variants += 1
 
             writer_variants = {
                 "lzma2-multichunk": (
@@ -828,9 +1476,15 @@ def main() -> None:
                 raise AssertionError("7z output limit was not enforced")
 
     print(
-        f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
+        f"seven_zip_diff=ok writer_entries={len(expected_vort) + 3} "
+        f"anti_items={len(ANTI_NAMES)} "
+        f"start_position_cases={start_position_cases} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
+        f"incremental_writer_variants={incremental_writer_variants} "
+        f"source_variants={source_variants} "
+        f"stream_variants={stream_variants} "
+        f"volume_variants={volume_variants} "
         f"system_7zip={seven_zip_tool is not None} "
         f"modern_7zip={modern_seven_zip_tool is not None} "
         f"modern_branch_filters={modern_branch_filters}"

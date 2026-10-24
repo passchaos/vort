@@ -1,0 +1,30 @@
+{
+  "status": "tests_passed_compiled_inputs_unchanged_non_input_source_change",
+  "global_source_snapshot_unchanged": false,
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py"
+  ],
+  "compiled_source_projection_before_after_equal": true,
+  "all_compile_inputs_and_recursive_objects_content_verified": true,
+  "changed_sources_absent_from_compiler_inputs": true,
+  "changed_sources_absent_from_run_inputs": true,
+  "raw_result_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/family-rf-result.json",
+  "raw_result_sha256": "f7e67562b0cdfbbcac508819d880bfc4feaf3bb4670ff627e17b8b10f4dbcf9c",
+  "raw_before_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+  "raw_after_snapshot_sha256": "b7a1d6e1ee16f9875c8a3c4b6d007ed0a89c5f9472cec13ad3df18d5d79e0c0e",
+  "raw_log_sha256": "3820c765f04acb2b689cd6e72a0b754cae7116a8c800a6459f36af58893d73c8",
+  "raw_changed_sources_preserved": true,
+  "exact_non_input_change_evidence": {
+    "source_path": "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+    "before_sha256": "c9f1d8ff5badd1324be50bd955921b3f329bfecadf17f1e9b2274c1f5483e1e4",
+    "after_sha256": "66117d4b4f1d858d77ddfeca7d71a968e6a73143cc10c02b39aab363cc57e890",
+    "before_content_archive": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli/source-before.zip",
+    "before_content_archive_entry": "home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+    "after_content_current_file_verified": true,
+    "after_file_mtime_utc": "2026-10-24T10:04:45.896101+00:00",
+    "diff_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/coverage/non-input-python-change.diff",
+    "diff_sha256": "0e1b20872038a3422ac6640dfcd7b5933df72388930f3ff0690dc317b8e821d6",
+    "compiled_input": false,
+    "raw_global_changed_sources_preserved": true
+  }
+}

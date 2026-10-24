@@ -1,6 +1,33 @@
 const std = @import("std");
 const vort = @import("vort");
 
+const QualityCase = struct {
+    quality: u4,
+    mode: vort.BrotliPlannedMode,
+    name: []const u8,
+};
+
+fn parseQualityCase(argument: []const u8) ?QualityCase {
+    if (argument.len < "q0-font-x".len or argument[0] != 'q') return null;
+    const quality_end = std.mem.indexOfScalar(u8, argument, '-') orelse return null;
+    const quality = std.fmt.parseInt(u8, argument[1..quality_end], 10) catch return null;
+    if (quality > 11) return null;
+
+    const mode_and_name = argument[quality_end + 1 ..];
+    const mode_end = std.mem.indexOfScalar(u8, mode_and_name, '-') orelse return null;
+    const mode: vort.BrotliPlannedMode = if (std.mem.eql(u8, mode_and_name[0..mode_end], "generic"))
+        .generic
+    else if (std.mem.eql(u8, mode_and_name[0..mode_end], "text"))
+        .text
+    else if (std.mem.eql(u8, mode_and_name[0..mode_end], "font"))
+        .font
+    else
+        return null;
+    const name = mode_and_name[mode_end + 1 ..];
+    if (name.len == 0) return null;
+    return .{ .quality = @intCast(quality), .mode = mode, .name = name };
+}
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -11,11 +38,290 @@ pub fn main(init: std.process.Init) !void {
     const static_dictionary = std.mem.startsWith(u8, mode, "dictionary-");
     const stable_fast = std.mem.startsWith(u8, mode, "stable-fast-");
     const stable_balanced = std.mem.startsWith(u8, mode, "stable-balanced-");
+    const quality_case = parseQualityCase(mode);
     const dictionary_index_bytes = std.mem.eql(u8, mode, "dictionary-index-bytes");
     if (dictionary_index_bytes) {
         var text: [32]u8 = undefined;
         const written = try std.fmt.bufPrint(&text, "{d}\n", .{vort.brPlannedStaticDictionaryIndexBytes()});
         try std.Io.File.stdout().writeStreamingAll(init.io, written);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q1-wide-literals")) {
+        var payload: [64 * 1024]u8 = undefined;
+        for (&payload, 0..) |*byte, index| byte.* = @intCast(index & 127);
+        const chunks = [_][]const u8{&payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 1, .block_len = payload.len },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q0-adaptive-trees")) {
+        var payload: [32 * 1024]u8 = undefined;
+        for (payload[0 .. 16 * 1024], 0..) |*byte, index|
+            byte.* = "abcd"[index & 3];
+        for (payload[16 * 1024 ..], 0..) |*byte, index|
+            byte.* = "0123456789abcdef"[index & 15];
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            &payload,
+            .{ .quality = 0 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q2-dynamic-commands")) {
+        const encoded = try vort.br.IncrementalTestSupport.encodeQ2DynamicCommands(
+            init.gpa,
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q2-quarter-segmentation")) {
+        const input_len = 64 * 1024;
+        const quarter_len = input_len / 4;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x4a11_7e12;
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if ((index / quarter_len) & 1 == 0)
+                nibble
+            else
+                240 + nibble;
+        }
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 2 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.compressed_meta_block_count +
+            summary.uncompressed_meta_block_count != 4)
+        {
+            return error.InvalidBlockPlan;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q2-grid-segmentation")) {
+        const input_len = 64 * 1024;
+        const boundary = 24 * 1024;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x8a11_7e12;
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if (index < boundary) nibble else 240 + nibble;
+        }
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 2 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.compressed_meta_block_count +
+            summary.uncompressed_meta_block_count != 2)
+        {
+            return error.InvalidBlockPlan;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q2-fine-grid-segmentation")) {
+        const input_len = 64 * 1024;
+        const boundary = 20 * 1024;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x4f1e_7e12;
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if (index < boundary) nibble else 240 + nibble;
+        }
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 2 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.compressed_meta_block_count +
+            summary.uncompressed_meta_block_count != 2)
+        {
+            return error.InvalidBlockPlan;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q2-frontier-segmentation")) {
+        const input_len = 64 * 1024;
+        const first_boundary = 16 * 1024;
+        const second_boundary = 40 * 1024;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x70f0_1e12;
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if (index < first_boundary)
+                nibble
+            else if (index < second_boundary)
+                96 + nibble
+            else
+                240 + nibble;
+        }
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 2 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.compressed_meta_block_count +
+            summary.uncompressed_meta_block_count != 3)
+        {
+            return error.InvalidBlockPlan;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q10-entropy-feedback")) {
+        var payload: [4096]u8 = undefined;
+        var state: u32 = @as(u32, 2) *% @as(u32, 0x9e37_79b9);
+        var position: usize = 0;
+        while (position < payload.len) {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const distances = [_]usize{ 7, 16, 31, 64, 127, 257 };
+            const selected_distance = distances[(state >> 16) % distances.len];
+            if (position >= selected_distance and state & 3 != 0) {
+                const copy_len = @min(payload.len - position, 3 + ((state >> 8) % 61));
+                for (0..copy_len) |i|
+                    payload[position + i] = payload[position + i - selected_distance];
+                position += copy_len;
+            } else {
+                payload[position] = @truncate((state >> 24) & 15);
+                position += 1;
+            }
+        }
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            &payload,
+            .{ .quality = 10 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q10-command-state")) {
+        var payload: [4096]u8 = undefined;
+        var state: u32 = 0x9e37_79b9;
+        var position: usize = 0;
+        while (position < payload.len) {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+            const selected_distance = distances[(state >> 16) % distances.len];
+            if (position >= selected_distance and state & 3 != 0) {
+                const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+                for (0..copy_len) |i|
+                    payload[position + i] = payload[position + i - selected_distance];
+                position += copy_len;
+            } else {
+                payload[position] = @truncate((state >> 24) & 31);
+                position += 1;
+            }
+        }
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            &payload,
+            .{ .quality = 10 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q10-command-state-chunked")) {
+        var payload: [8192]u8 = undefined;
+        var state: u32 = 0x7f4a_7c15;
+        var position: usize = 0;
+        while (position < payload.len) {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+            const selected_distance = distances[(state >> 16) % distances.len];
+            if (position >= selected_distance and state & 3 != 0) {
+                const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+                for (0..copy_len) |i|
+                    payload[position + i] = payload[position + i - selected_distance];
+                position += copy_len;
+            } else {
+                payload[position] = @truncate((state >> 24) & 31);
+                position += 1;
+            }
+        }
+        const chunks = [_][]const u8{ payload[0..4096], payload[4096..] };
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 10, .block_len = 4096 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q10-command-state-extended")) {
+        const payload = "streaming command-state override payload 0123456789abcdef\n" ** 224;
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{
+                .quality = 10,
+                .block_len = payload.len,
+                .command_state_max_input_kib = 13,
+            },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "q8-wide-history")) {
+        const block_len = 64 * 1024;
+        const repeated_len = 8 * 1024;
+        const payload = try init.gpa.alloc(u8, block_len + repeated_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x17b1_7b1d;
+        for (payload[0..block_len]) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 24);
+        }
+        @memcpy(payload[block_len..], payload[0..repeated_len]);
+        const chunks = [_][]const u8{
+            payload[0..block_len],
+            payload[block_len..],
+        };
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 8, .window_bits = 17 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.window_bits != 17 or summary.max_lz77_distance != block_len)
+            return error.InvalidBlockPlan;
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
@@ -69,7 +375,7 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
         defer init.gpa.free(encoded);
         const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
-        if (summary.max_command_block_types != 3 or
+        if (summary.max_command_block_types != 6 or
             summary.max_distance_block_types != 2 or
             summary.max_distance_context_trees != 2) return error.InvalidBlockPlan;
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
@@ -77,6 +383,13 @@ pub fn main(init: std.process.Init) !void {
     }
     if (std.mem.eql(u8, mode, "clustered-command-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeClusteredCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "adaptive-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAdaptiveCommandTypes(init.gpa);
         defer init.gpa.free(fixture.encoded);
         defer init.gpa.free(fixture.payload);
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
@@ -91,6 +404,160 @@ pub fn main(init: std.process.Init) !void {
     }
     if (std.mem.eql(u8, mode, "reuse-first-three-command-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeReuseFirstOfThreeCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "four-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "five-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFiveLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "adaptive-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAdaptiveLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "adaptive-literal-context-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAdaptiveLiteralContextTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "maximum-adaptive-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "maximum-joint-literal-contexts")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeMaximumJointLiteralContexts(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-region-clustered-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "five-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFiveCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-region-clustered-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "four-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFourDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "adaptive-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAdaptiveDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "maximum-adaptive-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "selected-distance-parameters")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSelectedDistanceParameters(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "baseline-distance-parameters")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeBaselineDistanceParameters(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "clustered-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeClusteredDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "alternating-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAlternatingDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "reuse-first-three-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeReuseFirstOfThreeDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "five-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFiveDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-region-clustered-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredDistanceTypes(init.gpa);
         defer init.gpa.free(fixture.encoded);
         defer init.gpa.free(fixture.payload);
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
@@ -153,7 +620,7 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded.items);
         return;
     }
-    const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
+    const name = if (quality_case) |case| case.name else if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
     else if (std.mem.eql(u8, name, "source"))
@@ -180,7 +647,12 @@ pub fn main(init: std.process.Init) !void {
         "abcd"
     else
         return error.InvalidBlockPlan;
-    const encoded = if (stable_fast)
+    const encoded = if (quality_case) |case|
+        try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{
+            .quality = case.quality,
+            .mode = case.mode,
+        })
+    else if (stable_fast)
         try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .fast })
     else if (stable_balanced)
         try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .balanced })

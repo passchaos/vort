@@ -31,7 +31,7 @@ pub fn collect(commands: []const command_plan.Command) CandidateSet {
     var prefix_has_wider_copy = false;
     while (prefix_len < @min(commands.len, 4)) : (prefix_len += 1) {
         const command = commands[prefix_len];
-        if (!command.has_copy or command.dictionary_output_len != 0 or command.copy_len > 5) break;
+        if (!command.has_copy or !command.isLz77() or command.copy_len > 5) break;
         prefix_has_wider_copy = prefix_has_wider_copy or command.copy_len > 3;
     }
     if (prefix_len >= 3 and prefix_has_wider_copy) {
@@ -42,7 +42,7 @@ pub fn collect(commands: []const command_plan.Command) CandidateSet {
     var three_byte_matches: [4]usize = undefined;
     var three_byte_count: usize = 0;
     for (commands, 0..) |command, index| {
-        if (!command.has_copy or command.dictionary_output_len != 0 or command.copy_len != 3) continue;
+        if (!command.has_copy or !command.isLz77() or command.copy_len != 3) continue;
         if (three_byte_count == three_byte_matches.len) return .{};
         three_byte_matches[three_byte_count] = index;
         three_byte_count += 1;
@@ -91,4 +91,14 @@ test "rejects unbounded short-match plans" {
         .has_copy = true,
     };
     try std.testing.expectEqual(@as(usize, 0), collect(&commands).len);
+}
+
+test "only LZ77 copies become short-match candidates" {
+    const commands = [_]command_plan.Command{
+        .{ .insert_start = 0, .insert_len = 0, .copy_len = 3, .has_copy = true, .source = .compound, .dictionary_address = 5 },
+        .{ .insert_start = 3, .insert_len = 0, .copy_len = 3, .has_copy = true, .source = .static, .dictionary_output_len = 3, .dictionary_address = 7 },
+        .{ .insert_start = 6, .insert_len = 0, .copy_len = 3, .distance = 3, .has_copy = true },
+        .{ .insert_start = 9, .insert_len = 0, .copy_len = 3, .distance = 6, .has_copy = true },
+    };
+    try std.testing.expectEqualSlices(u16, &.{ 0b0100, 0b1000, 0b1100 }, collect(&commands).slice());
 }

@@ -1,14 +1,58 @@
 const std = @import("std");
 const core = @import("core.zig");
 const snappy = @import("snappy.zig");
+const incremental_decoder = @import("snappy_framing/incremental_decoder.zig");
+const incremental_encoder = @import("snappy_framing/incremental_encoder.zig");
+const incremental_tests = @import("snappy_framing/incremental_tests.zig");
+const contracts_tests = @import("snappy_framing/incremental/contracts_tests.zig");
+const resources_tests = @import("snappy_framing/incremental/resources_tests.zig");
 
 pub const Error = core.Error || snappy.Error || std.mem.Allocator.Error || error{
     InvalidXerialSnappyStream,
     InvalidHadoopSnappyStream,
+    WorkingMemoryLimitExceeded,
 };
 
 pub const xerial_magic = [_]u8{ 0x82, 'S', 'N', 'A', 'P', 'P', 'Y', 0 };
 pub const xerial_header = xerial_magic ++ [_]u8{ 0, 0, 0, 1, 0, 0, 0, 1 };
+
+const IncrementalCodec = struct {
+    pub const Error = snappy_framing.Error;
+    pub const xerial_header = snappy_framing.xerial_header;
+    pub const BlockPlan = snappy.BlockPlan;
+    pub const BlockCursor = snappy.BlockCursor;
+
+    pub fn planBlock(input: []const u8) snappy_framing.Error!BlockPlan {
+        return snappy.planBlock(input);
+    }
+
+    pub fn invalidStreamError(comptime format: incremental_decoder.Format) snappy_framing.Error {
+        return if (format == .xerial)
+            error.InvalidXerialSnappyStream
+        else
+            error.InvalidHadoopSnappyStream;
+    }
+
+    pub fn initBlockEncoder(allocator: std.mem.Allocator) snappy_framing.Error!snappy.Encoder {
+        return snappy.Encoder.init(allocator);
+    }
+
+    pub fn encodeBlock(encoder: *snappy.Encoder, input: []const u8, output: *std.ArrayList(u8)) snappy_framing.Error!void {
+        try encoder.encodeBlockAppend(output, input);
+    }
+};
+
+const snappy_framing = @This();
+pub const XerialIncrementalDecoder = incremental_decoder.Decoder(IncrementalCodec, .xerial);
+pub const HadoopIncrementalDecoder = incremental_decoder.Decoder(IncrementalCodec, .hadoop);
+pub const XerialIncrementalEncoder = incremental_encoder.Encoder(snappy.Encoder, IncrementalCodec, .xerial);
+pub const HadoopIncrementalEncoder = incremental_encoder.Encoder(snappy.Encoder, IncrementalCodec, .hadoop);
+
+test {
+    _ = incremental_tests;
+    _ = contracts_tests;
+    _ = resources_tests;
+}
 
 pub const XerialOptions = struct {
     block_size: usize = 32 * 1024,
@@ -392,6 +436,64 @@ fn checkedEnd(start: usize, size: usize, limit: usize) Error!usize {
     return end;
 }
 
+fn expectIncrementalDecode(
+    comptime DecoderType: type,
+    encoded: []const u8,
+    expected: []const u8,
+    input_step: usize,
+    output_step: usize,
+) !DecoderType.Snapshot {
+    return expectIncrementalDecodeWithAllocator(
+        DecoderType,
+        std.testing.allocator,
+        encoded,
+        expected,
+        input_step,
+        output_step,
+    );
+}
+
+fn expectIncrementalDecodeWithAllocator(
+    comptime DecoderType: type,
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    expected: []const u8,
+    input_step: usize,
+    output_step: usize,
+) !DecoderType.Snapshot {
+    std.debug.assert(input_step != 0 and output_step != 0);
+    var decoder = DecoderType.initWithOptions(allocator, .{
+        .max_compressed_chunk_len = 1024 * 1024,
+        .max_decoded_chunk_len = 1024 * 1024,
+        .max_output_len = expected.len,
+        .expected_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const input_end = @min(encoded.len, input_offset + input_step);
+        const output_end = @min(output.len, output_offset + output_step);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    while (decoder.snapshot().phase != .done) {
+        const output_end = @min(output.len, output_offset + output_step);
+        const step = try decoder.step("", output[output_offset..output_end]);
+        try std.testing.expect(step.progress.output_written != 0 or step.status == .done);
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, output);
+    return decoder.snapshot();
+}
+
 test "Xerial Snappy writer round trips multiple independent blocks" {
     const allocator = std.testing.allocator;
     const input = "Xerial Snappy payload alpha beta gamma\n" ** 4096;
@@ -418,6 +520,172 @@ test "Hadoop Snappy writer round trips nested blocks and chunks" {
     const decoded = try decodeHadoopAlloc(allocator, encoded);
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "Xerial Snappy incremental decoder accepts fragmented input and output" {
+    const allocator = std.testing.allocator;
+    const input = "Xerial incremental payload alpha beta gamma\n" ** 1024;
+    const encoded = try encodeXerialAlloc(allocator, input, .{ .block_size = 4096 });
+    defer allocator.free(encoded);
+    const archive = try parseXerial(encoded);
+    const snapshot = try expectIncrementalDecode(XerialIncrementalDecoder, encoded, input, 3, 7);
+    try std.testing.expectEqual(archive.chunk_count, snapshot.chunk_count);
+    try std.testing.expectEqual(archive.chunk_count, snapshot.block_count);
+    try std.testing.expectEqual(input.len, snapshot.output_written);
+    try std.testing.expect(snapshot.retained_compressed_capacity <= 1024 * 1024);
+    try std.testing.expect(snapshot.retained_decoded_capacity <= 1024 * 1024);
+}
+
+test "Hadoop Snappy incremental decoder accepts nested fragmented chunks" {
+    const allocator = std.testing.allocator;
+    const input = "Hadoop incremental payload alpha beta gamma\n" ** 2048;
+    const encoded = try encodeHadoopAlloc(allocator, input, .{
+        .block_size = 16 * 1024,
+        .chunk_size = 2048,
+    });
+    defer allocator.free(encoded);
+    const archive = try parseHadoop(encoded);
+    const snapshot = try expectIncrementalDecode(HadoopIncrementalDecoder, encoded, input, 5, 11);
+    try std.testing.expectEqual(archive.block_count, snapshot.block_count);
+    try std.testing.expectEqual(archive.chunk_count, snapshot.chunk_count);
+    try std.testing.expectEqual(input.len, snapshot.output_written);
+    try std.testing.expectEqual(@as(usize, 0), snapshot.hadoop_block_expected);
+    try std.testing.expectEqual(@as(usize, 0), snapshot.hadoop_block_decoded);
+}
+
+test "Snappy ecosystem incremental decoders handle backpressure reset and limits" {
+    const allocator = std.testing.allocator;
+    const payload = "incremental backpressure payload" ** 32;
+    const xerial = try encodeXerialAlloc(allocator, payload, .{ .block_size = payload.len });
+    defer allocator.free(xerial);
+
+    var xerial_decoder = XerialIncrementalDecoder.initWithOptions(allocator, .{
+        .max_compressed_chunk_len = xerial.len,
+        .max_decoded_chunk_len = payload.len,
+        .expected_output_len = payload.len,
+    });
+    defer xerial_decoder.deinit();
+    const blocked = try xerial_decoder.step(xerial, &.{});
+    try std.testing.expectEqual(core.StepResult.Status.need_output, blocked.status);
+    try std.testing.expectEqual(xerial.len, blocked.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), blocked.progress.output_written);
+    try xerial_decoder.finish();
+    var xerial_output: [payload.len]u8 = undefined;
+    const drained = try xerial_decoder.step("", &xerial_output);
+    try std.testing.expectEqual(core.StepResult.Status.done, drained.status);
+    try std.testing.expectEqualSlices(u8, payload, &xerial_output);
+    const retained = xerial_decoder.snapshot();
+    xerial_decoder.reset();
+    try std.testing.expectEqual(XerialIncrementalDecoder.Phase.stream_header, xerial_decoder.snapshot().phase);
+    try std.testing.expectEqual(retained.retained_compressed_capacity, xerial_decoder.snapshot().retained_compressed_capacity);
+    try std.testing.expectEqual(retained.retained_decoded_capacity, xerial_decoder.snapshot().retained_decoded_capacity);
+
+    var compressed_limited = XerialIncrementalDecoder.initWithOptions(allocator, .{ .max_compressed_chunk_len = 1 });
+    defer compressed_limited.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, compressed_limited.step(xerial, &.{}));
+    try std.testing.expectEqualStrings("OutputLimitExceeded", compressed_limited.diagnostics().last_error_name);
+
+    var decoded_limited = XerialIncrementalDecoder.initWithOptions(allocator, .{ .max_decoded_chunk_len = payload.len - 1 });
+    defer decoded_limited.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, decoded_limited.step(xerial, &.{}));
+
+    const hadoop = try encodeHadoopAlloc(allocator, payload, .{ .block_size = payload.len, .chunk_size = payload.len });
+    defer allocator.free(hadoop);
+    var hadoop_limited = HadoopIncrementalDecoder.initWithOptions(allocator, .{ .max_output_len = payload.len - 1 });
+    defer hadoop_limited.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, hadoop_limited.step(hadoop, &.{}));
+}
+
+test "Snappy ecosystem incremental decoders reject truncation and size mismatch" {
+    const allocator = std.testing.allocator;
+    const payload = "truncation payload" ** 16;
+    const xerial = try encodeXerialAlloc(allocator, payload, .{});
+    defer allocator.free(xerial);
+    var xerial_decoder = XerialIncrementalDecoder.init(allocator);
+    defer xerial_decoder.deinit();
+    _ = try xerial_decoder.step(xerial[0 .. xerial.len - 1], &.{});
+    try std.testing.expectError(error.TruncatedFrame, xerial_decoder.finish());
+    try std.testing.expectEqualStrings("truncated_input", xerial_decoder.diagnostics().recoverability_hint_name);
+
+    var bad_magic = XerialIncrementalDecoder.init(allocator);
+    defer bad_magic.deinit();
+    var corrupt_header = xerial_header;
+    corrupt_header[0] ^= 1;
+    try std.testing.expectError(error.InvalidMagic, bad_magic.step(&corrupt_header, &.{}));
+
+    const hadoop = try encodeHadoopAlloc(allocator, payload, .{ .block_size = payload.len, .chunk_size = 64 });
+    defer allocator.free(hadoop);
+    var hadoop_decoder = HadoopIncrementalDecoder.init(allocator);
+    defer hadoop_decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    _ = try hadoop_decoder.step(hadoop[0 .. hadoop.len - 1], &output);
+    try std.testing.expectError(error.TruncatedFrame, hadoop_decoder.finish());
+
+    const bad_outer = try allocator.dupe(u8, hadoop);
+    defer allocator.free(bad_outer);
+    std.mem.writeInt(u32, bad_outer[0..4], payload.len - 1, .big);
+    var outer_mismatch = HadoopIncrementalDecoder.init(allocator);
+    defer outer_mismatch.deinit();
+    try std.testing.expectError(error.InvalidHadoopSnappyStream, outer_mismatch.step(bad_outer, &output));
+
+    var size_mismatch = HadoopIncrementalDecoder.initWithOptions(allocator, .{ .expected_output_len = payload.len + 1 });
+    defer size_mismatch.deinit();
+    const step = try size_mismatch.step(hadoop, &output);
+    try std.testing.expectEqual(hadoop.len, step.progress.input_read);
+    try std.testing.expectError(error.SizeMismatch, size_mismatch.finish());
+}
+
+test "Snappy ecosystem incremental decoders accept empty streams" {
+    const allocator = std.testing.allocator;
+    var xerial_decoder = XerialIncrementalDecoder.initWithOptions(allocator, .{ .expected_output_len = 0 });
+    defer xerial_decoder.deinit();
+    const xerial_step = try xerial_decoder.step(&xerial_header, &.{});
+    try std.testing.expectEqual(xerial_header.len, xerial_step.progress.input_read);
+    try xerial_decoder.finish();
+    try std.testing.expectEqual(XerialIncrementalDecoder.Phase.done, xerial_decoder.snapshot().phase);
+    try std.testing.expectError(error.TrailingData, xerial_decoder.step("x", &.{}));
+
+    var hadoop_decoder = HadoopIncrementalDecoder.initWithOptions(allocator, .{ .expected_output_len = 0 });
+    defer hadoop_decoder.deinit();
+    try hadoop_decoder.finish();
+    try std.testing.expectEqual(HadoopIncrementalDecoder.Phase.done, hadoop_decoder.snapshot().phase);
+}
+
+test "Snappy ecosystem incremental decoders clean up allocation failures" {
+    const allocator = std.testing.allocator;
+    const xerial_payload = "xerial allocation failure payload" ** 32;
+    const xerial = try encodeXerialAlloc(allocator, xerial_payload, .{ .block_size = 256 });
+    defer allocator.free(xerial);
+    const HadoopTest = struct {
+        fn run(active: std.mem.Allocator, encoded: []const u8, expected: []const u8) !void {
+            _ = try expectIncrementalDecodeWithAllocator(
+                HadoopIncrementalDecoder,
+                active,
+                encoded,
+                expected,
+                encoded.len,
+                13,
+            );
+        }
+    };
+    const XerialTest = struct {
+        fn run(active: std.mem.Allocator, encoded: []const u8, expected: []const u8) !void {
+            _ = try expectIncrementalDecodeWithAllocator(
+                XerialIncrementalDecoder,
+                active,
+                encoded,
+                expected,
+                encoded.len,
+                13,
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, XerialTest.run, .{ xerial, xerial_payload });
+
+    const hadoop_payload = "hadoop allocation failure payload" ** 32;
+    const hadoop = try encodeHadoopAlloc(allocator, hadoop_payload, .{ .block_size = 512, .chunk_size = 128 });
+    defer allocator.free(hadoop);
+    try std.testing.checkAllAllocationFailures(allocator, HadoopTest.run, .{ hadoop, hadoop_payload });
 }
 
 test "Snappy framing rejects bad magic truncation and output limits" {

@@ -1,0 +1,203 @@
+{
+  "phase": "formal-final-br-whole-block-cli",
+  "time_before_utc": "2026-10-24T10:49:04.503388+00:00",
+  "git_head": "b651a59d1d907429e7117d478299806675383eee",
+  "source_files_before": 1710,
+  "source_before_sha256": "abd0e783fabf07272e255b5daf61657e108df3c23ef8f2df4a5fe471dd87d66d",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br-whole-block-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "round_trips": 29,
+    "default_bounded_wire_checks": 4,
+    "whole_profile_wire_checks": 8,
+    "whole_not_larger_checks": 8,
+    "whole_span_checks": 8,
+    "rejected_output_preserved": 21,
+    "same_path_checks": 2,
+    "exact_cap_checks": 1,
+    "one_below_checks": 1
+  },
+  "status": "passed-final",
+  "observed_gate_process": "3977097 3976933       00:30 python3 tools/br/whole_block_cli_gate.py --cli ./.zig-cache/o/f3d1d0d45bbcc8e66b11f71ce9c60410/vort-br-hq-cli-probe",
+  "executed_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f3d1d0d45bbcc8e66b11f71ce9c60410/vort-br-hq-cli-probe",
+  "time_after_utc": "2026-10-24T10:54:01.963176+00:00",
+  "source_files_after": 1710,
+  "source_equal": true,
+  "delta": {
+    "changed": {},
+    "added": {},
+    "removed": {}
+  },
+  "build_exit_code": 0,
+  "parser_tests_passed": 12,
+  "gate_report": {
+    "round_trips": 29,
+    "default_bounded_wire_checks": 4,
+    "whole_profile_wire_checks": 8,
+    "whole_not_larger_checks": 8,
+    "whole_span_checks": 8,
+    "rejected_output_preserved": 21,
+    "same_path_checks": 2,
+    "exact_cap_checks": 1,
+    "one_below_checks": 1,
+    "observations": [
+      {
+        "quality": 10,
+        "large_window": false,
+        "input_bytes": 128,
+        "block_len": 64,
+        "command": "encode-br-file",
+        "bounded_bytes": 53,
+        "whole_bytes": 53,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 6,
+          "whole_block_passes": 2,
+          "max_parse_positions": 64
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": false,
+        "input_bytes": 4100,
+        "block_len": 4100,
+        "command": "encode-br-file",
+        "bounded_bytes": 46,
+        "whole_bytes": 46,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 3,
+          "whole_block_passes": 1,
+          "max_parse_positions": 4100
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "input_bytes": 128,
+        "block_len": 64,
+        "command": "encode-br-stream-file",
+        "bounded_bytes": 55,
+        "whole_bytes": 55,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 4,
+          "whole_block_passes": 2,
+          "max_parse_positions": 64
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "input_bytes": 4100,
+        "block_len": 4100,
+        "command": "encode-br-stream-file",
+        "bounded_bytes": 48,
+        "whole_bytes": 48,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 2,
+          "whole_block_passes": 1,
+          "max_parse_positions": 4100
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "input_bytes": 128,
+        "block_len": 64,
+        "command": "encode-br-stream-file",
+        "bounded_bytes": 53,
+        "whole_bytes": 53,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 8,
+          "whole_block_passes": 4,
+          "max_parse_positions": 64
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "input_bytes": 4100,
+        "block_len": 4100,
+        "command": "encode-br-stream-file",
+        "bounded_bytes": 46,
+        "whole_bytes": 46,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 4,
+          "whole_block_passes": 2,
+          "max_parse_positions": 4100
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "input_bytes": 128,
+        "block_len": 64,
+        "command": "encode-br-file",
+        "bounded_bytes": 55,
+        "whole_bytes": 55,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 18,
+          "whole_block_passes": 6,
+          "max_parse_positions": 64
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "input_bytes": 4100,
+        "block_len": 4100,
+        "command": "encode-br-file",
+        "bounded_bytes": 48,
+        "whole_bytes": 48,
+        "profile": {
+          "parse_mode": "whole_block",
+          "bounded_passes": 9,
+          "whole_block_passes": 3,
+          "max_parse_positions": 4100
+        }
+      }
+    ],
+    "reference_brotli_version": 16777225
+  },
+  "gate_expected_matches": true,
+  "binary": {
+    "executed_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f3d1d0d45bbcc8e66b11f71ce9c60410/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-whole-final-20261024-c47wcqh0/cli/vort-br-hq-cli-probe",
+    "sha256": "943bf10fb00b822a5666b892a360c39fe88eee46baf2dbe7c4b7cd227fa60a8f"
+  },
+  "actual_compiled_input_binding": {
+    "records": 1904,
+    "unique_inputs": 1902,
+    "mismatches": [],
+    "uncovered": [],
+    "all_stdlib_vail_objects_and_embedded_verified": true,
+    "method": "Original actual manifest SipHash128 content digests verified against the same bytes hashed with SHA256; all project and vail inputs match the before/after snapshots. Complete compiler input bytes archived."
+  },
+  "strict_binary_source_binding": true,
+  "report_files_sha256": {
+    "source-before.json": "abd0e783fabf07272e255b5daf61657e108df3c23ef8f2df4a5fe471dd87d66d",
+    "source-after.json": "abd0e783fabf07272e255b5daf61657e108df3c23ef8f2df4a5fe471dd87d66d",
+    "source-before.zip": "2555fb10a9a790ac2c6be5311534d9c7f9a7ddbef1d7c9497ab0ce146514a38f",
+    "source-after.zip": "2555fb10a9a790ac2c6be5311534d9c7f9a7ddbef1d7c9497ab0ce146514a38f",
+    "source-delta.json": "6e6c1716a2c4d92cdd27b27267c90b5e4457ba85cf08f05b77d1435c9432e149",
+    "compile-inputs.txt": "76a530420f77838adf26dbe4a61a4e1eadf33a0f64ae55345e556925b0d33013",
+    "compile-input-digest-check.tsv": "f9ca420d96875525a77fb7da36901193683442d287d5b79df7e53b9997f82a67",
+    "compiled-inputs-all.json": "da2738213900415bfa547ac4b30262692ba6f9ded6850d13cff835016cb9c546",
+    "compiled-input-bytes.zip": "e8c55acd5a0d082955242963b49be9da49787b15e7fa5ae8a595c5b492326d1e",
+    "gate-report.json": "13ddfda00afbaffd5a0f20615fe9af7052d9d4d56d1b68325905878cac61530d",
+    "build.stdout": "1c508f642b6cf9aadc4c0e4e7fc282fa989575c17ab0792782ee1bc47f4b6c0c",
+    "build.stderr": "4ec7f2b2894a8e396d496e52ad78128e506d463276172095820c66399854b6ca"
+  }
+}

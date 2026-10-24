@@ -119,6 +119,60 @@ pub fn encode(
     );
 }
 
+pub fn encodeSegments(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_prefix = args.next() orelse return error.MissingCorpusPath;
+    const compression = try parseCompression(
+        args.next() orelse return error.MissingCorpusPath,
+    );
+    const max_segment_size = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const sectors_per_chunk = if (args.next()) |text|
+        try std.fmt.parseInt(u32, text, 10)
+    else
+        64;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    var encoded = try vort.encodeEwfSegmentsAlloc(init.gpa, input, .{
+        .compression = compression,
+        .sectors_per_chunk = sectors_per_chunk,
+    }, max_segment_size);
+    defer encoded.deinit();
+    if (encoded.segments.len > 99) return error.OutputLimitExceeded;
+    var encoded_bytes: usize = 0;
+    for (encoded.segments, 1..) |segment, number| {
+        const path = try std.fmt.allocPrint(
+            init.gpa,
+            "{s}.E{d:0>2}",
+            .{ output_prefix, number },
+        );
+        defer init.gpa.free(path);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = path,
+            .data = segment,
+        });
+        encoded_bytes = std.math.add(usize, encoded_bytes, segment.len) catch
+            return error.IntegerOverflow;
+    }
+    try stdout.print(
+        "compression={s} input_bytes={d} ewf_bytes={d} segments={d} prefix={s}\n",
+        .{
+            @tagName(compression),
+            input.len,
+            encoded_bytes,
+            encoded.segments.len,
+            output_prefix,
+        },
+    );
+}
+
 fn parseCompression(text: []const u8) !vort.EwfCompression {
     inline for (std.enums.values(vort.EwfCompression)) |compression|
         if (std.mem.eql(u8, text, @tagName(compression))) return compression;

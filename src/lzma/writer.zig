@@ -1,10 +1,12 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const encoder = @import("encoder.zig");
+const settings = @import("encode_options.zig");
 
 pub const Error = core.Error || encoder.Error;
 pub const Properties = encoder.Properties;
 pub const Mode = encoder.Mode;
+pub const MatchOptions = settings.MatchOptions;
 
 pub const SizeMode = enum {
     known,
@@ -16,12 +18,32 @@ pub const EncodeOptions = struct {
     dictionary_size: u32 = 32 * 1024,
     mode: Mode = .greedy,
     size_mode: SizeMode = .end_marker,
+    match_options: ?MatchOptions = null,
+
+    pub fn validate(self: EncodeOptions) Error!void {
+        try validateOptions(self);
+    }
+
+    pub fn fromPreset(level: u32, extreme: bool) Error!EncodeOptions {
+        const preset = try settings.resolvePreset(level, extreme);
+        return .{ .properties = preset.properties, .dictionary_size = preset.dictionary_size, .mode = preset.mode, .match_options = preset.match_options };
+    }
 };
 
 pub const ZipEncodeOptions = struct {
     properties: Properties = .{},
     dictionary_size: u32 = 32 * 1024,
     mode: Mode = .greedy,
+    match_options: ?MatchOptions = null,
+
+    pub fn validate(self: ZipEncodeOptions) Error!void {
+        try validateZipOptions(self);
+    }
+
+    pub fn fromPreset(level: u32, extreme: bool) Error!ZipEncodeOptions {
+        const preset = try settings.resolvePreset(level, extreme);
+        return .{ .properties = preset.properties, .dictionary_size = preset.dictionary_size, .mode = preset.mode, .match_options = preset.match_options };
+    }
 };
 
 pub fn encodeAlloc(
@@ -79,21 +101,17 @@ pub fn encodeAppend(
     input: []const u8,
     options: EncodeOptions,
 ) !usize {
-    try validateCoreOptions(options.properties, options.dictionary_size);
+    try validateOptions(options);
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
-    try encoded.append(allocator, try encoder.propertyByte(options.properties));
-    try appendU32(allocator, &encoded, options.dictionary_size);
-    try appendU64(allocator, &encoded, switch (options.size_mode) {
-        .known => std.math.cast(u64, input.len) orelse return error.IntegerOverflow,
-        .end_marker => std.math.maxInt(u64),
-    });
+    try appendStreamHeader(allocator, &encoded, options, input.len);
     _ = try encoder.encodeChunkAppend(allocator, &encoded, input, .{
         .properties = options.properties,
         .dictionary_size = options.dictionary_size,
         .mode = options.mode,
         .end_marker = options.size_mode == .end_marker,
+        .match_options = effectiveMatchOptions(options.mode, options.dictionary_size, options.match_options),
     });
 
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
@@ -132,6 +150,7 @@ pub fn encodeZipPayloadAppend(
         .dictionary_size = options.dictionary_size,
         .mode = options.mode,
         .end_marker = true,
+        .match_options = effectiveMatchOptions(options.mode, options.dictionary_size, options.match_options),
     });
 
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
@@ -139,14 +158,59 @@ pub fn encodeZipPayloadAppend(
     return encoded.items.len;
 }
 
-pub fn validateZipOptions(options: ZipEncodeOptions) Error!void {
-    return validateCoreOptions(options.properties, options.dictionary_size);
+pub fn validateOptions(options: EncodeOptions) Error!void {
+    try validateCoreOptions(options.properties, options.dictionary_size);
+    try encoder.validateOptions(.{ .properties = options.properties, .dictionary_size = options.dictionary_size, .mode = options.mode, .end_marker = options.size_mode == .end_marker, .match_options = effectiveMatchOptions(options.mode, options.dictionary_size, options.match_options) });
 }
 
-fn validateCoreOptions(properties: Properties, dictionary_size: u32) Error!void {
+pub fn validateZipOptions(options: ZipEncodeOptions) Error!void {
+    try validateCoreOptions(options.properties, options.dictionary_size);
+    try encoder.validateOptions(.{ .properties = options.properties, .dictionary_size = options.dictionary_size, .mode = options.mode, .end_marker = true, .match_options = effectiveMatchOptions(options.mode, options.dictionary_size, options.match_options) });
+}
+
+pub fn validateCoreOptions(properties: Properties, dictionary_size: u32) Error!void {
     _ = try encoder.propertyByte(properties);
-    if (dictionary_size < 4096 or dictionary_size > std.math.maxInt(u16))
+    if (dictionary_size < 4096 or dictionary_size > settings.max_dictionary_size)
         return error.InvalidLzmaOptions;
+}
+
+pub fn appendStreamHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: EncodeOptions,
+    input_len: ?usize,
+) !void {
+    try validateOptions(options);
+    const dictionary_size = try advertisedDictionarySize(options);
+    try output.append(allocator, try encoder.propertyByte(options.properties));
+    try appendU32(allocator, output, dictionary_size);
+    try appendU64(allocator, output, switch (options.size_mode) {
+        .known => std.math.cast(u64, input_len orelse return error.InvalidBlockPlan) orelse
+            return error.IntegerOverflow,
+        .end_marker => std.math.maxInt(u64),
+    });
+}
+
+fn effectiveMatchOptions(mode: Mode, dictionary_size: u32, requested: ?MatchOptions) ?MatchOptions {
+    if (requested == null and mode == .greedy and dictionary_size > std.math.maxInt(u16)) return .{};
+    return requested;
+}
+
+/// LZMA-Alone's automatic decoder recognizes canonical 2^n / 3*2^(n-1)
+/// dictionary shapes. New configurations advertise the next shape while
+/// retaining the requested actual window. Existing narrow/null configurations
+/// retain their exact historical headers, including noncanonical sizes.
+fn advertisedDictionarySize(options: EncodeOptions) Error!u32 {
+    const requested = options.dictionary_size;
+    if (requested <= std.math.maxInt(u16) and options.match_options == null and
+        options.mode != .fast and options.mode != .normal) return requested;
+    var power: u32 = 4096;
+    while (power < requested) {
+        const middle = std.math.add(u32, power, power / 2) catch return error.IntegerOverflow;
+        if (middle >= requested) return middle;
+        power = std.math.mul(u32, power, 2) catch return error.IntegerOverflow;
+    }
+    return power;
 }
 
 fn appendU16(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u16) !void {
@@ -184,6 +248,19 @@ test "LZMA-Alone writer round trips known-size and end-marker streams" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+}
+
+test "LZMA-Alone lazy writer round trips ratio-oriented input" {
+    const decoder = @import("decoder.zig");
+    const input = ("{\"service\":\"vort\",\"status\":\"ok\",\"message\":\"lazy LZMA ratio\"}\n" ** 1024);
+    const greedy = try encodeAlloc(std.testing.allocator, input, .{ .mode = .greedy });
+    defer std.testing.allocator.free(greedy);
+    const lazy = try encodeAlloc(std.testing.allocator, input, .{ .mode = .lazy });
+    defer std.testing.allocator.free(lazy);
+    const decoded = try decoder.decodeAlloc(std.testing.allocator, lazy);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    try std.testing.expect(lazy.len <= greedy.len);
 }
 
 test "LZMA-Alone writer handles empty input and transactional output" {

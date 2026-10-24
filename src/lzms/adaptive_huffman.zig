@@ -55,6 +55,70 @@ pub fn AdaptiveCode(comptime max_symbols: usize) type {
     };
 }
 
+pub fn AdaptiveEncoder(comptime max_symbols: usize) type {
+    return struct {
+        frequencies: [max_symbols]u32 = @splat(0),
+        codes: [max_symbols]u16 = @splat(0),
+        lengths: [max_symbols]u4 = @splat(0),
+        num_symbols: usize = 0,
+        remaining: usize = 0,
+        rebuild_frequency: usize = 0,
+
+        const Self = @This();
+
+        pub fn init(num_symbols: usize, rebuild_frequency: usize) Error!Self {
+            if (num_symbols == 0 or num_symbols > max_symbols or rebuild_frequency == 0)
+                return error.InvalidLzms;
+            var self = Self{
+                .num_symbols = num_symbols,
+                .remaining = rebuild_frequency,
+                .rebuild_frequency = rebuild_frequency,
+            };
+            @memset(self.frequencies[0..num_symbols], 1);
+            try self.rebuild(false);
+            return self;
+        }
+
+        pub fn encode(self: *Self, writer: anytype, symbol: usize) !void {
+            if (symbol >= self.num_symbols or self.lengths[symbol] == 0)
+                return error.InvalidLzms;
+            try writer.writeBits(self.codes[symbol], self.lengths[symbol]);
+            self.frequencies[symbol] += 1;
+            self.remaining -= 1;
+            if (self.remaining == 0) try self.rebuild(true);
+        }
+
+        fn rebuild(self: *Self, dilute: bool) Error!void {
+            self.lengths = try buildLengths(
+                max_symbols,
+                &self.frequencies,
+                self.num_symbols,
+            );
+            var counts: [huffman.max_code_bits + 1]u16 = @splat(0);
+            for (self.lengths[0..self.num_symbols]) |length| {
+                if (length == 0 or length > huffman.max_code_bits)
+                    return error.InvalidLzms;
+                counts[length] += 1;
+            }
+            var code: u32 = 0;
+            var next: [huffman.max_code_bits + 1]u32 = @splat(0);
+            for (1..huffman.max_code_bits + 1) |bits| {
+                code = (code + counts[bits - 1]) << 1;
+                next[bits] = code;
+            }
+            for (self.lengths[0..self.num_symbols], 0..) |length, symbol| {
+                self.codes[symbol] = @intCast(next[length]);
+                next[length] += 1;
+            }
+            self.remaining = self.rebuild_frequency;
+            if (dilute) {
+                for (self.frequencies[0..self.num_symbols]) |*frequency|
+                    frequency.* = (frequency.* >> 1) + 1;
+            }
+        }
+    };
+}
+
 fn buildLengths(
     comptime max_symbols: usize,
     frequencies: *const [max_symbols]u32,

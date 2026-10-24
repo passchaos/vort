@@ -125,15 +125,21 @@ pub const Encoder = struct {
         return self.encodeMemberInternal(input, solid, null);
     }
 
+    /// Encodes one member with RAR VM records. In solid mode, dictionary and
+    /// repeat-distance state continue over the pre-filter byte stream while VM
+    /// offsets restart at zero for the new member.
     pub fn encodeFilteredMemberAlloc(
         self: *Encoder,
         input: []const u8,
         filter: Filter,
         solid: bool,
     ) Error![]u8 {
-        if (solid) return error.InvalidRar29FilterOptions;
-        try filter_encoder.validate(filter);
-        return self.encodeMemberInternal(input, false, filter);
+        try validateOptions(self.options);
+        if (input.len == 0) return error.InvalidRar29FilterOptions;
+        const block_size = try filter_encoder.blockSize(filter, self.options.block_size);
+        if (!filter_encoder.canApply(filter, @min(input.len, block_size)))
+            return error.InvalidRar29FilterOptions;
+        return self.encodeMemberInternal(input, solid, filter);
     }
 
     fn encodeMemberInternal(
@@ -691,7 +697,7 @@ test "RAR29 encoder round trips all six standard VM filters across blocks" {
         invalid.encodeFilteredMemberAlloc(&input, .{ .rgb = .{ .width = 10 } }, false),
     );
     try std.testing.expectError(
-        error.InvalidRar29FilterOptions,
+        error.MissingRar29SolidEncoderState,
         invalid.encodeFilteredMemberAlloc(&input, .e8, true),
     );
     try std.testing.expectError(

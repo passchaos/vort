@@ -1,10 +1,45 @@
 const std = @import("std");
 const core = @import("core.zig");
 const lz4 = @import("lz4.zig");
+const incremental_decoder = @import("snappy_framing/incremental_decoder.zig");
+const incremental_encoder = @import("snappy_framing/incremental_encoder.zig");
+const incremental_tests = @import("hadoop_lz4/incremental_tests.zig");
+const incremental_block_decoder = @import("hadoop_lz4/incremental_block_decoder.zig");
 
 pub const Error = core.Error || lz4.Error || std.mem.Allocator.Error || error{
     InvalidHadoopLz4Stream,
 };
+
+const IncrementalCodec = struct {
+    pub const Error = hadoop_lz4.Error;
+    pub const BlockPlan = incremental_block_decoder.Plan;
+    pub const BlockCursor = incremental_block_decoder.Cursor;
+
+    pub fn planBlock(input: []const u8) hadoop_lz4.Error!BlockPlan {
+        return incremental_block_decoder.plan(input);
+    }
+
+    pub fn invalidStreamError(comptime format: incremental_decoder.Format) hadoop_lz4.Error {
+        if (format != .hadoop) @compileError("Hadoop LZ4 only supports Hadoop block framing");
+        return error.InvalidHadoopLz4Stream;
+    }
+
+    pub fn initBlockEncoder(allocator: std.mem.Allocator) hadoop_lz4.Error!lz4.BlockEncoder {
+        return try lz4.BlockEncoder.init(allocator);
+    }
+
+    pub fn encodeBlock(encoder: *lz4.BlockEncoder, input: []const u8, output: *std.ArrayList(u8)) hadoop_lz4.Error!void {
+        _ = try encoder.append(output, input);
+    }
+};
+
+const hadoop_lz4 = @This();
+pub const IncrementalDecoder = incremental_decoder.Decoder(IncrementalCodec, .hadoop);
+pub const IncrementalEncoder = incremental_encoder.Encoder(lz4.BlockEncoder, IncrementalCodec, .hadoop);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const Options = struct {
     block_size: usize = 256 * 1024,

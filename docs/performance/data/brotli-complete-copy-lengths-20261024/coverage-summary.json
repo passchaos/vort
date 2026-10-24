@@ -1,0 +1,61 @@
+{
+  "generated_utc": "2026-10-24T11:26:51.116913+00:00",
+  "scope": "只读实际正式 CompleteLengths ELF、缓存编译/运行清单与全部输入内容；未编译或运行测试产物。",
+  "main_ordered_names_equal": true,
+  "modes": {
+    "complete-debug": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/5b654cafd9e9b27a883611c4cb0dfb77/vort-br-complete-length-tests",
+      "binary_sha256": "eac62e21abb1c885f575fa61d0ebf44e383cbf966b85ab9508c72feb15282aa7",
+      "metadata_count": 41,
+      "named_count": 24,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "complete_codec": 3,
+        "complete_parser": 3,
+        "independent_qa": 15,
+        "length_options": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/17211286c82d8b05283784aff0a02094.txt"
+    },
+    "complete-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/bbfe53bf1edf162e2c01c9ec1c9d464e/vort-br-complete-length-tests",
+      "binary_sha256": "b72e4bcf70d146397bfb04d623c750df144113288096e9d020c4407c2c23b8a6",
+      "metadata_count": 41,
+      "named_count": 24,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "complete_codec": 3,
+        "complete_parser": 3,
+        "independent_qa": 15,
+        "length_options": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/43bda8ba18f5110fdfd441721e9a4b4c.txt"
+    },
+    "complete-x86": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/a67917b6e33cfc67b4b7f0c4b3bf07bb/vort-br-complete-length-tests",
+      "binary_sha256": "0acff5770bb119806ec48c4b737cebaf90098b9940ba3b332aa843544e0a8436",
+      "metadata_count": 41,
+      "named_count": 24,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "complete_codec": 3,
+        "complete_parser": 3,
+        "independent_qa": 15,
+        "length_options": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/5872d35e6a430dfa31b5568cecd52d68.txt"
+    }
+  },
+  "all_compile_and_recursive_objects_contents_verified": true,
+  "all_run_elf_input_contents_verified": true,
+  "all_recorded_global_sources_before_after_equal": true,
+  "exact_child_compile_argv_logged": false,
+  "builder_integration_named_counts": {
+    "complete-debug": 0,
+    "complete-rf": 0,
+    "complete-x86": 0
+  }
+}

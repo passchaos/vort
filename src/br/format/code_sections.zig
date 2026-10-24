@@ -7,6 +7,27 @@ pub const large_window = switch (builtin.object_format) {
     else => ".text",
 };
 
+pub const adaptive_split = switch (builtin.object_format) {
+    .elf => ".vort_br_adaptive_split",
+    .macho => "__TEXT,__vort_br_adapt",
+    .coff => ".text$vort_br_adaptive_split",
+    else => ".text",
+};
+
+pub const distance_parameters = switch (builtin.object_format) {
+    .elf => ".vort_br_distance_params",
+    .macho => "__TEXT,__vort_br_distp",
+    .coff => ".text$vort_br_distp",
+    else => ".text",
+};
+
+pub const command_state = switch (builtin.object_format) {
+    .elf => ".vort_br_command_state",
+    .macho => "__TEXT,__vort_br_cmdst",
+    .coff => ".text$vort_br_command_state",
+    else => ".text",
+};
+
 pub const wide_literal_lookup9 = switch (builtin.object_format) {
     .elf => ".vort_br_wide_lookup9",
     .macho => "__TEXT,__vort_br_w9",

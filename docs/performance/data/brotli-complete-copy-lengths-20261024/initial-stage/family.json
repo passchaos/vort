@@ -1,0 +1,20 @@
+{
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 518.2834151210263,
+  "utc": "2026-10-24T11:27:22.246895+00:00",
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig"
+  ],
+  "source_sha256": "0fd93df621ffce1e214f0771784eebc99f3fe74fc1bc49b57ad3762daa7ad509",
+  "log": "/tmp/vort-br-complete-final-20261024-qy09p5f8/family-rf.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

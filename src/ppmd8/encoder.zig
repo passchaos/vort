@@ -6,7 +6,7 @@ pub const Error = model_mod.Error;
 const top_value: u32 = 1 << 24;
 const bottom_value: u32 = 1 << 15;
 
-const RangeEncoder = struct {
+pub const RangeEncoder = struct {
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     range: u32 = std.math.maxInt(u32),
@@ -46,7 +46,7 @@ const RangeEncoder = struct {
         }
     }
 
-    fn finish(self: *RangeEncoder) Error!void {
+    pub fn finish(self: *RangeEncoder) Error!void {
         for (0..4) |_| {
             try self.output.append(self.allocator, @truncate(self.low >> 24));
             self.low *%= 256;
@@ -86,7 +86,7 @@ pub fn encodeAlloc(
     return output.toOwnedSlice(allocator);
 }
 
-fn encodeSymbol(
+pub fn encodeSymbol(
     model: *model_mod.Model,
     range_encoder: *RangeEncoder,
     symbol: ?u8,

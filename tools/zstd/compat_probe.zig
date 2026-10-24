@@ -54,6 +54,7 @@ pub fn main(init: std.process.Init) !void {
     var golden_cases: usize = 0;
     var golden_error_cases: usize = 0;
     var advanced_cases: usize = 0;
+    var far_window_encode_cases: usize = 0;
     var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
     var trained_dictionary_cases: usize = 0;
@@ -127,6 +128,30 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         advanced_cases += 1;
     }
+    try validateFarWindowEncode(
+        init.gpa,
+        &runtime,
+        24,
+        null,
+        vort.zstdNativeDictionaryWindowLen + std.compress.zstd.block_size_max,
+    );
+    try validateFarWindowEncode(
+        init.gpa,
+        &runtime,
+        25,
+        @as(usize, 1) << 25,
+        vort.zstdNativeExplicitWindowMatchLenDefault +
+            std.compress.zstd.block_size_max,
+    );
+    try validateFarWindowEncode(
+        init.gpa,
+        &runtime,
+        26,
+        vort.zstdNativeExplicitWindowMatchLenMax,
+        (@as(usize, 1) << 25) + std.compress.zstd.block_size_max,
+    );
+    checked += 3;
+    far_window_encode_cases += 3;
     var raw_dictionary: [32 * 1024]u8 = undefined;
     var raw_dictionary_state: u32 = 0x243f_6a88;
     for (&raw_dictionary) |*byte| {
@@ -549,13 +574,51 @@ pub fn main(init: std.process.Init) !void {
         return error.ReferenceEncodeFailed;
     const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} far_window_encode_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
+        .{ checked, unsupported, advanced_cases, far_window_encode_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
     );
     std.debug.print(
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
         .{ decodecorpus_coverage.max_sequence_count, decodecorpus_coverage.max_block_count, decodecorpus_coverage.sequence_count_tiers, @popCount(decodecorpus_coverage.sequence_mode_combinations), decodecorpus_coverage.sequence_mode_combinations, @popCount(decodecorpus_combined_mode_mask), decodecorpus_combined_mode_mask, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
     );
+}
+
+fn validateFarWindowEncode(
+    allocator: std.mem.Allocator,
+    runtime: *libzstd.Runtime,
+    window_log: u6,
+    max_match_history_len: ?usize,
+    far_distance: usize,
+) !void {
+    const block_len = std.compress.zstd.block_size_max;
+    const payload = try allocator.alloc(u8, far_distance + block_len);
+    defer allocator.free(payload);
+    var state: u32 = 0x6a09_e667;
+    for (payload[0..far_distance]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[far_distance..], payload[0..block_len]);
+    const frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+        allocator,
+        payload,
+        .{
+            .content_checksum = true,
+            .include_content_size = false,
+            .window_log = window_log,
+            .max_match_history_len = max_match_history_len,
+            .selection = .literal_only,
+            .match_search_budget = 0,
+        },
+    );
+    defer allocator.free(frame.frame);
+    const header = try vort.zstdInspectNativeFrameHeader(frame.frame);
+    if (header.window_size != @as(u64, 1) << window_log)
+        return error.ReferenceEncodeFailed;
+    const reference_output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(reference_output);
+    try runtime.decode(frame.frame, reference_output);
+    if (!std.mem.eql(u8, payload, reference_output)) return error.SizeMismatch;
 }
 
 fn reusableDecodeCorpusCase(allocator: std.mem.Allocator, decoder: *vort.ZstdNativeFrameDecoder, encoded: []const u8, expected: []const u8) !void {

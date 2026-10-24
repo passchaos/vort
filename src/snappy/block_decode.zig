@@ -61,7 +61,16 @@ pub fn readLiteralLen(
 /// Validate a raw block without materializing output. Size-query APIs require
 /// a full token pass so malformed offsets and trailing bytes do not become
 /// valid merely because the uncompressed length prefix was well-formed.
+pub const BodyPlan = struct { max_offset: usize };
+
 pub fn validateBody(block: []const u8, header: Header) Error!void {
+    _ = try analyzeBody(block, header);
+}
+
+/// Validate every token and record the largest backward dependency. COPY_4
+/// retains its full u32 distance; only the already-decoded prefix bounds it.
+pub fn analyzeBody(block: []const u8, header: Header) Error!BodyPlan {
+    var max_offset: usize = 0;
     var input_index = header.index;
     var written: usize = 0;
     while (input_index < block.len) {
@@ -95,6 +104,7 @@ pub fn validateBody(block: []const u8, header: Header) Error!void {
                     offset,
                     len,
                 );
+                max_offset = @max(max_offset, @as(usize, offset));
                 written += len;
             },
             2 => {
@@ -114,6 +124,7 @@ pub fn validateBody(block: []const u8, header: Header) Error!void {
                     offset,
                     len,
                 );
+                max_offset = @max(max_offset, @as(usize, offset));
                 written += len;
             },
             3 => {
@@ -133,12 +144,14 @@ pub fn validateBody(block: []const u8, header: Header) Error!void {
                     offset,
                     len,
                 );
+                max_offset = @max(max_offset, @as(usize, offset));
                 written += len;
             },
             else => unreachable,
         }
     }
     if (written != header.decoded_len) return error.TruncatedFrame;
+    return .{ .max_offset = max_offset };
 }
 
 /// Decode tokens after the caller has consumed the length prefix and provided

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "check",
+    "-Doptimize=Debug",
+    "-j4",
+    "--summary",
+    "all"
+  ],
+  "started_utc": "2026-10-24T11:52:28.994978+00:00",
+  "finished_utc": "2026-10-24T12:01:56.604389+00:00",
+  "exit_code": 0,
+  "source_before_after_equal": false,
+  "changed_sources": [
+    "tools/lz4/fast_controls_cli_gate.py"
+  ],
+  "log_sha256": "98113f0bdd8066c2aa2f6dd35d42801b6735161f81fcde7b8fc4902d70eb3234"
+}

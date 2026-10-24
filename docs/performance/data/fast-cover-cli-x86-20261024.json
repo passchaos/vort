@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "verified_at_utc": "2026-10-24T00:58:31.687982+00:00",
+  "workspace": "/home/passchaos/project-z/vort-stream-contracts",
+  "source_sha256": {
+    "examples/cli.zig": "144afdbd9267b8be5f4016ceedf0e4f42ff54de7eb84ce780ef6526f47d68151",
+    "examples/cli/fast_cover.zig": "5f3ae087f1cb9c049e9821148d5a70cfd6a320e05667a50e193489426adac465",
+    "src/dictionary.zig": "cd230e340b39b5c2f0740ebb764f9d6af7b60f635bb0fda7843d04f23608ddcf",
+    "src/dictionary/fast_cover.zig": "ee49d6d3f7ff14d48815e41edb518a919b1524175dcadba88381dbe8bd477f60",
+    "src/dictionary/fast_cover/kernel.zig": "31c31a754fe905ce01054ce2c47b05358bdbc94583385a4085df3d891bb0180e",
+    "src/dictionary/fast_cover/resources.zig": "8f71c026c15c281bac22182063b17e8ca9c71def173b1a1ee2418afce2129f83",
+    "src/dictionary/fast_cover/types.zig": "8d8b480606b3c1a4ec1064a3196af41087f4aad3328864d171dd1280807adf6a",
+    "src/dictionary/fast_cover_optimize.zig": "642178b45059151fef7a7e26f7d6be2af809eea9c5016fa5edbdbe61d798fc97",
+    "src/dictionary/fast_cover_optimize/engine.zig": "7e7bc845b50785cbbaf5bc7146a0af7f75594bd8042adaea912f611ffc34f30e",
+    "src/dictionary/fast_cover_optimize/grid.zig": "ef326ec11c29f58e09ba5f4f86003ab0835e327f118c5d904ec58c54639292a5",
+    "src/dictionary/fast_cover_optimize/memory.zig": "7923b20d3d19ba30480cf010bc4234acacd5da5ed7f701cbe77390975ae5fbbf",
+    "src/dictionary/fast_cover_optimize/types.zig": "55bda2d2a170b63f969ffc7324897cca8195fe4e570278962ccc2b29331706d2",
+    "src/root.zig": "c2bf76e5a8e340a24a69a0bbed13abea9e7e91a2a5c6f616d026f80086ed5b9b",
+    "src/zstd.zig": "dbec14d1f2f20e695d311338afb444be9cb1a00c0576e7b0a16a5863710c6784",
+    "src/zstd/dictionary/fast_cover.zig": "07ddc6ac73423aee6a910e7b683a22cd85cad79e0ecc015f10fc3c2d5b1e01d4"
+  },
+  "driver": "/tmp/vort-fastcover-cli/check_cli.py",
+  "driver_sha256": "60731f325c6bf621bc0cda4c77000568f81251758892eba4f34097c7132640f6",
+  "binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/390401f3f9278783a2367ffd7e350a4c/vort",
+  "binary_sha256": "66271e4fc14c4b4ed182cb490f66c4f15ab8f952ccd6982bb69d385676e548b4",
+  "build_log": "/tmp/vort-fast-cover-final-cli-build.log",
+  "build_log_sha256": "4531e33d5db617fc57c4b7dfb55a1e6d22917d40a5532180b7283eb507c77c4f",
+  "reference_version": "1.4.8",
+  "successful_standard_dictionaries": 6,
+  "invalid_output_preservation_cases": 38,
+  "zero_finalize_prefix_valid": true,
+  "legal_default_grid_k6_k7_valid": true,
+  "help_ok": true,
+  "sample_sources": {
+    "/tmp/vort-fastcover-cli/samples/sample0.bin": "5f80011490e2c42d7f02c73a6bc1fa841db21ae01c7a77b2c0344d55bac4b8c1",
+    "/tmp/vort-fastcover-cli/samples/sample1.bin": "7ed490dcaaac8b50a012dbc7219369a38369acd2949af76f79e698862e012186",
+    "/tmp/vort-fastcover-cli/samples/sample2.bin": "2588a538b4f651628be7daf364f38d829f3fc667ed03ef9cc17f92e4c3aaaac1",
+    "/tmp/vort-fastcover-cli/samples/sample3.bin": "902797d80b10f1a626d6502a0d02f3e97914eb7a236869286b597d8f78cc3b4f",
+    "/tmp/vort-fastcover-cli/samples/sample4.bin": "499b94fe7b7ce53b2ecba92873b99675dbea6f9fdcce98343699662f1b1048fc",
+    "/tmp/vort-fastcover-cli/samples/sample5.bin": "8c2a7dac7ef77a34ca46e215cedca2e3f56419e3fb4d7d57609672f9317563e9",
+    "/tmp/vort-fastcover-cli/samples/sample6.bin": "0895b9c2ba55e1092dbe8cdf034c8834f67ddbcc0274d2e893fd96aa2493ed0e",
+    "/tmp/vort-fastcover-cli/samples/sample7.bin": "d1c7d9b26e3375e8e0cd1f8612f43a0130e688adc11ded394e432c74c2f8edc8",
+    "/tmp/vort-fastcover-cli/samples/sample8.bin": "7e3956f35a1ee31d1d72cf504f38bfb2cb28bd2455f8a7d0d51227ec702b3909",
+    "/tmp/vort-fastcover-cli/samples/sample9.bin": "4a3112779fb819f20fdc3cda52e062cb442e5901af31a28d4df610e7dd8414ec",
+    "/tmp/vort-fastcover-cli/samples/sample10.bin": "ffcaed6c946fe2d45a4fe3a968a2cdce6549b810485ca18cf34ac1887c3f3870",
+    "/tmp/vort-fastcover-cli/samples/sample11.bin": "99b19f9f046e3069500e1bc7e0f0925f4fa4b4be51792327847d9f59148aff4f"
+  },
+  "records": [
+    {
+      "command": "train-zstd-fastcover-dictionary",
+      "target_history_bytes": 64,
+      "dictionary_id": 21001,
+      "dictionary_bytes": 223,
+      "dictionary_sha256": "86ebd444373944b5f107d8a39e6180eccf47b2e0f984453308ccf162cd7adfc3",
+      "reference_frame_bytes": 63,
+      "flags": [
+        "--dmer=8",
+        "--segment=32",
+        "--hash-log=10",
+        "--accel=10"
+      ],
+      "stdout": "dictionary_id=21001 dictionary_bytes=223 history_bytes=64 d=8 k=32 f=10 accel=10 path=/tmp/vort-fastcover-cli/final-21001.dict\n"
+    },
+    {
+      "command": "train-zstd-fastcover-dictionary",
+      "target_history_bytes": 64,
+      "dictionary_id": 21002,
+      "dictionary_bytes": 201,
+      "dictionary_sha256": "a2910999539dbcd2ab341e5b0723a8a3be51ba52d9f886d375a8226fce00b231",
+      "reference_frame_bytes": 84,
+      "flags": [
+        "--segment=32",
+        "--hash-log=10",
+        "--accel=10",
+        "--json",
+        "--profile"
+      ],
+      "stdout": "{\"dictionary_id\":21002,\"dictionary_bytes\":201,\"history_bytes\":64,\"dmer_size\":8,\"segment_size\":32,\"hash_log\":10,\"acceleration\":10,\"path\":\"/tmp/vort-fastcover-cli/final-21002.dict\",\"profile\":{\"training\":{\"available\":true,\"dmer_size\":8,\"hash_log\":10,\"acceleration\":10,\"finalize_percent\":10,\"samples\":5,\"corpus_bytes\":3005,\"dmer_positions\":2970,\"prepared_bytes\":12500,\"peak_working_memory\":12564,\"result_bytes\":64,\"frequency_passes\":1,\"frequency_positions\":2970,\"frequency_hashes\":300,\"frequency_skipped_positions\":2670,\"selection_hashes\":2970,\"segment_windows\":2970,\"active_adds\":2970,\"active_removes\":2970,\"epoch_visits\":2,\"zero_score_epochs\":0,\"selected_segments\":2,\"selected_bytes\":64,\"frequency_clear_positions\":50,\"frequency_clears\":30,\"frequency_restore_bytes\":4096,\"table_clear_bytes\":8192,\"training_runs\":1,\"prepared_reuses\":0,\"prepared_forks\":0,\"frequency_copy_bytes\":0},\"finalizer\":{\"total_ns\":365595,\"literal_entropy_ns\":197730,\"sequence_collection_ns\":10554,\"greedy_parse_ns\":0,\"lazy_parse_ns\":0,\"sequence_entropy_ns\":18952,\"baseline_assembly_ns\":119541,\"repcode_entropy_ns\":0,\"repcode_scoring_ns\":0,\"sample_bytes\":0,\"blocks\":0,\"greedy_tokens\":0,\"lazy_tokens\":0,\"offset_sequences\":0},\"total_ns\":623997,\"frequency_ns\":57463,\"segment_ns\":156367,\"finalization_ns\":366115,\"finalizations\":1,\"finalization_samples\":0,\"finalization_sample_bytes\":0,\"peak_working_memory\":12564,\"peak_allocator_owned_bytes\":12564,\"thread_stack_reservation_peak\":0}}\n"
+    },
+    {
+      "command": "optimize-zstd-fastcover-dictionary",
+      "target_history_bytes": 512,
+      "dictionary_id": 21003,
+      "dictionary_bytes": 393,
+      "dictionary_sha256": "4febd6f50cc0071ef47fd64d5e9fb039702df1b15d43b92b5b7f63d2b680d5a2",
+      "reference_frame_bytes": 34,
+      "flags": [
+        "--dmer=8",
+        "--hash-log=10",
+        "--accel=10",
+        "--steps=2",
+        "--threads=2",
+        "--shrink",
+        "--json",
+        "--profile"
+      ],
+      "stdout": "{\"dictionary_id\":21003,\"dictionary_bytes\":393,\"history_bytes\":256,\"dmer_size\":8,\"segment_size\":512,\"hash_log\":10,\"acceleration\":10,\"path\":\"/tmp/vort-fastcover-cli/final-21003.dict\",\"profile\":{\"search\":{\"available\":true,\"training\":{\"available\":true,\"dmer_size\":8,\"hash_log\":10,\"acceleration\":10,\"finalize_percent\":10,\"samples\":9,\"corpus_bytes\":5409,\"dmer_positions\":5346,\"prepared_bytes\":14900,\"peak_working_memory\":24736,\"result_bytes\":512,\"frequency_passes\":1,\"frequency_positions\":5346,\"frequency_hashes\":540,\"frequency_skipped_positions\":4806,\"selection_hashes\":11760,\"segment_windows\":11760,\"active_adds\":11760,\"active_removes\":11760,\"epoch_visits\":13,\"zero_score_epochs\":0,\"selected_segments\":13,\"selected_bytes\":1024,\"frequency_clear_positions\":933,\"frequency_clears\":148,\"frequency_restore_bytes\":8192,\"table_clear_bytes\":12288,\"training_runs\":2,\"prepared_reuses\":0,\"prepared_forks\":2,\"frequency_copy_bytes\":8192},\"training_samples\":9,\"validation_samples\":3,\"corpus_bytes\":7222,\"threads_used\":2,\"peak_working_memory\":2138496,\"peak_allocator_owned_bytes\":41344,\"thread_stack_reservation_peak\":2097152,\"result_bytes\":256,\"charged_dictionary_bytes\":256,\"candidate_grid_points\":2,\"prepared_groups\":1,\"candidates_evaluated\":2,\"scoring_calls\":4,\"shrink_evaluations\":2,\"shrink_selected\":1,\"thread_spawn_fallbacks\":0},\"candidate_finalizer\":{\"total_ns\":0,\"literal_entropy_ns\":0,\"sequence_collection_ns\":0,\"greedy_parse_ns\":0,\"lazy_parse_ns\":0,\"sequence_entropy_ns\":0,\"baseline_assembly_ns\":0,\"repcode_entropy_ns\":0,\"repcode_scoring_ns\":0,\"sample_bytes\":0,\"blocks\":0,\"greedy_tokens\":0,\"lazy_tokens\":0,\"offset_sequences\":0},\"winner_finalizer\":{\"total_ns\":363582,\"literal_entropy_ns\":194328,\"sequence_collection_ns\":11023,\"greedy_parse_ns\":0,\"lazy_parse_ns\":0,\"sequence_entropy_ns\":19189,\"baseline_assembly_ns\":119284,\"repcode_entropy_ns\":0,\"repcode_scoring_ns\":0,\"sample_bytes\":0,\"blocks\":0,\"greedy_tokens\":0,\"lazy_tokens\":0,\"offset_sequences\":0},\"total_ns\":5133488,\"candidate_search_ns\":4748754,\"selector_encoding_ns\":0,\"winner_finalization_ns\":364261,\"candidate_finalizations\":0,\"candidate_finalization_samples\":0,\"candidate_finalization_sample_bytes\":0,\"winner_finalizations\":1,\"winner_finalization_samples\":0,\"winner_finalization_sample_bytes\":0,\"candidate_encode_attempts\":0,\"candidate_frames\":0,\"selector_encoded_bytes\":0,\"peak_working_memory\":2138496,\"peak_allocator_owned_bytes\":41344,\"thread_stack_reservation_peak\":2097152}}\n"
+    },
+    {
+      "command": "optimize-zstd-fastcover-dictionary",
+      "target_history_bytes": 64,
+      "dictionary_id": 21004,
+      "dictionary_bytes": 197,
+      "dictionary_sha256": "70312413ea9e1610bfec0f13098c0b8bb8d0471f2d2618b4e8e6bca573949ae7",
+      "reference_frame_bytes": 123,
+      "flags": [
+        "--segment=6",
+        "--hash-log=10",
+        "--accel=10"
+      ],
+      "stdout": "dictionary_id=21004 dictionary_bytes=197 history_bytes=60 d=6 k=6 f=10 accel=10 path=/tmp/vort-fastcover-cli/final-21004.dict\n"
+    },
+    {
+      "command": "optimize-zstd-fastcover-dictionary",
+      "target_history_bytes": 64,
+      "dictionary_id": 21005,
+      "dictionary_bytes": 200,
+      "dictionary_sha256": "b111c0a0ef08971bb54e08af9a4ee1cad100ed5240ae9d29563c80fcca971fe7",
+      "reference_frame_bytes": 114,
+      "flags": [
+        "--segment=7",
+        "--hash-log=10",
+        "--accel=10"
+      ],
+      "stdout": "dictionary_id=21005 dictionary_bytes=200 history_bytes=63 d=6 k=7 f=10 accel=10 path=/tmp/vort-fastcover-cli/final-21005.dict\n"
+    },
+    {
+      "command": "optimize-zstd-fastcover-dictionary",
+      "target_history_bytes": 64,
+      "dictionary_id": 21006,
+      "dictionary_bytes": 223,
+      "dictionary_sha256": "f993326fd58abd33a03d5f55f23674e7618d4370c6e30e959a67c26ae54fbbb1",
+      "reference_frame_bytes": 63,
+      "flags": [
+        "--dmer=8",
+        "--segment=32",
+        "--hash-log=10",
+        "--accel=10",
+        "--split-num=1",
+        "--split-den=1",
+        "--json"
+      ],
+      "stdout": "{\"dictionary_id\":21006,\"dictionary_bytes\":223,\"history_bytes\":64,\"dmer_size\":8,\"segment_size\":32,\"hash_log\":10,\"acceleration\":10,\"path\":\"/tmp/vort-fastcover-cli/final-21006.dict\",\"profile\":null}\n"
+    }
+  ],
+  "thin_checks": {
+    "old_parser_valid": 6,
+    "old_parser_invalid": 21,
+    "small_segment_valid": 2,
+    "pinned_d8_and_train_rejections": 4,
+    "local_output_guards": 8,
+    "raw_cli_allocation_failure_points": 23,
+    "writer_mapped_allocation_failure_points": 1,
+    "allocation_ledger_balanced": true,
+    "independent_public_optimizer_k6_k7_byte_exact": true
+  },
+  "integration": {
+    "source_and_tools_revision": "a11bfd6c934644807281dbf0793203faaba4a487",
+    "checked_utc": "2026-10-24T01:07:34.392999+00:00",
+    "matched_source_hashes": 15,
+    "original_report_sha256": "3e26f9c06a3b16b11636446eb501004147bd56c942f6c8d2cadce08b30a6ddb0"
+  }
+}

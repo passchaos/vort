@@ -39,6 +39,15 @@ const encoded = try vort.encodeZfsBlockAlloc(
 defer allocator.free(encoded);
 ```
 
+`zstd_level` is signed. Positive levels 1...19 retain their old behavior, while
+the representable OpenZFS FAST levels are `-1...-10`, `-20...-100` in tens,
+`-500`, and `-1000`. They map to unsigned on-disk enum values 103...123;
+`ZstdMetadata.level` continues to report that wire value. Zero, missing fast
+steps, other native negative levels and enum values passed as input are
+rejected. The level/version header and physical-padding rules are preserved.
+Fixed-tag mapping and bidirectional evidence are recorded in
+[the Zstd controls baseline](../performance/zstd-encode-controls-functional-baseline.md).
+
 The writer emits only the selected algorithm's compressed representation. If a
 compressed result would not be smaller than the logical block it returns
 `error.IncompressibleZfsBlock`; it never labels raw bytes as a compressed ZFS

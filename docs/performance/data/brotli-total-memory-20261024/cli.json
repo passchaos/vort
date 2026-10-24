@@ -1,0 +1,156 @@
+{
+  "phase": "formal-final-br-total-memory-cli",
+  "time_before_utc": "2026-10-24T09:16:33.009683+00:00",
+  "git_head": "c4cca69c992aaefdf235c57cb9e5d4f778e39c66",
+  "source_files_before": 1679,
+  "source_before_sha256": "06dbe782fc1d6e84fe4ed4bd3c1ca482e611bed9bfb222b9ba731196388c9b68",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br-total-memory-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "round_trips": 44,
+    "profile_wire_checks": 14,
+    "exact_cap_checks": 14,
+    "one_below_checks": 14,
+    "rejected_output_preserved": 44,
+    "same_path_checks": 2
+  },
+  "status": "passed-final",
+  "time_after_utc": "2026-10-24T09:18:01.013114+00:00",
+  "source_files_after": 1679,
+  "source_equal": true,
+  "delta": {
+    "changed": {},
+    "added": {},
+    "removed": {}
+  },
+  "gate_report": {
+    "round_trips": 44,
+    "profile_wire_checks": 14,
+    "exact_cap_checks": 14,
+    "one_below_checks": 14,
+    "rejected_output_preserved": 44,
+    "same_path_checks": 2,
+    "measurements": [
+      {
+        "command": "encode-br-file",
+        "case": "legacy_default",
+        "peak_requested_bytes": 990
+      },
+      {
+        "command": "encode-br-file",
+        "case": "quality0",
+        "peak_requested_bytes": 4073
+      },
+      {
+        "command": "encode-br-file",
+        "case": "quality5",
+        "peak_requested_bytes": 689855
+      },
+      {
+        "command": "encode-br-file",
+        "case": "quality8_window",
+        "peak_requested_bytes": 689855
+      },
+      {
+        "command": "encode-br-file",
+        "case": "quality11",
+        "peak_requested_bytes": 689855
+      },
+      {
+        "command": "encode-br-file",
+        "case": "hq10_text",
+        "peak_requested_bytes": 8824829
+      },
+      {
+        "command": "encode-br-file",
+        "case": "hq11_font",
+        "peak_requested_bytes": 9138392
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "legacy_default",
+        "peak_requested_bytes": 2209
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "quality0",
+        "peak_requested_bytes": 4358
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "quality5",
+        "peak_requested_bytes": 689955
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "quality8_window",
+        "peak_requested_bytes": 689957
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "quality11",
+        "peak_requested_bytes": 689955
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "hq10_text",
+        "peak_requested_bytes": 8824674
+      },
+      {
+        "command": "encode-br-stream-file",
+        "case": "hq11_font",
+        "peak_requested_bytes": 9138195
+      }
+    ],
+    "reference_brotli_version": 16777225,
+    "external_dictionary_cli_cases": 0
+  },
+  "gate_expected_matches": true,
+  "build_exit_code": 0,
+  "parser_tests_passed": 8,
+  "compile_cache_manifest": ".zig-cache/h/fdca596c70fbb49d05725c19120bdb50.txt",
+  "binary_candidates_in_window": [
+    "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/43d5468ec9dd1dfb09efae0dd5408344/vort-br-hq-cli-probe"
+  ],
+  "binary": {
+    "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/43d5468ec9dd1dfb09efae0dd5408344/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-total-final-20261024-n_7jpt2j/cli/vort-br-hq-cli-probe",
+    "sha256": "b3731eca7378c1656667acf6d23a257a9cdca0a9ea34c0ab9283edc6e8f6d962",
+    "built_in_window": true
+  },
+  "compiled_input_binding": {
+    "records": 1884,
+    "unique_inputs": 1882,
+    "prefix_counts": {
+      "0": 1067,
+      "1": 813,
+      "2": 2
+    },
+    "mismatches": [],
+    "uncovered_project_inputs": [],
+    "method": "Original actual compiler manifest SipHash128 content digests verified against same bytes hashed with SHA256 and all project/dependency contents compared to both snapshots"
+  },
+  "strict_binary_source_binding": true,
+  "finalized_utc": "2026-10-24T09:18:09.575834+00:00",
+  "report_files_sha256": {
+    "source-before.json": "06dbe782fc1d6e84fe4ed4bd3c1ca482e611bed9bfb222b9ba731196388c9b68",
+    "source-after.json": "06dbe782fc1d6e84fe4ed4bd3c1ca482e611bed9bfb222b9ba731196388c9b68",
+    "source-before.zip": "50dfc9d357732ab42e31bf8bf6f52531ced03a8a1c2e194bcdeea7eeab48d2a6",
+    "source-after.zip": "50dfc9d357732ab42e31bf8bf6f52531ced03a8a1c2e194bcdeea7eeab48d2a6",
+    "source-delta.json": "6e6c1716a2c4d92cdd27b27267c90b5e4457ba85cf08f05b77d1435c9432e149",
+    "compile-inputs.txt": "edec57d086a5e809c1c5797cb19d3fadbea9a0b7dbb73918632cfba714226c75",
+    "compile-input-digest-check.tsv": "e4d8920e8123767cccd27170e9a9aa50168c1c2508b637d4cdfff96ddfa73554",
+    "compiled-inputs-all.json": "ae3fcbe6c03f0c8f42608bbda36ede65ab96c5c16035c007d6b85c56b568f70b",
+    "compiled-input-bytes.zip": "83ff040afbfd923c80684a5f87701f0d90923c1a40e17c15dd665834bcaa537b",
+    "gate-report.json": "d3b173d06720fc65345a86a747354e992c32e4863d945faef304bffdab61ee3b",
+    "build.stdout": "d73df57971f3fc9b714cbacc6534763ac7213c0a885feb603d15deffcfdc4bbd",
+    "build.stderr": "45fa424d997d193b5ef16ef4ecac4e0c839e470e05dfe56073abd004a835866e"
+  }
+}

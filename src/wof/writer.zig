@@ -1,9 +1,10 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const xpress = @import("../xpress.zig");
+const lzx_encoder = @import("../cab/lzx/encoder.zig");
 const format = @import("format.zig");
 
-pub const Error = core.Error || xpress.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || xpress.Error || lzx_encoder.Error || std.mem.Allocator.Error || error{
     InvalidWof,
 };
 
@@ -49,14 +50,12 @@ pub fn encodeAppend(
     for (0..chunk_count) |chunk_index| {
         const decoded_len = @min(chunk_size, input.len - input_offset);
         const chunk = input[input_offset..][0..decoded_len];
-        var encoded: ?[]u8 = null;
-        defer if (encoded) |bytes| allocator.free(bytes);
-        if (algorithm != .lzx)
-            encoded = try xpress.encodeHuffmanAlloc(allocator, chunk, .{});
-        const selected = if (encoded) |bytes|
-            if (bytes.len < chunk.len) bytes else chunk
+        const encoded = if (algorithm == .lzx)
+            try lzx_encoder.encodeWimChunkAlloc(allocator, chunk, 15)
         else
-            chunk;
+            try xpress.encodeHuffmanAlloc(allocator, chunk, .{});
+        defer allocator.free(encoded);
+        const selected = if (encoded.len < chunk.len) encoded else chunk;
         try output.appendSlice(allocator, selected);
         data_size = std.math.add(usize, data_size, selected.len) catch
             return error.IntegerOverflow;

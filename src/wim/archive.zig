@@ -3,9 +3,11 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
 const image_metadata = @import("metadata.zig");
+const encrypted_esd = @import("encrypted_esd.zig");
+const pipable = @import("pipable.zig");
 const solid = @import("solid.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || solid.Error ||
+pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || encrypted_esd.Error || pipable.Error || solid.Error ||
     std.mem.Allocator.Error || error{
     InvalidWim,
     WimImageNotFound,
@@ -22,6 +24,36 @@ pub const PathLimits = struct {
     max_directory_entries: usize = 1024 * 1024,
     max_path_depth: usize = 256,
 };
+
+pub const StreamSelector = union(enum) {
+    default,
+    named: []const u8,
+    reparse,
+    encrypted_raw,
+};
+
+pub fn selectDentryStreamSha1Alloc(
+    allocator: std.mem.Allocator,
+    dentry: image_metadata.Dentry,
+    stream: StreamSelector,
+) Error![20]u8 {
+    switch (stream) {
+        .encrypted_raw => return dentry.encryptedRawDataSha1(),
+        else => {},
+    }
+    if (dentry.isEncrypted()) return error.UnsupportedWimFile;
+    return switch (stream) {
+        .default => blk: {
+            if (dentry.isDirectory() or dentry.isReparsePoint())
+                return error.WimNotRegularFile;
+            break :blk try dentry.defaultDataSha1() orelse
+                return error.WimNotRegularFile;
+        },
+        .named => |name| try dentry.namedStreamSha1(allocator, name),
+        .reparse => try dentry.reparseDataSha1(),
+        .encrypted_raw => unreachable,
+    };
+}
 
 pub const solid_resource_magic = solid.resource_magic;
 pub const LookupKind = solid.LookupKind;
@@ -87,7 +119,90 @@ pub const Archive = struct {
         );
     }
 
+    pub fn readEncryptedEsdInfoAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        limits: encrypted_esd.Limits,
+    ) Error!encrypted_esd.Info {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        errdefer info.deinit();
+        try encrypted_esd.validateInfo(self.bytes, self.header, info);
+        return info;
+    }
+
+    pub fn decryptEncryptedEsdAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        private_key_blob: []const u8,
+        max_output_len: usize,
+        limits: encrypted_esd.Limits,
+    ) Error![]u8 {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        defer info.deinit();
+        return encrypted_esd.decryptWithPrivateKeyAllocLimited(
+            allocator,
+            self.bytes,
+            self.header,
+            xml,
+            info,
+            private_key_blob,
+            max_output_len,
+        );
+    }
+
+    pub fn decryptEncryptedEsdWithAesKeyAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        key: *const [32]u8,
+        max_output_len: usize,
+        limits: encrypted_esd.Limits,
+    ) Error![]u8 {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        defer info.deinit();
+        return encrypted_esd.decryptWithAesKeyAllocLimited(
+            allocator,
+            self.bytes,
+            self.header,
+            xml,
+            info,
+            key,
+            max_output_len,
+        );
+    }
+
     pub fn readLookupTableAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        max_entries: usize,
+        max_table_bytes: usize,
+    ) Error!LookupTable {
+        var lookup = try self.readLookupTableRawAlloc(
+            allocator,
+            max_entries,
+            max_table_bytes,
+        );
+        errdefer lookup.deinit();
+        if (self.header.pipable) {
+            for (lookup.entries) |entry| {
+                if (entry.resource.isSolid()) return error.InvalidWim;
+            }
+        }
+        try solid.resolveEntries(
+            allocator,
+            self.bytes,
+            self.header.version,
+            lookup.entries,
+        );
+        return lookup;
+    }
+
+    pub fn readLookupTableRawAlloc(
         self: Archive,
         allocator: std.mem.Allocator,
         max_entries: usize,
@@ -125,12 +240,6 @@ pub const Archive = struct {
                 .sha1 = sha1,
             };
         }
-        try solid.resolveEntries(
-            allocator,
-            self.bytes,
-            self.header.version,
-            entries,
-        );
         return .{ .allocator = allocator, .bytes = bytes, .entries = entries };
     }
 
@@ -186,6 +295,83 @@ pub const Archive = struct {
         max_output_len: usize,
         limits: PathLimits,
     ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .default,
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractNamedStreamByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream_name: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .{ .named = stream_name },
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractReparseDataByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .reparse,
+            max_output_len,
+            limits,
+        );
+    }
+
+    /// Extracts the opaque EFSRPC raw stream for an encrypted file or
+    /// directory. The returned bytes are suitable for WriteEncryptedFileRaw()
+    /// and are not plaintext.
+    pub fn extractEncryptedRawByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .encrypted_raw,
+            max_output_len,
+            limits,
+        );
+    }
+
+    fn extractPathStreamAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream: StreamSelector,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
         var lookup = try self.readLookupTableAlloc(
             allocator,
             limits.max_lookup_entries,
@@ -209,12 +395,26 @@ pub const Archive = struct {
             limits.max_directory_entries,
             limits.max_path_depth,
         );
-        if (dentry.isDirectory()) return error.WimNotRegularFile;
-        if (dentry.isEncrypted() or dentry.isReparsePoint() or
-            try dentry.hasNamedStreams())
-            return error.UnsupportedWimFile;
-        const hash = try dentry.defaultDataSha1() orelse
-            return error.WimNotRegularFile;
+        return self.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            dentry,
+            stream,
+            max_output_len,
+            limits.max_solid_chunk_bytes,
+        );
+    }
+
+    pub fn extractDentryStreamAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        lookup: LookupTable,
+        dentry: image_metadata.Dentry,
+        stream: StreamSelector,
+        max_output_len: usize,
+        max_solid_chunk_bytes: usize,
+    ) Error![]u8 {
+        const hash = try selectDentryStreamSha1Alloc(allocator, dentry, stream);
         if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
         const entry = lookup.findData(&hash) orelse {
             if (self.header.total_parts > 1) return error.WimResourceInOtherPart;
@@ -224,7 +424,7 @@ pub const Archive = struct {
             allocator,
             entry,
             max_output_len,
-            limits.max_solid_chunk_bytes,
+            max_solid_chunk_bytes,
         );
     }
 
@@ -252,11 +452,20 @@ pub const Archive = struct {
         if (entry.part_number != self.header.part_number)
             return error.WimResourceInOtherPart;
         const output = switch (entry.kind) {
-            .standalone => try self.readResourceAllocLimited(
-                allocator,
-                entry.resource,
-                max_output_len,
-            ),
+            .standalone => blk: {
+                if (self.header.pipable) {
+                    try pipable.validateBlobHeader(
+                        self.bytes,
+                        entry.resource,
+                        &entry.sha1,
+                    );
+                }
+                break :blk try self.readResourceAllocLimited(
+                    allocator,
+                    entry.resource,
+                    max_output_len,
+                );
+            },
             .solid_resource => return error.UnsupportedWimFeature,
             .solid_blob => try solid.readBlobAllocLimited(
                 allocator,
@@ -283,6 +492,19 @@ pub const Archive = struct {
     ) Error![]u8 {
         if (resource.isSolid() or resource.isSpanned())
             return error.UnsupportedWimFeature;
+        if (self.header.pipable) {
+            try pipable.validateBlobHeader(self.bytes, resource, null);
+            if (resource.isCompressed()) {
+                return pipable.readCompressedAllocLimited(
+                    allocator,
+                    self.bytes,
+                    resource,
+                    self.header.compression,
+                    self.header.chunk_size,
+                    max_output_len,
+                );
+            }
+        }
         const output_len = std.math.cast(usize, resource.uncompressed_size) orelse
             return error.IntegerOverflow;
         if (output_len > max_output_len) return error.OutputLimitExceeded;
@@ -485,6 +707,150 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
     );
     defer allocator.free(by_path);
     try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", by_path);
+
+    var stream_record: [48]u8 = @splat(0);
+    std.mem.writeInt(u64, stream_record[0..8], stream_record.len, .little);
+    @memcpy(stream_record[16..36], &file_hash);
+    std.mem.writeInt(u16, stream_record[36..38], 2, .little);
+    stream_record[38] = 'x';
+    var with_named_stream = nested_file;
+    with_named_stream.metadata_bytes = &stream_record;
+    with_named_stream.extra_stream_count = 1;
+    with_named_stream.extra_stream_offset = 0;
+    const named = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        with_named_stream,
+        .{ .named = "x" },
+        1024,
+        1024,
+    );
+    defer allocator.free(named);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", named);
+    const NamedFailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            test_lookup: LookupTable,
+            test_dentry: image_metadata.Dentry,
+        ) !void {
+            const output = try test_archive.extractDentryStreamAllocLimited(
+                failure_allocator,
+                test_lookup,
+                test_dentry,
+                .{ .named = "x" },
+                1024,
+                1024,
+            );
+            defer failure_allocator.free(output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        NamedFailureTest.run,
+        .{ archive, lookup, with_named_stream },
+    );
+    const default_with_ads = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        with_named_stream,
+        .default,
+        1024,
+        1024,
+    );
+    defer allocator.free(default_with_ads);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", default_with_ads);
+    try std.testing.expectError(
+        error.WimStreamNotFound,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            with_named_stream,
+            .{ .named = "missing" },
+            1024,
+            1024,
+        ),
+    );
+    var encrypted = nested_file;
+    encrypted.attributes |= image_metadata.file_attribute_encrypted;
+    const encrypted_raw = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        encrypted,
+        .encrypted_raw,
+        1024,
+        1024,
+    );
+    defer allocator.free(encrypted_raw);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", encrypted_raw);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            encrypted,
+            .encrypted_raw,
+            encrypted_raw.len - 1,
+            1024,
+        ),
+    );
+    const EncryptedFailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            test_lookup: LookupTable,
+            test_dentry: image_metadata.Dentry,
+        ) !void {
+            const raw = try test_archive.extractDentryStreamAllocLimited(
+                failure_allocator,
+                test_lookup,
+                test_dentry,
+                .encrypted_raw,
+                1024,
+                1024,
+            );
+            defer failure_allocator.free(raw);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        EncryptedFailureTest.run,
+        .{ archive, lookup, encrypted },
+    );
+    try std.testing.expectError(
+        error.UnsupportedWimFile,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            encrypted,
+            .default,
+            1024,
+            1024,
+        ),
+    );
+    try std.testing.expectError(
+        error.WimNotEncryptedFile,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            nested_file,
+            .encrypted_raw,
+            1024,
+            1024,
+        ),
+    );
+    var reparse = nested_file;
+    reparse.attributes |= image_metadata.file_attribute_reparse_point;
+    const reparse_data = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        reparse,
+        .reparse,
+        1024,
+        1024,
+    );
+    defer allocator.free(reparse_data);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", reparse_data);
     try std.testing.expectError(
         error.WimPathNotFound,
         archive.extractByPathAllocLimited(
@@ -516,6 +882,111 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
                 .max_path_depth = 8,
             },
         ),
+    );
+}
+
+test "WIM reads seekable pipable XPRESS resources" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/pipable-xpress.wim.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    try std.testing.expect(archive.header.pipable);
+    try std.testing.expectEqual(format.Compression.xpress, archive.header.compression);
+    var lookup = try archive.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 2), lookup.entries.len);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const file_hash = try parseSha1("d5929858ebffe1963ca1e26dd189cc32c6ce2914");
+    const by_hash = try archive.extractBySha1AllocLimited(
+        allocator,
+        &file_hash,
+        expected.len,
+        16,
+        4096,
+    );
+    defer allocator.free(by_hash);
+    try std.testing.expectEqualStrings(expected, by_hash);
+    const by_path = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/payload.txt",
+        expected.len,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(by_path);
+    try std.testing.expectEqualStrings(expected, by_path);
+    const xml = try archive.readXmlAllocLimited(allocator, 4096);
+    defer allocator.free(xml);
+    try std.testing.expect(std.mem.indexOf(u8, xml, &.{ '<', 0, 'W', 0, 'I', 0, 'M', 0 }) != null);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.extractBySha1AllocLimited(
+            allocator,
+            &file_hash,
+            expected.len - 1,
+            16,
+            4096,
+        ),
+    );
+
+    const FailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            expected_len: usize,
+        ) !void {
+            const output = try test_archive.extractByPathAllocLimited(
+                failure_allocator,
+                1,
+                "/nested/payload.txt",
+                expected_len,
+                .{
+                    .max_metadata_bytes = 4096,
+                    .max_lookup_entries = 16,
+                    .max_lookup_bytes = 4096,
+                    .max_directory_entries = 16,
+                    .max_path_depth = 8,
+                },
+            );
+            defer failure_allocator.free(output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        FailureTest.run,
+        .{ archive, expected.len },
+    );
+
+    const entry = lookup.find(&file_hash).?;
+    const blob_header_offset = @as(usize, @intCast(entry.resource.offset_in_wim)) -
+        pipable.blob_header_size;
+    bytes[blob_header_offset] ^= 1;
+    try std.testing.expectError(
+        error.InvalidWim,
+        archive.extractEntryAllocLimited(allocator, entry, expected.len),
+    );
+    bytes[blob_header_offset] ^= 1;
+    const chunk_header_offset: usize = @intCast(entry.resource.offset_in_wim);
+    const saved_chunk_size = format.readU32(bytes, chunk_header_offset);
+    std.mem.writeInt(u32, bytes[chunk_header_offset..][0..4], 0, .little);
+    try std.testing.expectError(
+        error.InvalidWim,
+        archive.extractEntryAllocLimited(allocator, entry, expected.len),
+    );
+    std.mem.writeInt(
+        u32,
+        bytes[chunk_header_offset..][0..4],
+        saved_chunk_size,
+        .little,
     );
 }
 

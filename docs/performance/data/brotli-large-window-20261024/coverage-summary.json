@@ -1,0 +1,229 @@
+{
+  "generated_utc": "2026-10-24T10:16:08.635541+00:00",
+  "scope": "只读实际正式 ELF 元数据、编译/运行缓存输入与非输入源变更补充；未重编译或运行测试二进制。",
+  "main_ordered_names_equal": true,
+  "main_expected_named_groups": {
+    "independent_qa": 16,
+    "distance_math": 3,
+    "format_types": 2,
+    "tree_geometry": 3,
+    "parser_format": 3,
+    "exact_wire": 2
+  },
+  "modes": {
+    "family-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/3f12551fc1c8a2970f780b5f19b2d3ea/vort-br-tests",
+      "binary_sha256": "2e1eef9aec0af82dad0c4d57eb888e66fae91c51e29431c12873a3a87a95d87f",
+      "metadata_count": 1188,
+      "named_count": 1172,
+      "anonymous_count": 16,
+      "group_counts": {
+        "anonymous_import_roots": 16,
+        "distance_math": 3,
+        "exact_wire": 2,
+        "format_types": 2,
+        "independent_qa": 16,
+        "other_library_named": 1143,
+        "parser_format": 3,
+        "tree_geometry": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/bce1bd306ce6910678552b2a9f1b3d51.txt",
+      "source_change_supplement": {
+        "status": "tests_passed_compiled_inputs_unchanged_non_input_source_change",
+        "global_source_snapshot_unchanged": false,
+        "changed_sources": [
+          "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py"
+        ],
+        "compiled_source_projection_before_after_equal": true,
+        "all_compile_inputs_and_recursive_objects_content_verified": true,
+        "changed_sources_absent_from_compiler_inputs": true,
+        "changed_sources_absent_from_run_inputs": true,
+        "raw_result_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/family-rf-result.json",
+        "raw_result_sha256": "f7e67562b0cdfbbcac508819d880bfc4feaf3bb4670ff627e17b8b10f4dbcf9c",
+        "raw_before_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_after_snapshot_sha256": "b7a1d6e1ee16f9875c8a3c4b6d007ed0a89c5f9472cec13ad3df18d5d79e0c0e",
+        "raw_log_sha256": "3820c765f04acb2b689cd6e72a0b754cae7116a8c800a6459f36af58893d73c8",
+        "raw_changed_sources_preserved": true,
+        "exact_non_input_change_evidence": {
+          "source_path": "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+          "before_sha256": "c9f1d8ff5badd1324be50bd955921b3f329bfecadf17f1e9b2274c1f5483e1e4",
+          "after_sha256": "66117d4b4f1d858d77ddfeca7d71a968e6a73143cc10c02b39aab363cc57e890",
+          "before_content_archive": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli/source-before.zip",
+          "before_content_archive_entry": "home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+          "after_content_current_file_verified": true,
+          "after_file_mtime_utc": "2026-10-24T10:04:45.896101+00:00",
+          "diff_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/coverage/non-input-python-change.diff",
+          "diff_sha256": "0e1b20872038a3422ac6640dfcd7b5933df72388930f3ff0690dc317b8e821d6",
+          "compiled_input": false,
+          "raw_global_changed_sources_preserved": true
+        }
+      },
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f05814ce0d2c0e8a4a090a940d4772a1.txt",
+      "compiled_input_count": 991,
+      "compiled_prefix_counts": {
+        "1": 813,
+        "0": 177,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "large-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/03552231ddcff47ab0d3a90b803723b2/vort-br-large-window-tests",
+      "binary_sha256": "39758516a5b5f235b9691c1760375bc48aa7e2bb31d32308770e00b3b4b0a356",
+      "metadata_count": 44,
+      "named_count": 29,
+      "anonymous_count": 15,
+      "group_counts": {
+        "anonymous_import_roots": 15,
+        "distance_math": 3,
+        "exact_wire": 2,
+        "format_types": 2,
+        "independent_qa": 16,
+        "parser_format": 3,
+        "tree_geometry": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/da3231b10b43060065cf009ed3205949.txt",
+      "source_change_supplement": {
+        "status": "tests_passed_all_recorded_source_inputs_unchanged",
+        "global_source_snapshot_unchanged": true,
+        "changed_sources": [],
+        "compiled_source_projection_before_after_equal": true,
+        "all_compile_inputs_and_recursive_objects_content_verified": true,
+        "changed_sources_absent_from_compiler_inputs": true,
+        "changed_sources_absent_from_run_inputs": true,
+        "raw_result_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/large-rf-result.json",
+        "raw_result_sha256": "c853a95e879605c774f04b7f0b623865f87665fc443429dbc8b955a08f01709c",
+        "raw_before_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_after_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_log_sha256": "297e0052985233e80b97b28fe50ade8bbdc27763a61da05d58361b741bb78c61",
+        "raw_changed_sources_preserved": true
+      },
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7339c1575e11edaa416b4b67dbf5eb58.txt",
+      "compiled_input_count": 991,
+      "compiled_prefix_counts": {
+        "1": 813,
+        "0": 177,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "large-debug": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/b060cd0a372d0f1ff06a9b1f8b8ca0dd/vort-br-large-window-tests",
+      "binary_sha256": "bcb71899613ae65252c732552d0688e5290708c846e90a791cd6f6def6321e70",
+      "metadata_count": 44,
+      "named_count": 29,
+      "anonymous_count": 15,
+      "group_counts": {
+        "anonymous_import_roots": 15,
+        "distance_math": 3,
+        "exact_wire": 2,
+        "format_types": 2,
+        "independent_qa": 16,
+        "parser_format": 3,
+        "tree_geometry": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/311adc94fc78096f7c76715db4e27453.txt",
+      "source_change_supplement": {
+        "status": "tests_passed_compiled_inputs_unchanged_non_input_source_change",
+        "global_source_snapshot_unchanged": false,
+        "changed_sources": [
+          "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py"
+        ],
+        "compiled_source_projection_before_after_equal": true,
+        "all_compile_inputs_and_recursive_objects_content_verified": true,
+        "changed_sources_absent_from_compiler_inputs": true,
+        "changed_sources_absent_from_run_inputs": true,
+        "raw_result_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/large-debug-result.json",
+        "raw_result_sha256": "00f12fa66a02012a1e1407e65eeea09e5a2a5e90faa65c4a4c0e3f6ea6ec470e",
+        "raw_before_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_after_snapshot_sha256": "b7a1d6e1ee16f9875c8a3c4b6d007ed0a89c5f9472cec13ad3df18d5d79e0c0e",
+        "raw_log_sha256": "e789f0f492fe9716db926dfad5c978402de0a7f54c2c173970a94e319529e44a",
+        "raw_changed_sources_preserved": true,
+        "exact_non_input_change_evidence": {
+          "source_path": "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+          "before_sha256": "c9f1d8ff5badd1324be50bd955921b3f329bfecadf17f1e9b2274c1f5483e1e4",
+          "after_sha256": "66117d4b4f1d858d77ddfeca7d71a968e6a73143cc10c02b39aab363cc57e890",
+          "before_content_archive": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli/source-before.zip",
+          "before_content_archive_entry": "home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+          "after_content_current_file_verified": true,
+          "after_file_mtime_utc": "2026-10-24T10:04:45.896101+00:00",
+          "diff_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/coverage/non-input-python-change.diff",
+          "diff_sha256": "0e1b20872038a3422ac6640dfcd7b5933df72388930f3ff0690dc317b8e821d6",
+          "compiled_input": false,
+          "raw_global_changed_sources_preserved": true
+        }
+      },
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/a05a07a88f48e3f9d365ea746091e1a7.txt",
+      "compiled_input_count": 992,
+      "compiled_prefix_counts": {
+        "1": 814,
+        "0": 177,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "large-x86": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/605d5c040d0226c251cac8af8658c540/vort-br-large-window-tests",
+      "binary_sha256": "32805c541a2d7184ace73e4419b09d88795a4d8639137892ff01fb2f445d503f",
+      "metadata_count": 44,
+      "named_count": 29,
+      "anonymous_count": 15,
+      "group_counts": {
+        "anonymous_import_roots": 15,
+        "distance_math": 3,
+        "exact_wire": 2,
+        "format_types": 2,
+        "independent_qa": 16,
+        "parser_format": 3,
+        "tree_geometry": 3
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/c1533bf9e4e322af4cb1a1526f2c411b.txt",
+      "source_change_supplement": {
+        "status": "tests_passed_all_recorded_source_inputs_unchanged",
+        "global_source_snapshot_unchanged": true,
+        "changed_sources": [],
+        "compiled_source_projection_before_after_equal": true,
+        "all_compile_inputs_and_recursive_objects_content_verified": true,
+        "changed_sources_absent_from_compiler_inputs": true,
+        "changed_sources_absent_from_run_inputs": true,
+        "raw_result_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/large-x86-result.json",
+        "raw_result_sha256": "afa77369158957c992af463937b6766252c1fd5d4c1e9cfe0fab2906b334e888",
+        "raw_before_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_after_snapshot_sha256": "9ff21697c407248e5ff19fad10ca0056e6237264c4e19eb5c6eff1b751c40028",
+        "raw_log_sha256": "752fbce328c43e9dbe5360bc801f7f59750d776953a0801b0dd594b7130ee926",
+        "raw_changed_sources_preserved": true
+      },
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/1637a0ffd16456b4d71626fdf29e6855.txt",
+      "compiled_input_count": 991,
+      "compiled_prefix_counts": {
+        "1": 813,
+        "0": 177,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    }
+  },
+  "all_compile_and_recursive_object_inputs_verified": true,
+  "all_run_elf_input_digests_verified": true,
+  "original_raw_change_reports_preserved": true,
+  "exact_child_compile_argv_logged": false,
+  "big_tree_extra_tests_included_in_main": false,
+  "raw_frozen_source_global_hash": "9ce6a16da6fbed3fe4b1cf7c6f7cb3e2c9866d67d3745830f7252e660f6cbb2d",
+  "source_projection_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/coverage/source-projection-with-noninput-change.json",
+  "non_input_change_evidence_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/coverage/non-input-python-change.json",
+  "source_count": 1556,
+  "audit_current_changes_after_formal_terminal": [
+    "/home/passchaos/project-z/vort-stream-contracts/build.zig"
+  ],
+  "all_main_named_tests_present_in_full_family": true,
+  "big_tree_extra_tests_in_main_count": 0,
+  "post_terminal_build_change_context": "父代理在主正式运行终态后新增永久Far与Wasm目标；后续代码/目标验证另有独立报告。当前审计不将新目标归入原44项或原before/after快照。"
+}

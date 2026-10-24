@@ -1,0 +1,48 @@
+{
+  "system": {
+    "version": "1.9.3",
+    "header_version": 10903,
+    "runtime_version": 10903,
+    "helper_sha256": "346a7fab2075f9ff9739d0da7cc03024454004cba0cdfe48b189a64cd2d2d0b8",
+    "runtime_path": "/usr/lib/x86_64-linux-gnu/liblz4.so.1.9.3",
+    "runtime_sha256": "65f47a3dc2cec5f938379b7b625f0621657bf1254551895d22462c6a204cbad8",
+    "controls_size": 32,
+    "header_owned_frame_preferences_size": 56,
+    "frame_level_mapping": "fast acceleration=max(1,min(65537,1-level)) for negative frame levels; generator selects level=1-normalized_acceleration"
+  },
+  "local194": {
+    "version": "1.9.4",
+    "header_version": 10904,
+    "runtime_version": 10904,
+    "helper_sha256": "71e644fe1eb41282863faf502a33310811f42fbe6ad2ec908772e49da75fe267",
+    "runtime_path": "/tmp/vort-lz4-fast-reference-1.9.4.so",
+    "runtime_sha256": "71e644fe1eb41282863faf502a33310811f42fbe6ad2ec908772e49da75fe267",
+    "controls_size": 32,
+    "header_owned_frame_preferences_size": 56,
+    "frame_level_mapping": "fast acceleration=max(1,min(65537,1-level)) for negative frame levels; generator selects level=1-normalized_acceleration"
+  },
+  "headers_system": {
+    "/usr/include/lz4.h": "c9b52a14c2c93fe5c435a09054cc8f1bf5d94a3ce1a38dc51296a92ce409f8e4",
+    "/usr/include/lz4frame.h": "69edc35d9a4e62cfc5639150cfebff4e4749c4923bf7d89e77a8d5eda8daf661"
+  },
+  "local_source_hashes": {
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4.h": "1d8e0b81d28306d92c2414bd5ae27ba00fd7255c7eb152bcb3b8ce161fa60a1f",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4.c": "0e60ef69a0c1468da9d04779ec55d400e17cc5c36ae744ae041cff4b77220d9e",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4hc.h": "6bc1efeb79571807da2ca084809de1760e0cd87064e40eccf9624d95088dce7d",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4hc.c": "ae180d5f7f0e4a39dee85c2c758deebcc4d6435be65612e4359acc0f0ea21fb8",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4frame.h": "5688d161153c9caf4889a53f97dbd7035ee7c5c5b4dbf723335637cc1cabb8ab",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4frame.c": "f9d49f6326bba8f02a836579853d404fe505640286b9214d61ba38fc3ed89e44",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/xxhash.h": "aefdd236f35130495c18764cabed3f7b216906855fc5e6a9025cd2040bc84444",
+    "/tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/xxhash.c": "7ae8273e2eae674db237c4d0c300e4a69bff8832b0e5b4e08552255fde006fa2"
+  },
+  "local193_mapping_source": {
+    "path": "/tmp/vort-maxcso-ref/lz4/lib/lz4frame.c",
+    "sha256": "81a95d4b234dfc6579d0978d6a18bd0c00d916753c3bd02410d6cf61951bcab4",
+    "expression": "int const acceleration = (level < 0) ? -level + 1 : 1;"
+  },
+  "helper_source_sha256": "3a8d8917234b3cb5c49fb9db2ff39d10570c79f6997cd6659a2d359add674f93",
+  "compiler": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+  "system_build_command": "cc -O2 -fPIC -shared tools/lz4/fast_controls_reference.c -Wl,-z,defs -llz4 -ldl -o /tmp/vort-lz4-fast-reference.so",
+  "local_build_command": "cc -O2 -fPIC -shared -I /tmp/vort-dolphin-ref/Externals/lz4/lz4/lib tools/lz4/fast_controls_reference.c /tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4.c /tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4hc.c /tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/lz4frame.c /tmp/vort-dolphin-ref/Externals/lz4/lz4/lib/xxhash.c -Wl,-z,defs -ldl -o /tmp/vort-lz4-fast-reference-1.9.4.so",
+  "scope": "reference-only ABI/build provenance; normalized raw and negative-frame-level equivalences do not establish native parser parity"
+}

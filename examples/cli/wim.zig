@@ -26,9 +26,10 @@ pub fn list(
     defer init.gpa.free(input);
     const archive = try vort.parseWim(input);
     try stdout.print(
-        "wim_version=0x{x} compression={s} chunk_size={d} images={d} part={d}/{d}\n",
+        "wim_version=0x{x} layout={s} compression={s} chunk_size={d} images={d} part={d}/{d}\n",
         .{
             archive.header.version,
+            if (archive.header.pipable) "pipable" else "standard",
             @tagName(archive.header.compression),
             archive.header.chunk_size,
             archive.header.image_count,
@@ -131,6 +132,7 @@ pub fn listImage(
         image_index,
         image.security.descriptor_count,
     });
+    try listDentryMetadata(init, image.root, "/", stdout);
     try listImageDirectory(init, image, image.root, "", 0, stdout);
 }
 
@@ -157,6 +159,7 @@ fn listImageDirectory(
         else
             try std.fmt.allocPrint(init.gpa, "{s}/{s}", .{ prefix, name });
         defer init.gpa.free(path);
+        try listDentryMetadata(init, entry, path, stdout);
         if (entry.isDirectory()) {
             try stdout.print("directory\t{s}\tattributes=0x{x}\n", .{
                 path,
@@ -169,8 +172,12 @@ fn listImageDirectory(
                 entry.attributes,
             });
         } else if (entry.isReparsePoint()) {
-            try stdout.print("reparse\t{s}\tattributes=0x{x}\n", .{
+            const hash = try entry.reparseDataSha1();
+            const hash_text = std.fmt.bytesToHex(hash, .lower);
+            try stdout.print("reparse\t{s}\ttag=0x{x}\tsha1={s}\tattributes=0x{x}\n", .{
                 path,
+                entry.reparseTag().?,
+                &hash_text,
                 entry.attributes,
             });
         } else {
@@ -182,6 +189,56 @@ fn listImageDirectory(
                 entry.attributes,
             });
         }
+        var streams = entry.extraStreams();
+        while (try streams.next()) |stream| {
+            if (!stream.isNamed()) continue;
+            const stream_name = try stream.nameUtf8Alloc(init.gpa);
+            defer init.gpa.free(stream_name);
+            const hash_text = std.fmt.bytesToHex(stream.hash, .lower);
+            try stdout.print("stream\t{s}:{s}\tsha1={s}\n", .{
+                path,
+                stream_name,
+                &hash_text,
+            });
+        }
+    }
+}
+
+fn listDentryMetadata(
+    init: std.process.Init,
+    entry: vort.WimDentry,
+    path: []const u8,
+    stdout: *std.Io.Writer,
+) !void {
+    if (entry.short_name_utf16le.len != 0) {
+        const short_name = try entry.shortNameUtf8Alloc(init.gpa);
+        defer init.gpa.free(short_name);
+        try stdout.print("short\t{s}\tname={s}\n", .{ path, short_name });
+    }
+    var items = entry.taggedItems();
+    while (try items.next()) |item|
+        try stdout.print("tag\t{s}\tid=0x{x}\tbytes={d}\n", .{
+            path,
+            item.tag,
+            item.data.len,
+        });
+    if (try entry.unixMetadata()) |unix|
+        try stdout.print("unix\t{s}\tuid={d}\tgid={d}\tmode=0{o}\trdev=0x{x}\n", .{
+            path,
+            unix.uid,
+            unix.gid,
+            unix.mode,
+            unix.rdev,
+        });
+    if (try entry.xattrs()) |initial| {
+        var xattrs = initial;
+        while (try xattrs.next()) |xattr|
+            try stdout.print("xattr\t{s}\tname={s}\tbytes={d}\tneed_ea={}\n", .{
+                path,
+                xattr.name,
+                xattr.value.len,
+                xattr.need_ea,
+            });
     }
 }
 
@@ -217,6 +274,438 @@ pub fn extractPath(
         decoded.len,
         output_path,
     });
+}
+
+pub fn extractNamedStream(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const stream_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decoded = try archive.extractNamedStreamByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        stream_name,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} entry={s} stream={s} decoded_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        stream_name,
+        decoded.len,
+        output_path,
+    });
+}
+
+pub fn extractReparseData(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decoded = try archive.extractReparseDataByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} entry={s} reparse_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        decoded.len,
+        output_path,
+    });
+}
+
+pub fn extractEncryptedRawData(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const raw = try archive.extractEncryptedRawByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(raw);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = raw });
+    try stdout.print("image={d} entry={s} efsrpc_raw_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        raw.len,
+        output_path,
+    });
+}
+
+pub fn extractPipablePathIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const input_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        4096;
+    const output_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        32 * 1024;
+    const stream: vort.WimStreamSelector = if (args.next()) |text|
+        if (std.mem.eql(u8, text, "default"))
+            .default
+        else if (std.mem.eql(u8, text, "reparse"))
+            .reparse
+        else if (std.mem.eql(u8, text, "encrypted-raw"))
+            .encrypted_raw
+        else if (std.mem.startsWith(u8, text, "stream:"))
+            .{ .named = text["stream:".len..] }
+        else
+            return error.InvalidBlockPlan
+    else
+        .default;
+    const verify_integrity = if (args.next()) |text|
+        if (std.mem.eql(u8, text, "verify-integrity"))
+            true
+        else if (std.mem.eql(u8, text, "early-exit"))
+            false
+        else
+            return error.InvalidBlockPlan
+    else
+        false;
+    if (input_step == 0 or output_step == 0 or output_step > max_file_size)
+        return error.InvalidBlockPlan;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const scratch = try init.gpa.alloc(u8, output_step);
+    defer init.gpa.free(scratch);
+    var decoded: std.ArrayList(u8) = .empty;
+    defer decoded.deinit(init.gpa);
+    var extractor = vort.WimPipableStreamPathExtractor.init(init.gpa, .{
+        .image_index = image_index,
+        .path = entry_path,
+        .stream = stream,
+        .max_output_len = limit,
+        .verify_integrity = verify_integrity,
+        .limits = .{
+            .max_metadata_bytes = max_metadata_bytes,
+            .max_directory_entries = max_directory_entries,
+            .max_path_depth = max_path_depth,
+        },
+    });
+    defer extractor.deinit();
+    var input_offset: usize = 0;
+    while (true) {
+        const input_end = @min(input.len, input_offset + input_step);
+        const stepped = try extractor.step(input[input_offset..input_end], scratch);
+        input_offset += stepped.progress.input_read;
+        try decoded.appendSlice(init.gpa, scratch[0..stepped.progress.output_written]);
+        if (stepped.status == .done) break;
+        if (stepped.status == .need_input and input_offset == input.len) {
+            try extractor.finish();
+            return error.SizeMismatch;
+        }
+        if (stepped.progress.input_read == 0 and stepped.progress.output_written == 0)
+            return error.InvalidBlockPlan;
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decoded.items,
+    });
+    try stdout.print(
+        "image={d} entry={s} decoded_bytes={d} input_read={d} input_step={d} output_step={d} verify_integrity={} path={s}\n",
+        .{
+            image_index,
+            entry_path,
+            decoded.items.len,
+            input_offset,
+            input_step,
+            output_step,
+            verify_integrity,
+            output_path,
+        },
+    );
+}
+
+pub fn inspectEncryptedEsd(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_xml = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        16 * 1024 * 1024;
+    const max_ranges = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        1024 * 1024;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    var info = try archive.readEncryptedEsdInfoAlloc(init.gpa, .{
+        .max_xml_bytes = max_xml,
+        .max_ranges = max_ranges,
+    });
+    defer info.deinit();
+    try stdout.print("wrapped_key_bytes={d} ranges={d}\n", .{
+        info.wrapped_key.len,
+        info.ranges.len,
+    });
+    for (info.ranges, 0..) |range, index|
+        try stdout.print("range={d}\toffset={d}\tbytes={d}\n", .{
+            index,
+            range.offset,
+            range.length,
+        });
+}
+
+pub fn decryptEncryptedEsd(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const key_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const private_key = try readFile(init, key_path);
+    defer {
+        std.crypto.secureZero(u8, private_key);
+        init.gpa.free(private_key);
+    }
+    const archive = try vort.parseWim(input);
+    const decrypted = try archive.decryptEncryptedEsdAllocLimited(
+        init.gpa,
+        private_key,
+        max_output,
+        .{},
+    );
+    defer init.gpa.free(decrypted);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decrypted,
+    });
+    try stdout.print("encrypted_bytes={d} decrypted_bytes={d} path={s}\n", .{
+        input.len,
+        decrypted.len,
+        output_path,
+    });
+}
+
+pub fn decryptEncryptedEsdWithKey(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const key_hex = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    if (key_hex.len != 64) return error.InvalidCorpusHex;
+    var key: [32]u8 = undefined;
+    defer std.crypto.secureZero(u8, &key);
+    _ = try std.fmt.hexToBytes(&key, key_hex);
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decrypted = try archive.decryptEncryptedEsdWithAesKeyAllocLimited(
+        init.gpa,
+        &key,
+        max_output,
+        .{},
+    );
+    defer init.gpa.free(decrypted);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decrypted,
+    });
+    try stdout.print("encrypted_bytes={d} decrypted_bytes={d} path={s}\n", .{
+        input.len,
+        decrypted.len,
+        output_path,
+    });
+}
+
+pub fn listSetImage(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    var loaded = try loadSet(init, args);
+    defer loaded.deinit();
+    const set = try vort.WimArchiveSet.init(loaded.archives);
+    var image = try set.readImageMetadataAlloc(init.gpa, image_index, path_limits);
+    defer image.deinit();
+    try stdout.print("image={d} parts={d} security_descriptors={d}\n", .{
+        image_index,
+        loaded.archives.len,
+        image.security.descriptor_count,
+    });
+    try listImageDirectory(init, image, image.root, "", 0, stdout);
+}
+
+pub fn extractSetPath(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    var loaded = try loadSet(init, args);
+    defer loaded.deinit();
+    const set = try vort.WimArchiveSet.init(loaded.archives);
+    const decoded = try set.extractByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} parts={d} entry={s} decoded_bytes={d} path={s}\n", .{
+        image_index,
+        loaded.archives.len,
+        entry_path,
+        decoded.len,
+        output_path,
+    });
+}
+
+const LoadedSet = struct {
+    allocator: std.mem.Allocator,
+    buffers: [][]u8,
+    archives: []vort.WimArchive,
+
+    fn deinit(self: *LoadedSet) void {
+        for (self.buffers) |bytes| self.allocator.free(bytes);
+        self.allocator.free(self.buffers);
+        self.allocator.free(self.archives);
+        self.* = undefined;
+    }
+};
+
+fn loadSet(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+) !LoadedSet {
+    var buffers: std.ArrayList([]u8) = .empty;
+    defer buffers.deinit(init.gpa);
+    var archives: std.ArrayList(vort.WimArchive) = .empty;
+    defer archives.deinit(init.gpa);
+    errdefer for (buffers.items) |bytes| init.gpa.free(bytes);
+    while (args.next()) |path| {
+        const bytes = try readFile(init, path);
+        errdefer init.gpa.free(bytes);
+        const archive = try vort.parseWim(bytes);
+        try buffers.ensureUnusedCapacity(init.gpa, 1);
+        try archives.ensureUnusedCapacity(init.gpa, 1);
+        buffers.appendAssumeCapacity(bytes);
+        archives.appendAssumeCapacity(archive);
+    }
+    if (archives.items.len == 0) return error.MissingCorpusPath;
+    const owned_buffers = try buffers.toOwnedSlice(init.gpa);
+    errdefer {
+        for (owned_buffers) |bytes| init.gpa.free(bytes);
+        init.gpa.free(owned_buffers);
+    }
+    return .{
+        .allocator = init.gpa,
+        .buffers = owned_buffers,
+        .archives = try archives.toOwnedSlice(init.gpa),
+    };
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {

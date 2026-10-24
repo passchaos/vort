@@ -22,8 +22,8 @@ pub const Nid = struct {
     pub const num_unpack_stream: u8 = 0x0d;
 };
 
-pub const max_coders: usize = 5;
-pub const max_streams_per_folder: usize = 8;
+pub const max_coders: usize = 6;
+pub const max_streams_per_folder: usize = 12;
 pub const max_coder_properties: usize = 34;
 
 pub const Coder = struct {
@@ -40,6 +40,15 @@ pub const Coder = struct {
     }
 };
 
+pub const Bcj2Branch = struct {
+    /// Offset from `Folder.pack_index` for this semantic BCJ2 input. Branches
+    /// are ordered MAIN, CALL, JUMP, and range-coder control data.
+    pack_stream_offset: u3 = 0,
+    /// The AES coder between this packed stream and its consumer, when the
+    /// branch is independently encrypted.
+    aes_coder_index: ?u3 = null,
+};
+
 pub const Folder = struct {
     coders: [max_coders]Coder = undefined,
     coder_count: u3,
@@ -49,18 +58,22 @@ pub const Folder = struct {
     packed_inputs: [max_streams_per_folder]u4 = @splat(0),
     pack_stream_count: u4 = 1,
     bcj2_coder_index: ?u3 = null,
+    bcj2_branches: [4]Bcj2Branch = @splat(.{}),
     aes_coder_index: ?u3 = null,
     unpack_size: u64 = 0,
     crc32: ?u32 = null,
     first_substream: usize = 0,
     substream_count: usize = 1,
 
+    pub fn primaryCoderIndex(self: *const Folder) ?u3 {
+        for (self.decode_order[0..self.coder_count]) |coder_index|
+            if (isCompression(self.coders[coder_index].method)) return coder_index;
+        return null;
+    }
+
     pub fn primaryMethod(self: *const Folder) types.Method {
-        for (self.decode_order[0..self.coder_count]) |coder_index| {
-            const method = self.coders[coder_index].method;
-            if (isCompression(method)) return method;
-        }
-        return .copy;
+        const coder_index = self.primaryCoderIndex() orelse return .copy;
+        return self.coders[coder_index].method;
     }
 };
 
@@ -270,41 +283,29 @@ fn parseFolder(reader: *number.Reader, pack_index: usize) !Folder {
 
     var bcj2_index: ?usize = null;
     var aes_index: ?usize = null;
+    var aes_count: usize = 0;
     for (folder.coders[0..coder_count], 0..) |coder, index| {
         if (coder.method == .bcj2) {
             if (bcj2_index != null) return error.Unsupported7zFeature;
             bcj2_index = index;
         }
         if (coder.method == .aes256_sha256) {
-            if (aes_index != null) return error.Unsupported7zFeature;
+            aes_count += 1;
             aes_index = index;
         }
     }
     if (bcj2_index) |bcj_index| {
-        if (aes_index != null) return error.Unsupported7zFeature;
-        if (coder_count != 2 or packed_count != 4) return error.Unsupported7zFeature;
-        const primary_index: usize = 1 - bcj_index;
-        const primary = folder.coders[primary_index];
-        const bcj = folder.coders[bcj_index];
-        if (!isCompression(primary.method) or primary.input_count != 1 or
-            primary.output_count != 1 or bcj.input_count != 4 or bcj.output_count != 1)
-            return error.Unsupported7zFeature;
-        if (bind_count != 1 or bind_outputs[0] != primary.output_start or
-            bind_inputs[0] != bcj.input_start)
-            return error.Unsupported7zFeature;
-        const expected_inputs = [_]usize{
-            primary.input_start,
-            bcj.input_start + 1,
-            bcj.input_start + 2,
-            bcj.input_start + 3,
-        };
-        for (folder.packed_inputs[0..4], expected_inputs) |actual, expected|
-            if (actual != expected) return error.Unsupported7zFeature;
-        folder.decode_order[0] = @intCast(primary_index);
-        folder.decode_order[1] = @intCast(bcj_index);
-        folder.bcj2_coder_index = @intCast(bcj_index);
+        try configureBcj2Folder(
+            &folder,
+            bcj_index,
+            aes_count,
+            bind_inputs[0..bind_count],
+            bind_outputs[0..bind_count],
+        );
         return folder;
     }
+
+    if (aes_count > 1) return error.Unsupported7zFeature;
 
     for (folder.coders[0..coder_count]) |coder|
         if (coder.input_count != 1 or coder.output_count != 1)
@@ -357,6 +358,92 @@ fn parseFolder(reader: *number.Reader, pack_index: usize) !Folder {
     for (folder.decode_order[compression_order + 1 .. coder_count]) |coder_index|
         if (!isFilter(folder.coders[coder_index].method)) return error.Unsupported7zFeature;
     return folder;
+}
+
+fn configureBcj2Folder(
+    folder: *Folder,
+    bcj_index: usize,
+    aes_count: usize,
+    bind_inputs: []const u4,
+    bind_outputs: []const u3,
+) !void {
+    if ((aes_count != 0 and aes_count != 4) or
+        folder.coder_count != 2 + aes_count or folder.pack_stream_count != 4)
+        return error.Unsupported7zFeature;
+
+    var primary_index: ?usize = null;
+    for (folder.coders[0..folder.coder_count], 0..) |coder, index| switch (coder.method) {
+        .copy, .deflate, .bzip2, .lzma, .lzma2, .ppmd7 => {
+            if (primary_index != null) return error.Unsupported7zFeature;
+            primary_index = index;
+        },
+        .bcj2, .aes256_sha256 => {},
+        else => return error.Unsupported7zFeature,
+    };
+    const primary_coder_index = primary_index orelse return error.Unsupported7zFeature;
+    const primary = folder.coders[primary_coder_index];
+    const bcj = folder.coders[bcj_index];
+    if (primary.input_count != 1 or primary.output_count != 1 or
+        bcj.input_count != 4 or bcj.output_count != 1)
+        return error.Unsupported7zFeature;
+
+    const main_output = boundOutputForInput(bind_inputs, bind_outputs, bcj.input_start) orelse
+        return error.Unsupported7zFeature;
+    if (main_output != @as(usize, primary.output_start)) return error.Unsupported7zFeature;
+
+    const branch_inputs = [_]usize{
+        primary.input_start,
+        bcj.input_start + 1,
+        bcj.input_start + 2,
+        bcj.input_start + 3,
+    };
+    for (branch_inputs, 0..) |consumer_input, branch_index| {
+        const packed_input = if (aes_count == 0)
+            consumer_input
+        else encrypted: {
+            const aes_output = boundOutputForInput(
+                bind_inputs,
+                bind_outputs,
+                consumer_input,
+            ) orelse return error.Unsupported7zFeature;
+            const aes_coder_index = coderForOutput(folder, aes_output) orelse
+                return error.Invalid7zArchive;
+            const aes_coder = folder.coders[aes_coder_index];
+            if (aes_coder.method != .aes256_sha256) return error.Unsupported7zFeature;
+            folder.bcj2_branches[branch_index].aes_coder_index = @intCast(aes_coder_index);
+            break :encrypted aes_coder.input_start;
+        };
+        folder.bcj2_branches[branch_index].pack_stream_offset = @intCast(
+            packedInputOffset(folder, packed_input) orelse return error.Unsupported7zFeature,
+        );
+    }
+
+    var order_index: usize = 0;
+    if (aes_count != 0) {
+        for (folder.bcj2_branches) |branch| {
+            folder.decode_order[order_index] = branch.aes_coder_index.?;
+            order_index += 1;
+        }
+    }
+    folder.decode_order[order_index] = @intCast(primary_coder_index);
+    folder.decode_order[order_index + 1] = @intCast(bcj_index);
+    folder.bcj2_coder_index = @intCast(bcj_index);
+}
+
+fn boundOutputForInput(
+    bind_inputs: []const u4,
+    bind_outputs: []const u3,
+    input_index: usize,
+) ?usize {
+    for (bind_inputs, bind_outputs) |bound_input, bound_output|
+        if (@as(usize, bound_input) == input_index) return bound_output;
+    return null;
+}
+
+fn packedInputOffset(folder: *const Folder, input_index: usize) ?usize {
+    for (folder.packed_inputs[0..folder.pack_stream_count], 0..) |packed_input, offset|
+        if (@as(usize, packed_input) == input_index) return offset;
+    return null;
 }
 
 fn parseCoder(reader: *number.Reader) !Coder {
@@ -706,6 +793,73 @@ test "7z Folder orders AES before Copy decoding" {
     try std.testing.expectEqual(types.Method.aes256_sha256, folder.coders[folder.decode_order[0]].method);
     try std.testing.expectEqual(types.Method.copy, folder.primaryMethod());
     try std.testing.expectEqual(@as(usize, encoded.len), reader.offset);
+}
+
+test "7z Folder maps four AES packed branches into BCJ2 inputs" {
+    const aes_coder = [_]u8{
+        0x24,
+        0x06,
+        0xf1,
+        0x07,
+        0x01,
+        1,
+        aes.direct_key_power,
+    };
+    const encoded = [_]u8{6} ++ aes_coder ** 4 ++ [_]u8{
+        0x21, 0x21, 1,    0,
+        0x14, 0x03, 0x03, 0x01,
+        0x1b, 4,    1,    8,
+        0,    7,    1,    6,
+        2,    4,    3,    5,
+        4,    3,    2,    1,
+        0,
+    };
+    var reader = number.Reader.init(&encoded);
+    const folder = try parseFolder(&reader, 11);
+
+    try std.testing.expectEqual(@as(u3, 6), folder.coder_count);
+    try std.testing.expectEqual(@as(u4, 4), folder.pack_stream_count);
+    try std.testing.expectEqual(@as(?u3, 5), folder.bcj2_coder_index);
+    try std.testing.expectEqual(types.Method.lzma2, folder.primaryMethod());
+    for (folder.bcj2_branches, 0..) |branch, index| {
+        try std.testing.expectEqual(@as(u3, @intCast(index)), branch.pack_stream_offset);
+        try std.testing.expectEqual(@as(?u3, @intCast(3 - index)), branch.aes_coder_index);
+    }
+    try std.testing.expectEqual(@as(usize, encoded.len), reader.offset);
+}
+
+test "7z Folder rejects partially encrypted BCJ2 branches" {
+    const encoded = [_]u8{
+        3,
+        0x24,
+        0x06,
+        0xf1,
+        0x07,
+        0x01,
+        1,
+        aes.direct_key_power,
+        0x21,
+        0x21,
+        1,
+        0,
+        0x14,
+        0x03,
+        0x03,
+        0x01,
+        0x1b,
+        4,
+        1,
+        1,
+        0,
+        2,
+        1,
+        0,
+        3,
+        4,
+        5,
+    };
+    var reader = number.Reader.init(&encoded);
+    try std.testing.expectError(error.Unsupported7zFeature, parseFolder(&reader, 0));
 }
 
 test "7z Folder rejects disconnected cyclic coder graph" {

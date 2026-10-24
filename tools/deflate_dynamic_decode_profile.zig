@@ -48,22 +48,20 @@ const Row = struct {
     mix: u64,
 };
 
-const binary_payload = blk: {
-    @setEvalBranchQuota(200000);
-    var data: [64 * 1024]u8 = undefined;
-    for (&data, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
-    break :blk data;
-};
+fn binaryPayload(allocator: std.mem.Allocator) std.mem.Allocator.Error![]u8 {
+    const data = try allocator.alloc(u8, 64 * 1024);
+    for (data, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+    return data;
+}
 
-const window_match_payload = blk: {
-    @setEvalBranchQuota(700000);
+fn windowMatchPayload(allocator: std.mem.Allocator) std.mem.Allocator.Error![]u8 {
     const width = 512;
     const height = 256;
     const bytes_per_pixel = 3;
     const row_len = width * bytes_per_pixel;
     const stride = row_len + 1;
-    var data: [stride * height]u8 = undefined;
-    for (&data, 0..) |*byte, i| {
+    const data = try allocator.alloc(u8, stride * height);
+    for (data, 0..) |*byte, i| {
         const group = i / (64 * 1024);
         const local = i % (64 * 1024);
         const source = local % (24 * 1024);
@@ -73,8 +71,8 @@ const window_match_payload = blk: {
         x ^= x >> 31;
         byte.* = @truncate(x >> 24);
     }
-    break :blk data;
-};
+    return data;
+}
 
 const BuiltinCase = struct {
     name: []const u8,
@@ -87,8 +85,6 @@ const builtins = [_]BuiltinCase{
     .{ .name = "distance-heavy", .payload = ("0123456789abcdef" ** 1024) ++ "----" ++ ("0123456789abcdef" ** 1024) },
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
     .{ .name = "dynamic-match", .payload = "literal-heavy dynamic huffman decode stage\n" ** 512 },
-    .{ .name = "binary", .payload = &binary_payload },
-    .{ .name = "chunked-window-match", .payload = &window_match_payload },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -116,6 +112,14 @@ pub fn main(init: std.process.Init) !void {
     defer rows.deinit(init.gpa);
     if (paths.items.len == 0 or include_builtins) {
         for (builtins) |case| try rows.append(init.gpa, try measurePayload(init, case.name, case.payload));
+        // Build large deterministic inputs only for requested builtin rows.
+        // Generation finishes before measurePayload starts its codec timer.
+        const binary = try binaryPayload(init.gpa);
+        defer init.gpa.free(binary);
+        try rows.append(init.gpa, try measurePayload(init, "binary", binary));
+        const window_match = try windowMatchPayload(init.gpa);
+        defer init.gpa.free(window_match);
+        try rows.append(init.gpa, try measurePayload(init, "chunked-window-match", window_match));
     }
     for (paths.items) |path| {
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));

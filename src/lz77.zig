@@ -162,6 +162,190 @@ pub const DictionaryGreedyScratch = struct {
     }
 };
 
+/// Caller-owned transaction log for StreamingHashGreedy's indexed writes.
+pub const StreamingHashGreedyJournal = @import("lz77/streaming_hash_journal.zig").Journal;
+
+/// Persistent hash-chain state for callers that commit an input stream in
+/// order while retaining at least `max_match_len` bytes of lookahead. Absolute
+/// positions preserve the same insertion/search order as `hashGreedyPlanAlloc`;
+/// the predecessor ring is safe because its period is at least the history
+/// window, so a reachable candidate slot cannot be overwritten.
+pub const StreamingHashGreedy = struct {
+    head: std.ArrayList(i64) = .empty,
+    prev: std.ArrayList(i64) = .empty,
+    window_len: usize,
+
+    pub const Result = struct {
+        token: Token,
+        consumed: usize,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, window_len: usize) !StreamingHashGreedy {
+        if (window_len == 0 or window_len > max_window_len) return error.InvalidBlockPlan;
+        var state = StreamingHashGreedy{ .window_len = window_len };
+        errdefer state.deinit(allocator);
+        try state.head.resize(allocator, hash_head_table_size);
+        @memset(state.head.items, -1);
+        var prev_len: usize = 1;
+        while (prev_len < window_len) prev_len *= 2;
+        try state.prev.resize(allocator, prev_len);
+        @memset(state.prev.items, -1);
+        return state;
+    }
+
+    pub fn deinit(self: *StreamingHashGreedy, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *StreamingHashGreedy) void {
+        @memset(self.head.items, -1);
+        @memset(self.prev.items, -1);
+    }
+
+    pub fn next(
+        self: *StreamingHashGreedy,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+    ) Error!Result {
+        return self.nextImpl(false, dictionary, input, position, stream_start, options, {});
+    }
+
+    /// Transactional variant with the exact legacy search/insertion rules.
+    /// Reserve at least input.len entries before begin; each consumed byte can
+    /// cause at most one logged insertion. A caller rolls back the whole batch
+    /// after any parser, range coder, output or history allocation failure.
+    pub fn nextWithJournal(
+        self: *StreamingHashGreedy,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+        journal: *StreamingHashGreedyJournal,
+    ) Error!Result {
+        if (!journal.isActive()) return error.InvalidBlockPlan;
+        return self.nextImpl(true, dictionary, input, position, stream_start, options, journal);
+    }
+
+    fn nextImpl(
+        self: *StreamingHashGreedy,
+        comptime journaled: bool,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+        journal: if (journaled) *StreamingHashGreedyJournal else void,
+    ) Error!Result {
+        if (options.window_len != self.window_len or position >= input.len)
+            return error.InvalidBlockPlan;
+        const absolute = std.math.add(usize, stream_start, position) catch
+            return error.IntegerOverflow;
+        const max_len = @min(maxMatch(options), input.len - position);
+        var best = MatchCandidate{};
+        const hash = streamingHash(input, position);
+        if (hash) |bucket| {
+            const earliest = absolute -| self.window_len;
+            var candidate_i = self.head.items[bucket];
+            var checked: usize = 0;
+            var walked: usize = 0;
+            const max_walks = maxHashChainWalks(options, minMatch(options));
+            while (candidate_i >= 0 and walked < max_walks) : (walked += 1) {
+                const candidate: usize = @intCast(candidate_i);
+                if (candidate < earliest) break;
+                if (candidate >= absolute) return error.InvalidMatch;
+                if (best.length == max_len) break;
+                const distance = absolute - candidate;
+                const required_prefix = @max(best.length, minMatch(options) - 1);
+                if (streamingByte(dictionary, input, stream_start, candidate + required_prefix) !=
+                    input[position + required_prefix])
+                {
+                    candidate_i = self.prev.items[candidate % self.prev.items.len];
+                    continue;
+                }
+                checked += 1;
+                var length: usize = 0;
+                while (length < max_len and
+                    streamingByte(dictionary, input, stream_start, candidate + length) == input[position + length])
+                {
+                    length += 1;
+                }
+                if (length >= minMatch(options) and length > best.length) {
+                    best = .{ .length = length, .distance = distance };
+                    if (length >= options.nice_len) break;
+                }
+                if (checked == options.max_chain) break;
+                candidate_i = self.prev.items[candidate % self.prev.items.len];
+            }
+        }
+
+        const accepted = acceptMatch(input, position, best.length, best.distance, options);
+        if (accepted) {
+            const end = position + best.length;
+            try self.insert(journaled, input, position, stream_start, journal);
+            const tail_start = if (end > position + 4) end - 4 else position + 1;
+            var seed = @max(position + 1, tail_start);
+            while (seed < end) : (seed += 1)
+                try self.insert(journaled, input, seed, stream_start, journal);
+            return .{
+                .token = .{ .match = .{
+                    .length = @intCast(best.length),
+                    .distance = @intCast(best.distance),
+                } },
+                .consumed = best.length,
+            };
+        }
+        try self.insert(journaled, input, position, stream_start, journal);
+        return .{ .token = .{ .literal = input[position] }, .consumed = 1 };
+    }
+
+    fn insert(
+        self: *StreamingHashGreedy,
+        comptime journaled: bool,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        journal: if (journaled) *StreamingHashGreedyJournal else void,
+    ) Error!void {
+        const bucket = streamingHash(input, position) orelse return;
+        const absolute = std.math.add(usize, stream_start, position) catch
+            return error.IntegerOverflow;
+        const stored_position = std.math.cast(i64, absolute) orelse
+            return error.IntegerOverflow;
+        const slot = absolute % self.prev.items.len;
+        if (comptime journaled) try journal.record(bucket, slot, self.head.items[bucket], self.prev.items[slot]);
+        self.prev.items[slot] = self.head.items[bucket];
+        self.head.items[bucket] = stored_position;
+    }
+};
+
+test {
+    _ = @import("lz77/streaming_hash_journal_tests.zig");
+}
+
+fn streamingHash(input: []const u8, position: usize) ?usize {
+    if (input.len - position < min_match_len) return null;
+    return hash3(input[position..][0..3]) & (hash_head_table_size - 1);
+}
+
+fn streamingByte(
+    dictionary: []const u8,
+    input: []const u8,
+    stream_start: usize,
+    absolute: usize,
+) u8 {
+    const history_start = stream_start - dictionary.len;
+    return if (absolute < stream_start)
+        dictionary[absolute - history_start]
+    else
+        input[absolute - stream_start];
+}
+
 pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,
@@ -178,6 +362,39 @@ pub const OptimalScratch = struct {
         self.compact_prev.deinit(allocator);
         self.tokens.deinit(allocator);
         self.* = .{};
+    }
+};
+
+/// Caller-supplied token costs for the bounded optimal parser. Costs use an
+/// arbitrary common fixed-point scale; only their relative values matter.
+/// The Brotli encoder uses Q8 entropy estimates while the established generic
+/// parser keeps its compile-time fixed-Huffman proxy.
+pub const OptimalCostModel = struct {
+    literal: *const [256]u16,
+    length: *const [max_match_len + 1]u16,
+    /// Entry zero is unused. The slice must cover every distance permitted by
+    /// the matching window supplied to the parser.
+    distance: []const u16,
+
+    fn validate(self: OptimalCostModel, window_len: usize, input_len: usize) Error!void {
+        if (self.distance.len <= window_len) return error.InvalidBlockPlan;
+        for (self.literal) |cost| if (cost == 0) return error.InvalidBlockPlan;
+        for (self.length[min_match_len..]) |cost| if (cost == 0) return error.InvalidBlockPlan;
+        for (self.distance[1 .. window_len + 1]) |cost| if (cost == 0) return error.InvalidBlockPlan;
+
+        const max_literal = std.mem.max(u16, self.literal);
+        const max_length = std.mem.max(u16, self.length[min_match_len..]);
+        const max_distance = std.mem.max(u16, self.distance[1 .. window_len + 1]);
+        const literal_bound = std.math.mul(usize, input_len, max_literal) catch
+            return error.InvalidBlockPlan;
+        const match_edge_bound = @as(usize, max_length) + max_distance;
+        const maximum_cost = std.math.add(usize, literal_bound, match_edge_bound) catch
+            return error.InvalidBlockPlan;
+        const representable = if (comptime packed_optimal_length_choices)
+            std.math.maxInt(usize) >> optimal_length_bits
+        else
+            std.math.maxInt(usize);
+        if (maximum_cost > representable) return error.InvalidBlockPlan;
     }
 };
 
@@ -347,7 +564,10 @@ pub const HashIndex = struct {
         return .{ .length = @intCast(best.length), .distance = @intCast(best.distance) };
     }
 
-    fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+    /// Enumerate bounded same-hash match candidates in nearest-first chain
+    /// order. Format-specific optimal parsers may attach their own stateful
+    /// entropy costs while reusing the validated shared match index.
+    pub fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
         if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
         if (pos + minMatch(options) > input.len or out.len == 0) return 0;
         const maximum = @min(maxMatch(options), input.len - pos);
@@ -365,6 +585,42 @@ pub const HashIndex = struct {
             const length = matchLength(input, candidate, pos, maximum);
             if (length >= minMatch(options)) {
                 out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                count += 1;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return count;
+    }
+
+    /// Enumerate prefix-validated candidate distances without extending each
+    /// match. Stateful format parsers can cheaply inspect a deeper hash chain,
+    /// then spend full match-length work only on candidates favored by their
+    /// own entropy or recent-distance model.
+    pub fn candidateDistancesAt(
+        self: *const HashIndex,
+        input: []const u8,
+        pos: usize,
+        options: GreedyOptions,
+        out: []u16,
+    ) Error!usize {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (options.window_len > max_window_len) return error.InvalidBlockPlan;
+        const minimum = minMatch(options);
+        if (pos + minimum > input.len or out.len == 0) return 0;
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var count: usize = 0;
+        while (chain_i >= 0 and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            const prefix_matches = if (minimum >= 4)
+                std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+                    std.mem.readInt(u32, input[pos..][0..4], .little)
+            else
+                std.mem.eql(u8, input[candidate..][0..minimum], input[pos..][0..minimum]);
+            if (prefix_matches) {
+                out[count] = @intCast(distance);
                 count += 1;
             }
             chain_i = self.prev.items[candidate];
@@ -974,6 +1230,22 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
 }
 
+/// Run the same bounded hash-chain search as `optimalPlanAlloc`, but score its
+/// literal, match-length, and match-distance choices with a caller model. This
+/// is a proposal API: format encoders should still arbitrate the resulting
+/// plan using their complete wire cost.
+pub fn optimalPlanAllocWithCostModel(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+) !GreedyPlan {
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuseWithCostModel(&scratch, allocator, input, options, model);
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
 const rep_beam_width = 2;
 const rep_beam_match_candidates = 1;
 const rep_beam_input_max = std.math.maxInt(u16);
@@ -1196,7 +1468,18 @@ inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: us
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, undefined, undefined, undefined);
+}
+
+pub fn optimalPlanReuseWithCostModel(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+) !PlanStats {
+    try model.validate(options.window_len, input.len);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, false, false, true, undefined, undefined, model);
 }
 
 fn optimalPlanReuseInternal(
@@ -1206,7 +1489,7 @@ fn optimalPlanReuseInternal(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, false, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !GreedyPlan {
@@ -1214,7 +1497,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const total_start = std.Io.Clock.awake.now(io);
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, io, profile);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, false, io, profile, undefined);
     const tokens = try allocator.dupe(Token, scratch.tokens.items);
     profile.total_ns = elapsedNs(total_start, io);
     return .{ .tokens = tokens, .stats = stats };
@@ -1223,7 +1506,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
 pub fn optimalPlanReuseProfiled(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !PlanStats {
     profile.* = .{ .input_bytes = input.len };
     const total_start = std.Io.Clock.awake.now(io);
-    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, io, profile);
+    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, io, profile, undefined);
     profile.total_ns = elapsedNs(total_start, io);
     return stats;
 }
@@ -1235,8 +1518,10 @@ fn optimalPlanReuseInternalProfiled(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
+    comptime modeled: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
+    model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
     const n = input.len;
     // A literal-only path costs at most nine bits per byte. This bound is far
@@ -1260,7 +1545,7 @@ fn optimalPlanReuseInternalProfiled(
             profile.index_ns = elapsedNs(index_start, io);
             profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
         }
-        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, io, profile);
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     try scratch.index.build(allocator, input);
@@ -1268,7 +1553,7 @@ fn optimalPlanReuseInternalProfiled(
         profile.index_ns = elapsedNs(index_start, io);
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
     }
-    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, io, profile);
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, io, profile, model);
 }
 
 inline fn optimalPlanReuseWithIndex(
@@ -1280,8 +1565,10 @@ inline fn optimalPlanReuseWithIndex(
     comptime empty: @TypeOf(prev[0]),
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
+    comptime modeled: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
+    model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
     const n = input.len;
     const costs = scratch.costs.items;
@@ -1291,13 +1578,13 @@ inline fn optimalPlanReuseWithIndex(
     var rev_i: usize = n;
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
-    const distance_costs = &fixed_distance_costs;
+    const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
         rev_i -= 1;
         if (comptime collect_profile) profile.positions += 1;
-        costs[rev_i] = fixedLiteralCost(input[rev_i]) + costs[rev_i + 1];
+        costs[rev_i] = (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
         if (rev_i + minimum > n) continue;
@@ -1361,15 +1648,28 @@ inline fn optimalPlanReuseWithIndex(
                     profile.length_choices_built += added_choices;
                     profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                 }
-                extendOptimalLengthChoices(
-                    costs,
-                    rev_i,
-                    minimum,
-                    choices_built_through,
-                    length,
-                    &scratch.index.best_length_choices,
-                    &scratch.index.best_lengths,
-                );
+                if (comptime modeled) {
+                    extendModeledOptimalLengthChoices(
+                        costs,
+                        rev_i,
+                        minimum,
+                        choices_built_through,
+                        length,
+                        model.length,
+                        &scratch.index.best_length_choices,
+                        &scratch.index.best_lengths,
+                    );
+                } else {
+                    extendOptimalLengthChoices(
+                        costs,
+                        rev_i,
+                        minimum,
+                        choices_built_through,
+                        length,
+                        &scratch.index.best_length_choices,
+                        &scratch.index.best_lengths,
+                    );
+                }
                 choices_built_through = @max(choices_built_through, length);
                 const choice = scratch.index.best_length_choices[length];
                 const cost = optimalLengthChoiceCost(choice) + distance_cost;
@@ -1470,6 +1770,34 @@ fn extendOptimalLengthChoices(
             const choice = optimalLengthChoice(cost, length);
             // The low bits rank longer lengths first, so one unsigned
             // comparison preserves minimum-cost / longest-on-tie ordering.
+            if (choice < best_choice) best_choice = choice;
+        } else if (cost < best_choice or (cost == best_choice and length > best_length)) {
+            best_choice = cost;
+            best_length = @intCast(length);
+        }
+        best_choices[length] = best_choice;
+        if (comptime !packed_optimal_length_choices) best_lengths[length] = best_length;
+    }
+}
+
+fn extendModeledOptimalLengthChoices(
+    costs: []const usize,
+    position: usize,
+    minimum: usize,
+    built_through: usize,
+    maximum: usize,
+    length_costs: *const [max_match_len + 1]u16,
+    best_choices: *[max_match_len + 1]usize,
+    best_lengths: *[max_match_len + 1]u16,
+) void {
+    if (maximum <= built_through) return;
+    var best_choice = if (built_through >= minimum) best_choices[built_through] else std.math.maxInt(usize);
+    var best_length: u16 = if (comptime packed_optimal_length_choices) 0 else if (built_through >= minimum) best_lengths[built_through] else 0;
+    var length = @max(minimum, built_through + 1);
+    while (length <= maximum) : (length += 1) {
+        const cost = @as(usize, length_costs[length]) + costs[position + length];
+        if (comptime packed_optimal_length_choices) {
+            const choice = optimalLengthChoice(cost, length);
             if (choice < best_choice) best_choice = choice;
         } else if (cost < best_choice or (cost == best_choice and length > best_length)) {
             best_choice = cost;
@@ -2732,7 +3060,7 @@ fn findBestCombinedScanMatch(
     const minimum = minMatch(options);
     if (input.len - pos < minimum or options.max_chain == 0) return .{};
     const current = dict.len + pos;
-    const start = current -| @min(options.window_len, default_window_len);
+    const start = current -| @min(options.window_len, max_window_len);
     const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
     var checked: usize = 0;
@@ -2999,7 +3327,7 @@ fn byteAt(dict: []const u8, input: []const u8, pos: usize) u8 {
 }
 
 fn activeDictionary(dictionary: []const u8, options: GreedyOptions) []const u8 {
-    const max_len = @min(options.window_len, default_window_len);
+    const max_len = @min(options.window_len, max_window_len);
     return dictionary[dictionary.len - @min(dictionary.len, max_len) ..];
 }
 
@@ -3194,6 +3522,73 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount() + 2);
 }
 
+test "modeled optimal parser follows caller entropy costs" {
+    const input = "abcabcabcabcabcabcabcabc";
+    const options = GreedyOptions{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = max_match_len,
+        .max_candidates = 32,
+        .min_match = 3,
+        .max_match = max_match_len,
+    };
+    var literal_costs: [256]u16 = @splat(1);
+    var length_costs: [max_match_len + 1]u16 = @splat(1000);
+    var distance_costs: [input.len + 1]u16 = @splat(1000);
+    distance_costs[0] = 1;
+
+    const literal_plan = try optimalPlanAllocWithCostModel(std.testing.allocator, input, options, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    });
+    defer literal_plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(input.len, literal_plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 0), literal_plan.stats.matches);
+
+    literal_costs = @splat(1000);
+    length_costs = @splat(1);
+    distance_costs = @splat(1);
+    const match_plan = try optimalPlanAllocWithCostModel(std.testing.allocator, input, options, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    });
+    defer match_plan.deinit(std.testing.allocator);
+    try std.testing.expect(match_plan.stats.matches != 0);
+    try std.testing.expect(match_plan.stats.literals < literal_plan.stats.literals);
+
+    const replayed = try replayAlloc(std.testing.allocator, match_plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "modeled optimal parser validates complete nonzero costs" {
+    var literal_costs: [256]u16 = @splat(1);
+    var length_costs: [max_match_len + 1]u16 = @splat(1);
+    var distance_costs: [8]u16 = @splat(1);
+    literal_costs['x'] = 0;
+    try std.testing.expectError(error.InvalidBlockPlan, optimalPlanAllocWithCostModel(std.testing.allocator, "xxxxxxxx", .{
+        .window_len = 7,
+        .min_match = 3,
+    }, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    }));
+
+    literal_costs['x'] = 1;
+    length_costs[3] = 0;
+    try std.testing.expectError(error.InvalidBlockPlan, optimalPlanAllocWithCostModel(std.testing.allocator, "xxxxxxxx", .{
+        .window_len = 7,
+        .min_match = 3,
+    }, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    }));
+}
+
 test "reusable optimal parser preserves tokens and capacities" {
     const input = "abcabcXabcabcYabcabcZabcabcX" ** 8;
     const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8, .min_match = 4 };
@@ -3375,6 +3770,29 @@ test "reusable hash index exposes deterministic position matches" {
     try std.testing.expectEqual(@as(u16, 17), match.length);
     try std.testing.expectEqual(@as(u16, @intCast(second - "prefix-".len)), match.distance);
     try std.testing.expectError(error.InvalidBlockPlan, index.bestMatch(input[0 .. input.len - 1], second, .{}));
+}
+
+test "hash index candidate distances preserve validated match order" {
+    const input = "abcd-abcX-abcd-abcdY-abcd-abcd";
+    var index: HashIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.build(std.testing.allocator, input);
+    const position = std.mem.lastIndexOf(u8, input, "abcd") orelse
+        return error.InvalidMatch;
+    const options = GreedyOptions{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+    };
+    var matches: [8]Token.Match = undefined;
+    var distances: [8]u16 = undefined;
+    const match_count = try index.matchesAt(input, position, options, &matches);
+    const distance_count = try index.candidateDistancesAt(input, position, options, &distances);
+    try std.testing.expectEqual(match_count, distance_count);
+    for (matches[0..match_count], distances[0..distance_count]) |match, distance_value|
+        try std.testing.expectEqual(match.distance, distance_value);
 }
 
 test "optimal LZ77 considers multiple match distances" {
@@ -3992,6 +4410,50 @@ test "dictionary-backed hash and lazy planners can emit preset-history matches" 
             },
             else => return error.TestExpectedEqual,
         }
+    }
+}
+
+test "dictionary-backed planners cover the complete 16-bit distance range" {
+    const history_len = 48 * 1024;
+    const match_len = max_match_len;
+    const history = try std.testing.allocator.alloc(u8, history_len);
+    defer std.testing.allocator.free(history);
+    var state: u32 = 0x16b1_7b1d;
+    for (history) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const input = history[0..match_len];
+    const options: GreedyOptions = .{
+        .window_len = max_window_len,
+        .max_chain = 64,
+        .nice_len = match_len,
+        .min_match = 4,
+        .max_match = match_len,
+    };
+    const hash_plan = try hashGreedyPlanAllocWithDictionary(
+        std.testing.allocator,
+        input,
+        history,
+        options,
+    );
+    defer hash_plan.deinit(std.testing.allocator);
+    const lazy_plan = try lazyGreedyPlanAllocWithDictionary(
+        std.testing.allocator,
+        input,
+        history,
+        options,
+    );
+    defer lazy_plan.deinit(std.testing.allocator);
+
+    for ([_]GreedyPlan{ hash_plan, lazy_plan }) |plan| {
+        try std.testing.expectEqual(@as(usize, 1), plan.tokens.len);
+        const match = switch (plan.tokens[0]) {
+            .match => |value| value,
+            .literal => return error.TestExpectedEqual,
+        };
+        try std.testing.expectEqual(@as(u16, history_len), match.distance);
+        try std.testing.expectEqual(@as(u16, match_len), match.length);
     }
 }
 

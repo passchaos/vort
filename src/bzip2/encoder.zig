@@ -18,11 +18,11 @@ const RleBlock = struct {
     crc32: u32,
 };
 
-const BwtBlock = struct {
+pub const BwtBlock = struct {
     bytes: []u8,
     original_pointer: u32,
 
-    fn deinit(self: BwtBlock, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: BwtBlock, allocator: std.mem.Allocator) void {
         allocator.free(self.bytes);
     }
 };
@@ -81,9 +81,7 @@ pub fn encodeAppend(
         combined_crc = std.math.rotl(u32, combined_crc, 1) ^ block_result.crc32;
     }
 
-    try writer.writeBits(48, end_magic);
-    try writer.writeBits(32, combined_crc);
-    try writer.finish();
+    try writeStreamEnd(&writer, combined_crc);
 
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
     out.appendSliceAssumeCapacity(encoded.items);
@@ -120,7 +118,7 @@ fn fillRleBlock(block: *std.ArrayList(u8), input: []const u8, block_limit: usize
     return .{ .input_read = input_offset, .crc32 = crc.digest() };
 }
 
-fn bwtTransformAlloc(allocator: std.mem.Allocator, input: []const u8) !BwtBlock {
+pub fn bwtTransformAlloc(allocator: std.mem.Allocator, input: []const u8) !BwtBlock {
     if (input.len == 0 or input.len > 900_000) return error.InvalidBzip2Stream;
     const order_a = try allocator.alloc(u32, input.len);
     defer allocator.free(order_a);
@@ -207,7 +205,7 @@ fn bwtTransformAlloc(allocator: std.mem.Allocator, input: []const u8) !BwtBlock 
     };
 }
 
-fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u32) !void {
+pub fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u32) !void {
     var in_use: [256]bool = @splat(false);
     for (transformed.bytes) |byte| in_use[byte] = true;
     var sequence: [256]u8 = undefined;
@@ -271,6 +269,12 @@ fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u32) 
         for (0..alpha_size) |_| try writer.writeBit(0);
     }
     for (symbols.items) |symbol| try writer.writeBits(code_length, symbol);
+}
+
+pub fn writeStreamEnd(writer: *bit_writer.BitWriter, combined_crc: u32) !void {
+    try writer.writeBits(48, end_magic);
+    try writer.writeBits(32, combined_crc);
+    try writer.finish();
 }
 
 fn flushZeroRun(symbols: *std.ArrayList(u16), allocator: std.mem.Allocator, run: usize) !void {

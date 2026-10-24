@@ -6,24 +6,202 @@ pub const Error = core.Error || error{Invalid7zArchive};
 const top_value: u32 = 1 << 24;
 const probability_total: u32 = 1 << 11;
 const move_bits: u5 = 5;
+const relative_limit: u32 = 1 << 26;
 
 pub fn encodeNoConversionAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
 ) ![]u8 {
-    var encoder = RangeEncoder{};
-    var context: u32 = 0;
-    for (input) |byte| {
-        context = (context << 24) | byte;
-        const is_marker = byte == 0xe8 or byte == 0xe9 or
-            (@as(u8, @truncate(context >> 24)) == 0x0f and byte & 0xf0 == 0x80);
-        if (!is_marker) continue;
-        const c = ((context +% 0x17) >> 6) & 1;
-        const probability_index = (((0 -% c) & (context >> 24)) +% c +%
-            ((context >> 5) & 1)) & 0x1ff;
-        try encoder.encodeZero(allocator, @intCast(probability_index));
+    var encoder = NoConversionEncoder{};
+    defer encoder.deinit(allocator);
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try encoder.push(allocator, input, true, &output);
+    return output.toOwnedSlice(allocator);
+}
+
+pub const NoConversionEncoder = struct {
+    range_encoder: RangeEncoder = .{},
+    context: u32 = 0,
+    finished: bool = false,
+
+    pub fn deinit(self: *NoConversionEncoder, allocator: std.mem.Allocator) void {
+        self.range_encoder.bytes.deinit(allocator);
+        self.* = undefined;
     }
-    return encoder.finishAlloc(allocator);
+
+    pub fn push(
+        self: *NoConversionEncoder,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        finish: bool,
+        output: *std.ArrayList(u8),
+    ) !void {
+        if (self.finished) {
+            if (input.len != 0 or !finish) return error.Invalid7zArchive;
+            return;
+        }
+        for (input) |byte| {
+            self.context = (self.context << 24) | byte;
+            const is_marker = byte == 0xe8 or byte == 0xe9 or
+                (@as(u8, @truncate(self.context >> 24)) == 0x0f and byte & 0xf0 == 0x80);
+            if (!is_marker) continue;
+            const c = ((self.context +% 0x17) >> 6) & 1;
+            const probability_index = (((0 -% c) & (self.context >> 24)) +% c +%
+                ((self.context >> 5) & 1)) & 0x1ff;
+            try self.range_encoder.encodeZero(allocator, @intCast(probability_index));
+        }
+        if (finish) {
+            for (0..5) |_| try self.range_encoder.shiftLow(allocator);
+            self.finished = true;
+        }
+        try output.appendSlice(allocator, self.range_encoder.bytes.items);
+        self.range_encoder.bytes.clearRetainingCapacity();
+    }
+};
+
+pub const ConversionEncoder = struct {
+    range_encoder: RangeEncoder = .{},
+    pending: std.ArrayList(u8) = .empty,
+    context: u32 = 0,
+    ip: u32,
+    convert_targets: bool,
+    finished: bool = false,
+    main_size: u64 = 0,
+
+    pub fn init(start_ip: u32) ConversionEncoder {
+        return .{ .ip = start_ip, .convert_targets = start_ip == 0 };
+    }
+
+    pub fn deinit(self: *ConversionEncoder, allocator: std.mem.Allocator) void {
+        self.range_encoder.bytes.deinit(allocator);
+        self.pending.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn push(
+        self: *ConversionEncoder,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        finish: bool,
+        main: *std.ArrayList(u8),
+        call: *std.ArrayList(u8),
+        jump: *std.ArrayList(u8),
+        range_output: *std.ArrayList(u8),
+    ) !void {
+        if (self.finished) {
+            if (input.len != 0 or !finish) return error.Invalid7zArchive;
+            return;
+        }
+        try self.pending.appendSlice(allocator, input);
+        var index: usize = 0;
+        while (index < self.pending.items.len) {
+            const byte = self.pending.items[index];
+            const next_context = (self.context << 24) | byte;
+            const is_marker = byte == 0xe8 or byte == 0xe9 or
+                (@as(u8, @truncate(next_context >> 24)) == 0x0f and byte & 0xf0 == 0x80);
+            if (self.convert_targets and is_marker and
+                self.pending.items.len - index < 5 and !finish) break;
+
+            try main.append(allocator, byte);
+            self.main_size = std.math.add(u64, self.main_size, 1) catch
+                return error.IntegerOverflow;
+            self.ip +%= 1;
+            self.context = next_context;
+            if (!is_marker) {
+                index += 1;
+                continue;
+            }
+
+            const probability_index = markerProbabilityIndex(self.context);
+            if (!self.convert_targets or self.pending.items.len - index < 5) {
+                try self.range_encoder.encodeZero(allocator, probability_index);
+                index += 1;
+                continue;
+            }
+
+            const relative = std.mem.readInt(u32, self.pending.items[index + 1 ..][0..4], .little);
+            if ((relative +% relative_limit) >> 1 >= relative_limit) {
+                try self.range_encoder.encodeZero(allocator, probability_index);
+                index += 1;
+                continue;
+            }
+            try self.range_encoder.encodeOne(allocator, probability_index);
+            const absolute = relative +% (self.ip +% 4);
+            var target: [4]u8 = undefined;
+            std.mem.writeInt(u32, &target, absolute, .big);
+            if (byte == 0xe8)
+                try call.appendSlice(allocator, &target)
+            else
+                try jump.appendSlice(allocator, &target);
+            self.ip +%= 4;
+            self.context = relative >> 24;
+            index += 5;
+        }
+        if (index != 0) {
+            const remaining = self.pending.items.len - index;
+            std.mem.copyForwards(
+                u8,
+                self.pending.items[0..remaining],
+                self.pending.items[index..],
+            );
+            self.pending.items.len = remaining;
+        }
+        if (finish) {
+            std.debug.assert(self.pending.items.len == 0);
+            for (0..5) |_| try self.range_encoder.shiftLow(allocator);
+            self.finished = true;
+        }
+        try range_output.appendSlice(allocator, self.range_encoder.bytes.items);
+        self.range_encoder.bytes.clearRetainingCapacity();
+    }
+};
+
+pub const EncodedStreams = struct {
+    allocator: std.mem.Allocator,
+    main: []u8,
+    call: []u8,
+    jump: []u8,
+    range: []u8,
+
+    pub fn deinit(self: *EncodedStreams) void {
+        self.allocator.free(self.main);
+        self.allocator.free(self.call);
+        self.allocator.free(self.jump);
+        self.allocator.free(self.range);
+        self.* = undefined;
+    }
+};
+
+pub fn encodeConvertedAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    start_ip: u32,
+) !EncodedStreams {
+    var encoder = ConversionEncoder.init(start_ip);
+    defer encoder.deinit(allocator);
+    var main: std.ArrayList(u8) = .empty;
+    defer main.deinit(allocator);
+    var call: std.ArrayList(u8) = .empty;
+    defer call.deinit(allocator);
+    var jump: std.ArrayList(u8) = .empty;
+    defer jump.deinit(allocator);
+    var range: std.ArrayList(u8) = .empty;
+    defer range.deinit(allocator);
+    try encoder.push(allocator, input, true, &main, &call, &jump, &range);
+    const main_owned = try main.toOwnedSlice(allocator);
+    errdefer allocator.free(main_owned);
+    const call_owned = try call.toOwnedSlice(allocator);
+    errdefer allocator.free(call_owned);
+    const jump_owned = try jump.toOwnedSlice(allocator);
+    errdefer allocator.free(jump_owned);
+    return .{
+        .allocator = allocator,
+        .main = main_owned,
+        .call = call_owned,
+        .jump = jump_owned,
+        .range = try range.toOwnedSlice(allocator),
+    };
 }
 
 const RangeEncoder = struct {
@@ -51,10 +229,23 @@ const RangeEncoder = struct {
         );
     }
 
-    fn finishAlloc(self: *RangeEncoder, allocator: std.mem.Allocator) ![]u8 {
-        errdefer self.bytes.deinit(allocator);
-        for (0..5) |_| try self.shiftLow(allocator);
-        return self.bytes.toOwnedSlice(allocator);
+    fn encodeOne(
+        self: *RangeEncoder,
+        allocator: std.mem.Allocator,
+        probability_index: usize,
+    ) !void {
+        if (probability_index >= self.probabilities.len) return error.Invalid7zArchive;
+        if (self.range < top_value) {
+            try self.shiftLow(allocator);
+            self.range <<= 8;
+        }
+        const probability = self.probabilities[probability_index];
+        const bound = (self.range >> 11) * probability;
+        self.low += bound;
+        self.range -= bound;
+        self.probabilities[probability_index] = @intCast(
+            probability - (probability >> move_bits),
+        );
     }
 
     fn shiftLow(self: *RangeEncoder, allocator: std.mem.Allocator) !void {
@@ -73,6 +264,12 @@ const RangeEncoder = struct {
         self.low = @as(u32, low32 << 8);
     }
 };
+
+fn markerProbabilityIndex(context: u32) usize {
+    const c = ((context +% 0x17) >> 6) & 1;
+    return @intCast((((0 -% c) & (context >> 24)) +% c +%
+        ((context >> 5) & 1)) & 0x1ff);
+}
 
 pub fn decodeAlloc(
     allocator: std.mem.Allocator,
@@ -210,4 +407,86 @@ test "BCJ2 no-conversion encoder round trips branch markers" {
     );
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "BCJ2 no-conversion encoder is fragmentation independent" {
+    const input = ("\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff" ++
+        "\x0f\x85\x08\x00\x00\x00tail") ** 97;
+    const expected = try encodeNoConversionAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(expected);
+    for (1..24) |chunk_len| {
+        var encoder = NoConversionEncoder{};
+        defer encoder.deinit(std.testing.allocator);
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const end = @min(input.len, offset + chunk_len);
+            try encoder.push(std.testing.allocator, input[offset..end], false, &actual);
+            offset = end;
+        }
+        try encoder.push(std.testing.allocator, &.{}, true, &actual);
+        try std.testing.expectEqualSlices(u8, expected, actual.items);
+    }
+}
+
+test "BCJ2 conversion encoder splits and restores real branch targets" {
+    const input = ("\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff" ++
+        "\x0f\x85\x08\x00\x00\x00tail") ** 97;
+    var expected = try encodeConvertedAlloc(std.testing.allocator, input, 0);
+    defer expected.deinit();
+    try std.testing.expect(expected.main.len < input.len);
+    try std.testing.expect(expected.call.len != 0);
+    try std.testing.expect(expected.jump.len != 0);
+    const decoded = try decodeAlloc(
+        std.testing.allocator,
+        expected.main,
+        expected.call,
+        expected.jump,
+        expected.range,
+        input.len,
+        0,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    for (1..24) |chunk_len| {
+        var encoder = ConversionEncoder.init(0);
+        defer encoder.deinit(std.testing.allocator);
+        var main: std.ArrayList(u8) = .empty;
+        defer main.deinit(std.testing.allocator);
+        var call: std.ArrayList(u8) = .empty;
+        defer call.deinit(std.testing.allocator);
+        var jump: std.ArrayList(u8) = .empty;
+        defer jump.deinit(std.testing.allocator);
+        var range: std.ArrayList(u8) = .empty;
+        defer range.deinit(std.testing.allocator);
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const end = @min(input.len, offset + chunk_len);
+            try encoder.push(
+                std.testing.allocator,
+                input[offset..end],
+                false,
+                &main,
+                &call,
+                &jump,
+                &range,
+            );
+            offset = end;
+        }
+        try encoder.push(
+            std.testing.allocator,
+            &.{},
+            true,
+            &main,
+            &call,
+            &jump,
+            &range,
+        );
+        try std.testing.expectEqualSlices(u8, expected.main, main.items);
+        try std.testing.expectEqualSlices(u8, expected.call, call.items);
+        try std.testing.expectEqualSlices(u8, expected.jump, jump.items);
+        try std.testing.expectEqualSlices(u8, expected.range, range.items);
+    }
 }

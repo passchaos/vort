@@ -24,18 +24,38 @@ pub fn main(init: std.process.Init) !void {
     var implode_large = true;
     var implode_literal_tree = true;
     var implode_mode = false;
+    var implode_descriptor_mode = false;
     var dcl_dictionary_bits: u3 = 6;
     var dcl_literal_coded = true;
     var dcl_mode = false;
     var reduce_mode = false;
+    var reduce_descriptor_mode = false;
+    var zipcrypto_mode = false;
+    var zipcrypto_descriptor_mode = false;
+    var winzip_aes_mode = false;
+    var winzip_aes_descriptor_mode = false;
+    var pkware_strong_mode = false;
+    var pkware_strong_descriptor_mode = false;
+    var split_mode = false;
+    var unicode_mode = false;
+    var archive_extra_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
+            zip64 = .always;
+        } else if (std.mem.eql(u8, value, "split")) {
+            split_mode = true;
+        } else if (std.mem.eql(u8, value, "split-zip64")) {
+            split_mode = true;
             zip64 = .always;
         } else if (std.mem.eql(u8, value, "ppmd-cutoff")) {
             ppmd_cutoff = true;
         } else if (std.mem.startsWith(u8, value, "implode-")) {
             implode_mode = true;
-            const specification = value["implode-".len..];
+            var specification: []const u8 = value["implode-".len..];
+            if (std.mem.endsWith(u8, specification, "-descriptor")) {
+                implode_descriptor_mode = true;
+                specification = specification[0 .. specification.len - "-descriptor".len];
+            }
             if (std.mem.startsWith(u8, specification, "4k-"))
                 implode_large = false
             else if (!std.mem.startsWith(u8, specification, "8k-"))
@@ -48,6 +68,30 @@ pub fn main(init: std.process.Init) !void {
                 return error.InvalidZipMode;
         } else if (std.mem.eql(u8, value, "reduce")) {
             reduce_mode = true;
+        } else if (std.mem.eql(u8, value, "reduce-descriptor")) {
+            reduce_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "zipcrypto")) {
+            zipcrypto_mode = true;
+        } else if (std.mem.eql(u8, value, "zipcrypto-descriptor")) {
+            zipcrypto_mode = true;
+            zipcrypto_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "winzip-aes")) {
+            winzip_aes_mode = true;
+        } else if (std.mem.eql(u8, value, "winzip-aes-descriptor")) {
+            winzip_aes_mode = true;
+            winzip_aes_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "pkware-strong")) {
+            pkware_strong_mode = true;
+        } else if (std.mem.eql(u8, value, "pkware-strong-descriptor")) {
+            pkware_strong_mode = true;
+            pkware_strong_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "unicode")) {
+            unicode_mode = true;
+        } else if (std.mem.eql(u8, value, "archive-extra") or
+            std.mem.eql(u8, value, "archive-extra-zip64"))
+        {
+            archive_extra_mode = true;
+            if (std.mem.endsWith(u8, value, "-zip64")) zip64 = .always;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -104,8 +148,48 @@ pub fn main(init: std.process.Init) !void {
     const zstd_payload = "Vort ZIP Zstandard method 93.\n" ** 96;
     const ppmd_payload = "Vort ZIP PPMd method 98.\n" ** 128;
     const utf8_payload = "ZIP UTF-8 文件名\n" ** 17;
+    const split_payload = try init.gpa.alloc(u8, 384 * 1024);
+    defer init.gpa.free(split_payload);
+    var split_state: u32 = 0x51a7_2026;
+    for (0..split_payload.len / 128) |block| {
+        for (0..64) |index| {
+            split_state = split_state *% 1_664_525 +% 1_013_904_223;
+            const value: u8 = @truncate(split_state >> 24);
+            split_payload[block * 128 + index] = value;
+            split_payload[block * 128 + 64 + index] = value;
+        }
+    }
+    const metadata_time = try vort.ZipDosTimestamp.fromComponents(.{
+        .year = 2026,
+        .month = 10,
+        .day = 17,
+        .hour = 1,
+        .minute = 23,
+        .second = 45,
+    });
+    const extended_timestamp: vort.ZipExtendedTimestamp = .{
+        .modified = 1_700_000_001,
+        .accessed = 1_700_000_002,
+        .created = -1,
+    };
+    const ntfs_timestamp: vort.ZipNtfsTimestamp = .{
+        .modified = try vort.zipFileTimeFromUnixSeconds(1_700_000_001),
+        .accessed = try vort.zipFileTimeFromUnixSeconds(1_700_000_002),
+        .created = try vort.zipFileTimeFromUnixSeconds(1_700_000_003),
+    };
     const entries = [_]vort.ZipEncodeEntry{
-        .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
+        .{
+            .name = "stored.bin",
+            .data = &stored,
+            .method = .stored,
+            .comment = "stored entry",
+            .modified = metadata_time,
+            .extended_timestamp = extended_timestamp,
+            .ntfs_timestamp = ntfs_timestamp,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = vort.zipUnixExternalAttributes(0o100640),
+        },
         .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
         .{ .name = "folder/implode.txt", .data = implode_payload, .method = .implode, .comment = "implode entry" },
         .{ .name = "folder/reduce1.txt", .data = reduce1_payload, .method = .reduce_1, .comment = "reduce1 entry" },
@@ -124,13 +208,185 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "utf8-目录/数据.txt", .data = utf8_payload, .method = .deflate },
         .{ .name = "empty/", .data = "", .method = .stored },
     };
+    const zipcrypto_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "encrypted/stored.bin",
+            .data = "Vort Traditional ZipCrypto stored payload.\n" ** 17,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted/deflate.txt",
+            .data = "Vort Traditional ZipCrypto Deflate payload.\n" ** 97,
+            .method = .deflate,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+    };
+    const aes128_salt = [_]u8{0x61} ** 8;
+    const aes192_salt = [_]u8{0x62} ** 12;
+    const aes256_salt = [_]u8{0x63} ** 16;
+    const winzip_aes_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "aes/stored-128.bin",
+            .data = "Vort WinZip AES-128 stored payload longer than twenty bytes.",
+            .method = .stored,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes128,
+                .salt = &aes128_salt,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes/deflate-192.txt",
+            .data = "Vort WinZip AES-192 Deflate payload.\n" ** 67,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes192,
+                .salt = &aes192_salt,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes/small-256.bin",
+            .data = "small",
+            .method = .stored,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes256,
+                .salt = &aes256_salt,
+                .version = .ae2,
+            },
+        },
+    };
+    const strong_iv128 = [_]u8{0x71} ** 16;
+    const strong_iv192 = [_]u8{0x72} ** 16;
+    const strong_iv256 = [_]u8{0x73} ** 16;
+    const strong_random128 = [_]u8{0x81} ** 16;
+    const strong_random192 = [_]u8{0x82} ** 16;
+    const strong_random256 = [_]u8{0x83} ** 32;
+    const strong_validation128 = [_]u8{0x91} ** 12;
+    const strong_validation192 = [_]u8{0x92} ** 12;
+    const strong_validation256 = [_]u8{0x93} ** 12;
+    const pkware_strong_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "strong/stored-128.bin",
+            .data = "Vort PKWARE Strong AES-128 stored payload.",
+            .method = .stored,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes128,
+                .iv = strong_iv128,
+                .random_data = &strong_random128,
+                .validation_data = &strong_validation128,
+            },
+        },
+        .{
+            .name = "strong/deflate-192.txt",
+            .data = "Vort PKWARE Strong AES-192 Deflate payload.\n" ** 67,
+            .method = .deflate,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes192,
+                .iv = strong_iv192,
+                .random_data = &strong_random192,
+                .validation_data = &strong_validation192,
+            },
+        },
+        .{
+            .name = "strong/bzip2-256.txt",
+            .data = "Vort PKWARE Strong AES-256 Bzip2 payload.\n" ** 53,
+            .method = .bzip2,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes256,
+                .iv = strong_iv256,
+                .random_data = &strong_random256,
+                .validation_data = &strong_validation256,
+            },
+        },
+    };
+    const split_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "split/crossing.bin",
+            .data = split_payload,
+            .method = .deflate,
+            .comment = "cross-volume Deflate",
+        },
+        .{
+            .name = "split/tail.bin",
+            .data = "Vort split writer stored tail.\n" ** 97,
+            .method = .stored,
+            .comment = "final stored entry",
+        },
+    };
+    const unicode_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "\x82-legacy-name.txt",
+            .unicode_name = "目录/数据.txt",
+            .data = "Vort Unicode path payload.\n" ** 17,
+            .method = .deflate,
+            .comment = "\x82-legacy-comment",
+            .unicode_comment = "条目注释",
+        },
+        .{
+            .name = "legacy-directory/",
+            .unicode_name = "目录/",
+            .data = "",
+            .method = .stored,
+        },
+    };
+    const archive_extra_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "archive-extra/data.txt",
+            .data = "Vort archive extra data record payload.\n" ** 19,
+            .method = .deflate,
+        },
+        .{
+            .name = "archive-extra/empty.bin",
+            .data = "",
+            .method = .stored,
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
-    _ = try vort.zipEncodeAppend(init.gpa, &bytes, &entries, .{
+    const selected_entries: []const vort.ZipEncodeEntry = if (split_mode)
+        &split_entries
+    else if (unicode_mode)
+        &unicode_entries
+    else if (archive_extra_mode)
+        &archive_extra_entries
+    else if (winzip_aes_mode)
+        &winzip_aes_entries
+    else if (pkware_strong_mode)
+        &pkware_strong_entries
+    else if (zipcrypto_mode)
+        &zipcrypto_entries
+    else if (reduce_mode or reduce_descriptor_mode)
+        entries[3..7]
+    else if (implode_mode)
+        entries[2..3]
+    else
+        &entries;
+    const encode_options: vort.ZipEncodeOptions = .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = !(implode_mode or reduce_mode or dcl_mode),
+        .archive_extra_data = if (archive_extra_mode)
+            "Vort archive extra data\x00\xff"
+        else
+            "",
+        .utf8 = !unicode_mode,
+        .data_descriptor = split_mode or implode_descriptor_mode or reduce_descriptor_mode or
+            zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or pkware_strong_descriptor_mode or
+            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode or pkware_strong_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,
@@ -151,6 +407,30 @@ pub fn main(init: std.process.Init) !void {
             .restore_method = .cut_off,
         } else .{},
         .zstd_options = .{ .content_checksum = true },
-    });
+    };
+    if (split_mode) {
+        bytes.clearRetainingCapacity();
+        var encoded = try vort.zipEncodeSplitAlloc(init.gpa, selected_entries, .{
+            .zip_options = encode_options,
+            .max_part_size = 64 * 1024,
+        });
+        defer encoded.deinit();
+        for (encoded.parts, 0..) |part, index| {
+            const path = if (index + 1 == encoded.parts.len)
+                try std.fmt.allocPrint(init.gpa, "{s}.zip", .{output_path})
+            else
+                try std.fmt.allocPrint(init.gpa, "{s}.z{d:0>2}", .{
+                    output_path,
+                    index + 1,
+                });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{
+                .sub_path = path,
+                .data = part,
+            });
+        }
+        return;
+    }
+    _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, encode_options);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes.items });
 }

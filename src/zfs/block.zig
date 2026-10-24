@@ -50,12 +50,15 @@ pub const Algorithm = enum(u8) {
 };
 
 pub const EncodeOptions = struct {
-    zstd_level: u8 = 3,
+    /// Native Zstd level, restricted to levels OpenZFS can represent on disk:
+    /// 1...19, -1...-10, -20...-100 in steps of 10, -500 and -1000.
+    zstd_level: c_int = 3,
     zstd_version: u32 = 10507,
 };
 
 pub const ZstdMetadata = struct {
     compressed_size: usize,
+    /// OpenZFS wire enum: positive levels are 1...19; fast levels 103...123.
     level: u8,
     version: u32,
 };
@@ -180,9 +183,9 @@ fn encodeZstdAlloc(
     input: []const u8,
     options: EncodeOptions,
 ) Error![]u8 {
-    if (options.zstd_level < 1 or options.zstd_level > 19 or
-        options.zstd_version > 0x00ff_ffff)
+    const wire_level = zstdWireLevel(options.zstd_level) orelse
         return error.InvalidZfsBlock;
+    if (options.zstd_version > 0x00ff_ffff) return error.InvalidZfsBlock;
     const frame = try zstd.encodeFrameWithLevelAndOptionsAlloc(
         allocator,
         input,
@@ -201,7 +204,7 @@ fn encodeZstdAlloc(
         std.math.cast(u32, compressed_size) orelse return error.IntegerOverflow,
         .big,
     );
-    const version_level = (@as(u32, options.zstd_level) << 24) |
+    const version_level = (@as(u32, wire_level) << 24) |
         options.zstd_version;
     std.mem.writeInt(u32, output[4..8], version_level, .big);
     @memcpy(output[8..], frame[4..]);
@@ -243,6 +246,28 @@ fn decodeZstdVersionLevel(raw: u32) struct { level: u8, version: u32 } {
             .version = (raw >> 8) & 0x00ff_ffff,
         },
         else => .{ .level = 0, .version = 0 },
+    };
+}
+
+// OpenZFS zfs-2.4.0 include/sys/zio_compress.h (zio_zstd_levels) and
+// module/zstd/zfs_zstd.c (zstd_levels). FAST=102 is a property alias,
+// while encoded blocks use the explicit FAST_1...FAST_1000 values 103...123.
+fn zstdWireLevel(level: c_int) ?u8 {
+    return switch (level) {
+        1...19 => @intCast(level),
+        -10...-1 => @intCast(102 - level),
+        -20 => 113,
+        -30 => 114,
+        -40 => 115,
+        -50 => 116,
+        -60 => 117,
+        -70 => 118,
+        -80 => 119,
+        -90 => 120,
+        -100 => 121,
+        -500 => 122,
+        -1000 => 123,
+        else => null,
     };
 }
 
@@ -348,4 +373,8 @@ test "ZFS Zstd metadata reports level and version" {
     );
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualStrings(input, decoded);
+}
+
+test {
+    _ = @import("fast_levels_tests.zig");
 }

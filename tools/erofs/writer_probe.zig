@@ -1,36 +1,194 @@
 const std = @import("std");
 const vort = @import("vort");
+const verification = @import("writer_verify.zig");
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
-    const compression_name = args.next() orelse "lz4";
+    const raw_mode = args.next() orelse "lz4";
+    const index_format: vort.ErofsWriterIndexFormat = if (std.mem.startsWith(u8, raw_mode, "compact4-")) .compact_4byte else if (std.mem.startsWith(u8, raw_mode, "compact-")) .compact else .full;
+    const mode_name = switch (index_format) {
+        .compact_4byte => raw_mode["compact4-".len..],
+        .compact => raw_mode["compact-".len..],
+        .full => raw_mode,
+    };
+    const source_suffix = "-source";
+    const sink_suffix = "-sink";
+    const encoder_suffix = "-encoder";
+    const encoder_mode = std.mem.endsWith(u8, mode_name, encoder_suffix);
+    const sink_mode = std.mem.endsWith(u8, mode_name, sink_suffix);
+    const source_mode = encoder_mode or sink_mode or std.mem.endsWith(u8, mode_name, source_suffix);
+    const layout_name = if (encoder_mode) mode_name[0 .. mode_name.len - encoder_suffix.len] else if (sink_mode) mode_name[0 .. mode_name.len - sink_suffix.len] else if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
+    const address48_suffix = "-48bit";
+    const fragment_suffix = "-fragments";
+    const inline_suffix = "-ztailpacking";
+    const metabox_suffix = "-metabox";
+    const directory_suffix = "-dirs";
+    const extended_suffix = "-extended";
+    const metabox = std.mem.endsWith(u8, layout_name, metabox_suffix);
+    const without_metabox = if (metabox)
+        layout_name[0 .. layout_name.len - metabox_suffix.len]
+    else
+        layout_name;
+    const extended = std.mem.endsWith(u8, without_metabox, extended_suffix);
+    const without_extended = if (extended)
+        without_metabox[0 .. without_metabox.len - extended_suffix.len]
+    else
+        without_metabox;
+    const force_48bit = std.mem.endsWith(u8, without_extended, address48_suffix);
+    const layout_mode = if (force_48bit)
+        without_extended[0 .. without_extended.len - address48_suffix.len]
+    else
+        without_extended;
+    const chunk_local = std.mem.eql(u8, layout_mode, "chunk-local");
+    const chunk_external = std.mem.eql(u8, layout_mode, "chunk-external");
+    const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
+    const compressed_inline = std.mem.endsWith(u8, layout_mode, inline_suffix);
+    const compress_directories = std.mem.endsWith(u8, layout_mode, directory_suffix);
+    const compression_with_extent = if (chunk_local or chunk_external)
+        "stored"
+    else if (fragments)
+        layout_mode[0 .. layout_mode.len - fragment_suffix.len]
+    else if (compressed_inline)
+        layout_mode[0 .. layout_mode.len - inline_suffix.len]
+    else if (compress_directories)
+        layout_mode[0 .. layout_mode.len - directory_suffix.len]
+    else
+        layout_mode;
+    const grouped_suffix = "-clusters";
+    const bounded_suffix: ?[]const u8 = if (std.mem.endsWith(u8, compression_with_extent, "-bounded12"))
+        "-bounded12"
+    else if (std.mem.endsWith(u8, compression_with_extent, "-bounded8"))
+        "-bounded8"
+    else if (std.mem.endsWith(u8, compression_with_extent, "-bounded"))
+        "-bounded"
+    else
+        null;
+    const grouped = bounded_suffix != null or std.mem.endsWith(u8, compression_with_extent, grouped_suffix);
+    const compression_name = if (bounded_suffix) |suffix|
+        compression_with_extent[0 .. compression_with_extent.len - suffix.len]
+    else if (grouped)
+        compression_with_extent[0 .. compression_with_extent.len - grouped_suffix.len]
+    else
+        compression_with_extent;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
 
     var random: [8193]u8 = undefined;
     fillPseudoRandom(&random);
+    var mixed: [16384]u8 = undefined;
+    @memcpy(mixed[0..8192], random[0..8192]);
+    @memcpy(mixed[8192..], random[0..8192]);
     const large = "EROFS writer probe multi-block payload 0123456789\n" ** 4096;
-    const entries = [_]vort.ErofsEntry{
-        .{ .path = "etc/config", .data = "writer probe configuration\n" },
+    const config_xattrs = [_]vort.ErofsXattr{
+        .{ .name = "user.vort.config", .value = "config-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
+    };
+    const small_xattrs = [_]vort.ErofsXattr{
+        .{ .name = "user.vort.small", .value = "small-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
+    };
+    const directory_xattrs = [_]vort.ErofsXattr{
+        .{ .name = "user.vort.directory", .value = "directory-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
+    };
+    const root_xattrs = [_]vort.ErofsXattr{
+        .{ .name = "user.vort.root", .value = "root-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
+    };
+    var entries = [_]vort.ErofsEntry{
+        .{ .path = "etc/config", .data = "writer probe configuration\n", .xattrs = &config_xattrs },
         .{ .path = "large.bin", .data = large },
         .{ .path = "random.bin", .data = &random },
-        .{ .path = "small", .data = "inline payload" },
+        .{ .path = "mixed.bin", .data = &mixed },
+        .{ .path = "small", .data = "inline payload", .xattrs = &small_xattrs },
         .{ .path = "link", .kind = .symlink, .target = "etc/config" },
-        .{ .path = "empty", .kind = .directory },
+        .{ .path = "empty", .kind = .directory, .xattrs = &directory_xattrs },
     };
-    const encoded = try vort.encodeErofsAlloc(init.gpa, &entries, .{
+    var sources: [entries.len]vort.SliceByteSource = undefined;
+    const expected_entries = entries;
+    if (source_mode) {
+        for (&entries, 0..) |*entry, index| {
+            if (entry.kind != .file) continue;
+            sources[index] = .{ .bytes = entry.data };
+            entry.source = sources[index].source();
+            entry.source.?.max_read_size = 4096;
+            entry.data = &.{};
+        }
+    }
+    const options = vort.ErofsWriterOptions{
         .compression = compression,
+        .compressed_index_format = index_format,
+        .compression_extent_size = if (grouped) 64 * 1024 else 4096,
+        .max_pcluster_size = if (bounded_suffix) |suffix|
+            if (std.mem.eql(u8, suffix, "-bounded12")) 12288 else if (std.mem.eql(u8, suffix, "-bounded8")) 8192 else 4096
+        else
+            null,
         .volume_name = "vort-writer",
-    });
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        .root_xattrs = &root_xattrs,
+        .xattr_prefixes = &.{"user.vort."},
+        .tail_packing = if (fragments)
+            .fragments
+        else if (compressed_inline)
+            .compressed_inline
+        else
+            .none,
+        .chunk_size = if (chunk_local or chunk_external) 4096 else null,
+        .force_48bit = force_48bit,
+        .metabox = metabox,
+        .shared_xattrs = true,
+        .compress_directories = compress_directories,
+        .inode_version = if (extended) .extended else .compact,
+    };
+    if (sink_mode or encoder_mode) {
+        const output_file = try std.Io.Dir.cwd().createFile(init.io, output_path, .{});
+        defer output_file.close(init.io);
+        var output_adapter = vort.FileByteSink.init(init.io, output_file);
+        if (chunk_external) {
+            const device_path = args.next() orelse return error.MissingOutputPath;
+            const device_file = try std.Io.Dir.cwd().createFile(init.io, device_path, .{});
+            defer device_file.close(init.io);
+            var device_adapter = vort.FileByteSink.init(init.io, device_file);
+            if (encoder_mode) {
+                var encoder: vort.ErofsEncoder = undefined;
+                try encoder.initExternalChunks(init.gpa, &entries, options, .{});
+                defer encoder.deinit();
+                try pumpEncoder(&encoder, output_adapter.sink(), device_adapter.sink());
+            } else _ = try vort.encodeErofsExternalChunksToSinks(init.gpa, &entries, options, output_adapter.sink(), device_adapter.sink(), .{});
+        } else {
+            if (encoder_mode) {
+                var encoder: vort.ErofsEncoder = undefined;
+                try encoder.init(init.gpa, &entries, options, .{});
+                defer encoder.deinit();
+                try pumpEncoder(&encoder, output_adapter.sink(), null);
+            } else _ = try vort.encodeErofsToSink(init.gpa, &entries, options, output_adapter.sink(), .{});
+        }
+    } else if (chunk_external) {
+        const device_path = args.next() orelse return error.MissingOutputPath;
+        var encoded = try vort.encodeErofsExternalChunksAlloc(init.gpa, &entries, options);
+        defer encoded.deinit(init.gpa);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = output_path,
+            .data = encoded.image,
+        });
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = device_path,
+            .data = encoded.device,
+        });
+    } else {
+        const encoded = try vort.encodeErofsAlloc(init.gpa, &entries, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    }
+    if (index_format != .full and compression != .stored)
+        try verification.verify(init, output_path, &expected_entries, &root_xattrs, index_format);
 }
 
 fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {
     if (std.mem.eql(u8, name, "stored")) return .stored;
     if (std.mem.eql(u8, name, "lz4")) return .lz4;
+    if (std.mem.eql(u8, name, "lzma")) return .lzma;
     if (std.mem.eql(u8, name, "deflate")) return .deflate;
     if (std.mem.eql(u8, name, "zstd")) return .zstandard;
     return null;
@@ -44,4 +202,22 @@ fn fillPseudoRandom(output: []u8) void {
         state ^= state << 5;
         byte.* = @truncate(state);
     }
+}
+
+fn pumpEncoder(encoder: *vort.ErofsEncoder, image: vort.ByteSink, device: ?vort.ByteSink) !void {
+    var buffer: [137]u8 = undefined;
+    var step: usize = 0;
+    while (true) {
+        const size = ([_]usize{ 0, 1, 7, 137, 31 })[step % 5];
+        const progress = try encoder.read(buffer[0..size]);
+        if (progress.output_written != 0) {
+            const output = if (progress.target == .image) image else device orelse return error.InvalidErofs;
+            try output.writeExact(progress.offset, buffer[0..progress.output_written]);
+        }
+        if (progress.status == .done) break;
+        step += 1;
+    }
+    const result = encoder.result().?;
+    if (device) |output| try output.finish(result.device_size);
+    try image.finish(result.image_size);
 }

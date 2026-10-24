@@ -1,0 +1,90 @@
+{
+  "status": "ok",
+  "scope": "final frozen-source small Large Window HQ functional campaign; no far artifact or performance evidence in this report",
+  "exit_code": 0,
+  "feature_cases": 114,
+  "feature_groups": {
+    "window": 42,
+    "shape": 64,
+    "api": 6,
+    "raw": 1,
+    "empty": 1
+  },
+  "baseline_regressions": 9,
+  "budget_cases": 4,
+  "invalid_configuration_cases": 4,
+  "logical_case_total": 131,
+  "probe_calls": 586,
+  "probe_successes": 466,
+  "expected_errors": {
+    "CorruptFrame": 114,
+    "WorkingMemoryLimitExceeded": 2,
+    "InvalidBlockPlan": 4
+  },
+  "all_error_outputs_preserved": true,
+  "versioned_bidirectional_reference_results": 227,
+  "reference_strict_rejections": 227,
+  "known_skips": [
+    {
+      "name": "raw",
+      "reference": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "all_114_actual_headers_large_14bits": true,
+  "window_widths_tested": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30
+  ],
+  "qualities_tested": [
+    10,
+    11
+  ],
+  "shape_wire_fields_independently_verified": 64,
+  "max_wire_alphabet_size": 1128,
+  "max_active_alphabet_size": 544,
+  "source_before_after_equal": true,
+  "source_file_count": 1708,
+  "test_source_files": 13,
+  "embedded_nonzig_src_files": 143,
+  "baseline_manifest_sha256": "b428f2461c6be8a68ab8007d85670355f46b3e26c094b723d5ed8619c697df40",
+  "report_sha256": "0861535baace790398496d3cf1317709fffd97f601e29ed12bb767c2d921f399",
+  "rows_canonical_sha256": "3ef0404448e47e9bd0d80cf1af4350ebd96ee381f3b30e55386c082bed26fbd6",
+  "source_zip_sha256": "84468430fecda1e085fc75416b0f74d66ca1a1e153d887f3b0b711b64d2afc66",
+  "probe_sha256": "4c4f83c0ac5222dcb6a0b4bf289a1e695f5781907e8b66b7665abb6dad34f5e0",
+  "compiler_manifest_sha256": "e9e02250f30363f634b35ada29e5d47b12ef8e842be79dcc27c6784f782d36e5",
+  "calculated_cache_output_digest": "a7ddb17530f436acb7b470d305d47bf2",
+  "compiler_input_records": 1889,
+  "compiler_input_groups": {
+    "project": 1059,
+    "vail": 16,
+    "linked_objects": 2,
+    "zig_library": 812
+  },
+  "all_compiler_input_contents_verified": true,
+  "unique_compiler_input_count": 1887,
+  "compiler_inputs_zip_sha256": "08f023b0ad5d9ab15ca39f5ce02f233a56b1f9c3b2064a6df8f9e4a8e43ca51b",
+  "artifact_binding_report_sha256": "694fc6f715b1b2ac617305764c9599630c232af43d5e471820df1b0e5ab70ea4",
+  "far_artifact": null,
+  "performance_claim": null
+}

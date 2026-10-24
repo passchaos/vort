@@ -227,182 +227,189 @@ const ParsedEntry = struct {
     is_trailer: bool,
 };
 
+pub const FixedHeader = struct {
+    format: Format,
+    kind: Kind,
+    mode: u32,
+    inode: u32,
+    uid: u32,
+    gid: u32,
+    link_count: u32,
+    mtime: u32,
+    device_major: u32,
+    device_minor: u32,
+    rdevice_major: u32,
+    rdevice_minor: u32,
+    checksum: ?u32,
+    stored_size: usize,
+    name_size: usize,
+    header_size: usize,
+    alignment: usize,
+};
+
 fn parseEntry(bytes: []const u8, offset: usize, format: Format) Error!ParsedEntry {
-    return switch (format) {
-        .newc, .crc => parseNewAscii(bytes, offset, format),
-        .odc => parseOldAscii(bytes, offset),
-        .binary_little, .binary_big => parseBinary(bytes, offset, format),
+    const header_size = fixedHeaderSize(format);
+    const header_end = try checkedEnd(offset, header_size, bytes.len);
+    const fixed = try parseFixedHeader(bytes[offset..header_end], format);
+    const name_end = try checkedEnd(header_end, fixed.name_size, bytes.len);
+    const name = try parseName(bytes[header_end..name_end]);
+    const data_offset = try alignedEnd(header_end, fixed.name_size, fixed.alignment, bytes.len);
+    try requireZero(bytes[name_end..data_offset]);
+    const data_end = try checkedEnd(data_offset, fixed.stored_size, bytes.len);
+    const next_offset = try alignedEnd(
+        data_offset,
+        fixed.stored_size,
+        fixed.alignment,
+        bytes.len,
+    );
+    try requireZero(bytes[data_end..next_offset]);
+    const is_trailer = try validateEntryHeader(fixed, name);
+    return .{
+        .entry = .{
+            .name = name,
+            .format = format,
+            .kind = fixed.kind,
+            .mode = fixed.mode,
+            .inode = fixed.inode,
+            .uid = fixed.uid,
+            .gid = fixed.gid,
+            .link_count = fixed.link_count,
+            .mtime = fixed.mtime,
+            .device_major = fixed.device_major,
+            .device_minor = fixed.device_minor,
+            .rdevice_major = fixed.rdevice_major,
+            .rdevice_minor = fixed.rdevice_minor,
+            .checksum = fixed.checksum,
+            .stored_size = fixed.stored_size,
+            .header_offset = offset,
+            .header_size = fixed.header_size,
+            .data_offset = data_offset,
+            .next_offset = next_offset,
+            .safe_path = isSafePath(name),
+        },
+        .is_trailer = is_trailer,
     };
 }
 
-fn parseNewAscii(bytes: []const u8, offset: usize, format: Format) Error!ParsedEntry {
-    const header_end = try checkedEnd(offset, newc_header_size, bytes.len);
-    const header = bytes[offset..header_end];
+pub fn fixedHeaderSize(format: Format) usize {
+    return switch (format) {
+        .newc, .crc => newc_header_size,
+        .odc => odc_header_size,
+        .binary_little, .binary_big => binary_header_size,
+    };
+}
+
+pub fn parseFixedHeader(bytes: []const u8, format: Format) Error!FixedHeader {
+    const header_size = fixedHeaderSize(format);
+    if (bytes.len < header_size) return error.TruncatedFrame;
+    const header = bytes[0..header_size];
+    return switch (format) {
+        .newc, .crc => parseNewAsciiFixed(header, format),
+        .odc => parseOldAsciiFixed(header),
+        .binary_little, .binary_big => parseBinaryFixed(header, format),
+    };
+}
+
+fn parseNewAsciiFixed(header: []const u8, format: Format) Error!FixedHeader {
     const expected_magic = if (format == .crc) magic_crc else magic_newc;
     if (!std.mem.eql(u8, header[0..6], expected_magic)) return error.InvalidMagic;
-
-    const inode = try parseAscii(u32, header[6..14], 16);
-    const mode = try parseAscii(u32, header[14..22], 16);
-    const uid = try parseAscii(u32, header[22..30], 16);
-    const gid = try parseAscii(u32, header[30..38], 16);
-    const link_count = try parseAscii(u32, header[38..46], 16);
-    const mtime = try parseAscii(u32, header[46..54], 16);
     const stored_size_u32 = try parseAscii(u32, header[54..62], 16);
-    const device_major = try parseAscii(u32, header[62..70], 16);
-    const device_minor = try parseAscii(u32, header[70..78], 16);
-    const rdevice_major = try parseAscii(u32, header[78..86], 16);
-    const rdevice_minor = try parseAscii(u32, header[86..94], 16);
     const name_size_u32 = try parseAscii(u32, header[94..102], 16);
     const stored_checksum = try parseAscii(u32, header[102..110], 16);
     if (format == .newc and stored_checksum != 0) return error.InvalidCpioArchive;
-
-    const name_size = std.math.cast(usize, name_size_u32) orelse return error.IntegerOverflow;
-    const stored_size = std.math.cast(usize, stored_size_u32) orelse return error.IntegerOverflow;
-    const name_start = header_end;
-    const name_end = try checkedEnd(name_start, name_size, bytes.len);
-    const name = try parseName(bytes[name_start..name_end]);
-    const header_and_name = std.math.add(usize, newc_header_size, name_size) catch
-        return error.IntegerOverflow;
-    const data_offset = try alignedEnd(offset, header_and_name, 4, bytes.len);
-    try requireZero(bytes[name_end..data_offset]);
-    const data_end = try checkedEnd(data_offset, stored_size, bytes.len);
-    const next_offset = try alignedEnd(data_offset, stored_size, 4, bytes.len);
-    try requireZero(bytes[data_end..next_offset]);
-
-    return finishParsedEntry(.{
-        .name = name,
+    const mode = try parseAscii(u32, header[14..22], 16);
+    return .{
         .format = format,
         .kind = kindFromMode(mode),
         .mode = mode,
-        .inode = inode,
-        .uid = uid,
-        .gid = gid,
-        .link_count = link_count,
-        .mtime = mtime,
-        .device_major = device_major,
-        .device_minor = device_minor,
-        .rdevice_major = rdevice_major,
-        .rdevice_minor = rdevice_minor,
+        .inode = try parseAscii(u32, header[6..14], 16),
+        .uid = try parseAscii(u32, header[22..30], 16),
+        .gid = try parseAscii(u32, header[30..38], 16),
+        .link_count = try parseAscii(u32, header[38..46], 16),
+        .mtime = try parseAscii(u32, header[46..54], 16),
+        .device_major = try parseAscii(u32, header[62..70], 16),
+        .device_minor = try parseAscii(u32, header[70..78], 16),
+        .rdevice_major = try parseAscii(u32, header[78..86], 16),
+        .rdevice_minor = try parseAscii(u32, header[86..94], 16),
         .checksum = if (format == .crc) stored_checksum else null,
-        .stored_size = stored_size,
-        .header_offset = offset,
+        .stored_size = std.math.cast(usize, stored_size_u32) orelse
+            return error.IntegerOverflow,
+        .name_size = std.math.cast(usize, name_size_u32) orelse
+            return error.IntegerOverflow,
         .header_size = newc_header_size,
-        .data_offset = data_offset,
-        .next_offset = next_offset,
-        .safe_path = isSafePath(name),
-    });
+        .alignment = 4,
+    };
 }
 
-fn parseOldAscii(bytes: []const u8, offset: usize) Error!ParsedEntry {
-    const header_end = try checkedEnd(offset, odc_header_size, bytes.len);
-    const header = bytes[offset..header_end];
+fn parseOldAsciiFixed(header: []const u8) Error!FixedHeader {
     if (!std.mem.eql(u8, header[0..6], magic_odc)) return error.InvalidMagic;
-
-    const device = try parseAscii(u32, header[6..12], 8);
-    const inode = try parseAscii(u32, header[12..18], 8);
     const mode = try parseAscii(u32, header[18..24], 8);
-    const uid = try parseAscii(u32, header[24..30], 8);
-    const gid = try parseAscii(u32, header[30..36], 8);
-    const link_count = try parseAscii(u32, header[36..42], 8);
-    const rdevice = try parseAscii(u32, header[42..48], 8);
-    const mtime = try parseAscii(u32, header[48..59], 8);
     const name_size_u32 = try parseAscii(u32, header[59..65], 8);
     const stored_size_u64 = try parseAscii(u64, header[65..76], 8);
-    const name_size = std.math.cast(usize, name_size_u32) orelse return error.IntegerOverflow;
-    const stored_size = std.math.cast(usize, stored_size_u64) orelse return error.IntegerOverflow;
-    const name_end = try checkedEnd(header_end, name_size, bytes.len);
-    const name = try parseName(bytes[header_end..name_end]);
-    const data_end = try checkedEnd(name_end, stored_size, bytes.len);
-
-    return finishParsedEntry(.{
-        .name = name,
+    return .{
         .format = .odc,
         .kind = kindFromMode(mode),
         .mode = mode,
-        .inode = inode,
-        .uid = uid,
-        .gid = gid,
-        .link_count = link_count,
-        .mtime = mtime,
+        .inode = try parseAscii(u32, header[12..18], 8),
+        .uid = try parseAscii(u32, header[24..30], 8),
+        .gid = try parseAscii(u32, header[30..36], 8),
+        .link_count = try parseAscii(u32, header[36..42], 8),
+        .mtime = try parseAscii(u32, header[48..59], 8),
         .device_major = 0,
-        .device_minor = device,
+        .device_minor = try parseAscii(u32, header[6..12], 8),
         .rdevice_major = 0,
-        .rdevice_minor = rdevice,
+        .rdevice_minor = try parseAscii(u32, header[42..48], 8),
         .checksum = null,
-        .stored_size = stored_size,
-        .header_offset = offset,
+        .stored_size = std.math.cast(usize, stored_size_u64) orelse
+            return error.IntegerOverflow,
+        .name_size = std.math.cast(usize, name_size_u32) orelse
+            return error.IntegerOverflow,
         .header_size = odc_header_size,
-        .data_offset = name_end,
-        .next_offset = data_end,
-        .safe_path = isSafePath(name),
-    });
+        .alignment = 1,
+    };
 }
 
-fn parseBinary(bytes: []const u8, offset: usize, format: Format) Error!ParsedEntry {
-    const header_end = try checkedEnd(offset, binary_header_size, bytes.len);
-    const header = bytes[offset..header_end];
+fn parseBinaryFixed(header: []const u8, format: Format) Error!FixedHeader {
     const endian: std.builtin.Endian = if (format == .binary_little) .little else .big;
     if (std.mem.readInt(u16, header[0..2], endian) != binary_magic)
         return error.InvalidMagic;
-
-    const device = readBinary16(header, 2, endian);
-    const inode = readBinary16(header, 4, endian);
-    const mode = readBinary16(header, 6, endian);
-    const uid = readBinary16(header, 8, endian);
-    const gid = readBinary16(header, 10, endian);
-    const link_count = readBinary16(header, 12, endian);
-    const rdevice = readBinary16(header, 14, endian);
-    const mtime = readBinary32(header, 16, endian);
-    const name_size: usize = readBinary16(header, 20, endian);
-    const stored_size_u32 = readBinary32(header, 22, endian);
-    const stored_size = std.math.cast(usize, stored_size_u32) orelse return error.IntegerOverflow;
-    const name_end = try checkedEnd(header_end, name_size, bytes.len);
-    const name = try parseName(bytes[header_end..name_end]);
-    const data_offset = try alignedEnd(header_end, name_size, 2, bytes.len);
-    try requireZero(bytes[name_end..data_offset]);
-    const data_end = try checkedEnd(data_offset, stored_size, bytes.len);
-    const next_offset = try alignedEnd(data_offset, stored_size, 2, bytes.len);
-    try requireZero(bytes[data_end..next_offset]);
-
-    return finishParsedEntry(.{
-        .name = name,
+    const mode: u32 = readBinary16(header, 6, endian);
+    return .{
         .format = format,
         .kind = kindFromMode(mode),
         .mode = mode,
-        .inode = inode,
-        .uid = uid,
-        .gid = gid,
-        .link_count = link_count,
-        .mtime = mtime,
+        .inode = readBinary16(header, 4, endian),
+        .uid = readBinary16(header, 8, endian),
+        .gid = readBinary16(header, 10, endian),
+        .link_count = readBinary16(header, 12, endian),
+        .mtime = readBinary32(header, 16, endian),
         .device_major = 0,
-        .device_minor = device,
+        .device_minor = readBinary16(header, 2, endian),
         .rdevice_major = 0,
-        .rdevice_minor = rdevice,
+        .rdevice_minor = readBinary16(header, 14, endian),
         .checksum = null,
-        .stored_size = stored_size,
-        .header_offset = offset,
+        .stored_size = readBinary32(header, 22, endian),
+        .name_size = readBinary16(header, 20, endian),
         .header_size = binary_header_size,
-        .data_offset = data_offset,
-        .next_offset = next_offset,
-        .safe_path = isSafePath(name),
-    });
+        .alignment = 2,
+    };
 }
 
-fn finishParsedEntry(entry: Entry) Error!ParsedEntry {
-    const is_trailer = std.mem.eql(u8, entry.name, trailer_name);
+pub fn validateEntryHeader(header: FixedHeader, name: []const u8) Error!bool {
+    const is_trailer = std.mem.eql(u8, name, trailer_name);
     if (is_trailer) {
-        if (entry.stored_size != 0) return error.InvalidCpioArchive;
+        if (header.stored_size != 0) return error.InvalidCpioArchive;
     } else {
-        if (entry.link_count == 0) return error.InvalidCpioArchive;
-        switch (entry.kind) {
-            .directory, .block_device, .character_device, .fifo, .socket => if (entry.stored_size != 0) return error.InvalidCpioArchive,
+        if (header.link_count == 0) return error.InvalidCpioArchive;
+        switch (header.kind) {
+            .directory, .block_device, .character_device, .fifo, .socket => if (header.stored_size != 0) return error.InvalidCpioArchive,
             else => {},
         }
     }
-    return .{ .entry = entry, .is_trailer = is_trailer };
+    return is_trailer;
 }
 
-fn detectFormat(bytes: []const u8, offset: usize) Error!Format {
+pub fn detectFormat(bytes: []const u8, offset: usize) Error!Format {
     _ = try checkedEnd(offset, 2, bytes.len);
     if (std.mem.readInt(u16, bytes[offset..][0..2], .little) == binary_magic)
         return .binary_little;
@@ -426,7 +433,7 @@ fn detectFormat(bytes: []const u8, offset: usize) Error!Format {
     return error.InvalidMagic;
 }
 
-fn parseName(field: []const u8) Error![]const u8 {
+pub fn parseName(field: []const u8) Error![]const u8 {
     if (field.len < 2 or field[field.len - 1] != 0) return error.InvalidCpioArchive;
     const name = field[0 .. field.len - 1];
     if (std.mem.indexOfScalar(u8, name, 0) != null) return error.InvalidCpioArchive;
@@ -451,7 +458,7 @@ fn parseAscii(comptime T: type, field: []const u8, radix: u8) Error!T {
     return std.math.cast(T, value) orelse error.IntegerOverflow;
 }
 
-fn kindFromMode(mode: u32) Kind {
+pub fn kindFromMode(mode: u32) Kind {
     return switch (mode & mode_type_mask) {
         mode_regular => .regular,
         mode_directory => .directory,

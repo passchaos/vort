@@ -59,9 +59,11 @@ references, including relocated hunks; uncompressed output uses the simple-map
 same-position parent convention and stores an explicit raw zero hunk whenever
 zero data must override a non-zero parent.
 
-`compression_level` is used by zlib and Zstandard. Zlib and `auto` accept
-levels 0...9; forced Zstandard accepts 0...22. LZMA and Huffman currently use
-their deterministic built-in planning policies.
+`compression_level` is a signed hint used by zlib and Zstandard. Zlib and
+`auto` accept levels 0...9; forced Zstandard accepts -131072...22, including
+negative fast acceleration. LZMA and Huffman use their deterministic built-in
+planning policies and retain the old nonnegative hint domain. Invalid hints
+are rejected before allocation. Default level 6 retains its old wire.
 
 ```zig
 const encoded = try vort.encodeChdAlloc(allocator, raw_disk, .{

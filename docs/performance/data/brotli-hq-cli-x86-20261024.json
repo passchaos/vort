@@ -1,0 +1,192 @@
+{
+  "phase": "formal-final-br-hq-cli",
+  "before_utc": "2026-10-24T06:42:59.008332+00:00",
+  "workspace": "/home/passchaos/project-z/vort-stream-contracts",
+  "git_head": "ff1b111ceb1d73f4b8acc2f28cf158a51028ecbe",
+  "source_files_before": 1517,
+  "source_before_sha256": "7491feabb4a7c137f299d7b1d5982b11b4dd7dc7adf88c103debbc278e6c2c66",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br-hq-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected_gate": {
+    "round_trips": 146,
+    "profile_wire_checks": 60,
+    "rejected_output_preserved": 50,
+    "same_path_checks": 4,
+    "null_hq_mapping_wire_checks": 10
+  },
+  "reference_brotli_version": 16777225,
+  "reference_brotli_version_text": "1.0.9",
+  "full_gate_run": true,
+  "status": "passed",
+  "executed_cli_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/5807de3add8d494eae567cb623374e88/vort-br-hq-cli-probe",
+  "observed_gate_process": "3829359 3829283       02:03 python3 tools/br/hq_cli_gate.py --cli ./.zig-cache/o/5807de3add8d494eae567cb623374e88/vort-br-hq-cli-probe",
+  "compiled_input_binding_current": {
+    "manifest_path": "/tmp/vort-br-hq-final-20261024-dtre4swk/cli/compile-inputs.txt",
+    "manifest_cache_key": ".zig-cache/h/fdca596c70fbb49d05725c19120bdb50.txt",
+    "records": 1868,
+    "unique_inputs": 1866,
+    "project_and_vail_inputs": 1051,
+    "zig_standard_library_inputs": 813,
+    "linked_object_inputs": 2,
+    "content_mismatches": [],
+    "all_input_bytes_archive": "/tmp/vort-br-hq-final-20261024-dtre4swk/cli/compiled-input-bytes.zip",
+    "method": "Verify each original manifest SipHash128 content digest against the same bytes hashed with SHA256; project/vail source snapshot crosscheck is completed after the gate."
+  },
+  "after_utc": "2026-10-24T07:04:16.314229+00:00",
+  "source_files_after": 1517,
+  "source_all_snapshot_equal": true,
+  "raw_source_delta": {
+    "changed": {},
+    "added": {},
+    "removed": {}
+  },
+  "build_exit_code": 0,
+  "gate_report": {
+    "round_trips": 146,
+    "profile_wire_checks": 60,
+    "rejected_output_preserved": 50,
+    "same_path_checks": 4,
+    "null_hq_mapping_wire_checks": 10,
+    "hq_work": {
+      "encode-br-file:10:generic": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12932499,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-file:10:text": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12932452,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-file:10:font": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12917933,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-file:11:generic": {
+        "tree_nodes": 27570,
+        "price_evaluations": 78554711,
+        "passes": 212,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      },
+      "encode-br-file:11:text": {
+        "tree_nodes": 27570,
+        "price_evaluations": 78554356,
+        "passes": 212,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      },
+      "encode-br-file:11:font": {
+        "tree_nodes": 27570,
+        "price_evaluations": 78415732,
+        "passes": 212,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:10:generic": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12932499,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:10:text": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12932452,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:10:font": {
+        "tree_nodes": 8254,
+        "price_evaluations": 12917933,
+        "passes": 53,
+        "refinement_passes": 0,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:11:generic": {
+        "tree_nodes": 19316,
+        "price_evaluations": 65622212,
+        "passes": 159,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:11:text": {
+        "tree_nodes": 19316,
+        "price_evaluations": 65621904,
+        "passes": 159,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      },
+      "encode-br-stream-file:11:font": {
+        "tree_nodes": 19316,
+        "price_evaluations": 65497799,
+        "passes": 159,
+        "refinement_passes": 53,
+        "emitted_metablocks": 53
+      }
+    },
+    "reference_brotli_version": 16777225
+  },
+  "gate_expected_matches": true,
+  "parser_tests_passed": 6,
+  "compiled_input_after_validation": {
+    "unique_inputs": 1866,
+    "project_source_uncovered": [
+      "/home/passchaos/project-z/vort-stream-contracts/src/br/dictionary.bin"
+    ],
+    "mismatches": [],
+    "includes_zig_stdlib": true,
+    "includes_linked_objects": [
+      "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/b0d047ba2b114a510a29fad6255d7eaf/vort-br-record-optimal.o",
+      "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/ff73a3e98d3bd346f40ab758e02f8735/vort-zstd-huffman-x2.o"
+    ]
+  },
+  "binary": {
+    "executed_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/5807de3add8d494eae567cb623374e88/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-hq-final-20261024-dtre4swk/cli/vort-br-hq-cli-probe",
+    "sha256": "e6b2f3e760ba0f575e89e1354943f79b935619842eaff2b77dd3e99a216ad995"
+  },
+  "binary_built_in_window": true,
+  "binary_source_binding_verified": true,
+  "report_files_sha256": {
+    "source-before.json": "7491feabb4a7c137f299d7b1d5982b11b4dd7dc7adf88c103debbc278e6c2c66",
+    "source-after.json": "7491feabb4a7c137f299d7b1d5982b11b4dd7dc7adf88c103debbc278e6c2c66",
+    "source-before.zip": "bd655516680aa7068473ac9c627bb9bd183495c7297efb6e882d9a1fdb17880f",
+    "source-after.zip": "bd655516680aa7068473ac9c627bb9bd183495c7297efb6e882d9a1fdb17880f",
+    "source-delta.json": "6e6c1716a2c4d92cdd27b27267c90b5e4457ba85cf08f05b77d1435c9432e149",
+    "compile-inputs.txt": "e2c3da7e7e23e63ffcd68ee9e842c8833d3f7d727936611a4565ff1850eca477",
+    "compile-input-digest-check.tsv": "2c2468bc38279652999caeabef4d62ea4db434b08866402ea8c4b8958365291f",
+    "compiled-inputs-all.json": "450be1f628b0b2f4b5d3b580ccfbcbb30dc3439324907a23d0ba806b0d6fb500",
+    "compiled-input-bytes.zip": "82f6d5c32f041cd634cd5b0589eab425ce87cc5506abe1ea4984ad43add46a63",
+    "gate-report.json": "7ccd95edebd471348db211f0b7d9caa1ea8734c983876527518258662306c066",
+    "build.stdout": "a51ab56b398fa0458456ca47d9431cb66e68146c63f496ce8b5bb3f981d9b656",
+    "build.stderr": "da906db9b3aecf70cd8c3a8ecb85a0838cdc7f07945dff49dec570fd3efe63b7"
+  },
+  "supplemental_compiler_verified_resources": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/dictionary.bin",
+      "sha256": "20e42eb1b511c21806d4d227d07e5dd06877d8ce7b3a817f378f313653f35c70",
+      "cache_siphash128": "57009510382fab7b373d6183a7e445dd",
+      "verified_by": "Original actual compiler manifest content digest; same bytes in the during-gate archive and post-gate file",
+      "initial_scope_note": "Embedded binary resource is outside the initial src/**/*.zig snapshot; not retroactively added to that snapshot"
+    }
+  ],
+  "all_actual_compiler_inputs_verified": true,
+  "binding_scope_note": "The original 1517-source snapshot is unchanged. Actual compilation input verification also covers the embedded src/br/dictionary.bin resource, the complete Zig stdlib and linked objects. The embedded binary resource was outside the initial Zig source snapshot and is identified separately rather than retroactively changing it.",
+  "finalized_utc": "2026-10-24T07:04:44.151308+00:00"
+}

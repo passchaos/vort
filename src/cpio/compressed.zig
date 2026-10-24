@@ -78,7 +78,10 @@ pub fn detect(input: []const u8) Compression {
 }
 
 fn looksLikeLzma(input: []const u8) bool {
+    if (input.len < 14 or input[13] != 0) return false;
     const header = lzma.parseHeader(input) catch return false;
+    const max_supported_dictionary: u32 = (1 << 30) + (1 << 29);
+    if (header.dictionary_size > max_supported_dictionary) return false;
     return if (header.uncompressed_size) |size| size >= archive.binary_header_size else true;
 }
 

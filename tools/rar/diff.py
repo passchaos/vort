@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""RAR4/RAR5 stored-container interoperability and rejection harness."""
+"""RAR4/RAR5 codec, encryption, and rejection interoperability harness."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import random
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+
+from ppmd_filter_diff import run_matrix as run_ppmd_filter_matrix
 
 
 def run(
@@ -33,9 +36,23 @@ def make_payload() -> bytes:
     return prefix + b"RAR interoperability payload\n" * 512 + prefix
 
 
-def seven_zip_extract(tool: Path, archive: Path, output_dir: Path) -> bytes:
+def seven_zip_extract(
+    tool: Path,
+    archive: Path,
+    output_dir: Path,
+    password: str | None = None,
+) -> bytes:
     output_dir.mkdir()
-    run(tool, "x", "-y", f"-o{output_dir}", str(archive), "payload.bin")
+    password_arg = (f"-p{password}",) if password is not None else ()
+    run(
+        tool,
+        "x",
+        "-y",
+        *password_arg,
+        f"-o{output_dir}",
+        str(archive),
+        "payload.bin",
+    )
     return (output_dir / "payload.bin").read_bytes()
 
 
@@ -47,6 +64,7 @@ def compare_archive_entries(
     label: str,
     method: str | None = None,
     solid: bool | None = None,
+    password: str | None = None,
 ) -> int:
     listing = run(cli, "list-rar-file", str(archive)).stdout
     names = [
@@ -58,13 +76,73 @@ def compare_archive_entries(
     ]
     reference = root / f"reference-{label}"
     reference.mkdir()
-    run(seven_zip, "x", "-y", f"-o{reference}", str(archive))
+    password_arg = (f"-p{password}",) if password is not None else ()
+    run(seven_zip, "x", "-y", *password_arg, f"-o{reference}", str(archive))
     for index, name in enumerate(names):
         output = root / f"decoded-{label}-{index}.out"
-        run(cli, "extract-rar-file", str(archive), name, str(output), str(256 * 1024 * 1024))
+        cli_password = (password,) if password is not None else ()
+        run(
+            cli,
+            "extract-rar-file",
+            str(archive),
+            name,
+            str(output),
+            str(256 * 1024 * 1024),
+            *cli_password,
+        )
         expected = reference.joinpath(*name.replace("\\", "/").split("/"))
         if output.read_bytes() != expected.read_bytes():
             raise AssertionError(f"Vort mismatch for {archive.name}:{name}")
+    return len(names)
+
+
+def compare_unrar_entries(
+    cli: Path,
+    unrar: Path,
+    archive: Path,
+    root: Path,
+    label: str,
+    password: str | None = None,
+    accepted_exit_codes: tuple[int, ...] = (0,),
+) -> int:
+    listing = run(cli, "list-rar-file", str(archive)).stdout
+    names = [
+        line.split(" name=", 1)[1]
+        for line in listing.splitlines()
+        if line.startswith("index=") and "directory=false" in line
+    ]
+    reference = root / f"unrar-reference-{label}"
+    reference.mkdir()
+    password_arg = f"-p{password}" if password is not None else "-p-"
+    extracted = run(
+        unrar,
+        "x",
+        "-o+",
+        "-idq",
+        password_arg,
+        str(archive),
+        f"{reference}/",
+        check=False,
+    )
+    if extracted.returncode not in accepted_exit_codes:
+        raise AssertionError(
+            f"unrar failed for {archive.name}: {extracted.returncode}: {extracted.stderr}"
+        )
+    for index, name in enumerate(names):
+        output = root / f"unrar-decoded-{label}-{index}.out"
+        cli_password = (password,) if password is not None else ()
+        run(
+            cli,
+            "extract-rar-file",
+            str(archive),
+            name,
+            str(output),
+            str(256 * 1024 * 1024),
+            *cli_password,
+        )
+        expected = reference.joinpath(*name.replace("\\", "/").split("/"))
+        if output.read_bytes() != expected.read_bytes():
+            raise AssertionError(f"Vort/unrar mismatch for {archive.name}:{name}")
     return len(names)
 
 
@@ -100,6 +178,9 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--7zz", dest="seven_zip", type=Path)
+    parser.add_argument("--rar", dest="rar_tool", type=Path)
+    parser.add_argument("--rar4", dest="rar4_tool", type=Path)
+    parser.add_argument("--unrar", dest="unrar_tool", type=Path)
     parser.add_argument("--rars", type=Path)
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--legacy-fixtures", type=Path)
@@ -108,6 +189,15 @@ def main() -> None:
     if seven_zip is None:
         found = shutil.which("7zz") or shutil.which("7z")
         seven_zip = Path(found) if found else None
+    rar_tool = args.rar_tool
+    if rar_tool is None:
+        found = shutil.which("rar")
+        rar_tool = Path(found) if found else None
+    rar4_tool = args.rar4_tool
+    unrar_tool = args.unrar_tool
+    if unrar_tool is None:
+        found = shutil.which("unrar")
+        unrar_tool = Path(found) if found else None
     versions = ("rar4", "rar5")
     payload = make_payload()
     writer_external = 0
@@ -115,18 +205,73 @@ def main() -> None:
     writer_compressed_external = 0
     writer_ppmd = 0
     writer_ppmd_external = 0
+    writer_ppmd_filtered = 0
+    writer_ppmd_filtered_external = 0
+    writer_ppmd_filtered_unrar = 0
+    writer_ppmd_filtered_solid = 0
+    writer_ppmd_filtered_solid_external = 0
+    writer_ppmd_filtered_solid_unrar = 0
+    writer_ppmd_filtered_encrypted = 0
+    writer_ppmd_filtered_encrypted_external = 0
+    writer_ppmd_filtered_encrypted_unrar = 0
+    writer_rar29_filtered_solid = 0
+    writer_rar29_filtered_solid_external = 0
+    writer_rar29_filtered_solid_unrar = 0
+    writer_rar29_filtered_solid_encrypted = 0
+    writer_rar29_filtered_solid_encrypted_external = 0
+    writer_rar29_filtered_solid_encrypted_unrar = 0
     writer_filtered = 0
     writer_filtered_external = 0
     writer_solid = 0
     writer_solid_external = 0
     writer_volumes = 0
     writer_volumes_external = 0
+    writer_encrypted = 0
+    writer_encrypted_external = 0
+    reference_encrypted = 0
+    writer_encrypted_headers = 0
+    writer_encrypted_headers_external = 0
+    reference_encrypted_headers = 0
+    writer_encrypted_volumes = 0
+    writer_encrypted_volumes_external = 0
+    reference_encrypted_volumes = 0
+    writer_rar4_encrypted = 0
+    writer_rar4_encrypted_external = 0
+    reference_rar4_encrypted = 0
+    writer_rar4_encrypted_headers = 0
+    writer_rar4_encrypted_headers_external = 0
+    reference_rar4_encrypted_headers = 0
+    writer_rar4_encrypted_volumes = 0
+    writer_rar4_encrypted_volumes_external = 0
+    reference_rar4_encrypted_volumes = 0
+    writer_rar4_unicode = 0
+    writer_rar4_unicode_external = 0
+    writer_redirections = 0
+    writer_redirections_external = 0
+    writer_comments = 0
+    writer_comments_external = 0
+    writer_comment_volumes = 0
+    writer_comment_volumes_external = 0
+    reference_comments = 0
+    writer_rar4_comments = 0
+    writer_rar4_comments_external = 0
+    writer_rar4_comment_volumes = 0
+    writer_rar4_comment_volumes_external = 0
+    reference_rar4_comments = 0
+    reference_rar4_unicode = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
     fixture_cases = 0
     rar15_entries = 0
     rar20_entries = 0
+    rar15_solid_entries = 0
+    rar20_solid_entries = 0
+    legacy_solid_unrar_entries = 0
+    legacy_mixed_solid_unrar_entries = 0
+    rar15_encrypted_entries = 0
+    rar20_encrypted_entries = 0
+    legacy_encrypted_unrar_entries = 0
     rar29_entries = 0
     rar29_ppmd_entries = 0
     rar29_vm_entries = 0
@@ -163,6 +308,358 @@ def main() -> None:
                 if seven_zip_extract(seven_zip, first, temp / f"7z-vort-{version}") != payload:
                     raise AssertionError(f"7-Zip rejected Vort {version}")
                 writer_external += 1
+
+        if args.writer is not None:
+            rar4_comment_archive = temp / "vort-rar4-comment.rar"
+            run(args.writer, str(rar4_comment_archive), "rar4", "rar4-comment")
+            rar4_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_comment_archive),
+            ).stdout
+            if (
+                "has_comment=true" not in rar4_listing
+                or "comment_bytes=24" not in rar4_listing
+                or "comment_encrypted=false" not in rar4_listing
+            ):
+                raise AssertionError(f"RAR4 comment listing mismatch: {rar4_listing}")
+            writer_rar4_comments += 1
+            if rar_tool is not None:
+                external_listing = run(
+                    rar_tool,
+                    "lt",
+                    "-p-",
+                    str(rar4_comment_archive),
+                ).stdout
+                if "Vort RAR4 comment 世界" not in external_listing:
+                    raise AssertionError("RAR omitted Vort RAR4 archive comment text")
+                writer_rar4_comments_external += 1
+            elif seven_zip is not None:
+                run(seven_zip, "t", str(rar4_comment_archive))
+                writer_rar4_comments_external += 1
+
+            rar4_encrypted_comment_archive = temp / "vort-rar4-comment-encrypted.rar"
+            rar4_comment_password = "rar4-comment-password"
+            run(
+                args.writer,
+                str(rar4_encrypted_comment_archive),
+                "rar4",
+                "rar4-comment-encrypted",
+            )
+            rar4_encrypted_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_encrypted_comment_archive),
+                rar4_comment_password,
+            ).stdout
+            if (
+                "has_comment=true" not in rar4_encrypted_listing
+                or "comment_bytes=34" not in rar4_encrypted_listing
+                or "comment_encrypted=true" not in rar4_encrypted_listing
+                or "encrypted_headers=true" not in rar4_encrypted_listing
+            ):
+                raise AssertionError(
+                    f"RAR4 encrypted comment listing mismatch: {rar4_encrypted_listing}"
+                )
+            writer_rar4_comments += 1
+            if rar_tool is not None:
+                external_listing = run(
+                    rar_tool,
+                    "lt",
+                    f"-p{rar4_comment_password}",
+                    str(rar4_encrypted_comment_archive),
+                ).stdout
+                if "Encrypted Vort RAR4 comment 世界" not in external_listing:
+                    raise AssertionError("RAR omitted encrypted Vort RAR4 comment text")
+                writer_rar4_comments_external += 1
+            elif seven_zip is not None:
+                run(
+                    seven_zip,
+                    "t",
+                    f"-p{rar4_comment_password}",
+                    str(rar4_encrypted_comment_archive),
+                )
+                writer_rar4_comments_external += 1
+
+            rar4_comment_volume_prefix = temp / "vort-rar4-comment-volumes"
+            run(
+                args.writer,
+                str(rar4_comment_volume_prefix),
+                "rar4",
+                "rar4-comment-volumes",
+            )
+            rar4_comment_volumes = tuple(
+                sorted(temp.glob("vort-rar4-comment-volumes.part*.rar"))
+            )
+            if len(rar4_comment_volumes) < 2:
+                raise AssertionError("RAR4 comment volume probe did not split file data")
+            rar4_volume_comment = "Vort RAR4 comment outside payload budget\n" * 8
+            rar4_first_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_comment_volumes[0]),
+            ).stdout
+            if (
+                f"comment_bytes={len(rar4_volume_comment.encode('utf-8'))}"
+                not in rar4_first_listing
+                or "compressed=64" not in rar4_first_listing
+            ):
+                raise AssertionError(
+                    f"RAR4 first-volume comment budget mismatch: {rar4_first_listing}"
+                )
+            for continuation in rar4_comment_volumes[1:]:
+                continuation_listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(continuation),
+                ).stdout
+                if "has_comment=false" not in continuation_listing:
+                    raise AssertionError(
+                        f"RAR4 comment repeated in continuation volume: {continuation_listing}"
+                    )
+            rar4_comment_volume_output = temp / "vort-rar4-comment-volumes.out"
+            rar4_volume_payload = b"RAR4 comment volume payload\n" * 16
+            run(
+                args.cli,
+                "extract-rar-volumes",
+                "rar4-comment-volume.txt",
+                str(rar4_comment_volume_output),
+                str(len(rar4_volume_payload)),
+                *(str(volume) for volume in rar4_comment_volumes),
+            )
+            if rar4_comment_volume_output.read_bytes() != rar4_volume_payload:
+                raise AssertionError("RAR4 comment volume payload mismatch")
+            writer_rar4_comment_volumes = 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(rar4_comment_volumes[0]))
+                writer_rar4_comment_volumes_external = 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(rar4_comment_volumes[0]))
+                writer_rar4_comment_volumes_external = 1
+
+            comment_archive = temp / "vort-rar5-comment.rar"
+            run(args.writer, str(comment_archive), "rar5", "rar5-comment")
+            listing = run(args.cli, "list-rar-file", str(comment_archive)).stdout
+            if (
+                "has_comment=true" not in listing
+                or "comment_bytes=24" not in listing
+                or "comment_encrypted=false" not in listing
+            ):
+                raise AssertionError(f"RAR5 comment listing mismatch: {listing}")
+            writer_comments += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(comment_archive))
+                writer_comments_external += 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(comment_archive))
+                writer_comments_external += 1
+
+            encrypted_comment_archive = temp / "vort-rar5-comment-encrypted.rar"
+            comment_password = "rar5-comment-password"
+            run(
+                args.writer,
+                str(encrypted_comment_archive),
+                "rar5",
+                "rar5-comment-encrypted",
+            )
+            encrypted_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_comment_archive),
+                comment_password,
+            ).stdout
+            if (
+                "has_comment=true" not in encrypted_listing
+                or "comment_bytes=29" not in encrypted_listing
+                or "comment_encrypted=true" not in encrypted_listing
+                or "encrypted_headers=true" not in encrypted_listing
+            ):
+                raise AssertionError(
+                    f"RAR5 encrypted comment listing mismatch: {encrypted_listing}"
+                )
+            writer_comments += 1
+            if seven_zip is not None:
+                run(
+                    seven_zip,
+                    "t",
+                    f"-p{comment_password}",
+                    str(encrypted_comment_archive),
+                )
+                writer_comments_external += 1
+            elif rar_tool is not None:
+                run(
+                    rar_tool,
+                    "t",
+                    "-idq",
+                    f"-p{comment_password}",
+                    str(encrypted_comment_archive),
+                )
+                writer_comments_external += 1
+
+            comment_volume_prefix = temp / "vort-rar5-comment-volumes"
+            run(
+                args.writer,
+                str(comment_volume_prefix),
+                "rar5",
+                "rar5-comment-volumes",
+            )
+            comment_volumes = tuple(
+                sorted(temp.glob("vort-rar5-comment-volumes.part*.rar"))
+            )
+            if len(comment_volumes) < 2:
+                raise AssertionError("RAR5 comment volume probe did not split file data")
+            volume_comment = "Vort comment outside payload budget\n" * 8
+            first_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(comment_volumes[0]),
+            ).stdout
+            if (
+                f"comment_bytes={len(volume_comment.encode('utf-8'))}" not in first_listing
+                or "compressed=64" not in first_listing
+                or comment_volumes[0].stat().st_size <= len(volume_comment.encode("utf-8"))
+            ):
+                raise AssertionError(
+                    f"RAR5 first-volume comment budget mismatch: {first_listing}"
+                )
+            for continuation in comment_volumes[1:]:
+                continuation_listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(continuation),
+                ).stdout
+                if "has_comment=false" not in continuation_listing:
+                    raise AssertionError(
+                        f"RAR5 comment repeated in continuation volume: {continuation_listing}"
+                    )
+            comment_volume_output = temp / "vort-rar5-comment-volumes.out"
+            volume_payload = b"RAR5 comment volume payload\n" * 16
+            run(
+                args.cli,
+                "extract-rar-volumes",
+                "comment-volume.txt",
+                str(comment_volume_output),
+                str(len(volume_payload)),
+                *(str(volume) for volume in comment_volumes),
+            )
+            if comment_volume_output.read_bytes() != volume_payload:
+                raise AssertionError("RAR5 comment volume payload mismatch")
+            writer_comment_volumes = 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(comment_volumes[0]))
+                writer_comment_volumes_external = 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(comment_volumes[0]))
+                writer_comment_volumes_external = 1
+
+            redirection_archive = temp / "vort-rar5-redirections.rar"
+            run(
+                args.writer,
+                str(redirection_archive),
+                "rar5",
+                "rar5-redirections",
+            )
+            listing = run(args.cli, "list-rar-file", str(redirection_archive)).stdout
+            expected_fields = (
+                "redirection=unix_symlink redirection_directory=false "
+                "redirection_safe=true redirection_target=target.txt name=unix-link",
+                "redirection=hard_link redirection_directory=false "
+                "redirection_safe=true redirection_target=target.txt name=hard-link",
+                "redirection=unix_symlink redirection_directory=true "
+                "redirection_safe=true redirection_target=folder name=folder-link",
+            )
+            for expected in expected_fields:
+                if expected not in listing:
+                    raise AssertionError(f"RAR5 redirection listing mismatch: {listing}")
+                writer_redirections += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(redirection_archive))
+                external_listing = run(
+                    seven_zip,
+                    "l",
+                    "-slt",
+                    str(redirection_archive),
+                ).stdout
+                for name in ("unix-link", "hard-link", "folder-link"):
+                    if f"Path = {name}" not in external_listing:
+                        raise AssertionError(
+                            f"7-Zip omitted RAR5 redirection {name!r}"
+                        )
+                writer_redirections_external = 3
+
+        if rar_tool is not None:
+            comment_source = temp / "reference-comment.txt"
+            comment_source.write_text("RAR reference payload\n", encoding="utf-8")
+            comment_file = temp / "reference-comment-body.txt"
+            comment_file.write_text("Reference comment 世界", encoding="utf-8")
+            for encrypted_headers in (False, True):
+                suffix = "secret" if encrypted_headers else "plain"
+                reference_comment_archive = temp / f"reference-comment-{suffix}.rar"
+                password_args = ("-hpcomment-password",) if encrypted_headers else ()
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    "-m0",
+                    "-ep",
+                    *password_args,
+                    f"-z{comment_file}",
+                    str(reference_comment_archive),
+                    str(comment_source),
+                )
+                cli_password = ("comment-password",) if encrypted_headers else ()
+                listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(reference_comment_archive),
+                    *cli_password,
+                ).stdout
+                if (
+                    "has_comment=true" not in listing
+                    or "comment_bytes=24" not in listing
+                    or f"comment_encrypted={str(encrypted_headers).lower()}" not in listing
+                ):
+                    raise AssertionError(
+                        f"Vort rejected RAR5 {suffix} reference comment: {listing}"
+                    )
+                reference_comments += 1
+
+            for encrypted_headers in (False, True):
+                suffix = "secret" if encrypted_headers else "plain"
+                reference_comment_archive = temp / f"reference-rar4-comment-{suffix}.rar"
+                password_args = ("-hpcomment-password",) if encrypted_headers else ()
+                created = run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma4",
+                    "-m0",
+                    "-ep",
+                    *password_args,
+                    f"-z{comment_file}",
+                    str(reference_comment_archive),
+                    str(comment_source),
+                    check=False,
+                )
+                if created.returncode != 0:
+                    continue
+                cli_password = ("comment-password",) if encrypted_headers else ()
+                listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(reference_comment_archive),
+                    *cli_password,
+                ).stdout
+                if (
+                    "has_comment=true" not in listing
+                    or "comment_bytes=24" not in listing
+                    or f"comment_encrypted={str(encrypted_headers).lower()}" not in listing
+                ):
+                    raise AssertionError(
+                        f"Vort rejected RAR4 {suffix} reference comment: {listing}"
+                    )
+                reference_rar4_comments += 1
 
         for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
             compressed_first = temp / f"vort-{compression}-compressed-first.rar"
@@ -217,6 +714,560 @@ def main() -> None:
                         f"7-Zip rejected Vort {compression} compressed output"
                     )
                 writer_compressed_external += 1
+
+        encryption_password = "RAR5-test-password"
+        encryption_vectors = (
+            (
+                "stored",
+                "000102030405060708090a0b0c0d0e0f",
+                "101112131415161718191a1b1c1d1e1f",
+            ),
+            (
+                "rar50",
+                "202122232425262728292a2b2c2d2e2f",
+                "303132333435363738393a3b3c3d3e3f",
+            ),
+        )
+        for compression, salt_hex, iv_hex in encryption_vectors:
+            encrypted_archive = temp / f"vort-rar5-{compression}-encrypted.rar"
+            encrypted_output = temp / f"vort-rar5-{compression}-encrypted.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(source),
+                "rar5",
+                compression,
+                "none",
+                "non-solid",
+                encryption_password,
+                salt_hex,
+                iv_hex,
+                "3",
+            )
+            listing = run(args.cli, "list-rar-file", str(encrypted_archive)).stdout
+            if "encrypted=true" not in listing or "kdf_count=3" not in listing:
+                raise AssertionError(f"Vort lost RAR5 encryption metadata: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(encrypted_output),
+                str(len(payload)),
+                encryption_password,
+            )
+            if encrypted_output.read_bytes() != payload:
+                raise AssertionError(f"Vort failed encrypted {compression} self extraction")
+            wrong_password = run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(temp / f"vort-rar5-{compression}-wrong.out"),
+                str(len(payload)),
+                "wrong-password",
+                check=False,
+            )
+            if wrong_password.returncode == 0 or "InvalidRarPassword" not in wrong_password.stderr:
+                raise AssertionError(f"Vort accepted wrong RAR5 {compression} password")
+            writer_encrypted += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    encrypted_archive,
+                    temp / f"7z-vort-rar5-{compression}-encrypted",
+                    encryption_password,
+                ) != payload:
+                    raise AssertionError(f"7-Zip rejected Vort encrypted {compression}")
+                writer_encrypted_external += 1
+
+        header_ivs_hex = (
+            "404142434445464748494a4b4c4d4e4f"
+            "505152535455565758595a5b5c5d5e5f"
+            "606162636465666768696a6b6c6d6e6f"
+        )
+        for index, (compression, salt_hex, iv_hex) in enumerate(encryption_vectors):
+            encrypted_archive = temp / f"vort-rar5-{compression}-encrypted-headers.rar"
+            encrypted_output = temp / f"vort-rar5-{compression}-encrypted-headers.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(source),
+                "rar5",
+                compression,
+                "none",
+                "non-solid",
+                encryption_password,
+                salt_hex,
+                iv_hex,
+                "3",
+                encryption_password,
+                f"{index + 4:02x}" * 16,
+                header_ivs_hex,
+                "3",
+            )
+            listing = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_archive),
+                encryption_password,
+            ).stdout
+            if (
+                "encrypted_headers=true" not in listing
+                or "header_kdf_count=3" not in listing
+                or "encrypted=true" not in listing
+            ):
+                raise AssertionError(f"Vort lost encrypted-header metadata: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(encrypted_output),
+                str(len(payload)),
+                encryption_password,
+            )
+            if encrypted_output.read_bytes() != payload:
+                raise AssertionError(
+                    f"Vort failed encrypted-header {compression} self extraction"
+                )
+            wrong_password = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_archive),
+                "wrong-password",
+                check=False,
+            )
+            if wrong_password.returncode == 0 or "InvalidRarPassword" not in wrong_password.stderr:
+                raise AssertionError(f"Vort accepted wrong encrypted-header {compression} password")
+            writer_encrypted_headers += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    encrypted_archive,
+                    temp / f"7z-vort-rar5-{compression}-encrypted-headers",
+                    encryption_password,
+                ) != payload:
+                    raise AssertionError(
+                        f"7-Zip rejected Vort encrypted-header {compression}"
+                    )
+                writer_encrypted_headers_external += 1
+
+        rar4_password = "RAR4-test-password"
+        rar4_salt = "0102030405060708"
+        for compression in ("stored", "rar29", "rar29-ppmd"):
+            archive = temp / f"vort-rar4-{compression}-encrypted.rar"
+            output = temp / f"vort-rar4-{compression}-encrypted.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(archive),
+                "payload.bin",
+                str(source),
+                "rar4",
+                compression,
+                "none",
+                "non-solid",
+                rar4_password,
+                rar4_salt,
+            )
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(archive),
+                "payload.bin",
+                str(output),
+                str(len(payload)),
+                rar4_password,
+            )
+            if output.read_bytes() != payload:
+                raise AssertionError(f"Vort failed encrypted RAR4 {compression}")
+            writer_rar4_encrypted += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    archive,
+                    temp / f"7z-vort-rar4-{compression}-encrypted",
+                    rar4_password,
+                ) != payload:
+                    raise AssertionError(f"7-Zip rejected encrypted RAR4 {compression}")
+                writer_rar4_encrypted_external += 1
+
+        rar4_long_password = "RAR4-long-password-0123456789-ABCDEFGHIJKLMN"
+        long_archive = temp / "vort-rar4-long-password.rar"
+        long_output = temp / "vort-rar4-long-password.out"
+        run(
+            args.cli,
+            "create-rar-file",
+            str(long_archive),
+            "payload.bin",
+            str(source),
+            "rar4",
+            "stored",
+            "none",
+            "non-solid",
+            rar4_long_password,
+            rar4_salt,
+        )
+        run(
+            args.cli,
+            "extract-rar-file",
+            str(long_archive),
+            "payload.bin",
+            str(long_output),
+            str(len(payload)),
+            rar4_long_password,
+        )
+        if long_output.read_bytes() != payload:
+            raise AssertionError("Vort failed long-password RAR4 self extraction")
+        writer_rar4_encrypted += 1
+        if seven_zip is not None:
+            if seven_zip_extract(
+                seven_zip,
+                long_archive,
+                temp / "7z-vort-rar4-long-password",
+                rar4_long_password,
+            ) != payload:
+                raise AssertionError("7-Zip rejected Vort long-password RAR4")
+            writer_rar4_encrypted_external += 1
+
+        for compression in ("stored", "rar29"):
+            archive = temp / f"vort-rar4-{compression}-encrypted-headers.rar"
+            output = temp / f"vort-rar4-{compression}-encrypted-headers.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(archive),
+                "payload.bin",
+                str(source),
+                "rar4",
+                compression,
+                "none",
+                "non-solid",
+                rar4_password,
+                rar4_salt,
+                rar4_password,
+                rar4_salt,
+            )
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(archive),
+                "payload.bin",
+                str(output),
+                str(len(payload)),
+                rar4_password,
+            )
+            if output.read_bytes() != payload:
+                raise AssertionError(f"Vort failed RAR4 encrypted headers {compression}")
+            writer_rar4_encrypted_headers += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    archive,
+                    temp / f"7z-vort-rar4-{compression}-encrypted-headers",
+                    rar4_password,
+                ) != payload:
+                    raise AssertionError(
+                        f"7-Zip rejected RAR4 encrypted headers {compression}"
+                    )
+                writer_rar4_encrypted_headers_external += 1
+
+        unicode_name = "目录/данные.txt"
+        unicode_archive = temp / "vort-rar4-unicode.rar"
+        unicode_output = temp / "vort-rar4-unicode.out"
+        run(
+            args.cli,
+            "create-rar-file",
+            str(unicode_archive),
+            unicode_name,
+            str(source),
+            "rar4",
+            "stored",
+            "none",
+            "non-solid",
+        )
+        unicode_listing = run(args.cli, "list-rar-file", str(unicode_archive)).stdout
+        if f"name={unicode_name}" not in unicode_listing:
+            raise AssertionError(f"Vort lost its RAR4 Unicode name: {unicode_listing}")
+        run(
+            args.cli,
+            "extract-rar-file",
+            str(unicode_archive),
+            unicode_name,
+            str(unicode_output),
+            str(len(payload)),
+        )
+        if unicode_output.read_bytes() != payload:
+            raise AssertionError("Vort failed RAR4 Unicode self extraction")
+        writer_rar4_unicode += 1
+        if seven_zip is not None:
+            reference = temp / "vort-rar4-unicode-reference"
+            reference.mkdir()
+            run(seven_zip, "x", "-y", f"-o{reference}", str(unicode_archive))
+            if reference.joinpath(*unicode_name.split("/")).read_bytes() != payload:
+                raise AssertionError("7-Zip rejected Vort RAR4 Unicode name")
+            writer_rar4_unicode_external += 1
+
+        if rar_tool is not None:
+            reference_root = temp / "rar5-encrypted-reference"
+            reference_root.mkdir()
+            reference_source = reference_root / "payload.bin"
+            reference_source.write_bytes(payload)
+            for compression, method in (("stored", "0"), ("rar50", "5")):
+                reference_archive = temp / f"reference-rar5-{compression}-encrypted.rar"
+                reference_output = temp / f"reference-rar5-{compression}-encrypted.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-p{encryption_password}",
+                    str(reference_archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(reference_archive),
+                    "payload.bin",
+                    str(reference_output),
+                    str(len(payload)),
+                    encryption_password,
+                )
+                if reference_output.read_bytes() != payload:
+                    raise AssertionError(f"Vort rejected RAR encrypted {compression}")
+                reference_encrypted += 1
+
+                header_archive = temp / f"reference-rar5-{compression}-encrypted-headers.rar"
+                header_output = temp / f"reference-rar5-{compression}-encrypted-headers.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{encryption_password}",
+                    str(header_archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(header_archive),
+                    "payload.bin",
+                    str(header_output),
+                    str(len(payload)),
+                    encryption_password,
+                )
+                if header_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR encrypted-header {compression}"
+                    )
+                reference_encrypted_headers += 1
+
+                volume_base = temp / f"reference-rar5-{compression}-encrypted-volumes.rar"
+                volume_output = temp / f"reference-rar5-{compression}-encrypted-volumes.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{encryption_password}",
+                    "-v3000b",
+                    str(volume_base),
+                    str(reference_source),
+                )
+                reference_volumes = tuple(
+                    sorted(
+                        temp.glob(
+                            f"reference-rar5-{compression}-encrypted-volumes.part*.rar"
+                        )
+                    )
+                )
+                if len(reference_volumes) < 2:
+                    raise AssertionError(
+                        f"RAR encrypted {compression} reference did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(volume_output),
+                    str(len(payload)),
+                    f"--password={encryption_password}",
+                    *(str(volume) for volume in reference_volumes),
+                )
+                if volume_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR encrypted {compression} volumes"
+                    )
+                reference_encrypted_volumes += 1
+
+        if rar4_tool is not None:
+            reference_root = temp / "rar4-encrypted-reference"
+            reference_root.mkdir()
+            reference_source = reference_root / "payload.bin"
+            reference_source.write_bytes(payload)
+            for compression, method in (("stored", "0"), ("rar29", "5")):
+                archive = temp / f"reference-rar4-{compression}-encrypted.rar"
+                output = temp / f"reference-rar4-{compression}-encrypted.out"
+                run(
+                    rar4_tool,
+                    "a",
+                    "-idq",
+                    "-ma4",
+                    f"-m{method}",
+                    "-ep",
+                    f"-p{rar4_password}",
+                    str(archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(archive),
+                    "payload.bin",
+                    str(output),
+                    str(len(payload)),
+                    rar4_password,
+                )
+                if output.read_bytes() != payload:
+                    raise AssertionError(f"Vort rejected encrypted RAR4 {compression}")
+                reference_rar4_encrypted += 1
+
+                header_archive = temp / f"reference-rar4-{compression}-encrypted-headers.rar"
+                header_output = temp / f"reference-rar4-{compression}-encrypted-headers.out"
+                run(
+                    rar4_tool,
+                    "a",
+                    "-idq",
+                    "-ma4",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{rar4_password}",
+                    str(header_archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(header_archive),
+                    "payload.bin",
+                    str(header_output),
+                    str(len(payload)),
+                    rar4_password,
+                )
+                if header_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR4 encrypted headers {compression}"
+                    )
+                reference_rar4_encrypted_headers += 1
+
+                volume_base = temp / f"reference-rar4-{compression}-encrypted-volumes.rar"
+                volume_output = temp / f"reference-rar4-{compression}-encrypted-volumes.out"
+                run(
+                    rar4_tool,
+                    "a",
+                    "-idq",
+                    "-ma4",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{rar4_password}",
+                    "-v3000b",
+                    str(volume_base),
+                    str(reference_source),
+                )
+                reference_volumes = tuple(
+                    sorted(
+                        temp.glob(
+                            f"reference-rar4-{compression}-encrypted-volumes.part*.rar"
+                        )
+                    )
+                )
+                if len(reference_volumes) < 2:
+                    raise AssertionError(
+                        f"RAR4 encrypted {compression} reference did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(volume_output),
+                    str(len(payload)),
+                    f"--password={rar4_password}",
+                    *(str(volume) for volume in reference_volumes),
+                )
+                if volume_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR4 encrypted {compression} volumes"
+                    )
+                reference_rar4_encrypted_volumes += 1
+
+            long_archive = temp / "reference-rar4-long-password.rar"
+            long_output = temp / "reference-rar4-long-password.out"
+            run(
+                rar4_tool,
+                "a",
+                "-idq",
+                "-ma4",
+                "-m0",
+                "-ep",
+                f"-p{rar4_long_password}",
+                str(long_archive),
+                str(reference_source),
+            )
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(long_archive),
+                "payload.bin",
+                str(long_output),
+                str(len(payload)),
+                rar4_long_password,
+            )
+            if long_output.read_bytes() != payload:
+                raise AssertionError("Vort rejected RAR4 long-password reference")
+            reference_rar4_encrypted += 1
+
+            unicode_name = "目录-данные.txt"
+            unicode_source = reference_root / unicode_name
+            unicode_source.write_bytes(payload)
+            unicode_archive = temp / "reference-rar4-unicode.rar"
+            unicode_output = temp / "reference-rar4-unicode.out"
+            run(
+                rar4_tool,
+                "a",
+                "-idq",
+                "-ma4",
+                "-m0",
+                "-ep",
+                str(unicode_archive),
+                str(unicode_source),
+            )
+            listing = run(args.cli, "list-rar-file", str(unicode_archive)).stdout
+            if f"name={unicode_name}" not in listing:
+                raise AssertionError(f"Vort misdecoded RAR4 Unicode name: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(unicode_archive),
+                unicode_name,
+                str(unicode_output),
+                str(len(payload)),
+            )
+            if unicode_output.read_bytes() != payload:
+                raise AssertionError("Vort rejected RAR4 Unicode reference")
+            reference_rar4_unicode += 1
 
         ppmd_first = temp / "vort-rar29-ppmd-first.rar"
         ppmd_second = temp / "vort-rar29-ppmd-second.rar"
@@ -299,6 +1350,46 @@ def main() -> None:
                 if (reference / "payload.bin").read_bytes() != rar29_filter_payload:
                     raise AssertionError(f"7-Zip rejected Vort RAR29 {filter_name} output")
                 writer_filtered_external += 1
+
+        ppmd_filter_counts = run_ppmd_filter_matrix(
+            args.cli,
+            args.writer,
+            seven_zip,
+            unrar_tool,
+            temp,
+            rar29_filter_source,
+            bytes(rar29_filter_payload),
+            rar4_password,
+            rar4_salt,
+        )
+        writer_ppmd_filtered += ppmd_filter_counts.ordinary
+        writer_ppmd_filtered_external += ppmd_filter_counts.ordinary_7zip
+        writer_ppmd_filtered_unrar += ppmd_filter_counts.ordinary_unrar
+        writer_filtered += ppmd_filter_counts.ordinary
+        writer_filtered_external += ppmd_filter_counts.ordinary_7zip
+        writer_ppmd_filtered_solid += ppmd_filter_counts.solid
+        writer_ppmd_filtered_solid_external += ppmd_filter_counts.solid_7zip
+        writer_ppmd_filtered_solid_unrar += ppmd_filter_counts.solid_unrar
+        writer_solid += ppmd_filter_counts.solid
+        writer_solid_external += ppmd_filter_counts.solid_7zip
+        writer_ppmd_filtered_encrypted += ppmd_filter_counts.encrypted
+        writer_ppmd_filtered_encrypted_external += ppmd_filter_counts.encrypted_7zip
+        writer_ppmd_filtered_encrypted_unrar += ppmd_filter_counts.encrypted_unrar
+        writer_rar29_filtered_solid += ppmd_filter_counts.lz_solid
+        writer_rar29_filtered_solid_external += ppmd_filter_counts.lz_solid_7zip
+        writer_rar29_filtered_solid_unrar += ppmd_filter_counts.lz_solid_unrar
+        writer_rar29_filtered_solid_encrypted += ppmd_filter_counts.lz_solid_encrypted
+        writer_rar29_filtered_solid_encrypted_external += (
+            ppmd_filter_counts.lz_solid_encrypted_7zip
+        )
+        writer_rar29_filtered_solid_encrypted_unrar += (
+            ppmd_filter_counts.lz_solid_encrypted_unrar
+        )
+        writer_solid += ppmd_filter_counts.lz_solid + ppmd_filter_counts.lz_solid_encrypted
+        writer_solid_external += (
+            ppmd_filter_counts.lz_solid_7zip
+            + ppmd_filter_counts.lz_solid_encrypted_7zip
+        )
 
         if args.writer is not None:
             for version in versions:
@@ -423,6 +1514,126 @@ def main() -> None:
                     raise AssertionError("7-Zip rejected Vort solid volume output")
                 writer_volumes_external += 1
 
+            encrypted_volume_bytes = bytearray()
+            encrypted_volume_state = 0x7261_725F_766F_6C73
+            word_mask = (1 << 64) - 1
+            for _ in range(4096):
+                encrypted_volume_state = (
+                    encrypted_volume_state ^ (encrypted_volume_state << 13)
+                ) & word_mask
+                encrypted_volume_state ^= encrypted_volume_state >> 7
+                encrypted_volume_state = (
+                    encrypted_volume_state ^ (encrypted_volume_state << 17)
+                ) & word_mask
+                encrypted_volume_bytes.append(encrypted_volume_state & 0xFF)
+            encrypted_volume_payload = bytes(encrypted_volume_bytes)
+            for compression in ("stored", "rar50"):
+                encrypted_prefix = temp / f"vort-rar5-{compression}-encrypted-volume"
+                encrypted_output = temp / f"vort-rar5-{compression}-encrypted-volume.out"
+                run(
+                    args.writer,
+                    str(encrypted_prefix),
+                    "rar5",
+                    f"encrypted-volumes-{compression}",
+                )
+                encrypted_volumes = tuple(
+                    sorted(temp.glob(f"vort-rar5-{compression}-encrypted-volume.part*.rar"))
+                )
+                if len(encrypted_volumes) < 2:
+                    raise AssertionError(
+                        f"Vort encrypted {compression} volume writer did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(encrypted_output),
+                    "8192",
+                    "--password=rar-volume-password",
+                    *(str(volume) for volume in encrypted_volumes),
+                )
+                if encrypted_output.read_bytes() != encrypted_volume_payload:
+                    raise AssertionError(
+                        f"Vort failed encrypted {compression} volume self extraction"
+                    )
+                writer_encrypted_volumes += 1
+                if seven_zip is not None:
+                    reference = temp / f"vort-rar5-{compression}-encrypted-volume-reference"
+                    reference.mkdir()
+                    run(
+                        seven_zip,
+                        "x",
+                        "-y",
+                        "-prar-volume-password",
+                        f"-o{reference}",
+                        str(encrypted_volumes[0]),
+                    )
+                    if (reference / "payload.bin").read_bytes() != encrypted_volume_payload:
+                        raise AssertionError(
+                            f"7-Zip rejected Vort encrypted {compression} volumes"
+                        )
+                    writer_encrypted_volumes_external += 1
+
+            rar4_volume_bytes = bytearray()
+            rar4_volume_state = 0x7261_7234_766F_6C73
+            word_mask = (1 << 64) - 1
+            for _ in range(4096):
+                rar4_volume_state = (
+                    rar4_volume_state ^ (rar4_volume_state << 13)
+                ) & word_mask
+                rar4_volume_state ^= rar4_volume_state >> 7
+                rar4_volume_state = (
+                    rar4_volume_state ^ (rar4_volume_state << 17)
+                ) & word_mask
+                rar4_volume_bytes.append(rar4_volume_state & 0xFF)
+            rar4_volume_payload = bytes(rar4_volume_bytes)
+            for compression in ("stored", "rar29"):
+                prefix = temp / f"vort-rar4-{compression}-encrypted-volume"
+                output = temp / f"vort-rar4-{compression}-encrypted-volume.out"
+                run(
+                    args.writer,
+                    str(prefix),
+                    "rar4",
+                    f"rar4-encrypted-volumes-{compression}",
+                )
+                volumes = tuple(
+                    sorted(temp.glob(f"vort-rar4-{compression}-encrypted-volume.part*.rar"))
+                )
+                if len(volumes) < 2:
+                    raise AssertionError(
+                        f"Vort RAR4 encrypted {compression} writer did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(output),
+                    "8192",
+                    "--password=rar4-volume-password",
+                    *(str(volume) for volume in volumes),
+                )
+                if output.read_bytes() != rar4_volume_payload:
+                    raise AssertionError(
+                        f"Vort failed RAR4 encrypted {compression} volume self extraction"
+                    )
+                writer_rar4_encrypted_volumes += 1
+                if seven_zip is not None:
+                    reference = temp / f"vort-rar4-{compression}-encrypted-volume-reference"
+                    reference.mkdir()
+                    run(
+                        seven_zip,
+                        "x",
+                        "-y",
+                        "-prar4-volume-password",
+                        f"-o{reference}",
+                        str(volumes[0]),
+                    )
+                    if (reference / "payload.bin").read_bytes() != rar4_volume_payload:
+                        raise AssertionError(
+                            f"7-Zip rejected Vort RAR4 encrypted {compression} volumes"
+                        )
+                    writer_rar4_encrypted_volumes_external += 1
+
         if args.rars is not None:
             for version in versions:
                 stored = temp / f"reference-{version}-store.rar"
@@ -528,6 +1739,84 @@ def main() -> None:
                     archive,
                     temp,
                     f"rar20-{index}",
+                )
+
+            rar15_solid = args.legacy_fixtures / "solid_flag_cleared_rar15.rar"
+            rar15_solid_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar15_solid,
+                temp,
+                "rar15-solid",
+                method="rar15",
+            )
+            rar20_solid = args.legacy_fixtures / "rar250" / "SOLID.RAR"
+            rar20_solid_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar20_solid,
+                temp,
+                "rar20-solid",
+                method="rar20",
+            )
+
+            rar15_encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
+            rar20_encrypted = args.legacy_fixtures / "rar202" / "comment_psw.rar"
+            rar20_encrypted_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar20_encrypted,
+                temp,
+                "rar20-encrypted",
+                method="rar20",
+                password="password",
+            )
+            if unrar_tool is not None:
+                legacy_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar15_solid,
+                    temp,
+                    "rar15-solid",
+                )
+                legacy_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar20_solid,
+                    temp,
+                    "rar20-solid",
+                )
+                rar15_unrar_entries = compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar15_encrypted,
+                    temp,
+                    "rar15-encrypted",
+                    password="password",
+                )
+                rar15_encrypted_entries += rar15_unrar_entries
+                legacy_encrypted_unrar_entries += rar15_unrar_entries
+                legacy_encrypted_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar20_encrypted,
+                    temp,
+                    "rar20-encrypted",
+                    password="password",
+                    accepted_exit_codes=(0, 3),
+                )
+                mixed_solid = temp / "rar15-rar20-mixed-solid.rar"
+                encoded_fixture = (
+                    Path(__file__).resolve().parents[2]
+                    / "src/rar/testdata/rar15-rar20-mixed-solid.rar.b64"
+                )
+                mixed_solid.write_bytes(base64.b64decode(encoded_fixture.read_bytes()))
+                legacy_mixed_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    mixed_solid,
+                    temp,
+                    "rar15-rar20-mixed-solid",
                 )
 
             rar29_archives = (
@@ -789,35 +2078,16 @@ def main() -> None:
             if failed.returncode == 0 or "InvalidRar50Stream" not in failed.stderr:
                 raise AssertionError("Vort accepted a first RAR50 block without tables")
 
-            encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
             failed = run(
                 args.cli,
                 "extract-rar-file",
-                str(encrypted),
+                str(rar15_encrypted),
                 "README.md",
                 str(temp / "encrypted.out"),
                 check=False,
             )
-            if failed.returncode == 0 or "EncryptedRarEntry" not in failed.stderr:
-                raise AssertionError("Vort accepted encrypted RAR15 data")
-
-            solid = args.legacy_fixtures / "rar250" / "SOLID.RAR"
-            solid_listing = run(args.cli, "list-rar-file", str(solid)).stdout
-            solid_name = next(
-                line.split(" name=", 1)[1]
-                for line in solid_listing.splitlines()
-                if line.startswith("index=") and "solid=true" in line
-            )
-            failed = run(
-                args.cli,
-                "extract-rar-file",
-                str(solid),
-                solid_name,
-                str(temp / "solid.out"),
-                check=False,
-            )
-            if failed.returncode == 0 or "UnsupportedRarFeature" not in failed.stderr:
-                raise AssertionError("Vort accepted a solid RAR20 continuation without session state")
+            if failed.returncode == 0 or "RarPasswordRequired" not in failed.stderr:
+                raise AssertionError("Vort accepted encrypted RAR15 data without a password")
 
         original = temp / "vort-rar5-first.rar"
         sfx = temp / "sfx.rar"
@@ -858,16 +2128,71 @@ def main() -> None:
         f"writer_compressed_external={writer_compressed_external} "
         f"writer_ppmd={writer_ppmd} "
         f"writer_ppmd_external={writer_ppmd_external} "
+        f"writer_ppmd_filtered={writer_ppmd_filtered} "
+        f"writer_ppmd_filtered_external={writer_ppmd_filtered_external} "
+        f"writer_ppmd_filtered_unrar={writer_ppmd_filtered_unrar} "
+        f"writer_ppmd_filtered_solid={writer_ppmd_filtered_solid} "
+        f"writer_ppmd_filtered_solid_external={writer_ppmd_filtered_solid_external} "
+        f"writer_ppmd_filtered_solid_unrar={writer_ppmd_filtered_solid_unrar} "
+        f"writer_ppmd_filtered_encrypted={writer_ppmd_filtered_encrypted} "
+        f"writer_ppmd_filtered_encrypted_external={writer_ppmd_filtered_encrypted_external} "
+        f"writer_ppmd_filtered_encrypted_unrar={writer_ppmd_filtered_encrypted_unrar} "
+        f"writer_rar29_filtered_solid={writer_rar29_filtered_solid} "
+        f"writer_rar29_filtered_solid_external={writer_rar29_filtered_solid_external} "
+        f"writer_rar29_filtered_solid_unrar={writer_rar29_filtered_solid_unrar} "
+        f"writer_rar29_filtered_solid_encrypted={writer_rar29_filtered_solid_encrypted} "
+        f"writer_rar29_filtered_solid_encrypted_external={writer_rar29_filtered_solid_encrypted_external} "
+        f"writer_rar29_filtered_solid_encrypted_unrar={writer_rar29_filtered_solid_encrypted_unrar} "
         f"writer_filtered={writer_filtered} "
         f"writer_filtered_external={writer_filtered_external} "
         f"writer_solid={writer_solid} "
         f"writer_solid_external={writer_solid_external} "
         f"writer_volumes={writer_volumes} "
         f"writer_volumes_external={writer_volumes_external} "
+        f"writer_encrypted={writer_encrypted} "
+        f"writer_encrypted_external={writer_encrypted_external} "
+        f"reference_encrypted={reference_encrypted} "
+        f"writer_encrypted_headers={writer_encrypted_headers} "
+        f"writer_encrypted_headers_external={writer_encrypted_headers_external} "
+        f"reference_encrypted_headers={reference_encrypted_headers} "
+        f"writer_encrypted_volumes={writer_encrypted_volumes} "
+        f"writer_encrypted_volumes_external={writer_encrypted_volumes_external} "
+        f"reference_encrypted_volumes={reference_encrypted_volumes} "
+        f"writer_rar4_encrypted={writer_rar4_encrypted} "
+        f"writer_rar4_encrypted_external={writer_rar4_encrypted_external} "
+        f"reference_rar4_encrypted={reference_rar4_encrypted} "
+        f"writer_rar4_encrypted_headers={writer_rar4_encrypted_headers} "
+        f"writer_rar4_encrypted_headers_external={writer_rar4_encrypted_headers_external} "
+        f"reference_rar4_encrypted_headers={reference_rar4_encrypted_headers} "
+        f"writer_rar4_encrypted_volumes={writer_rar4_encrypted_volumes} "
+        f"writer_rar4_encrypted_volumes_external={writer_rar4_encrypted_volumes_external} "
+        f"reference_rar4_encrypted_volumes={reference_rar4_encrypted_volumes} "
+        f"writer_rar4_unicode={writer_rar4_unicode} "
+        f"writer_rar4_unicode_external={writer_rar4_unicode_external} "
+        f"writer_redirections={writer_redirections} "
+        f"writer_redirections_external={writer_redirections_external} "
+        f"writer_comments={writer_comments} "
+        f"writer_comments_external={writer_comments_external} "
+        f"writer_comment_volumes={writer_comment_volumes} "
+        f"writer_comment_volumes_external={writer_comment_volumes_external} "
+        f"reference_comments={reference_comments} "
+        f"writer_rar4_comments={writer_rar4_comments} "
+        f"writer_rar4_comments_external={writer_rar4_comments_external} "
+        f"writer_rar4_comment_volumes={writer_rar4_comment_volumes} "
+        f"writer_rar4_comment_volumes_external={writer_rar4_comment_volumes_external} "
+        f"reference_rar4_comments={reference_rar4_comments} "
+        f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
         f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
+        f"rar15_solid_entries={rar15_solid_entries} "
+        f"rar20_solid_entries={rar20_solid_entries} "
+        f"legacy_solid_unrar_entries={legacy_solid_unrar_entries} "
+        f"legacy_mixed_solid_unrar_entries={legacy_mixed_solid_unrar_entries} "
+        f"rar15_encrypted_entries={rar15_encrypted_entries} "
+        f"rar20_encrypted_entries={rar20_encrypted_entries} "
+        f"legacy_encrypted_unrar_entries={legacy_encrypted_unrar_entries} "
         f"rar29_ppmd_entries={rar29_ppmd_entries} "
         f"rar29_vm_entries={rar29_vm_entries} "
         f"rar50_entries={rar50_entries} "

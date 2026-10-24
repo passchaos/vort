@@ -1,0 +1,378 @@
+{
+  "phase": "formal-rebound-complete-lengths-cli",
+  "archived_utc": "2026-10-24T11:19:25.963289+00:00",
+  "status": "passed-current-product-narrow-and-final-compile-binding",
+  "original_stage_directory": "/tmp/vort-br-complete-lengths-cli-stage-20261024-111516",
+  "archived_stage_directory": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/original-stage",
+  "original_source_window_equal": false,
+  "original_source_delta": {
+    "changed": {
+      "/home/passchaos/project-z/vort-stream-contracts/src/tests/br_wasm_public.zig": {
+        "before": "1017d687d7726d764d752c09ce8b0ae5cbe73be15c00b4bca80a3e0633b216e0",
+        "after": "0721dbdeaa27aea352cfd30029d0e34350878af75879ff49571f42db9e9614f2"
+      }
+    },
+    "added": {},
+    "removed": {}
+  },
+  "original_source_change_classification": {
+    "actual_compiler_input_changes": [],
+    "non_compiled_QA_changes": [
+      "/home/passchaos/project-z/vort-stream-contracts/src/tests/br_wasm_public.zig"
+    ],
+    "production_and_cli_sources_stable": true
+  },
+  "actual_compilation_input_sha_unchanged": false,
+  "actual_compiler_inputs_checked": 1910,
+  "uncompiled_changes_do_not_affect_binary": [
+    "/home/passchaos/project-z/vort-stream-contracts/src/tests/br_wasm_public.zig"
+  ],
+  "whole_repository_source_window_claimed": false,
+  "matrix_rerun": false,
+  "production_or_cli_code_modified": false,
+  "gate_report": {
+    "round_trips": 60,
+    "default_sampled_wire_checks": 8,
+    "complete_profile_wire_checks": 16,
+    "complete_not_larger_checks": 16,
+    "complete_work_checks": 16,
+    "exact_work_cap_checks": 4,
+    "one_below_work_cap_checks": 4,
+    "zero_work_cap_rejections": 16,
+    "rejected_output_preserved": 36,
+    "same_path_checks": 2,
+    "observations": [
+      {
+        "quality": 10,
+        "large_window": false,
+        "parse_mode": "bounded",
+        "sample": "tiny64",
+        "command": "encode-br-file",
+        "sampled_bytes": 38,
+        "complete_bytes": 38,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 2,
+          "complete_length_passes": 1,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": false,
+        "parse_mode": "bounded",
+        "sample": "repeated_history",
+        "command": "encode-br-file",
+        "sampled_bytes": 47,
+        "complete_bytes": 47,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 4,
+          "complete_length_passes": 2,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": false,
+        "parse_mode": "whole_block",
+        "sample": "tiny64",
+        "command": "encode-br-file",
+        "sampled_bytes": 38,
+        "complete_bytes": 38,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 8,
+          "complete_length_passes": 4,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": false,
+        "parse_mode": "whole_block",
+        "sample": "repeated_history",
+        "command": "encode-br-file",
+        "sampled_bytes": 47,
+        "complete_bytes": 47,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 16,
+          "complete_length_passes": 8,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "parse_mode": "bounded",
+        "sample": "tiny64",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 40,
+        "complete_bytes": 40,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 1,
+          "complete_length_passes": 1,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "parse_mode": "bounded",
+        "sample": "repeated_history",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 50,
+        "complete_bytes": 50,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 2,
+          "complete_length_passes": 2,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "parse_mode": "whole_block",
+        "sample": "tiny64",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 40,
+        "complete_bytes": 40,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 3,
+          "complete_length_passes": 3,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 10,
+        "large_window": true,
+        "parse_mode": "whole_block",
+        "sample": "repeated_history",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 50,
+        "complete_bytes": 50,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 6,
+          "complete_length_passes": 6,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "parse_mode": "bounded",
+        "sample": "tiny64",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 38,
+        "complete_bytes": 38,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 2,
+          "complete_length_passes": 2,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "parse_mode": "bounded",
+        "sample": "repeated_history",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 47,
+        "complete_bytes": 47,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 4,
+          "complete_length_passes": 4,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "parse_mode": "whole_block",
+        "sample": "tiny64",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 38,
+        "complete_bytes": 38,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 6,
+          "complete_length_passes": 6,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": false,
+        "parse_mode": "whole_block",
+        "sample": "repeated_history",
+        "command": "encode-br-stream-file",
+        "sampled_bytes": 47,
+        "complete_bytes": 47,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 12,
+          "complete_length_passes": 12,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "parse_mode": "bounded",
+        "sample": "tiny64",
+        "command": "encode-br-file",
+        "sampled_bytes": 40,
+        "complete_bytes": 40,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 6,
+          "complete_length_passes": 3,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "parse_mode": "bounded",
+        "sample": "repeated_history",
+        "command": "encode-br-file",
+        "sampled_bytes": 50,
+        "complete_bytes": 50,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 12,
+          "complete_length_passes": 6,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "parse_mode": "whole_block",
+        "sample": "tiny64",
+        "command": "encode-br-file",
+        "sampled_bytes": 40,
+        "complete_bytes": 40,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 24,
+          "complete_length_passes": 12,
+          "max_copy_length_considered": 31,
+          "max_plan_price_evaluations": 39498
+        }
+      },
+      {
+        "quality": 11,
+        "large_window": true,
+        "parse_mode": "whole_block",
+        "sample": "repeated_history",
+        "command": "encode-br-file",
+        "sampled_bytes": 50,
+        "complete_bytes": 50,
+        "profile": {
+          "copy_lengths": "complete",
+          "sampled_length_passes": 48,
+          "complete_length_passes": 24,
+          "max_copy_length_considered": 64,
+          "max_plan_price_evaluations": 45463
+        }
+      }
+    ],
+    "reference_brotli_version": 16777225
+  },
+  "parser_tests_passed": 14,
+  "binary": {
+    "executed_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/a75073344c3491e07dcb4e3253cb3211/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-complete-lengths-cli-stage-20261024-111516/vort-br-hq-cli-probe",
+    "sha256": "19663fa5686d584aebe634efe7e235b2520759411601584ac9c1e1e65339ba13"
+  },
+  "evidence_scope_note": "Two stage/current complete CLI matrices passed and remain separately recorded. Final test-only source trim changed the executable hash, so the exact final compiled executable was additionally exercised with four authorized combinations (12 round trips plus exact/below/zero cap checks), without a third full matrix. All 1910 final compiler inputs remain unchanged and current. No whole-repository unchanged-window claim is made for earlier stages.",
+  "archive_sha256": "1fdcff8cc2fe8d165e180cdf7ebf69e46318108dcfb6763e922b49e5989e9e20",
+  "current_rebind_report_sha256": "2f8f7936ec994947e894d7b200b247fee8c07c421784843c01cd2af44aa66f62",
+  "archived_binary_sha256": "19663fa5686d584aebe634efe7e235b2520759411601584ac9c1e1e65339ba13",
+  "unchanged_actual_compiler_inputs": 1909,
+  "changed_actual_compiler_inputs": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig",
+      "compiled_content_sha256": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
+      "current_sha256": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2",
+      "matches": false,
+      "prefix": "0",
+      "original_cache_siphash128": "b7e4af009f536f26c02fa0433e545730"
+    }
+  ],
+  "changed_input_classification": {
+    "kind": "test-only append",
+    "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig",
+    "added_content": "Two new test blocks appended after the original file, with original content unchanged",
+    "new_test_names": [
+      "BrHQ complete lengths q10 reaches two interior fifty byte implicit commands",
+      "BrHQ complete lengths q11 retains seventy three byte cut before mixed suffix reference"
+    ],
+    "diff_path": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/changed-test-source.diff",
+    "changes_to_production_declarations": false,
+    "scope": "The test file appears in the compiler manifest; its current content is explicitly not claimed identical to the stage content."
+  },
+  "current_production_cli_and_non_test_compiled_inputs_match": true,
+  "current_all_compiler_inputs_identical_claimed": false,
+  "current_git_head": "34dbe96ae7b57f4eb9d36b0821be1ff700d26508",
+  "current_rebind_finalized_utc": "2026-10-24T11:20:12.888303+00:00",
+  "added_rebind_evidence_sha256": {
+    "current-compile-input-rebind.json": "2f8f7936ec994947e894d7b200b247fee8c07c421784843c01cd2af44aa66f62",
+    "changed-test-source.diff": "4a0fc0f8a40b784c1699cf541901dc73cf7e55bbc38d2fcb3898072b10620d66",
+    "complete_length_tests.stage.zig": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
+    "complete_length_tests.current.zig": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2"
+  },
+  "current_validation_report": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/current-validation/gate-report.json",
+  "current_validation_passed": true,
+  "final_compilation_manifest": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/final-compilation/manifest.json",
+  "final_compilation_binding": true,
+  "final_binary_sha256": "c34164054c913b857517fc05c4a27c3f659b333a76b7e5003656b306d09093e8",
+  "final_binary_ran_gate": false,
+  "final_production_cli_inputs_match_tested_validation": true,
+  "final_scope_note": "Two CLI matrix runs passed. The latest successful run used SHA55d134; afterward only a test-only compiler input was trimmed. The final CLI was compiled and all its inputs verified; its SHA is recorded separately. Per parent instruction no third identical CLI matrix was run. Production, CLI and tool behavior source did not change. All historical mismatches/diffs remain preserved.",
+  "final_compilation_manifest_sha256": "9b386b54a536cca83de9e14c29e48648f8e787c6c7eccc37bc6117effd8dd3f1",
+  "current_validation_report_sha256": "87c7d0ef216ff0f002c1657e1992de56c095bd466830ca2567fa6189d7189aa0",
+  "finalized_utc": "2026-10-24T11:26:03.527509+00:00",
+  "final_narrow_report": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/final-narrow/report.json",
+  "final_narrow_counts": {
+    "combinations": 4,
+    "round_trips": 12,
+    "complete_not_larger_checks": 4,
+    "exact_cap_wire_checks": 4,
+    "zero_limit_rejections": 4,
+    "one_below_rejections": 4,
+    "sentinel_checks": 8
+  },
+  "final_binary_ran_narrow": true,
+  "final_binary_ran_full_matrix": false,
+  "final_narrow_source_current_check": {
+    "checked_utc": "2026-10-24T11:27:15.759494+00:00",
+    "actual_final_compiler_inputs_checked": 1910,
+    "mismatches": [],
+    "all_final_inputs_unchanged": true,
+    "final_binary_sha256": "c34164054c913b857517fc05c4a27c3f659b333a76b7e5003656b306d09093e8"
+  },
+  "final_narrow_archive_sha256": "1e6709a52bb5ac9ea970f06cfae1779f564d17f0172f6c4e3a164b83b7f250a3"
+}

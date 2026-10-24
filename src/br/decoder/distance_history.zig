@@ -38,6 +38,25 @@ pub inline fn push(last_distances: *[4]usize, distance: usize) void {
     last_distances[3] = distance;
 }
 
+/// Return RFC 7932's short-distance symbol when `distance` is representable
+/// from the current four-entry history. Regular distances return null.
+pub fn symbolForDistance(distance: usize, last_distances: *const [4]usize) ?u4 {
+    const deltas = [_]i8{ -1, 1, -2, 2, -3, 3 };
+    if (distance == last_distances[3]) return 0;
+    if (distance == last_distances[2]) return 1;
+    if (distance == last_distances[1]) return 2;
+    if (distance == last_distances[0]) return 3;
+    for (deltas, 4..) |delta, symbol| {
+        if (withDelta(last_distances[3], delta) catch null == distance)
+            return @intCast(symbol);
+    }
+    for (deltas, 10..) |delta, symbol| {
+        if (withDelta(last_distances[2], delta) catch null == distance)
+            return @intCast(symbol);
+    }
+    return null;
+}
+
 test "Brotli distance history resolves short symbols and pushes recent values" {
     const initial = [_]usize{ 16, 15, 11, 4 };
     const expected = [_]usize{ 4, 11, 15, 16, 3, 5, 2, 6, 1, 7, 10, 12, 9, 13, 8, 14 };
@@ -45,6 +64,7 @@ test "Brotli distance history resolves short symbols and pushes recent values" {
         var actual: usize = undefined;
         try resolveShortInto(@intCast(symbol), &initial, &actual);
         try std.testing.expectEqual(want, actual);
+        try std.testing.expectEqual(@as(?u4, @intCast(symbol)), symbolForDistance(want, &initial));
     }
 
     var recent = initial;

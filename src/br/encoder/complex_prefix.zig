@@ -1,9 +1,43 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
+const code_length_huffman = @import("code_length_huffman.zig");
 const code_length_rle = @import("code_length_rle.zig");
 const small_huffman = @import("small_huffman.zig");
 
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+
+pub const BitCostProfile = struct {
+    calls: usize = 0,
+    rle_tokens: usize = 0,
+    code_length_active: usize = 0,
+    input_lengths: usize = 0,
+    zero_runs: usize = 0,
+    nonzero_runs: usize = 0,
+    zero_lengths: usize = 0,
+    nonzero_lengths: usize = 0,
+    literal_tokens: usize = 0,
+    repeat16_tokens: usize = 0,
+    repeat17_tokens: usize = 0,
+    repeat_chain_buckets: [4]usize = @splat(0),
+    rle_ns: u64 = 0,
+    code_length_tree_ns: u64 = 0,
+    header_ns: u64 = 0,
+    encoder_ns: u64 = 0,
+    payload_ns: u64 = 0,
+    shape_ns: u64 = 0,
+};
+
+const BitCounter = struct {
+    bits: usize = 0,
+
+    pub fn writeBits(self: *@This(), _: std.mem.Allocator, _: u64, count: u6) !void {
+        self.bits += count;
+    }
+
+    pub fn writeHuffmanBits(self: *@This(), _: std.mem.Allocator, _: u16, count: u4) !void {
+        self.bits += count;
+    }
+};
 
 /// Encode a Brotli complex prefix tree. Zero gaps use chained symbol-17 runs;
 /// non-zero code lengths remain explicit for deterministic production output.
@@ -31,19 +65,151 @@ pub fn writeWithStopIndex(allocator: std.mem.Allocator, writer: anytype, alphabe
 /// Exact number of bits produced by `writeWithStopIndex`, used to compare
 /// alternate code-length plans without encoding the complete Brotli stream.
 pub fn bitCost(allocator: std.mem.Allocator, alphabet_size: usize, lengths: []const u4, stop_index: usize) !usize {
-    const CountingWriter = struct {
-        bits: usize = 0,
+    return bitCostInternal(false, allocator, alphabet_size, lengths, stop_index, {}, {});
+}
 
-        pub fn writeBits(self: *@This(), _: std.mem.Allocator, _: u64, count: u6) !void {
-            self.bits += count;
-        }
+pub fn bitCostProfiled(
+    allocator: std.mem.Allocator,
+    alphabet_size: usize,
+    lengths: []const u4,
+    stop_index: usize,
+    io: std.Io,
+    profile: *BitCostProfile,
+) !usize {
+    profile.calls += 1;
+    return bitCostInternal(true, allocator, alphabet_size, lengths, stop_index, io, profile);
+}
 
-        pub fn writeHuffmanBits(self: *@This(), _: std.mem.Allocator, _: u16, count: u4) !void {
-            self.bits += count;
+/// Exact complex-prefix bit cost for a byte alphabet whose non-zero code
+/// lengths are already available in ascending symbol order. This is a
+/// score-only path; the production writer retains its dense validated input.
+pub fn bitCostSparse(
+    allocator: std.mem.Allocator,
+    lengths: []const u4,
+    symbols: []const u8,
+) !usize {
+    return bitCostSparseInternal(false, allocator, lengths, symbols, {}, {});
+}
+
+pub fn bitCostSparseProfiled(
+    allocator: std.mem.Allocator,
+    lengths: []const u4,
+    symbols: []const u8,
+    io: std.Io,
+    profile: *BitCostProfile,
+) !usize {
+    profile.calls += 1;
+    return bitCostSparseInternal(true, allocator, lengths, symbols, io, profile);
+}
+
+fn bitCostInternal(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    alphabet_size: usize,
+    lengths: []const u4,
+    stop_index: usize,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !usize {
+    if (lengths.len < alphabet_size or stop_index == 0 or stop_index > alphabet_size or lengths[stop_index - 1] == 0)
+        return error.InvalidBlockPlan;
+    var writer: BitCounter = .{};
+    try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
+
+    const rle_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    const summary = try code_length_rle.summarize(false, lengths, stop_index);
+    if (profiled) {
+        profile.rle_ns +%= elapsedNs(rle_start, io);
+        try recordSummaryProfile(&summary, lengths, stop_index, io, profile);
+    }
+
+    return finishBitCost(profiled, allocator, &writer, &summary, io, profile);
+}
+
+fn bitCostSparseInternal(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    lengths: []const u4,
+    symbols: []const u8,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !usize {
+    if (symbols.len == 0) return error.InvalidBlockPlan;
+    const stop_index = @as(usize, symbols[symbols.len - 1]) + 1;
+    var writer: BitCounter = .{};
+    try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
+
+    const rle_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    const summary = try code_length_rle.summarizeSparse(false, lengths, symbols);
+    if (profiled) {
+        profile.rle_ns +%= elapsedNs(rle_start, io);
+        try recordSummaryProfile(&summary, lengths, stop_index, io, profile);
+    }
+
+    return finishBitCost(profiled, allocator, &writer, &summary, io, profile);
+}
+
+fn recordSummaryProfile(
+    summary: *const code_length_rle.Summary,
+    lengths: []const u4,
+    stop_index: usize,
+    io: std.Io,
+    profile: *BitCostProfile,
+) !void {
+    profile.rle_tokens += summary.token_count;
+    for (summary.frequencies) |frequency|
+        profile.code_length_active += @intFromBool(frequency != 0);
+    const shape_start = std.Io.Clock.awake.now(io);
+    const shape = try code_length_rle.summarize(true, lengths, stop_index);
+    std.debug.assert(summary.token_count == shape.token_count);
+    std.debug.assert(summary.repeat16_tokens == shape.repeat16_tokens);
+    std.debug.assert(summary.repeat17_tokens == shape.repeat17_tokens);
+    std.debug.assert(std.mem.eql(u32, &summary.frequencies, &shape.frequencies));
+    profile.input_lengths += shape.input_lengths;
+    profile.zero_runs += shape.zero_runs;
+    profile.nonzero_runs += shape.nonzero_runs;
+    profile.zero_lengths += shape.zero_lengths;
+    profile.nonzero_lengths += shape.nonzero_lengths;
+    profile.literal_tokens += shape.literal_tokens;
+    profile.repeat16_tokens += shape.repeat16_tokens;
+    profile.repeat17_tokens += shape.repeat17_tokens;
+    for (&profile.repeat_chain_buckets, shape.repeat_chain_buckets) |*total, count|
+        total.* += count;
+    profile.shape_ns +%= elapsedNs(shape_start, io);
+}
+
+fn finishBitCost(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    writer: *BitCounter,
+    summary: *const code_length_rle.Summary,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !usize {
+    const code_length_tree_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    const code_length_lengths = codeLengthCodeLengths(&summary.frequencies);
+    if (profiled) profile.code_length_tree_ns +%= elapsedNs(code_length_tree_start, io);
+
+    const header_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    var space: i32 = 32;
+    for (code_length_order) |symbol| {
+        const length = code_length_lengths[symbol];
+        try writeCodeLengthCodeLength(allocator, writer, length);
+        if (length != 0) {
+            space -= @intCast(@as(u32, 32) >> length);
+            if (space < 0) return error.InvalidHuffmanCode;
+            if (space == 0) break;
         }
-    };
-    var writer: CountingWriter = .{};
-    try writeWithStopIndex(allocator, &writer, alphabet_size, lengths, stop_index);
+    }
+    if (space != 0) return error.InvalidHuffmanCode;
+    if (profiled) profile.header_ns +%= elapsedNs(header_start, io);
+
+    const payload_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    for (summary.frequencies, code_length_lengths) |frequency, length|
+        writer.bits += @as(usize, frequency) * length;
+    writer.bits += @as(usize, summary.repeat16_tokens) * 2;
+    writer.bits += @as(usize, summary.repeat17_tokens) * 3;
+    if (profiled) profile.payload_ns +%= elapsedNs(payload_start, io);
     return writer.bits;
 }
 
@@ -67,7 +233,69 @@ test "bit cost matches emitted complex prefix" {
     try std.testing.expectEqual(writer.bits, try bitCost(std.testing.allocator, lengths.len, &lengths, 'd' + 1));
 }
 
-fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, writer: anytype, lengths: []const u4, stop_index: usize) !void {
+test "summary bit cost matches emitted mixed prefix shapes" {
+    const CountingWriter = struct {
+        bits: usize = 0,
+        pub fn writeBits(self: *@This(), _: std.mem.Allocator, _: u64, count: u6) !void {
+            self.bits += count;
+        }
+        pub fn writeHuffmanBits(self: *@This(), _: std.mem.Allocator, _: u16, count: u4) !void {
+            self.bits += count;
+        }
+    };
+    var state: u32 = 0x9e37_79b9;
+    for ([_]usize{ 256, 520, 704 }) |alphabet_size| {
+        for (0..32) |_| {
+            var lengths: [704]u4 = @splat(0);
+            for (lengths[0..alphabet_size]) |*length| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                length.* = if (state & 7 < 5) 0 else @intCast(1 + (state >> 28) % 8);
+            }
+            lengths[alphabet_size - 1] = 3;
+            var writer: CountingWriter = .{};
+            try writeWithStopIndex(std.testing.allocator, &writer, alphabet_size, &lengths, alphabet_size);
+            try std.testing.expectEqual(
+                writer.bits,
+                try bitCost(std.testing.allocator, alphabet_size, &lengths, alphabet_size),
+            );
+            if (alphabet_size == 256) {
+                var symbols: [256]u8 = undefined;
+                var symbol_count: usize = 0;
+                for (lengths[0..alphabet_size], 0..) |length, symbol| {
+                    if (length == 0) continue;
+                    symbols[symbol_count] = @intCast(symbol);
+                    symbol_count += 1;
+                }
+                try std.testing.expectEqual(
+                    writer.bits,
+                    try bitCostSparse(std.testing.allocator, lengths[0..alphabet_size], symbols[0..symbol_count]),
+                );
+            }
+        }
+    }
+}
+
+test "sparse bit cost preserves byte-alphabet boundaries" {
+    var lengths: [256]u4 = @splat(0);
+    lengths[0] = 2;
+    lengths[1] = 2;
+    lengths[2] = 2;
+    lengths[127] = 3;
+    lengths[255] = 3;
+    const symbols = [_]u8{ 0, 1, 2, 127, 255 };
+    try std.testing.expectEqual(
+        try bitCost(std.testing.allocator, lengths.len, &lengths, lengths.len),
+        try bitCostSparse(std.testing.allocator, &lengths, &symbols),
+    );
+}
+
+fn writeWithStorage(
+    comptime storage_len: usize,
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    lengths: []const u4,
+    stop_index: usize,
+) !void {
     var rle_storage: [storage_len]code_length_rle.Token = undefined;
     var code_length_freqs: [18]u32 = undefined;
     const rle_len = try code_length_rle.encodeIntoWithFrequencies(&rle_storage, lengths, stop_index, &code_length_freqs);
@@ -95,10 +323,23 @@ fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, w
     }
 }
 
-/// The code-length alphabet has at most 18 live symbols. Its common trees fit
-/// Brotli's five-bit limit without length limiting, so reuse the linear small
-/// Huffman builder and reserve package merge for the rare over-depth shape.
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
+}
+
+/// The code-length alphabet has at most 18 live symbols. Its dedicated builder
+/// writes depths straight to the original symbols and reserves package merge
+/// for the rare shape whose unbounded tree exceeds Brotli's five-bit limit.
 fn codeLengthCodeLengths(frequencies: *const [18]u32) [18]u4 {
+    return code_length_huffman.build(frequencies) orelse
+        huffman.treeCodeLengths(18, frequencies, 5);
+}
+
+/// Previous production implementation retained as an exact test oracle. It
+/// deliberately repeats the compact ordering and scatter that the dedicated
+/// builder removes from the hot path.
+fn codeLengthCodeLengthsReference(frequencies: *const [18]u32) [18]u4 {
     var symbols: [18]u16 = undefined;
     var compact_frequencies: [18]u32 = undefined;
     var active: usize = 0;
@@ -192,6 +433,38 @@ test "small code-length alphabet matches package-merge weighted cost" {
         try std.testing.expectEqual(@as(usize, 0), actual_space);
         try std.testing.expectEqual(@as(usize, 0), reference_space);
         try std.testing.expect(actual_declaration_bits <= reference_declaration_bits);
+    }
+}
+
+test "direct code-length builder exactly matches previous implementation" {
+    const edge_cases = [_][18]u32{
+        @splat(0),
+        @splat(1),
+        @splat(std.math.maxInt(u32)),
+        .{ 1, 1, 2, 4, 8, 16, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9 },
+    };
+    for (edge_cases) |frequencies| {
+        const actual = codeLengthCodeLengths(&frequencies);
+        const expected = codeLengthCodeLengthsReference(&frequencies);
+        try std.testing.expectEqualSlices(u4, &expected, &actual);
+    }
+
+    var state: u32 = 0x6a09_e667;
+    for (0..16_384) |_| {
+        var frequencies: [18]u32 = undefined;
+        for (&frequencies) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = switch (state & 7) {
+                0, 1 => 0,
+                2, 3 => 1 + (state >> 29),
+                4 => std.math.maxInt(u32) - (state >> 28),
+                else => 1 + (state >> 8),
+            };
+        }
+        const actual = codeLengthCodeLengths(&frequencies);
+        const expected = codeLengthCodeLengthsReference(&frequencies);
+        try std.testing.expectEqualSlices(u4, &expected, &actual);
     }
 }
 

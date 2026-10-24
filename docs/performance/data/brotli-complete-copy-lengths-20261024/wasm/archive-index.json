@@ -1,0 +1,14 @@
+{
+  "utc": "2026-10-24T11:21:40.919238+00:00",
+  "source": "/tmp/vort-br-complete-wasm-stage-4e9og802",
+  "files": {
+    "debug-stage-status.json": "e3b8339abd5681366f5f53593ec4fce5b736f2b53bd43dd0cad6065c06ff291b",
+    "final-source-before.json": "b828369dd025a8c41df571510f4d1593969359d6cf7cf8f2943f15edf449a603",
+    "final-result.json": "66ee0b7fa711560bd416d29748b0888f42741f6321177325d1a3712fbd90a8f7",
+    "final-source-after.json": "b828369dd025a8c41df571510f4d1593969359d6cf7cf8f2943f15edf449a603",
+    "final-node-result.json": "502d25caaf276456ec4bf67f9ce371ac1327d14f967ca86865e6b5a68627e095",
+    "final-build-run.log.gz": "1508bd27be6b9149a0b91a95a43d74202c93e387150d638703cde12a7ad37c33"
+  },
+  "wasm_sha256": "6920c86e3e51e98cf38cb151d10393a4f1ecf7953b7c6705fed5cfb50daeea90",
+  "note": "Wasm product retained in original source dir; evidence copied without claiming every .h dependency has been resolved."
+}

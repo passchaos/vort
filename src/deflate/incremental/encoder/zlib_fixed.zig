@@ -25,6 +25,8 @@ pub fn Encoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const ParamsError = Codec.ParamsError;
+        pub const supports_runtime_params = Codec.RawEncoder.supports_runtime_params;
         pub const Options = struct { raw: Codec.RawOptions = .{} };
         pub const Snapshot = struct {
             input_read: usize,
@@ -32,6 +34,13 @@ pub fn Encoder(comptime Codec: type) type {
             stream_input: usize,
             stream_output: usize,
             pending_output: usize,
+            pending_bits: u3,
+            active_params: ?Codec.Params,
+            requested_params: ?Codec.Params,
+            params_boundary_pending: bool,
+            params_change_count: usize,
+            stored_only: bool,
+            flushing: bool,
             stream_count: usize,
             stream_index: usize,
             finishing: bool,
@@ -63,6 +72,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.stream_output = 0;
             self.stream_count = 0;
             self.raw.reset();
+            self.options.raw.compression = self.raw.options.compression;
             self.resetWrapper();
         }
         fn resetWrapper(self: *Self) void {
@@ -84,7 +94,7 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options = options;
             self.dictionary = dictionary;
-            self.raw.options = options.raw;
+            self.raw.resetWithOptions(options.raw);
             self.raw.resetDictionary(dictionary);
             self.resetWrapper();
         }
@@ -92,25 +102,55 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options = options;
             self.dictionary = dictionary;
-            self.raw.options = options.raw;
+            self.raw.resetWithOptions(options.raw);
             self.raw.resetExactSizeDictionary(expected_input_len, dictionary);
             self.resetWrapper();
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const raw_snapshot = self.raw.snapshot();
             return .{
                 .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .stream_input = self.total_input,
                 .stream_output = self.total_output,
-                .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_output = std.math.add(usize, self.pending.items.len - self.pending_offset, raw_snapshot.pending_output) catch std.math.maxInt(usize),
+                .pending_bits = raw_snapshot.pending_bits,
+                .active_params = raw_snapshot.active_params,
+                .requested_params = raw_snapshot.requested_params,
+                .params_boundary_pending = raw_snapshot.params_boundary_pending,
+                .params_change_count = raw_snapshot.params_change_count,
+                .stored_only = raw_snapshot.stored_only,
+                .flushing = raw_snapshot.flushing,
                 .stream_count = self.stream_count,
                 .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
+        /// Request zlib-compatible compression parameters for subsequent raw
+        /// DEFLATE blocks without resetting the wrapper checksum or history.
+        pub fn requestParams(self: *Self, params: Codec.Params) ParamsError!void {
+            try self.raw.requestParams(params);
+        }
+        /// End and publish the accepted input as a non-final DEFLATE block
+        /// without byte alignment. The zlib checksum and dictionary history
+        /// remain active for subsequent input.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.blockFlush();
+        }
+        /// Publish accepted input with zlib Z_PARTIAL_FLUSH wire semantics.
+        /// The Adler-32 state and match history remain continuous.
+        pub fn partialFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.partialFlush();
+        }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
+        }
+        /// Publish all accepted input at a byte boundary and reset the raw
+        /// DEFLATE match history, matching zlib's Z_FULL_FLUSH semantics while
+        /// keeping this RFC 1950 stream and its Adler-32 state open.
+        pub fn fullFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.fullFlush();
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -122,7 +162,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if (self.finishing and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.raw.snapshot().flushing) and input.len != 0) return error.TrailingData;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -140,6 +180,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
+                    try Codec.RawEncoder.validateOptions(self.raw.options);
                     try Codec.writeHeader(self.allocator, &self.pending, self.dictionary);
                     self.header_written = true;
                     continue;

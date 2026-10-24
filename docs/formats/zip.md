@@ -1,7 +1,13 @@
 # ZIP archive support
 
 Vort provides dependency-free, library-first reading and deterministic writing
-for common single-disk ZIP32 and ZIP64 archives. The reader parses the ordinary
+for common ZIP32 and ZIP64 archives. The direct borrowed parser and base
+one-shot/incremental writers use a single-disk view; dedicated split adapters
+provide owned writing plus owned or sparse reading. Ordered split/multi-disk
+input is accepted by
+either an owned normalization API or a sparse multi-slice sequential adapter;
+both validate the same disk-local metadata and reuse the established archive
+codecs. The reader parses the ordinary
 end-of-central-directory record, the ZIP64 locator/record when present, and the
 central directory before exposing entries. Data-descriptor archives therefore
 use the authoritative sizes and CRC values instead of trusting incomplete
@@ -48,10 +54,11 @@ fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
 version-needed 2.1. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
-comments, an archive comment, and the UTF-8 general-purpose flag. Its fixed DOS
-timestamp is `1980-01-01 00:00:00`, so identical inputs and options produce
-identical bytes. Data descriptors are optional and include the standard
-descriptor signature when enabled.
+comments, an archive comment, DOS modification timestamps, creator system,
+internal/external attributes, and the UTF-8 general-purpose flag. The default
+timestamp remains `1980-01-01 00:00:00`, so identical inputs and options
+produce identical bytes. Data descriptors are optional and include the
+standard descriptor signature when enabled.
 `EncodeOptions.zip64` controls archive selection:
 
 - `.auto` emits ZIP32 until an entry count, size, or offset needs ZIP64;
@@ -82,6 +89,722 @@ const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
 defer allocator.free(zip_bytes);
 ```
 
+## Entry metadata
+
+`ZipEncodeEntry` and `ZipIncrementalEntryOptions` accept the same metadata:
+`comment`, `modified`, `creator_system`, `internal_attributes`, and optional
+raw `external_attributes`, plus optional `extended_timestamp` and
+`ntfs_timestamp`. `ZipDosTimestamp.fromComponents` validates years
+1980...2107 and real calendar dates; ZIP stores two-second resolution, so an
+odd input second is rounded down. The raw `time`/`date` fields remain visible
+for exact wire interoperation. Invalid writer timestamps fail before a local
+header is published.
+
+Info-ZIP Extended Timestamp `0x5455` stores signed 32-bit UTC Unix seconds.
+Local headers may carry modification/access/creation times in flag order;
+central headers retain the same flags but canonically carry only modification
+time, matching Info-ZIP output. The reader merges both copies, rejects unknown
+flag bits, truncation, duplicate fields, trailing bytes, and contradictory
+overlapping values. NTFS `0x000a` stores reserved bytes followed by tag
+`0x0001` and three 64-bit 100 ns FILETIME values; local and central copies are
+cross-checked exactly while unknown NTFS attributes remain skippable.
+`zipFileTimeFromUnixSeconds` and `zipFileTimeToUnixSeconds` provide checked
+epoch conversion. `modifiedUnixSeconds()` prefers the higher-precision NTFS
+value over `0x5455`; both raw representations remain separately available.
+
+Info-ZIP Unicode Path `0x7075` and Unicode Comment `0x6375` carry version 1,
+the CRC-32 of the corresponding raw header field, and UTF-8 text. Writers emit
+them through `unicode_name`/`unicode_comment` only when archive option `utf8`
+is false, so bit 11 and the compatibility fields cannot contradict one another.
+Readers keep `name`/`comment` as byte-exact legacy fields and expose the valid
+alternatives separately. `preferredName()`/`preferredComment()` select raw
+fields whenever bit 11 is set, otherwise select a CRC-valid Unicode field.
+`Archive.find` checks preferred names first and then raw aliases;
+`Archive.findRaw` is exact, while the streaming CLI accepts preferred names.
+Per APPNOTE, an
+unknown Unicode-field version or CRC mismatch is ignored and falls back to raw;
+truncation, duplicates, CRC-valid malformed UTF-8, empty overrides, or two
+valid but conflicting local/central values are rejected.
+
+The central `version made by` value combines the selected creator system with
+the automatically derived version-needed value. `zipUnixExternalAttributes`
+places a Unix mode in the upper 16 bits and mirrors the DOS directory bit.
+Borrowed `ZipEntry` values expose comments and all metadata, with
+`creatorSystem()`, `unixMode()`, `isDirectory()`, and `isSymbolicLink()`
+helpers. Local and central timestamps must agree before payload extraction.
+
+The sequential reader exposes the local timestamp at `entry_header`; comments
+and central-only attributes become available after central validation.
+`entryAt(index)` retains them until reset/deinit, while `currentEntry()` keeps
+its existing event-oriented view. Entry comments share `max_metadata_size`
+with names and the archive comment. The sparse and owned split readers preserve
+Unicode names/comments under the same limit, and the split sequential adapter
+forwards `entryAt` without joining physical parts.
+
+## Archive extra data record
+
+`ZipEncodeOptions.archive_extra_data` and
+`ZipIncrementalWriterOptions.archive_extra_data` emit the opaque APPNOTE
+Archive Extra Data Record `0x08064b50` immediately before the first central
+file header. The EOCD/ZIP64 central offset points to the record signature and
+the central size includes its 8-byte header plus payload. An empty option omits
+the record; readers also accept a present zero-length record.
+
+Borrowed archives expose `archive_extra_data`; sequential readers retain it
+through `archiveExtraData()` under `max_archive_extra_data_size` and
+`max_control_record_size`. Owned and sparse split normalization skip the record
+when indexing central entries while preserving its bytes. Both split writers
+treat the complete record as one atomic control record that cannot cross a
+physical volume, and use its disk-local location as the central-directory
+origin. Payload interpretation, including any central-directory encryption
+policy layered above it, remains caller-owned.
+
+Focused gates cover nonempty and empty ZIP32/ZIP64 archives,
+descriptor/no-descriptor entries, corrupt declared lengths, one-byte input,
+allocation failure, reader/central limits, owned/sparse split round trips, and
+an archive-extra record larger than a split part. Python 3.10 `zipfile` and
+Info-ZIP 6.00 both reject this otherwise APPNOTE-defined layout because they
+assume the central offset directly names a file header; external validation is
+therefore limited to raw offset/size parsing while Vort supplies required
+one-shot, streaming, and split extraction (`vort_archive_extra_cases=4`,
+`incremental_archive_extra_cases=4`).
+
+## Traditional ZipCrypto
+
+The reusable cipher state and one-shot header helpers come from Vail's
+dependency-free `archive_crypto` package; Vort owns ZIP flags, verification-byte
+selection, compressed-size accounting and codec composition.
+
+The one-shot writer accepts optional per-entry `traditional_encryption` with a
+password and exactly 11 caller-supplied header-entropy bytes. Vort never hides a
+random source: production callers should obtain those bytes from a CSPRNG,
+while deterministic fixtures may provide stable bytes explicitly. The 12th
+encrypted-header byte uses the CRC-32 high byte for entries without bit 3 and
+the deterministic DOS-time high byte for descriptor-backed entries. The
+reported compressed size includes the 12-byte encryption header.
+
+One-shot extraction accepts `ZipDecodeOptions.password`. Encrypted extraction
+requires an allocator for the decrypted compressed payload; the no-allocator
+surface retains `EncryptedZipEntry`. Missing and rejected passwords return
+`PasswordRequired` and `InvalidZipPassword`, while the ordinary outer CRC-32
+still detects ciphertext corruption that passes the one-byte password check.
+`Archive.compressedData` deliberately does not expose ciphertext as if it were
+a codec payload.
+Traditional ZipCrypto is legacy compatibility, not authenticated modern
+encryption; applications requiring confidentiality and integrity should use
+the WinZip AES surface below.
+
+`ZipIncrementalEntryOptions.traditional_encryption` uses the same Vail state.
+Because every incremental entry has bit 3, the writer encrypts the 12-byte
+header with the deterministic DOS-time high-byte check before accepting input,
+then encrypts Stored or codec output directly in the caller's output slice.
+Compressed-size and ZIP64 policy include the 12-byte header. Password slices
+are consumed by `beginEntry`; only derived key state and copied header bytes
+survive the call.
+
+`ZipIncrementalReaderOptions.password` enables both known-size and descriptor-
+backed sequential extraction. The 12-byte header may be split across arbitrary
+input calls and uses the CRC-high check byte without bit 3 or DOS-time-high
+with bit 3. A bounded 256-byte trial window feeds the existing codec state;
+only bytes reported as consumed advance the live Vail cipher. For Stored,
+Shrink, Reduce and traditional Implode, paired raw/decrypted probe windows use
+raw bytes for signed/unsigned descriptor recognition and decrypted bytes only
+when a candidate is disproved. Self-delimiting codecs keep a 24-byte rolling
+raw tail and substitute it for any decrypted trailing input before the shared
+descriptor parser runs. Descriptor compressed sizes include the 12-byte
+header. Missing/wrong passwords, header/time-check corruption, strong-
+encryption flags and corrupt descriptors remain distinct failures.
+
+## WinZip AES
+
+Vort reads and writes WinZip AE-1 and AE-2 method-99 entries with AES-128,
+AES-192, or AES-256. The local and central `0x9901` extra fields carry vendor
+`AE`, vendor version, strength, and the actual compression method. Compressed
+size includes the strength-dependent 8/12/16-byte salt, two-byte password
+verifier, encrypted codec payload, and ten-byte HMAC-SHA1-80 authentication
+code. AE-1 retains and validates the ordinary CRC-32; AE-2 writes zero and
+uses authentication as specified.
+
+`ZipEncodeEntry.winzip_aes` requires a password and exact caller-supplied salt,
+keeping CSPRNG ownership explicit and deterministic fixtures reproducible.
+The one-shot and incremental writers encrypt after compression and authenticate
+ciphertext before writing the ZIP descriptor. The incremental path retains
+only derived cipher/HMAC state and a bounded header/trailer, not a member.
+`ZipDecodeOptions.password` performs constant-time verifier and authentication-
+code checks before one-shot extraction succeeds.
+
+PBKDF2-HMAC-SHA1/1000, the little-endian counter-mode AES stream, HMAC-SHA1-80,
+AES-192 key expansion, constant-time comparisons and secure state wiping live
+in `../vail/archive_crypto`; Vort owns only method 99, extra fields, AE-1/AE-2
+CRC policy, sizes and codec composition. Fixed vectors independently combine
+Python PBKDF2/HMAC with OpenSSL AES, while a Rust `zip 8.6.0` fixture covers all
+three strengths, AE-1/AE-2, Stored and Deflate wire compatibility.
+
+`ZipIncrementalReaderOptions.password` streams known-size and descriptor-backed
+WinZip AES entries, including arbitrary salt/verifier/ciphertext/
+authentication fragmentation, and does not report `entry_done` until the
+authentication code succeeds. Descriptor mode retains a bounded raw suffix
+and a cipher/HMAC checkpoint. Scanning codecs test the ten-byte authentication
+code beside signed/unsigned ZIP32/ZIP64 descriptor candidates; self-delimiting
+codecs roll back any accepted authentication/descriptor bytes at EOS. Only
+confirmed ciphertext remains in HMAC state before the authentication code is
+checked and the ordinary descriptor parser resumes.
+
+## PKWARE Strong Encryption
+
+The one-shot reader and writer support APPNOTE password-based Strong Encryption
+with AES-128, AES-192, or AES-256. `ZipEncodeEntry.pkware_strong_encryption`
+requires the password plus a caller-supplied 16-byte IV, block-aligned random
+data, and validation entropy whose length plus CRC-32 is block-aligned. This
+keeps CSPRNG ownership explicit and deterministic fixtures reproducible. The
+writer emits bits 0 and 6, version-needed 5.1 or higher, the format-2 `0x0017`
+record in the central header only, and a format-3 decryption header before the
+compressed ciphertext. Both ZIP32/ZIP64 and known-size/descriptor layouts are
+supported for every one-shot compression method.
+
+Vail's `archive_crypto.pkware_strong` owns SHA-1/CryptDeriveKey-compatible
+master/file keys, AES-CBC, PKCS#7 padding, encrypted random data, password
+validation CRC-32, AES-192 decryption, and secret wiping. Vort owns AlgID/flags,
+extra/decryption-header layout, synthesized-IV policy, compressed-size
+accounting, and codec composition. The reader accepts both an explicit 16-byte
+IV and APPNOTE's zero-length form derived from entry CRC-32 plus uncompressed
+size. It rejects mismatched algorithms/key sizes, certificate flags, reserved
+data, and malformed lengths before codec work.
+
+This legacy profile provides confidentiality but no ciphertext authentication;
+the ordinary ZIP CRC-32 remains the final content check. New applications
+should prefer WinZip AES when authenticated encryption compatibility is
+required. The incremental writer uses the same wire with a bounded 256-byte
+codec bridge and Vail stream state retaining at most one plaintext and one
+ciphertext AES block; it never buffers a complete member. Certificate
+recipients, DES/3DES/RC2/RC4/Blowfish/Twofish, encrypted central directories,
+are not yet supported. The sequential reader handles known sizes plus signed or
+unsigned ZIP32/ZIP64 descriptors for every codec. It incrementally parses the
+variable decryption header, validates the password before codec output, retains
+the final CBC block until PKCS#7 succeeds, and uses at most a 28-byte raw probe
+to distinguish block-aligned ciphertext from the following descriptor. The
+same state composes through sparse/source split readers. A fixed 7-Zip 26.04 source build at commit
+`9128b80e3a471108678e2b3ec3c985861c8d7b0f` independently extracts six
+Vort-produced AES strength × known/descriptor Stored/Deflate/Bzip2 one-shot
+cases plus six ZIP32/ZIP64 incremental-writer entries. Twelve corresponding
+archives are required through the sequential CLI.
+
+## Incremental entry decoder
+
+`ZipIncrementalEntryDecoder` is the allocation-free caller-memory data plane
+for a single Stored or raw-Deflate member. Its allocator-owned companion,
+`ZipOwnedIncrementalEntryDecoder`, extends the same central-directory-selected
+API to Stored, Shrink, Reduce 1...4, traditional Implode, Deflate, Deflate64,
+DCL Implode, Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard. It takes a
+canonical `ZipEntry`, so data-descriptor and ZIP64 entries already have
+authoritative CRC and 64-bit size values. `Archive.compressedData(entry)`
+validates the matching local header and returns an unencrypted borrowed payload;
+`Archive.rawEntryData(entry)` returns the exact encryption header, ciphertext,
+and authentication suffix for a password-configured owned decoder.
+
+Both decoders accept arbitrary compressed-input and uncompressed-output slices,
+returns exact progress with `need_input`, `need_output`, or `done`, and never
+consumes bytes beyond `entry.compressed_size`. Completion requires exact
+compressed and uncompressed lengths plus the central IEEE CRC-32. The output
+limit is checked before decoding; unsupported methods, malformed Stored sizes,
+short history, corruption, truncation, and checksum failure have distinct
+errors. The owned decoder additionally streams traditional ZipCrypto, WinZip
+AES-128/192/256 AE-1/AE-2, and PKWARE Strong AES-128/192/256. Password headers
+are validated before codec output, WinZip authentication is checked before
+`.done`, and PKWARE's final CBC block remains withheld until PKCS#7 succeeds.
+A failing `step` enters `.failed`; transactional `reset` starts another
+independent method/encryption combination while retaining reusable history.
+`finish` reports `TruncatedFrame` if the supplied local payload ends before the
+central-directory boundary.
+
+```zig
+const archive = try vort.parseZipArchive(zip_bytes);
+const entry = (try archive.find("data.txt")) orelse return error.ZipEntryNotFound;
+const compressed = try archive.compressedData(entry);
+
+var history: [vort.ZipIncrementalEntryDecoder.required_history_len]u8 = undefined;
+var decoder = try vort.ZipIncrementalEntryDecoder.initWithOptions(
+    entry,
+    &history,
+    .{ .max_output_len = 64 * 1024 * 1024 },
+);
+var input_offset: usize = 0;
+var scratch: [4096]u8 = undefined;
+while (true) {
+    const result = try decoder.step(compressed[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+```
+
+Stored members accept an empty history slice. The allocator-owned
+`ZipOwnedIncrementalEntryDecoder` retains one reusable 32 KiB Deflate history
+plus only the active method's bounded workspace/model. Its `codec_limits`
+option reuses the sequential-reader limits for Bzip2 blocks, LZMA/XZ
+dictionaries and compressed buffers, PPMd model memory, Zstandard buffering,
+and PKWARE control headers. Known central sizes remove descriptor scanning from
+this random-access path while still leaving any caller suffix unconsumed. The
+ZIP differential currently exercises 108 ZIP32/ZIP64 owned entry cases across
+all methods and three encryption families.
+
+## Incremental archive reader
+
+`ZipIncrementalReader` consumes a complete ZIP archive sequentially without
+retaining decoded payload bytes. It accepts Stored, Shrink, Reduce factors
+1...4, traditional Implode, Deflate, Deflate64, Bzip2, LZMA, XZ, DCL Implode,
+PPMd8, and legacy/current Zstandard local entries,
+including known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 ×
+signed/unsigned layouts. Traditional ZipCrypto is accepted for both layouts
+when `password` is configured. Deflate's
+final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
+validated Index/Footer, and Zstandard's validated frame end determine their
+compressed boundaries. Deflate64 reuses the byte-progressive Deflate state
+machine with a caller-owned 64 KiB history, 32-symbol distance alphabet, and
+the extended 16-bit code-285 length. ZIP method 14's 9-byte properties prefix
+is translated into the internal LZMA state without becoming decoded data;
+descriptor mode requires its standard general-purpose bit-1 EOS declaration.
+PPMd method 98 parses its two-byte order/memory/restore properties, allocates a
+bounded model arena, and decodes one symbol transactionally: insufficient input
+restores range/model metadata before accepting one more byte, while context
+memory changes only after a symbol commits. The range-coded EOS therefore owns
+an exact descriptor boundary without whole-member buffering.
+DCL Implode method 10 preserves partial fixed-Huffman decode state, its
+LSB-first reservoir, 1/2/4 KiB circular history, and match continuation across
+calls; length 519 is the exact container boundary.
+Shrink method 1 preserves its 9...13-bit LSB-first code reservoir, 8,192-entry
+LZW dictionary, partial-clear state, and pending expanded string across calls.
+It has no in-band terminator, so descriptor mode delays at most 16/24 bytes,
+feeds disproven candidate bytes to LZW one at a time, and commits only when
+zero padding, CRC-32, compressed size and output size all agree. Unsigned
+descriptors additionally require the following ZIP record signature.
+Reduce methods 2...5 preserve all 256 follower sets, partial LSB-first symbol
+state, DLE commands, implicit zero history, 512-byte...4 KiB circular windows,
+and overlapping match copies. Padding bits can be legal one-bit follower
+selections, so descriptor mode holds the final compressed byte and decodes it
+transactionally in a second fixed workspace under the candidate output size.
+Only matching CRC-32/compressed/output sizes commit that state and its bounded
+pending output; false candidates cannot reach the caller.
+Traditional Implode method 6 parses its byte-aligned run-length code-length
+records progressively, retains partial 1...16-bit Shannon–Fano literal/length/
+distance codes, and uses a 4/8 KiB history for implicit-zero and overlapping
+matches. It shares the final-byte transactional adapter because it has no EOS;
+CRC-32 and descriptor sizes decide whether trial state/output commit.
+Stored unsigned descriptors are inherently ambiguous, so the reader holds only
+the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
+uncompressed size, and the following local/central/end signature all agree.
+Signed descriptor-looking payload bytes that fail those invariants are emitted
+as ordinary data.
+
+The reader returns `entry_header` after copying and validating a local name,
+then `need_input`/`need_output` while streaming its payload, `entry_done` only
+after descriptor/CRC/size validation, and `done` only after validating the
+central directory and archive ending. `currentEntry()` exposes reader-owned
+metadata valid until `reset` or `deinit`; descriptor-derived fields become
+non-null at `entry_done`. Central records are matched by local-header offset,
+not assumed to be in local-entry order. ZIP64 EOCD/locator and legacy EOCD
+counts, sizes, offsets and disk fields are cross-checked; a central-directory
+digital signature is bounded and skipped after the signed entry records.
+
+```zig
+var reader = try vort.ZipIncrementalReader.initWithOptions(allocator, .{
+    .max_entries = 100_000,
+    .max_entry_output_len = 512 * 1024 * 1024,
+    .max_total_output_len = 4 * 1024 * 1024 * 1024,
+    .password = optional_password,
+});
+defer reader.deinit();
+
+while (true) {
+    const result = try reader.step(input_chunk, output_chunk);
+    input_chunk = input_chunk[result.progress.input_read..];
+    try payload_sink.writeAll(output_chunk[0..result.progress.output_written]);
+    switch (result.status) {
+        .entry_header => beginMember(reader.currentEntry().?),
+        .entry_done => finishMember(reader.currentEntry().?),
+        .done => break,
+        .need_input, .need_output => {},
+    }
+}
+```
+
+`initial_offset` lets a caller start at the first local header of an SFX archive
+while preserving absolute central-directory offsets. `allow_trailing_data` is
+false by default. `max_metadata_size` bounds retained names, entry comments,
+and the archive comment; `max_central_directory_size` bounds encoded central records;
+`max_control_record_size` bounds any one variable header/end/signature record.
+`max_bzip2_compressed_block_len` and `max_bzip2_decoded_block_len` bound one
+Bzip2 block's working storage; `max_zstd_compressed_buffer_len` selects whole-
+frame buffering versus the Zstandard block-streaming path. Both codecs expose
+container stop modes that retain accepted bytes after the first stream/frame;
+the ZIP reader limits descriptor probing to 12/20-byte increments.
+`zstd_dictionary` on `ZipDecodeOptions`, `ZipIncrementalReaderOptions`, or the
+owned entry decoder's `codec_limits` supplies the corresponding borrowed
+preset history. Missing or mismatched non-zero Dictionary_IDs return
+`NeedDictionary`; ZIP never copies the dictionary bytes.
+`max_lzma_dictionary_size`/`max_lzma_compressed_buffer_len` and the corresponding
+XZ dictionary, compressed-block, decoded-block, Index/Footer, and block-count
+limits bound those codec states independently. XZ descriptor mode stops before
+optional XZ stream padding so outer zero-valued descriptor bytes remain owned
+by ZIP.
+`max_ppmd_memory_size` bounds the model arena and
+`max_ppmd_compressed_buffer_len` bounds retained range-coded input.
+Any `step` error makes the state terminal until `reset`, because payload may
+already have reached an external sink. `finish()` distinguishes a truncated
+source. This sequential state machine does not directly consume separate
+split/multi-disk slices; `ZipSplitIncrementalReader` supplies their sparse
+normalized view without changing the codec state machine.
+Shrink uses one fixed approximately 40 KiB workspace while
+its member is active. Reduce uses two approximately 12 KiB workspaces and
+traditional Implode two approximately 10 KiB workspaces; both add one shared-
+design 8 KiB speculative tail buffer. No supported sequential codec retains
+the complete compressed or decoded member.
+
+## Incremental writer
+
+`ZipIncrementalWriter` emits archive bytes directly into caller-owned output
+without retaining the complete entry or archive. Stored data is copied directly;
+Deflate retains its configured block/lookahead, history, token, and pending-
+output working state. Bzip2 retains one configured RLE/BWT block plus bounded
+encoded pending output. The public slice accepts Stored (`method 0`), raw
+Deflate (`method 8`), Bzip2 (`method 12`), legacy Zstandard (`method 20`), and
+current Zstandard (`method 93`), plus LZMA (`method 14`) entries.
+XZ (`method 95`) and stored-block Deflate64 (`method 9`) entries use the same
+streaming archive state machine.
+PPMd (`method 98`), Shrink (`method 1`), Reduce (`methods 2...5`), traditional
+Implode (`method 6`), and DCL Implode (`method 10`) are also streamed through
+the codec union.
+Every entry sets general-purpose flag bit 3 and ends with a signed
+`0x08074b50` data descriptor; there is no seek-back or header-patching mode.
+
+The public option types are `ZipIncrementalWriterOptions` and
+`ZipIncrementalEntryOptions`. Archive options include `archive_comment`,
+`initial_offset`, UTF-8 and ZIP64 policy, raw-Deflate/Bzip2/LZMA/XZ/PPMd/
+Shrink/Reduce/Implode/DCL-Implode/Zstandard options,
+and limits for entry count, central-directory bytes, retained Deflate input,
+uncompressed input, and emitted archive bytes. `bzip2_options` independently selects the
+100...900 KiB block size plus total-input and pending-output limits.
+`zstd_options` selects standard block/window/parser/checksum policy; the writer
+forces content-size presence for pledged entries and absence for unknown-size
+entries. `zstd_dictionary` borrows one raw-content or standard-full preset
+dictionary for every method-20/93 entry; the descriptor and bytes must outlive
+the incremental writer. The one-shot `ZipEncodeOptions` exposes the same
+borrowed field.
+`lzma_options` selects properties, a 4...65,535-byte dictionary, literal/greedy
+mode, bounded input/lookahead and pending output. ZIP always uses an EOS marker:
+the adapter streams the 9-byte ZIP properties prefix, validates/discards the
+underlying 13-byte Alone header, and sets general-purpose bit 1.
+`xz_options` selects checks, block/dictionary sizes, parser, stored/compressed
+payloads, limits, and Delta/BCJ filters. The filter slice is copied at writer
+initialization and need not remain alive afterward.
+`deflate64_options` selects stored-block/input bounds. Match-producing fixed
+Deflate64 remains available through the one-shot writer and is a later
+incremental ratio enhancement rather than a wire-compatibility gap.
+`ppmd_options` selects order 2...16, 1...256 MiB ZIP model memory, restart or
+cut-off restoration, and input/pending-output bounds. The two-byte property
+prefix precedes a symbol-progressive range stream with mandatory EOS.
+`shrink_options` selects input and pending-output bounds. The encoder grows its
+LZW codes from 9 through 13 bits and freezes its fixed 8,192-code dictionary
+when full; adaptive partial clears remain a later ratio optimization.
+`dcl_implode_options` selects raw or fixed-Huffman literals, a 1/2/4 KiB
+dictionary, match-chain depth, and a total-input limit. The encoder uses a
+fixed 520-byte match lookahead and emits DCL's length-519 EOS.
+`reduce_options` selects match-chain/input limits and a complete optional
+follower table shared across factors. Its zero table default permits immediate
+bounded single-pass output. `trainZipReduceFollowerTable` performs the exact
+factor-specific DLE/match prepass for replayable input; supplying that result
+makes incremental output byte-identical to the one-shot trained stream.
+`implode_options` selects a 4/8 KiB dictionary, raw or fixed-tree literals,
+match-chain depth and an input limit. Its fixed tree header is known before
+input, so all four modes remain true bounded single-pass streams.
+`max_deflate_buffer_size` defaults to 1 MiB
+and bounds one planning block plus lookahead before a Deflate entry starts; it
+excludes the encoder's fixed 32 KiB history and one encoded pending block.
+Entry options contain the copied name/comment, Stored, Shrink, Reduce,
+traditional Implode, DCL Implode, Deflate, Deflate64, Bzip2, LZMA, XZ, PPMd,
+or legacy/current Zstandard method,
+and an optional exact
+`expected_size`. A null size accepts input until the configured
+limit. A known size rejects an overlong offered slice and `finishEntry()`
+rejects a short entry; a premature short finish is recoverable, so the caller
+may provide the remaining input and retry.
+
+The state sequence is `beginEntry` -> repeated `step` -> `finishEntry` -> drain
+to `.ready`, followed by more entries or `finishArchive` -> drain to `.done`.
+`step` returns the common `need_input`, `need_output`, or `done` status with
+exact input/output progress. Tiny output slices may split local headers,
+Shrink/Reduce/Implode/DCL-Implode/Deflate/Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard bytes,
+descriptors, central-directory
+records, and archive endings.
+Zero-length output returns `need_output` without consuming entry input whenever
+output is pending. With empty input, an idle `.ready` boundary or active
+`.entry_data` phase returns `need_input`.
+
+```zig
+var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
+    .zip64 = .auto,
+    .initial_offset = sfx_prefix.len,
+    .archive_comment = "streamed by Vort",
+});
+defer writer.deinit();
+
+try writer.beginEntry(.{
+    .name = "data.txt",
+    .method = .deflate,
+    .expected_size = null,
+});
+var input_offset: usize = 0;
+var scratch: [17]u8 = undefined;
+while (input_offset != input.len) {
+    const result = try writer.step(input[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+}
+try writer.finishEntry();
+while (writer.snapshot().phase != .ready) {
+    const result = try writer.step("", &scratch);
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+}
+try writer.finishArchive();
+while (true) {
+    const result = try writer.step("", &scratch);
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+```
+
+`initial_offset` accounts for bytes already written before the archive, such as
+an SFX executable prefix. The writer does not emit those bytes; the caller
+writes the prefix separately, then appends the incremental output. Local-file,
+central-directory, ZIP64 locator, and EOCD offsets include the supplied value.
+
+ZIP64 selection is frozen before each unpatchable local header is emitted:
+
+- `.auto` keeps a known-size Stored entry in ZIP32 when its size and local
+  offset fit. Unknown-size entries and all Shrink/Reduce/Implode/DCL-Implode/Deflate/
+  Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard entries conservatively use
+  ZIP64 because their final sizes are not known at header time. Archive count,
+  central size/offset, or any ZIP64 entry also promotes the archive ending;
+- `.always` emits ZIP64 local/central extras, 64-bit descriptors, and a ZIP64
+  archive ending even for small archives;
+- `.never` emits ZIP32 and rejects impossible known sizes/offsets before the
+  entry starts. An unknown or compressed entry may cross a ZIP32 sentinel only
+  after bytes have been published; that late `Zip32LimitExceeded` comes from
+  `step` and poisons the writer. After all entry descriptors drain,
+  `finishArchive()` preflights entry count, central-directory and ending
+  offsets/sizes, and `max_archive_size`; rejection leaves the phase `.ready`
+  and does not poison the writer.
+
+ZIP32 descriptor-backed local headers contain zero CRC/sizes. ZIP64 local
+headers use legacy `0xffffffff` size sentinels plus two zero `u64` placeholders
+in the local ZIP64 extra; authoritative CRC and sizes appear in the descriptor
+and central directory.
+
+The writer copies `archive_comment` during initialization and each entry's name
+and comment during `beginEntry`, so callers may release or mutate those slices
+after the respective call succeeds. It retains encoded central-directory
+metadata, one pending control record, counters, and codec working state; it does
+not retain Stored payload or already-emitted archive bytes. Deflate retains at
+most the accepted block/lookahead bound, 32 KiB history and match state, and one
+encoded pending block rather than the complete entry.
+Bzip2 retains at most one configured RLE/BWT block, a cross-call run, and its
+bounded pending encoded output rather than the complete entry.
+Zstandard retains one configured block, bounded rolling history and one pending
+encoded block; content checksum and frame-size metadata follow `zstd_options`
+and the entry pledge.
+LZMA retains its configured dictionary, bounded input/lookahead and pending
+range output; it never retains the complete entry.
+XZ retains one configured plaintext block, bounded encoded output and compact
+Index records until its Footer is emitted.
+Deflate64 retains one stored block and bounded pending output.
+PPMd retains one configured model arena and bounded pending range bytes.
+Shrink retains one fixed-capacity 8,192-code dictionary and bounded pending
+output.
+DCL Implode retains a 1/2/4 KiB history, 520-byte lookahead, rolling hash
+chains and at most 16 pending output bytes.
+Reduce retains a 512-byte...4 KiB history, at most 387 bytes of lookahead,
+rolling hash chains, its 8,448-byte follower table and bounded pending output.
+Traditional Implode retains a 4/8 KiB history, at most 323 bytes of lookahead,
+fixed tree header, rolling hash chains and bounded pending bits.
+`max_central_directory_size` bounds the logical encoded central directory;
+the independently copied archive comment is governed only by ZIP's `u16`
+length limit and is not charged to this field.
+
+Direct validation/state errors returned by `beginEntry`, `finishEntry`, or
+`finishArchive` do not poison the writer. `step` is not transactional: output
+from earlier successful calls may already be in an external sink, and an error
+can occur after output-buffer mutation or partial internal accounting. Output
+from a failing call is invalid and must not be committed. Any `step` error
+changes the phase to `.poisoned`; subsequent mutating calls return
+`ZipWriterPoisoned`, and the caller must discard the unfinished archive and
+deinitialize the writer. This does not change `zipEncodeAppend`'s existing
+whole-operation transactional guarantee.
+
+The incremental writer's additive error set is exported as
+`ZipIncrementalWriterError`; the established `ZipError` used by existing
+one-shot and reader APIs is unchanged.
+
+Every compression method currently supported by the sequential reader has a
+bounded incremental writer. The incremental writer also supports Traditional
+ZipCrypto. The sequential reader supports its known-size and descriptor-backed
+forms. The incremental writer also supports WinZip AES; its known-size form is
+accepted by the sequential reader alongside descriptor-backed AES. The writers
+remain single-disk, and the sequential reader does not directly coordinate
+separate split/multi-disk sources. The split adapter described below validates
+and supplies them as one logical stream without allocating joined archive
+bytes. PKWARE Strong Encryption has both a bounded incremental writer and the
+known-size/descriptor sequential reader described above.
+
+The incremental differential uses forty-five entries: known Stored data containing a
+descriptor-signature byte sequence, unknown Stored data containing two such
+sequences, a known Deflate entry larger than 32 KiB that crosses an actual
+planning-block boundary, a UTF-8-path cross-block unknown Deflate entry, empty
+Stored, empty Deflate, known/unknown/empty Bzip2, known-current/unknown-legacy/
+empty-current Zstandard, known/unknown/empty LZMA, and known/unknown/empty XZ.
+It also contains known/unknown/empty stored-block Deflate64 members.
+Known/unknown/empty PPMd members use order 12, a 1 MiB model, and cut-off
+restoration. Known/unknown/empty Shrink members cover pledged, descriptor-sized,
+and empty method-1 payloads. Known/unknown/empty DCL Implode members cover the
+same method-10 entry shapes with fixed-Huffman literals and a 4 KiB dictionary.
+Every Reduce factor adds known/unknown/empty members using the bounded
+single-pass zero follower table.
+Known/unknown/empty traditional Implode members use the default 8 KiB/tree
+mode; the dedicated four-mode matrix retains complete flag coverage.
+Input uses repeating
+1/2/3/5/7-byte chunks. For each ZIP mode, a one-byte-output run must be
+byte-identical to a 2/3/5/7-byte micro-output run; a zero-output local-header
+probe must return `need_output` with zero progress.
+
+`zig build run-zip-diff` passes for a 30,551-byte ZIP32 `.never` archive and a
+33,147-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
+local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
+ZIP64 extras/end records, Bzip2's version-needed 4.6, and LZMA/Zstandard's
+version-needed 6.3. Both one-shot and incremental archives carry a non-default
+DOS timestamp, entry comment, Unix creator/mode, and internal attribute that
+Python `zipfile` must reproduce exactly. Python raw parsing additionally checks
+local 13-byte versus central 5-byte `0x5455` payloads, flags and signed values,
+plus both 32-byte NTFS payloads and all three FILETIMEs; `zipfile` tests and
+reads every method it supports. Separate one-shot and ZIP32/ZIP64 incremental
+cases raw-parse `0x7075`/`0x6375`, verify CRC bindings, and extract by preferred
+Unicode name through Vort. This host's Python retains CP437 raw names despite
+valid Unicode extras, while system Info-ZIP selects and extracts the Unicode
+paths; the differential records that implementation difference explicitly
+(`vort_unicode_cases=2`, `incremental_unicode_cases=4`). System
+Info-ZIP validates the ordered member prefix before the first unsupported
+Zstandard entry, system `zstd` independently decodes methods 20/93, and Python
+`zipfile` independently extracts method-14 entries and checks bit 1. Python
+`lzma.FORMAT_XZ` and system `xz` independently decode method-95 entries to
+identical bytes. Python zlib and Info-ZIP decode all method-9 stored streams;
+the fixed 7-Zip payload independently covers extended-distance decoding.
+Vort's complete sequential reader decodes all method-98 entries and the raw
+gate pins property value `0x100b`; third-party PPMd remains conditional on 7z.
+The same sequential path decodes all three method-1 entries, while system
+Info-ZIP independently extracts them. Python `zipfile` has no Shrink decoder
+but still validates their raw method, flags, CRC, sizes, descriptors and ZIP64
+metadata.
+All three method-10 members also pass the sequential path; the raw gate pins
+their `{literal-mode=1,dictionary-bits=6}` header, version-needed 2.0, and
+outer descriptors. The fixed zlib-blast vector remains the independent DCL
+decoder reference; this host has no third-party DCL writer decoder.
+All twelve Reduce members pass the sequential path; Python pins their 192-byte
+zero follower headers and outer metadata. The optional 7-Zip path validates
+every supported member individually and deliberately skips methods 2...5,
+which the available 7-Zip family does not decode.
+All three default traditional Implode members pass the sequential path and
+system Info-ZIP; Python pins bits 1/2, their 27-byte fixed three-tree header,
+descriptors and ZIP64 metadata. The existing dedicated matrix still covers
+all four 4/8 KiB × raw/tree modes plus the two Apache Commons fixtures.
+Traditional ZipCrypto adds four Vort-to-Python/Info-ZIP Stored/Deflate cases
+covering CRC- and descriptor-time verification bytes, plus two independently
+written Info-ZIP-to-Vort cases. Wrong passwords must fail in both directions.
+Separate incremental ZIP32/ZIP64 archives add six known/unknown/empty encrypted
+writer cases. One-byte and micro-output schedules are byte-identical; Python,
+Vort one-shot extraction and Info-ZIP decode the 1,695/1,939-byte archives.
+All four Vort one-shot cases, both independently written Info-ZIP bit-3 cases,
+and all six ZIP32/ZIP64 incremental-writer cases additionally pass the
+sequential CLI reader with a password
+(`incremental_reader_zipcrypto_cases=12`,
+`infozip_incremental_reader_zipcrypto_cases=2`).
+WinZip AES adds six deterministic one-shot AE-1/AE-2 cases across both
+descriptor policies, six ZIP32/ZIP64 incremental-writer cases (1,797/2,041
+bytes), and twelve sequential-reader cases across both writer surfaces. Python independently
+derives PBKDF2/HMAC values and OpenSSL supplies AES-ECB counter blocks
+(`winzip_aes_cases=6`, `incremental_winzip_aes_cases=6`,
+`incremental_reader_winzip_aes_cases=12`). Rust `zip 8.6.0` independently
+writes the committed three-strength fixture and extracts both Vort writer
+surfaces.
+PKWARE Strong AES adds six one-shot and six ZIP32/ZIP64 incremental-writer
+cases, all required through Vort one-shot and sequential extraction
+(`pkware_strong_cases=6`, `incremental_pkware_strong_cases=6`,
+`incremental_reader_pkware_strong_cases=12`). Focused coverage additionally
+crosses every codec under known and signed descriptor ZIP32/ZIP64 layouts,
+plus unsigned Stored/Shrink/Reduce/Implode/Deflate/Bzip2 descriptors. A fixed
+7-Zip 26.04 build independently decrypts 12 writer cases.
+The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
+also decodes five
+Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
+input and 5-byte output, covering descriptor-backed entries, UTF-8, empty
+Stored, and a forced-ZIP64 local header (`incremental_reader_cases=5`). The
+complete sequential reader separately validates a six-entry non-seekable
+Python archive under the same 3/5-byte schedule, covering Stored descriptor-
+signature payload bytes, Deflate, Bzip2, LZMA, force-ZIP64 local metadata with a
+64-bit descriptor, empty Stored, central records and the archive comment
+(`incremental_archive_reader_cases=6`). Two system-zstd frames wrapped as
+legacy method 20 and current method 93 also pass the sequential path
+(`incremental_archive_zstd_cases=2`). Four additional ZIP32/ZIP64 known/unknown
+incremental-writer frames require a generated standard dictionary: system
+`zstd` must reject them without `-D` and decode them byte-exactly with it
+(`incremental_zstd_dictionary_cases=4`). An independently generated XZ method-95
+member passes the same path (`incremental_archive_xz_cases=1`). A fixed 7-Zip
+Deflate64 payload wrapped as method 9 passes the required sequential path
+(`incremental_archive_deflate64_cases=1`). A fixed zlib-blast method-10 payload
+passes the required sequential path (`incremental_archive_dcl_cases=1`). Both
+Apache Commons Compress `SHRUNK.ZIP` members pass the required sequential path
+(`incremental_archive_shrink_cases=2`). Four known-size and four descriptor-
+backed SFX members cover Reduce methods 2...5 through the required CLI path
+(`incremental_archive_reduce_cases=8`). Four known-size and four descriptor-
+backed SFX members cover all traditional Implode modes
+(`incremental_archive_implode_cases=8`); two Apache Commons Compress fixtures
+independently cover its endpoint modes
+(`incremental_archive_implode_fixture_cases=2`). No
+7z/7zz is installed on the current host, so the optional 7-Zip branch reports
+false and
+is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
+contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
+also affects the pre-existing one-shot output and is not claimed as fixed here.
+
+The current ReleaseFast ZIP module gates pass 37/37 for the incremental-writer
+filter and 34/34 for the incremental-reader filter;
+`zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
+4/4;
+`zig test src/zip.zig --test-filter 'Reduce incremental encoder'` passes 4/4;
+`zig test src/zip.zig --test-filter 'Legacy Implode incremental encoder'`
+passes 4/4;
+`zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
+15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
+4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
+`zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
+`zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
+the complete ZIP module passes 1,296/1,296.
+Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
+limit paths. Reduce covers every factor, signed/unsigned descriptors,
+ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
+padding ambiguity. DCL Implode's six modes cover known/descriptor and
+ZIP32/ZIP64. Traditional Implode covers 4/8 KiB dictionaries, raw/tree
+literals, signed/unsigned descriptors, ZIP32/ZIP64, arbitrary trees,
+implicit-zero and overlapping matches. PPMd
+restart/cut-off, descriptor and ZIP64 combinations are required
+Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
+Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
+repository graph passes 2719/2719 and `zig build check` passes 113/113.
+Repeated one-shot probe runs remain byte-identical after deliberately adding
+custom metadata to one Stored entry. Default and forced-ZIP64 SHA-256 values
+are `595584be47a5770b342cd5952955db483ddddf6c491e895fac94f7749c795d34`
+and `f7152d47f786704907daa231395c8a30dc615aab0454553398d7790ff3c5d25f`.
+Python syntax validation passes. No physical 4 GiB or 65,535-entry archive was
+generated; sentinel/overflow paths use focused tests, small forced-ZIP64
+layouts, and code review instead.
+
 `EncodeOptions.ppmd_options` selects PPMd order 2...16, model memory from 1
 through 256 MiB in whole-MiB units, and `.restart` or `.cut_off` restoration.
 Defaults are order 8, 16 MiB, and restart. Method 98 stores those values in its
@@ -94,9 +817,9 @@ validates width controls, partial clears, orphan protection, truncation, exact
 decoded size, and packed-input consumption.
 The Reduce implementation shares one parameterized core across factors 1...4.
 Its writer trains deterministic follower sets and applies a bounded greedy DLE
-matcher; its decoder accepts arbitrary valid sets, escaped DLE literals,
-extended lengths, implicit zero history, overlapping matches, and exact packed
-input/output accounting. Locally available 7-Zip and copyright-clean Info-ZIP
+matcher; its one-shot and caller-output decoders accept arbitrary valid sets,
+escaped DLE literals, extended lengths, implicit zero history, overlapping
+matches, and exact packed input/output accounting. Locally available 7-Zip and copyright-clean Info-ZIP
 builds omit Reduce decompression, so the required differential reports these
 four methods as Vort self-coverage rather than overstating external validation.
 `EncodeOptions.implode_options` selects a 4 or 8 KiB dictionary and raw or
@@ -130,6 +853,194 @@ const decoded = try archive.extractAllocLimited(
 defer allocator.free(decoded);
 ```
 
+## Ordered split/multi-disk reading
+
+`parseSplitZipArchiveAlloc` accepts explicitly ordered borrowed disk slices,
+for example `.z01`, `.z02`, ..., followed by `.zip`. It requires the standard
+`PK\x07\x08` split marker on the first disk by default, rejects empty parts and
+metadata-inconsistent missing, reordered, or out-of-range disks, and applies
+caller-selected total archive, part-count, and entry-count limits before
+allocating.
+ZIP32 disk fields and ZIP64 EOCD/locator plus central `0x0001` disk/offset
+fields are converted from disk-local coordinates to one virtual single-disk
+coordinate space. Local headers, compressed payloads, data descriptors,
+authentication bytes, and entry data remain byte-identical, including when a
+payload crosses multiple disk boundaries.
+
+The caller owns the physical filename/order mapping. ZIP has no per-volume
+sequence header on opaque payload-only intermediate disks, so such disks cannot
+always be distinguished before codec work; CRC, authenticated-encryption tags,
+and exact codec consumption prevent a reordered payload from being accepted as
+valid extracted data.
+
+```zig
+const parts = [_][]const u8{ z01_bytes, z02_bytes, final_zip_bytes };
+var split_archive = try vort.parseSplitZipArchiveAlloc(allocator, &parts, .{
+    .max_archive_size = 512 * 1024 * 1024,
+    .max_parts = 64,
+});
+defer split_archive.deinit();
+
+const decoded = try split_archive.archive.extractByNameAllocWithOptions(
+    allocator,
+    "folder/data.txt",
+    .{ .max_output_len = 64 * 1024 * 1024 },
+);
+defer allocator.free(decoded);
+```
+
+The returned `ZipSplitArchive` owns one allocation containing the joined,
+normalized bytes; its nested `archive` borrows that allocation and is valid
+until `deinit`. This remains the convenient one-shot compatibility surface.
+The target `usize`,
+`max_archive_size`, and available memory bound the virtual archive. If joining
+pushes a local-header offset past ZIP32 range and that central record has no
+existing ZIP64 offset slot to rewrite, normalization returns
+`UnsupportedZipFeature` rather than resizing/rebuilding the central directory.
+
+For bounded sequential extraction, `ZipSplitNormalizedStream` copies only the
+outer slice descriptors, disk bases, and small little-endian metadata patches.
+`readAt` overlays those patches on borrowed payload bytes. The higher-level
+`ZipSplitIncrementalReader` owns that sparse view, a configurable 32 KiB input
+bridge, and the ordinary `ZipIncrementalReader`; its `step(output)` therefore
+returns the same `entry_header`, `entry_done`, `need_output`, and `done`
+boundaries without accepting an input argument or allocating a joined archive.
+`reader_options` retains all codec, output, metadata, dictionary, encryption,
+and authentication limits; its `initial_offset` is replaced by the first
+normalized ZIP record.
+
+```zig
+var reader = try vort.ZipSplitIncrementalReader.initAlloc(
+    allocator,
+    &parts,
+    .{
+        .split_options = .{
+            .max_archive_size = 512 * 1024 * 1024,
+            .max_parts = 64,
+            .max_entries = 100_000,
+        },
+        .reader_options = .{
+            .max_total_output_len = 512 * 1024 * 1024,
+            .password = password,
+        },
+    },
+);
+defer reader.deinit();
+
+while (true) {
+    var output: [8192]u8 = undefined;
+    const result = try reader.step(&output);
+    // Route output[0..result.progress.output_written] using currentEntry().
+    if (result.status == .done) break;
+}
+try reader.finish();
+```
+
+Part payload slices must remain alive until `deinit`; only their outer
+descriptor array is copied. This removes the complete normalized copy but is
+still an in-memory multi-slice API, not a callback/file-opening source that can
+release earlier physical disks while decoding later ones.
+
+`ZipSplitPartSource` closes that lifetime gap. The caller supplies immutable
+part lengths, an opaque context, and a short-read-capable `read_at` callback.
+`ZipSplitNormalizedSourceStream` copies the length descriptors, builds the same
+sparse patch plan, and requests only the bytes needed for metadata parsing or
+sequential decode. `ZipSplitIncrementalReader.initSourceAlloc` selects this
+backing without changing entry/output semantics. Callback implementations map
+their platform I/O failures to `PartSourceReadFailed`; zero-length or oversized
+reads are rejected as malformed source behavior.
+
+```zig
+var reader = try vort.ZipSplitIncrementalReader.initSourceAlloc(
+    allocator,
+    .{
+        .context = source_context,
+        .part_lengths = part_lengths,
+        .read_at = readPartAt,
+    },
+    .{ .reader_options = .{ .password = password } },
+);
+defer reader.deinit();
+```
+
+The callback may open a volume on first access and release the previously
+active volume when `disk` changes. Initialization performs bounded random reads
+of the last record, central directory, and referenced local signatures; decode
+then proceeds from the first local record through the archive ending. Part
+contents and callback context remain caller-owned.
+
+### Split writing
+
+`zipEncodeSplitAlloc` first produces the ordinary deterministic one-shot wire,
+adds the conventional split marker, plans volume boundaries, and rewrites
+central/ending disk-local coordinates without changing any payload bytes. Only
+member payload may cross a boundary. Local headers, signed data descriptors,
+central headers, ZIP64 EOCD/locator, legacy EOCD, and its archive comment are
+atomic records; `InvalidZipSplitSize` is returned when any such record cannot
+fit in `max_part_size`. This matches the boundary policy observed from
+Info-ZIP rather than relying on Vort's more permissive joined reader.
+
+```zig
+var encoded = try vort.zipEncodeSplitAlloc(allocator, &entries, .{
+    .zip_options = .{
+        .data_descriptor = true,
+        .zip64 = .auto,
+    },
+    .max_part_size = 64 * 1024,
+    .max_archive_size = 512 * 1024 * 1024,
+    .max_parts = 1024,
+});
+defer encoded.deinit();
+
+// Write parts[0..len-1] as .z01, .z02, ... and the last part as .zip.
+for (encoded.parts) |part| try destination.writeAll(part);
+```
+
+`ZipSplitEncodedArchive` owns one backing byte allocation plus its small slice
+descriptor array. A small archive may contain one `.zip` part with the split
+marker, matching Info-ZIP. The writer supports the complete one-shot method,
+descriptor, ZIP32/ZIP64, ZipCrypto, and WinZip AES matrix. It caps the current
+slice at 65,535 parts so disk numbers remain in the existing legacy central
+field; supporting more disks would require expanding each relevant ZIP64
+extra. Encoding is owned and whole-archive-first, so `max_archive_size` bounds
+the accepted result but is not yet a pre-allocation/streaming bound.
+
+`ZipSplitIncrementalWriter` removes that whole-archive requirement. Its control
+surface mirrors `ZipIncrementalWriter`: call `beginEntry`, feed input through
+`step`, call `finishEntry`, then `finishArchive`. The split result adds a
+`part_done` status. All output returned up to and including that result belongs
+to the current volume; the caller switches sinks before its next `step` call.
+The writer retains the existing bounded codec state and central directory,
+plus at most one local header/encryption prefix, authentication+descriptor,
+central record, or archive ending. Payload output flows directly through the
+caller's buffer and may end exactly at a volume boundary.
+
+```zig
+var writer = try vort.ZipSplitIncrementalWriter.initWithOptions(allocator, .{
+    .writer_options = .{ .zip64 = .auto },
+    .max_part_size = 64 * 1024,
+    .max_archive_size = 512 * 1024 * 1024,
+});
+defer writer.deinit();
+
+try writer.beginEntry(.{
+    .name = "folder/data.txt",
+    .method = .deflate,
+    .expected_size = input_size,
+});
+// Repeatedly pass input/output to step. On `.part_done`, close the current
+// .zNN sink and use a fresh sink for the next call.
+try writer.finishEntry();
+try writer.finishArchive();
+```
+
+The adapter sets the underlying writer's initial offset to the four-byte split
+marker and enables internal control-record stop points; default
+`ZipIncrementalWriter` scheduling is unchanged. Logical archive offsets remain
+u64 on 32-bit targets, while individual buffers and part sizes use `usize`.
+The current implementation still retains central metadata until archive finish
+and caps the disk count at 65,535.
+
 Convenience functions `zipExtractEntryInto`, `zipExtractEntryAlloc`,
 `zipExtractEntryAllocLimited`, `zipExtractByNameAlloc`, and
 `zipExtractByNameAllocLimited` parse and extract in one call. The corresponding
@@ -152,21 +1063,72 @@ CLI validation surfaces:
 
 ```sh
 zig build run -- list-zip-file archive.zip
-zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864
+zig build run -- create-zip-split-file archive folder/data.txt input.txt \
+  65536 deflate auto descriptor
+zig build run -- create-zip-split-stream-file archive folder/data.txt \
+  input.txt 65536 deflate auto
+zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864 [password|-]
+zig build run -- extract-zip-split-files folder/data.txt output.txt 67108864 - archive.z01 archive.z02 archive.zip
+zig build run -- extract-zip-split-stream-files folder/data.txt output.txt \
+  67108864 - archive.z01 archive.z02 archive.zip
+zig build run -- extract-zip-split-source-files folder/data.txt output.txt \
+  67108864 - archive.z01 archive.z02 archive.zip
+zig build run -- extract-zip-stream-file archive.zip folder/data.txt output.txt 67108864 [password|-]
 zig build run-zip-diff
 ```
 
-The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
-enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
+The writer rejects empty names, invalid DOS calendar timestamps, invalid UTF-8
+names/comments when UTF-8 mode is enabled, Unicode overrides combined with bit
+11, empty/invalid Unicode overrides, fields longer than ZIP's 16-bit
+name/comment/extra limits, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
-reader deliberately
-rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
-extra fields, and compression methods other than
+one-shot reader accepts Traditional ZipCrypto, WinZip AES, and password-based
+PKWARE Strong AES when `ZipDecodeOptions.password` is provided. It deliberately
+rejects certificate/non-AES Strong Encryption, malformed/duplicate ZIP64 extra
+fields, and compression methods other than
 stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
-the caller's available memory. Encryption, split archives, and additional entry
-compression methods remain explicit future compatibility increments.
+the caller's available memory. A direct call to `parseZipArchive` still rejects
+multi-disk metadata because it has only one borrowed slice; callers must use
+the owned or sparse split APIs for ordered disk sets. The sequential reader
+accepts known-size and descriptor-backed Traditional ZipCrypto through
+`ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
+WinZip AES and password-based PKWARE Strong AES use the same option, including
+through `ZipSplitIncrementalReader`.
+A disk-count extension beyond the existing u16 central field remains a future
+compatibility increment.
+
+The required Info-ZIP differential creates a real seven-part archive with
+`zip -s 64k`. Its Deflate member crosses six disk boundaries, its following
+Stored member begins on the final disk, both extract through the public split
+APIs, and a first-two-disk reorder is rejected. The sparse path reports eight
+metadata patches and no joined archive allocation. Focused synthetic ZIP32 and forced
+ZIP64 cases additionally cover a data descriptor split across disks, normalized
+central/local offsets, 3/257-byte input bridges, 5-byte output backpressure,
+ZipCrypto and WinZip AES, wrong/missing passwords, allocation failure,
+missing disks, archive/part/entry/output limits, and extraction of a trailing
+Stored entry.
+
+The writer differential produces four-part ZIP32 and forced-ZIP64 sets with a
+Deflate payload crossing three boundaries plus a trailing Stored member.
+Python parses ZIP64 extras, disk-local central/local offsets, locator/end disk
+fields, and verifies that local headers, descriptors, central headers, and the
+complete ending never cross a volume. Python raw zlib and CRC-32 independently
+validate both members before the owned and sparse Vort readers add eight
+required extraction cases. The normalized views use 8 ZIP32 or 13 ZIP64
+metadata patches.
+The same two Info-ZIP entries are required through the on-demand file source.
+The gate checks source switches exceed the seven physical parts, every prior
+active file is released, exact logical input is consumed, and output matches
+byte-for-byte (`split_zip_source_cases=2`, `split_zip_source_switches=11`).
+
+The incremental-writer differential uses one-byte and 2/3/5/7-byte output
+schedules and requires byte-identical parts/boundaries. ZIP32 produces ten
+parts and forced ZIP64 thirteen; payloads cross two/one boundaries respectively.
+Python independently validates the six known/unknown/empty Stored/Deflate
+members, descriptors, CRCs and atomic records, followed by 24 owned/sparse
+Vort extraction cases.
 
 The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.
@@ -176,7 +1138,8 @@ Two Apache Commons Compress fixtures independently cover Implode's 4 KiB/
 two-tree and 8 KiB/three-tree endpoints. System 7-Zip extracts Vort output in
 all four modes, including a match at distance 5,001. Its 21.07 build rejects
 descriptor-backed Implode, so those legal entries remain covered by Vort
-self-extraction while the independent mode matrix uses ordinary local sizes.
+sequential self-extraction while the independent mode matrix uses ordinary
+local sizes.
 The method-10 matrix covers all six DCL literal/dictionary header modes through
 Vort self-extraction, including high-entropy literals and a 3,001-byte match
 that distinguishes the 4 KiB dictionary. When a `blast` executable is supplied

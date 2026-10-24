@@ -74,6 +74,34 @@ def main() -> None:
                 if repeat_path.read_bytes() != vort_encoded:
                     raise AssertionError("Vort Bzip2 output is not deterministic")
 
+        randomized_payload = b"a\n" * 2500
+        randomized = bytes.fromhex(
+            "425a68313141592653597d0435b980077dc10000186000200050669a052534e42"
+            "abb456c0d8856d02af5555da546c026d2ab6a889f1772453850907d0435b9"
+        )
+        if bz2.decompress(randomized) != randomized_payload:
+            raise AssertionError("Python bz2 rejected bzip2 0.1 randomized fixture")
+        randomized_path = temp / "randomized.bz2"
+        randomized_output = temp / "randomized.out"
+        randomized_path.write_bytes(randomized)
+        run(
+            args.cli,
+            "decode-bzip2-file",
+            str(randomized_path),
+            str(randomized_output),
+            str(len(randomized_payload)),
+        )
+        if randomized_output.read_bytes() != randomized_payload:
+            raise AssertionError("Vort rejected legacy randomized Bzip2 block")
+        randomized_size = run(
+            args.cli,
+            "size-bzip2-file",
+            str(randomized_path),
+            str(len(randomized_payload)),
+        ).stdout
+        if f"decoded_bytes={len(randomized_payload)}" not in randomized_size:
+            raise AssertionError(f"Vort randomized Bzip2 size mismatch: {randomized_size}")
+
         first = b"first concatenated member\n" * 97
         second = bytes(range(251)) * 313
         concatenated = bz2.compress(first, compresslevel=1) + bz2.compress(second, compresslevel=9)
@@ -120,7 +148,8 @@ def main() -> None:
 
     print(
         f"bzip2_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
-        f"decoded_bytes={decoded_total} concatenated_bytes={len(first) + len(second)}"
+        f"decoded_bytes={decoded_total} randomized_cases=1 "
+        f"concatenated_bytes={len(first) + len(second)}"
     )
 
 

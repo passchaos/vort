@@ -1,14 +1,20 @@
 const std = @import("std");
 const core = @import("core.zig");
 const lz4 = @import("lz4.zig");
+const incremental_decoder = @import("lz4_legacy/incremental_decoder.zig");
+const incremental_encoder = @import("lz4_legacy/incremental_encoder.zig");
+const incremental_encoder_tests = @import("lz4_legacy/incremental_encoder_tests.zig");
+const incremental_tests = @import("lz4_legacy/incremental_tests.zig");
 
-pub const Error = core.Error || lz4.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || lz4.Error || incremental_encoder.Encoder.Error || std.mem.Allocator.Error || error{
     InvalidLz4LegacyStream,
 };
 
 pub const magic = [_]u8{ 0x02, 0x21, 0x4c, 0x18 };
 pub const max_block_size: usize = 8 * 1024 * 1024;
 pub const max_compressed_block_size: usize = max_block_size + max_block_size / 255 + 16;
+pub const IncrementalDecoder = incremental_decoder.Decoder;
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 
 pub const Options = struct {
     block_size: usize = max_block_size,
@@ -246,4 +252,11 @@ test "LZ4 legacy frame enforces bounds and rejects malformed streams" {
     try std.testing.expectError(error.InvalidLz4LegacyStream, parse(&zero_block));
     var huge_block = magic ++ [_]u8{ 0xff, 0xff, 0xff, 0xff };
     try std.testing.expectError(error.InvalidLz4LegacyStream, parse(&huge_block));
+}
+
+test {
+    _ = incremental_decoder;
+    _ = incremental_encoder;
+    _ = incremental_encoder_tests;
+    _ = incremental_tests;
 }

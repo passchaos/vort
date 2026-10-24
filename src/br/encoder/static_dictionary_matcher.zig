@@ -1,6 +1,15 @@
 const std = @import("std");
+const allocator_dispatch = @import("../allocator_dispatch.zig");
 const builtin = @import("builtin");
 const static_dictionary = @import("../static_dictionary.zig");
+
+/// Complete, caller-owned HQ candidate tuples, including spelling aliases.
+/// The legacy compact and supplemental longest-match indexes remain separate.
+pub const CandidateIndex = @import("static_dictionary_candidates.zig").Index;
+
+test {
+    _ = @import("dictionary_visitor_tests.zig");
+}
 
 const index_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_br_dictionary_index",
@@ -136,7 +145,7 @@ pub const Index = struct {
         while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
         defer shared_lock.unlock();
         if (!shared_ready.load(.monotonic)) {
-            shared = try Index.init(std.heap.smp_allocator);
+            shared = try Index.init(allocator_dispatch.singleton);
             shared_ready.store(true, .release);
         }
         return &shared.?;
@@ -195,6 +204,148 @@ pub const Index = struct {
     }
 };
 
+const CompleteIndexedWord = struct {
+    word_index: usize,
+    copy_len: usize,
+    transform_index: usize,
+};
+
+/// Lazy supplemental index for transform shapes that cannot be reached from
+/// the compact canonical base-word buckets: omit-first transforms and
+/// transforms whose retained core contributes fewer than four hash bytes.
+/// Default q0...q11 matching never constructs or queries this table.
+pub const CompleteIndex = struct {
+    allocator: std.mem.Allocator,
+    heads: []u32,
+    words: []u32,
+
+    var shared: ?CompleteIndex = null;
+    var shared_lock: std.atomic.Mutex = .unlocked;
+    var shared_ready: std.atomic.Value(bool) = .init(false);
+
+    pub noinline fn init(allocator: std.mem.Allocator) linksection(index_build_text_section) !CompleteIndex {
+        const heads = try allocator.alloc(u32, bucket_count + 1);
+        errdefer allocator.free(heads);
+        @memset(heads, 0);
+        var transformed_storage: [64]u8 = undefined;
+        var entry_count: usize = 0;
+        for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+            for (0..static_dictionary.transform_count) |transform_index| {
+                if (!needsSupplementalTransform(transform_index, copy_len)) continue;
+                for (0..word_count) |word_index| {
+                    const word = static_dictionary.baseWord(copy_len, word_index).?;
+                    const transformed = static_dictionary.transformWord(
+                        transform_index,
+                        word,
+                        &transformed_storage,
+                    ).?;
+                    if (transformed.len < 4) continue;
+                    const bucket = hashPrefix(transformed);
+                    heads[bucket + 1] = std.math.add(u32, heads[bucket + 1], 1) catch
+                        return error.InvalidBlockPlan;
+                    entry_count = std.math.add(usize, entry_count, 1) catch
+                        return error.IntegerOverflow;
+                }
+            }
+        }
+        prefixSumOffsetsU32(heads);
+        const words = try allocator.alloc(u32, entry_count);
+        errdefer allocator.free(words);
+        const cursors = try allocator.dupe(u32, heads[0..bucket_count]);
+        defer allocator.free(cursors);
+        for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+            for (0..static_dictionary.transform_count) |transform_index| {
+                if (!needsSupplementalTransform(transform_index, copy_len)) continue;
+                for (0..word_count) |word_index| {
+                    const word = static_dictionary.baseWord(copy_len, word_index).?;
+                    const transformed = static_dictionary.transformWord(
+                        transform_index,
+                        word,
+                        &transformed_storage,
+                    ).?;
+                    if (transformed.len < 4) continue;
+                    const bucket = hashPrefix(transformed);
+                    const cursor = cursors[bucket];
+                    if (cursor >= heads[bucket + 1] or cursor >= words.len)
+                        return error.InvalidBlockPlan;
+                    words[cursor] = packCompleteIndexedWord(
+                        word_index,
+                        copy_len,
+                        transform_index,
+                    );
+                    cursors[bucket] += 1;
+                }
+            }
+        }
+        for (cursors, heads[1..]) |cursor, expected|
+            if (cursor != expected) return error.InvalidBlockPlan;
+        return .{ .allocator = allocator, .heads = heads, .words = words };
+    }
+
+    pub fn deinit(self: *CompleteIndex) void {
+        self.allocator.free(self.heads);
+        self.allocator.free(self.words);
+        self.* = undefined;
+    }
+
+    pub fn sharedIndex() !*const CompleteIndex {
+        if (shared_ready.load(.acquire)) return &shared.?;
+        while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
+        defer shared_lock.unlock();
+        if (!shared_ready.load(.monotonic)) {
+            shared = try CompleteIndex.init(allocator_dispatch.singleton);
+            shared_ready.store(true, .release);
+        }
+        return &shared.?;
+    }
+
+    pub fn findLongest(
+        self: *const CompleteIndex,
+        compact: *const Index,
+        input: []const u8,
+    ) ?static_dictionary.Match {
+        var best = compact.findLongest(input);
+        if (input.len < 4) return best;
+        const bucket = hashPrefix(input);
+        for (self.words[self.heads[bucket]..self.heads[bucket + 1]]) |encoded_word| {
+            const candidate = unpackCompleteIndexedWord(encoded_word);
+            const word = static_dictionary.baseWord(
+                candidate.copy_len,
+                candidate.word_index,
+            ).?;
+            const output_len = static_dictionary.transformedWordMatches(
+                candidate.transform_index,
+                word,
+                input,
+            ) orelse continue;
+            if (output_len < 4) continue;
+            const bits = static_dictionary.sizeBits(candidate.copy_len).?;
+            const address = (candidate.transform_index << bits) |
+                candidate.word_index;
+            if (best == null or output_len > best.?.output_len or
+                (output_len == best.?.output_len and address < best.?.address))
+            {
+                best = .{
+                    .output_len = @intCast(output_len),
+                    .copy_len = @intCast(candidate.copy_len),
+                    .address = address,
+                };
+            }
+        }
+        return best;
+    }
+
+    pub fn entryCount(self: *const CompleteIndex) usize {
+        return self.words.len;
+    }
+
+    pub fn byteSize(self: *const CompleteIndex) usize {
+        return self.heads.len * @sizeOf(u32) + self.words.len * @sizeOf(u32);
+    }
+};
+
 pub const max_index_bytes = (bucket_count + 1) * @sizeOf(u16) + 31_704 * @sizeOf(u32);
 
 fn containsEarlierCanonicalWord(staged: []const u32, next: []const u16, first: u16, transformed: []const u8, scratch: *[64]u8) bool {
@@ -226,6 +377,13 @@ fn prefixSumOffsets(offsets: []u16) void {
     while (index < offsets.len) : (index += 1) offsets[index] += offsets[index - 1];
 }
 
+fn prefixSumOffsetsU32(offsets: []u32) void {
+    var index: usize = 1;
+    while (index < offsets.len) : (index += 1)
+        offsets[index] = std.math.add(u32, offsets[index], offsets[index - 1]) catch
+            unreachable;
+}
+
 fn hashPrefix(bytes: []const u8) usize {
     const word = std.mem.readInt(u32, bytes[0..4], .little);
     return (word *% 0x1e35a7bd) >> (32 - bucket_bits);
@@ -243,6 +401,33 @@ fn unpackIndexedWord(encoded: u32) IndexedWord {
         .word_index = encoded & word_index_mask,
         .copy_len = 4 + ((encoded >> word_index_bits) & 0x1f),
         .case_kind = @enumFromInt((encoded >> 16) & 0x3),
+    };
+}
+
+fn needsSupplementalTransform(transform_index: usize, copy_len: usize) bool {
+    const metadata = static_dictionary.transformMetadata(transform_index).?;
+    const after_first = copy_len - @min(copy_len, metadata.omit_first);
+    const retained = after_first -| metadata.omit_last;
+    return metadata.omit_first != 0 or retained < 4;
+}
+
+fn packCompleteIndexedWord(
+    word_index: usize,
+    copy_len: usize,
+    transform_index: usize,
+) u32 {
+    std.debug.assert(word_index <= word_index_mask);
+    std.debug.assert(transform_index < 128);
+    return @as(u32, @intCast(word_index)) |
+        (@as(u32, @intCast(copy_len - 4)) << word_index_bits) |
+        (@as(u32, @intCast(transform_index)) << 16);
+}
+
+fn unpackCompleteIndexedWord(encoded: u32) CompleteIndexedWord {
+    return .{
+        .word_index = encoded & word_index_mask,
+        .copy_len = 4 + ((encoded >> word_index_bits) & 0x1f),
+        .transform_index = (encoded >> 16) & 0x7f,
     };
 }
 
@@ -317,6 +502,59 @@ test "indexed static dictionary matcher reaches every canonical transformed word
             }
         }
     }
+}
+
+test "complete static dictionary index matches every transform family" {
+    var compact = try Index.init(std.testing.allocator);
+    defer compact.deinit();
+    var complete = try CompleteIndex.init(std.testing.allocator);
+    defer complete.deinit();
+    try std.testing.expectEqual(@as(usize, 59_904), complete.entryCount());
+    try std.testing.expectEqual(@as(usize, 370_692), complete.byteSize());
+
+    var transformed_storage: [64]u8 = undefined;
+    for (0..static_dictionary.transform_count) |transform_index| {
+        var covered = false;
+        find_case: for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+            for (0..word_count) |word_index| {
+                const word = static_dictionary.baseWord(copy_len, word_index).?;
+                const transformed = static_dictionary.transformWord(
+                    transform_index,
+                    word,
+                    &transformed_storage,
+                ).?;
+                if (transformed.len < 5) continue;
+                const expected = static_dictionary.findLongestMatch(transformed);
+                const actual = complete.findLongest(&compact, transformed);
+                try std.testing.expectEqual(expected, actual);
+                covered = true;
+                break :find_case;
+            }
+        }
+        try std.testing.expect(covered);
+    }
+
+    const compact_match = compact.findLongest("quot;");
+    try std.testing.expect(compact_match == null or
+        compact_match.?.output_len < "quot;".len);
+    const complete_match = complete.findLongest(&compact, "quot;").?;
+    try std.testing.expectEqual(@as(usize, "quot;".len), complete_match.output_len);
+}
+
+test "complete static dictionary index releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            var complete = try CompleteIndex.init(allocator);
+            defer complete.deinit();
+            try std.testing.expectEqual(@as(usize, 59_904), complete.entryCount());
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
 }
 
 test "shared static dictionary index is safe under concurrent first access" {

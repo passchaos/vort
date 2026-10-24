@@ -1,10 +1,14 @@
 const std = @import("std");
+const core = @import("../core.zig");
+const incremental_encoder = @import("shrink/incremental_encoder.zig");
 
 pub const Error = std.mem.Allocator.Error || error{
     InvalidShrinkStream,
     TruncatedShrinkInput,
     ShrinkSizeMismatch,
     ShrinkTrailingData,
+    OutputLimitExceeded,
+    IntegerOverflow,
 };
 
 const control_code: u16 = 256;
@@ -13,6 +17,14 @@ const empty_code: u16 = 256;
 const min_bits: u4 = 9;
 const max_bits: u4 = 13;
 const dictionary_size: usize = 1 << max_bits;
+
+pub const IncrementalWorkspace = struct {
+    parents: [dictionary_size]u16 = undefined,
+    suffixes: [dictionary_size]u8 = undefined,
+    stack: [dictionary_size]u8 = undefined,
+    parent_marks: [dictionary_size]bool = undefined,
+};
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 
 const BitReader = struct {
     input: []const u8,
@@ -61,6 +73,297 @@ const BitWriter = struct {
             try self.output.append(self.allocator, @truncate(self.reservoir));
         self.reservoir = 0;
         self.bit_count = 0;
+    }
+};
+
+/// Caller-output, byte-progressive ZIP Shrink decoder.
+///
+/// Shrink has no in-band end marker. Call `finish` after the containing format
+/// establishes the compressed boundary, then drain `step("", output)` until
+/// it returns `.done`. The caller owns the fixed 8,192-entry LZW workspace.
+pub const IncrementalDecoder = struct {
+    options: Options,
+    workspace: *IncrementalWorkspace,
+    phase: Phase = .code,
+    bits: u4 = min_bits,
+    head: u16 = first_free_code,
+    last_symbol: ?u16 = null,
+    last_character: u8 = 0,
+    reservoir: u64 = 0,
+    bit_count: u8 = 0,
+    stack_pos: usize = 0,
+    input_finished: bool = false,
+    total_input: usize = 0,
+    total_output: usize = 0,
+    last_error_name: []const u8 = "",
+    last_error_phase: Phase = .code,
+
+    const Self = @This();
+
+    pub const Options = struct {
+        max_output_len: usize = std.math.maxInt(usize),
+        expected_output_len: ?usize = null,
+    };
+
+    pub const Phase = enum {
+        code,
+        control,
+        emit,
+        done,
+        failed,
+    };
+
+    pub const Snapshot = struct {
+        phase: Phase,
+        input_read: usize,
+        output_written: usize,
+        code_bits: u4,
+        dictionary_head: u16,
+        pending_output: usize,
+        input_finished: bool,
+        last_error_name: []const u8,
+        last_error_phase: Phase,
+    };
+
+    pub fn init(workspace: *IncrementalWorkspace) Self {
+        return initWithOptions(workspace, .{});
+    }
+
+    pub fn initWithOptions(workspace: *IncrementalWorkspace, options: Options) Self {
+        var self: Self = .{ .options = options, .workspace = workspace };
+        self.clearWorkspace();
+        return self;
+    }
+
+    pub fn reset(self: *Self) void {
+        const options = self.options;
+        const workspace = self.workspace;
+        self.* = .{ .options = options, .workspace = workspace };
+        self.clearWorkspace();
+    }
+
+    /// Declares that the container supplied every compressed byte. Pending
+    /// decoded bytes remain drainable through `step("", output)`.
+    pub fn finish(self: *Self) void {
+        self.input_finished = true;
+    }
+
+    pub fn setExpectedOutputLen(self: *Self, expected: usize) Error!void {
+        if (expected < self.total_output or expected > self.options.max_output_len)
+            return error.ShrinkSizeMismatch;
+        if (self.options.expected_output_len) |current|
+            if (current != expected) return error.ShrinkSizeMismatch;
+        self.options.expected_output_len = expected;
+    }
+
+    /// True only at a legal compressed boundary with zero-valued pad bits.
+    /// Container adapters use this before committing a descriptor candidate.
+    pub fn canFinish(self: *const Self) bool {
+        if (self.phase != .code or self.bit_count >= self.bits or self.reservoir != 0)
+            return false;
+        if (self.options.expected_output_len) |expected|
+            return self.total_output == expected;
+        return true;
+    }
+
+    pub fn snapshot(self: *const Self) Snapshot {
+        return .{
+            .phase = self.phase,
+            .input_read = self.total_input,
+            .output_written = self.total_output,
+            .code_bits = self.bits,
+            .dictionary_head = self.head,
+            .pending_output = self.stack_pos,
+            .input_finished = self.input_finished,
+            .last_error_name = self.last_error_name,
+            .last_error_phase = self.last_error_phase,
+        };
+    }
+
+    pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
+        return .{
+            .phase_name = @tagName(self.phase),
+            .frame_input_read = self.total_input,
+            .output_written = self.total_output,
+            .expected_output_len = self.options.expected_output_len,
+            .payload_remaining = self.stack_pos,
+            .last_error_name = self.last_error_name,
+            .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
+            .recoverability_hint_name = if (self.phase == .failed) "payload_corrupt" else "none",
+        };
+    }
+
+    pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.phase == .failed) return error.InvalidShrinkStream;
+        return self.stepInner(input, output) catch |err| {
+            return self.fail(err);
+        };
+    }
+
+    fn stepInner(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.phase == .done) {
+            if (input.len != 0) return error.ShrinkTrailingData;
+            return .{ .status = .done };
+        }
+        if (self.input_finished and input.len != 0) return error.ShrinkTrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) switch (self.phase) {
+            .code => {
+                if (self.options.expected_output_len) |expected| {
+                    if (self.total_output == expected) {
+                        if (input_read != input.len) return error.ShrinkTrailingData;
+                        return self.atInputBoundary(input_read, output_written);
+                    }
+                }
+                const symbol = self.readBits(input, &input_read, self.bits) orelse
+                    return self.atInputBoundary(input_read, output_written);
+                if (symbol == control_code) {
+                    self.phase = .control;
+                    continue;
+                }
+                try self.beginSymbol(symbol);
+                self.phase = .emit;
+            },
+            .control => {
+                const command = self.readBits(input, &input_read, self.bits) orelse {
+                    if (self.input_finished) return error.TruncatedShrinkInput;
+                    return result(input_read, output_written, .need_input);
+                };
+                switch (command) {
+                    1 => {
+                        if (self.bits == max_bits) return error.InvalidShrinkStream;
+                        self.bits += 1;
+                    },
+                    2 => self.partialClear(),
+                    else => return error.InvalidShrinkStream,
+                }
+                self.phase = .code;
+            },
+            .emit => {
+                while (self.stack_pos != 0 and output_written < output.len) {
+                    self.stack_pos -= 1;
+                    output[output_written] = self.workspace.stack[self.stack_pos];
+                    output_written += 1;
+                    self.total_output = std.math.add(usize, self.total_output, 1) catch
+                        return error.IntegerOverflow;
+                }
+                if (self.stack_pos != 0)
+                    return result(input_read, output_written, .need_output);
+                self.phase = .code;
+            },
+            .done => {
+                if (input_read != input.len) return error.ShrinkTrailingData;
+                return result(input_read, output_written, .done);
+            },
+            .failed => return error.InvalidShrinkStream,
+        };
+    }
+
+    fn beginSymbol(self: *Self, original_symbol: u16) Error!void {
+        var inserted: ?u16 = null;
+        if (self.last_symbol != null and self.head < dictionary_size) {
+            while (self.head < dictionary_size and
+                self.workspace.parents[self.head] != empty_code)
+                self.head += 1;
+            if (self.head < dictionary_size) {
+                self.workspace.parents[self.head] = self.last_symbol.?;
+                self.workspace.suffixes[self.head] = self.last_character;
+                inserted = self.head;
+                self.head += 1;
+            }
+        }
+
+        self.last_symbol = original_symbol;
+        var symbol = original_symbol;
+        var stack_size: usize = 0;
+        while (symbol >= 256) {
+            if (symbol >= dictionary_size or stack_size == dictionary_size)
+                return error.InvalidShrinkStream;
+            self.workspace.stack[stack_size] = self.workspace.suffixes[symbol];
+            stack_size += 1;
+            symbol = self.workspace.parents[symbol];
+            if (symbol == empty_code) return error.InvalidShrinkStream;
+        }
+        self.workspace.stack[stack_size] = @intCast(symbol);
+        stack_size += 1;
+        self.last_character = @intCast(symbol);
+        if (inserted) |code| self.workspace.suffixes[code] = self.last_character;
+
+        if (stack_size > self.options.max_output_len -| self.total_output)
+            return error.OutputLimitExceeded;
+        if (self.options.expected_output_len) |expected|
+            if (stack_size > expected -| self.total_output)
+                return error.ShrinkSizeMismatch;
+        self.stack_pos = stack_size;
+    }
+
+    fn partialClear(self: *Self) void {
+        @memset(&self.workspace.parent_marks, false);
+        for (first_free_code..dictionary_size) |index| {
+            const parent = self.workspace.parents[index];
+            if (parent != empty_code) self.workspace.parent_marks[parent] = true;
+        }
+        for (first_free_code..dictionary_size) |index| {
+            if (!self.workspace.parent_marks[index]) {
+                self.workspace.parents[index] = empty_code;
+            }
+        }
+        self.head = first_free_code;
+    }
+
+    fn readBits(self: *Self, input: []const u8, input_read: *usize, count: u4) ?u16 {
+        while (self.bit_count < count) {
+            if (input_read.* == input.len) return null;
+            self.reservoir |= @as(u64, input[input_read.*]) << @intCast(self.bit_count);
+            self.bit_count += 8;
+            input_read.* += 1;
+            self.total_input += 1;
+        }
+        const value: u16 = @truncate(self.reservoir & ((@as(u64, 1) << count) - 1));
+        self.reservoir >>= count;
+        self.bit_count -= count;
+        return value;
+    }
+
+    fn atInputBoundary(
+        self: *Self,
+        input_read: usize,
+        output_written: usize,
+    ) Error!core.StepResult {
+        if (!self.input_finished)
+            return result(input_read, output_written, .need_input);
+        if (self.options.expected_output_len) |expected|
+            if (self.total_output != expected) return error.ShrinkSizeMismatch;
+        if (self.reservoir != 0) return error.ShrinkTrailingData;
+        self.phase = .done;
+        return result(input_read, output_written, .done);
+    }
+
+    fn clearWorkspace(self: *Self) void {
+        @memset(&self.workspace.parents, empty_code);
+        @memset(&self.workspace.parent_marks, false);
+    }
+
+    fn fail(self: *Self, err: Error) Error {
+        if (self.phase != .failed) {
+            self.last_error_name = @errorName(err);
+            self.last_error_phase = self.phase;
+            self.phase = .failed;
+        }
+        return err;
+    }
+
+    fn result(
+        input_read: usize,
+        output_written: usize,
+        status: core.StepResult.Status,
+    ) core.StepResult {
+        return .{
+            .progress = .{ .input_read = input_read, .output_written = output_written },
+            .status = status,
+        };
     }
 };
 

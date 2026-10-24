@@ -73,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
         "reusable-chunked",
         "dictionary",
         "dictionary-set",
+        "hc-incremental",
         "incremental",
         "lib-generated",
         "malformed",
@@ -81,6 +82,7 @@ pub fn main(init: std.process.Init) !void {
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
         .{ .capability = "compressed-block-cursor", .cases = 5 },
+        .{ .capability = "hc-incremental", .cases = 13 },
         .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
@@ -356,6 +358,7 @@ fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []
     if (first_block.is_compressed or !second_block.is_compressed) return;
 
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .input_policy = .prevalidated_frame,
         .expected_output_len = case.payload.len,
         .max_decoded_buffer_len = case.payload.len,
     });
@@ -364,6 +367,7 @@ fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []
     defer allocator.free(output);
     const initial = try decoder.step(frame, output[0..0]);
     if (initial.status != .need_output) return error.Lz4ProbeMismatch;
+    if (initial.progress.input_read != frame.len or initial.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, "direct_output", decoder.diagnostics().phase_name)) return error.Lz4ProbeMismatch;
     const first = try decoder.step("", output[0 .. 64 * 1024]);
     if (first.status != .need_output) return error.Lz4ProbeMismatch;
@@ -376,7 +380,9 @@ fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []
     if (decoder.decodedBufferedBytes() != 0 or decoder.decodedBufferCapacity() != 0) return error.Lz4ProbeSizeMismatch;
     const done = try decoder.step("", output[64 * 1024 + 127 ..]);
     if (done.status != .done) return error.Lz4ProbeMismatch;
+    if (decoder.snapshot().input_received != frame.len or decoder.snapshot().output_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, output);
+    try decoder.finish();
 }
 
 fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
@@ -563,7 +569,7 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     defer bad_checksum_decoder.deinit();
     const bad_checksum_initial = try bad_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]);
     if (bad_checksum_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step("", &checksum_priority_output));
+    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step(wrong_checksum[bad_checksum_initial.progress.input_read..], &checksum_priority_output));
     if (!std.mem.eql(u8, "ChecksumMismatch", bad_checksum_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -609,7 +615,7 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, "ChecksumMismatch", bad_block_checksum_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
-    if (!std.mem.eql(u8, "frame", bad_block_checksum_decoder.diagnostics().last_error_phase_name)) {
+    if (!std.mem.eql(u8, "direct_output", bad_block_checksum_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
@@ -652,11 +658,11 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         .max_decoded_buffer_len = invalid_match_output.len,
     });
     defer invalid_match_decoder.deinit();
-    try expectError(error.InvalidMatch, invalid_match_decoder.step(invalid_match, invalid_match_output[0..0]));
+    try expectError(error.InvalidMatch, invalid_match_decoder.step(invalid_match, &invalid_match_output));
     if (!std.mem.eql(u8, "InvalidMatch", invalid_match_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
-    if (!std.mem.eql(u8, "frame", invalid_match_decoder.diagnostics().last_error_phase_name)) {
+    if (!std.mem.eql(u8, "direct_output", invalid_match_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
@@ -702,11 +708,11 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         .max_decoded_buffer_len = size_priority_output.len,
     });
     defer size_mismatch_decoder.deinit();
-    try expectError(error.SizeMismatch, size_mismatch_decoder.step(size_mismatch, size_priority_output[0..0]));
+    try expectError(error.SizeMismatch, size_mismatch_decoder.step(size_mismatch, &size_priority_output));
     if (!std.mem.eql(u8, "SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
-    if (!std.mem.eql(u8, "frame", size_mismatch_decoder.diagnostics().last_error_phase_name)) {
+    if (!std.mem.eql(u8, "direct_output", size_mismatch_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
@@ -973,7 +979,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer missing_set_checksum_decoder.deinit();
     const missing_set_initial = try missing_set_checksum_decoder.step(checksum_stream, missing_output[0..0]);
     if (missing_set_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.NeedDictionary, missing_set_checksum_decoder.step("", &missing_output));
+    try expectError(error.NeedDictionary, missing_set_checksum_decoder.step(checksum_stream[missing_set_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "NeedDictionary", missing_set_checksum_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -987,11 +993,11 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer set_checksum_decoder.deinit();
     const set_checksum_initial = try set_checksum_decoder.step(checksum_stream, missing_output[0..0]);
     if (set_checksum_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.ChecksumMismatch, set_checksum_decoder.step("", &missing_output));
+    try expectError(error.ChecksumMismatch, set_checksum_decoder.step(checksum_stream[set_checksum_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "ChecksumMismatch", set_checksum_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
-    if (!std.mem.eql(u8, "frame", set_checksum_decoder.diagnostics().last_error_phase_name)) {
+    if (!std.mem.eql(u8, "direct_output", set_checksum_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
@@ -1013,7 +1019,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer missing_set_content_decoder.deinit();
     const missing_content_initial = try missing_set_content_decoder.step(content_checksum_stream, missing_output[0..0]);
     if (missing_content_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.NeedDictionary, missing_set_content_decoder.step("", &missing_output));
+    try expectError(error.NeedDictionary, missing_set_content_decoder.step(content_checksum_stream[missing_content_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "NeedDictionary", missing_set_content_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -1027,7 +1033,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer set_content_decoder.deinit();
     const set_content_initial = try set_content_decoder.step(content_checksum_stream, missing_output[0..0]);
     if (set_content_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.ChecksumMismatch, set_content_decoder.step("", &missing_output));
+    try expectError(error.ChecksumMismatch, set_content_decoder.step(content_checksum_stream[set_content_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "ChecksumMismatch", set_content_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -1065,7 +1071,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer missing_set_size_decoder.deinit();
     const missing_size_initial = try missing_set_size_decoder.step(size_stream.items, missing_output[0..0]);
     if (missing_size_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.NeedDictionary, missing_set_size_decoder.step("", &missing_output));
+    try expectError(error.NeedDictionary, missing_set_size_decoder.step(size_stream.items[missing_size_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "NeedDictionary", missing_set_size_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -1079,7 +1085,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer set_size_decoder.deinit();
     const set_size_initial = try set_size_decoder.step(size_stream.items, size_mismatch_output[0..0]);
     if (set_size_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.SizeMismatch, set_size_decoder.step("", &size_mismatch_output));
+    try expectError(error.SizeMismatch, set_size_decoder.step(size_stream.items[set_size_initial.progress.input_read..], &size_mismatch_output));
     if (!std.mem.eql(u8, "SizeMismatch", set_size_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -1115,7 +1121,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer missing_set_invalid_decoder.deinit();
     const missing_invalid_initial = try missing_set_invalid_decoder.step(invalid_stream.items, missing_output[0..0]);
     if (missing_invalid_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.NeedDictionary, missing_set_invalid_decoder.step("", &missing_output));
+    try expectError(error.NeedDictionary, missing_set_invalid_decoder.step(invalid_stream.items[missing_invalid_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "NeedDictionary", missing_set_invalid_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
@@ -1129,11 +1135,11 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     defer set_invalid_decoder.deinit();
     const set_invalid_initial = try set_invalid_decoder.step(invalid_stream.items, missing_output[0..0]);
     if (set_invalid_initial.status != .need_output) return error.Lz4ProbeMismatch;
-    try expectError(error.InvalidMatch, set_invalid_decoder.step("", &missing_output));
+    try expectError(error.InvalidMatch, set_invalid_decoder.step(invalid_stream.items[set_invalid_initial.progress.input_read..], &missing_output));
     if (!std.mem.eql(u8, "InvalidMatch", set_invalid_decoder.diagnostics().last_error_name)) {
         return error.Lz4ProbeMismatch;
     }
-    if (!std.mem.eql(u8, "frame", set_invalid_decoder.diagnostics().last_error_phase_name)) {
+    if (!std.mem.eql(u8, "direct_output", set_invalid_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
@@ -1233,6 +1239,8 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
         const result = try decoder.step(encoded[input_offset..], output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != decoder.snapshot().input_received or output_offset != decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         saw_cursor = saw_cursor or decoder.isCompressedBlockStreaming();
         if (decoder.compressedBufferedBytes() > block.payload_len or
             decoder.compressedBufferCapacity() > block.payload_len or
@@ -1291,6 +1299,8 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
         const result = try linked_decoder.step(linked[input_offset..input_end], linked_output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != linked_decoder.snapshot().input_received or output_offset != linked_decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         saw_cursor = saw_cursor or linked_decoder.isCompressedBlockStreaming();
         if (linked_decoder.compressedBufferedBytes() > linked_limit or
             linked_decoder.decodedBufferedBytes() != 0 or
@@ -1345,6 +1355,8 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
         const result = try dictionary_decoder.step(dictionary_frame[input_offset..input_end], dictionary_output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != dictionary_decoder.snapshot().input_received or output_offset != dictionary_decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         saw_cursor = saw_cursor or dictionary_decoder.isCompressedBlockStreaming();
         if (dictionary_decoder.compressedBufferedBytes() > dictionary_limit or
             dictionary_decoder.decodedBufferedBytes() != 0 or
@@ -1391,6 +1403,8 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
         const result = try large_decoder.step(large_frame[input_offset..], large_output[output_offset..output_end]);
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != large_decoder.snapshot().input_received or output_offset != large_decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         saw_cursor = saw_cursor or large_decoder.isCompressedBlockStreaming();
         if (large_decoder.compressedBufferedBytes() > large_limit or
             large_decoder.decodedBufferedBytes() != 0 or
@@ -1437,6 +1451,8 @@ fn checkCompressedBlockCursorIncremental(allocator: std.mem.Allocator) !void {
         );
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != streaming_decoder.snapshot().input_received or output_offset != streaming_decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         saw_cursor = saw_cursor or streaming_decoder.isCompressedBlockStreaming();
         if (streaming_decoder.compressedBufferedBytes() > streaming_header.payload_offset or
             streaming_decoder.compressedBufferCapacity() > streaming_header.payload_offset or
@@ -1875,13 +1891,17 @@ fn checkEmptySkippableThenPayloadFrame(allocator: std.mem.Allocator) !void {
     defer incremental.deinit();
     var inc_output: [payload.len]u8 = undefined;
     var result = try incremental.step(stream, inc_output[0..0]);
-    var output_written: usize = 0;
+    var input_read = result.progress.input_read;
+    var output_written = result.progress.output_written;
     while (result.status != .done) {
         if (result.status != .need_output) return error.Lz4ProbeMismatch;
-        result = try incremental.step("", inc_output[output_written..]);
+        result = try incremental.step(stream[input_read..], inc_output[output_written..]);
+        input_read += result.progress.input_read;
         output_written += result.progress.output_written;
+        if (input_read != incremental.snapshot().input_received or output_written != incremental.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
     }
-    if (output_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (input_read != stream.len or output_written != payload.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, payload, &inc_output)) return error.Lz4ProbeMismatch;
     try incremental.finish();
 }
@@ -1918,13 +1938,17 @@ fn checkPayloadSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
     defer incremental.deinit();
     var inc_output: [payload.len]u8 = undefined;
     var result = try incremental.step(stream, inc_output[0..0]);
-    var output_written: usize = 0;
+    var input_read = result.progress.input_read;
+    var output_written = result.progress.output_written;
     while (result.status != .done) {
         if (result.status != .need_output) return error.Lz4ProbeMismatch;
-        result = try incremental.step("", inc_output[output_written..]);
+        result = try incremental.step(stream[input_read..], inc_output[output_written..]);
+        input_read += result.progress.input_read;
         output_written += result.progress.output_written;
+        if (input_read != incremental.snapshot().input_received or output_written != incremental.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
     }
-    if (output_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (input_read != stream.len or output_written != payload.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, payload, &inc_output)) return error.Lz4ProbeMismatch;
     try incremental.finish();
 }
@@ -2007,6 +2031,22 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator, stdout: *std.
     };
 
     var checked: usize = 0;
+    const hc_levels = [_]c_int{ 1, 3, 5, 9, 10, 11, 12, 19 };
+    for (cases) |case| {
+        for (hc_levels) |level| {
+            try checkLibLz4HcBlock(allocator, runtime, case, level);
+            checked += 1;
+            if (level >= 3) {
+                try checkLibLz4HcFrame(allocator, runtime, case, level);
+                checked += 1;
+                if (std.mem.eql(u8, case.name, "liblz4-linked-large")) {
+                    try checkLibLz4HcLinkedFrame(allocator, runtime, case, level);
+                    checked += 1;
+                }
+            }
+        }
+    }
+    checked += try checkLibLz4HcDictionaryFrames(allocator, runtime);
     for (cases) |case| {
         for (levels) |level| {
             for (option_sets) |options| {
@@ -2020,6 +2060,194 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator, stdout: *std.
         .{ runtime.version(), checked },
     );
     return checked;
+}
+
+fn checkLibLz4HcDictionaryFrames(allocator: std.mem.Allocator, runtime: liblz4.Runtime) !usize {
+    const block_len = 64 * 1024;
+    const dictionary_bytes = try allocator.alloc(u8, block_len);
+    defer allocator.free(dictionary_bytes);
+    var rng = std.Random.DefaultPrng.init(0x3141_5926);
+    rng.random().bytes(dictionary_bytes);
+    const payload = try allocator.alloc(u8, block_len * 2);
+    defer allocator.free(payload);
+    @memcpy(payload[0 .. block_len - 1], dictionary_bytes[1..]);
+    payload[block_len - 1] = dictionary_bytes[0] ^ 0xa5;
+    @memcpy(payload[block_len..][0 .. block_len - 1], payload[1..block_len]);
+    payload[payload.len - 1] = payload[0] ^ 0x5a;
+    const dictionary = vort.Lz4NativeDictionary.init(0x3141_5926, dictionary_bytes);
+    var checked: usize = 0;
+
+    for ([_]vort.Lz4BlockMode{ .independent, .linked }) |block_mode| {
+        for ([_]c_int{ 3, 9, 12 }) |level| {
+            const reference = try runtime.encodeFrameWithDictionaryAlloc(allocator, payload, dictionary_bytes, .{
+                .include_content_size = false,
+                .content_checksum = true,
+                .block_checksum = true,
+                .block_size_id = 4,
+                .block_independent = block_mode == .independent,
+                .compression_level = level,
+                .dictionary_id = dictionary.id,
+            });
+            defer allocator.free(reference);
+            const encoded = try vort.lz4EncodeHcFrameWithDictionaryAlloc(allocator, payload, .{
+                .include_content_size = false,
+                .content_checksum = true,
+                .block_checksum = true,
+                .block_size_id = .max64kb,
+                .block_mode = block_mode,
+                .dictionary_id = dictionary.id,
+                .compression_level = level,
+            }, dictionary);
+            defer allocator.free(encoded);
+            if (!std.mem.eql(u8, reference, encoded)) {
+                std.debug.print(
+                    "lz4_hc_dictionary_frame_mismatch mode={s} level={d} reference={d} vort={d}\n",
+                    .{ @tagName(block_mode), level, reference.len, encoded.len },
+                );
+                return error.Lz4ProbeMismatch;
+            }
+            const incremental = try encodeIncrementalHcFrameAlloc(allocator, payload, .{
+                .include_content_size = false,
+                .content_checksum = true,
+                .block_checksum = true,
+                .block_size_id = .max64kb,
+                .block_mode = block_mode,
+                .dictionary_id = dictionary.id,
+                .compression_level = level,
+            }, dictionary);
+            defer allocator.free(incremental);
+            if (!std.mem.eql(u8, reference, incremental)) return error.Lz4ProbeMismatch;
+
+            const native_decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, reference, dictionary);
+            defer allocator.free(native_decoded);
+            if (!std.mem.eql(u8, payload, native_decoded)) return error.Lz4ProbeMismatch;
+            const reference_decoded = try allocator.alloc(u8, payload.len);
+            defer allocator.free(reference_decoded);
+            try runtime.decodeFrameWithDictionary(encoded, reference_decoded, dictionary_bytes);
+            if (!std.mem.eql(u8, payload, reference_decoded)) return error.Lz4ProbeMismatch;
+            checked += 1;
+        }
+    }
+    return checked;
+}
+
+fn checkLibLz4HcBlock(
+    allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
+    case: Case,
+    level: c_int,
+) !void {
+    const reference = try runtime.encodeHcAlloc(
+        allocator,
+        case.payload,
+        level,
+    );
+    defer allocator.free(reference);
+    const encoded = try vort.lz4EncodeBlockHcAlloc(
+        allocator,
+        case.payload,
+        level,
+    );
+    defer allocator.free(encoded);
+    if (!std.mem.eql(u8, reference, encoded)) {
+        std.debug.print(
+            "lz4_hc_block_mismatch case={s} level={d} reference={d} vort={d}\n",
+            .{ case.name, level, reference.len, encoded.len },
+        );
+        return error.Lz4ProbeMismatch;
+    }
+    const decoded = try vort.lz4DecodeBlockAlloc(
+        allocator,
+        encoded,
+        case.payload.len,
+    );
+    defer allocator.free(decoded);
+    try expectPayload(case, decoded);
+}
+
+fn checkLibLz4HcFrame(
+    allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
+    case: Case,
+    level: c_int,
+) !void {
+    const reference = try runtime.encodeFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = 4,
+        .block_independent = true,
+        .compression_level = level,
+    });
+    defer allocator.free(reference);
+    const encoded = try vort.lz4EncodeHcFrameAlloc(
+        allocator,
+        case.payload,
+        .{
+            .include_content_size = false,
+            .content_checksum = true,
+            .block_checksum = true,
+            .block_size_id = .max64kb,
+            .compression_level = level,
+        },
+    );
+    defer allocator.free(encoded);
+    if (!std.mem.eql(u8, reference, encoded)) {
+        std.debug.print(
+            "lz4_hc_frame_mismatch case={s} level={d} reference={d} vort={d}\n",
+            .{ case.name, level, reference.len, encoded.len },
+        );
+        return error.Lz4ProbeMismatch;
+    }
+    const decoded = try vort.lz4DecodeFrameAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try expectPayload(case, decoded);
+}
+
+fn checkLibLz4HcLinkedFrame(
+    allocator: std.mem.Allocator,
+    runtime: liblz4.Runtime,
+    case: Case,
+    level: c_int,
+) !void {
+    const reference = try runtime.encodeFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = 4,
+        .block_independent = false,
+        .compression_level = level,
+    });
+    defer allocator.free(reference);
+    const encoded = try vort.lz4EncodeHcFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = level,
+    });
+    defer allocator.free(encoded);
+    if (!std.mem.eql(u8, reference, encoded)) {
+        std.debug.print(
+            "lz4_hc_linked_frame_mismatch case={s} level={d} reference={d} vort={d}\n",
+            .{ case.name, level, reference.len, encoded.len },
+        );
+        return error.Lz4ProbeMismatch;
+    }
+    const incremental = try encodeIncrementalHcFrameAlloc(allocator, case.payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .compression_level = level,
+    }, null);
+    defer allocator.free(incremental);
+    if (!std.mem.eql(u8, reference, incremental)) return error.Lz4ProbeMismatch;
+    const decoded = try vort.lz4DecodeFrameAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try expectPayload(case, decoded);
 }
 
 fn checkLibLz4GeneratedLibraryFrame(
@@ -2174,6 +2402,8 @@ fn checkLibLz4GeneratedIncrementalFrame(allocator: std.mem.Allocator, case: Case
         );
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
+        if (input_offset != decoder.snapshot().input_received or output_offset != decoder.snapshot().output_written)
+            return error.Lz4ProbeSizeMismatch;
         status = result.status;
 
         switch (status) {
@@ -2426,6 +2656,52 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     checked += 1;
 
     return checked;
+}
+
+fn encodeIncrementalHcFrameAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: vort.Lz4HcFrameOptions,
+    dictionary: ?vort.Lz4NativeDictionary,
+) ![]u8 {
+    var encoder = if (dictionary) |dict|
+        if (options.include_content_size)
+            try vort.Lz4HcIncrementalFrameEncoder.initExactSizeWithDictionary(
+                allocator,
+                options,
+                input.len,
+                dict.id,
+                dict.content,
+            )
+        else
+            try vort.Lz4HcIncrementalFrameEncoder.initWithDictionary(
+                allocator,
+                options,
+                dict.id,
+                dict.content,
+            )
+    else if (options.include_content_size)
+        try vort.Lz4HcIncrementalFrameEncoder.initExactSize(allocator, options, input.len)
+    else
+        try vort.Lz4HcIncrementalFrameEncoder.init(allocator, options);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    var scratch: [17]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const input_end = @min(input.len, offset + 997);
+        const result = try encoder.step(input[offset..input_end], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(allocator);
 }
 
 fn checkSkippableChecksumAndTrailingStreams(allocator: std.mem.Allocator) !usize {

@@ -1,0 +1,69 @@
+{
+  "generated_utc": "2026-10-24T06:52:18.335698+00:00",
+  "metadata_method": "Existing ELF TestFn name slices and executable function pointers; symbols and exact cache/run input digests verified.",
+  "ordered_TestFn_names_equal_between_modes": true,
+  "named_count": 93,
+  "anonymous_count": 9,
+  "total_count": 102,
+  "group_counts": {
+    "alias": 14,
+    "anonymous_import_roots": 9,
+    "bridge_inspection": 2,
+    "dictionary_provider": 6,
+    "dictionary_visitors": 4,
+    "generic_block_target": 2,
+    "generic_stream": 11,
+    "independent_qa": 21,
+    "native_serializer_guard": 1,
+    "parser": 14,
+    "public_stream": 4,
+    "tree_oracle": 8,
+    "wire_transaction_model": 6
+  },
+  "binaries": {
+    "debug": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/ed067445e54bcdd5561f10f53eadf0b7/vort-br-hq-tests",
+      "binary_sha256": "037cf275f973c31346f0071dd56dba6f49316f2b80da27f8b5d3fdc0060741d3",
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7e67e9e12ad78a6d2c46396de81f057e.txt",
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/bfc35298f7a7cacdbf8a8bbcb6950be8.txt",
+      "compiled_input_count": 967,
+      "source_input_prefix_counts": {
+        "0": 152,
+        "1": 814,
+        "2": 1
+      },
+      "linked_object_transitive_binding_path": "/tmp/vort-br-hq-final-20261024-dtre4swk/coverage/hq-debug-linked-object-binding.json"
+    },
+    "release-fast": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/341e980ae5d7ab6e7cda422e9db257e0/vort-br-hq-tests",
+      "binary_sha256": "2aec909befccb9963edd6f7857d11213edd048c837f1aec9f271ac07a995da5a",
+      "compile_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/c0af0ccd068a753f764ba79bb970fe03.txt",
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/1f9386b2aff32cb62e84970638ed7438.txt",
+      "compiled_input_count": 966,
+      "source_input_prefix_counts": {
+        "0": 152,
+        "1": 813,
+        "2": 1
+      },
+      "linked_object_transitive_binding_path": "/tmp/vort-br-hq-final-20261024-dtre4swk/coverage/hq-release-fast-linked-object-binding.json"
+    }
+  },
+  "source_input_content_verification": true,
+  "gate_source_before_after_equal": true,
+  "executed_existing_test_binaries": false,
+  "compiled_anything": false,
+  "exact_child_zig_test_argv_recorded": false,
+  "command_evidence_gap": "Successful gate used --summary all without --verbose; child Zig test argv was not logged. The exact compiled ELF is bound by recomputing its cache output digest and verifying the run manifest input digest.",
+  "all_compiler_input_prefixes_content_verified": true,
+  "independent_qa_frozen_source_matches": {
+    "src/tests/br_hq_contracts.zig": true,
+    "src/tests/br_hq_helpers.zig": true,
+    "src/tests/br_hq_resource_contracts.zig": true,
+    "src/tests/br_hq_transaction_contracts.zig": true
+  },
+  "linked_object_binding_files": [
+    "/tmp/vort-br-hq-final-20261024-dtre4swk/coverage/hq-debug-linked-object-binding.json",
+    "/tmp/vort-br-hq-final-20261024-dtre4swk/coverage/hq-release-fast-linked-object-binding.json"
+  ],
+  "linked_object_transitive_source_content_verified": true
+}

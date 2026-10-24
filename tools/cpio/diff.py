@@ -4,12 +4,76 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import ctypes.util
 import os
 import random
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+
+
+def brotli_compress(data: bytes) -> bytes:
+    try:
+        import brotli
+
+        return brotli.compress(data, quality=5)
+    except ImportError:
+        library_path = ctypes.util.find_library("brotlienc")
+        if library_path is None:
+            raise AssertionError("Python brotli or libbrotlienc is required")
+        library = ctypes.CDLL(library_path)
+        maximum_size = library.BrotliEncoderMaxCompressedSize
+        maximum_size.argtypes = [ctypes.c_size_t]
+        maximum_size.restype = ctypes.c_size_t
+        compress = library.BrotliEncoderCompress
+        compress.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.c_void_p,
+        ]
+        compress.restype = ctypes.c_int
+        source = ctypes.create_string_buffer(data, max(1, len(data)))
+        bound = maximum_size(len(data))
+        output = ctypes.create_string_buffer(max(1, bound))
+        output_size = ctypes.c_size_t(bound)
+        if compress(5, 22, 0, len(data), source, ctypes.byref(output_size), output) != 1:
+            raise AssertionError("libbrotli could not compress CPIO fixture")
+        return output.raw[: output_size.value]
+
+
+def brotli_decompress(data: bytes, max_output_len: int) -> bytes:
+    try:
+        import brotli
+
+        decoded = brotli.decompress(data)
+        if len(decoded) > max_output_len:
+            raise AssertionError("Brotli CPIO fixture exceeded its output limit")
+        return decoded
+    except ImportError:
+        library_path = ctypes.util.find_library("brotlidec")
+        if library_path is None:
+            raise AssertionError("Python brotli or libbrotlidec is required")
+        library = ctypes.CDLL(library_path)
+        decompress = library.BrotliDecoderDecompress
+        decompress.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.c_void_p,
+        ]
+        decompress.restype = ctypes.c_int
+        source = ctypes.create_string_buffer(data, max(1, len(data)))
+        output = ctypes.create_string_buffer(max_output_len)
+        output_size = ctypes.c_size_t(max_output_len)
+        if decompress(len(data), source, ctypes.byref(output_size), output) != 1:
+            raise AssertionError("libbrotli could not decompress CPIO fixture")
+        return output.raw[: output_size.value]
 
 
 def run(
@@ -58,10 +122,91 @@ def reference_extract(cpio: Path, archive: Path, output_dir: Path) -> bytes:
     return (output_dir / "payload.bin").read_bytes()
 
 
+def decode_streaming_cpio(
+    compression: str,
+    archive_path: Path,
+    zstd_tool: str | None,
+    lz4_tool: str | None,
+    lzf_tool: str | None,
+    lzip_tool: str | None,
+    lzop_tool: str | None,
+    uncompress_tool: str | None,
+) -> bytes | None:
+    encoded = archive_path.read_bytes()
+    if compression == "gzip":
+        return __import__("gzip").decompress(encoded)
+    if compression == "bzip2":
+        return __import__("bz2").decompress(encoded)
+    if compression == "brotli":
+        return brotli_decompress(encoded, 512 * 1024 * 1024)
+    if compression == "compress-z":
+        if uncompress_tool is None:
+            return None
+        return subprocess.run(
+            [uncompress_tool, "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzma":
+        return __import__("lzma").decompress(
+            encoded, format=__import__("lzma").FORMAT_ALONE
+        )
+    if compression == "xz":
+        return __import__("lzma").decompress(encoded)
+    if compression in ("lz4", "lz4-legacy"):
+        if lz4_tool is None:
+            return None
+        return subprocess.run(
+            [lz4_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzf":
+        if lzf_tool is None:
+            return None
+        return subprocess.run(
+            [lzf_tool, "-d"],
+            input=encoded,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzip":
+        if lzip_tool is None:
+            return None
+        return subprocess.run(
+            [lzip_tool, "-dc", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "zstd":
+        if zstd_tool is None:
+            return None
+        return subprocess.run(
+            [zstd_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzop":
+        if lzop_tool is None:
+            return None
+        return subprocess.run(
+            [lzop_tool, "-dc", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    raise AssertionError(f"unsupported streaming CPIO compression: {compression}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", type=Path)
+    parser.add_argument("--incremental-reader", type=Path)
+    parser.add_argument("--incremental-sequence-reader", type=Path)
+    parser.add_argument("--incremental-mixed-reader", type=Path)
+    parser.add_argument("--incremental-compressed-reader", type=Path)
+    parser.add_argument("--incremental-auto-reader", type=Path)
+    parser.add_argument("--incremental-compressed-writer", type=Path)
     parser.add_argument("--cpio", type=Path)
     args = parser.parse_args()
     cpio_tool = args.cpio or (Path(found) if (found := shutil.which("cpio")) else None)
@@ -91,6 +236,18 @@ def main() -> None:
     writer_external = 0
     reference_writer = 0
     wrapper_cases = 0
+    incremental_writer_cases = 0
+    incremental_reader_cases = 0
+    incremental_sequence_reader_cases = 0
+    incremental_sequence_reader_external = 0
+    incremental_mixed_reader_cases = 0
+    incremental_mixed_reader_external = 0
+    incremental_compressed_reader_cases = 0
+    incremental_compressed_reader_external = 0
+    incremental_auto_reader_cases = 0
+    incremental_auto_reader_external = 0
+    incremental_compressed_writer_cases = 0
+    incremental_compressed_writer_external = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-cpio-diff-") as temp_text:
         temp = Path(temp_text)
@@ -111,6 +268,27 @@ def main() -> None:
             run(args.cli, "extract-cpio-file", str(first), "payload.bin", str(output), str(len(payload)))
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort CPIO {format_name} self-extraction mismatch")
+            if args.incremental_reader is not None:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_reader,
+                        str(first),
+                        "payload.bin",
+                        str(source),
+                        pattern,
+                    )
+                    incremental_reader_cases += 1
+            if args.incremental_auto_reader is not None:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(first),
+                        "payload.bin",
+                        str(source),
+                        "raw_cpio",
+                        pattern,
+                    )
+                incremental_auto_reader_cases += 1
             if cpio_tool is not None:
                 listed = run(cpio_tool, "-it", "--quiet", "-F", str(first)).stdout.splitlines()
                 if listed != ["payload.bin"]:
@@ -122,6 +300,25 @@ def main() -> None:
                 ) != payload:
                     raise AssertionError(f"GNU cpio extraction mismatch for Vort {format_name}")
                 writer_external += 1
+
+        if args.incremental_sequence_reader is not None:
+            sequence_path = temp / "vort-concatenated.cpio"
+            sequence_data = bytearray(b"\0" * 3)
+            for index, format_name in enumerate(formats):
+                sequence_data.extend((temp / f"vort-{format_name}-first.cpio").read_bytes())
+                sequence_data.extend(b"\0" * (index % 3))
+            sequence_data.extend(b"\0" * 7)
+            sequence_path.write_bytes(sequence_data)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_sequence_reader,
+                    str(sequence_path),
+                    "payload.bin",
+                    str(source),
+                    str(len(formats)),
+                    pattern,
+                )
+            incremental_sequence_reader_cases += 1
 
         for compression in compressions:
             archive = temp / f"wrapper-{compression}.cpio"
@@ -144,13 +341,356 @@ def main() -> None:
             run(args.cli, "extract-cpio-file", str(archive), "payload.bin", str(output), str(len(payload)))
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort CPIO wrapper mismatch for {compression}")
+            if compression != "none" and args.incremental_compressed_reader is not None:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_compressed_reader,
+                        str(archive),
+                        "payload.bin",
+                        str(source),
+                        compression,
+                        pattern,
+                    )
+                incremental_compressed_reader_cases += 1
+            if args.incremental_auto_reader is not None:
+                auto_format = {
+                    "none": "raw_cpio",
+                    "compress-z": "compress_z",
+                    "zstd": "zstandard",
+                }.get(compression, compression)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(archive),
+                        "payload.bin",
+                        str(source),
+                        auto_format,
+                        pattern,
+                    )
+                incremental_auto_reader_cases += 1
             wrapper_cases += 1
+
+        raw_reference_path = temp / "vort-newc-first.cpio"
+        raw_reference = raw_reference_path.read_bytes()
+        lz4_tool = shutil.which("lz4")
+        zstd_tool = shutil.which("zstd")
+        lzf_tool = shutil.which("lzf")
+        lzip_tool = shutil.which("lzip")
+        lzop_tool = shutil.which("lzop")
+        uncompress_tool = shutil.which("uncompress")
+        compress_tool = shutil.which("compress")
+
+        legacy_path = temp / "wrapper-lz4-legacy.cpio"
+        run(
+            args.cli,
+            "encode-lz4-legacy-file",
+            str(raw_reference_path),
+            str(legacy_path),
+            "1024",
+        )
+        if args.incremental_compressed_reader is not None:
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_compressed_reader,
+                    str(legacy_path),
+                    "payload.bin",
+                    str(source),
+                    "lz4-legacy",
+                    pattern,
+                )
+            incremental_compressed_reader_cases += 1
+        if args.incremental_auto_reader is not None:
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_auto_reader,
+                    str(legacy_path),
+                    "payload.bin",
+                    str(source),
+                    "lz4_legacy",
+                    pattern,
+                )
+            incremental_auto_reader_cases += 1
+
+        if args.incremental_mixed_reader is not None:
+            mixed_names = (
+                ("raw_cpio", raw_reference_path),
+                ("gzip", temp / "wrapper-gzip.cpio"),
+                ("bzip2", temp / "wrapper-bzip2.cpio"),
+                ("brotli", temp / "wrapper-brotli.cpio"),
+                ("compress_z", temp / "wrapper-compress-z.cpio"),
+                ("lzma", temp / "wrapper-lzma.cpio"),
+                ("xz", temp / "wrapper-xz.cpio"),
+                ("lz4", temp / "wrapper-lz4.cpio"),
+                ("lz4_legacy", legacy_path),
+                ("zstandard", temp / "wrapper-zstd.cpio"),
+                ("lzip", temp / "wrapper-lzip.cpio"),
+                ("lzop", temp / "wrapper-lzop.cpio"),
+            )
+            mixed_path = temp / "vort-mixed-initramfs.cpio"
+            mixed_data = bytearray(b"\0" * 3)
+            for index, (_, path) in enumerate(mixed_names):
+                mixed_data.extend(path.read_bytes())
+                mixed_data.extend(b"\0" * (index % 3))
+            mixed_data.extend(b"\0" * 5)
+            mixed_path.write_bytes(mixed_data)
+            expected_formats = ",".join(name for name, _ in mixed_names)
+            member_sizes = ",".join(
+                str(path.stat().st_size)
+                if name in ("compress_z", "lz4_legacy")
+                else "-"
+                for name, path in mixed_names
+            )
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_mixed_reader,
+                    str(mixed_path),
+                    "payload.bin",
+                    str(source),
+                    expected_formats,
+                    member_sizes,
+                    pattern,
+                )
+            incremental_mixed_reader_cases += 1
+
+        external_inputs = {
+            "gzip": __import__("gzip").compress(raw_reference, mtime=0),
+            "bzip2": __import__("bz2").compress(raw_reference),
+            "brotli": brotli_compress(raw_reference),
+            "lzma": __import__("lzma").compress(
+                raw_reference, format=__import__("lzma").FORMAT_ALONE
+            ),
+            "xz": __import__("lzma").compress(raw_reference),
+        }
+        if compress_tool is not None:
+            external_inputs["compress-z"] = subprocess.run(
+                [compress_tool, "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if lz4_tool is not None:
+            external_inputs["lz4"] = subprocess.run(
+                [lz4_tool, "-q", "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+            external_inputs["lz4-legacy"] = subprocess.run(
+                [lz4_tool, "-l", "-q", "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if lzf_tool is not None:
+            external_inputs["lzf"] = subprocess.run(
+                [lzf_tool, "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if lzip_tool is not None:
+            external_inputs["lzip"] = subprocess.run(
+                [lzip_tool, "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if zstd_tool is not None:
+            external_inputs["zstd"] = subprocess.run(
+                [zstd_tool, "-q", "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if lzop_tool is not None:
+            external_inputs["lzop"] = subprocess.run(
+                [lzop_tool, "-c"],
+                input=raw_reference,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
+        if args.incremental_compressed_reader is not None:
+            for compression, data in external_inputs.items():
+                path = temp / f"external-{compression}.cpio"
+                path.write_bytes(data)
+                output = temp / f"external-{compression}.out"
+                run(
+                    args.cli,
+                    "extract-cpio-file",
+                    str(path),
+                    "payload.bin",
+                    str(output),
+                    str(len(payload)),
+                )
+                if output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort auto decode failed external CPIO wrapper: {compression}"
+                    )
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_compressed_reader,
+                        str(path),
+                        "payload.bin",
+                        str(source),
+                        compression,
+                        pattern,
+                    )
+                incremental_compressed_reader_external += 1
+        if args.incremental_auto_reader is not None:
+            for compression, data in external_inputs.items():
+                path = temp / f"external-{compression}.cpio"
+                path.write_bytes(data)
+                auto_format = {
+                    "compress-z": "compress_z",
+                    "zstd": "zstandard",
+                    "lz4-legacy": "lz4_legacy",
+                }.get(compression, compression)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(path),
+                        "payload.bin",
+                        str(source),
+                        auto_format,
+                        pattern,
+                    )
+                incremental_auto_reader_external += 1
+        if args.incremental_mixed_reader is not None:
+            external_order = (
+                "gzip",
+                "bzip2",
+                "brotli",
+                "compress-z",
+                "lzma",
+                "xz",
+                "lz4",
+                "lz4-legacy",
+                "zstd",
+                "lzip",
+                "lzop",
+            )
+            mixed_names = [("raw_cpio", raw_reference)]
+            mixed_names.extend(
+                (
+                    {
+                        "compress-z": "compress_z",
+                        "lz4-legacy": "lz4_legacy",
+                        "zstd": "zstandard",
+                    }.get(name, name),
+                    external_inputs[name],
+                )
+                for name in external_order
+                if name in external_inputs
+            )
+            mixed_path = temp / "external-mixed-initramfs.cpio"
+            mixed_data = bytearray(b"\0" * 2)
+            for index, (_, data) in enumerate(mixed_names):
+                mixed_data.extend(data)
+                mixed_data.extend(b"\0" * (index % 2))
+            mixed_path.write_bytes(mixed_data)
+            expected_formats = ",".join(name for name, _ in mixed_names)
+            member_sizes = ",".join(
+                str(len(data)) if name in ("compress_z", "lz4_legacy") else "-"
+                for name, data in mixed_names
+            )
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_mixed_reader,
+                    str(mixed_path),
+                    "payload.bin",
+                    str(source),
+                    expected_formats,
+                    member_sizes,
+                    pattern,
+                )
+            incremental_mixed_reader_cases += 1
+            incremental_mixed_reader_external += 1
+
+        if args.incremental_compressed_writer is not None:
+            for compression in (
+                "gzip",
+                "bzip2",
+                "brotli",
+                "compress-z",
+                "lzma",
+                "xz",
+                "lz4",
+                "lz4-legacy",
+                "lzf",
+                "lzip",
+                "zstd",
+                "lzop",
+            ):
+                one = temp / f"incremental-{compression}-one.cpio"
+                micro = temp / f"incremental-{compression}-micro.cpio"
+                run(
+                    args.incremental_compressed_writer,
+                    str(one),
+                    compression,
+                    str(source),
+                    "one",
+                )
+                run(
+                    args.incremental_compressed_writer,
+                    str(micro),
+                    compression,
+                    str(source),
+                    "micro",
+                )
+                if one.read_bytes() != micro.read_bytes():
+                    raise AssertionError(
+                        f"incremental compressed CPIO wire changed with scheduling: {compression}"
+                    )
+                decoded_output = temp / f"incremental-{compression}.out"
+                run(
+                    args.cli,
+                    "extract-cpio-file",
+                    str(one),
+                    "payload.bin",
+                    str(decoded_output),
+                    str(len(payload)),
+                )
+                if decoded_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort could not extract incremental CPIO: {compression}"
+                    )
+                raw_stream = decode_streaming_cpio(
+                    compression,
+                    one,
+                    zstd_tool,
+                    lz4_tool,
+                    lzf_tool,
+                    lzip_tool,
+                    lzop_tool,
+                    uncompress_tool,
+                )
+                if raw_stream is not None:
+                    if raw_stream != raw_reference:
+                        raise AssertionError(
+                            f"external decoder produced a different raw CPIO: {compression}"
+                        )
+                    incremental_compressed_writer_external += 1
+                incremental_compressed_writer_cases += 1
 
         if args.writer is not None:
             expected_names = ["plain.txt", "folder", "folder/data.bin", "link"]
             for format_name in formats:
                 archive = temp / f"probe-{format_name}.cpio"
                 run(args.writer, str(archive), format_name)
+                incremental_one = temp / f"probe-{format_name}-incremental-one.cpio"
+                incremental_micro = temp / f"probe-{format_name}-incremental-micro.cpio"
+                run(args.writer, str(incremental_one), format_name, "incremental-one")
+                run(args.writer, str(incremental_micro), format_name, "incremental-micro")
+                expected_wire = archive.read_bytes()
+                if incremental_one.read_bytes() != expected_wire:
+                    raise AssertionError(
+                        f"one-byte incremental CPIO wire mismatch for {format_name}"
+                    )
+                if incremental_micro.read_bytes() != expected_wire:
+                    raise AssertionError(
+                        f"micro incremental CPIO wire mismatch for {format_name}"
+                    )
+                incremental_writer_cases += 2
                 listing = run(args.cli, "list-cpio-file", str(archive)).stdout
                 if "kind=directory" not in listing or "kind=symlink" not in listing:
                     raise AssertionError(f"Vort writer probe metadata mismatch for {format_name}: {listing}")
@@ -186,7 +726,36 @@ def main() -> None:
                 run(args.cli, "extract-cpio-file", str(archive), "hard-a", str(hard_output), str(len(payload)))
                 if hard_output.read_bytes() != payload:
                     raise AssertionError(f"Vort failed GNU cpio {format_name} hard-link resolution")
+                if args.incremental_reader is not None:
+                    for pattern in ("one", "micro"):
+                        run(
+                            args.incremental_reader,
+                            str(archive),
+                            "payload.bin",
+                            str(reference / "payload.bin"),
+                            pattern,
+                        )
+                        incremental_reader_cases += 1
                 reference_writer += 1
+
+            if args.incremental_sequence_reader is not None:
+                sequence_path = temp / "gnu-concatenated.cpio"
+                sequence_data = bytearray(b"\0" * 5)
+                for index, format_name in enumerate(reference_formats):
+                    sequence_data.extend((temp / f"reference-{format_name}.cpio").read_bytes())
+                    sequence_data.extend(b"\0" * (index + 1))
+                sequence_path.write_bytes(sequence_data)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_sequence_reader,
+                        str(sequence_path),
+                        "payload.bin",
+                        str(reference / "payload.bin"),
+                        str(len(reference_formats)),
+                        pattern,
+                    )
+                incremental_sequence_reader_cases += 1
+                incremental_sequence_reader_external += 1
 
         crc_archive = temp / "vort-crc-first.cpio"
         corrupt = bytearray(crc_archive.read_bytes())
@@ -223,6 +792,18 @@ def main() -> None:
         f"formats={len(formats)} self_writer_cases={len(formats)} "
         f"cpio={cpio_tool is not None} writer_external={writer_external} "
         f"reference_writer={reference_writer} wrapper_cases={wrapper_cases} "
+        f"incremental_writer_cases={incremental_writer_cases} "
+        f"incremental_reader_cases={incremental_reader_cases} "
+        f"incremental_sequence_reader_cases={incremental_sequence_reader_cases} "
+        f"incremental_sequence_reader_external={incremental_sequence_reader_external} "
+        f"incremental_mixed_reader_cases={incremental_mixed_reader_cases} "
+        f"incremental_mixed_reader_external={incremental_mixed_reader_external} "
+        f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
+        f"incremental_compressed_reader_external={incremental_compressed_reader_external} "
+        f"incremental_auto_reader_cases={incremental_auto_reader_cases} "
+        f"incremental_auto_reader_external={incremental_auto_reader_external} "
+        f"incremental_compressed_writer_cases={incremental_compressed_writer_cases} "
+        f"incremental_compressed_writer_external={incremental_compressed_writer_external} "
         "corrupt_crc=True truncated=True trailing=True"
     )
 

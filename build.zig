@@ -3,16 +3,28 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const vail_dep = b.dependency("vail_archive_crypto", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const vail_crypto = vail_dep.module("vail_archive_crypto");
+    const vail_releasefast_dep = b.dependency("vail_archive_crypto", .{
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const vail_crypto_releasefast = vail_releasefast_dep.module("vail_archive_crypto");
 
     const vort_mod = b.addModule("vort", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
     });
     const vort_mod_releasefast = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto_releasefast }},
     });
     const br_record_optimal_obj = b.addObject(.{
         .name = "vort-br-record-optimal",
@@ -47,6 +59,11 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const vail_wasm_dep = b.dependency("vail_archive_crypto", .{
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    const vail_crypto_wasm = vail_wasm_dep.module("vail_archive_crypto");
     const wasm_br_record_optimal_obj = b.addObject(.{
         .name = "vort-br-record-optimal-wasm-check",
         .root_module = b.createModule(.{
@@ -67,12 +84,68 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = wasm_target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto_wasm }},
     });
     wasm_mod.addObject(wasm_br_record_optimal_obj);
     wasm_mod.addObject(wasm_zstd_huffman_x2_obj);
     const wasm_lib = b.addLibrary(.{ .name = "vort-wasm-check", .root_module = wasm_mod });
     const wasm_check_step = b.step("check-wasm", "Compile the complete Vort library for wasm32-wasi");
     wasm_check_step.dependOn(&wasm_lib.step);
+    const br_public_wasm = b.addExecutable(.{
+        .name = "vort-br-public-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_wasm_public.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_public_wasm.entry = .disabled;
+    br_public_wasm.rdynamic = true;
+    br_public_wasm.stack_size = 8 * 1024 * 1024;
+    const br_public_wasm_check = b.step("check-br-public-wasm", "Compile real public Brotli HQ encode and decode consumers for wasm32-wasi");
+    br_public_wasm_check.dependOn(&br_public_wasm.step);
+    const br_public_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/wasm_public_gate.js" });
+    br_public_wasm_run.addArtifactArg(br_public_wasm);
+    const br_public_wasm_test = b.step("test-br-public-wasm", "Execute public Brotli HQ encode and decode routes in WebAssembly");
+    br_public_wasm_test.dependOn(&br_public_wasm_run.step);
+    const lz4_fast_wasm = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/lz4_fast_controls_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    lz4_fast_wasm.entry = .disabled;
+    lz4_fast_wasm.rdynamic = true;
+    lz4_fast_wasm.stack_size = 2 * 1024 * 1024;
+    const lz4_fast_wasm_run = b.addSystemCommand(&.{ "node", "tools/lz4/wasm_fast_controls_gate.js" });
+    lz4_fast_wasm_run.addArtifactArg(lz4_fast_wasm);
+    const lz4_fast_wasm_step = b.step("test-lz4-fast-controls-wasm", "Execute public LZ4 acceleration and profile contracts in WebAssembly");
+    lz4_fast_wasm_step.dependOn(&lz4_fast_wasm_run.step);
+    const br_large_wasm = b.addExecutable(.{
+        .name = "vort-br-large-window-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_large_wasm.entry = .disabled;
+    br_large_wasm.rdynamic = true;
+    br_large_wasm.stack_size = 8 * 1024 * 1024;
+    const br_large_wasm_check = b.step("check-br-large-window-wasm", "Compile real Brotli Large Window encode and decode consumers");
+    br_large_wasm_check.dependOn(&br_large_wasm.step);
+    const br_large_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/large_window_wasm_gate.js" });
+    br_large_wasm_run.addArtifactArg(br_large_wasm);
+    const br_large_wasm_test = b.step("test-br-large-window-wasm", "Execute public Brotli Large Window HQ round-trips in WebAssembly");
+    br_large_wasm_test.dependOn(&br_large_wasm_run.step);
     const br_record_classifier_tests = b.addTest(.{
         .name = "vort-br-record-classifier-tests",
         .root_module = b.createModule(.{
@@ -111,15 +184,230 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
     });
     tests_mod.addObject(br_record_optimal_obj);
     tests_mod.addObject(zstd_huffman_x2_obj);
+
+    const erofs_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/erofs.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
+    });
+    erofs_tests_mod.addObject(br_record_optimal_obj);
+    erofs_tests_mod.addObject(zstd_huffman_x2_obj);
 
     const tests = b.addTest(.{
         .name = "vort-tests",
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const tar_incremental_writer_tests = b.addTest(.{
+        .name = "vort-tar-incremental-writer-tests",
+        .root_module = tests_mod,
+        .filters = &.{"compressed TAR incremental writer"},
+    });
+    const run_tar_incremental_writer_tests = b.addRunArtifact(tar_incremental_writer_tests);
+    const tar_incremental_writer_test_step = b.step(
+        "test-tar-incremental-writer",
+        "Run focused compressed TAR incremental writer tests",
+    );
+    tar_incremental_writer_test_step.dependOn(&run_tar_incremental_writer_tests.step);
+    const seven_zip_incremental_writer_tests = b.addTest(.{
+        .name = "vort-seven-zip-incremental-writer-tests",
+        .root_module = tests_mod,
+        .filters = &.{
+            "7z incremental writer",
+            "raw LZMA2 incremental encoder",
+            "PPMd7 incremental encoder",
+            "incremental XZ forward filters",
+            "BCJ2 conversion encoder",
+        },
+    });
+    const run_seven_zip_incremental_writer_tests = b.addRunArtifact(
+        seven_zip_incremental_writer_tests,
+    );
+    const seven_zip_incremental_writer_test_step = b.step(
+        "test-seven-zip-incremental-writer",
+        "Run focused 7z incremental writer tests",
+    );
+    seven_zip_incremental_writer_test_step.dependOn(
+        &run_seven_zip_incremental_writer_tests.step,
+    );
+    const zip_incremental_entry_decoder_tests = b.addTest(.{
+        .name = "vort-zip-incremental-entry-decoder-tests",
+        .root_module = tests_mod,
+        .filters = &.{"ZIP incremental entry decoder"},
+    });
+    const run_zip_incremental_entry_decoder_tests = b.addRunArtifact(
+        zip_incremental_entry_decoder_tests,
+    );
+    const zip_incremental_entry_decoder_test_step = b.step(
+        "test-zip-incremental-entry-decoder",
+        "Run focused ZIP random-access incremental entry decoder tests",
+    );
+    zip_incremental_entry_decoder_test_step.dependOn(
+        &run_zip_incremental_entry_decoder_tests.step,
+    );
+    const rar_tests = b.addTest(.{
+        .name = "vort-rar-tests",
+        .root_module = tests_mod,
+        .filters = &.{"RAR"},
+    });
+    const run_rar_tests = b.addRunArtifact(rar_tests);
+    const rar_test_step = b.step("test-rar", "Run focused RAR archive and codec tests");
+    rar_test_step.dependOn(&run_rar_tests.step);
+    const arj_tests = b.addTest(.{
+        .name = "vort-arj-tests",
+        .root_module = tests_mod,
+        .filters = &.{"ARJ"},
+    });
+    const run_arj_tests = b.addRunArtifact(arj_tests);
+    const arj_test_step = b.step("test-arj", "Run focused ARJ archive and codec tests");
+    arj_test_step.dependOn(&run_arj_tests.step);
+    const br_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/br.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    br_tests_mod.addObject(br_record_optimal_obj);
+    const br_test_filter = b.option(
+        []const u8,
+        "br-test-filter",
+        "Compile and run only Brotli tests whose names contain this text",
+    );
+    const br_tests = b.addTest(.{
+        .name = "vort-br-tests",
+        .root_module = br_tests_mod,
+        .filters = if (br_test_filter) |filter| &.{filter} else &.{},
+    });
+    const run_br_tests = b.addRunArtifact(br_tests);
+    const br_test_step = b.step("test-br", "Run focused Brotli codec tests");
+    br_test_step.dependOn(&run_br_tests.step);
+    const br_hq_tests = b.addTest(.{
+        .name = "vort-br-hq-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli HQ", "BrHQ core", "Brotli dictionary visitors" },
+    });
+    const br_hq_test_step = b.step("test-br-hq", "Run Brotli HQ matching, exact commands and resource contracts");
+    br_hq_test_step.dependOn(&b.addRunArtifact(br_hq_tests).step);
+    const br_total_memory_tests = b.addTest(.{
+        .name = "vort-br-total-memory-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli total memory", "Brotli total budget" },
+    });
+    const br_total_memory_test_step = b.step("test-br-total-memory", "Run Brotli whole-encoder allocation and transaction contracts");
+    br_total_memory_test_step.dependOn(&b.addRunArtifact(br_total_memory_tests).step);
+    const br_large_window_tests = b.addTest(.{
+        .name = "vort-br-large-window-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli large window", "Brotli large distance", "Brotli HQ Large Window", "BrHQ LargeWindow" },
+    });
+    const br_large_window_test_step = b.step("test-br-large-window", "Run Brotli Large Window format, parser and resource contracts");
+    br_large_window_test_step.dependOn(&b.addRunArtifact(br_large_window_tests).step);
+    const br_whole_block_tests = b.addTest(.{
+        .name = "vort-br-whole-block-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli whole block", "Brotli whole-block", "Brotli HQ whole block", "BrHQ whole block", "Brotli HQ command storage" },
+    });
+    const br_whole_block_test_step = b.step("test-br-whole-block", "Run complete-meta-block Brotli search, wire and resource contracts");
+    br_whole_block_test_step.dependOn(&b.addRunArtifact(br_whole_block_tests).step);
+    const br_complete_length_tests = b.addTest(.{
+        .name = "vort-br-complete-length-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli complete lengths", "Brotli copy-length", "Brotli HQ complete lengths", "BrHQ complete lengths", "BrHQ complete length policy", "BrHQ price budget" },
+    });
+    const br_complete_length_step = b.step("test-br-complete-lengths", "Run complete Brotli copy-length choice and evaluation-limit contracts");
+    br_complete_length_step.dependOn(&b.addRunArtifact(br_complete_length_tests).step);
+    const br_large_tree_tests = b.addTest(.{
+        .name = "vort-br-large-tree-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br_large_window_tree_tests.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+        .filters = &.{"Brotli LargeWindow tree"},
+    });
+    const br_large_tree_test_step = b.step("test-br-large-window-tree", "Run the explicit large-history Brotli tree and fork oracle");
+    br_large_tree_test_step.dependOn(&b.addRunArtifact(br_large_tree_tests).step);
+    const br_large_tree_build_step = b.step("build-br-large-window-tree", "Compile the explicit Brotli large-history tree oracle");
+    br_large_tree_build_step.dependOn(&br_large_tree_tests.step);
+    const br_large_far = b.addExecutable(.{
+        .name = "vort-br-large-window-far",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_far.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const br_large_far_run = b.addRunArtifact(br_large_far);
+    if (b.args) |args| br_large_far_run.addArgs(args);
+    const br_large_far_test = b.step("test-br-large-window-far", "Run the explicit public Brotli large-history campaign in ReleaseFast");
+    br_large_far_test.dependOn(&br_large_far_run.step);
+    const br_large_far_build = b.step("build-br-large-window-far", "Compile the explicit public Brotli large-history campaign");
+    br_large_far_build.dependOn(&br_large_far.step);
+    const br_large_extra_tests = b.addTest(.{
+        .name = "vort-br-large-window-extra-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_extra.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+        .filters = &.{"Brotli Large Window public RAW dictionary"},
+    });
+    const br_large_extra_test = b.step("test-br-large-window-extra", "Run the explicit public 25-bit distance-extra RAW dictionary regression");
+    br_large_extra_test.dependOn(&b.addRunArtifact(br_large_extra_tests).step);
+    const zstd_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/zstd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zstd_tests_mod.addObject(zstd_huffman_x2_obj);
+    const zstd_tests = b.addTest(.{
+        .name = "vort-zstd-tests",
+        .root_module = zstd_tests_mod,
+    });
+    const run_zstd_tests = b.addRunArtifact(zstd_tests);
+    const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
+    zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_controls_tests = b.addTest(.{
+        .name = "vort-zstd-encode-controls-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd encode controls", "controlled " },
+    });
+    const zstd_controls_test_step = b.step("test-zstd-encode-controls", "Run signed Zstd level, strategy, profile and matcher contracts");
+    zstd_controls_test_step.dependOn(&b.addRunArtifact(zstd_controls_tests).step);
+    const zstd_hq_tests = b.addTest(.{
+        .name = "vort-zstd-hq-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd HQ", "Zstd lazy2", "Zstd canonical presets" },
+    });
+    const zstd_hq_test_step = b.step("test-zstd-hq", "Run Zstd HQ strategies, binary tree, entropy prices and resource contracts");
+    zstd_hq_test_step.dependOn(&b.addRunArtifact(zstd_hq_tests).step);
+    const fast_cover_dictionary_mod = b.createModule(.{ .root_source_file = b.path("src/dictionary.zig"), .target = target, .optimize = optimize });
+    const fast_cover_dictionary_tests = b.addTest(.{ .name = "vort-fast-cover-dictionary-tests", .root_module = fast_cover_dictionary_mod, .filters = &.{ "FastCover", "fast cover" } });
+    const fast_cover_zstd_tests = b.addTest(.{ .name = "vort-fast-cover-zstd-tests", .root_module = zstd_tests_mod, .filters = &.{ "FastCover", "fast cover" } });
+    const fast_cover_test_step = b.step("test-fast-cover", "Run FastCover selection, optimization, standard dictionary and resource contracts");
+    fast_cover_test_step.dependOn(&b.addRunArtifact(fast_cover_dictionary_tests).step);
+    fast_cover_test_step.dependOn(&b.addRunArtifact(fast_cover_zstd_tests).step);
+    const zstd_far_window_tests = b.addTest(.{
+        .name = "vort-zstd-far-window-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{
+            "zstd explicit 24-bit window",
+            "zstd explicit 25-bit window",
+            "zstd explicit 26-bit window",
+        },
+    });
+    const run_zstd_far_window_tests = b.addRunArtifact(zstd_far_window_tests);
+    const zstd_far_window_test_step = b.step(
+        "test-zstd-far-window",
+        "Run focused Zstandard explicit far-window tests",
+    );
+    zstd_far_window_test_step.dependOn(&run_zstd_far_window_tests.step);
     const zstd_huffman_x2_tests = b.addTest(.{
         .name = "vort-zstd-huffman-x2-tests",
         .root_module = tests_mod,
@@ -152,9 +440,28 @@ pub fn build(b: *std.Build) void {
     const run_bgzf_tests = b.addRunArtifact(bgzf_tests);
     const bgzf_test_step = b.step("test-bgzf", "Run focused BGZF block and range tests");
     bgzf_test_step.dependOn(&run_bgzf_tests.step);
+    const bzip2_tests_mod = b.createModule(.{ .root_source_file = b.path("src/bzip2.zig"), .target = target, .optimize = optimize });
+    const snappy_tests_mod = b.createModule(.{ .root_source_file = b.path("src/snappy.zig"), .target = target, .optimize = optimize });
+    const snappy_framing_tests_mod = b.createModule(.{ .root_source_file = b.path("src/snappy_framing.zig"), .target = target, .optimize = optimize });
+    const bzip2_tests = b.addTest(.{ .name = "vort-bzip2-tests", .root_module = bzip2_tests_mod });
+    const bzip2_test_step = b.step("test-bzip2", "Run Bzip2 codec and incremental replay tests");
+    bzip2_test_step.dependOn(&b.addRunArtifact(bzip2_tests).step);
+    const snappy_tests = b.addTest(.{ .name = "vort-snappy-tests", .root_module = snappy_tests_mod });
+    const snappy_test_step = b.step("test-snappy", "Run Snappy raw-block and framed-stream tests");
+    snappy_test_step.dependOn(&b.addRunArtifact(snappy_tests).step);
+    const bzip2_snappy_contracts_step = b.step("test-bzip2-snappy-contracts", "Run Bzip2 and Snappy allocation and progress contracts");
+    const bzip2_contracts = b.addTest(.{ .name = "vort-bzip2-contract-tests", .root_module = bzip2_tests_mod, .filters = &.{"Bzip2 stream contracts"} });
+    const snappy_contracts = b.addTest(.{ .name = "vort-snappy-contract-tests", .root_module = snappy_tests_mod, .filters = &.{"Snappy stream contracts"} });
+    const snappy_framing_contracts = b.addTest(.{ .name = "vort-snappy-framing-contract-tests", .root_module = snappy_framing_tests_mod, .filters = &.{"Snappy framing contracts"} });
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(bzip2_contracts).step);
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(snappy_contracts).step);
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(snappy_framing_contracts).step);
+    const bzip2_consumer_tests = b.addTest(.{ .name = "vort-bzip2-stream-consumer-tests", .root_module = tests_mod, .filters = &.{ "ZIP incremental reader streams Bzip2", "ZIP method 12 round trips" } });
+    const bzip2_consumer_step = b.step("test-bzip2-stream-consumers", "Run ZIP method 12 and descriptor-stream Bzip2 integration");
+    bzip2_consumer_step.dependOn(&b.addRunArtifact(bzip2_consumer_tests).step);
     const snappy_framing_tests = b.addTest(.{
         .name = "vort-snappy-framing-tests",
-        .root_module = tests_mod,
+        .root_module = snappy_framing_tests_mod,
         .filters = &.{ "Xerial Snappy", "Hadoop Snappy", "Snappy framing" },
     });
     const run_snappy_framing_tests = b.addRunArtifact(snappy_framing_tests);
@@ -200,6 +507,15 @@ pub fn build(b: *std.Build) void {
     const run_lzms_tests = b.addRunArtifact(lzms_tests);
     const lzms_test_step = b.step("test-lzms", "Run focused Windows LZMS codec tests");
     lzms_test_step.dependOn(&run_lzms_tests.step);
+    const quantum_tests = b.addTest(.{ .name = "vort-quantum-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/quantum.zig"), .target = target, .optimize = optimize }), .filters = &.{"Quantum"} });
+    const quantum_test_step = b.step("test-quantum", "Run focused Quantum codec, match and resource tests");
+    quantum_test_step.dependOn(&b.addRunArtifact(quantum_tests).step);
+    const lzx_tests = b.addTest(.{ .name = "vort-lzx-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lzx.zig"), .target = target, .optimize = optimize }), .filters = &.{"LZX"} });
+    const lzx_test_step = b.step("test-lzx", "Run focused LZX codec tests");
+    lzx_test_step.dependOn(&b.addRunArtifact(lzx_tests).step);
+    const cab_tests = b.addTest(.{ .name = "vort-cab-tests", .root_module = tests_mod, .filters = &.{ "CAB", "LZX", "Quantum" } });
+    const cab_test_step = b.step("test-cab", "Run CAB, LZX and Quantum codec/container tests");
+    cab_test_step.dependOn(&b.addRunArtifact(cab_tests).step);
     const microlzma_tests = b.addTest(.{
         .name = "vort-microlzma-tests",
         .root_module = tests_mod,
@@ -216,6 +532,8 @@ pub fn build(b: *std.Build) void {
     const run_wof_tests = b.addRunArtifact(wof_tests);
     const wof_test_step = b.step("test-wof", "Run focused WOF backing stream tests");
     wof_test_step.dependOn(&run_wof_tests.step);
+    const wof_codec_tests = b.addTest(.{ .name = "vort-wof-codec-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/wof.zig"), .target = target, .optimize = optimize }), .filters = &.{"WOF"} });
+    wof_test_step.dependOn(&b.addRunArtifact(wof_codec_tests).step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -224,6 +542,111 @@ pub fn build(b: *std.Build) void {
     const run_lzfse_tests = b.addRunArtifact(lzfse_tests);
     const lzfse_test_step = b.step("test-lzfse", "Run focused LZFSE and LZVN tests");
     lzfse_test_step.dependOn(&run_lzfse_tests.step);
+    const lzfse_stream_tests = b.addTest(.{ .name = "vort-lzfse-stream-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lzfse.zig"), .target = target, .optimize = optimize }), .filters = &.{ "LZFSE stream", "LZFSE incremental", "LZVN cursor", "LZFSE FSE cursor", "LZFSE history" } });
+    const lzfse_stream_test_step = b.step("test-lzfse-stream", "Run bounded LZFSE streaming decoder tests");
+    lzfse_stream_test_step.dependOn(&b.addRunArtifact(lzfse_stream_tests).step);
+    const lz4_tests = b.addTest(.{ .name = "vort-lz4-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lz4.zig"), .target = target, .optimize = optimize, .link_libc = true }), .filters = &.{"LZ4"} });
+    const lz4_test_step = b.step("test-lz4", "Run focused LZ4 codec and incremental tests");
+    lz4_test_step.dependOn(&b.addRunArtifact(lz4_tests).step);
+    const lz4_fast_controls_tests = b.addTest(.{
+        .name = "vort-lz4-fast-controls-tests",
+        .root_module = lz4_tests.root_module,
+        .filters = &.{ "LZ4 fast controls", "LZ4 fast options", "LZ4 fast parser" },
+    });
+    const lz4_fast_controls_step = b.step("test-lz4-fast-controls", "Run LZ4 acceleration, search-work and public ownership contracts");
+    lz4_fast_controls_step.dependOn(&b.addRunArtifact(lz4_fast_controls_tests).step);
+    const lz4_full_tests = b.addTest(.{
+        .name = "vort-lz4-full-tests",
+        .root_module = lz4_tests.root_module,
+    });
+    const lz4_full_step = b.step("test-lz4-full", "Run the complete LZ4 family, including lowercase native tests and imported kernels");
+    lz4_full_step.dependOn(&b.addRunArtifact(lz4_full_tests).step);
+    const zlib_stream_tests = b.addTest(.{
+        .name = "vort-zlib-stream-tests",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/deflate.zig"), .target = target, .optimize = optimize }),
+        .filters = &.{"zlib incremental"},
+    });
+    const run_zlib_stream_tests = b.addRunArtifact(zlib_stream_tests);
+    const zlib_stream_test_step = b.step("test-zlib-stream", "Run incremental zlib and dictionary recovery tests");
+    zlib_stream_test_step.dependOn(&run_zlib_stream_tests.step);
+    const zstd_limits_tests = b.addTest(.{ .name = "vort-zstd-stream-contract-tests", .root_module = zstd_tests_mod, .filters = &.{"Zstd incremental limits"} });
+    const lz4_limits_tests = b.addTest(.{ .name = "vort-lz4-stream-contract-tests", .root_module = lz4_tests.root_module, .filters = &.{"LZ4 incremental limits"} });
+    const stream_contracts_test_step = b.step("test-stream-contracts", "Run cumulative stream quotas, allocation budgets and zlib recovery tests");
+    stream_contracts_test_step.dependOn(&b.addRunArtifact(zstd_limits_tests).step);
+    stream_contracts_test_step.dependOn(&b.addRunArtifact(lz4_limits_tests).step);
+    stream_contracts_test_step.dependOn(&run_zlib_stream_tests.step);
+    const lzma_contracts_mod = b.createModule(.{ .root_source_file = b.path("src/lzma.zig"), .target = target, .optimize = optimize });
+    const lzma_tests = b.addTest(.{ .name = "vort-lzma-tests", .root_module = lzma_contracts_mod, .filters = &.{"LZMA"} });
+    const lzma_test_step = b.step("test-lzma", "Run LZMA-Alone, MicroLZMA and incremental tests");
+    lzma_test_step.dependOn(&b.addRunArtifact(lzma_tests).step);
+    const codec_contracts_step = b.step("test-codec-stream-contracts", "Run native dictionary recovery and LZMA/Brotli resource contracts");
+    const zstd_dictionary_contracts = b.addTest(.{ .name = "vort-zstd-dictionary-contract-tests", .root_module = zstd_tests_mod, .filters = &.{"Zstd dictionary resume"} });
+    const lz4_dictionary_contracts = b.addTest(.{ .name = "vort-lz4-dictionary-contract-tests", .root_module = lz4_tests.root_module, .filters = &.{"LZ4 dictionary resume"} });
+    const lzma_stream_contracts = b.addTest(.{ .name = "vort-lzma-stream-contract-tests", .root_module = lzma_contracts_mod, .filters = &.{"LZMA stream contracts"} });
+    const br_stream_contracts = b.addTest(.{ .name = "vort-br-stream-contract-tests", .root_module = br_tests_mod, .filters = &.{"Brotli stream contracts"} });
+    codec_contracts_step.dependOn(&b.addRunArtifact(zstd_dictionary_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(lz4_dictionary_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(lzma_stream_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(br_stream_contracts).step);
+    const stream_contract_consumer_tests = b.addTest(.{
+        .name = "vort-stream-contract-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "ZIP incremental reader streams LZMA", "ZIP method 14 writer", "ZIP incremental writer emits ZIP LZMA", "TAR Brotli auto decode", "compressed CPIO auto decode is bounded and rejects non-CPIO Brotli", "TAR compression detection distinguishes raw TAR and LZMA-Alone" },
+    });
+    const stream_contract_consumer_step = b.step("test-stream-contract-consumers", "Run ZIP, TAR and CPIO integration for LZMA/Brotli streaming contracts");
+    stream_contract_consumer_step.dependOn(&b.addRunArtifact(stream_contract_consumer_tests).step);
+    const xz_tests_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = target, .optimize = optimize });
+    const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
+    const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
+    xz_test_step.dependOn(&b.addRunArtifact(xz_tests).step);
+    const lzma_encode_controls_tests = b.addTest(.{
+        .name = "vort-lzma-encode-controls-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{ "LZMA encode controls", "LZMA advanced", "LZMA matcher", "LZMA preset validation", "LZMA wrapper presets", "LZMA fast parser", "Streaming hash journal" },
+    });
+    const xz_encode_controls_tests = b.addTest(.{
+        .name = "vort-xz-encode-controls-tests",
+        .root_module = xz_tests_mod,
+        .filters = &.{ "XZ encode controls", "LZMA2 encode controls" },
+    });
+    const encode_controls_test_step = b.step("test-lzma-xz-encode-controls", "Run LZMA/XZ preset, match-finder, parser, streaming and resource contracts");
+    encode_controls_test_step.dependOn(&b.addRunArtifact(lzma_encode_controls_tests).step);
+    encode_controls_test_step.dependOn(&b.addRunArtifact(xz_encode_controls_tests).step);
+    const large_dictionary_tests = b.addTest(.{
+        .name = "vort-lzma-large-dictionary-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{ "LZMA large dictionary", "LZMA bounded payload" },
+    });
+    const large_chunk_tests = b.addTest(.{
+        .name = "vort-lzma2-large-chunk-tests",
+        .root_module = xz_tests_mod,
+        .filters = &.{ "LZMA2 large chunk", "XZ large chunk" },
+    });
+    const large_block_test_step = b.step("test-lzma2-large-blocks", "Run large LZMA dictionary and LZMA2 chunk framing, streaming and resource contracts");
+    large_block_test_step.dependOn(&b.addRunArtifact(large_dictionary_tests).step);
+    large_block_test_step.dependOn(&b.addRunArtifact(large_chunk_tests).step);
+    const large_distance_tests = b.addTest(.{
+        .name = "vort-lzma-actual-large-distance-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{"Large dictionary actual distance"},
+    });
+    const large_distance_test_step = b.step("test-lzma-large-distance", "Run the explicit ReleaseFast dictionary-distance fixture beyond 64 MiB");
+    large_distance_test_step.dependOn(&b.addRunArtifact(large_distance_tests).step);
+    const lzma_one_shot_tests = b.addTest(.{ .name = "vort-lzma-one-shot-tests", .root_module = lzma_contracts_mod, .filters = &.{ "LZMA one shot", "LZMA one-shot" } });
+    const xz_one_shot_tests = b.addTest(.{ .name = "vort-xz-one-shot-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ one shot", "XZ one-shot" } });
+    const one_shot_contract_step = b.step("test-lzma-xz-one-shot-contracts", "Run bounded atomic LZMA and XZ caller-buffer and size-query contracts");
+    one_shot_contract_step.dependOn(&b.addRunArtifact(lzma_one_shot_tests).step);
+    one_shot_contract_step.dependOn(&b.addRunArtifact(xz_one_shot_tests).step);
+    const xz_progressive_tests = b.addTest(.{ .name = "vort-xz-progressive-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ progressive", "LZMA2 progressive" } });
+    const xz_progressive_test_step = b.step("test-xz-progressive", "Run progressive XZ and LZMA2 resource and progress tests");
+    xz_progressive_test_step.dependOn(&b.addRunArtifact(xz_progressive_tests).step);
+    const xz_consumer_tests = b.addTest(.{
+        .name = "vort-xz-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "7z reader decodes a real LZMA2", "7z writer round trips an LZMA2", "PBZX", "WIA" },
+    });
+    const xz_consumer_test_step = b.step("test-xz-consumers", "Run LZMA2 integration tests in 7z, PBZX and WIA/RVZ");
+    xz_consumer_test_step.dependOn(&b.addRunArtifact(xz_consumer_tests).step);
     const decmpfs_tests = b.addTest(.{
         .name = "vort-decmpfs-tests",
         .root_module = tests_mod,
@@ -272,6 +695,13 @@ pub fn build(b: *std.Build) void {
     const run_zfs_compression_tests = b.addRunArtifact(zfs_compression_tests);
     const zfs_compression_test_step = b.step("test-zfs-compression", "Run focused ZFS block compression tests");
     zfs_compression_test_step.dependOn(&run_zfs_compression_tests.step);
+    const zstd_control_consumer_tests = b.addTest(.{
+        .name = "vort-zstd-control-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "CHD signed Zstd levels", "ZFS signed Zstd levels" },
+    });
+    const zstd_control_consumer_step = b.step("test-zstd-control-consumers", "Run signed Zstd level and OpenZFS FAST metadata integration tests");
+    zstd_control_consumer_step.dependOn(&b.addRunArtifact(zstd_control_consumer_tests).step);
     const qcow2_tests = b.addTest(.{
         .name = "vort-qcow2-tests",
         .root_module = tests_mod,
@@ -416,12 +846,33 @@ pub fn build(b: *std.Build) void {
     squashfs_test_step.dependOn(&run_squashfs_tests.step);
     const erofs_tests = b.addTest(.{
         .name = "vort-erofs-tests",
-        .root_module = tests_mod,
+        .root_module = erofs_tests_mod,
         .filters = &.{"EROFS"},
     });
     const run_erofs_tests = b.addRunArtifact(erofs_tests);
     const erofs_test_step = b.step("test-erofs", "Run focused EROFS reader and writer tests");
     erofs_test_step.dependOn(&run_erofs_tests.step);
+    const io_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/io/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const byte_source_tests = b.addTest(.{
+        .name = "vort-byte-source-tests",
+        .root_module = io_tests_mod,
+        .filters = &.{"byte source"},
+    });
+    const run_byte_source_tests = b.addRunArtifact(byte_source_tests);
+    const byte_source_test_step = b.step("test-byte-source", "Run bounded byte-source and file adapter tests");
+    byte_source_test_step.dependOn(&run_byte_source_tests.step);
+    const byte_sink_tests = b.addTest(.{
+        .name = "vort-byte-sink-tests",
+        .root_module = io_tests_mod,
+        .filters = &.{ "byte sink", "working allocator" },
+    });
+    const run_byte_sink_tests = b.addRunArtifact(byte_sink_tests);
+    const byte_sink_test_step = b.step("test-byte-sink", "Run output sink and working-memory accounting tests");
+    byte_sink_test_step.dependOn(&run_byte_sink_tests.step);
     const wim_tests = b.addTest(.{
         .name = "vort-wim-tests",
         .root_module = tests_mod,
@@ -1011,20 +1462,40 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast,
     });
+    const deflate_params_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-params-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_params_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
     if (zlib_ng_root) |root| {
         zlib_translate.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ root, "build" }) });
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-ng-2.3.90-level6\"");
         deflate_incremental_encode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
         deflate_incremental_decode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+        deflate_params_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
     } else {
         zlib_translate.linkSystemLibrary("z", .{});
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-1.3-level6\"");
         deflate_incremental_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
         deflate_incremental_decode_bench_exe.root_module.linkSystemLibrary("z", .{});
+        deflate_params_interop_exe.root_module.linkSystemLibrary("z", .{});
     }
     const zlib_compat_mod = zlib_translate.createModule();
     deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
     deflate_incremental_decode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
+    deflate_params_interop_exe.root_module.addImport("zlib", zlib_compat_mod);
+    const run_deflate_params_interop = b.addRunArtifact(deflate_params_interop_exe);
+    const deflate_params_interop_step = b.step(
+        "run-deflate-params-interop",
+        "Run bidirectional DEFLATE parameter-change interoperability against libz",
+    );
+    deflate_params_interop_step.dependOn(&run_deflate_params_interop.step);
     const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
     if (b.args) |args| run_deflate_incremental_encode_bench.addArgs(args);
     const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
@@ -1315,6 +1786,223 @@ pub fn build(b: *std.Build) void {
     const python_zlib_diff_dashboard_step = b.step("run-python-zlib-diff-dashboard", "Write Python zlib differential smoke summary to zig-out");
     python_zlib_diff_dashboard_step.dependOn(&python_zlib_diff_dashboard.step);
 
+    const zlib_dictionary_resume_probe = b.addExecutable(.{
+        .name = "vort-zlib-dictionary-resume-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zlib/dictionary_resume_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = zlib_stream_tests.root_module }},
+        }),
+    });
+    const zlib_dictionary_resume_diff = b.addSystemCommand(&.{ "python3", "tools/zlib/dictionary_resume_diff.py", "--probe" });
+    zlib_dictionary_resume_diff.addArtifactArg(zlib_dictionary_resume_probe);
+    if (b.args) |args| zlib_dictionary_resume_diff.addArgs(args);
+    const zlib_dictionary_resume_diff_step = b.step("run-zlib-dictionary-resume-diff", "Validate in-place incremental dictionary recovery against system zlib");
+    zlib_dictionary_resume_diff_step.dependOn(&zlib_dictionary_resume_diff.step);
+
+    const zstd_dictionary_resume_probe = b.addExecutable(.{ .name = "vort-zstd-dictionary-resume-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/native/dictionary_resume_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = zstd_tests_mod }} }) });
+    const lz4_dictionary_resume_probe = b.addExecutable(.{ .name = "vort-lz4-dictionary-resume-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/native/dictionary_resume_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = lz4_tests.root_module }} }) });
+    const native_dictionary_resume_diff = b.addSystemCommand(&.{ "python3", "tools/native/dictionary_resume_diff.py", "--zstd-probe" });
+    native_dictionary_resume_diff.addArtifactArg(zstd_dictionary_resume_probe);
+    native_dictionary_resume_diff.addArg("--lz4-probe");
+    native_dictionary_resume_diff.addArtifactArg(lz4_dictionary_resume_probe);
+    if (b.args) |args| native_dictionary_resume_diff.addArgs(args);
+    const native_dictionary_resume_step = b.step("run-native-dictionary-resume-diff", "Validate native dictionary requests against libzstd and liblz4");
+    native_dictionary_resume_step.dependOn(&native_dictionary_resume_diff.step);
+
+    const zstd_controls_probe = b.addExecutable(.{
+        .name = "vort-zstd-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "codec", .module = zstd_tests_mod }},
+        }),
+    });
+    const zstd_controls_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/controls_diff.py", "--probe" });
+    zstd_controls_diff.addArtifactArg(zstd_controls_probe);
+    zstd_controls_diff.addArgs(&.{ "--build-mode", @tagName(optimize), "--zstd-helper-object" });
+    zstd_controls_diff.addArtifactArg(zstd_huffman_x2_obj);
+    if (b.args) |args| zstd_controls_diff.addArgs(args);
+    const zstd_controls_diff_step = b.step("run-zstd-controls-diff", "Validate signed levels and explicit Zstd match strategies against independent references");
+    zstd_controls_diff_step.dependOn(&zstd_controls_diff.step);
+    const zstd_hq_probe = b.addExecutable(.{
+        .name = "vort-zstd-hq-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/hq_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_hq_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_controls_diff.py", "--probe" });
+    zstd_hq_diff.addArtifactArg(zstd_hq_probe);
+    if (b.args) |args| zstd_hq_diff.addArgs(args);
+    const zstd_hq_diff_step = b.step("run-zstd-hq-diff", "Validate Zstd HQ output and controls against versioned references");
+    zstd_hq_diff_step.dependOn(&zstd_hq_diff.step);
+    const br_hq_probe = b.addExecutable(.{
+        .name = "vort-br-hq-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/hq_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_hq_diff = b.addSystemCommand(&.{ "python3", "tools/br/hq_controls_diff.py", "--probe" });
+    br_hq_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_hq_diff.addArgs(args);
+    const br_hq_diff_step = b.step("run-br-hq-diff", "Validate Brotli HQ wire and controls against versioned references");
+    br_hq_diff_step.dependOn(&br_hq_diff.step);
+    const br_hq_cli_probe = b.addExecutable(.{
+        .name = "vort-br-hq-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/brotli_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_hq_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/hq_cli_gate.py", "--cli" });
+    br_hq_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_hq_cli_gate.addArgs(args);
+    const br_hq_cli_step = b.step("test-br-hq-cli", "Validate Brotli HQ CLI controls and failed-output preservation");
+    br_hq_cli_step.dependOn(&br_hq_cli_gate.step);
+    const br_hq_cli_tests = b.addTest(.{
+        .name = "vort-br-hq-cli-controls-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli/brotli_controls_tests.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    br_hq_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_total_memory_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/total_memory_cli_gate.py", "--cli" });
+    br_total_memory_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_total_memory_cli_gate.addArgs(args);
+    const br_total_memory_cli_step = b.step("test-br-total-memory-cli", "Validate Brotli total-memory controls and atomic CLI output");
+    br_total_memory_cli_step.dependOn(&br_total_memory_cli_gate.step);
+    br_total_memory_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_total_memory_diff = b.addSystemCommand(&.{ "python3", "tools/br/total_memory_diff.py", "--probe" });
+    br_total_memory_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_total_memory_diff.addArgs(args);
+    const br_total_memory_diff_step = b.step("run-br-total-memory-diff", "Validate whole-encoder memory caps and Brotli interoperability");
+    br_total_memory_diff_step.dependOn(&br_total_memory_diff.step);
+    const br_large_window_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/large_window_cli_gate.py", "--cli" });
+    br_large_window_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_large_window_cli_gate.addArgs(args);
+    const br_large_window_cli_step = b.step("test-br-large-window-cli", "Validate explicit Brotli Large Window CLI format and resource controls");
+    br_large_window_cli_step.dependOn(&br_large_window_cli_gate.step);
+    br_large_window_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_large_window_diff = b.addSystemCommand(&.{ "python3", "tools/br/large_window_diff.py", "--probe" });
+    br_large_window_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_large_window_diff.addArgs(args);
+    const br_large_window_diff_step = b.step("run-br-large-window-diff", "Validate Brotli Large Window HQ against opt-in reference decoders");
+    br_large_window_diff_step.dependOn(&br_large_window_diff.step);
+    const br_whole_block_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/whole_block_cli_gate.py", "--cli" });
+    br_whole_block_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_whole_block_cli_gate.addArgs(args);
+    const br_whole_block_cli_step = b.step("test-br-whole-block-cli", "Validate explicit complete-meta-block Brotli CLI search");
+    br_whole_block_cli_step.dependOn(&br_whole_block_cli_gate.step);
+    br_whole_block_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_whole_block_diff = b.addSystemCommand(&.{ "python3", "tools/br/whole_block_diff.py", "--probe" });
+    br_whole_block_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_whole_block_diff.addArgs(args);
+    const br_whole_block_diff_step = b.step("run-br-whole-block-diff", "Validate complete-meta-block Brotli planning against reference decoders");
+    br_whole_block_diff_step.dependOn(&br_whole_block_diff.step);
+    const br_complete_length_cli = b.addSystemCommand(&.{ "python3", "tools/br/complete_lengths_cli_gate.py", "--cli" });
+    br_complete_length_cli.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_complete_length_cli.addArgs(args);
+    const br_complete_length_cli_step = b.step("test-br-complete-lengths-cli", "Validate complete-copy-length Brotli CLI controls and search limits");
+    br_complete_length_cli_step.dependOn(&br_complete_length_cli.step);
+    br_complete_length_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_complete_length_diff = b.addSystemCommand(&.{ "python3", "tools/br/complete_lengths_diff.py", "--probe" });
+    br_complete_length_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_complete_length_diff.addArgs(args);
+    const br_complete_length_diff_step = b.step("run-br-complete-lengths-diff", "Validate complete-copy-length Brotli output and per-plan search limits");
+    br_complete_length_diff_step.dependOn(&br_complete_length_diff.step);
+    const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
+    br_hq_tools_step.dependOn(&br_hq_probe.step);
+    br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
+    const zstd_hq_cli_probe = b.addExecutable(.{
+        .name = "vort-zstd-hq-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/zstd_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_hq_cli_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_controls_cli_gate.py", "--cli" });
+    zstd_hq_cli_gate.addArtifactArg(zstd_hq_cli_probe);
+    if (b.args) |args| zstd_hq_cli_gate.addArgs(args);
+    const zstd_hq_cli_step = b.step("test-zstd-hq-cli", "Validate Zstd HQ CLI flags, defaults and failed-output preservation");
+    zstd_hq_cli_step.dependOn(&zstd_hq_cli_gate.step);
+
+    const fast_cover_probe = b.addExecutable(.{ .name = "vort-fast-cover-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/zstd/fast_cover_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }) });
+    const fast_cover_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/fast_cover_diff.py", "--probe" });
+    fast_cover_diff.addArtifactArg(fast_cover_probe);
+    if (b.args) |args| fast_cover_diff.addArgs(args);
+    const fast_cover_diff_step = b.step("run-fast-cover-diff", "Validate FastCover trained dictionaries and workflows against libzstd");
+    fast_cover_diff_step.dependOn(&fast_cover_diff.step);
+
+    const lzma_encode_controls_probe = b.addExecutable(.{
+        .name = "vort-lzma-encode-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lzma/encode_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lzma_encode_controls_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/encode_controls_diff.py", "--probe" });
+    lzma_encode_controls_diff.addArtifactArg(lzma_encode_controls_probe);
+    if (b.args) |args| lzma_encode_controls_diff.addArgs(args);
+    const lzma_encode_controls_diff_step = b.step("run-lzma-xz-encode-controls-diff", "Validate LZMA/XZ presets and encoder controls against liblzma");
+    lzma_encode_controls_diff_step.dependOn(&lzma_encode_controls_diff.step);
+    const lzma_large_blocks_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/large_blocks_diff.py", "--probe" });
+    lzma_large_blocks_diff.addArtifactArg(lzma_encode_controls_probe);
+    if (b.args) |args| lzma_large_blocks_diff.addArgs(args);
+    const lzma_large_blocks_diff_step = b.step("run-lzma2-large-blocks-diff", "Validate large LZMA2 chunks and dictionary properties against liblzma");
+    lzma_large_blocks_diff_step.dependOn(&lzma_large_blocks_diff.step);
+    const lzma_controls_cli_probe = b.addExecutable(.{
+        .name = "vort-lzma-controls-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/lzma_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lzma_controls_cli_gate = b.addSystemCommand(&.{ "python3", "tools/lzma/cli_controls_gate.py", "--cli" });
+    lzma_controls_cli_gate.addArtifactArg(lzma_controls_cli_probe);
+    if (b.args) |args| lzma_controls_cli_gate.addArgs(args);
+    const lzma_controls_cli_step = b.step("test-lzma-xz-cli-controls", "Validate public LZMA/XZ CLI encoder settings and failed-output preservation");
+    lzma_controls_cli_step.dependOn(&lzma_controls_cli_gate.step);
+
+    const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
+    const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
+    lzma_contract_diff.addArtifactArg(lzma_contract_probe);
+    if (b.args) |args| lzma_contract_diff.addArgs(args);
+    const lzma_contract_diff_step = b.step("run-lzma-contract-diff", "Validate LZMA-Alone allocation and progress contracts against independent streams");
+    lzma_contract_diff_step.dependOn(&lzma_contract_diff.step);
+
+    const lzma_one_shot_probe = b.addExecutable(.{ .name = "vort-lzma-one-shot-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/one_shot_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
+    const lzma_one_shot_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/one_shot_diff.py", "--probe" });
+    lzma_one_shot_diff.addArtifactArg(lzma_one_shot_probe);
+    if (b.args) |args| lzma_one_shot_diff.addArgs(args);
+    const lzma_one_shot_diff_step = b.step("run-lzma-one-shot-diff", "Validate bounded atomic LZMA caller-buffer decoding against independent streams");
+    lzma_one_shot_diff_step.dependOn(&lzma_one_shot_diff.step);
+
+    const br_contract_probe = b.addExecutable(.{ .name = "vort-br-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/br/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "br", .module = br_tests_mod }} }) });
+    const br_contract_diff = b.addSystemCommand(&.{ "python3", "tools/br/stream_contract_diff.py", "--probe" });
+    br_contract_diff.addArtifactArg(br_contract_probe);
+    if (b.args) |args| br_contract_diff.addArgs(args);
+    const br_contract_diff_step = b.step("run-br-stream-contract-diff", "Validate Brotli incremental resource contracts against libbrotli");
+    br_contract_diff_step.dependOn(&br_contract_diff.step);
+
     const gzip_cli_diff = b.addSystemCommand(&.{ "python3", "tools/gzip_cli_diff.py" });
     gzip_cli_diff.addArtifactArg(cli_exe);
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
@@ -1360,11 +2048,45 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzms_diff.addArgs(args);
     const lzms_diff_step = b.step("run-lzms-diff", "Validate Windows LZMS decoding against optional wimlib");
     lzms_diff_step.dependOn(&lzms_diff.step);
+    const lzms_probe_mod = b.createModule(.{ .root_source_file = b.path("src/lzms.zig"), .target = target, .optimize = optimize });
+    const lzms_match_probe = b.addExecutable(.{
+        .name = "vort-lzms-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzms/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzms", .module = lzms_probe_mod }} }),
+    });
+    const lzms_item_probe = b.addExecutable(.{
+        .name = "vort-lzms-item-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzms/item_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzms", .module = lzms_probe_mod }} }),
+    });
+    const lzms_match_diff = b.addSystemCommand(&.{ "python3", "tools/lzms/match_diff.py", "--probe" });
+    lzms_match_diff.addArtifactArg(lzms_match_probe);
+    lzms_match_diff.addArg("--item-probe");
+    lzms_match_diff.addArtifactArg(lzms_item_probe);
+    if (b.args) |args| lzms_match_diff.addArgs(args);
+    const lzms_match_step = b.step("run-lzms-match-diff", "Validate greedy LZ/delta encoding and literal-envelope sizes with wimlib");
+    lzms_match_step.dependOn(&lzms_match_diff.step);
+    const lzx_match_probe = b.addExecutable(.{
+        .name = "vort-lzx-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzx/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }),
+    });
+    const lzx_match_diff = b.addSystemCommand(&.{ "python3", "tools/lzx/match_diff.py", "--probe" });
+    lzx_match_diff.addArtifactArg(lzx_match_probe);
+    if (b.args) |args| lzx_match_diff.addArgs(args);
+    const lzx_match_step = b.step("run-lzx-match-diff", "Validate LZX matched CAB/WIM/WOF output with libarchive, libmspack and wimlib");
+    lzx_match_step.dependOn(&lzx_match_diff.step);
+    const quantum_match_probe = b.addExecutable(.{
+        .name = "vort-quantum-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/quantum/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }),
+    });
+    const quantum_match_diff = b.addSystemCommand(&.{ "python3", "tools/quantum/match_diff.py", "--probe" });
+    quantum_match_diff.addArtifactArg(quantum_match_probe);
+    if (b.args) |args| quantum_match_diff.addArgs(args);
+    const quantum_match_step = b.step("run-quantum-match-diff", "Validate Quantum matching and split CAB output with libmspack");
+    quantum_match_step.dependOn(&quantum_match_diff.step);
 
     const microlzma_diff = b.addSystemCommand(&.{ "python3", "tools/microlzma/diff.py", "--cli" });
     microlzma_diff.addArtifactArg(cli_exe);
     if (b.args) |args| microlzma_diff.addArgs(args);
-    const microlzma_diff_step = b.step("run-microlzma-diff", "Validate MicroLZMA decoding against optional XZ Utils");
+    const microlzma_diff_step = b.step("run-microlzma-diff", "Validate MicroLZMA encoding and decoding against optional XZ Utils");
     microlzma_diff_step.dependOn(&microlzma_diff.step);
 
     const wof_diff = b.addSystemCommand(&.{ "python3", "tools/wof/diff.py", "--cli" });
@@ -1378,6 +2100,34 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzfse_diff.addArgs(args);
     const lzfse_diff_step = b.step("run-lzfse-diff", "Validate LZFSE and LZVN streams against the optional Apple reference CLI");
     lzfse_diff_step.dependOn(&lzfse_diff.step);
+    const lzfse_fse_probe_mod = b.createModule(.{ .root_source_file = b.path("src/lzfse.zig"), .target = target, .optimize = optimize });
+    const lzfse_fse_probe = b.addExecutable(.{
+        .name = "vort-lzfse-fse-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzfse/fse_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzfse", .module = lzfse_fse_probe_mod }} }),
+    });
+    const lzfse_fse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/fse_match_diff.py", "--probe" });
+    lzfse_fse_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_fse_diff.addArgs(args);
+    const lzfse_fse_diff_step = b.step("run-lzfse-fse-diff", "Validate matched LZFSE V1/V2 writing and resource limits against Apple LZFSE");
+    lzfse_fse_diff_step.dependOn(&lzfse_fse_diff.step);
+    const lzfse_cli_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/cli_fse_diff.py", "--cli" });
+    lzfse_cli_diff.addArtifactArg(cli_exe);
+    lzfse_cli_diff.addArg("--probe");
+    lzfse_cli_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_cli_diff.addArgs(args);
+    const lzfse_cli_diff_step = b.step("run-lzfse-cli-diff", "Validate LZFSE CLI strategies, limits, atomic failures and same-path replacement");
+    lzfse_cli_diff_step.dependOn(&lzfse_cli_diff.step);
+    const lzfse_stream_probe = b.addExecutable(.{
+        .name = "vort-lzfse-stream-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzfse/stream_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzfse", .module = lzfse_fse_probe_mod }} }),
+    });
+    const lzfse_stream_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/stream_diff.py", "--probe" });
+    lzfse_stream_diff.addArtifactArg(lzfse_stream_probe);
+    lzfse_stream_diff.addArg("--encode-probe");
+    lzfse_stream_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_stream_diff.addArgs(args);
+    const lzfse_stream_diff_step = b.step("run-lzfse-stream-diff", "Validate bounded LZFSE input/output streaming against Apple corpus");
+    lzfse_stream_diff_step.dependOn(&lzfse_stream_diff.step);
 
     const decmpfs_diff = b.addSystemCommand(&.{ "python3", "tools/decmpfs/diff.py", "--cli" });
     decmpfs_diff.addArtifactArg(cli_exe);
@@ -1546,15 +2296,64 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const erofs_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/diff.py", "--cli" });
+    const erofs_metadata_zone_probe = b.addExecutable(.{
+        .name = "vort-erofs-metadata-zone-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/metadata_zone_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const erofs_directory_probe = b.addExecutable(.{
+        .name = "vort-erofs-directory-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/directory_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     erofs_diff.addArtifactArg(cli_exe);
     erofs_diff.addArg("--writer");
     erofs_diff.addArtifactArg(erofs_writer_probe);
+    erofs_diff.addArg("--directory-writer");
+    erofs_diff.addArtifactArg(erofs_directory_probe);
+    erofs_diff.addArg("--metadata-zone-writer");
+    erofs_diff.addArtifactArg(erofs_metadata_zone_probe);
+    const erofs_range_probe = b.addExecutable(.{
+        .name = "vort-erofs-range-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/range_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    erofs_diff.addArg("--range-reader");
+    erofs_diff.addArtifactArg(erofs_range_probe);
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
+    const erofs_compact_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/compact_writer_diff.py", "--writer" });
+    erofs_compact_diff.addArtifactArg(erofs_writer_probe);
+    if (b.args) |args| erofs_compact_diff.addArgs(args);
+    const erofs_compact_diff_step = b.step("run-erofs-compact-diff", "Validate compact EROFS writer formats through public APIs and optional erofs-utils");
+    erofs_compact_diff_step.dependOn(&erofs_compact_diff.step);
 
+    const wim_writer_probe = b.addExecutable(.{
+        .name = "vort-wim-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/wim/writer_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     const wim_diff = b.addSystemCommand(&.{ "python3", "tools/wim/diff.py", "--cli" });
     wim_diff.addArtifactArg(cli_exe);
+    wim_diff.addArg("--writer");
+    wim_diff.addArtifactArg(wim_writer_probe);
     if (b.args) |args| wim_diff.addArgs(args);
     const wim_diff_step = b.step("run-wim-diff", "Validate WIM resources against optional wimlib-imagex");
     wim_diff_step.dependOn(&wim_diff.step);
@@ -1574,12 +2373,23 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const zip_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-zip-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zip/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip/diff.py", "--cli" });
     zip_diff.addArtifactArg(cli_exe);
     zip_diff.addArg("--writer");
     zip_diff.addArtifactArg(zip_writer_probe_exe);
+    zip_diff.addArg("--incremental-writer");
+    zip_diff.addArtifactArg(zip_incremental_writer_probe_exe);
     if (b.args) |args| zip_diff.addArgs(args);
-    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 Reduce, Shrink, Implode, DCL Implode, Deflate64, Bzip2, LZMA, Zstandard, XZ, and PPMd interoperability");
+    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 codecs, split archives, and incremental descriptors against Python, Info-ZIP, and optional 7-Zip");
     zip_diff_step.dependOn(&zip_diff.step);
 
     const bzip2_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/diff.py", "--cli" });
@@ -1587,24 +2397,140 @@ pub fn build(b: *std.Build) void {
     const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 encode/decode against Python bz2");
     bzip2_diff_step.dependOn(&bzip2_diff.step);
 
+    const bzip2_contract_probe = b.addExecutable(.{ .name = "vort-bzip2-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/bzip2/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "bzip2", .module = bzip2_tests_mod }} }) });
+    const bzip2_contract_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/stream_contract_diff.py", "--probe" });
+    bzip2_contract_diff.addArtifactArg(bzip2_contract_probe);
+    if (b.args) |args| bzip2_contract_diff.addArgs(args);
+    const bzip2_contract_diff_step = b.step("run-bzip2-stream-contract-diff", "Validate Bzip2 replay, allocation and progress against system bzip2");
+    bzip2_contract_diff_step.dependOn(&bzip2_contract_diff.step);
+
+    const snappy_contract_probe = b.addExecutable(.{ .name = "vort-snappy-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/snappy/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = snappy_tests_mod }} }) });
+    const snappy_framing_contract_probe = b.addExecutable(.{ .name = "vort-snappy-framing-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/snappy/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = snappy_framing_tests_mod }} }) });
+    const snappy_contract_diff = b.addSystemCommand(&.{ "python3", "tools/snappy/stream_contract_diff.py", "--probe" });
+    snappy_contract_diff.addArtifactArg(snappy_contract_probe);
+    snappy_contract_diff.addArg("--framing-probe");
+    snappy_contract_diff.addArtifactArg(snappy_framing_contract_probe);
+    if (b.args) |args| snappy_contract_diff.addArgs(args);
+    const snappy_contract_diff_step = b.step("run-snappy-stream-contract-diff", "Validate native, Xerial and Hadoop Snappy streaming resources against C and Java references");
+    snappy_contract_diff_step.dependOn(&snappy_contract_diff.step);
+
     const xz_diff = b.addSystemCommand(&.{ "python3", "tools/xz/diff.py", "--cli" });
     xz_diff.addArtifactArg(cli_exe);
     if (b.args) |args| xz_diff.addArgs(args);
     const xz_diff_step = b.step("run-xz-diff", "Validate XZ/LZMA2 and standard filter interoperability with Python lzma and xz");
     xz_diff_step.dependOn(&xz_diff.step);
 
+    const xz_progressive_probe = b.addExecutable(.{
+        .name = "vort-xz-progressive-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/progressive_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "xz", .module = xz_tests_mod }},
+        }),
+    });
+    const xz_progressive_diff = b.addSystemCommand(&.{ "python3", "tools/xz/progressive_diff.py", "--probe" });
+    xz_progressive_diff.addArtifactArg(xz_progressive_probe);
+    if (b.args) |args| xz_progressive_diff.addArgs(args);
+    const xz_progressive_diff_step = b.step("run-xz-progressive-diff", "Validate progressive XZ and raw LZMA2 against system liblzma");
+    xz_progressive_diff_step.dependOn(&xz_progressive_diff.step);
+
+    const xz_one_shot_probe = b.addExecutable(.{ .name = "vort-xz-one-shot-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/xz/one_shot_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xz", .module = xz_tests_mod }} }) });
+    const xz_one_shot_diff = b.addSystemCommand(&.{ "python3", "tools/xz/one_shot_diff.py", "--probe" });
+    xz_one_shot_diff.addArtifactArg(xz_one_shot_probe);
+    if (b.args) |args| xz_one_shot_diff.addArgs(args);
+    const xz_one_shot_diff_step = b.step("run-xz-one-shot-diff", "Validate bounded atomic XZ caller-buffer decoding against system liblzma");
+    xz_one_shot_diff_step.dependOn(&xz_one_shot_diff.step);
+
+    const xz_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-xz-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_xz_encode_bench = b.addRunArtifact(xz_encode_bench_exe);
+    if (b.args) |args| run_xz_encode_bench.addArgs(args);
+    const xz_encode_bench_step = b.step(
+        "run-xz-encode-bench",
+        "Compare pure-Zig XZ encoding with runtime liblzma",
+    );
+    xz_encode_bench_step.dependOn(&run_xz_encode_bench.step);
+
+    const run_xz_encode_bench_gate_csv = b.addRunArtifact(xz_encode_bench_exe);
+    run_xz_encode_bench_gate_csv.addArgs(&.{
+        "--iterations", "1",
+        "--rounds",     "1",
+        "--csv",        "zig-out/vort-xz-encode-bench.csv",
+    });
+    const xz_encode_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/xz/encode_bench_gate.py",
+        "--csv",   "zig-out/vort-xz-encode-bench.csv",
+    });
+    xz_encode_bench_gate.step.dependOn(&run_xz_encode_bench_gate_csv.step);
+    const xz_encode_bench_gate_step = b.step(
+        "run-xz-encode-bench-gate",
+        "Validate XZ/liblzma encode benchmark coverage",
+    );
+    xz_encode_bench_gate_step.dependOn(&xz_encode_bench_gate.step);
+
+    const lzma2_incremental_report_exe = b.addExecutable(.{
+        .name = "vort-lzma2-incremental-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/lzma2_incremental_report.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_lzma2_incremental_report = b.addRunArtifact(lzma2_incremental_report_exe);
+    if (b.args) |args| run_lzma2_incremental_report.addArgs(args);
+    const lzma2_incremental_report_step = b.step(
+        "run-lzma2-incremental-report",
+        "Measure persistent-state raw LZMA2 incremental encoding",
+    );
+    lzma2_incremental_report_step.dependOn(&run_lzma2_incremental_report.step);
+
     const lzma_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/diff.py", "--cli" });
     lzma_diff.addArtifactArg(cli_exe);
     const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone encoding and decoding against Python lzma and xz");
     lzma_diff_step.dependOn(&lzma_diff.step);
 
+    const compress_z_incremental_probe_exe = b.addExecutable(.{
+        .name = "vort-compress-z-incremental-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/compress_z/incremental_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const compress_z_diff = b.addSystemCommand(&.{ "python3", "tools/compress_z/diff.py", "--cli" });
     compress_z_diff.addArtifactArg(cli_exe);
+    compress_z_diff.addArg("--incremental");
+    compress_z_diff.addArtifactArg(compress_z_incremental_probe_exe);
     const compress_z_diff_step = b.step("run-compress-z-diff", "Validate Unix compress (.Z) encode/decode interoperability");
     compress_z_diff_step.dependOn(&compress_z_diff.step);
 
+    const lzip_incremental_probe_exe = b.addExecutable(.{
+        .name = "vort-lzip-incremental-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lzip/incremental_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const lzip_diff = b.addSystemCommand(&.{ "python3", "tools/lzip/diff.py", "--cli" });
     lzip_diff.addArtifactArg(cli_exe);
+    lzip_diff.addArg("--incremental");
+    lzip_diff.addArtifactArg(lzip_incremental_probe_exe);
     const lzip_diff_step = b.step("run-lzip-diff", "Validate lzip encoding and decoding against Python lzma and the optional lzip CLI");
     lzip_diff_step.dependOn(&lzip_diff.step);
 
@@ -1634,7 +2560,7 @@ pub fn build(b: *std.Build) void {
     ar_diff.addArg("--writer");
     ar_diff.addArtifactArg(ar_writer_probe_exe);
     if (b.args) |args| ar_diff.addArgs(args);
-    const ar_diff_step = b.step("run-ar-diff", "Validate GNU/BSD Unix ar reading and writing against optional GNU ar");
+    const ar_diff_step = b.step("run-ar-diff", "Validate GNU/BSD ar and thin symbol indexes against optional GNU/LLVM tools");
     ar_diff_step.dependOn(&ar_diff.step);
 
     const deb_diff = b.addSystemCommand(&.{ "python3", "tools/deb/diff.py", "--cli" });
@@ -1652,7 +2578,7 @@ pub fn build(b: *std.Build) void {
     const arj_diff = b.addSystemCommand(&.{ "python3", "tools/arj/diff.py", "--cli" });
     arj_diff.addArtifactArg(cli_exe);
     if (b.args) |args| arj_diff.addArgs(args);
-    const arj_diff_step = b.step("run-arj-diff", "Validate ARJ methods 0-4 against optional ARJ and 7-Zip tools");
+    const arj_diff_step = b.step("run-arj-diff", "Validate ARJ methods, Garble, and volumes against optional external tools");
     arj_diff_step.dependOn(&arj_diff.step);
 
     const arc_diff = b.addSystemCommand(&.{ "python3", "tools/arc/diff.py", "--cli" });
@@ -1670,12 +2596,78 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const cpio_incremental_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_incremental_sequence_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-sequence-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_sequence_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_incremental_mixed_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-mixed-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_mixed_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_incremental_compressed_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-compressed-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_compressed_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_incremental_auto_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-auto-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_auto_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const cpio_incremental_compressed_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-compressed-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_compressed_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const cpio_diff = b.addSystemCommand(&.{ "python3", "tools/cpio/diff.py", "--cli" });
     cpio_diff.addArtifactArg(cli_exe);
     cpio_diff.addArg("--writer");
     cpio_diff.addArtifactArg(cpio_writer_probe_exe);
+    cpio_diff.addArg("--incremental-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_reader_probe_exe);
+    cpio_diff.addArg("--incremental-sequence-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_sequence_reader_probe_exe);
+    cpio_diff.addArg("--incremental-mixed-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_mixed_reader_probe_exe);
+    cpio_diff.addArg("--incremental-compressed-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_compressed_reader_probe_exe);
+    cpio_diff.addArg("--incremental-auto-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_auto_reader_probe_exe);
+    cpio_diff.addArg("--incremental-compressed-writer");
+    cpio_diff.addArtifactArg(cpio_incremental_compressed_writer_probe_exe);
     if (b.args) |args| cpio_diff.addArgs(args);
-    const cpio_diff_step = b.step("run-cpio-diff", "Validate CPIO header formats, metadata, and compression wrappers against optional GNU cpio");
+    const cpio_diff_step = b.step("run-cpio-diff", "Validate CPIO formats, bounded streaming, and wrappers against optional system tools");
     cpio_diff_step.dependOn(&cpio_diff.step);
 
     const rar_writer_probe_exe = b.addExecutable(.{
@@ -1692,7 +2684,7 @@ pub fn build(b: *std.Build) void {
     rar_diff.addArg("--writer");
     rar_diff.addArtifactArg(rar_writer_probe_exe);
     if (b.args) |args| rar_diff.addArgs(args);
-    const rar_diff_step = b.step("run-rar-diff", "Validate RAR29/RAR50 writing plus legacy decoding against optional 7-Zip and rars");
+    const rar_diff_step = b.step("run-rar-diff", "Validate RAR codecs, comments, and encryption against optional RAR, 7-Zip, and rars");
     rar_diff_step.dependOn(&rar_diff.step);
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });
@@ -1709,10 +2701,21 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const seven_zip_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-seven-zip-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/seven_zip/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const seven_zip_diff = b.addSystemCommand(&.{ "python3", "tools/seven_zip/diff.py", "--cli" });
     seven_zip_diff.addArtifactArg(cli_exe);
     seven_zip_diff.addArg("--writer");
     seven_zip_diff.addArtifactArg(seven_zip_writer_probe_exe);
+    seven_zip_diff.addArg("--incremental-writer");
+    seven_zip_diff.addArtifactArg(seven_zip_incremental_writer_probe_exe);
     if (b.args) |args| seven_zip_diff.addArgs(args);
     const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate common 7z codecs and linear filters against 7-Zip");
     seven_zip_diff_step.dependOn(&seven_zip_diff.step);
@@ -1726,12 +2729,67 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const tar_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const tar_incremental_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const tar_incremental_compressed_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-compressed-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_compressed_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const tar_incremental_auto_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-auto-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_auto_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const tar_incremental_compressed_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-compressed-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_compressed_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const tar_diff = b.addSystemCommand(&.{ "python3", "tools/tar/diff.py", "--cli" });
     tar_diff.addArtifactArg(cli_exe);
     tar_diff.addArg("--writer");
     tar_diff.addArtifactArg(tar_writer_probe_exe);
+    tar_diff.addArg("--incremental-writer");
+    tar_diff.addArtifactArg(tar_incremental_writer_probe_exe);
+    tar_diff.addArg("--incremental-reader");
+    tar_diff.addArtifactArg(tar_incremental_reader_probe_exe);
+    tar_diff.addArg("--incremental-compressed-reader");
+    tar_diff.addArtifactArg(tar_incremental_compressed_reader_probe_exe);
+    tar_diff.addArg("--incremental-auto-reader");
+    tar_diff.addArtifactArg(tar_incremental_auto_reader_probe_exe);
+    tar_diff.addArg("--incremental-compressed-writer");
+    tar_diff.addArtifactArg(tar_incremental_compressed_writer_probe_exe);
     if (b.args) |args| tar_diff.addArgs(args);
-    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, lzma, and optional LZF");
+    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and compressed tarballs against Python and installed compression tools");
     tar_diff_step.dependOn(&tar_diff.step);
 
     const cab_diff = b.addSystemCommand(&.{ "python3", "tools/cab/diff.py", "--cli" });
@@ -1813,6 +2871,117 @@ pub fn build(b: *std.Build) void {
     br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
+
+    const br_complete_dictionary_bench_exe = b.addExecutable(.{
+        .name = "vort-br-complete-dictionary-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/complete_dictionary_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "br_internal", .module = br_tests_mod }},
+        }),
+    });
+    const run_br_complete_dictionary_bench = b.addRunArtifact(br_complete_dictionary_bench_exe);
+    if (b.args) |args| run_br_complete_dictionary_bench.addArgs(args);
+    const br_complete_dictionary_bench_step = b.step(
+        "run-br-complete-dictionary-bench",
+        "Compare indexed and exhaustive-reference Brotli static dictionary encoding",
+    );
+    br_complete_dictionary_bench_step.dependOn(&run_br_complete_dictionary_bench.step);
+    const run_br_complete_dictionary_bench_csv = b.addRunArtifact(br_complete_dictionary_bench_exe);
+    run_br_complete_dictionary_bench_csv.addArgs(&.{ "--iterations", "2" });
+    const br_complete_dictionary_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/br/complete_dictionary_bench_gate.py",
+        "--csv",
+    });
+    br_complete_dictionary_bench_gate.addFileArg(
+        run_br_complete_dictionary_bench_csv.captureStdOut(.{}),
+    );
+    const br_complete_dictionary_bench_gate_step = b.step(
+        "run-br-complete-dictionary-bench-gate",
+        "Validate complete Brotli static dictionary indexed/reference evidence",
+    );
+    br_complete_dictionary_bench_gate_step.dependOn(
+        &br_complete_dictionary_bench_gate.step,
+    );
+
+    const br_serialized_dictionary_bench_exe = b.addExecutable(.{
+        .name = "vort-br-serialized-dictionary-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/serialized_dictionary_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_br_serialized_dictionary_bench = b.addRunArtifact(
+        br_serialized_dictionary_bench_exe,
+    );
+    if (b.args) |args| run_br_serialized_dictionary_bench.addArgs(args);
+    const br_serialized_dictionary_bench_step = b.step(
+        "run-br-serialized-dictionary-bench",
+        "Compare indexed and exhaustive serialized Brotli dictionary matching",
+    );
+    br_serialized_dictionary_bench_step.dependOn(
+        &run_br_serialized_dictionary_bench.step,
+    );
+    const br_context_tree_report_exe = b.addExecutable(.{
+        .name = "vort-br-context-tree-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/context_tree_report.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_context_tree_report = b.addRunArtifact(br_context_tree_report_exe);
+    if (b.args) |args| run_br_context_tree_report.addArgs(args);
+    const br_context_tree_report_step = b.step("run-br-context-tree-report", "Report Brotli ratio context-tree choices");
+    br_context_tree_report_step.dependOn(&run_br_context_tree_report.step);
+    const run_br_context_tree_report_csv = b.addRunArtifact(br_context_tree_report_exe);
+    run_br_context_tree_report_csv.addArgs(&.{ "--csv", "zig-out/vort-br-context-tree-report.csv" });
+    const br_context_tree_report_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/context_tree_report_gate.py",
+        "--csv",   "zig-out/vort-br-context-tree-report.csv",
+    });
+    br_context_tree_report_gate.addArg("--executable");
+    br_context_tree_report_gate.addArtifactArg(br_context_tree_report_exe);
+    br_context_tree_report_gate.step.dependOn(&run_br_context_tree_report_csv.step);
+    const br_context_tree_report_gate_step = b.step("run-br-context-tree-report-gate", "Validate Brotli context-tree report coverage");
+    br_context_tree_report_gate_step.dependOn(&br_context_tree_report_gate.step);
+    const br_context_tree_report_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_gate_smoke.py" });
+    const br_context_tree_report_gate_smoke_step = b.step("run-br-context-tree-report-gate-smoke", "Validate Brotli context-tree report gate negatives");
+    br_context_tree_report_gate_smoke_step.dependOn(&br_context_tree_report_gate_smoke.step);
+    const br_context_tree_report_dir_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_dir_smoke.py" });
+    br_context_tree_report_dir_smoke.addArtifactArg(br_context_tree_report_exe);
+    const br_context_tree_report_dir_smoke_step = b.step("run-br-context-tree-report-dir-smoke", "Validate bounded Brotli context-tree directory discovery");
+    br_context_tree_report_dir_smoke_step.dependOn(&br_context_tree_report_dir_smoke.step);
+    const br_context_tree_dashboard = b.addSystemCommand(&.{
+        "python3",    "tools/br/context_tree_dashboard.py",
+        "--csv",      "zig-out/vort-br-context-tree-report.csv",
+        "--markdown", "zig-out/vort-br-context-tree-dashboard.md",
+        "--json",     "zig-out/vort-br-context-tree-dashboard.json",
+    });
+    br_context_tree_dashboard.step.dependOn(&run_br_context_tree_report_csv.step);
+    const br_context_tree_dashboard_step = b.step("run-br-context-tree-dashboard", "Write Brotli context-tree Markdown and JSON dashboard");
+    br_context_tree_dashboard_step.dependOn(&br_context_tree_dashboard.step);
+    const br_context_tree_dashboard_gate = b.addSystemCommand(&.{
+        "python3",    "tools/br/context_tree_dashboard_gate.py",
+        "--json",     "zig-out/vort-br-context-tree-dashboard.json",
+        "--markdown", "zig-out/vort-br-context-tree-dashboard.md",
+    });
+    br_context_tree_dashboard_gate.step.dependOn(br_context_tree_dashboard_step);
+    const br_context_tree_dashboard_gate_step = b.step("run-br-context-tree-dashboard-gate", "Validate Brotli context-tree dashboard artifacts");
+    br_context_tree_dashboard_gate_step.dependOn(&br_context_tree_dashboard_gate.step);
+    const br_context_tree_dashboard_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_dashboard_gate_smoke.py" });
+    const br_context_tree_dashboard_gate_smoke_step = b.step("run-br-context-tree-dashboard-gate-smoke", "Validate Brotli context-tree dashboard negatives");
+    br_context_tree_dashboard_gate_smoke_step.dependOn(&br_context_tree_dashboard_gate_smoke.step);
     const run_br_planned_encode_path_csv = b.addRunArtifact(br_planned_encode_bench_exe);
     run_br_planned_encode_path_csv.addArgs(&.{
         "--iterations", "10",
@@ -1866,6 +3035,26 @@ pub fn build(b: *std.Build) void {
     const run_br_planned_stage_profile = b.addRunArtifact(br_planned_stage_profile_exe);
     const br_planned_stage_profile_step = b.step("run-br-planned-stage-profile", "Report planner-backed Brotli token/command/alphabet shape");
     br_planned_stage_profile_step.dependOn(&run_br_planned_stage_profile.step);
+    const br_quality_command_state_profile_exe = b.addExecutable(.{
+        .name = "vort-br-quality-command-state-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/quality_command_state_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_quality_command_state_profile = b.addRunArtifact(
+        br_quality_command_state_profile_exe,
+    );
+    if (b.args) |args| run_br_quality_command_state_profile.addArgs(args);
+    const br_quality_command_state_profile_step = b.step(
+        "run-br-quality-command-state-profile",
+        "Profile q10/q11 command-state seed, search, and wire stages",
+    );
+    br_quality_command_state_profile_step.dependOn(
+        &run_br_quality_command_state_profile.step,
+    );
     const br_ratio_stage_profile_exe = b.addExecutable(.{
         .name = "vort-br-ratio-stage-profile",
         .root_module = b.createModule(.{
@@ -1920,6 +3109,40 @@ pub fn build(b: *std.Build) void {
     br_ratio_stage_profile_gate.step.dependOn(&run_br_ratio_stage_profile_csv.step);
     const br_ratio_stage_profile_gate_step = b.step("run-br-ratio-stage-profile-gate", "Validate Brotli ratio stage profile coverage and counters");
     br_ratio_stage_profile_gate_step.dependOn(&br_ratio_stage_profile_gate.step);
+    const br_literal_context_profile_exe = b.addExecutable(.{
+        .name = "vort-br-literal-context-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/literal_context_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_literal_context_profile = b.addRunArtifact(br_literal_context_profile_exe);
+    if (b.args) |args| run_br_literal_context_profile.addArgs(args);
+    const br_literal_context_profile_step = b.step("run-br-literal-context-profile", "Profile Brotli literal-context proposal substages");
+    br_literal_context_profile_step.dependOn(&run_br_literal_context_profile.step);
+    const run_br_literal_context_profile_csv = b.addRunArtifact(br_literal_context_profile_exe);
+    run_br_literal_context_profile_csv.addArgs(&.{ "--iterations", "3", "--csv", "zig-out/vort-br-literal-context-profile.csv" });
+    const br_literal_context_profile_gate = b.addSystemCommand(&.{ "python3", "tools/br/literal_context_profile_gate.py", "--csv", "zig-out/vort-br-literal-context-profile.csv", "--executable" });
+    br_literal_context_profile_gate.addArtifactArg(br_literal_context_profile_exe);
+    br_literal_context_profile_gate.step.dependOn(&run_br_literal_context_profile_csv.step);
+    const br_literal_context_profile_gate_step = b.step("run-br-literal-context-profile-gate", "Validate Brotli literal-context profile stages and counters");
+    br_literal_context_profile_gate_step.dependOn(&br_literal_context_profile_gate.step);
+    const br_literal_context_profile_gate_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/br/literal_context_profile_gate_smoke.py",
+        "--csv",
+        "zig-out/vort-br-literal-context-profile.csv",
+        "--gate",
+        "tools/br/literal_context_profile_gate.py",
+    });
+    br_literal_context_profile_gate_smoke.step.dependOn(&run_br_literal_context_profile_csv.step);
+    const br_literal_context_profile_gate_smoke_step = b.step("run-br-literal-context-profile-gate-smoke", "Reject malformed Brotli literal-context profiles");
+    br_literal_context_profile_gate_smoke_step.dependOn(&br_literal_context_profile_gate_smoke.step);
     const br_planned_stage_bench_exe = b.addExecutable(.{
         .name = "vort-br-planned-stage-bench",
         .root_module = b.createModule(.{
@@ -3072,6 +4295,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/zstd_native_frame_probe.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
             .imports = &.{
                 .{ .name = "vort", .module = vort_mod },
             },
@@ -3114,6 +4338,49 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_lz4_native_probe.addArgs(args);
     const lz4_native_probe_step = b.step("run-lz4-native-probe", "Run bounded generated-corpus probe for native LZ4 frames and blocks");
     lz4_native_probe_step.dependOn(&run_lz4_native_probe.step);
+
+    const lz4_fast_controls_probe = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lz4/fast_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-cli",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/lz4_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli_tests = b.addTest(.{
+        .name = "vort-lz4-fast-controls-cli-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli/lz4_controls_tests.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli_gate = b.addSystemCommand(&.{ "python3", "tools/lz4/fast_controls_cli_gate.py", "--cli" });
+    lz4_fast_controls_cli_gate.addArtifactArg(lz4_fast_controls_cli);
+    if (b.args) |args| lz4_fast_controls_cli_gate.addArgs(args);
+    const lz4_fast_controls_cli_step = b.step("test-lz4-fast-controls-cli", "Validate LZ4 acceleration CLI controls and atomic output");
+    lz4_fast_controls_cli_step.dependOn(&lz4_fast_controls_cli_gate.step);
+    lz4_fast_controls_cli_step.dependOn(&b.addRunArtifact(lz4_fast_controls_cli_tests).step);
+    const lz4_fast_controls_diff = b.addSystemCommand(&.{ "python3", "tools/lz4/fast_controls_diff.py", "--probe" });
+    lz4_fast_controls_diff.addArtifactArg(lz4_fast_controls_probe);
+    if (b.args) |args| lz4_fast_controls_diff.addArgs(args);
+    const lz4_fast_controls_diff_step = b.step("run-lz4-fast-controls-diff", "Validate LZ4 acceleration effects and versioned interoperability");
+    lz4_fast_controls_diff_step.dependOn(&lz4_fast_controls_diff.step);
+    const lz4_fast_controls_tools_step = b.step("build-lz4-fast-controls-tools", "Compile public LZ4 acceleration API and CLI consumers");
+    lz4_fast_controls_tools_step.dependOn(&lz4_fast_controls_probe.step);
+    lz4_fast_controls_tools_step.dependOn(&lz4_fast_controls_cli.step);
 
     const lz4_native_dictionary_probe_exe = b.addExecutable(.{
         .name = "lz4-native-dictionary-probe",
@@ -3599,8 +4866,15 @@ pub fn build(b: *std.Build) void {
     });
     snappy_reference_bench_gate.addArg("--executable");
     snappy_reference_bench_gate.addArtifactArg(snappy_reference_bench_exe);
+    const snappy_reference_bench_gate_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/snappy/reference_bench_gate_smoke.py",
+    });
     snappy_reference_bench_gate.step.dependOn(
         &run_snappy_reference_bench_gate_csv.step,
+    );
+    snappy_reference_bench_gate.step.dependOn(
+        &snappy_reference_bench_gate_smoke.step,
     );
     const snappy_reference_bench_gate_step = b.step(
         "run-snappy-reference-bench-gate",
@@ -3658,6 +4932,45 @@ pub fn build(b: *std.Build) void {
     lz4_reference_bench_gate_step.dependOn(
         &lz4_reference_bench_gate.step,
     );
+
+    const lz4_hc_reference_bench_exe = b.addExecutable(.{
+        .name = "vort-lz4-hc-reference-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lz4/hc_reference_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_lz4_hc_reference_bench = b.addRunArtifact(lz4_hc_reference_bench_exe);
+    if (b.args) |args| run_lz4_hc_reference_bench.addArgs(args);
+    const lz4_hc_reference_bench_step = b.step(
+        "run-lz4-hc-reference-bench",
+        "Compare one-shot LZ4HC frame encode against runtime liblz4",
+    );
+    lz4_hc_reference_bench_step.dependOn(&run_lz4_hc_reference_bench.step);
+
+    const run_lz4_hc_reference_bench_gate_csv = b.addRunArtifact(lz4_hc_reference_bench_exe);
+    run_lz4_hc_reference_bench_gate_csv.addArgs(&.{
+        "--iterations", "3",
+        "--csv",        "zig-out/vort-lz4-hc-reference-bench.csv",
+    });
+    const lz4_hc_reference_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/lz4/hc_reference_bench_gate.py",
+        "--csv",   "zig-out/vort-lz4-hc-reference-bench.csv",
+    });
+    lz4_hc_reference_bench_gate.addArg("--executable");
+    lz4_hc_reference_bench_gate.addArtifactArg(lz4_hc_reference_bench_exe);
+    lz4_hc_reference_bench_gate.step.dependOn(&run_lz4_hc_reference_bench_gate_csv.step);
+    const lz4_hc_reference_bench_gate_step = b.step(
+        "run-lz4-hc-reference-bench-gate",
+        "Validate LZ4HC frame encode reference benchmark coverage",
+    );
+    lz4_hc_reference_bench_gate_step.dependOn(&lz4_hc_reference_bench_gate.step);
 
     const lz4_decode_profile_exe = b.addExecutable(.{
         .name = "vort-lz4-decode-profile",
@@ -3745,6 +5058,29 @@ pub fn build(b: *std.Build) void {
         &br_reference_bench_path_smoke.step,
     );
 
+    const br_compound_dictionary_diff_exe = b.addExecutable(.{
+        .name = "vort-br-compound-dictionary-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/compound_dictionary_diff.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_compound_dictionary_diff = b.addRunArtifact(
+        br_compound_dictionary_diff_exe,
+    );
+    const br_compound_dictionary_diff_step = b.step(
+        "run-br-compound-dictionary-diff",
+        "Validate RAW compound dictionaries between Vort and libbrotli",
+    );
+    br_compound_dictionary_diff_step.dependOn(
+        &run_br_compound_dictionary_diff.step,
+    );
+
     const br_compressed_header_profile_exe = b.addExecutable(.{
         .name = "vort-br-compressed-header-profile",
         .root_module = b.createModule(.{
@@ -3781,6 +5117,42 @@ pub fn build(b: *std.Build) void {
     );
     br_compressed_header_profile_gate_step.dependOn(&br_compressed_header_profile_gate.step);
 
+    const br_decode_stage_profile_exe = b.addExecutable(.{
+        .name = "vort-br-decode-stage-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/decode_stage_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_br_decode_stage_profile = b.addRunArtifact(br_decode_stage_profile_exe);
+    if (b.args) |args| run_br_decode_stage_profile.addArgs(args);
+    const br_decode_stage_profile_step = b.step(
+        "run-br-decode-stage-profile",
+        "Profile high-tree-count Brotli header, lookup setup, and payload stages",
+    );
+    br_decode_stage_profile_step.dependOn(&run_br_decode_stage_profile.step);
+
+    const run_br_decode_stage_profile_gate_csv = b.addRunArtifact(br_decode_stage_profile_exe);
+    run_br_decode_stage_profile_gate_csv.addArgs(&.{
+        "--iterations", "1000",
+        "--csv",        "zig-out/vort-br-decode-stage-profile.csv",
+    });
+    const br_decode_stage_profile_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/decode_stage_profile_gate.py",
+        "--csv",   "zig-out/vort-br-decode-stage-profile.csv",
+    });
+    br_decode_stage_profile_gate.step.dependOn(&run_br_decode_stage_profile_gate_csv.step);
+    const br_decode_stage_profile_gate_step = b.step(
+        "run-br-decode-stage-profile-gate",
+        "Validate the focused high-tree-count Brotli decode-stage profile",
+    );
+    br_decode_stage_profile_gate_step.dependOn(&br_decode_stage_profile_gate.step);
+
     const br_upstream_multiblock_diff_exe = b.addExecutable(.{
         .name = "vort-br-upstream-multiblock-diff",
         .root_module = b.createModule(.{
@@ -3800,6 +5172,13 @@ pub fn build(b: *std.Build) void {
         "Decode streamed multi-meta-block libbrotli operation schedules byte progressively",
     );
     br_upstream_multiblock_diff_step.dependOn(&run_br_upstream_multiblock_diff.step);
+    const run_br_literal_context_modes_diff = b.addRunArtifact(br_upstream_multiblock_diff_exe);
+    run_br_literal_context_modes_diff.addArg("--only-literal-context-modes");
+    const br_literal_context_modes_diff_step = b.step(
+        "run-br-literal-context-modes-diff",
+        "Validate RFC Brotli literal context modes and clustered maps against libbrotli",
+    );
+    br_literal_context_modes_diff_step.dependOn(&run_br_literal_context_modes_diff.step);
 
     const br_real_corpus_diff_smoke = b.addSystemCommand(&.{
         "python3", "tools/br/real_corpus_diff_smoke.py",
@@ -3821,6 +5200,41 @@ pub fn build(b: *std.Build) void {
         "Require one-shot and progressive Brotli decoding across real repository corpora",
     );
     br_real_corpus_diff_step.dependOn(&br_real_corpus_diff.step);
+
+    const br_serialized_trainer_report_exe = b.addExecutable(.{
+        .name = "vort-br-serialized-trainer-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/serialized_dictionary_trainer_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const br_serialized_trainer_report_smoke = b.addSystemCommand(&.{
+        "python3", "tools/br/serialized_dictionary_trainer_report_smoke.py",
+    });
+    const br_serialized_trainer_report_smoke_step = b.step(
+        "run-br-serialized-trainer-report-smoke",
+        "Validate serialized dictionary trainer report accounting and artifacts",
+    );
+    br_serialized_trainer_report_smoke_step.dependOn(
+        &br_serialized_trainer_report_smoke.step,
+    );
+    const br_serialized_trainer_report = b.addSystemCommand(&.{
+        "python3", "tools/br/serialized_dictionary_trainer_report.py",
+    });
+    br_serialized_trainer_report.addArtifactArg(br_serialized_trainer_report_exe);
+    if (b.args) |args| br_serialized_trainer_report.addArgs(args);
+    br_serialized_trainer_report.step.dependOn(
+        &br_serialized_trainer_report_smoke.step,
+    );
+    const br_serialized_trainer_report_step = b.step(
+        "run-br-serialized-trainer-report",
+        "Write Brotli serialized dictionary trainer JSON/Markdown real-corpus evidence",
+    );
+    br_serialized_trainer_report_step.dependOn(&br_serialized_trainer_report.step);
 
     const br_progressive_copy_bench_exe = b.addExecutable(.{
         .name = "vort-br-progressive-copy-bench",
@@ -3897,7 +5311,7 @@ pub fn build(b: *std.Build) void {
     const br_incremental_planned_bench_step = b.step("run-br-incremental-planned-bench", "Compare warmed incremental and one-shot Brotli planning");
     br_incremental_planned_bench_step.dependOn(&run_br_incremental_planned_bench.step);
     const run_br_incremental_planned_bench_csv = b.addRunArtifact(br_incremental_planned_bench_exe);
-    run_br_incremental_planned_bench_csv.addArg("200");
+    run_br_incremental_planned_bench_csv.addArg("1000");
     const br_incremental_planned_bench_gate = b.addSystemCommand(&.{ "python3", "tools/br/incremental_planned_bench_gate.py", "--csv" });
     br_incremental_planned_bench_gate.addFileArg(run_br_incremental_planned_bench_csv.captureStdOut(.{}));
     const br_incremental_planned_bench_gate_step = b.step("run-br-incremental-planned-bench-gate", "Validate warmed incremental Brotli planner reuse");
@@ -4283,6 +5697,24 @@ pub fn build(b: *std.Build) void {
     const zstd_dictionary_trainer_compare_step = b.step("run-zstd-dictionary-trainer-compare", "Compare Vort and zstd dictionary trainers on held-out corpora");
     zstd_dictionary_trainer_compare_step.dependOn(&zstd_dictionary_trainer_compare.step);
 
+    const zstd_cover_trainer_compare_exe = b.addExecutable(.{
+        .name = "vort-zstd-cover-trainer-compare",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/cover_trainer_compare.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const zstd_cover_trainer_compare = b.addSystemCommand(&.{ "python3", "tools/zstd/cover_trainer_compare.py" });
+    zstd_cover_trainer_compare.addArtifactArg(zstd_cover_trainer_compare_exe);
+    const zstd_cover_trainer_compare_step = b.step(
+        "run-zstd-cover-trainer-compare",
+        "Compare Vort optimized COVER with zstd COVER and FastCover",
+    );
+    zstd_cover_trainer_compare_step.dependOn(&zstd_cover_trainer_compare.step);
+
     const dictionary_train_bench_exe = b.addExecutable(.{
         .name = "vort-dictionary-train-bench",
         .root_module = b.createModule(.{
@@ -4292,6 +5724,10 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const run_dictionary_train_bench = b.addRunArtifact(dictionary_train_bench_exe);
+    if (b.args) |args| run_dictionary_train_bench.addArgs(args);
+    const dictionary_train_bench_step = b.step("run-dictionary-train-bench", "Benchmark deterministic dictionary training modes");
+    dictionary_train_bench_step.dependOn(&run_dictionary_train_bench.step);
     const run_dictionary_train_bench_csv = b.addRunArtifact(dictionary_train_bench_exe);
     run_dictionary_train_bench_csv.addArgs(&.{ "--iterations", "20", "--rounds", "3", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
     const dictionary_train_bench_gate = b.addSystemCommand(&.{ "python3", "tools/dictionary_train_bench_gate.py", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
@@ -4299,6 +5735,19 @@ pub fn build(b: *std.Build) void {
     dictionary_train_bench_gate.step.dependOn(&run_dictionary_train_bench_csv.step);
     const dictionary_train_bench_gate_step = b.step("run-dictionary-train-bench-gate", "Validate deterministic dictionary training throughput");
     dictionary_train_bench_gate_step.dependOn(&dictionary_train_bench_gate.step);
+    const cover_dictionary_train_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/dictionary_train_bench_gate.py",
+        "--csv",
+        "zig-out/vort-dictionary-train-bench.csv",
+        "--cover-only",
+    });
+    cover_dictionary_train_bench_gate.step.dependOn(&run_dictionary_train_bench_csv.step);
+    const cover_dictionary_train_bench_gate_step = b.step(
+        "run-cover-dictionary-train-bench-gate",
+        "Validate shared COVER parameter-training throughput and allocations",
+    );
+    cover_dictionary_train_bench_gate_step.dependOn(&cover_dictionary_train_bench_gate.step);
 
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",
@@ -5177,23 +6626,53 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_decode_bench_exe.step);
+    check_step.dependOn(&deflate_params_interop_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
     check_step.dependOn(wasm_check_step);
+    check_step.dependOn(br_public_wasm_check);
+    check_step.dependOn(br_large_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
+    check_step.dependOn(&zlib_dictionary_resume_probe.step);
+    check_step.dependOn(&zstd_dictionary_resume_probe.step);
+    check_step.dependOn(&zstd_controls_probe.step);
+    check_step.dependOn(&zstd_hq_probe.step);
+    check_step.dependOn(&zstd_hq_cli_probe.step);
+    check_step.dependOn(&br_hq_probe.step);
+    check_step.dependOn(&br_hq_cli_probe.step);
+    check_step.dependOn(&br_hq_cli_tests.step);
+    check_step.dependOn(&fast_cover_probe.step);
+    check_step.dependOn(&lzma_encode_controls_probe.step);
+    check_step.dependOn(&lzma_controls_cli_probe.step);
+    check_step.dependOn(&lz4_dictionary_resume_probe.step);
+    check_step.dependOn(&lzma_contract_probe.step);
+    check_step.dependOn(&lzma_one_shot_probe.step);
+    check_step.dependOn(&br_contract_probe.step);
     check_step.dependOn(&gzip_diff_exe.step);
+    check_step.dependOn(&zip_writer_probe_exe.step);
+    check_step.dependOn(&zip_incremental_writer_probe_exe.step);
+    check_step.dependOn(&tar_incremental_reader_probe_exe.step);
+    check_step.dependOn(&tar_incremental_compressed_reader_probe_exe.step);
+    check_step.dependOn(&tar_incremental_auto_reader_probe_exe.step);
+    check_step.dependOn(&tar_incremental_compressed_writer_probe_exe.step);
+    check_step.dependOn(&lzip_incremental_probe_exe.step);
+    check_step.dependOn(&compress_z_incremental_probe_exe.step);
     check_step.dependOn(&br_rle_probe_exe.step);
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);
     check_step.dependOn(&br_planned_encode_bench_exe.step);
+    check_step.dependOn(&br_complete_dictionary_bench_exe.step);
+    check_step.dependOn(&br_context_tree_report_exe.step);
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
+    check_step.dependOn(&br_quality_command_state_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
+    check_step.dependOn(&br_literal_context_profile_exe.step);
     check_step.dependOn(&br_record_optimal_audit_exe.step);
     check_step.dependOn(&br_record_optimal_shape_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
@@ -5206,9 +6685,14 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&snappy_interop_probe_exe.step);
+    check_step.dependOn(&bzip2_contract_probe.step);
+    check_step.dependOn(&snappy_contract_probe.step);
+    check_step.dependOn(&snappy_framing_contract_probe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
+    check_step.dependOn(&lz4_hc_reference_bench_exe.step);
     check_step.dependOn(&lz4_decode_profile_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
+    check_step.dependOn(&br_decode_stage_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&benchmark_provenance_tests.step);
     check_step.dependOn(&zstd_decode_profile_exe.step);
@@ -5220,6 +6704,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&zstd_dictionary_trainer_compare_exe.step);
+    check_step.dependOn(&zstd_cover_trainer_compare_exe.step);
     check_step.dependOn(&dictionary_train_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
@@ -5236,12 +6721,21 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_stored_corpus_exe.step);
     check_step.dependOn(&br_static_dictionary_report_exe.step);
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
+    check_step.dependOn(&br_compound_dictionary_diff_exe.step);
+    check_step.dependOn(&br_serialized_dictionary_bench_exe.step);
+    check_step.dependOn(&br_serialized_trainer_report_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&br_progressive_huffman_bench_exe.step);
     check_step.dependOn(&br_incremental_planned_bench_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
+    check_step.dependOn(&lz4_fast_controls_probe.step);
+    check_step.dependOn(&lz4_fast_controls_cli.step);
+    check_step.dependOn(&lz4_fast_wasm.step);
+    check_step.dependOn(&lzma2_incremental_report_exe.step);
+    check_step.dependOn(&xz_progressive_probe.step);
+    check_step.dependOn(&xz_one_shot_probe.step);
 
     const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
     ci_smoke_step.dependOn(test_step);
@@ -5263,6 +6757,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_diff_step);
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
+    ci_smoke_step.dependOn(deflate_params_interop_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
@@ -5305,11 +6800,21 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
+    ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
+    ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
+    ci_smoke_step.dependOn(br_complete_dictionary_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
+    ci_smoke_step.dependOn(br_compound_dictionary_diff_step);
+    ci_smoke_step.dependOn(br_context_tree_report_gate_step);
+    ci_smoke_step.dependOn(br_context_tree_report_gate_smoke_step);
+    ci_smoke_step.dependOn(br_context_tree_report_dir_smoke_step);
+    ci_smoke_step.dependOn(br_context_tree_dashboard_gate_step);
+    ci_smoke_step.dependOn(br_context_tree_dashboard_gate_smoke_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);
+    ci_smoke_step.dependOn(br_serialized_trainer_report_smoke_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);

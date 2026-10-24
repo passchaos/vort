@@ -1,9 +1,12 @@
 # TAR and compressed tarballs
 
-Vort provides an in-memory, library-first TAR reader and deterministic writer.
+Vort provides in-memory and bounded incremental library-first TAR readers plus
+deterministic one-shot and incremental writers.
 The reader validates every 512-byte header checksum and supports regular files,
 directories, symbolic links, hard links, USTAR prefixes, POSIX PAX `path`,
-`linkpath`, and `size` records, and GNU long-name/long-link records.
+`linkpath`, and `size` records, GNU long-name/long-link records, old GNU
+`typeflag='S'` sparse maps with chained extension headers, and GNU PAX sparse
+formats 0.0, 0.1, and 1.0.
 
 Entries borrow their metadata and payload slices from the archive bytes. A path
 is represented by `TarPath`, which avoids allocating for USTAR prefix/name
@@ -11,6 +14,16 @@ pairs and provides `eql`, `writeInto`, `alloc`, and `isSafeRelative` helpers.
 The safety helper rejects absolute paths, `.`/`..` components, Windows drive
 prefixes, and backslashes. Vort never writes archive entry paths to the
 filesystem automatically.
+
+Sparse entries expose `TarSparseInfo`: format (`gnu_old`, `pax_0_0`,
+`pax_0_1`, or `pax_1_0`), logical size, wire extent count,
+the borrowed raw map, and the concatenated stored extent bytes. Its iterator
+returns logical offset/length plus the corresponding physical-data offset.
+Normal extraction allocates or accepts the logical size, zero-fills holes, and
+copies each validated extent. Maps must be ordered, non-overlapping, within the
+logical size, agree with `GNU.sparse.numblocks`, and consume exactly the stored
+payload. PAX 1.0 map padding must be zero and 512-byte aligned. Output limits
+apply to logical size rather than the much smaller physical payload.
 
 ```zig
 const entries = [_]vort.TarEncodeEntry{
@@ -31,6 +44,31 @@ const decoded = try owned.archive.extractByNameAllocLimited(
 );
 defer allocator.free(decoded);
 ```
+
+Sparse writing uses explicit caller-owned extents:
+
+```zig
+const extents = [_]vort.TarSparseDataExtent{
+    .{ .offset = 0, .data = "HEAD" },
+    .{ .offset = 1024 * 1024 - 4, .data = "TAIL" },
+};
+const entries = [_]vort.TarEncodeEntry{.{
+    .name = "sparse.img",
+    .sparse = .{
+        .logical_size = 1024 * 1024,
+        .extents = &extents,
+        // Optional: .format = .gnu_old,
+    },
+}};
+```
+
+The writer defaults to deterministic GNU PAX sparse 1.0; `.format = .gnu_old`
+emits the legacy GNU header and as many chained 21-entry extension blocks as
+required. Both normalize stored ranges to TAR's 512-byte blocks, merge touching
+normalized ranges, insert zeroes only inside those physical blocks, and append
+the required zero-length terminal extent. This preserves logical bytes while
+remaining compatible with GNU tar; the archive still stores only the selected
+physical ranges. Old-GNU names are limited to its 100-byte header field.
 
 `TarCompression` supports raw TAR, gzip, Bzip2, Brotli, Unix compress,
 LZMA-Alone, XZ, LZ4 frame, lzip, LZF, Zstandard, and LZOP. This includes `.tar.br`,
@@ -57,8 +95,8 @@ writer uses Vort's compressed-or-stored fast Brotli encoder.
 
 The writer emits reproducible USTAR headers with zero timestamps by default.
 Names and link targets longer than the classic fields are represented with PAX
-extended headers. `encodeTarAppend` and `encodeCompressedTarAppend` are
-transactional.
+extended headers. Sparse entries use `GNU.sparse.major/minor/name/realsize` and
+a payload-prefixed map. `encodeTarAppend` and `encodeCompressedTarAppend` are transactional.
 
 CLI validation surfaces:
 
@@ -72,6 +110,153 @@ zig build run -- extract-tar-file archive.tar.gz payload.bin output.bin 26843545
 zig build run-tar-diff
 ```
 
-Sparse files and device/FIFO extraction are not implemented. Symbolic and hard
-links are exposed as metadata but are not followed or materialized by the
-in-memory extraction helpers.
+`run-tar-diff` requires GNU tar 1.34-compatible sparse handling: GNU tar writes
+old-GNU (including a multi-extension fixture) plus PAX 0.0/0.1/1.0 archives
+that Vort reconstructs, while Python `tarfile` and GNU tar both extract Vort's
+deterministic PAX-1.0 and old-GNU writer output
+(`gnu_sparse_reader_cases=5`, `sparse_writer_readers=4`). Sparse entries also
+round trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
+not implemented. Symbolic and hard links are exposed as metadata but are not
+followed or materialized by the in-memory extraction helpers.
+
+## Incremental reader
+
+`TarIncrementalReader` parses raw TAR under arbitrary input fragmentation and
+writes each member's logical bytes directly into caller output. An
+`.entry_header` result makes `currentEntry()` available before member output;
+`.entry_done` marks the end of that member. Ordinary payload bytes are copied
+directly from caller input. Sparse extents are copied directly while holes are
+zero-filled into caller output, so even a multi-gigabyte logical sparse member
+does not require a member-sized allocation.
+
+PAX headers, GNU long-name/long-link records, PAX 1.0 textual maps and old-GNU
+sparse extension blocks are the only buffered wire data. Options independently
+bound a control record, retained metadata, logical member size, total logical
+output, sparse extent count, entry count and total archive input. PAX sparse
+0.0/0.1/1.0 and old-GNU maps share the same validated plan and direct-output
+data plane. Reader-owned names remain valid until the call that reports the
+matching `.entry_done`.
+
+Call `finish()` when the underlying input reaches EOF. It accepts a clean entry
+boundary or one zero end block for compatibility, while rejecting partial
+headers, control records, maps, members and padding as `TruncatedFrame`. The
+standard two-zero-block terminator returns `.done` directly; `input_read`
+identifies its exact prefix if an outer container supplied trailing bytes.
+
+Tiny-buffer tests exercise every supported sparse dialect, PAX metadata,
+directories and links with one-byte input/output, plus explicit limit,
+malformed-padding, poisoned-state and exhaustive allocation-failure paths. The
+GNU/Python differential rebuilds 14 external/Vort entries under both one-byte
+and micro schedules (`incremental_reader_cases=14`).
+
+### Compressed incremental readers
+
+All twelve outer formats compose directly with the same raw reader without retaining
+the decompressed TAR: `TarGzipIncrementalReader`,
+`TarBzip2IncrementalReader`, `TarBrotliIncrementalReader`,
+`TarLzmaIncrementalReader`, `TarXzIncrementalReader`,
+`TarLz4IncrementalReader`, `TarLz4LegacyIncrementalReader`,
+`TarLzfIncrementalReader`, `TarLzipIncrementalReader`,
+`TarCompressZIncrementalReader`, `TarZstandardIncrementalReader`, and
+`TarLzopIncrementalReader`. The first LZ4 type targets modern frames; the
+legacy type handles the original EOF-terminated stream.
+`TarIncrementalCompressedReader(Codec)` is the generic composition surface
+behind the named types.
+
+Each type has the same `step`/`finish`/`currentEntry` contract as the raw
+reader. A configurable decoded bridge is the only storage between the outer
+decoder and TAR state machine. Wrapper checksums, footers, XZ indexes and
+content sizes must validate before `.done`; decoded bytes after TAR's two end
+blocks must be zero. `max_decoded_size` bounds all decoded TAR/padding bytes,
+while `Options.decoder` exposes that wrapper's block, dictionary, history and
+compressed-buffer limits. Gzip accepts concatenated members by default.
+
+One-byte and micro-schedule tests cover all twelve Vort writers, and the required
+external differential adds independently produced gzip, Bzip2, Brotli,
+LZMA-Alone, XZ, modern LZ4, legacy LZ4 and Zstandard inputs. The current
+required report is `incremental_compressed_reader_cases=20`; installed external
+`lzf` and `lzop` tools add one direction each. Zero-output backpressure,
+decoded limits, nonzero TAR trailers, truncation and full-decode allocation
+failures have focused coverage.
+
+The twelve-format tarball matrix therefore has no remaining whole-TAR buffering
+gap when callers select the corresponding explicit incremental reader type.
+
+`TarIncrementalAutoReader` adds bounded automatic dispatch. It retains at most
+one 512-byte prefix, gives a checksum-valid raw TAR header priority over magic-
+looking filename bytes, identifies every wrapper with an unambiguous signature,
+and applies the same structural TAR-size restriction used by one-shot detection
+to LZMA-Alone. Brotli has no magic and is the configurable ambiguous fallback;
+callers may instead select `reject` or `raw_tar`. Empty input resolves to an
+empty raw TAR. The shared LZ4/Zstandard skippable magic is handled by streaming
+over each payload and probing the next frame, so metadata size does not expand
+the retained prefix. The active concrete reader is allocator-owned and is only
+installed after fully successful initialization.
+
+The auto reader exposes the same entry events and exact progress contract plus
+the detected `TarIncrementalAutoReaderFormat`. External differential coverage
+currently exercises 24 raw/Vort/Python/system archives under both one-byte and
+micro schedules (`incremental_auto_reader_cases=24`). Explicit reader types
+remain useful when a surrounding protocol already declares the compression or
+when an application wants to avoid the 512-byte detection delay.
+
+## Incremental writer
+
+`TarIncrementalWriter` emits raw TAR through caller output without retaining an
+archive or member. `beginEntry` serializes a bounded control prefix; regular
+files then accept exactly the pledged size, while directories and links accept
+no payload. PAX long path/link records, PAX sparse 1.0 maps, old-GNU sparse
+extension chains, entry padding and the two final zero blocks all drain under
+arbitrary output backpressure.
+
+Incremental sparse input is the complete logical file. The caller supplies only
+offset/length layout metadata; the writer discards declared holes and streams
+normalized stored ranges directly. By default every discarded byte must be
+zero, so an incorrect sparse map fails with `NonZeroSparseHole` rather than
+silently losing data. State contains copied normalized extents, the current TAR
+control record, and counters—never the file. One-byte and micro schedules are
+byte-identical to `encodeTarAlloc` for regular files, long PAX metadata, links,
+PAX sparse and old-GNU sparse.
+
+The external differential requires seven schedule-independent incremental
+writer entries (`incremental_writer_cases=7`) and exact byte equality with the
+one-shot writer before Python and GNU tar interoperability checks run.
+
+### Compressed incremental writers
+
+All twelve supported streaming encoders compose directly after the raw writer:
+`TarGzipIncrementalWriter`, `TarBzip2IncrementalWriter`,
+`TarBrotliIncrementalWriter`, `TarCompressZIncrementalWriter`,
+`TarLzmaIncrementalWriter`, `TarXzIncrementalWriter`,
+`TarLz4IncrementalWriter`, `TarLz4LegacyIncrementalWriter`,
+`TarLzfIncrementalWriter`, `TarLzipIncrementalWriter`,
+`TarZstandardIncrementalWriter`, and `TarLzopIncrementalWriter`.
+`TarIncrementalCompressedWriter(Codec)` is the generic composition surface.
+
+The state retains one caller-sized raw-TAR bridge in addition to the selected
+encoder's documented block/history/pending storage. Entry source bytes flow
+through the established raw writer, including PAX and sparse handling, and the
+outer writer reports `.entry_done` only after the compressor has consumed that
+entry's complete TAR header, stored data and padding and is ready for more
+input. After the raw two-block terminator is consumed, the compressor is
+finished and its footer/checksum/index drains before `.done`.
+
+`Options.tar` and `Options.encoder` preserve the inner safety limits;
+`raw_bridge_size` bounds the composition buffer and `max_compressed_size`
+bounds returned wire bytes. Modern LZ4 and Zstandard omit content size because
+the final raw archive length is not known at initialization. One-byte versus
+micro input/output plus 1-byte versus 31-byte bridge schedules are byte-exact
+for regular files, long PAX paths, directories and sparse members. Poisoning,
+zero-output backpressure, nonzero sparse holes, compressed limits and complete
+allocation-failure paths have focused coverage.
+
+The required differential generates all twelve formats under both schedules,
+requires byte equality, extracts each through Vort, and independently validates
+eight through Python or installed system tools; LZF and LZOP remain Vort-only
+when the corresponding system utilities are unavailable
+(`incremental_compressed_writer_cases=12`,
+`incremental_compressed_writer_external=9` on the current host).
+
+All twelve formats now have bounded incremental readers and writers. Automatic
+input dispatch remains reader-only because output format selection is an
+explicit caller policy rather than something discoverable from plaintext.

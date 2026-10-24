@@ -75,7 +75,7 @@ pub fn encode(
         args.next() orelse return error.MissingCorpusPath,
     );
     const zstd_level = if (args.next()) |text|
-        try std.fmt.parseInt(u8, text, 10)
+        try std.fmt.parseInt(c_int, text, 10)
     else
         3;
     const input = try readFile(init, input_path);

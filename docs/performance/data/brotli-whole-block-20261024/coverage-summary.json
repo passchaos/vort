@@ -1,0 +1,181 @@
+{
+  "generated_utc": "2026-10-24T10:58:31.867415+00:00",
+  "scope": "只读实际正式 WholeBlock ELF、缓存编译/运行清单与全部输入内容；未编译或运行测试产物。",
+  "main_ordered_names_equal": true,
+  "modes": {
+    "family-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/0bf0ef9b93b795ca60fafb5236d9b0e9/vort-br-tests",
+      "binary_sha256": "17e0c8572192e54d861a8c5b43e6fe5e34af533329547c466b8c501693fa8f0c",
+      "metadata_count": 1229,
+      "named_count": 1211,
+      "anonymous_count": 18,
+      "group_counts": {
+        "anonymous_import_roots": 18,
+        "builder_integration": 2,
+        "command_storage": 8,
+        "independent_qa": 18,
+        "other_library_named": 1172,
+        "parse_options": 3,
+        "whole_codec": 3,
+        "whole_parser": 5
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f0ea864e34578a41b921926979dcc625.txt"
+    },
+    "whole-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/c7239c8e45871492bbc6096c8833aa6e/vort-br-whole-block-tests",
+      "binary_sha256": "f0edff2d72de79c49b990622d561649664649d7caff23319b7cc046edbc846aa",
+      "metadata_count": 54,
+      "named_count": 37,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "command_storage": 8,
+        "independent_qa": 18,
+        "parse_options": 3,
+        "whole_codec": 3,
+        "whole_parser": 5
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/775f8f1223ae1d80fbe9552b93c31dca.txt"
+    },
+    "whole-debug": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/28ac52cf0d5ba084faf991afbaa6a24c/vort-br-whole-block-tests",
+      "binary_sha256": "d3cd36f071837e849819a98b6d124432776b4fd7779dfa89e30873264a7128be",
+      "metadata_count": 54,
+      "named_count": 37,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "command_storage": 8,
+        "independent_qa": 18,
+        "parse_options": 3,
+        "whole_codec": 3,
+        "whole_parser": 5
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/44eb4ec005c7c642c11479697722152d.txt"
+    },
+    "whole-x86": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/39ca981a706578eaec691c24c66c4f01/vort-br-whole-block-tests",
+      "binary_sha256": "ae32d7d1223b20114fc47d36d7b48dbabcba4d9ad0c16e066f2e04bfabc03e18",
+      "metadata_count": 54,
+      "named_count": 37,
+      "anonymous_count": 17,
+      "group_counts": {
+        "anonymous_import_roots": 17,
+        "command_storage": 8,
+        "independent_qa": 18,
+        "parse_options": 3,
+        "whole_codec": 3,
+        "whole_parser": 5
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/82d41246026ecfc5cfca77a15d520aeb.txt"
+    }
+  },
+  "all_compile_and_recursive_objects_contents_verified": true,
+  "all_run_elf_input_contents_verified": true,
+  "all_recorded_global_sources_before_after_equal": true,
+  "exact_child_compile_argv_logged": false,
+  "builder_integration_named_counts": {
+    "family-rf": 2,
+    "whole-rf": 0,
+    "whole-debug": 0,
+    "whole-x86": 0
+  },
+  "frozen_source_count": 1574,
+  "frozen_source_global_sha256": "61e1e710188c39eede7a4d83773eb7b283c8a698ddb9bbd216d5c50d105b14d4",
+  "full_frozen_source_binding_path": "/tmp/vort-br-whole-final-20261024-c47wcqh0/coverage/full-frozen-source-binding.json",
+  "qa_source_and_base_binding_path": "/tmp/vort-br-whole-final-20261024-c47wcqh0/coverage/qa-freeze-and-base-wire-binding.json",
+  "builder_selection_path": "/tmp/vort-br-whole-final-20261024-c47wcqh0/coverage/builder-integration-selection.json",
+  "all_main_named_tests_present_in_full_family": true,
+  "builder_integration_covered_by_full_family": [
+    {
+      "index": 847,
+      "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak",
+      "name_address": "0x1335f1a",
+      "name_length": 140,
+      "function_address": "0x1886e00",
+      "function_symbols": [
+        "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x1323160",
+      "metadata_file_offset": 3289440,
+      "function_shared_with": [],
+      "group": "builder_integration",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+      "source_line": 8,
+      "source_sha256": "d2a4e1cdc2a525b99d0df05d29a74b4318d53c1f22fff1d521d9d3835304a14e",
+      "compile_manifest_line": 984
+    },
+    {
+      "index": 848,
+      "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands",
+      "name_address": "0x1335fa6",
+      "name_length": 148,
+      "function_address": "0x1886d20",
+      "function_symbols": [
+        "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x1323178",
+      "metadata_file_offset": 3289464,
+      "function_shared_with": [],
+      "group": "builder_integration",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+      "source_line": 43,
+      "source_sha256": "d2a4e1cdc2a525b99d0df05d29a74b4318d53c1f22fff1d521d9d3835304a14e",
+      "compile_manifest_line": 984
+    }
+  ],
+  "compiled_input_bindings": {
+    "whole-debug": {
+      "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/e975140f70018ffdc57e29ce99c98b33.txt",
+      "direct_input_count": 1003,
+      "prefix_counts": {
+        "1": 814,
+        "0": 188,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "whole-rf": {
+      "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/75d9eaa5818f49674f2672c7f45fc269.txt",
+      "direct_input_count": 1002,
+      "prefix_counts": {
+        "1": 813,
+        "0": 188,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "whole-x86": {
+      "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/27bd999d9b68c68ae6cf56bec0b4b840.txt",
+      "direct_input_count": 1002,
+      "prefix_counts": {
+        "1": 813,
+        "0": 188,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    },
+    "family-rf": {
+      "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f05814ce0d2c0e8a4a090a940d4772a1.txt",
+      "direct_input_count": 1002,
+      "prefix_counts": {
+        "1": 813,
+        "0": 188,
+        "2": 1
+      },
+      "recursive_object_input_counts": [
+        549
+      ]
+    }
+  }
+}

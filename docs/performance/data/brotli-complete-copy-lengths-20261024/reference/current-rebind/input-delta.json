@@ -1,0 +1,14 @@
+{
+  "unique_original_inputs": 1906,
+  "changes": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig",
+      "old_compiled_sha256": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
+      "current_sha256": "7fc2a57741e5da60f7a7e6fb01d8f7df0bdf673a45747f22caa9aaee2b4c36ff"
+    }
+  ],
+  "production_implementations_changed": false,
+  "probe_source_changed": false,
+  "helper_or_driver_source_changed": false,
+  "scope": "comparison to the exact original compiler input contents, including its recovered old test bytes"
+}

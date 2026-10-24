@@ -13,11 +13,55 @@ size and requires their checked sum to equal the outer length exactly.
 and 64 KiB chunks. `decodeHadoopLz4AllocLimited` and caller-owned decode enforce
 the aggregate bound before output.
 
+`HadoopLz4IncrementalEncoder` and `HadoopLz4IncrementalDecoder` provide the
+matching caller-input/caller-output streaming surface. They reuse the same
+outer-block state machine as Hadoop Snappy while injecting Vort's reusable raw
+LZ4 block encoder, token-derived decoded-size scanner, and caller-buffer block
+decoder. The encoder retains one bounded outer block until its final
+uncompressed length can be written; without `flush`, arbitrary fragmentation
+is byte-exact with one-shot output. `flush` explicitly closes the current outer
+block and repeated empty flushes are idempotent.
+
+Options bound input, pending encoded output, compressed chunk retention,
+decoded chunk length, aggregate output, and optional exact input/output sizes.
+
+Incremental decoding now prevalidates each retained raw block, then wraps the
+existing LZ4 cursor with a conservative history ring of at most 64 KiB. It does
+not retain a complete decoded chunk. History capacity is reserved before caller
+output is written, and successful/error deltas are recorded before any
+allocation-free ring update. The shared framing work budget accounts for
+compressed and history capacities and their transient replacement peaks.
+Reset retains capacity, explicit reconfiguration validates first, and active
+values can move without leaving self-referential allocator callbacks.
+Both directions support zero-output backpressure, retained-capacity reset,
+snapshots, and malformed/truncated outer-block diagnostics.
+
+```zig
+var encoder = try vort.HadoopLz4IncrementalEncoder.initExactSize(allocator, .{
+    .block_size = 256 * 1024,
+    .chunk_size = 64 * 1024,
+    .max_pending_output_len = 4 * 1024 * 1024,
+}, input.len);
+defer encoder.deinit();
+
+var decoder = vort.HadoopLz4IncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = input.len,
+    .max_working_memory = 8 * 1024 * 1024,
+    .expected_output_len = input.len,
+});
+defer decoder.deinit();
+```
+
 ```sh
 zig build run -- encode-hadoop-lz4-file input.bin output.lz4
+zig build run -- encode-hadoop-lz4-incremental-file input.bin output.lz4 262144 65536 17 31
 zig build run -- inspect-hadoop-lz4-file output.lz4
 zig build run -- decode-hadoop-lz4-file output.lz4 decoded.bin 536870912
+zig build run -- decode-hadoop-lz4-incremental-file output.lz4 decoded.bin 1048576 17 31
 ```
 
 `run-hadoop-lz4-diff` validates both directions against Python `lz4.block`
-using `store_size=False`, which matches Hadoop's raw inner blocks.
+using `store_size=False`, which matches Hadoop's raw inner blocks. It also
+requires incremental encoding to match one-shot bytes, decodes that output in
+Python, and sends both Vort- and Python-generated streams through the
+17-byte-input / 31-byte-output incremental decoder.

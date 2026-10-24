@@ -1,0 +1,94 @@
+{
+  "phase": "formal-final-lz4-cli-attempt-profile-corrected",
+  "time_before_utc": "2026-10-24T11:54:25.561172+00:00",
+  "git_head": "fef87a827f5aeaa1c5a7b2035a7eb0c7648d9389",
+  "source_count": 1736,
+  "source_sha256": "167b309fbbb82dfc0028047fb2bac5ef1c9e5099e874fc91d3d285c7404c4a8f",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-lz4-fast-controls-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "reference_round_trips": 60,
+    "raw_empty_legacy_wire_checks": 5,
+    "canonical_empty_reverse_decode_checks": 1,
+    "profile_wire_checks": 22,
+    "default_acceleration_wire_checks": 9,
+    "normalization_checks": 4,
+    "skipping_work_checks": 3,
+    "prefix_history_checks": 2,
+    "zero_chain_checks": 3,
+    "idle_frame_profile_checks": 2,
+    "rejected_output_preserved": 21,
+    "same_path_checks": 6
+  },
+  "status": "passed-corrected-final",
+  "time_after_utc": "2026-10-24T11:55:07.150981+00:00",
+  "source_equal": true,
+  "source_delta": {},
+  "build_exit_code": 0,
+  "parser_tests_passed": 6,
+  "gate_report": {
+    "reference_round_trips": 60,
+    "raw_empty_legacy_wire_checks": 5,
+    "canonical_empty_reverse_decode_checks": 1,
+    "profile_wire_checks": 22,
+    "default_acceleration_wire_checks": 9,
+    "normalization_checks": 4,
+    "skipping_work_checks": 3,
+    "prefix_history_checks": 2,
+    "zero_chain_checks": 3,
+    "idle_frame_profile_checks": 2,
+    "rejected_output_preserved": 21,
+    "same_path_checks": 6,
+    "reference_lz4_version": "1.9.3"
+  },
+  "gate_expected_matches": true,
+  "actual_compile_manifest": ".zig-cache/h/064d22088e761b894c9197bce91f4cec.txt",
+  "initial_manifest_key": "064d22088e761b894c9197bce91f4cec",
+  "binary": {
+    "cache_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/a042fab793f5073857243f772bb8c63d/vort-lz4-fast-controls-cli",
+    "archive_path": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/cli-new-final/vort-lz4-fast-controls-cli",
+    "sha256": "77508cfd3eef003104429134d3dd16f1272bc4f2ff4e23905e34737a8d2ed5c4"
+  },
+  "cache_output_key": {
+    "key": "a042fab793f5073857243f772bb8c63d",
+    "method": "Zig Cache hasher initialized with actual .h key binary, then updated by every recorded file bin_digest in order."
+  },
+  "input_binding": {
+    "records": 1920,
+    "unique_inputs": 1918,
+    "prefix_counts": {
+      "0": 1103,
+      "1": 813,
+      "2": 2
+    },
+    "mismatches": [],
+    "uncovered": []
+  },
+  "strict_binary_source_binding": true,
+  "source_changes_from_failed_run": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/lz4/fast_controls_cli_gate.py"
+  ],
+  "same_binary_as_failed_run": true,
+  "report_files_sha256": {
+    "source-before.json": "167b309fbbb82dfc0028047fb2bac5ef1c9e5099e874fc91d3d285c7404c4a8f",
+    "source-after.json": "167b309fbbb82dfc0028047fb2bac5ef1c9e5099e874fc91d3d285c7404c4a8f",
+    "source-before.zip": "d9c5b86ad6b7c8d615743621bd3bcb556e48ac8db97729ab354409e844aba09b",
+    "source-after.zip": "d9c5b86ad6b7c8d615743621bd3bcb556e48ac8db97729ab354409e844aba09b",
+    "source-delta.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "compile-inputs.txt": "79a0840354d1f63a5cbbc0ed95814f39000cc002398f0fe8893e26ac8b5f27a5",
+    "compile-input-digest-check.tsv": "e8b7142724b5454cac31f7fd9e759f7df4146f724cdb44b00a4bb3bdc3ac7a42",
+    "compiled-inputs-all.json": "b5c29b5afd2f7da3c37232d29d472d36add8f8dc9566f7f9d2d6a3e0709ccb23",
+    "compiled-input-bytes.zip": "e6d7c1558e3f8a6b5dc236498f8139600c4a725c86892d9054e8fd85433732b1",
+    "gate-report.json": "3ab5afe67339e474a5654de7d863d70127d8ca3aac8f505dcab52750974f2b7d",
+    "gate-correction.json": "fdfa90a99b236fd6934b9009d270c5d408ab9a566f814434742ba53f79bde229",
+    "build.stdout": "8a60104166a5575c5d5a64a06a65184dfbe495f9b8e91180a321186513e059d5",
+    "build.stderr": "5e516ec4634c2572aaa91eed18ed653ee5cc77b150964fd9ee4211b77406e850"
+  }
+}

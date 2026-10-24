@@ -1,0 +1,29 @@
+{
+  "status": "strong_binding_verified",
+  "artifact_digest": "adf83d4d67737a8b01d8792da2341647",
+  "artifact_sha256": "5ec5bd4da43d72fe7d708fbc58aaa4cd2d1b40273d74b16a819f70feba0ad1ae",
+  "manifest_sha256": "3d166ed4330bdb310a56ecea2fcb8524f2d5f137db8d4fa2732de38dfdcdc43c",
+  "binding_report": "artifact-digest-binding.json",
+  "binding_report_sha256": "9385be77d618b81b8c8c01c69f23bdcff6488d1173134d0d7cc9d0852ddca582",
+  "binding_metadata_sha256": "ab92907a0f1ed90b6c9b11880f65182d6883597632ff9f82b27d3f249fdc0190",
+  "all_input_records": 1864,
+  "input_groups": {
+    "project": 1034,
+    "vail": 16,
+    "linked_objects": 2,
+    "zig_library": 812
+  },
+  "all_input_contents_verified": true,
+  "formal_report_sha256": "0b8ebbe850c2ba08d69ce34db230a9fffd19491602212e6fcfa81c9caca0eee7",
+  "formal_feature_rows": 74,
+  "formal_feature_rows_canonical_sha256": "c4308993fb20c3af5d5a46bdaaa0478cdc0c7f47f6b48be19ffb10ebbcdbce2f",
+  "baseline_manifest_sha256": "f9560f3af37fd932eaf6c9b72853eac87fcc612028f1dd311a128eeabaa1fe85",
+  "baseline_rows": 49,
+  "baseline_rows_canonical_sha256": "1b29f07fd716e0438e56b50577456f9423c872a0f6edc415c8980f0074b5902c",
+  "formal_summary_sha256": "dd8d7e23d19ec56f8abbafde1637cec3ee5404390b34396b05ebefc124c011f3",
+  "canonical_rows_hash_method": "SHA256 of JSON sort_keys=true,separators=(comma,colon),UTF8",
+  "rebuilt_binary": false,
+  "executed_artifact": false,
+  "source_modified": false,
+  "original_results_modified": false
+}

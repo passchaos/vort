@@ -27,6 +27,100 @@ The encoder:
 - generates correct output verified by Python zlib, system gzip, and
   zlib-ng/zlib-rs differential harnesses.
 
+## Runtime level and strategy changes
+
+`DeflateParams` exposes zlib-compatible numeric levels `0...9` and strategies
+`.default`, `.filtered`, `.huffman_only`, `.rle`, and `.fixed`. Level 0 is a
+true stored-only mode regardless of strategy. `.fixed` retains stored fallback
+but excludes dynamic-Huffman blocks; the other nonzero combinations retain the
+Best encoder's stored/fixed/dynamic arbitration under their selected parser
+policy.
+
+The root exports `DeflateParams` and `DeflateParamsError`; algorithm-family and
+resolved planner details remain internal. Unlike the C API, the normalized Zig
+surface has no `-1`/default-compression sentinel: callers select an explicit
+level `0...9`, with `6` as the struct default.
+
+`RawDeflateIncrementalBestEncoder`, `ZlibIncrementalBestEncoder`, and
+`GzipIncrementalBestEncoder` expose `requestParams()`. The level families are
+stored (`0`), fast (`1...3`), and slow (`4...9`). A request within the active
+family and strategy applies immediately without ending the current block, so
+accepted but still buffered bytes use the new planner. A family or strategy
+change queues an implicit non-final DEFLATE block boundary: callers drain with
+empty input until `need_input`, and the boundary adds neither a sync marker nor
+byte alignment. Supplying input while this asynchronous boundary is pending is
+an error.
+
+An initial request made before any input applies immediately and emits no empty
+block. Levels `10...15` return `InvalidCompressionLevel` without changing
+active or queued state.
+
+Duplicate requests are idempotent, the latest queued request wins, and a
+request for the active pair cancels a queued change. Snapshots expose active
+and requested parameters, pending-boundary state, applied-change count,
+stored-only state, and combined flushing state. `reset()` retains the active
+pair but cancels queued work and resets the count; `resetWithOptions()` opts
+back into direct low-level compression options. Fixed-only incremental encoders
+advertise `supports_runtime_params = false` and return `UnsupportedOperation`
+from `requestParams()` because their block policy cannot implement the full
+runtime domain. Wrapper runtime state is authoritative in `snapshot()`; outer
+options remain initialization/reset configuration and do not change early while
+a request is queued.
+
+For wrapped encoders, ordinary `reset()` and gzip header-only `nextMember()` /
+`nextMemberExactSize()` reuse the active pair and cancel a queued request. APIs
+that explicitly accept new raw options (`nextStream`, `nextMemberWithOptions`,
+and their exact-size variants) replace runtime-param state with those options.
+Parameter changes affect the DEFLATE payload planner; they do not rewrite an
+already emitted zlib FLEVEL or gzip XFL/header field.
+
+Parameter boundaries retain rolling history, matcher state, and a preset
+dictionary. Zlib Adler-32 and gzip CRC-32/ISIZE continue across changes.
+`fullFlush()` remains the only parameter/flush composition that clears history
+and disables the current preset dictionary; partial/sync/block boundaries and
+ordinary parameter changes do not. `partialFlush()` publishes accepted data
+then writes the ten-bit non-final empty fixed block defined by zlib
+`Z_PARTIAL_FLUSH`. Unlike sync/full flush it does not byte-align, but unlike
+`blockFlush()` it emits enough bits for the decoder to finish the preceding
+block immediately. Flush strength upgrades in block < partial < sync < full
+order.
+
+### Validation
+
+`run-deflate-params-interop` passes against the selected libz; the local run
+reports runtime zlib 1.2.11. It covers raw, zlib, and gzip in both directions:
+three Vort `requestParams()` streams are inflated by libz, and three libz
+`deflateParams()` streams are decoded by Vort. The common schedule covers
+`6 -> 1 -> 0 -> 6`, every strategy, same-family `1 <-> 3` and `4 <-> 9`, 84
+total requests, and 24 same-family requests. Vort observes 45 applied changes
+and 30 queued implicit boundaries. Both implementations drain through
+three-byte output. The libz side deliberately applies zero-output pressure,
+observes three `Z_BUF_ERROR` results, and retries the same requested parameters
+to successful completion. Cross-implementation wire equality is not required;
+decoded bytes and wrapper checksums are.
+
+The same gate covers six bidirectional `Z_PARTIAL_FLUSH` cases across raw,
+zlib, and gzip using three-byte output: three Vort streams inflate through
+libz, and three libz streams decode through Vort. Fixed fixture tests separately
+pin the exact ten-bit marker wire.
+
+Raw recovery uses `RawDeflateSyncScanner` or `findRawDeflateSyncPoint()` to
+search the byte sequence `00 00 ff ff` emitted inside a full-flush marker. The
+scanner keeps overlap state across arbitrary chunks and reports absolute marker
+and resume offsets. `decodeRawDeflateAfterSync*()` decodes the independent raw
+suffix into caller or owned storage; the incremental raw decoder can instead
+call `resumeAfterSync(skipped_input)` after an external scan. This intentionally
+matches `inflateSync`'s byte-pattern search and can therefore find the same
+false positive inside arbitrary corrupt bytes; callers should use it only for
+streams whose producer inserted full-flush recovery points. Zlib/gzip wrapper
+checksums cover discarded bytes and are not resumed by the raw API.
+
+Focused runtime-parameter tests pass 19/19, and the direct Deflate suite passes
+479/479. The full repository test graph passes 2621/2621, and `zig build check`
+passes all 113 steps including the new probe. The probe is also wired into
+`ci-smoke`; the aggregate smoke graph currently has unrelated existing
+failures, so this increment does not claim a fully green `ci-smoke` run.
+
 Remaining encoder work for future milestones:
 
 - dynamic-Huffman-aware optimal parser refinement (iterative LZ77

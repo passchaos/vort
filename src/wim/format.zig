@@ -51,6 +51,7 @@ pub const ResourceHeader = struct {
 };
 
 pub const Header = struct {
+    pipable: bool,
     version: u32,
     flags: u32,
     chunk_size: usize,
@@ -68,9 +69,41 @@ pub const Header = struct {
 
 pub fn parseHeader(input: []const u8) Error!Header {
     if (input.len < header_size) return error.TruncatedFrame;
-    if (std.mem.eql(u8, input[0..8], &pipable_magic))
-        return error.UnsupportedWimFeature;
-    if (!std.mem.eql(u8, input[0..8], &magic)) return error.InvalidMagic;
+    if (std.mem.eql(u8, input[0..8], &magic)) {
+        const header = try parseHeaderFields(input[0..header_size], false);
+        try validateHeaderResources(header, input.len);
+        return header;
+    }
+    if (!std.mem.eql(u8, input[0..8], &pipable_magic)) return error.InvalidMagic;
+    if (input.len < 2 * header_size) return error.TruncatedFrame;
+
+    const leading = try parsePipableLeadingHeader(input[0..header_size]);
+    const trailing_offset = input.len - header_size;
+    const trailing_bytes = input[trailing_offset..];
+    if (!std.mem.eql(u8, trailing_bytes[0..8], &pipable_magic))
+        return error.InvalidWim;
+    const trailing = try parseHeaderFields(trailing_bytes, true);
+    if (!headersDescribeSameArchive(leading, trailing)) return error.InvalidWim;
+    try validateHeaderResources(trailing, trailing_offset);
+    return trailing;
+}
+
+pub fn parsePipableLeadingHeader(input: []const u8) Error!Header {
+    const header = try parsePipableStreamHeader(input);
+    if (!header.lookup_table.isZero() or !header.xml_data.isZero() or
+        !header.boot_metadata.isZero() or !header.integrity_table.isZero())
+        return error.InvalidWim;
+    return header;
+}
+
+pub fn parsePipableStreamHeader(input: []const u8) Error!Header {
+    return parseHeaderFields(input, true);
+}
+
+fn parseHeaderFields(input: []const u8, pipable: bool) Error!Header {
+    if (input.len < header_size) return error.TruncatedFrame;
+    const expected_magic = if (pipable) pipable_magic else magic;
+    if (!std.mem.eql(u8, input[0..8], &expected_magic)) return error.InvalidMagic;
     if (readU32(input, 8) != header_size) return error.InvalidWim;
     const version = readU32(input, 12);
     if (version != default_version and version != solid_version)
@@ -89,7 +122,8 @@ pub fn parseHeader(input: []const u8) Error!Header {
     if (boot_index > image_count) return error.InvalidWim;
     var guid: [16]u8 = undefined;
     @memcpy(&guid, input[24..40]);
-    const header = Header{
+    return .{
+        .pipable = pipable,
         .version = version,
         .flags = flags,
         .chunk_size = chunk_size,
@@ -104,11 +138,26 @@ pub fn parseHeader(input: []const u8) Error!Header {
         .boot_index = boot_index,
         .integrity_table = try parseResourceHeader(input, 124),
     };
-    try validateHeaderResource(header.lookup_table, input.len);
-    try validateHeaderResource(header.xml_data, input.len);
-    try validateHeaderResource(header.boot_metadata, input.len);
-    try validateHeaderResource(header.integrity_table, input.len);
-    return header;
+}
+
+fn headersDescribeSameArchive(leading: Header, trailing: Header) bool {
+    return leading.pipable == trailing.pipable and
+        leading.version == trailing.version and
+        leading.flags == trailing.flags and
+        leading.chunk_size == trailing.chunk_size and
+        std.mem.eql(u8, &leading.guid, &trailing.guid) and
+        leading.part_number == trailing.part_number and
+        leading.total_parts == trailing.total_parts and
+        leading.image_count == trailing.image_count and
+        leading.compression == trailing.compression and
+        leading.boot_index == trailing.boot_index;
+}
+
+fn validateHeaderResources(header: Header, resource_limit: usize) Error!void {
+    try validateHeaderResource(header.lookup_table, resource_limit);
+    try validateHeaderResource(header.xml_data, resource_limit);
+    try validateHeaderResource(header.boot_metadata, resource_limit);
+    try validateHeaderResource(header.integrity_table, resource_limit);
 }
 
 pub fn parseResourceHeader(input: []const u8, offset: usize) Error!ResourceHeader {
@@ -194,4 +243,37 @@ test "WIM header rejects bad geometry and compression flags" {
     try std.testing.expectError(error.UnsupportedWimCompression, parseHeader(&bytes));
     bytes[0] = 'x';
     try std.testing.expectError(error.InvalidMagic, parseHeader(&bytes));
+}
+
+test "pipable WIM uses matching trailing header" {
+    var bytes: [2 * header_size]u8 = @splat(0);
+    for ([_]usize{ 0, header_size }) |offset| {
+        @memcpy(bytes[offset..][0..8], &pipable_magic);
+        std.mem.writeInt(u32, bytes[offset + 8 ..][0..4], header_size, .little);
+        std.mem.writeInt(u32, bytes[offset + 12 ..][0..4], default_version, .little);
+        std.mem.writeInt(u16, bytes[offset + 40 ..][0..2], 1, .little);
+        std.mem.writeInt(u16, bytes[offset + 42 ..][0..2], 1, .little);
+    }
+    const header = try parseHeader(&bytes);
+    try std.testing.expect(header.pipable);
+
+    bytes[48] = 1;
+    try std.testing.expectError(error.InvalidWim, parseHeader(&bytes));
+    bytes[48] = 0;
+    bytes[header_size + 48] = 1;
+    std.mem.writeInt(
+        u64,
+        bytes[header_size + 56 ..][0..8],
+        header_size,
+        .little,
+    );
+    std.mem.writeInt(u64, bytes[header_size + 64 ..][0..8], 1, .little);
+    try std.testing.expectError(error.InvalidWim, parseHeader(&bytes));
+    @memset(bytes[header_size + 48 .. header_size + 72], 0);
+
+    bytes[header_size + 24] = 1;
+    try std.testing.expectError(error.InvalidWim, parseHeader(&bytes));
+    bytes[header_size + 24] = 0;
+    bytes[header_size] = 'x';
+    try std.testing.expectError(error.InvalidWim, parseHeader(&bytes));
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocator_dispatch = @import("br/allocator_dispatch.zig");
 const builtin = @import("builtin");
 const core = @import("core.zig");
 const lz77 = @import("lz77.zig");
@@ -9,32 +10,60 @@ const dictionary_copy = @import("br/dictionary_copy.zig");
 const single_command_lookup = @import("br/single_command_lookup.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
+const br_length = @import("br/length.zig");
+const command_encoding = @import("br/encoder/command_encoding.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
+const fast_fragment = @import("br/encoder/fast_fragment.zig");
+const fast_fragment_one_pass = @import("br/encoder/fast_fragment_one_pass.zig");
+const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
+const literal_context_split = @import("br/encoder/literal_context_split.zig");
+const literal_entropy_plan = @import("br/encoder/literal_entropy_plan.zig");
+const literal_joint_context_split = @import("br/encoder/literal_joint_context_split.zig");
+const context_map_encoder = @import("br/encoder/context_map.zig");
+const dynamic_context_map = @import("br/encoder/dynamic_context_map.zig");
 const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
+const distance_parameter_search = @import("br/encoder/distance_parameter_search.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
 const huffman_rle_counts = @import("br/encoder/huffman_rle_counts.zig");
 const code_length_rle = @import("br/encoder/code_length_rle.zig");
 const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
+const entropy_feedback = @import("br/encoder/entropy_feedback.zig");
+const hq_command_parser = @import("br/encoder/hq_command_parser.zig");
+const hq_options = @import("br/encoder/hq_options.zig");
+const hq_types = @import("br/encoder/hq_types.zig");
+const hq_codec = @import("br/encoder/hq_codec.zig");
+const new_hq_parser = @import("br/encoder/hq_parser.zig");
+const total_budget = @import("br/encoder/total_budget.zig");
+const quality_schedule = @import("br/encoder/quality_schedule.zig");
+const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
+const static_dictionary_stream = @import("br/encoder/static_dictionary_stream.zig");
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
 const distance_block_split = @import("br/encoder/distance_block_split.zig");
+const compound_dictionary_matcher = @import("br/encoder/compound_dictionary_matcher.zig");
+const serialized_dictionary_matcher = @import("br/encoder/serialized_dictionary_matcher.zig");
+const compound_wire = @import("br/encoder/compound_wire.zig");
+const block_split_plan = @import("br/encoder/block_split_plan.zig");
+const adaptive_block_code = @import("br/encoder/adaptive_block_code.zig");
+const identity_context_map = @import("br/encoder/identity_context_map.zig");
 const record_optimal_abi = @import("br/encoder/record_optimal_abi.zig");
 extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) callconv(.c) u8;
 extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
 extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
-const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_copy = @import("br/incremental/copy_decoder.zig");
 const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
+const incremental_contracts_tests = @import("br/incremental/contracts_tests.zig");
+const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -45,26 +74,225 @@ const fast_bit_reader = @import("br/fast_bit_reader.zig");
 const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
 const code_sections = @import("br/format/code_sections.zig");
 const distance_history = @import("br/decoder/distance_history.zig");
+const shared_dictionary = @import("br/shared_dictionary.zig");
+const serialized_dictionary = @import("br/serialized_dictionary.zig");
+const serialized_dictionary_builder = @import("br/serialized_dictionary_builder.zig");
+const serialized_dictionary_trainer = @import("br/serialized_dictionary_trainer.zig");
+const serialized_dictionary_transform_clusterer = @import("br/serialized_dictionary_transform_clusterer.zig");
+const serialized_dictionary_word_pruner = @import("br/serialized_dictionary_word_pruner.zig");
+const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
 const pushLastDistance = distance_history.push;
 const resolveShortDistanceInto = distance_history.resolveShortInto;
+const recentDistanceSymbol = distance_history.symbolForDistance;
 
 var test_external_literal_lookup_hits: usize = 0;
 var test_context_independent_literal_lookup_hits: usize = 0;
 var test_single_tree_external_lookup_hits: usize = 0;
 var test_wide_auxiliary_lookup10_hits: usize = 0;
+var test_q0_one_pass_writer_hits: usize = 0;
+var test_q1_two_pass_writer_hits: usize = 0;
+var test_q2_fast_writer_hits: usize = 0;
+var test_q2_static_tree_hits: usize = 0;
+var test_q2_dynamic_tree_hits: usize = 0;
+var test_q3_trivial_writer_hits: usize = 0;
+var test_hq_command_candidate_attempts: usize = 0;
+var test_hq_command_candidate_selections: usize = 0;
+var test_hq_command_pre_bytes: usize = 0;
+var test_hq_command_bytes: usize = 0;
+var test_stream_hq_command_candidate_attempts: usize = 0;
+var test_stream_hq_command_candidate_selections: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
+const adaptive_split_text_section = code_sections.adaptive_split;
+const distance_parameter_text_section = code_sections.distance_parameters;
+const command_state_text_section = code_sections.command_state;
 
-pub const Error = core.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
+pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
+pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
+pub const PlannedMode = quality_schedule.Mode;
+pub const SharedDictionary = shared_dictionary.Dictionary;
+pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
+pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
+pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;
+pub const SerializedSharedDictionarySpec = serialized_dictionary_builder.Spec;
+pub const SerializedSharedDictionaryChoice = serialized_dictionary.DictionaryChoice;
+pub const SerializedSharedDictionaryWordListSpec = serialized_dictionary_builder.WordListSpec;
+pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_builder.TransformListSpec;
+pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
+pub const SerializedSharedDictionaryTransformProfile = serialized_dictionary_trainer.TransformProfile;
+pub const SerializedSharedDictionaryContextProfile = serialized_dictionary_trainer.ContextProfile;
+pub const SerializedSharedDictionaryWordSelectionProfile = serialized_dictionary_trainer.WordSelectionProfile;
+pub const SerializedSharedDictionaryWordBucketProfile = struct {
+    min_word_len: u5,
+    max_word_len: u5,
+    max_words_per_length: u16,
+};
+pub const max_serialized_word_bucket_profiles: usize = 8;
+pub const SerializedSharedDictionaryWordLengthBucketCap = struct {
+    word_len: u5,
+    max_words: u16,
+};
+pub const SerializedSharedDictionarySparseWordProfile = struct {
+    buckets: []const SerializedSharedDictionaryWordLengthBucketCap,
+};
+pub const max_serialized_sparse_word_profiles: usize = 16;
+pub const max_serialized_word_bucket_pruning_steps =
+    serialized_dictionary_word_pruner.max_steps;
+pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
+pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
+pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
+pub const serializeSharedDictionaryAlloc = serialized_dictionary_builder.serializeAlloc;
+pub const SerializedSharedDictionaryTrainOptions = struct {
+    min_word_len: u5 = 4,
+    max_word_len: u5 = 16,
+    max_words_per_length: u16 = 64,
+    max_phrases_per_length: usize = 256,
+    word_bucket_profiles: []const SerializedSharedDictionaryWordBucketProfile = &.{},
+    sparse_word_profiles: []const SerializedSharedDictionarySparseWordProfile = &.{},
+    /// Greedily halve one per-length cap at a time and retain each next round
+    /// only when complete held-out wire cost improves.
+    optimize_word_bucket_caps: bool = false,
+    max_word_bucket_pruning_steps: u8 = 2,
+    train_cover_words: bool = true,
+    optimize_cover_words: bool = true,
+    cover_dmer_size: u8 = 8,
+    cover_hash_log: u8 = 16,
+    cover_dmer_sizes: []const u8 = &.{ 6, 8 },
+    cover_hash_logs: []const u8 = &.{ 12, 16 },
+    max_cover_candidates: u8 = 8,
+    max_cover_corpus_size: usize = 256 * 1024 * 1024,
+    train_context_map: bool = true,
+    train_context_clustering: bool = true,
+    train_case_transforms: bool = true,
+    train_omit_transforms: bool = true,
+    train_prefix_suffix_transforms: bool = true,
+    train_shift_transforms: bool = true,
+    train_transform_clustering: bool = true,
+    max_transform_cluster_dictionaries: u7 = 4,
+    max_transform_scoring_positions: usize = 64 * 1024,
+    /// Bounded stringlet learner. Candidate transforms are ranked
+    /// deterministically, then retained only through complete held-out wire
+    /// comparison with the identity/case/omit families.
+    max_prefix_suffix_len: u8 = 8,
+    max_prefix_suffix_transforms: u8 = 16,
+    max_prefix_suffix_candidates: usize = 4096,
+    max_prefix_suffix_words: usize = 4096,
+    max_prefix_suffix_positions: usize = 16 * 1024,
+    min_prefix_suffix_occurrences: u16 = 2,
+    max_shift_transforms: u8 = 8,
+    max_shift_candidates: usize = 4096,
+    max_shift_words: usize = 256,
+    max_shift_positions: usize = 4096,
+    min_shift_occurrences: u16 = 2,
+    /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
+    /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
+    context_cutoffs: []const u6 = &.{ 16, 32, 48 },
+    /// Strictly increasing RFC literal-context modes to evaluate.
+    context_modes: []const u2 = &.{ 0, 1, 2, 3 },
+    /// Strictly increasing learned cluster counts. These arbitrary context maps
+    /// compete with the global and two-range cutoff candidates.
+    context_cluster_counts: []const u7 = &.{ 3, 4 },
+    max_context_positions_per_group: usize = 16 * 1024,
+    max_context_signature_positions: usize = 4096,
+    quality: u4 = 5,
+    mode: PlannedMode = .generic,
+    /// Charge the serialized dictionary bytes once against the held-out frame
+    /// total. Disable only when deployment amortizes dictionary distribution
+    /// out of band.
+    include_dictionary_size: bool = true,
+    min_savings_bytes: usize = 1,
+};
+
+pub const OwnedTrainedSerializedSharedDictionary = struct {
+    bytes: []u8,
+    id: serialized_dictionary_trainer.DictionaryId,
+    bucket_count: usize,
+    word_count: usize,
+    baseline_frame_bytes: usize,
+    trained_frame_bytes: usize,
+    charged_dictionary_bytes: usize,
+    total_savings_bytes: usize,
+    selected_min_word_len: u5,
+    selected_max_word_len: u5,
+    selected_max_words_per_length: u16,
+    /// Present for caller-supplied sparse profiles and automatic pruning.
+    selected_word_count_caps_by_length: ?[32]u16,
+    word_bucket_pruning_steps: u8,
+    word_bucket_candidates_evaluated: u16,
+    selected_sparse_word_profile: ?u8,
+    word_selection_profile: SerializedSharedDictionaryWordSelectionProfile,
+    cover_dmer_size: ?u8,
+    cover_hash_log: ?u8,
+    cover_candidates_evaluated: u16,
+    context_based: bool,
+    trained_context_mode: ?u2,
+    context_cutoff: ?u6,
+    /// Global, contiguous-cutoff, or learned arbitrary context selection.
+    context_profile: SerializedSharedDictionaryContextProfile,
+    /// One for global candidates, two for cutoffs, otherwise the learned count.
+    context_cluster_count: u7,
+    transform_profile: SerializedSharedDictionaryTransformProfile,
+    /// Number of distinct serialized transform lists in the selected result.
+    transform_list_count: u7,
+    /// Non-empty serialized stringlets contributed by the selected learner.
+    learned_stringlet_count: usize,
+    /// Learned prefix/suffix transform triplets, excluding the base family.
+    learned_prefix_suffix_transform_count: usize,
+    /// Unique signed SHIFT parameters in the selected transform family.
+    learned_shift_parameter_count: usize,
+    /// SHIFT_FIRST/SHIFT_ALL triplets added by the selected learner.
+    learned_shift_transform_count: usize,
+
+    pub fn deinit(self: OwnedTrainedSerializedSharedDictionary, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+
+    pub fn parse(
+        self: *const OwnedTrainedSerializedSharedDictionary,
+    ) SerializedSharedDictionaryError!SerializedSharedDictionary {
+        return parseSerializedSharedDictionary(self.bytes);
+    }
+};
 pub const max_extended_dictionary_probes: u16 = 4096;
+pub const command_state_default_max_input_kib: u8 = std.math.maxInt(u8);
+pub const HqOptions = hq_options.HqOptions;
+pub const HqProfile = hq_options.HqProfile;
+pub const HqResolvedOptions = hq_options.Resolved;
+pub const HqDistanceParameters = encoder_distance.Parameters;
+pub const HqDistanceFormat = encoder_distance.Format;
+pub const HqParseMode = hq_options.ParseMode;
+pub const HqCopyLengthPolicy = hq_options.CopyLengthPolicy;
+pub const EncodeMemoryProfile = total_budget.EncodeMemoryProfile;
 pub const PlannedEncodeOptions = struct {
+    /// Optional cap for all live encoder-owned requested heap during this
+    /// operation, including retained storage and complete candidate wires.
+    /// Borrowed input/output buffers and allocator bookkeeping are excluded.
+    max_total_working_memory: ?usize = null,
+    /// Caller-owned total-allocation instrumentation; independent of HQ's
+    /// workspace profile. Enabling instrumentation must preserve output bytes.
+    memory_profile: ?*EncodeMemoryProfile = null,
     level: PlannedCompressionLevel = .fast,
+    /// Optional Vort-native Brotli quality preset. When present, `level` must
+    /// remain `.fast` and the deterministic q0...q11 schedule is used; null
+    /// preserves the historical three-level output exactly. These presets do
+    /// not claim libbrotli algorithm, byte-output, or performance parity.
+    quality: ?u4 = null,
+    /// Explicit standard-window HQ command parsing for quality 10 or 11.
+    /// Null preserves the established quality policy and complete wire.
+    hq: ?HqOptions = null,
+    /// Emit the explicit Large Window extension for HQ quality 10 or 11.
+    /// The decoder must opt in. False preserves the standard wire format.
+    large_window: bool = false,
+    /// Generic, text, or font policy for quality-scheduled encoding. A
+    /// non-generic mode requires `quality` so legacy level calls remain stable.
+    mode: PlannedMode = .generic,
     /// Explicit Brotli window for one-shot planned encoding. The current
     /// planned matcher can fully honor RFC window bits 10...16 at every level
     /// and 17...24 in ratio mode; leaving this null preserves the established level
@@ -79,6 +307,32 @@ pub const PlannedEncodeOptions = struct {
     /// above `max_extended_dictionary_probes` are rejected. Inputs at or below
     /// the automatic gate retain their existing complete search.
     extended_dictionary_probes: u16 = 0,
+    /// Opt into the allocator-backed Viterbi command block splitter in ratio
+    /// mode. It searches arbitrary temporal boundaries and general type reuse,
+    /// then retains the result only when its complete Brotli wire is smaller.
+    /// Disabled by default until corpus evidence can justify its extra search.
+    adaptive_command_split: bool = false,
+    /// Opt into the allocator-backed Viterbi literal block splitter in ratio
+    /// mode. It searches arbitrary literal positions and general type reuse,
+    /// then retains the plan only after strict complete-wire comparison.
+    adaptive_literal_split: bool = false,
+    /// Override ratio mode's adaptive distance-block policy. Null uses the
+    /// automatic bounded search, false disables it, and true forces it on for
+    /// eligible single-meta-block inputs. Complete-wire arbitration guarantees
+    /// that the selected stream is never larger than the unsplit candidate.
+    adaptive_distance_split: ?bool = null,
+    /// Override ratio mode's 64-shape NPOSTFIX/NDIRECT search. Null enables it
+    /// automatically for stable record-optimal plans, false disables it, and
+    /// true also enables it for the general bounded optimal candidate.
+    distance_parameter_search: ?bool = null,
+    /// Override q10/q11's bounded command-state work ceiling. The default
+    /// sentinel uses the evidence-backed 8 KiB policy limit, zero disables
+    /// the candidate, and a non-zero KiB value may extend it through that
+    /// quality's optimal-input ceiling (64 for q10, 32 for q11).
+    command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+    /// Borrowed RAW shared-prefix attachments used by the Brotli compound
+    /// dictionary. The descriptor and bytes must remain alive for the call.
+    shared_dictionary: SharedDictionary = .{},
 };
 /// Search budget for the ratio-oriented planner. These knobs affect token
 /// selection only; the resulting stream still uses the same Brotli command
@@ -90,28 +344,948 @@ pub const PlannedParserOptions = struct {
     lazy_min_gain: usize = 1,
 };
 
+fn plannedSharedDictionarySize(dictionary: SharedDictionary) Error!usize {
+    return dictionary.totalSize() catch |err| switch (err) {
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn mixSerializedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const command_plan.Command,
+    dictionary: *const SerializedSharedDictionary,
+    matcher: ?*const serialized_dictionary_matcher.Matcher,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) Error!command_plan.Plan {
+    return command_plan.mixSerializedDictionaryWithMatcherAlloc(
+        allocator,
+        input,
+        baseline,
+        dictionary,
+        matcher,
+        context_mode,
+        initial_previous,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn appendPreviousBytes(previous: *[2]u8, bytes: []const u8) void {
+    if (bytes.len == 0) return;
+    if (bytes.len == 1) {
+        previous.* = .{ previous[1], bytes[0] };
+    } else {
+        previous.* = .{ bytes[bytes.len - 2], bytes[bytes.len - 1] };
+    }
+}
+
+pub fn parseSerializedSharedDictionary(
+    encoded: []const u8,
+) SerializedSharedDictionaryError!SerializedSharedDictionary {
+    return serialized_dictionary.parse(encoded);
+}
+
+pub fn trainSerializedSharedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+) Error!?OwnedTrainedSerializedSharedDictionary {
+    if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
+        options.quality > 11 or
+        !validSerializedWordBucketProfiles(options) or
+        !validSerializedSparseWordProfiles(options) or
+        (options.optimize_word_bucket_caps and
+            (options.max_word_bucket_pruning_steps == 0 or
+                options.max_word_bucket_pruning_steps > max_serialized_word_bucket_pruning_steps)) or
+        (options.train_cover_words and
+            ((options.optimize_cover_words and
+                !validSerializedCoverGrid(options)) or
+                (!options.optimize_cover_words and
+                    ((options.cover_dmer_size != 6 and options.cover_dmer_size != 8) or
+                        options.cover_hash_log < serialized_dictionary_trainer.min_cover_hash_log or
+                        options.cover_hash_log > serialized_dictionary_trainer.max_cover_hash_log)) or
+                options.max_cover_corpus_size == 0)) or
+        (options.train_context_map and
+            (!validSerializedTrainingCutoffs(options.context_cutoffs) or
+                !validSerializedTrainingModes(options.context_modes) or
+                options.max_context_positions_per_group == 0 or
+                options.max_context_positions_per_group > serialized_dictionary_trainer.max_context_training_positions_per_group or
+                (options.train_context_clustering and
+                    (!validSerializedTrainingClusterCounts(options.context_cluster_counts) or
+                        options.max_context_signature_positions == 0 or
+                        options.max_context_signature_positions > serialized_dictionary_trainer.max_context_signature_positions)))) or
+        (options.train_prefix_suffix_transforms and
+            (options.max_prefix_suffix_len == 0 or
+                options.max_prefix_suffix_len > serialized_dictionary_trainer.max_learned_stringlet_len or
+                options.max_prefix_suffix_transforms == 0 or
+                options.max_prefix_suffix_transforms > serialized_dictionary_trainer.max_learned_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates < options.max_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates > 64 * 1024 or
+                options.max_prefix_suffix_words == 0 or
+                options.max_prefix_suffix_words > serialized_dictionary_trainer.max_learned_prefix_suffix_words or
+                options.max_prefix_suffix_positions == 0 or
+                options.max_prefix_suffix_positions > serialized_dictionary_trainer.max_learned_prefix_suffix_positions or
+                options.min_prefix_suffix_occurrences == 0)) or
+        (options.train_shift_transforms and
+            (options.max_shift_transforms == 0 or
+                options.max_shift_transforms > serialized_dictionary_trainer.max_learned_shift_transforms or
+                options.max_shift_candidates < options.max_shift_transforms or
+                options.max_shift_candidates > serialized_dictionary_trainer.max_learned_shift_candidates or
+                options.max_shift_words == 0 or
+                options.max_shift_words > serialized_dictionary_trainer.max_learned_shift_words or
+                options.max_shift_positions == 0 or
+                options.max_shift_positions > serialized_dictionary_trainer.max_learned_shift_positions or
+                options.min_shift_occurrences == 0)) or
+        (options.train_transform_clustering and
+            (options.max_transform_cluster_dictionaries < 2 or
+                options.max_transform_cluster_dictionaries > serialized_dictionary_transform_clusterer.max_dictionaries or
+                options.max_transform_scoring_positions == 0 or
+                options.max_transform_scoring_positions > serialized_dictionary_transform_clusterer.max_scoring_positions)))
+        return error.InvalidDictionaryTraining;
+    const core_options = serialized_dictionary_trainer.Options{
+        .min_word_len = options.min_word_len,
+        .max_word_len = options.max_word_len,
+        .max_words_per_length = options.max_words_per_length,
+        .max_phrases_per_length = options.max_phrases_per_length,
+        .cover_dmer_size = options.cover_dmer_size,
+        .cover_hash_log = options.cover_hash_log,
+        .max_cover_corpus_size = options.max_cover_corpus_size,
+        .train_context_map = options.train_context_map,
+        .context_cutoff = if (options.context_cutoffs.len == 0)
+            32
+        else
+            options.context_cutoffs[0],
+        .max_context_positions_per_group = options.max_context_positions_per_group,
+        .max_context_signature_positions = options.max_context_signature_positions,
+    };
+    const baseline_frame_bytes = try serializedTrainingFrameBytes(
+        allocator,
+        validation_samples,
+        options,
+        null,
+    );
+    var selection: SerializedTrainingSelection = .{};
+    errdefer if (selection.candidate) |candidate| candidate.deinit(allocator);
+    var cover_candidates_evaluated: u16 = 0;
+    var word_bucket_candidates_evaluated: u16 = 1;
+    try considerSerializedWordBucketCandidates(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        core_options,
+        0,
+        &selection,
+        &cover_candidates_evaluated,
+    );
+    if (options.optimize_word_bucket_caps) {
+        try considerSerializedMarginalWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            core_options,
+            &selection,
+            &word_bucket_candidates_evaluated,
+            &cover_candidates_evaluated,
+        );
+    }
+    for (options.word_bucket_profiles) |profile| {
+        var bucket_options = core_options;
+        bucket_options.min_word_len = profile.min_word_len;
+        bucket_options.max_word_len = profile.max_word_len;
+        bucket_options.max_words_per_length = profile.max_words_per_length;
+        try considerSerializedWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            bucket_options,
+            0,
+            &selection,
+            &cover_candidates_evaluated,
+        );
+        word_bucket_candidates_evaluated = std.math.add(
+            u16,
+            word_bucket_candidates_evaluated,
+            1,
+        ) catch return error.InvalidDictionaryTraining;
+    }
+    for (options.sparse_word_profiles, 0..) |profile, profile_index| {
+        var caps: [32]u16 = @splat(0);
+        for (profile.buckets) |bucket|
+            caps[bucket.word_len] = bucket.max_words;
+        var bucket_options = core_options;
+        bucket_options.word_count_caps_by_length = &caps;
+        bucket_options.sparse_word_profile_index = @intCast(profile_index);
+        try considerSerializedWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            bucket_options,
+            0,
+            &selection,
+            &cover_candidates_evaluated,
+        );
+        word_bucket_candidates_evaluated = std.math.add(
+            u16,
+            word_bucket_candidates_evaluated,
+            1,
+        ) catch return error.InvalidDictionaryTraining;
+    }
+    const candidate = selection.candidate orelse return null;
+    if (selection.total_bytes >= baseline_frame_bytes or
+        baseline_frame_bytes - selection.total_bytes < options.min_savings_bytes)
+    {
+        candidate.deinit(allocator);
+        return null;
+    }
+    const result = OwnedTrainedSerializedSharedDictionary{
+        .bytes = candidate.encoded,
+        .id = candidate.id,
+        .bucket_count = candidate.bucket_count,
+        .word_count = candidate.word_count,
+        .baseline_frame_bytes = baseline_frame_bytes,
+        .trained_frame_bytes = selection.frame_bytes,
+        .charged_dictionary_bytes = selection.charged_dictionary_bytes,
+        .total_savings_bytes = baseline_frame_bytes - selection.total_bytes,
+        .selected_min_word_len = candidate.selected_min_word_len,
+        .selected_max_word_len = candidate.selected_max_word_len,
+        .selected_max_words_per_length = candidate.selected_max_words_per_length,
+        .selected_word_count_caps_by_length = selection.word_count_caps_by_length,
+        .word_bucket_pruning_steps = selection.word_bucket_pruning_steps,
+        .word_bucket_candidates_evaluated = word_bucket_candidates_evaluated,
+        .selected_sparse_word_profile = candidate.sparse_word_profile_index,
+        .word_selection_profile = candidate.word_selection_profile,
+        .cover_dmer_size = candidate.cover_dmer_size,
+        .cover_hash_log = candidate.cover_hash_log,
+        .cover_candidates_evaluated = cover_candidates_evaluated,
+        .context_based = candidate.context_based,
+        .trained_context_mode = candidate.context_mode,
+        .context_cutoff = candidate.context_cutoff,
+        .context_profile = candidate.context_profile,
+        .context_cluster_count = candidate.context_cluster_count,
+        .transform_profile = candidate.transform_profile,
+        .transform_list_count = candidate.transform_list_count,
+        .learned_stringlet_count = candidate.learned_stringlet_count,
+        .learned_prefix_suffix_transform_count = candidate.learned_prefix_suffix_transform_count,
+        .learned_shift_parameter_count = candidate.learned_shift_parameter_count,
+        .learned_shift_transform_count = candidate.learned_shift_transform_count,
+    };
+    return result;
+}
+
+fn validSerializedTrainingCutoffs(cutoffs: []const u6) bool {
+    if (cutoffs.len == 0 or cutoffs.len > 16) return false;
+    var previous: u6 = 0;
+    for (cutoffs) |cutoff| {
+        if (cutoff == 0 or cutoff >= 64 or cutoff <= previous) return false;
+        previous = cutoff;
+    }
+    return true;
+}
+
+fn validSerializedTrainingModes(modes: []const u2) bool {
+    if (modes.len == 0 or modes.len > 4) return false;
+    var previous: ?u2 = null;
+    for (modes) |mode| {
+        if (previous) |value| if (mode <= value) return false;
+        previous = mode;
+    }
+    return true;
+}
+
+fn validSerializedTrainingClusterCounts(counts: []const u7) bool {
+    if (counts.len == 0 or counts.len > 8) return false;
+    var previous: u7 = 1;
+    for (counts) |count| {
+        if (count < 2 or count > 16 or count <= previous) return false;
+        previous = count;
+    }
+    return true;
+}
+
+fn validSerializedCoverGrid(options: SerializedSharedDictionaryTrainOptions) bool {
+    if (options.max_cover_candidates == 0 or
+        options.cover_dmer_sizes.len == 0 or
+        options.cover_hash_logs.len == 0)
+    {
+        return false;
+    }
+    var previous_dmer: u8 = 0;
+    for (options.cover_dmer_sizes) |dmer_size| {
+        if ((dmer_size != 6 and dmer_size != 8) or
+            dmer_size <= previous_dmer)
+        {
+            return false;
+        }
+        previous_dmer = dmer_size;
+    }
+    var previous_hash_log: u8 = 0;
+    for (options.cover_hash_logs) |hash_log| {
+        if (hash_log < serialized_dictionary_trainer.min_cover_hash_log or
+            hash_log > serialized_dictionary_trainer.max_cover_hash_log or
+            hash_log <= previous_hash_log)
+        {
+            return false;
+        }
+        previous_hash_log = hash_log;
+    }
+    const candidate_count = std.math.mul(
+        usize,
+        options.cover_dmer_sizes.len,
+        options.cover_hash_logs.len,
+    ) catch return false;
+    return candidate_count <= options.max_cover_candidates;
+}
+
+fn validSerializedWordBucketProfiles(
+    options: SerializedSharedDictionaryTrainOptions,
+) bool {
+    if (options.word_bucket_profiles.len > max_serialized_word_bucket_profiles)
+        return false;
+    for (options.word_bucket_profiles, 0..) |profile, index| {
+        if (profile.min_word_len < options.min_word_len or
+            profile.max_word_len > options.max_word_len or
+            profile.min_word_len > profile.max_word_len or
+            profile.max_words_per_length < 2 or
+            profile.max_words_per_length > options.max_words_per_length or
+            (profile.min_word_len == options.min_word_len and
+                profile.max_word_len == options.max_word_len and
+                profile.max_words_per_length == options.max_words_per_length))
+        {
+            return false;
+        }
+        for (options.word_bucket_profiles[0..index]) |previous| {
+            if (previous.min_word_len == profile.min_word_len and
+                previous.max_word_len == profile.max_word_len and
+                previous.max_words_per_length == profile.max_words_per_length)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+fn validSerializedSparseWordProfiles(
+    options: SerializedSharedDictionaryTrainOptions,
+) bool {
+    if (options.sparse_word_profiles.len > max_serialized_sparse_word_profiles)
+        return false;
+    for (options.sparse_word_profiles, 0..) |profile, profile_index| {
+        if (profile.buckets.len == 0 or profile.buckets.len > 28)
+            return false;
+        var previous_len: usize = 0;
+        var duplicates_base = profile.buckets.len ==
+            options.max_word_len - options.min_word_len + 1;
+        for (profile.buckets, 0..) |bucket, bucket_index| {
+            if (bucket.word_len < options.min_word_len or
+                bucket.word_len > options.max_word_len or
+                bucket.max_words < 2 or
+                bucket.max_words > options.max_words_per_length or
+                !std.math.isPowerOfTwo(bucket.max_words) or
+                (bucket_index != 0 and bucket.word_len <= previous_len))
+            {
+                return false;
+            }
+            if (duplicates_base and
+                (bucket.word_len != options.min_word_len + bucket_index or
+                    bucket.max_words != options.max_words_per_length))
+            {
+                duplicates_base = false;
+            }
+            previous_len = bucket.word_len;
+        }
+        if (duplicates_base) return false;
+        for (options.sparse_word_profiles[0..profile_index]) |previous| {
+            if (sparseWordProfilesEqual(previous, profile)) return false;
+        }
+    }
+    return true;
+}
+
+fn sparseWordProfilesEqual(
+    a: SerializedSharedDictionarySparseWordProfile,
+    b: SerializedSharedDictionarySparseWordProfile,
+) bool {
+    if (a.buckets.len != b.buckets.len) return false;
+    for (a.buckets, b.buckets) |a_bucket, b_bucket| {
+        if (a_bucket.word_len != b_bucket.word_len or
+            a_bucket.max_words != b_bucket.max_words)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn considerSerializedMarginalWordBucketCandidates(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    core_options: serialized_dictionary_trainer.Options,
+    selection: *SerializedTrainingSelection,
+    word_bucket_candidates_evaluated: *u16,
+    cover_candidates_evaluated: *u16,
+) Error!void {
+    var current_caps = serialized_dictionary_word_pruner.initialCaps(
+        core_options.min_word_len,
+        core_options.max_word_len,
+        core_options.max_words_per_length,
+    );
+    var step: u8 = 1;
+    while (step <= options.max_word_bucket_pruning_steps) : (step += 1) {
+        var neighbors = serialized_dictionary_word_pruner.neighbors(
+            &current_caps,
+            core_options.min_word_len,
+            core_options.max_word_len,
+        );
+        if (neighbors.len == 0) return;
+        for (neighbors.items[0..neighbors.len]) |*caps| {
+            var bucket_options = core_options;
+            bucket_options.word_count_caps_by_length = caps;
+            bucket_options.sparse_word_profile_index = null;
+            try considerSerializedWordBucketCandidates(
+                allocator,
+                training_samples,
+                validation_samples,
+                options,
+                bucket_options,
+                step,
+                selection,
+                cover_candidates_evaluated,
+            );
+            word_bucket_candidates_evaluated.* = std.math.add(
+                u16,
+                word_bucket_candidates_evaluated.*,
+                1,
+            ) catch return error.InvalidDictionaryTraining;
+        }
+        if (selection.word_bucket_pruning_steps != step) return;
+        current_caps = selection.word_count_caps_by_length orelse
+            return error.InvalidDictionaryTraining;
+    }
+}
+
+fn considerSerializedWordBucketCandidates(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    bucket_options: serialized_dictionary_trainer.Options,
+    word_bucket_pruning_steps: u8,
+    selection: *SerializedTrainingSelection,
+    cover_candidates_evaluated: *u16,
+) Error!void {
+    var heavy_options = bucket_options;
+    heavy_options.word_selection = .heavy_hitter;
+    try considerSerializedWordSelectionCandidates(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        heavy_options,
+        word_bucket_pruning_steps,
+        selection,
+    );
+    if (!options.train_cover_words) return;
+    if (options.optimize_cover_words) {
+        for (options.cover_dmer_sizes) |dmer_size| {
+            for (options.cover_hash_logs) |hash_log| {
+                var cover_options = bucket_options;
+                cover_options.word_selection = .cover;
+                cover_options.cover_dmer_size = dmer_size;
+                cover_options.cover_hash_log = hash_log;
+                try considerSerializedWordSelectionCandidates(
+                    allocator,
+                    training_samples,
+                    validation_samples,
+                    options,
+                    cover_options,
+                    word_bucket_pruning_steps,
+                    selection,
+                );
+                cover_candidates_evaluated.* = std.math.add(
+                    u16,
+                    cover_candidates_evaluated.*,
+                    1,
+                ) catch return error.InvalidDictionaryTraining;
+            }
+        }
+    } else {
+        var cover_options = bucket_options;
+        cover_options.word_selection = .cover;
+        try considerSerializedWordSelectionCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            cover_options,
+            word_bucket_pruning_steps,
+            selection,
+        );
+        cover_candidates_evaluated.* = std.math.add(
+            u16,
+            cover_candidates_evaluated.*,
+            1,
+        ) catch return error.InvalidDictionaryTraining;
+    }
+}
+
+fn considerSerializedWordSelectionCandidates(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    word_options: serialized_dictionary_trainer.Options,
+    word_bucket_pruning_steps: u8,
+    selection: *SerializedTrainingSelection,
+) Error!void {
+    if (serialized_dictionary_trainer.trainCandidateAlloc(
+        allocator,
+        training_samples,
+        word_options,
+    ) catch |err| return mapSerializedTrainingError(err)) |candidate| {
+        try considerSerializedTrainingCandidateFamily(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            candidate,
+            word_options.word_count_caps_by_length,
+            word_bucket_pruning_steps,
+            selection,
+        );
+    }
+    if (!options.train_context_map) return;
+    for (options.context_cutoffs) |cutoff| {
+        var context_options = word_options;
+        context_options.context_cutoff = cutoff;
+        for (options.context_modes) |mode| {
+            if (serialized_dictionary_trainer.trainContextCandidateAlloc(
+                allocator,
+                training_samples,
+                context_options,
+                mode,
+            ) catch |err| return mapSerializedTrainingError(err)) |candidate| {
+                try considerSerializedTrainingCandidateFamily(
+                    allocator,
+                    training_samples,
+                    validation_samples,
+                    options,
+                    candidate,
+                    word_options.word_count_caps_by_length,
+                    word_bucket_pruning_steps,
+                    selection,
+                );
+            }
+        }
+    }
+    if (!options.train_context_clustering) return;
+    for (options.context_cluster_counts) |cluster_count| {
+        for (options.context_modes) |mode| {
+            if (serialized_dictionary_trainer.trainClusteredContextCandidateAlloc(
+                allocator,
+                training_samples,
+                word_options,
+                mode,
+                cluster_count,
+            ) catch |err| return mapSerializedTrainingError(err)) |candidate| {
+                try considerSerializedTrainingCandidateFamily(
+                    allocator,
+                    training_samples,
+                    validation_samples,
+                    options,
+                    candidate,
+                    word_options.word_count_caps_by_length,
+                    word_bucket_pruning_steps,
+                    selection,
+                );
+            }
+        }
+    }
+}
+
+const SerializedTrainingSelection = struct {
+    candidate: ?serialized_dictionary_trainer.Candidate = null,
+    frame_bytes: usize = 0,
+    charged_dictionary_bytes: usize = 0,
+    total_bytes: usize = std.math.maxInt(usize),
+    word_count_caps_by_length: ?[32]u16 = null,
+    word_bucket_pruning_steps: u8 = 0,
+};
+
+fn considerSerializedTrainingCandidateFamily(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    identity: serialized_dictionary_trainer.Candidate,
+    word_count_caps_by_length: ?*const [32]u16,
+    word_bucket_pruning_steps: u8,
+    selection: *SerializedTrainingSelection,
+) Error!void {
+    var derived: [16]serialized_dictionary_trainer.Candidate = undefined;
+    var derived_count: usize = 0;
+    var prefix_suffix_plan: ?serialized_dictionary_trainer.PrefixSuffixPlan = null;
+    defer if (prefix_suffix_plan) |plan| plan.deinit(allocator);
+    var shift_plan: ?serialized_dictionary_trainer.ShiftPlan = null;
+    defer if (shift_plan) |plan| plan.deinit(allocator);
+    {
+        errdefer {
+            identity.deinit(allocator);
+            for (derived[0..derived_count]) |candidate| candidate.deinit(allocator);
+        }
+        if (options.train_case_transforms) {
+            derived[derived_count] = serialized_dictionary_trainer.withCaseTransformsAlloc(
+                allocator,
+                &identity,
+            ) catch |err| return mapSerializedTrainingError(err);
+            derived_count += 1;
+        }
+        if (options.train_omit_transforms) {
+            derived[derived_count] = serialized_dictionary_trainer.withOmitTransformsAlloc(
+                allocator,
+                &identity,
+                false,
+            ) catch |err| return mapSerializedTrainingError(err);
+            derived_count += 1;
+            if (options.train_case_transforms) {
+                derived[derived_count] = serialized_dictionary_trainer.withOmitTransformsAlloc(
+                    allocator,
+                    &identity,
+                    true,
+                ) catch |err| return mapSerializedTrainingError(err);
+                derived_count += 1;
+            }
+        }
+        if (options.train_prefix_suffix_transforms) {
+            prefix_suffix_plan = serialized_dictionary_trainer.learnPrefixSuffixPlanAlloc(
+                allocator,
+                &identity,
+                training_samples,
+                .{
+                    .max_stringlet_len = options.max_prefix_suffix_len,
+                    .max_transforms = options.max_prefix_suffix_transforms,
+                    .max_candidates = options.max_prefix_suffix_candidates,
+                    .max_words = options.max_prefix_suffix_words,
+                    .max_positions = options.max_prefix_suffix_positions,
+                    .min_occurrences = options.min_prefix_suffix_occurrences,
+                },
+            ) catch |err| return mapSerializedTrainingError(err);
+            if (prefix_suffix_plan) |*plan| {
+                const base_derived_count = derived_count;
+                derived[derived_count] = serialized_dictionary_trainer.withPrefixSuffixTransformsAlloc(
+                    allocator,
+                    &identity,
+                    plan,
+                ) catch |err| return mapSerializedTrainingError(err);
+                derived_count += 1;
+                for (0..base_derived_count) |base_index| {
+                    derived[derived_count] = serialized_dictionary_trainer.withPrefixSuffixTransformsAlloc(
+                        allocator,
+                        &derived[base_index],
+                        plan,
+                    ) catch |err| return mapSerializedTrainingError(err);
+                    derived_count += 1;
+                }
+            }
+        }
+        if (options.train_shift_transforms) {
+            shift_plan = serialized_dictionary_trainer.learnShiftPlanAlloc(
+                allocator,
+                &identity,
+                validation_samples,
+                .{
+                    .max_transforms = options.max_shift_transforms,
+                    .max_candidates = options.max_shift_candidates,
+                    .max_words = options.max_shift_words,
+                    .max_positions = options.max_shift_positions,
+                    .min_occurrences = options.min_shift_occurrences,
+                },
+            ) catch |err| return mapSerializedTrainingError(err);
+            if (shift_plan) |*plan| {
+                const non_shift_count = derived_count;
+                derived[derived_count] = serialized_dictionary_trainer.withShiftTransformsAlloc(
+                    allocator,
+                    &identity,
+                    plan,
+                ) catch |err| return mapSerializedTrainingError(err);
+                derived_count += 1;
+                for (0..non_shift_count) |source_index| {
+                    derived[derived_count] = serialized_dictionary_trainer.withShiftTransformsAlloc(
+                        allocator,
+                        &derived[source_index],
+                        plan,
+                    ) catch |err| return mapSerializedTrainingError(err);
+                    derived_count += 1;
+                }
+            }
+        }
+        if (try deriveSerializedTransformClusterCandidateAlloc(
+            allocator,
+            validation_samples,
+            options,
+            &identity,
+            derived[0..derived_count],
+        )) |clustered| {
+            derived[derived_count] = clustered;
+            derived_count += 1;
+        }
+    }
+    considerSerializedTrainingCandidate(
+        allocator,
+        validation_samples,
+        options,
+        identity,
+        word_count_caps_by_length,
+        word_bucket_pruning_steps,
+        selection,
+    ) catch |err| {
+        for (derived[0..derived_count]) |candidate| candidate.deinit(allocator);
+        return err;
+    };
+    for (derived[0..derived_count], 0..) |candidate, index| {
+        considerSerializedTrainingCandidate(
+            allocator,
+            validation_samples,
+            options,
+            candidate,
+            word_count_caps_by_length,
+            word_bucket_pruning_steps,
+            selection,
+        ) catch |err| {
+            for (derived[index + 1 .. derived_count]) |remaining|
+                remaining.deinit(allocator);
+            return err;
+        };
+    }
+}
+
+fn deriveSerializedTransformClusterCandidateAlloc(
+    allocator: std.mem.Allocator,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    identity: *const serialized_dictionary_trainer.Candidate,
+    derived: []const serialized_dictionary_trainer.Candidate,
+) Error!?serialized_dictionary_trainer.Candidate {
+    if (!options.train_transform_clustering or !identity.context_based or
+        derived.len == 0 or derived.len + 1 > serialized_dictionary_transform_clusterer.max_profiles)
+    {
+        return null;
+    }
+    const identity_parsed = parseSerializedSharedDictionary(identity.encoded) catch
+        return error.InvalidDictionaryTraining;
+    if (identity_parsed.dictionary_count > options.max_transform_cluster_dictionaries)
+        return null;
+
+    var candidate_sources: [serialized_dictionary_transform_clusterer.max_profiles]*const serialized_dictionary_trainer.Candidate =
+        undefined;
+    var capabilities: [serialized_dictionary_transform_clusterer.max_profiles]u4 =
+        undefined;
+    var parsed_sources: [serialized_dictionary_transform_clusterer.max_profiles]SerializedSharedDictionary =
+        undefined;
+    var dictionary_sources: [serialized_dictionary_transform_clusterer.max_profiles]*const SerializedSharedDictionary =
+        undefined;
+    candidate_sources[0] = identity;
+    capabilities[0] = identity.transform_capabilities;
+    parsed_sources[0] = identity_parsed;
+    dictionary_sources[0] = &parsed_sources[0];
+    for (derived, 1..) |*candidate, source_index| {
+        candidate_sources[source_index] = candidate;
+        capabilities[source_index] = candidate.transform_capabilities;
+        parsed_sources[source_index] = parseSerializedSharedDictionary(candidate.encoded) catch
+            return error.InvalidDictionaryTraining;
+        dictionary_sources[source_index] = &parsed_sources[source_index];
+    }
+    const source_count = derived.len + 1;
+    const assignment = (serialized_dictionary_transform_clusterer.assignAlloc(
+        allocator,
+        dictionary_sources[0..source_count],
+        capabilities[0..source_count],
+        validation_samples,
+        identity.context_mode orelse return error.InvalidDictionaryTraining,
+        .{ .max_positions = options.max_transform_scoring_positions },
+    ) catch |err| return mapSerializedTrainingError(err)) orelse return null;
+    const candidate = serialized_dictionary_trainer.withClusteredTransformProfilesAlloc(
+        allocator,
+        candidate_sources[0..source_count],
+        assignment.profile_by_dictionary[0..assignment.dictionary_count],
+    ) catch |err| return mapSerializedTrainingError(err);
+    return candidate;
+}
+
+fn mapSerializedTrainingError(err: anyerror) Error {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidDictionaryTraining,
+    };
+}
+
+fn considerSerializedTrainingCandidate(
+    allocator: std.mem.Allocator,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    candidate: serialized_dictionary_trainer.Candidate,
+    word_count_caps_by_length: ?*const [32]u16,
+    word_bucket_pruning_steps: u8,
+    selection: *SerializedTrainingSelection,
+) Error!void {
+    errdefer candidate.deinit(allocator);
+    const parsed = parseSerializedSharedDictionary(candidate.encoded) catch
+        return error.InvalidDictionaryTraining;
+    const frame_bytes = try serializedTrainingFrameBytes(
+        allocator,
+        validation_samples,
+        options,
+        SharedDictionary{ .serialized = &parsed },
+    );
+    const charged_dictionary_bytes = if (options.include_dictionary_size)
+        candidate.encoded.len
+    else
+        0;
+    const total_bytes = std.math.add(
+        usize,
+        frame_bytes,
+        charged_dictionary_bytes,
+    ) catch return error.IntegerOverflow;
+    const prefers_smaller_uncharged_dictionary = if (!options.include_dictionary_size)
+        if (selection.candidate) |previous|
+            frame_bytes == selection.frame_bytes and
+                candidate.encoded.len < previous.encoded.len
+        else
+            false
+    else
+        false;
+    if (total_bytes < selection.total_bytes or prefers_smaller_uncharged_dictionary) {
+        if (selection.candidate) |previous| previous.deinit(allocator);
+        selection.* = .{
+            .candidate = candidate,
+            .frame_bytes = frame_bytes,
+            .charged_dictionary_bytes = charged_dictionary_bytes,
+            .total_bytes = total_bytes,
+            .word_count_caps_by_length = if (word_count_caps_by_length) |caps|
+                caps.*
+            else
+                null,
+            .word_bucket_pruning_steps = word_bucket_pruning_steps,
+        };
+    } else {
+        candidate.deinit(allocator);
+    }
+}
+
+fn serializedTrainingFrameBytes(
+    allocator: std.mem.Allocator,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    shared: ?SharedDictionary,
+) Error!usize {
+    var total: usize = 0;
+    for (validation_samples) |sample| {
+        const encoded = try encodePlannedStreamWithOptionsAlloc(
+            allocator,
+            sample,
+            .{
+                .quality = options.quality,
+                .mode = options.mode,
+                .shared_dictionary = shared orelse .{},
+            },
+        );
+        defer allocator.free(encoded);
+        total = std.math.add(usize, total, encoded.len) catch
+            return error.IntegerOverflow;
+    }
+    return total;
+}
+
+fn preparePlannedSharedDictionary(
+    matcher: *compound_dictionary_matcher.Matcher,
+    dictionary: SharedDictionary,
+) Error!usize {
+    const total_size = try plannedSharedDictionarySize(dictionary);
+    matcher.prepare(dictionary) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidBlockPlan,
+    };
+    return total_size;
+}
+
 /// Decode policy for standard RFC 7932 streams and the opt-in Large Window
 /// Brotli extension. The extension reuses a reserved RFC window code, so it
 /// remains disabled by default for strict format validation.
 pub const DecodeOptions = struct {
     allow_large_window: bool = false,
+    /// Borrowed RAW prefixes and optional parsed serialized contextual static
+    /// dictionary attached out of band. Explicit empty RAW chunks are byte-wise
+    /// no-ops but still consume one of the fifteen attachment slots.
+    shared_dictionary: SharedDictionary = .{},
 };
 
-const IncrementalCodec = struct {
-    pub const Error = br.Error;
-    pub const DecodeOptions = br.DecodeOptions;
-    pub fn decodedSizeLimited(stream: []const u8, limit: usize, options: br.DecodeOptions) br.Error!usize {
-        return br.decodedStreamSizeLimitedWithOptions(stream, limit, options);
-    }
-    pub fn decodeInto(stream: []const u8, output: []u8, options: br.DecodeOptions) br.Error!usize {
-        return br.decodeStreamIntoWithOptions(stream, output, options);
-    }
+const DecodeSharedDictionary = struct {
+    dictionary: SharedDictionary,
+    total_size: usize,
 };
+
+fn decodeSharedDictionary(options: DecodeOptions) Error!?DecodeSharedDictionary {
+    const total_size = options.shared_dictionary.totalSize() catch |err| switch (err) {
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.CorruptFrame,
+    };
+    if (total_size == 0 and options.shared_dictionary.serialized == null)
+        return null;
+    return .{ .dictionary = options.shared_dictionary, .total_size = total_size };
+}
+
+fn decodeOptionsNeedColdPath(options: DecodeOptions) Error!bool {
+    return options.allow_large_window or (try decodeSharedDictionary(options)) != null;
+}
 
 const br = @This();
-pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
 pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
 pub const IncrementalCopyStreamDecoder = incremental_copy.Decoder(IncrementalCopyCodec);
+const IncrementalOwnedCodec = struct {
+    pub const Error = br.Error;
+    pub const DecodeOptions = br.DecodeOptions;
+    pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
+    pub const HistoryPlan = struct { allocation_len: usize, capped: bool };
+
+    pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
+        _ = try decodeSharedDictionary(options);
+    }
+
+    pub fn historyPlanFromPrefix(prefix: []const u8, output_bound: usize, max_history_len: usize, options: br.DecodeOptions) br.Error!?HistoryPlan {
+        options.shared_dictionary.validate() catch |err| switch (err) {
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.CorruptFrame,
+        };
+        var reader = bitstream.BitReader.init(prefix);
+        const window = readWindowInfo(&reader, options) catch |err| switch (err) {
+            error.TruncatedFrame => return null,
+            else => return err,
+        };
+        const advertised = (@as(usize, 1) << window.bits) - 16;
+        const required = @min(output_bound, advertised);
+        if (required == 0) return .{ .allocation_len = 0, .capped = false };
+        if (max_history_len == 0) return error.OutputLimitExceeded;
+        return .{
+            .allocation_len = @min(required, max_history_len),
+            .capped = max_history_len < required,
+        };
+    }
+};
+pub const IncrementalStreamDecoder = incremental_owned_copy.Decoder(IncrementalOwnedCodec);
 pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
 
@@ -240,6 +1414,21 @@ const IncrementalCopyCodec = struct {
         return @intCast(symbol);
     }
 
+    pub fn dictionaryContext(
+        header: *const Header,
+        previous: u8,
+        second_previous: u8,
+    ) IncrementalCopyCodec.Error!usize {
+        const block_type = header.compressed.literal_block.current_type;
+        if (block_type >= max_literal_block_types)
+            return error.UnsupportedBrotliFeature;
+        return literalContextFromMode(
+            header.compressed.literal_context_modes[block_type],
+            previous,
+            second_previous,
+        );
+    }
+
     pub fn readCommand(header: *Header, reader: anytype) IncrementalCopyCodec.Error!Command {
         const symbol = try readLargeCommandSymbolAny(&header.compressed, reader);
         if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
@@ -288,8 +1477,11 @@ const IncrementalCopyCodec = struct {
         };
     }
 
-    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: []u8) IncrementalCopyCodec.Error![]const u8 {
         return minimalStaticDictionaryWord(distance, copy_len, max_backward_distance, scratch);
+    }
+    pub fn staticDictionaryWord(address: usize, copy_len: usize, scratch: []u8) IncrementalCopyCodec.Error![]const u8 {
+        return minimalStaticDictionaryWordAtAddress(address, copy_len, scratch);
     }
 
     pub fn maxBackwardDistance(window_bits: u5, output_len: usize) usize {
@@ -416,43 +1608,116 @@ pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(In
 
 const IncrementalPlannedEncoderCodec = struct {
     pub const Error = br.Error;
-    pub const StreamOptions = br.StoredStreamOptions;
-    pub const max_block_len = planned_chunk_max_input_len;
-    pub const default_block_len = planned_chunk_max_input_len;
+    pub const StreamOptions = br.PlannedStreamChunksOptions;
+    pub const max_block_len = hq_options.max_block_len;
+    /// Zero asks the shared stream policy to select the level/quality default.
+    pub const default_block_len: usize = 0;
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
+        large_window: bool = false,
+        level: PlannedCompressionLevel = .fast,
+        quality: ?u4 = null,
+        hq: ?HqOptions = null,
+        hq_state: @import("br/encoder/hq_codec.zig").State = .{},
+        mode: PlannedMode = .generic,
+        adaptive_blocks: bool = false,
+        command_state_max_input_kib: u8 = command_state_default_max_input_kib,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
+        candidate_wire: std.ArrayList(u8) = .empty,
+        best_wire: std.ArrayList(u8) = .empty,
+        adaptive_single_wire: std.ArrayList(u8) = .empty,
+        adaptive_split_wire: std.ArrayList(u8) = .empty,
+        adaptive_grid_wire: std.ArrayList(u8) = .empty,
+        adaptive_grid_candidate_wire: std.ArrayList(u8) = .empty,
+        history_snapshot: std.ArrayList(u8) = .empty,
+        adaptive_split_history: std.ArrayList(u8) = .empty,
+        adaptive_grid_history: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
+        fragment_scratch: fast_fragment.Scratch = .{},
+        q0_entropy_state: fast_fragment_one_pass.State = .{},
+        compound_matcher: ?compound_dictionary_matcher.Matcher = null,
+        serialized_matcher: ?serialized_dictionary_matcher.Matcher = null,
+        compound_dictionary_size: usize = 0,
+        shared_dictionary: SharedDictionary = .{},
+        context_previous: [2]u8 = .{ 0, 0 },
+        wire_state: PlannedWireState = .{},
     };
 
     pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.hq_state.deinit();
         state.greedy_scratch.deinit(allocator);
         state.dictionary_greedy_scratch.deinit(allocator);
+        state.fragment_scratch.deinit(allocator);
+        if (state.compound_matcher) |*matcher| matcher.deinit();
+        if (state.serialized_matcher) |*matcher| matcher.deinit();
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
         state.history.deinit(allocator);
+        state.candidate_wire.deinit(allocator);
+        state.best_wire.deinit(allocator);
+        state.adaptive_single_wire.deinit(allocator);
+        state.adaptive_split_wire.deinit(allocator);
+        state.adaptive_grid_wire.deinit(allocator);
+        state.adaptive_grid_candidate_wire.deinit(allocator);
+        state.history_snapshot.deinit(allocator);
+        state.adaptive_split_history.deinit(allocator);
+        state.adaptive_grid_history.deinit(allocator);
     }
 
     pub fn resetState(state: *State) void {
+        state.hq_state.deinit();
         state.bit_index = 0;
         state.window_bits = default_window_bits;
+        state.large_window = false;
+        state.level = .fast;
+        state.quality = null;
+        state.hq = null;
+        state.mode = .generic;
+        state.adaptive_blocks = false;
+        state.command_state_max_input_kib = command_state_default_max_input_kib;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
         state.history.clearRetainingCapacity();
+        state.candidate_wire.clearRetainingCapacity();
+        state.best_wire.clearRetainingCapacity();
+        state.adaptive_single_wire.clearRetainingCapacity();
+        state.adaptive_split_wire.clearRetainingCapacity();
+        state.adaptive_grid_wire.clearRetainingCapacity();
+        state.adaptive_grid_candidate_wire.clearRetainingCapacity();
+        state.history_snapshot.clearRetainingCapacity();
+        state.adaptive_split_history.clearRetainingCapacity();
+        state.adaptive_grid_history.clearRetainingCapacity();
+        state.compound_dictionary_size = 0;
+        state.shared_dictionary = .{};
+        state.context_previous = .{ 0, 0 };
+        state.wire_state = .{};
+        state.q0_entropy_state.reset();
         state.greedy_scratch.head_initialized = @splat(0);
         state.greedy_scratch.prev.clearRetainingCapacity();
     }
 
     pub fn stateRetainedCapacity(state: *const State) usize {
-        return state.tokens.capacity * @sizeOf(lz77.Token) +
-            state.commands.capacity * @sizeOf(command_plan.Command) +
-            state.history.capacity +
-            state.greedy_scratch.retainedCapacity() +
-            state.dictionary_greedy_scratch.retainedCapacity();
+        return @import("br/encoder/total_retained.zig").codec(state) catch std.math.maxInt(usize);
+    }
+
+    pub const MemoryConfig = @import("br/incremental/stored/allocator_adapter.zig").Config;
+
+    pub fn extractMemoryConfig(options: StreamOptions) MemoryConfig {
+        return .{ .limit = options.max_total_working_memory, .profile = options.memory_profile };
+    }
+
+    pub fn requiredTotalRetainedBytes(state: *const State) br.Error!usize {
+        return @import("br/encoder/total_retained.zig").codec(state);
+    }
+
+    pub fn rebindStateAllocator(state: *State, allocator: std.mem.Allocator) void {
+        if (state.compound_matcher) |*matcher| matcher.allocator = allocator;
+        if (state.serialized_matcher) |*matcher| matcher.allocator = allocator;
+        if (state.hq_state.budget) |budget| budget.backing = allocator;
     }
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
@@ -463,65 +1728,122 @@ const IncrementalPlannedEncoderCodec = struct {
         return pending_len;
     }
 
+    pub fn resolveBlockLen(options: StreamOptions, requested: usize) br.Error!usize {
+        if (options.hq) |raw| {
+            // Prefix validation owns the borrowed dictionary check. Its
+            // original descriptors can overlap pending output after snapshot.
+            try raw.validate(options.quality orelse return error.InvalidBlockPlan);
+            const block_len = if (requested != 0) requested else if (options.block_len != 0) options.block_len else raw.block_len;
+            if (block_len == 0 or block_len > max_block_len) return error.InvalidBlockPlan;
+            return block_len;
+        }
+        if (requested != 0) {
+            if (requested > planned_chunk_max_input_len) return error.InvalidBlockPlan;
+            return requested;
+        }
+        return plannedStreamBlockLen(options);
+    }
+
+    pub fn deferFullBlock(options: StreamOptions) bool {
+        return options.hq != null;
+    }
+
+    pub fn writePrefixWithBlockLen(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions, block_len: usize) br.Error!void {
+        var effective = options;
+        if (effective.hq) |*hq| hq.block_len = block_len;
+        return writePrefix(allocator, out, state, effective);
+    }
+
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        try validatePlannedStreamChunksOptions(options);
+        const adaptive_blocks = try plannedStreamAdaptiveBlocks(options);
+        const original_len = out.items.len;
+        const original_tail = if (original_len == 0) 0 else out.items[original_len - 1];
+        const original_dictionary_size = state.compound_dictionary_size;
+        const original_shared = state.shared_dictionary;
+        var next_hq_resources = state.hq_state;
+        var new_alias_resources = false;
+        defer if (new_alias_resources) next_hq_resources.deinit();
+        var active_shared = options.shared_dictionary;
+        var active_metadata = options.metadata;
+        if (options.hq) |raw| {
+            const resolved = try raw.resolveForFormat(options.quality orelse return error.InvalidBlockPlan, options.mode, if (options.large_window) .large_window else .standard);
+            if (raw.profile) |p| p.recordEffective(resolved);
+            const allocation = out.items.ptr[0..out.capacity];
+            const alias_bytes = hq_codec.alias.requiredInputBytes(allocation, active_metadata, active_shared) catch |err| return hqCodecError(err);
+            if (alias_bytes != 0) {
+                if (state.hq_state.budget != null) return error.InvalidBlockPlan;
+                const needed = std.math.add(usize, @sizeOf(hq_codec.Budget), alias_bytes) catch return error.IntegerOverflow;
+                if (needed > resolved.max_working_memory) return error.WorkingMemoryLimitExceeded;
+                next_hq_resources.ensureBudget(allocator, resolved.max_working_memory) catch |err| return hqCodecError(err);
+                new_alias_resources = true;
+                next_hq_resources.alias_snapshot = hq_codec.alias.Snapshot.initInput(next_hq_resources.budget.?.allocator(), allocation, active_metadata, active_shared) catch |err| return hqWorkingError(err, next_hq_resources.budget.?);
+                active_shared = next_hq_resources.alias_snapshot.?.getDictionary();
+                active_metadata = next_hq_resources.alias_snapshot.?.getInput();
+                if (raw.profile) |p| p.recordPeak(next_hq_resources.budget.?.peak);
+            }
+        }
+        errdefer {
+            out.items.len = original_len;
+            if (original_len != 0) out.items[original_len - 1] = original_tail;
+            state.compound_dictionary_size = original_dictionary_size;
+            state.shared_dictionary = original_shared;
+        }
+        if (options.hq != null) {
+            state.compound_dictionary_size = try plannedSharedDictionarySize(active_shared);
+        } else {
+            if (state.compound_matcher == null)
+                state.compound_matcher = compound_dictionary_matcher.Matcher.init(allocator);
+            if (options.shared_dictionary.hasSerializedStatic()) {
+                if (state.serialized_matcher == null)
+                    state.serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator);
+                state.serialized_matcher.?.prepare(
+                    options.shared_dictionary.serialized.?,
+                ) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.IntegerOverflow => return error.IntegerOverflow,
+                    else => return error.InvalidBlockPlan,
+                };
+            } else if (state.serialized_matcher) |*matcher| {
+                matcher.reset();
+            }
+            state.compound_dictionary_size = try preparePlannedSharedDictionary(
+                &state.compound_matcher.?,
+                options.shared_dictionary,
+            );
+        }
+        state.shared_dictionary = active_shared;
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        try writeWindowBits(allocator, &writer, options.window_bits);
-        if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
+        if (active_metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, active_metadata);
         state.bit_index = writer.bit_index;
         state.window_bits = options.window_bits;
+        state.large_window = options.large_window;
+        state.level = options.level;
+        state.quality = options.quality;
+        state.hq = options.hq;
+        if (new_alias_resources) {
+            state.hq_state = next_hq_resources;
+            new_alias_resources = false;
+        }
+        state.mode = options.mode;
+        state.adaptive_blocks = adaptive_blocks;
+        state.command_state_max_input_kib = options.command_state_max_input_kib;
     }
 
     pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
-        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        const start_len = out.items.len;
-        const start_bit_index = writer.bit_index;
-        const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
-        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
-
-        const stats = if (state.history.items.len == 0)
-            try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
-                .window_len = @min(block.len, max_backward_distance),
-                .max_chain = 64,
-                .nice_len = 64,
-                .max_candidates = 8,
-                .min_match = 3,
-                .max_match = lz77.max_match_len,
-            })
-        else blk: {
-            const history_stats = try lz77.hashGreedyPlanWithDictionaryReuse(&state.tokens, &state.dictionary_greedy_scratch, allocator, block, state.history.items, .{
-                .window_len = max_backward_distance,
-                .max_chain = 64,
-                .nice_len = 64,
-                .max_candidates = 8,
-                .min_match = 3,
-                .max_match = lz77.max_match_len,
-            });
-            break :blk history_stats;
-        };
-        var compressed_ok = stats.matches != 0;
-        if (compressed_ok) {
-            _ = if (state.history.items.len == 0)
-                try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items)
-            else
-                try command_plan.buildWithDictionaryReuse(&state.commands, allocator, block, state.history.items.len, state.tokens.items);
-            var encode_stats: encoder_stats.PlannedEncodeStats = .{};
-            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, state.commands.items, null, &encode_stats, .{
-                .write_stream_prefix = false,
-                .final_meta_block = false,
-            }) catch |err| switch (err) {
-                error.InvalidBlockPlan => compressed_ok = false,
-                else => return err,
-            };
+        if (state.adaptive_blocks) {
+            const split_plan = stream_block_split.plan64(block);
+            if (split_plan.any())
+                return writeAdaptivePlannedStreamBlock(
+                    allocator,
+                    out,
+                    state,
+                    block,
+                    split_plan,
+                );
         }
-        const stored_ceiling = try addStoredUncompressedMetaBlockBitsLen(startBitPosition(start_len, start_bit_index), block.len);
-        if (!compressed_ok or writer.bitPosition() > stored_ceiling) {
-            out.shrinkRetainingCapacity(start_len);
-            if (start_len != 0) out.items[start_len - 1] = start_byte;
-            writer.bit_index = start_bit_index;
-            try writeUncompressedMetaBlock(allocator, &writer, block);
-        }
-        state.bit_index = writer.bit_index;
-        try appendHistory(&state.history, allocator, block, max_backward_distance);
+        try writePlannedStreamMetaBlock(allocator, out, state, block, true);
     }
 
     pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
@@ -535,6 +1857,11 @@ const IncrementalPlannedEncoderCodec = struct {
         try writer.writeBits(allocator, 1, 1);
         try writer.writeBits(allocator, 1, 1);
         state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeFinalBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
+        if (state.hq != null) return writeHqPlannedStreamMetaBlock(allocator, out, state, block, true);
+        return writeLegacyFinalPlannedBlock(allocator, out, state, block);
     }
 
     fn startBitPosition(len: usize, bit_index: u3) usize {
@@ -557,18 +1884,275 @@ const IncrementalPlannedEncoderCodec = struct {
 
 pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(IncrementalPlannedEncoderCodec);
 
+/// Dedicated complete RFC 7932 static-dictionary stream encoder. It retains
+/// command and output capacity in caller-owned state, while the shared generic
+/// incremental core supplies resumable input/output progress and stream reuse.
+const IncrementalStaticDictionaryEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = br.max_uncompressed_meta_block_len;
+    pub const default_block_len = planner_max_backward_distance;
+    pub const defer_full_block_until_more_input = true;
+    pub const State = struct {
+        bit_index: u3 = 0,
+        window_bits: u5 = default_window_bits,
+        commands: std.ArrayList(command_plan.Command) = .empty,
+        wire_state: PlannedWireState = .{},
+    };
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.commands.deinit(allocator);
+    }
+
+    pub fn resetState(state: *State) void {
+        state.bit_index = 0;
+        state.window_bits = default_window_bits;
+        state.commands.clearRetainingCapacity();
+        state.wire_state = .{};
+    }
+
+    pub fn stateRetainedCapacity(state: *const State) usize {
+        return state.commands.capacity * @sizeOf(command_plan.Command);
+    }
+
+    pub fn readyOutputLen(
+        state: *const State,
+        pending_len: usize,
+        final_written: bool,
+    ) usize {
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
+    pub fn writePrefix(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        options: StreamOptions,
+    ) br.Error!void {
+        if (options.window_bits < 10 or options.window_bits > 24)
+            return error.InvalidBlockPlan;
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0)
+            try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+        state.window_bits = options.window_bits;
+    }
+
+    pub fn writeBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+    ) br.Error!void {
+        try writeDataBlock(allocator, out, state, block, false);
+    }
+
+    pub fn writeFinalBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+    ) br.Error!void {
+        try writeDataBlock(allocator, out, state, block, true);
+    }
+
+    fn writeDataBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+        final: bool,
+    ) br.Error!void {
+        if (block.len == 0 or block.len > max_block_len)
+            return error.InvalidBlockPlan;
+        _ = try command_plan.buildStaticDictionaryCompleteReuse(
+            &state.commands,
+            allocator,
+            block,
+        );
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        try encodeCommandPlanWithOptionsWrite(
+            allocator,
+            &writer,
+            block,
+            state.commands.items,
+            null,
+            &stats,
+            .{
+                .window_bits = state.window_bits,
+                .write_stream_prefix = false,
+                .final_meta_block = final,
+                .initial_output_pos = state.wire_state.output_pos,
+                .starting_last_distances = state.wire_state.last_distances,
+                .final_wire_state = &state.wire_state,
+            },
+        );
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeMetadata(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        metadata: []const u8,
+    ) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeFinal(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+    ) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+};
+
+pub const IncrementalStaticDictionaryStreamEncoder =
+    incremental_stored_encoder.Encoder(IncrementalStaticDictionaryEncoderCodec);
+pub const StaticDictionaryStreamOptions = IncrementalStaticDictionaryStreamEncoder.Options;
+
+/// Reusable complete static-dictionary encoder. Scratch results are borrowed
+/// until the next method call; allocating results are independent.
+pub const StaticDictionaryStreamEncoder = struct {
+    allocator: std.mem.Allocator,
+    incremental: IncrementalStaticDictionaryStreamEncoder,
+    output: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) StaticDictionaryStreamEncoder {
+        return .{
+            .allocator = allocator,
+            .incremental = IncrementalStaticDictionaryStreamEncoder.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *StaticDictionaryStreamEncoder) void {
+        self.incremental.deinit();
+        self.output.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn retainedCapacity(self: *const StaticDictionaryStreamEncoder) usize {
+        return self.output.capacity + self.incremental.retainedCapacity();
+    }
+
+    pub fn encodeChunksScratch(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+    ) Error![]const u8 {
+        return self.encodeChunksScratchWithOptions(chunks, .{});
+    }
+
+    pub fn encodeChunksScratchWithOptions(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error![]const u8 {
+        self.output.clearRetainingCapacity();
+        try static_dictionary_stream.encodeChunksWithOptionsAppendReuse(
+            IncrementalStaticDictionaryStreamEncoder,
+            max_uncompressed_meta_block_len,
+            &self.incremental,
+            self.allocator,
+            &self.output,
+            chunks,
+            options,
+        );
+        return self.output.items;
+    }
+
+    pub fn encodeChunksAlloc(
+        self: *StaticDictionaryStreamEncoder,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+    ) Error![]u8 {
+        return self.encodeChunksWithOptionsAlloc(allocator, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAlloc(
+        self: *StaticDictionaryStreamEncoder,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error![]u8 {
+        return allocator.dupe(
+            u8,
+            try self.encodeChunksScratchWithOptions(chunks, options),
+        );
+    }
+
+    pub fn encodeChunksAppend(
+        self: *StaticDictionaryStreamEncoder,
+        out: *std.ArrayList(u8),
+        chunks: []const []const u8,
+    ) Error!void {
+        return self.encodeChunksWithOptionsAppend(out, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAppend(
+        self: *StaticDictionaryStreamEncoder,
+        out: *std.ArrayList(u8),
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error!void {
+        if (out == &self.output) return error.InvalidBlockPlan;
+        const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
+        const start = out.items.len;
+        errdefer out.shrinkRetainingCapacity(start);
+        try out.appendSlice(self.allocator, encoded);
+    }
+
+    pub fn encodeChunksInto(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        output: []u8,
+    ) Error!usize {
+        return self.encodeChunksWithOptionsInto(chunks, output, .{});
+    }
+
+    pub fn encodeChunksWithOptionsInto(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        output: []u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error!usize {
+        const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+};
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
     _ = incremental_copy_tests;
+    _ = incremental_contracts_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
+    _ = incremental_stored_encoder;
     _ = incremental_planned_encoder_tests;
     _ = fast_bit_reader;
     _ = paired_literal_lookup;
     _ = pattern;
     _ = command_plan;
+    _ = fast_fragment;
+    _ = fast_fragment_one_pass;
+    _ = fast_fragment_two_pass;
     _ = literal_context;
+    _ = literal_context_split;
+    _ = context_map_encoder;
     _ = long_distance;
     _ = short_match_candidates;
     _ = encoder_distance;
@@ -576,16 +2160,225 @@ test {
     _ = code_length_rle;
     _ = small_huffman;
     _ = encoder_stats;
+    _ = entropy_feedback;
+    _ = hq_command_parser;
+    _ = hq_options;
+    _ = hq_types;
+    _ = hq_codec;
+    _ = new_hq_parser;
+    _ = total_budget;
+    _ = @import("tests/br_total_memory_contracts.zig");
+    _ = @import("tests/br_total_memory_transactions.zig");
+    _ = @import("tests/br_large_window_contracts.zig");
+    _ = @import("tests/br_large_window_resources.zig");
+    _ = @import("tests/br_large_window_transactions.zig");
+    _ = @import("tests/br_whole_block_contracts.zig");
+    _ = @import("tests/br_whole_block_resources.zig");
+    _ = @import("tests/br_whole_block_transactions.zig");
+    _ = @import("br/encoder/hq_parser/whole_options_tests.zig");
+    _ = @import("br/encoder/hq_codec/whole_block_tests.zig");
+    _ = @import("br/encoder/hq_codec/complete_length_tests.zig");
+    _ = @import("tests/br_complete_lengths_contracts.zig");
+    _ = @import("tests/br_complete_lengths_resources.zig");
+    _ = @import("tests/br_complete_lengths_transactions.zig");
+    _ = @import("br/encoder/hq_parser/length_options_tests.zig");
+    _ = @import("br/encoder/hq_tree_oracle_tests.zig");
+    _ = @import("br/encoder/hq_dictionary.zig");
+    _ = @import("br/encoder/hq_codec/exact.zig");
+    _ = @import("br/encoder/hq_codec/transaction.zig");
+    _ = @import("br/encoder/hq_codec/huffman_model.zig");
+    _ = @import("br/encoder/hq_codec/alias.zig");
+    _ = @import("tests/br_hq_contracts.zig");
+    _ = @import("tests/br_hq_resource_contracts.zig");
+    _ = @import("tests/br_hq_transaction_contracts.zig");
+    _ = @import("br/incremental/stored/hq_encoder_tests.zig");
+    _ = @import("tests/br_hq_bridge_tests.zig");
+    _ = br_length;
+    _ = command_encoding;
     _ = static_dictionary_matcher;
+    _ = serialized_dictionary_matcher;
     _ = literal_block_split;
     _ = command_block_split;
     _ = distance_block_split;
+    _ = stream_block_split;
+    _ = compound_wire;
     _ = header_profile;
+    _ = code_length_decoder_mod;
+    _ = serialized_dictionary;
+    _ = serialized_dictionary_builder;
+    _ = serialized_dictionary_trainer;
 }
 
 pub const IncrementalTestSupport = struct {
+    pub const HqCommand = command_plan.Command;
+    pub const HqCommandWireOptions = struct {
+        window_bits: u5 = default_window_bits,
+        large_window: bool = false,
+        distance_parameters: HqDistanceParameters = HqDistanceParameters.init(0, 0),
+        compound_dictionary_size: usize = 0,
+        starting_last_distances: [4]usize = initial_last_distances,
+    };
+
+    pub fn inspectHqLegacyWire(
+        allocator: std.mem.Allocator,
+        encoded: []const u8,
+        options: PlannedStreamChunksOptions,
+        expected_len: usize,
+    ) Error!?HqProfile.Emitted {
+        var resolved = try (options.hq orelse return error.InvalidBlockPlan).resolveForFormat(options.quality orelse return error.InvalidBlockPlan, options.mode, if (options.large_window) .large_window else .standard);
+        resolved.block_len = try plannedStreamBlockLen(options);
+        return hq_codec.legacy.inspect(LegacyHqInspectionCodec, allocator, encoded, options, resolved, expected_len);
+    }
+
+    /// Expose the production writer to independent exact-command wire tests.
+    pub fn encodeHqCommandPlan(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        commands: []const HqCommand,
+        options: HqCommandWireOptions,
+    ) Error!struct { bytes: []u8, last_distances: [4]usize } {
+        var stats: PlannedEncodeStats = .{};
+        var final_state: PlannedWireState = .{};
+        const bytes = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
+            .use_recent_distances = true,
+            .distance_parameters = options.distance_parameters,
+            .window_bits = options.window_bits,
+            .large_window = options.large_window,
+            .compound_dictionary_size = options.compound_dictionary_size,
+            .starting_last_distances = options.starting_last_distances,
+            .final_wire_state = &final_state,
+        });
+        return .{ .bytes = bytes, .last_distances = final_state.last_distances };
+    }
+
+    pub const complete_static_dictionary_transform_count =
+        static_dictionary.transform_count;
+
+    pub fn resetStreamHqCommandCounters() void {
+        test_stream_hq_command_candidate_attempts = 0;
+        test_stream_hq_command_candidate_selections = 0;
+    }
+
+    pub fn streamHqCommandAttempts() usize {
+        return test_stream_hq_command_candidate_attempts;
+    }
+
+    pub fn streamHqCommandSelections() usize {
+        return test_stream_hq_command_candidate_selections;
+    }
+
+    pub fn completeStaticDictionaryTransformCase(
+        transform_index: usize,
+        storage: *[64]u8,
+    ) Error![]const u8 {
+        if (transform_index >= static_dictionary.transform_count)
+            return error.InvalidBlockPlan;
+        for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) <<
+                static_dictionary.sizeBits(copy_len).?;
+            for (0..word_count) |word_index| {
+                const word = static_dictionary.baseWord(copy_len, word_index).?;
+                const transformed = static_dictionary.transformWord(
+                    transform_index,
+                    word,
+                    storage,
+                ).?;
+                if (transformed.len >= 5) return transformed;
+            }
+        }
+        return error.InvalidBlockPlan;
+    }
+
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
+    }
+
+    pub fn encodeQ2DynamicCommands(allocator: std.mem.Allocator) Error![]u8 {
+        const command_count = 129;
+        const payload = [_]u8{'a'} ** (command_count * 6);
+        var commands: [command_count]command_plan.Command = undefined;
+        for (&commands, 0..) |*command, index| command.* = .{
+            .insert_start = index * 6,
+            .insert_len = 1,
+            .copy_len = 5,
+            .distance = 1,
+            .has_copy = true,
+        };
+        var stream: std.ArrayList(u8) = .empty;
+        errdefer stream.deinit(allocator);
+        var prefix_writer = BitWriter{ .out = &stream };
+        try writeWindowBits(allocator, &prefix_writer, default_window_bits);
+        const start_bit_index = prefix_writer.bit_index;
+        const start_byte = stream.items[stream.items.len - 1];
+        var candidate_wire: std.ArrayList(u8) = .empty;
+        defer candidate_wire.deinit(allocator);
+        const candidate = try encodeQ23MetaBlockCandidate(
+            .q2_fast,
+            allocator,
+            &candidate_wire,
+            start_byte,
+            start_bit_index,
+            &payload,
+            &commands,
+            default_window_bits,
+            0,
+            .{},
+        );
+        try commitPlannedMetaBlockCandidate(
+            allocator,
+            &stream,
+            start_bit_index,
+            candidate_wire.items,
+        );
+        var final_writer = BitWriter{ .out = &stream, .bit_index = candidate.bit_index };
+        try final_writer.writeBits(allocator, 1, 1);
+        try final_writer.writeBits(allocator, 1, 1);
+        return stream.toOwnedSlice(allocator);
+    }
+
+    /// Encode one insertion-only production stream with a caller-selected RFC
+    /// literal context mode. Differential tools use this narrow test surface to
+    /// prove all four wire modes against an independent decoder.
+    pub fn encodeLiteralContextMode(
+        allocator: std.mem.Allocator,
+        payload: []const u8,
+        mode: u2,
+        cutoff: u6,
+    ) Error![]u8 {
+        if (payload.len == 0 or mode > literal_context.mode_signed or cutoff == 0 or cutoff >= 64)
+            return error.InvalidBlockPlan;
+        const commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = payload.len,
+        }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        return encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_context_candidate = literal_context_split.Candidate.suffix(mode, cutoff, 0),
+        });
+    }
+
+    pub fn encodeLiteralContextMap(
+        allocator: std.mem.Allocator,
+        payload: []const u8,
+        mode: u2,
+        tree_count: u7,
+        context_map: [64]u8,
+    ) Error![]u8 {
+        if (payload.len == 0 or mode > literal_context.mode_signed or tree_count < 2 or tree_count > literal_context_split.max_trees)
+            return error.InvalidBlockPlan;
+        const commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = payload.len,
+        }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        return encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_context_candidate = .{
+                .mode = mode,
+                .tree_count = tree_count,
+                .context_map = context_map,
+                .savings_bits = 0,
+            },
+        });
     }
 
     /// Build a final Large Window stream with one explicit regular-distance
@@ -681,6 +2474,301 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build an off-grid five-region command stream whose general block-type
+    /// sequence is A-B-A-C-A. Unlike the older cyclic fixtures, this requires
+    /// both previous-type and direct-type transition symbols.
+    pub fn encodeAdaptiveCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const command_count = 8192;
+        const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+        const region_types = [_]usize{ 0, 1, 0, 2, 0 };
+        const payload_len = commandTypeFixturePayloadLen(command_count, &boundaries, &region_types);
+        const payload = try allocator.alloc(u8, payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, command_count);
+        defer allocator.free(commands);
+        fillCommandTypeFixture(payload, commands, &boundaries, &region_types);
+        const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+        const types = [_]u8{ 0, 1, 0, 2, 0 };
+        const plan = try block_split_plan.Plan.initCopy(
+            allocator,
+            &lengths,
+            &types,
+            3,
+            command_count,
+            0,
+        );
+        defer plan.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            commands,
+            null,
+            &stats,
+            .{ .adaptive_command_split = &plan },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production literal stream whose three regions reuse two literal
+    /// tree types in A-B-A order.
+    pub fn encodeClusteredLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, clustered_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillClusteredLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const clustered = proposals.clustered orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = clustered,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build an off-grid literal stream whose general block-type sequence is
+    /// A-B-A-C-A. A single insert command proves that boundaries can occur
+    /// inside one literal run rather than only between commands.
+    pub fn encodeAdaptiveLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const literal_count = 8192;
+        const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+        const region_types = [_]usize{ 0, 1, 0, 2, 0 };
+        const payload = try allocator.alloc(u8, literal_count);
+        errdefer allocator.free(payload);
+        fillAdaptiveLiteralFixture(payload, &boundaries, &region_types);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+        const types = [_]u8{ 0, 1, 0, 2, 0 };
+        const plan = try block_split_plan.Plan.initCopy(
+            allocator,
+            &lengths,
+            &types,
+            3,
+            literal_count,
+            0,
+        );
+        defer plan.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            &commands,
+            null,
+            &stats,
+            .{ .adaptive_literal_split = &plan },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Run the production adaptive literal discovery and joint block/context
+    /// clustering over the same off-grid fixture, including exact-wire
+    /// arbitration against the identity-tree adaptive candidate.
+    pub fn encodeAdaptiveLiteralContextTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+        const region_types = [_]usize{ 0, 1, 0, 2, 0 };
+        const payload = try allocator.alloc(u8, 8192);
+        errdefer allocator.free(payload);
+        fillAdaptiveLiteralFixture(payload, &boundaries, &region_types);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const baseline = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            &commands,
+            null,
+            &stats,
+            .{},
+        );
+        errdefer allocator.free(baseline);
+        const selected = try encodeEntropySplitCandidateAlloc(
+            allocator,
+            payload,
+            &commands,
+            &stats,
+            .{ .try_adaptive_literal_split = true },
+            .{ .encoded = baseline, .use_recent_distances = false },
+        );
+        if (selected) |encoded| {
+            allocator.free(baseline);
+            return .{ .encoded = encoded, .payload = payload };
+        }
+        return .{ .encoded = baseline, .payload = payload };
+    }
+
+    /// Exercise the complete 256 literal block-type/tree range and its
+    /// 16,384-entry identity context map through the production writer.
+    pub fn encodeMaximumAdaptiveLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const literal_count = 256;
+        const payload = try allocator.alloc(u8, literal_count);
+        errdefer allocator.free(payload);
+        for (payload, 0..) |*literal, index| literal.* = @intCast(index);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        const lengths: [literal_count]u32 = @splat(1);
+        var types: [literal_count]u8 = undefined;
+        for (&types, 0..) |*block_type, index| block_type.* = @intCast(index);
+        const plan = try block_split_plan.Plan.initCopy(
+            allocator,
+            &lengths,
+            &types,
+            256,
+            literal_count,
+            0,
+        );
+        defer plan.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            &commands,
+            null,
+            &stats,
+            .{ .adaptive_literal_split = &plan },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Exercise the maximum joint plan dimensions through the generalized
+    /// dynamic context-map writer, including tree id 255.
+    pub fn encodeMaximumJointLiteralContexts(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const literal_count = 256;
+        const payload = try allocator.alloc(u8, literal_count);
+        errdefer allocator.free(payload);
+        for (payload, 0..) |*literal, index| literal.* = @intCast(index);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        const lengths: [literal_count]u32 = @splat(1);
+        var types: [literal_count]u8 = undefined;
+        var modes: [literal_count]u2 = undefined;
+        var context_map: [literal_count * 64]u8 = undefined;
+        for (&types, &modes, 0..) |*block_type, *mode, index| {
+            block_type.* = @intCast(index);
+            mode.* = @intCast(index & 3);
+            @memset(context_map[index * 64 ..][0..64], @as(u8, @intCast(index)));
+        }
+        const block_plan: block_split_plan.Plan = .{
+            .lengths = @constCast(&lengths),
+            .types = &types,
+            .type_count = 256,
+            .estimated_bits = 0,
+        };
+        const joint = literal_entropy_plan.Plan.initCopy(
+            allocator,
+            block_plan,
+            &modes,
+            &context_map,
+            256,
+            literal_count,
+        ) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidBlockPlan,
+        };
+        defer joint.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            &commands,
+            null,
+            &stats,
+            .{
+                .adaptive_literal_split = &joint.block_plan,
+                .literal_entropy_plan = &joint,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production literal stream whose three regions use distinct
+    /// literal tree types in A-B-C order.
+    pub fn encodeThreeLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, three_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillThreeLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const three = proposals.three orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = three,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production literal stream whose four regions alternate two
+    /// literal tree types in A-B-A-B order.
+    pub fn encodeAlternatingLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, alternating_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillAlternatingLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const alternating = proposals.alternating_four orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = alternating,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production literal stream whose four regions reuse three
+    /// literal tree types in A-B-C-A order.
+    pub fn encodeReuseFirstOfThreeLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, reuse_first_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillReuseFirstLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const reused = proposals.reuse_first_four orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = reused,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production literal stream whose four regions use distinct
+    /// literal tree types in A-B-C-D order.
+    pub fn encodeFourLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, four_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillFourLiteralFixture(payload);
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const four = proposals.four orelse return error.InvalidBlockPlan;
+        const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_split = four,
+        });
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build five literal regions with five independent Huffman trees.
+    pub fn encodeFiveLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillFiveLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six literal regions with six independent Huffman trees.
+    pub fn encodeSixLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillSixLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six literal regions whose three trees cycle A-B-C-A-B-C.
+    pub fn encodeSixRegionClusteredLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillSixRegionClusteredLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a four-region production stream whose two command tree types
     /// alternate A-B-A-B across three consecutive implicit type switches.
     pub fn encodeAlternatingCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
@@ -702,6 +2790,289 @@ pub const IncrementalTestSupport = struct {
         defer allocator.free(commands);
         fillReuseFirstFourFixture(payload, commands);
         const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four command regions whose four tree types follow A-B-C-D,
+    /// exercising three consecutive implicit next-type transitions.
+    pub fn encodeFourCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, four_command_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, four_command_count);
+        defer allocator.free(commands);
+        fillFourCommandFixture(payload, commands);
+        const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build five command regions with five independent Huffman trees.
+    pub fn encodeFiveCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, five_command_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_command_count);
+        defer allocator.free(commands);
+        fillFiveCommandFixture(payload, commands);
+        const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six command regions with six independent Huffman trees.
+    pub fn encodeSixCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, six_command_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_command_count);
+        defer allocator.free(commands);
+        fillSixCommandFixture(payload, commands);
+        const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six command regions whose three trees cycle A-B-C-A-B-C.
+    pub fn encodeSixRegionClusteredCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_command_clustered_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_command_count);
+        defer allocator.free(commands);
+        fillSixRegionClusteredCommandFixture(payload, commands);
+        const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four distance-symbol regions whose block/tree types follow
+    /// A-B-C-D. All payload bytes are equal, so every requested backward
+    /// distance is independently verifiable without hiding fixture history.
+    pub fn encodeFourDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, four_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, four_distance_command_count);
+        defer allocator.free(commands);
+        fillFourDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build three distance-symbol regions whose two tree types follow A-B-A.
+    pub fn encodeClusteredDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, clustered_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, clustered_distance_command_count);
+        defer allocator.free(commands);
+        fillClusteredDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build an off-grid five-region distance stream whose general block-type
+    /// sequence is A-B-A-C-A. The fixture exercises previous-type and direct
+    /// transitions plus the adaptive distance context-map production path.
+    pub fn encodeAdaptiveDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const command_count = 8192;
+        const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+        const region_types = [_]usize{ 0, 3, 0, 5, 0 };
+        const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+        const payload = try allocator.alloc(u8, payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, command_count);
+        defer allocator.free(commands);
+        fillDistanceTypeFixture(payload, commands, &boundaries, &region_types);
+        const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+        const types = [_]u8{ 0, 1, 0, 2, 0 };
+        const plan = try block_split_plan.Plan.initCopy(
+            allocator,
+            &lengths,
+            &types,
+            3,
+            command_count,
+            0,
+        );
+        defer plan.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            commands,
+            null,
+            &stats,
+            .{
+                .adaptive_distance_split = &plan,
+                .optimize_same_last_distance = false,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production-path stream containing all 256 RFC distance block
+    /// types and distance context trees. One explicit distance symbol per
+    /// block keeps the payload small while exercising the maximum-width
+    /// adaptive type, length, context-map, and tree headers.
+    pub fn encodeMaximumAdaptiveDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const command_count = 256;
+        const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+        const payload = try allocator.alloc(u8, payload_len);
+        errdefer allocator.free(payload);
+        @memset(payload, 'a');
+        var commands: [command_count]command_plan.Command = undefined;
+        for (&commands, 0..) |*command, index| {
+            command.* = .{
+                .insert_start = if (index == 0) 0 else four_distance_seed_len + index * four_distance_copy_len,
+                .insert_len = if (index == 0) four_distance_seed_len else 0,
+                .copy_len = four_distance_copy_len,
+                .distance = 1,
+                .has_copy = true,
+            };
+        }
+        const lengths: [command_count]u32 = @splat(1);
+        var types: [command_count]u8 = undefined;
+        for (&types, 0..) |*block_type, index| block_type.* = @intCast(index);
+        const plan = try block_split_plan.Plan.initCopy(
+            allocator,
+            &lengths,
+            &types,
+            256,
+            command_count,
+            0,
+        );
+        defer plan.deinit(allocator);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            &commands,
+            null,
+            &stats,
+            .{
+                .adaptive_distance_split = &plan,
+                .optimize_same_last_distance = false,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a production planned stream with a nonzero RFC distance postfix
+    /// and scaled direct-distance field. This exercises the isolated
+    /// 520-symbol-capacity writer independently of parameter selection.
+    pub fn encodeNonzeroDistanceParameters(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const command_count = 4096;
+        const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+        const payload = try allocator.alloc(u8, payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, command_count);
+        defer allocator.free(commands);
+        fillDistanceTypeFixture(payload, commands, &.{}, &.{0});
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            commands,
+            null,
+            &stats,
+            .{
+                .distance_parameters = encoder_distance.Parameters.init(1, 6),
+                .optimize_same_last_distance = false,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build a ratio production fixture whose exact-wire winner uses nonzero
+    /// distance postfix bits after searching all 64 RFC parameter shapes.
+    pub fn encodeSelectedDistanceParameters(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, distance_parameter_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, distance_parameter_command_count);
+        defer allocator.free(commands);
+        fillDistanceParameterFixture(payload, commands);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithDistanceParameterSearchAlloc(
+            allocator,
+            payload,
+            commands,
+            true,
+            &stats,
+            .{
+                .use_recent_distances = true,
+                .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .optimize_same_last_distance = false,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    pub fn encodeBaselineDistanceParameters(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, distance_parameter_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, distance_parameter_command_count);
+        defer allocator.free(commands);
+        fillDistanceParameterFixture(payload, commands);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            payload,
+            commands,
+            null,
+            &stats,
+            .{
+                .use_recent_distances = true,
+                .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .optimize_same_last_distance = false,
+            },
+        );
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four distance-symbol regions whose two tree types follow A-B-A-B.
+    pub fn encodeAlternatingDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, alternating_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, alternating_distance_command_count);
+        defer allocator.free(commands);
+        fillAlternatingDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four distance-symbol regions whose three tree types follow
+    /// A-B-C-A, exercising the implicit wrap from type two back to zero.
+    pub fn encodeReuseFirstOfThreeDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, reuse_first_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, reuse_first_distance_command_count);
+        defer allocator.free(commands);
+        fillReuseFirstDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build five sequential distance regions with five independent trees.
+    pub fn encodeFiveDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_distance_command_count);
+        defer allocator.free(commands);
+        fillFiveDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six sequential distance regions with six independent trees.
+    pub fn encodeSixDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_distance_command_count);
+        defer allocator.free(commands);
+        fillSixDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six distance regions whose three trees cycle A-B-C-A-B-C.
+    pub fn encodeSixRegionClusteredDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, dynamic_distance_command_count);
+        defer allocator.free(commands);
+        fillSixRegionClusteredDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
         return .{ .encoded = encoded, .payload = payload };
     }
 
@@ -1083,7 +3454,7 @@ pub const IncrementalTestSupport = struct {
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
 pub const default_window_bits: u5 = 16;
-const planned_chunk_max_input_len: usize = 32 * 1024;
+const planned_chunk_max_input_len: usize = 64 * 1024;
 
 // Above this size payload copying dominates the fixed bit-writer overhead, so
 // keep large streams on the shared implementation to avoid duplicating its
@@ -1100,7 +3471,93 @@ pub const StoredStreamOptions = struct {
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
 };
-pub const PlannedStreamChunksOptions = StoredStreamOptions;
+pub const PlannedStreamChunksOptions = struct {
+    /// Same whole-encoder allocation cap and profile as one-shot options.
+    max_total_working_memory: ?usize = null,
+    memory_profile: ?*EncodeMemoryProfile = null,
+    level: PlannedCompressionLevel = .fast,
+    quality: ?u4 = null,
+    /// Same opt-in HQ controls as `PlannedEncodeOptions`.
+    hq: ?HqOptions = null,
+    /// Same explicit Large Window format selection as one-shot options.
+    large_window: bool = false,
+    mode: PlannedMode = .generic,
+    /// Zero selects the policy default: 16 KiB for q0; 32 KiB for legacy
+    /// fast/q1/q6/q7/q11; and 64 KiB for balanced/ratio/q2...q5/q8...q10.
+    /// With HQ enabled, zero uses `hq.block_len`; an explicit value selects
+    /// the meta-block target and may range through 16 MiB.
+    block_len: usize = 0,
+    /// Null follows the level/quality policy. True enables entropy lookahead
+    /// for 64 KiB blocks; false keeps every configured boundary unchanged.
+    /// HQ uses its explicit meta-block target and rejects true.
+    adaptive_blocks: ?bool = null,
+    /// Same q10/q11 command-state work override, in KiB, as
+    /// `PlannedEncodeOptions`.
+    command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+    window_bits: u5 = default_window_bits,
+    metadata: []const u8 = "",
+    shared_dictionary: SharedDictionary = .{},
+};
+
+fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error!void {
+    if (options.large_window and options.hq == null) return error.InvalidBlockPlan;
+    if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
+    _ = try plannedSharedDictionarySize(options.shared_dictionary);
+    if (options.window_bits < 10 or options.window_bits > (if (options.large_window) @as(u5, 30) else 24))
+        return error.InvalidBlockPlan;
+    if (options.quality != null) {
+        if (options.level != .fast) return error.InvalidBlockPlan;
+        const schedule = try resolvedStreamQualitySchedule(options);
+        if (!options.large_window) {
+            _ = schedule.window.resolve(options.window_bits) catch
+                return error.InvalidBlockPlan;
+        }
+    } else if (options.mode != .generic) {
+        return error.InvalidBlockPlan;
+    } else if (options.command_state_max_input_kib != command_state_default_max_input_kib) {
+        return error.InvalidBlockPlan;
+    }
+    const max_block_len = if (options.hq != null) hq_options.max_block_len else planned_chunk_max_input_len;
+    if (options.block_len > max_block_len)
+        return error.InvalidBlockPlan;
+}
+
+fn plannedStreamBlockLen(options: PlannedStreamChunksOptions) Error!usize {
+    try validatePlannedStreamChunksOptions(options);
+    if (options.block_len != 0) return options.block_len;
+    if (options.hq) |hq| return hq.block_len;
+    if (options.quality) |quality| {
+        const schedule = quality_schedule.getInt(quality, options.mode) catch
+            return error.InvalidBlockPlan;
+        return schedule.stream_block_len;
+    }
+    return switch (options.level) {
+        .fast => 32 * 1024,
+        .balanced, .ratio => 64 * 1024,
+    };
+}
+
+fn plannedStreamAdaptiveBlocks(options: PlannedStreamChunksOptions) Error!bool {
+    const block_len = try plannedStreamBlockLen(options);
+    if (options.hq != null) {
+        if (options.adaptive_blocks == true) return error.InvalidBlockPlan;
+        return false;
+    }
+    const automatic = if (options.block_len != 0)
+        false
+    else if (options.quality) |quality| blk: {
+        const schedule = quality_schedule.getInt(quality, options.mode) catch
+            return error.InvalidBlockPlan;
+        break :blk schedule.stream_entropy_split;
+    } else options.level != .fast;
+    const enabled = options.adaptive_blocks orelse
+        (automatic and options.window_bits <= default_window_bits);
+    if (enabled and block_len != stream_block_split.full_block_len)
+        return error.InvalidBlockPlan;
+    if (enabled and options.window_bits > default_window_bits)
+        return error.InvalidBlockPlan;
+    return enabled;
+}
 
 pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
     return try encodedStoredStreamBoundWithOptions(input_len, .{});
@@ -1166,6 +3623,9 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    uses_shared_dictionary: bool = false,
+    shared_dictionary_copy_count: usize = 0,
+    shared_dictionary_bytes: usize = 0,
     /// Commands decoded from compressed meta-block payloads. This includes a
     /// final command whose insert reaches the end before its copy is applied.
     command_count: usize = 0,
@@ -1226,8 +3686,11 @@ pub const StreamProbeResult = struct {
 };
 
 const StreamSummaryMetaBlockStats = struct {
+    max_wire_distance: usize = 0,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    shared_dictionary_copy_count: usize = 0,
+    shared_dictionary_bytes: usize = 0,
     command_count: usize = 0,
     zero_insert_command_count: usize = 0,
     single_literal_insert_command_count: usize = 0,
@@ -1484,6 +3947,7 @@ const large_max_distance_alphabet_size = 544;
 // exactly 79 symbols even though the decoder accepts the RFC-wide 520-symbol
 // maximum. Keep encoder scratch proportional to what its header advertises.
 const planned_distance_alphabet_size = 16 + 15 + 48;
+const planned_wide_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 // RFC 7932 uses the same bounded varlen uint8 count for all three block-type
 // families. Real quality-11 streams already exercise more than 32 literal
@@ -1658,6 +4122,17 @@ const LiteralHistory = struct {
         const needed: u2 = if (mode <= 1) 1 else 2;
         if (self.known_suffix_len < needed) return contextIndependentLargeLiteralContext(header) orelse error.SummaryHistoryExhausted;
         return try literalContextFromMode(
+            mode,
+            self.previous[1],
+            self.previous[0],
+        );
+    }
+
+    fn dictionaryContext(self: *const LiteralHistory, mode: u2) SummaryError!usize {
+        const needed: u2 = if (mode <= 1) 1 else 2;
+        if (self.known_suffix_len < needed)
+            return error.SummaryHistoryExhausted;
+        return literalContextFromMode(
             mode,
             self.previous[1],
             self.previous[0],
@@ -2004,12 +4479,385 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
     return encodePlannedStreamAllocWithStats(allocator, input, &stats);
 }
 
+fn usesDedicatedQualityBlockCore(quality: ?u4) bool {
+    return if (quality) |value| value <= 3 else false;
+}
+
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     try validatePlannedEncodeOptions(input.len, options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").owned(allocator, input, options, encodePlannedStreamWithOptionsAlloc);
+    if (options.hq != null) {
+        const chunks = [_][]const u8{input};
+        return encodeHqWholeStreamAlloc(allocator, &chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
+    }
+    if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
+        const chunks = [_][]const u8{input};
+        return encodePlannedStreamChunksWithOptionsAlloc(
+            allocator,
+            &chunks,
+            try plannedStreamChunksOptionsFromEncodeOptions(options),
+        );
+    }
+    const compound_size = try plannedSharedDictionarySize(options.shared_dictionary);
+    if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
+        var matcher = compound_dictionary_matcher.Matcher.init(allocator);
+        defer matcher.deinit();
+        _ = try preparePlannedSharedDictionary(&matcher, options.shared_dictionary);
+        return encodePlannedStreamWithPreparedSharedDictionaryAlloc(
+            allocator,
+            input,
+            options,
+            &matcher,
+            null,
+            compound_size,
+        );
+    }
+    if (options.quality != null)
+        return encodePlannedStreamQualityWithOptionsAlloc(allocator, input, options);
     return switch (options.level) {
         .fast, .balanced => encodePlannedStreamOrStoredAlloc(allocator, input, options),
         .ratio => encodePlannedStreamRatioWithOptionsAlloc(allocator, input, options),
     };
+}
+
+fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: PlannedEncodeOptions,
+    matcher: *const compound_dictionary_matcher.Matcher,
+    prepared_serialized_matcher: ?*serialized_dictionary_matcher.Matcher,
+    compound_size: usize,
+) Error![]u8 {
+    const window_bits = try resolvedPlannedWindowBits(options);
+    const stream_options = StoredStreamOptions{
+        .window_bits = window_bits,
+        .metadata = options.metadata,
+    };
+    std.debug.assert(input.len <= max_uncompressed_meta_block_len);
+    if (input.len < 4)
+        return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+
+    var local_serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator);
+    defer local_serialized_matcher.deinit();
+    const active_serialized_matcher: ?*const serialized_dictionary_matcher.Matcher =
+        if (options.shared_dictionary.hasSerializedStatic()) blk: {
+            const active = prepared_serialized_matcher orelse
+                &local_serialized_matcher;
+            active.prepare(
+                options.shared_dictionary.serialized.?,
+            ) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidBlockPlan,
+            };
+            break :blk active;
+        } else null;
+    const schedule = if (options.quality != null) try resolvedQualitySchedule(options) else null;
+    const window_len = @min(
+        input.len,
+        @min((@as(usize, 1) << window_bits) - 16, lz77.max_window_len),
+    );
+    const max_chain: usize = if (schedule) |active| active.lazy.max_chain else switch (options.level) {
+        .fast, .balanced => 64,
+        .ratio => 512,
+    };
+    const nice_len: usize = if (schedule) |active| active.lazy.nice_len else switch (options.level) {
+        .fast, .balanced => 64,
+        .ratio => lz77.max_match_len,
+    };
+    const lazy_min_gain: usize = if (schedule) |active| active.lazy.min_gain else 1;
+    const fast_family = if (schedule) |active| active.family == .fast else options.level == .fast;
+    const lz_plan = if (fast_family)
+        try lz77.hashGreedyPlanAlloc(allocator, input, .{
+            .window_len = window_len,
+            .max_chain = max_chain,
+            .nice_len = nice_len,
+            .max_candidates = 1,
+            .lazy_min_gain = lazy_min_gain,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        })
+    else
+        try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+            .window_len = window_len,
+            .max_chain = max_chain,
+            .nice_len = nice_len,
+            .max_candidates = 1,
+            .lazy_min_gain = lazy_min_gain,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+    defer lz_plan.deinit(allocator);
+    const baseline = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer baseline.deinit(allocator);
+    const mixed = if (compound_size != 0)
+        try command_plan.mixCompoundDictionaryAlloc(
+            allocator,
+            input,
+            baseline.commands,
+            matcher,
+            compound_dictionary_matcher.bucket_ways,
+        )
+    else
+        null;
+    defer if (mixed) |plan| plan.deinit(allocator);
+    const base_commands = if (mixed) |plan| plan.commands else baseline.commands;
+    var serialized_plans: [4]?command_plan.Plan = .{ null, null, null, null };
+    defer for (serialized_plans) |plan|
+        if (plan) |active| active.deinit(allocator);
+    var has_serialized_match = false;
+    if (options.shared_dictionary.hasSerializedStatic()) {
+        const serialized = options.shared_dictionary.serialized.?;
+        const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
+        for (0..mode_count) |mode| {
+            const plan = try mixSerializedDictionaryAlloc(
+                allocator,
+                input,
+                base_commands,
+                serialized,
+                active_serialized_matcher,
+                @intCast(mode),
+                .{ 0, 0 },
+            );
+            if (plan.match_count == 0) {
+                plan.deinit(allocator);
+            } else {
+                serialized_plans[mode] = plan;
+                has_serialized_match = true;
+            }
+        }
+    }
+    if ((mixed == null or mixed.?.match_count == 0) and
+        !has_serialized_match and
+        lz_plan.stats.matches == 0)
+        return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    var lazy_options: LazyWireOptions = if (schedule) |active|
+        qualityWireOptions(active, options, window_bits)
+    else
+        .{
+            .try_recent_distances = options.level != .fast,
+            .try_literal_contexts = options.level == .ratio,
+            .try_literal_split = options.level == .ratio,
+            .try_adaptive_literal_split = options.adaptive_literal_split,
+            .try_command_split = options.level == .ratio,
+            .try_adaptive_command_split = options.adaptive_command_split,
+            .try_distance_split = options.level == .ratio,
+            .try_adaptive_distance_split = options.adaptive_distance_split orelse
+                (options.level == .ratio and input.len >= 64 * 1024),
+            .window_bits = window_bits,
+            .metadata = options.metadata,
+        };
+    lazy_options.compound_dictionary_size = compound_size;
+    var best = (if (options.level == .fast and options.quality == null)
+        encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
+            .window_bits = window_bits,
+            .metadata = options.metadata,
+            .compound_dictionary_size = compound_size,
+        })
+    else
+        encodeLazyCommandPlanAlloc(allocator, input, base_commands, &stats, lazy_options)) catch |err| switch (err) {
+        error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options),
+        else => return err,
+    };
+    errdefer allocator.free(best);
+
+    for (serialized_plans, 0..) |maybe_plan, mode| if (maybe_plan) |plan| {
+        var serialized_stats: encoder_stats.PlannedEncodeStats = .{};
+        const candidate = encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            input,
+            plan.commands,
+            null,
+            &serialized_stats,
+            .{
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+                .compound_dictionary_size = compound_size,
+                .literal_context_mode = @intCast(mode),
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => null,
+            else => return err,
+        };
+        if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+
+        const context_mode: u2 = @intCast(mode);
+        const proposals = try literal_context_split.chooseProposalsForMode(
+            allocator,
+            input,
+            plan.commands,
+            context_mode,
+        );
+        const alternatives = [_]?literal_context_split.Candidate{
+            proposals.suffix,
+            proposals.up_to_16,
+            proposals.full,
+        };
+        for (alternatives, 0..) |maybe_context, index| {
+            const context = maybe_context orelse continue;
+            var duplicate = false;
+            for (alternatives[0..index]) |prior| {
+                if (prior) |existing| {
+                    duplicate = duplicate or literal_context_split.Candidate.eql(
+                        context,
+                        existing,
+                    );
+                }
+            }
+            if (duplicate) continue;
+            var context_stats: encoder_stats.PlannedEncodeStats = .{};
+            const context_wire = encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                plan.commands,
+                null,
+                &context_stats,
+                .{
+                    .literal_context_candidate = context,
+                    .window_bits = window_bits,
+                    .metadata = options.metadata,
+                    .compound_dictionary_size = compound_size,
+                    .literal_context_mode = context_mode,
+                },
+            ) catch |err| switch (err) {
+                error.InvalidBlockPlan => null,
+                else => return err,
+            };
+            if (context_wire) |encoded|
+                retainSmallerOwnedWire(allocator, &best, encoded);
+        }
+    };
+
+    const legacy_record_distance_search = options.level == .ratio and
+        (options.window_bits == null or options.window_bits.? == default_window_bits) and
+        input.len >= 4 * 1024 and input.len <= 64 * 1024 and
+        input[input.len - 1] == '\n' and vortBrStableFixedWidthRecord(input.ptr, input.len) != 0;
+    const search_distance_parameters = options.distance_parameter_search orelse
+        (if (schedule) |active| active.search_distance_parameters else legacy_record_distance_search);
+    if (search_distance_parameters and lazy_options.try_recent_distances) {
+        var distance_stats: encoder_stats.PlannedEncodeStats = .{};
+        const candidate = encodeCommandPlanWithDistanceParameterSearchAlloc(
+            allocator,
+            input,
+            base_commands,
+            true,
+            &distance_stats,
+            .{
+                .use_recent_distances = true,
+                .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+                .compound_dictionary_size = compound_size,
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => null,
+            else => return err,
+        };
+        if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+    }
+
+    const try_static = !options.shared_dictionary.hasSerializedStatic() and
+        input.len <= ratio_static_dictionary_max_input_len and
+        (options.level == .ratio or if (schedule) |active| active.dictionary.static_dictionary else false);
+    if (try_static) {
+        const with_static = try command_plan.mixStaticDictionaryAlloc(allocator, input, base_commands);
+        defer with_static.deinit(allocator);
+        if (with_static.match_count != 0) {
+            var static_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = encodeLazyCommandPlanAlloc(allocator, input, with_static.commands, &static_stats, lazy_options) catch |err| switch (err) {
+                error.InvalidBlockPlan => null,
+                else => return err,
+            };
+            if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+        }
+    } else if (!options.shared_dictionary.hasSerializedStatic() and
+        input.len <= ratio_extended_static_dictionary_max_input_len)
+    {
+        const extended_probes: usize = if (options.extended_dictionary_probes != 0)
+            options.extended_dictionary_probes
+        else if (schedule) |active|
+            if (active.dictionary.extended_search) active.dictionary.max_probes else 0
+        else
+            0;
+        if (extended_probes != 0) {
+            const with_static = try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(
+                allocator,
+                input,
+                base_commands,
+                null,
+                extended_probes,
+            );
+            defer with_static.deinit(allocator);
+            if (with_static.match_count != 0) {
+                var static_stats: encoder_stats.PlannedEncodeStats = .{};
+                const candidate = encodeLazyCommandPlanAlloc(allocator, input, with_static.commands, &static_stats, lazy_options) catch |err| switch (err) {
+                    error.InvalidBlockPlan => null,
+                    else => return err,
+                };
+                if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+            }
+        }
+    }
+
+    const use_long_distance = if (schedule) |active|
+        active.family == .ratio
+    else
+        options.level == .ratio;
+    const long_distance_window = if (schedule != null)
+        window_bits >= 17
+    else
+        options.window_bits == null or window_bits >= 17;
+    if (use_long_distance and
+        input.len > long_distance.min_distance and
+        long_distance_window)
+    {
+        const long_window_bits: u5 = if (schedule != null)
+            window_bits
+        else
+            options.window_bits orelse 17;
+        const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
+        const literal_commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = input.len,
+        }};
+        const proposal_count: usize = if (commandPlanHasCopy(base_commands)) 2 else 1;
+        for (0..proposal_count) |proposal_index| {
+            const proposal = if (proposal_index == 0)
+                base_commands
+            else
+                &literal_commands;
+            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+                allocator,
+                input,
+                proposal,
+                long_max_distance,
+            ) orelse continue;
+            defer allocator.free(long_commands);
+            var long_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                long_commands,
+                null,
+                &long_stats,
+                .{
+                    .use_recent_distances = true,
+                    .use_utf8_text_contexts = true,
+                    .window_bits = long_window_bits,
+                    .metadata = options.metadata,
+                    .compound_dictionary_size = compound_size,
+                },
+            ) catch |err| switch (err) {
+                error.InvalidBlockPlan => null,
+                else => return err,
+            };
+            if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+        }
+    }
+    return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
 }
 
 /// Conservative bound for every stable planned level. Stable selection always
@@ -2020,27 +4868,611 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     try validatePlannedEncodeOptions(input_len, options);
-    const window_bits = options.window_bits orelse default_window_bits;
+    const window_bits = try resolvedPlannedWindowBits(options);
+    if (options.hq != null or input_len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality))
+        return encodedPlannedChunkedStreamBoundForInputLen(
+            input_len,
+            try plannedStreamChunksOptionsFromEncodeOptions(options),
+        );
     return encodedStoredStreamBoundWithOptions(input_len, .{ .window_bits = window_bits, .metadata = options.metadata });
 }
 
-/// Conservative bound for a fast planned stream with one independently
-/// planned meta-block per non-empty chunk. Oversized chunks are split into
-/// 32 KiB blocks so parser memory remains bounded.
+fn resolvedQualitySchedule(options: PlannedEncodeOptions) Error!quality_schedule.Schedule {
+    const raw_quality = options.quality orelse return error.InvalidBlockPlan;
+    var schedule = quality_schedule.getInt(raw_quality, options.mode) catch
+        return error.InvalidBlockPlan;
+    try applyCommandStateLimit(&schedule, options.command_state_max_input_kib);
+    schedule.validate() catch return error.InvalidBlockPlan;
+    if (!options.large_window) {
+        _ = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
+    }
+    return schedule;
+}
+
+fn resolvedStreamQualitySchedule(options: PlannedStreamChunksOptions) Error!quality_schedule.Schedule {
+    const raw_quality = options.quality orelse return error.InvalidBlockPlan;
+    var schedule = quality_schedule.getInt(raw_quality, options.mode) catch
+        return error.InvalidBlockPlan;
+    try applyCommandStateLimit(&schedule, options.command_state_max_input_kib);
+    schedule.validate() catch return error.InvalidBlockPlan;
+    return schedule;
+}
+
+fn applyCommandStateLimit(
+    schedule: *quality_schedule.Schedule,
+    requested_kib: u8,
+) Error!void {
+    if (requested_kib == command_state_default_max_input_kib) return;
+    const limit = @as(u32, requested_kib) * 1024;
+    if (!schedule.optimal.entropy_feedback or limit > schedule.optimal.max_input_len)
+        return error.InvalidBlockPlan;
+    schedule.optimal.command_state_max_input_len = limit;
+}
+
+fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
+    if (options.quality != null) {
+        const schedule = try resolvedQualitySchedule(options);
+        if (options.large_window) {
+            const bits = options.window_bits orelse schedule.window.default_bits;
+            if (bits < 10 or bits > 30) return error.InvalidBlockPlan;
+            return bits;
+        }
+        return schedule.window.resolve(options.window_bits) catch error.InvalidBlockPlan;
+    }
+    return options.window_bits orelse default_window_bits;
+}
+
+fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Error!PlannedStreamChunksOptions {
+    return .{
+        .max_total_working_memory = options.max_total_working_memory,
+        .memory_profile = options.memory_profile,
+        .level = options.level,
+        .quality = options.quality,
+        .hq = options.hq,
+        .large_window = options.large_window,
+        .mode = options.mode,
+        .window_bits = try resolvedPlannedWindowBits(options),
+        .metadata = options.metadata,
+        .command_state_max_input_kib = options.command_state_max_input_kib,
+        .shared_dictionary = options.shared_dictionary,
+    };
+}
+
+fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncodeOptions, window_bits: u5) LazyWireOptions {
+    return .{
+        .try_recent_distances = schedule.use_recent_distances,
+        .try_literal_contexts = schedule.context.literal_contexts,
+        .try_clustered_literal_contexts = schedule.context.cluster_contexts,
+        .try_joint_literal_contexts = schedule.context.joint_block_contexts,
+        .preferred_literal_context_mode = null,
+        .try_literal_split = schedule.split.literal,
+        .try_adaptive_literal_split = schedule.split.adaptive_literal or options.adaptive_literal_split,
+        .try_command_split = schedule.split.command,
+        .try_adaptive_command_split = schedule.split.adaptive_command or options.adaptive_command_split,
+        .try_distance_split = schedule.split.distance,
+        .try_adaptive_distance_split = options.adaptive_distance_split orelse schedule.split.adaptive_distance,
+        .window_bits = window_bits,
+        .metadata = options.metadata,
+    };
+}
+
+fn encodePlannedStreamQualityWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: PlannedEncodeOptions,
+) Error![]u8 {
+    const schedule = try resolvedQualitySchedule(options);
+    const window_bits = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
+    const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = options.metadata };
+    if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+    std.debug.assert(input.len <= max_uncompressed_meta_block_len);
+
+    // Resolve q10 first so its planner scratch is gone before q11 constructs
+    // the deeper plan. Only the complete q10 winner remains live, which keeps
+    // q11 size-monotonic without stacking two parser/command working sets.
+    var inherited_q10: ?[]u8 = null;
+    if (schedule.quality == .q11) {
+        var q10_options = options;
+        q10_options.quality = @intFromEnum(quality_schedule.Quality.q10);
+        inherited_q10 = try encodePlannedStreamQualityWithOptionsAlloc(allocator, input, q10_options);
+    }
+    errdefer if (inherited_q10) |wire| allocator.free(wire);
+
+    const search_window = @min(
+        input.len,
+        @min((@as(usize, 1) << window_bits) - 16, lz77.max_window_len),
+    );
+    const lz_plan = switch (schedule.family) {
+        .fast => try lz77.hashGreedyPlanAlloc(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = schedule.lazy.max_chain,
+            .nice_len = schedule.lazy.nice_len,
+            .max_candidates = 1,
+            .lazy_min_gain = schedule.lazy.min_gain,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        }),
+        .balanced, .ratio => try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = schedule.lazy.max_chain,
+            .nice_len = schedule.lazy.nice_len,
+            .max_candidates = 1,
+            .lazy_min_gain = schedule.lazy.min_gain,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        }),
+    };
+    defer lz_plan.deinit(allocator);
+    const command_stream = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer command_stream.deinit(allocator);
+    const wire_options = qualityWireOptions(schedule, options, window_bits);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    var best = if (lz_plan.stats.matches == 0)
+        try encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options)
+    else
+        try encodeLazyCommandPlanAlloc(allocator, input, command_stream.commands, &stats, wire_options);
+    var best_owned = true;
+    errdefer if (best_owned) allocator.free(best);
+
+    // q11 is additive: retain the complete q10 winner, not merely q10's parser
+    // proposal. This makes the public size contract independent of proxy costs,
+    // context/split choices, dictionaries, and font distance shaping.
+    if (inherited_q10) |q10| {
+        retainSmallerOwnedWire(allocator, &best, q10);
+        inherited_q10 = null;
+    }
+
+    if (schedule.family == .ratio and window_bits >= 17 and
+        input.len > long_distance.min_distance)
+    {
+        const max_backward_distance = (@as(usize, 1) << window_bits) - 16;
+        const literal_commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = input.len,
+        }};
+        const proposal_count: usize = if (commandPlanHasCopy(command_stream.commands)) 2 else 1;
+        for (0..proposal_count) |proposal_index| {
+            const proposal = if (proposal_index == 0)
+                command_stream.commands
+            else
+                &literal_commands;
+            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+                allocator,
+                input,
+                proposal,
+                max_backward_distance,
+            ) orelse continue;
+            defer allocator.free(long_commands);
+            var long_stats: encoder_stats.PlannedEncodeStats = .{};
+            const long_candidate = try encodeLazyCommandPlanAlloc(
+                allocator,
+                input,
+                long_commands,
+                &long_stats,
+                wire_options,
+            );
+            retainSmallerOwnedWire(allocator, &best, long_candidate);
+        }
+    }
+
+    const search_distance_parameters = options.distance_parameter_search orelse schedule.search_distance_parameters;
+    if (search_distance_parameters and schedule.use_recent_distances and lz_plan.stats.matches != 0) {
+        var distance_stats: encoder_stats.PlannedEncodeStats = .{};
+        const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAlloc(
+            allocator,
+            input,
+            command_stream.commands,
+            true,
+            &distance_stats,
+            .{
+                .use_recent_distances = true,
+                .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+            },
+        );
+        retainSmallerOwnedWire(allocator, &best, distance_candidate);
+    }
+
+    if (schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
+        if (try encodeQualityOptimalCandidateAlloc(allocator, input, schedule.optimal, wire_options)) |candidate|
+            retainSmallerOwnedWire(allocator, &best, candidate);
+    }
+
+    if (schedule.quality.int() >= 10 and window_bits >= default_window_bits and
+        input.len >= 4 * 1024 and input.len <= 64 * 1024 and
+        input[input.len - 1] == '\n' and vortBrStableFixedWidthRecord(input.ptr, input.len) != 0)
+    {
+        var record_stats: encoder_stats.PlannedEncodeStats = .{};
+        if (try encodeRecordOptimalCandidateWithOptionsAlloc(
+            allocator,
+            input,
+            window_bits,
+            options.metadata,
+            search_distance_parameters,
+            &record_stats,
+        )) |record| retainSmallerOwnedWire(allocator, &best, record);
+    }
+
+    if (schedule.mode == .font and schedule.quality.int() >= 4) {
+        var font_stats: encoder_stats.PlannedEncodeStats = .{};
+        const font_candidate = encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            input,
+            command_stream.commands,
+            null,
+            &font_stats,
+            .{
+                .use_recent_distances = schedule.use_recent_distances,
+                .distance_parameters = encoder_distance.Parameters.init(1, 6),
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+                .optimize_same_last_distance = false,
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => null,
+            else => return err,
+        };
+        if (font_candidate) |candidate| retainSmallerOwnedWire(allocator, &best, candidate);
+    }
+
+    if (schedule.dictionary.static_dictionary and input.len <= ratio_static_dictionary_max_input_len) {
+        // The selector consumes `best` on both success and error.
+        best_owned = false;
+        best = try selectRatioStaticDictionaryAlloc(
+            allocator,
+            input,
+            command_stream.commands,
+            best,
+            window_bits,
+            options.metadata,
+        );
+        best_owned = true;
+    } else if (schedule.dictionary.extended_search and input.len <= ratio_extended_static_dictionary_max_input_len) {
+        const probes = if (options.extended_dictionary_probes != 0)
+            options.extended_dictionary_probes
+        else
+            schedule.dictionary.max_probes;
+        if (probes != 0)
+            try selectExtendedRatioStaticDictionary(
+                allocator,
+                input,
+                command_stream.commands,
+                window_bits,
+                options.metadata,
+                probes,
+                &best,
+            );
+    }
+    // Final arbitration likewise consumes the compressed candidate.
+    best_owned = false;
+    return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
+}
+
+fn encodeQualityOptimalCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    budget: quality_schedule.OptimalBudget,
+    wire_options: LazyWireOptions,
+) Error!?[]u8 {
+    if (!budget.enabled) return null;
+    const search_window = @min(
+        input.len,
+        @min((@as(usize, 1) << wire_options.window_bits) - 16, lz77.default_window_len),
+    );
+    const optimal = try lz77.optimalPlanAlloc(allocator, input, .{
+        .window_len = search_window,
+        .max_chain = budget.max_chain,
+        .nice_len = budget.nice_len,
+        .max_candidates = budget.max_candidates,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    });
+    defer optimal.deinit(allocator);
+    if (optimal.stats.matches == 0) return null;
+    const commands = try command_plan.buildAlloc(allocator, input, optimal.tokens);
+    defer commands.deinit(allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    var best = try encodeLazyCommandPlanAlloc(allocator, input, commands.commands, &stats, wire_options);
+    errdefer allocator.free(best);
+    if (!budget.entropy_feedback) return best;
+
+    var model = try entropy_feedback.build(allocator, input, commands.commands, search_window);
+    defer model.deinit(allocator);
+    const modeled = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+        .window_len = search_window,
+        .max_chain = budget.max_chain,
+        .nice_len = budget.nice_len,
+        .max_candidates = budget.max_candidates,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    }, model.lz77Model());
+    defer modeled.deinit(allocator);
+    if (modeled.stats.matches == 0) return best;
+    const modeled_commands = try command_plan.buildAlloc(allocator, input, modeled.tokens);
+    defer modeled_commands.deinit(allocator);
+    var modeled_stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate = try encodeLazyCommandPlanAlloc(
+        allocator,
+        input,
+        modeled_commands.commands,
+        &modeled_stats,
+        wire_options,
+    );
+    retainSmallerOwnedWire(allocator, &best, candidate);
+
+    if (budget.command_state_max_input_len != 0 and
+        input.len <= budget.command_state_max_input_len)
+    {
+        try selectQualityCommandStateCandidate(
+            allocator,
+            input,
+            budget,
+            search_window,
+            wire_options,
+            &model,
+            &best,
+        );
+    }
+    return best;
+}
+
+noinline fn selectQualityCommandStateCandidate(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    budget: quality_schedule.OptimalBudget,
+    search_window: usize,
+    wire_options: LazyWireOptions,
+    model: *const entropy_feedback.Model,
+    best: *[]u8,
+) linksection(command_state_text_section) Error!void {
+    const hq = try hq_command_parser.planAlloc(allocator, input, .{
+        .window_len = search_window,
+        .max_chain = @min(budget.max_chain, 64),
+        .nice_len = budget.nice_len,
+        .max_candidates = @min(budget.max_candidates, 8),
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    }, model);
+    defer hq.deinit(allocator);
+    if (hq.lz.stats.matches == 0) return;
+    const hq_commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+    defer hq_commands.deinit(allocator);
+    var compact_stats: encoder_stats.PlannedEncodeStats = .{};
+    const compact = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        hq_commands.commands,
+        null,
+        &compact_stats,
+        commandStateCompactEncodeOptions(wire_options),
+    );
+    var compact_owned = true;
+    errdefer if (compact_owned) allocator.free(compact);
+    const run_full_wire = commandStateFullWireEligible(compact.len, best.*.len);
+    if (!run_full_wire) {
+        compact_owned = false;
+        retainSmallerOwnedWire(allocator, best, compact);
+        return;
+    }
+    var hq_stats: encoder_stats.PlannedEncodeStats = .{};
+    const hq_candidate = try encodeLazyCommandPlanAlloc(
+        allocator,
+        input,
+        hq_commands.commands,
+        &hq_stats,
+        wire_options,
+    );
+    if (builtin.is_test) {
+        test_hq_command_candidate_attempts += 1;
+        test_hq_command_pre_bytes = best.*.len;
+        test_hq_command_bytes = hq_candidate.len;
+        test_hq_command_candidate_selections += @intFromBool(
+            hq_candidate.len < best.*.len,
+        );
+    }
+    compact_owned = false;
+    retainSmallerOwnedWire(allocator, best, compact);
+    retainSmallerOwnedWire(allocator, best, hq_candidate);
+}
+
+/// Profile one q10/q11 command-state proposal in isolation. The production
+/// encoder still performs complete candidate arbitration; this API exists to
+/// attribute the opt-in parser's seed, model, state search, and wire stages.
+pub fn profileQualityCommandStateCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    quality: u4,
+    mode: PlannedMode,
+    io: std.Io,
+    profile: *QualityCommandStateProfile,
+) Error![]u8 {
+    if (quality < 10 or quality > 11 or input.len < 4 * 1024 or
+        input.len > max_uncompressed_meta_block_len)
+    {
+        return error.InvalidBlockPlan;
+    }
+    const schedule = quality_schedule.getInt(quality, mode) catch
+        return error.InvalidBlockPlan;
+    if (input.len > schedule.optimal.max_input_len) return error.InvalidBlockPlan;
+    profile.* = .{ .input_bytes = input.len, .quality = quality };
+    const total_start = std.Io.Clock.awake.now(io);
+    const window_bits = schedule.window.default_bits;
+    const search_window = @min(
+        input.len,
+        @min((@as(usize, 1) << window_bits) - 16, lz77.default_window_len),
+    );
+    const parser_options = lz77.GreedyOptions{
+        .window_len = search_window,
+        .max_chain = schedule.optimal.max_chain,
+        .nice_len = schedule.optimal.nice_len,
+        .max_candidates = schedule.optimal.max_candidates,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    };
+
+    var stage_start = std.Io.Clock.awake.now(io);
+    const seed = try lz77.optimalPlanAlloc(allocator, input, parser_options);
+    defer seed.deinit(allocator);
+    profile.seed_plan_ns = elapsedNs(stage_start, io);
+    profile.seed_tokens = seed.tokens.len;
+    if (seed.stats.matches == 0) return error.InvalidBlockPlan;
+
+    stage_start = std.Io.Clock.awake.now(io);
+    const seed_commands = try command_plan.buildAlloc(allocator, input, seed.tokens);
+    defer seed_commands.deinit(allocator);
+    profile.seed_command_ns = elapsedNs(stage_start, io);
+    profile.seed_commands = seed_commands.commands.len;
+
+    stage_start = std.Io.Clock.awake.now(io);
+    var model = try entropy_feedback.build(
+        allocator,
+        input,
+        seed_commands.commands,
+        search_window,
+    );
+    defer model.deinit(allocator);
+    profile.model_ns = elapsedNs(stage_start, io);
+
+    const state_plan = try hq_command_parser.planAllocProfiledWithStartingDistances(
+        allocator,
+        input,
+        .{
+            .window_len = search_window,
+            .max_chain = @min(schedule.optimal.max_chain, 64),
+            .nice_len = schedule.optimal.nice_len,
+            .max_candidates = @min(schedule.optimal.max_candidates, 8),
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        },
+        &model,
+        initial_last_distances,
+        io,
+    );
+    defer state_plan.deinit(allocator);
+    profile.state_plan_ns = state_plan.stats.total_ns;
+    profile.state_index_ns = state_plan.stats.index_ns;
+    profile.state_setup_ns = state_plan.stats.setup_ns;
+    profile.state_search_ns = state_plan.stats.search_ns;
+    profile.state_reconstruct_ns = state_plan.stats.reconstruct_ns;
+    profile.state_positions = state_plan.stats.positions;
+    profile.state_states_visited = state_plan.stats.states_visited;
+    profile.state_match_candidates = state_plan.stats.match_candidates;
+    profile.state_match_transitions = state_plan.stats.match_transitions;
+    profile.state_general_match_transitions = state_plan.stats.general_match_transitions;
+    profile.state_recent_match_transitions = state_plan.stats.recent_match_transitions;
+    profile.state_early_cost_bound_rejections = state_plan.stats.early_cost_bound_rejections;
+    profile.state_full_target_transitions = state_plan.stats.full_target_transitions;
+    profile.state_cost_bound_rejections = state_plan.stats.cost_bound_rejections;
+    profile.state_beam_replacements = state_plan.stats.beam_replacements;
+    profile.state_tokens = state_plan.lz.tokens.len;
+
+    stage_start = std.Io.Clock.awake.now(io);
+    const state_commands = try command_plan.buildAlloc(
+        allocator,
+        input,
+        state_plan.lz.tokens,
+    );
+    defer state_commands.deinit(allocator);
+    profile.state_command_ns = elapsedNs(stage_start, io);
+    profile.state_commands = state_commands.commands.len;
+
+    stage_start = std.Io.Clock.awake.now(io);
+    var compact_stats: PlannedEncodeStats = .{};
+    const compact = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        state_commands.commands,
+        null,
+        &compact_stats,
+        commandStateCompactEncodeOptions(qualityWireOptions(
+            schedule,
+            .{ .quality = quality, .mode = mode },
+            window_bits,
+        )),
+    );
+    profile.compact_wire_ns = elapsedNs(stage_start, io);
+    profile.compact_wire_bytes = compact.len;
+    allocator.free(compact);
+
+    stage_start = std.Io.Clock.awake.now(io);
+    var stats: PlannedEncodeStats = .{};
+    const encoded = try encodeLazyCommandPlanAlloc(
+        allocator,
+        input,
+        state_commands.commands,
+        &stats,
+        qualityWireOptions(
+            schedule,
+            .{ .quality = quality, .mode = mode },
+            window_bits,
+        ),
+    );
+    profile.wire_ns = elapsedNs(stage_start, io);
+    profile.encoded_bytes = encoded.len;
+    profile.total_ns = elapsedNs(total_start, io);
+    return encoded;
+}
+
+fn retainSmallerOwnedWire(allocator: std.mem.Allocator, best: *[]u8, candidate: []u8) void {
+    if (candidate.len < best.*.len) {
+        allocator.free(best.*);
+        best.* = candidate;
+    } else allocator.free(candidate);
+}
+
+fn commandPlanHasCopy(commands: []const command_plan.Command) bool {
+    for (commands) |command|
+        if (command.has_copy) return true;
+    return false;
+}
+
+/// Conservative bound for a planned stream with one policy-selected
+/// meta-block per bounded input block. Oversized chunks are split into 32 KiB
+/// blocks so parser memory remains bounded.
 pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
     return encodedPlannedStreamChunksBoundWithOptions(chunks, .{});
 }
 
+fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: PlannedStreamChunksOptions) Error!usize {
+    const configured_block_len = try plannedStreamBlockLen(options);
+    const block_len = if (try plannedStreamAdaptiveBlocks(options))
+        stream_block_split.conservative_bound_block_len
+    else
+        configured_block_len;
+    var bit_count: usize = if (options.large_window) 14 else try storedWindowBitsLen(options.window_bits);
+    if (options.metadata.len != 0)
+        bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
+    var remaining = input_len;
+    while (remaining != 0) {
+        const current_len = @min(remaining, block_len);
+        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
+        remaining -= current_len;
+    }
+    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
+    return bytesForBits(bit_count);
+}
+
 pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
+    if (options.hq != null) {
+        var input_len: usize = 0;
+        for (chunks) |chunk| input_len = std.math.add(usize, input_len, chunk.len) catch return error.IntegerOverflow;
+        return encodedPlannedChunkedStreamBoundForInputLen(input_len, options);
+    }
+    const configured_block_len = try plannedStreamBlockLen(options);
+    const block_len = if (try plannedStreamAdaptiveBlocks(options))
+        stream_block_split.conservative_bound_block_len
+    else
+        configured_block_len;
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     for (chunks) |chunk| {
         var offset: usize = 0;
         while (offset < chunk.len) {
-            const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
-            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
-            offset += block_len;
+            const current_len = @min(chunk.len - offset, block_len);
+            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
+            offset += current_len;
         }
     }
     bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
@@ -2052,6 +5484,9 @@ pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []co
 }
 
 pub fn encodePlannedStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    try validatePlannedStreamChunksOptions(options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").owned(allocator, chunks, options, encodePlannedStreamChunksWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
     return encoder.encodeChunksWithOptionsAlloc(allocator, chunks, options);
@@ -2064,7 +5499,9 @@ pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) E
 pub fn encodePlannedStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
     const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
-    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").into(allocator_dispatch.singleton, chunks, output, options, encodePlannedStreamChunksWithOptionsAlloc);
+    var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeChunksWithOptionsInto(chunks, output, options);
 }
@@ -2074,6 +5511,9 @@ pub fn encodePlannedStreamChunksAppend(allocator: std.mem.Allocator, out: *std.A
 }
 
 pub fn encodePlannedStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
+    try validatePlannedStreamChunksOptions(options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").append(allocator, out, chunks, options, encodePlannedStreamChunksWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
     try encoder.encodeChunksWithOptionsAppend(out, chunks, options);
@@ -2084,7 +5524,11 @@ pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
-    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
+    if (output.len < needed) return error.OutOfMemory;
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").into(allocator_dispatch.singleton, input, output, options, encodePlannedStreamWithOptionsAlloc);
+    var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeIntoWithOptions(input, output, options);
 }
@@ -2123,10 +5567,10 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// search for smaller Brotli streams. Keeping this distinct from `.balanced`
 /// makes the substantial encode-time cost explicit rather than silently
 /// slowing latency-sensitive users. Short inputs without a backward match use
-/// static-dictionary/stored arbitration so this stable level still accepts
-/// arbitrary payloads inside its documented one-meta-block size range.
+/// static-dictionary/stored arbitration. Larger inputs use the shared bounded
+/// multi-meta-block policy while remaining one Brotli stream.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    return encodePlannedStreamRatioWithOptionsAlloc(allocator, input, .{ .level = .ratio });
+    return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .level = .ratio });
 }
 
 /// Profile the exact default-window ratio pipeline for one bounded block. The
@@ -2251,11 +5695,11 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         profile.optimal_top_distance_counts = optimal_shape.top_distance_counts;
 
         stage_start = std.Io.Clock.awake.now(io);
-        const optimal_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, &wire_stats, .{
+        const optimal_candidate = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, optimal_commands.commands, false, &wire_stats, .{
             .use_recent_distances = true,
             .use_utf8_text_contexts = true,
             .utf8_context_cutoff = 48,
-            .ndirect = 0,
+            .distance_parameters = encoder_distance.Parameters.init(0, 0),
         });
         profile.optimal_wire_ns = elapsedNs(stage_start, io);
         profile.optimal_bytes = optimal_candidate.len;
@@ -2274,14 +5718,14 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
         const record_commands = try command_plan.buildAlloc(allocator, input, record_plan.tokens);
         defer record_commands.deinit(allocator);
         const record_shape = try commandShapeStats(allocator, record_commands.commands);
-        const record = try encodeCommandPlanWithOptionsAlloc(allocator, input, record_commands.commands, null, &wire_stats, .{
+        const record = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, record_commands.commands, true, &wire_stats, .{
             .use_recent_distances = true,
             // Fixed-width record literals share one stable alphabet. A second
             // UTF-8 context tree adds more header cost than payload savings.
             .use_utf8_text_contexts = false,
             .optimize_literal_tree_wire = true,
             .utf8_context_cutoff = 48,
-            .ndirect = 0,
+            .distance_parameters = encoder_distance.Parameters.init(0, 0),
         });
         profile.record_optimal_ns = elapsedNs(stage_start, io);
         profile.record_optimal_bytes = record.len;
@@ -2317,6 +5761,36 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     return result;
 }
 
+/// Profile literal-context proposal search over the same bounded optimal command
+/// plan used by ratio encoding. The plan is built once outside the measured
+/// iterations so the result isolates context analysis and clustering.
+pub fn profileLiteralContextSearch(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    io: std.Io,
+    iterations: usize,
+) Error!LiteralContextProfile {
+    if (input.len < 4 * 1024 or input.len > 64 * 1024 or iterations == 0)
+        return error.InvalidBlockPlan;
+    const parser_options = PlannedParserOptions{
+        .window_len = @min(input.len, planner_max_backward_distance),
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    };
+    const plan = try lz77.optimalPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
+        .max_chain = @min(parser_options.max_chain, 256),
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 128,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    });
+    defer plan.deinit(allocator);
+    const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
+    defer commands.deinit(allocator);
+    return literal_context_split.profileSearch(allocator, input, commands.commands, io, iterations);
+}
+
 fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     const use_record_optimal = (options.window_bits == null or options.window_bits.? == default_window_bits) and
         input.len >= 4 * 1024 and input.len <= 64 * 1024 and
@@ -2325,14 +5799,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     const window_bits = options.window_bits orelse default_window_bits;
     const window_len = try plannedWindowLen(.ratio, window_bits);
     const primary_window_len = @min(window_len, planner_max_backward_distance);
-    if (input.len > max_uncompressed_meta_block_len) {
-        // A Brotli meta-block can describe at most 2^24 output bytes. Keep the
-        // stable ratio API total over larger slices by emitting one bounded
-        // stream of independently planned blocks rather than failing or
-        // returning concatenated Brotli streams (which the format forbids).
-        const chunks = [_][]const u8{input};
-        return encodePlannedStreamChunksWithOptionsAlloc(allocator, &chunks, .{ .window_bits = window_bits, .metadata = options.metadata });
-    }
+    std.debug.assert(input.len <= max_uncompressed_meta_block_len);
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
     const parser_options = PlannedParserOptions{
         .window_len = primary_window_len,
@@ -2370,12 +5837,16 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     var baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{
         .try_recent_distances = true,
         .try_literal_split = true,
+        .try_adaptive_literal_split = options.adaptive_literal_split,
         .try_command_split = true,
+        .try_adaptive_command_split = options.adaptive_command_split,
         .try_distance_split = true,
+        .try_adaptive_distance_split = options.adaptive_distance_split orelse (input.len >= 64 * 1024),
         .window_bits = window_bits,
         .metadata = options.metadata,
     });
-    errdefer allocator.free(baseline);
+    var baseline_owned = true;
+    errdefer if (baseline_owned) allocator.free(baseline);
 
     // The shared optimal parser uses a bounded fixed-bit proxy rather than
     // Brotli's final Huffman cost. Run it only for moderate ratio-mode blocks,
@@ -2384,19 +5855,27 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     // memory/latency on the existing path.
     if (input.len >= 4 * 1024 and input.len <= 64 * 1024) {
         if (use_record_optimal)
-            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.metadata, &stats, &baseline)
+            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.metadata, options.distance_parameter_search orelse true, &stats, &baseline)
         else
-            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, &stats, &baseline);
+            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, options.distance_parameter_search orelse false, &stats, &baseline);
     }
-    if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.metadata);
+    if (input.len <= ratio_static_dictionary_max_input_len) {
+        baseline_owned = false;
+        return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.metadata);
+    }
     if (options.extended_dictionary_probes != 0)
         try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
-    if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance)
+    if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance) {
+        baseline_owned = false;
         return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+    }
 
     const long_window_bits: u5 = explicit_window_bits orelse 17;
     const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
-    const commands = try long_distance.augmentAllocWithMaxDistance(allocator, input, plan.commands, long_max_distance) orelse return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+    const commands = try long_distance.augmentAllocWithMaxDistance(allocator, input, plan.commands, long_max_distance) orelse {
+        baseline_owned = false;
+        return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+    };
     defer allocator.free(commands);
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
         .use_recent_distances = true,
@@ -2406,16 +5885,18 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     });
     if (candidate.len < baseline.len) {
         allocator.free(baseline);
+        baseline_owned = false;
         return if (explicit_window_bits == null)
             chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .metadata = options.metadata })
         else
             chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .window_bits = window_bits, .metadata = options.metadata });
     }
     allocator.free(candidate);
+    baseline_owned = false;
     return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
 }
 
-fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
     // Four-byte matching avoids expensive one-off command/distance symbols on
     // the retained source corpus. The fixed-bit DP is only a proposal stage:
     // exact Brotli wire size decides whether the candidate survives.
@@ -2433,11 +5914,11 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     if (optimal_plan.stats.matches == 0) return;
     const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
     defer optimal_commands.deinit(allocator);
-    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, stats, .{
+    const candidate = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, optimal_commands.commands, search_distance_parameters, stats, .{
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
         .utf8_context_cutoff = 48,
-        .ndirect = 0,
+        .distance_parameters = encoder_distance.Parameters.init(0, 0),
         .window_bits = window_bits,
         .metadata = metadata,
     });
@@ -2484,31 +5965,190 @@ fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error
     };
 }
 
-fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
-    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, metadata, stats)) orelse return;
+fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, metadata, search_distance_parameters, stats)) orelse return;
     if (record.len < baseline.*.len) {
         allocator.free(baseline.*);
         baseline.* = record;
     } else allocator.free(record);
 }
 
-fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
+fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
     const plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return null;
     defer plan.deinit(allocator);
     const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
     defer commands.deinit(allocator);
-    const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands.commands, null, stats, .{
+    const encoded = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, commands.commands, search_distance_parameters, stats, .{
         .use_recent_distances = true,
         // The record classifier already proves a stable field layout; one
         // literal tree is smaller across the audited record family.
         .use_utf8_text_contexts = false,
         .optimize_literal_tree_wire = true,
         .utf8_context_cutoff = 48,
-        .ndirect = 0,
+        .distance_parameters = encoder_distance.Parameters.init(0, 0),
         .window_bits = window_bits,
         .metadata = metadata,
     });
     return encoded;
+}
+
+/// Screen all 64 RFC distance parameter shapes, then materialize at most one
+/// alternative complete Brotli wire. The estimator only reduces candidate
+/// count; final byte length remains authoritative and ties retain `(0, 0)`.
+fn encodeCommandPlanWithDistanceParameterSearchAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    enable_search: bool,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error![]u8 {
+    if (options.distance_parameters.npostfix != 0 or
+        options.distance_parameters.ndirect_high != 0 or
+        !options.use_recent_distances or options.distance_split != null or
+        options.adaptive_distance_split != null)
+        return error.InvalidBlockPlan;
+
+    if (!enable_search)
+        return encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            input,
+            commands,
+            null,
+            stats,
+            options,
+        );
+
+    const initial_stats = stats.*;
+    var baseline_stats = initial_stats;
+    const baseline = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        commands,
+        null,
+        &baseline_stats,
+        options,
+    );
+    errdefer allocator.free(baseline);
+
+    const alternative_parameters = try chooseDistanceParameterAlternativeAlloc(
+        allocator,
+        commands,
+        options,
+    ) orelse {
+        stats.* = baseline_stats;
+        return baseline;
+    };
+    var alternative_options = options;
+    alternative_options.distance_parameters = alternative_parameters;
+    alternative_options.optimize_same_last_distance = false;
+    var alternative_stats = initial_stats;
+    const alternative = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        commands,
+        null,
+        &alternative_stats,
+        alternative_options,
+    );
+    if (alternative.len < baseline.len) {
+        allocator.free(baseline);
+        stats.* = alternative_stats;
+        return alternative;
+    }
+    allocator.free(alternative);
+    stats.* = baseline_stats;
+    return baseline;
+}
+
+fn chooseDistanceParameterAlternativeAlloc(
+    allocator: std.mem.Allocator,
+    commands: []const command_plan.Command,
+    options: CommandPlanEncodeOptions,
+) Error!?encoder_distance.Parameters {
+    const semantic_distances = try allocator.alloc(
+        distance_parameter_search.DistanceFrequency,
+        commands.len,
+    );
+    defer allocator.free(semantic_distances);
+    var semantic_count: usize = 0;
+    var short_symbol_frequencies: [16]u32 = @splat(0);
+    var last_distances = options.starting_last_distances;
+    for (commands) |command| {
+        const wire_distance = if (command.has_copy) try commandWireDistance(
+            command,
+            options.window_bits,
+            options.compound_dictionary_size,
+            options.initial_output_pos,
+        ) else 0;
+        const recent_symbol = if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
+            recentDistanceSymbol(wire_distance, &last_distances)
+        else
+            null;
+        const encoding = commandEntryForLengthsAndDistance(
+            command.insert_len,
+            command.copy_len,
+            recent_symbol == 0,
+        ) orelse commandEntryForLengths(command.insert_len, command.copy_len) orelse
+            return error.InvalidBlockPlan;
+        if (command.has_copy and encoding.command.distance_code == -1) {
+            if (recent_symbol) |symbol| {
+                short_symbol_frequencies[symbol] = std.math.add(
+                    u32,
+                    short_symbol_frequencies[symbol],
+                    1,
+                ) catch return error.IntegerOverflow;
+            } else {
+                semantic_distances[semantic_count] = .{
+                    .semantic_distance = wire_distance,
+                    .frequency = 1,
+                };
+                semantic_count += 1;
+            }
+        }
+        if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+            pushLastDistance(&last_distances, wire_distance);
+    }
+    if (semantic_count == 0 and allZeroFrequencies(16, &short_symbol_frequencies))
+        return null;
+
+    std.mem.sort(
+        distance_parameter_search.DistanceFrequency,
+        semantic_distances[0..semantic_count],
+        {},
+        struct {
+            fn lessThan(_: void, lhs: distance_parameter_search.DistanceFrequency, rhs: distance_parameter_search.DistanceFrequency) bool {
+                return lhs.semantic_distance < rhs.semantic_distance;
+            }
+        }.lessThan,
+    );
+    var unique_count: usize = 0;
+    for (semantic_distances[0..semantic_count]) |entry| {
+        if (unique_count != 0 and semantic_distances[unique_count - 1].semantic_distance == entry.semantic_distance) {
+            semantic_distances[unique_count - 1].frequency = std.math.add(
+                u32,
+                semantic_distances[unique_count - 1].frequency,
+                entry.frequency,
+            ) catch return error.IntegerOverflow;
+        } else {
+            semantic_distances[unique_count] = entry;
+            unique_count += 1;
+        }
+    }
+
+    const selection = distance_parameter_search.selectAlloc(allocator, .{
+        .distance_frequencies = semantic_distances[0..unique_count],
+        .short_symbol_frequencies = short_symbol_frequencies,
+    }) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return error.InvalidBlockPlan,
+    };
+    const preferred = selection.preferred();
+    if ((preferred.parameters.npostfix == selection.baseline.parameters.npostfix and
+        preferred.parameters.ndirect_high == selection.baseline.parameters.ndirect_high) or
+        preferred.totalBits() >= selection.baseline.totalBits())
+        return null;
+    return preferred.parameters;
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -2537,13 +6177,44 @@ const ratio_extended_static_dictionary_max_input_len: usize = 4096;
 const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10 }) catch unreachable;
 
 fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions) Error!void {
+    if (options.large_window) {
+        if (options.hq == null) return error.InvalidBlockPlan;
+        _ = try resolvedPlannedWindowBits(options);
+    }
+    if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
+    _ = try plannedSharedDictionarySize(options.shared_dictionary);
+    if (options.quality != null) {
+        if (options.level != .fast) return error.InvalidBlockPlan;
+        const schedule = try resolvedQualitySchedule(options);
+        if ((options.adaptive_command_split or options.adaptive_literal_split or options.adaptive_distance_split == true) and
+            input_len > max_uncompressed_meta_block_len)
+            return error.InvalidBlockPlan;
+        if (options.extended_dictionary_probes > max_extended_dictionary_probes or
+            (options.extended_dictionary_probes != 0 and
+                (!schedule.dictionary.extended_search or input_len > ratio_extended_static_dictionary_max_input_len)))
+            return error.InvalidBlockPlan;
+        if (options.distance_parameter_search == true and !schedule.use_recent_distances)
+            return error.InvalidBlockPlan;
+        if (input_len > max_uncompressed_meta_block_len and options.distance_parameter_search != null)
+            return error.InvalidBlockPlan;
+        return;
+    }
+    if (options.command_state_max_input_kib != command_state_default_max_input_kib)
+        return error.InvalidBlockPlan;
+    if (options.mode != .generic) return error.InvalidBlockPlan;
     const window_bits = options.window_bits orelse default_window_bits;
     _ = try plannedWindowLen(options.level, window_bits);
-    if (options.extended_dictionary_probes == 0) return;
-    if (options.level != .ratio or
-        options.extended_dictionary_probes > max_extended_dictionary_probes or
-        input_len > ratio_extended_static_dictionary_max_input_len)
+    if ((options.adaptive_command_split or options.adaptive_literal_split or options.adaptive_distance_split == true) and
+        (options.level != .ratio or input_len > max_uncompressed_meta_block_len))
         return error.InvalidBlockPlan;
+    if (options.adaptive_distance_split != null and options.level != .ratio)
+        return error.InvalidBlockPlan;
+    if (options.distance_parameter_search != null and options.level != .ratio)
+        return error.InvalidBlockPlan;
+    if (options.extended_dictionary_probes != 0 and
+        (options.level != .ratio or
+            options.extended_dictionary_probes > max_extended_dictionary_probes or
+            input_len > ratio_extended_static_dictionary_max_input_len)) return error.InvalidBlockPlan;
 }
 
 fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, window_bits: u5, metadata: []const u8, probe_limit: usize, baseline: *[]u8) Error!void {
@@ -2580,7 +6251,10 @@ fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input:
     var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
-        error.OutOfMemory => return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options),
+        error.OutOfMemory => {
+            try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
+            return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+        },
         else => return err,
     };
     if (candidate_len >= stored_len) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
@@ -2588,8 +6262,9 @@ fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input:
 }
 
 fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8, window_bits: u5, metadata: []const u8) Error![]u8 {
-    errdefer allocator.free(baseline);
     var best = baseline;
+    var best_owned = true;
+    errdefer if (best_owned) allocator.free(best);
     var cached_matches: [ratio_static_dictionary_max_input_len]static_dictionary.Match = undefined;
     var cache_known: [ratio_static_dictionary_max_input_len]bool = undefined;
     var match_cache = command_plan.StaticDictionaryMatchCache.init(cached_matches[0..input.len], cache_known[0..input.len]);
@@ -2618,6 +6293,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
                 best = candidate;
             } else allocator.free(candidate);
         }
+        best_owned = false;
         return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
     }
     const candidate_limit = @min(best.len, try encodedStoredStreamBoundWithOptions(input.len, stream_options));
@@ -2632,7 +6308,10 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
             // A candidate that exhausts the current winner's byte budget cannot
             // win the strict final-size comparison, so no retry is needed.
-            error.OutOfMemory => null,
+            error.OutOfMemory => failed: {
+                try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
+                break :failed null;
+            },
             else => return err,
         };
         if (mixed_len) |len| if (len < best.len) {
@@ -2643,17 +6322,27 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     }
     const dictionary_plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, &match_cache);
     defer dictionary_plan.deinit(allocator);
-    if (dictionary_plan.match_count == 0) return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
+    if (dictionary_plan.match_count == 0) {
+        best_owned = false;
+        return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
+    }
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
-        error.OutOfMemory => return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options),
+        error.OutOfMemory => {
+            try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
+            best_owned = false;
+            return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
+        },
         else => return err,
     };
     if (candidate_len < best.len) {
         const candidate = try allocator.dupe(u8, candidate_storage[0..candidate_len]);
         allocator.free(best);
-        return chooseStoredIfSmallerWithOptions(allocator, input, candidate, stream_options);
+        best = candidate;
+        best_owned = false;
+        return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
     }
+    best_owned = false;
     return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
 }
 
@@ -2662,7 +6351,7 @@ fn allCopiesAreDictionary(commands: []const command_plan.Command) bool {
     for (commands) |command| {
         if (!command.has_copy) continue;
         has_copy = true;
-        if (command.dictionary_output_len == 0) return false;
+        if (!command.isStatic()) return false;
     }
     return has_copy;
 }
@@ -2675,30 +6364,2494 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 }
 
 const CommandPlanEncodeOptions = struct {
+    large_window: bool = false,
+    hq_model_output: ?*@import("br/encoder/hq_codec.zig").Model = null,
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
-    literal_split: ?usize = null,
+    literal_context_candidate: ?literal_context_split.Candidate = null,
+    literal_split: ?literal_block_split.Result = null,
+    adaptive_literal_split: ?*const block_split_plan.Plan = null,
+    literal_entropy_plan: ?*const literal_entropy_plan.Plan = null,
     command_split: ?command_block_split.Result = null,
-    distance_split: ?usize = null,
+    adaptive_command_split: ?*const block_split_plan.Plan = null,
+    distance_split: ?distance_block_split.Result = null,
+    adaptive_distance_split: ?*const block_split_plan.Plan = null,
     utf8_context_cutoff: u6 = 56,
-    ndirect: u7 = 15,
+    /// Mode written even when the literal tree is context-independent. Static
+    /// dictionary selection still consumes this mode, so serialized dictionary
+    /// command plans must match it exactly.
+    literal_context_mode: u2 = literal_context.mode_lsb6,
+    distance_parameters: encoder_distance.Parameters = encoder_distance.Parameters.init(0, 15),
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     write_stream_prefix: bool = true,
     final_meta_block: bool = true,
     optimize_literal_tree_wire: bool = false,
     optimize_same_last_distance: bool = true,
+    compound_dictionary_size: usize = 0,
+    initial_output_pos: usize = 0,
+    /// `{ second_previous, previous }` immediately before `input[0]`.
+    initial_previous: [2]u8 = .{ 0, 0 },
+    starting_last_distances: [4]usize = initial_last_distances,
+    final_wire_state: ?*PlannedWireState = null,
 };
+
+fn literalContextHistory(
+    input: []const u8,
+    position: usize,
+    initial_previous: [2]u8,
+) [2]u8 {
+    return if (position == 0)
+        .{ initial_previous[1], initial_previous[0] }
+    else if (position == 1)
+        .{ input[0], initial_previous[1] }
+    else
+        .{ input[position - 1], input[position - 2] };
+}
+const PlannedWireState = struct {
+    last_distances: [4]usize = initial_last_distances,
+    output_pos: usize = 0,
+};
+const PlannedWireContext = struct {
+    window_bits: u5 = default_window_bits,
+    compound_dictionary_size: usize = 0,
+    initial_output_pos: usize = 0,
+    starting_last_distances: [4]usize = initial_last_distances,
+};
+
+const PlannedMetaBlockPolicy = struct {
+    quality: ?quality_schedule.Quality = null,
+    family: quality_schedule.LevelFamily,
+    lazy: quality_schedule.LazyBudget,
+    optimal: quality_schedule.OptimalBudget = .{
+        .enabled = false,
+        .max_chain = 0,
+        .nice_len = 0,
+        .max_candidates = 0,
+        .max_input_len = 0,
+    },
+    context: quality_schedule.ContextFlags = .{
+        .literal_contexts = false,
+        .cluster_contexts = false,
+        .joint_block_contexts = false,
+    },
+    dictionary: quality_schedule.DictionaryFlags = .{
+        .static_dictionary = false,
+        .extended_search = false,
+        .max_probes = 0,
+    },
+    split: quality_schedule.SplitFlags = .{
+        .literal = false,
+        .command = false,
+        .distance = false,
+        .adaptive_literal = false,
+        .adaptive_command = false,
+        .adaptive_distance = false,
+    },
+    use_recent_distances: bool = false,
+    search_distance_parameters: bool = false,
+    font_distance_candidate: bool = false,
+    hash_candidates: usize = 1,
+    fragment_variant: ?fast_fragment.Variant = null,
+
+    fn fromLevel(level: PlannedCompressionLevel) PlannedMetaBlockPolicy {
+        return switch (level) {
+            .fast => .{
+                .family = .fast,
+                .lazy = .{ .max_chain = 64, .nice_len = 64, .min_gain = 1 },
+                .hash_candidates = 8,
+            },
+            .balanced => .{
+                .family = .balanced,
+                .lazy = .{ .max_chain = 64, .nice_len = 64, .min_gain = 1 },
+            },
+            .ratio => .{
+                .family = .ratio,
+                .lazy = .{ .max_chain = 512, .nice_len = lz77.max_match_len, .min_gain = 1 },
+                .context = .{
+                    .literal_contexts = true,
+                    .cluster_contexts = true,
+                    .joint_block_contexts = true,
+                },
+                .split = .{
+                    .literal = true,
+                    .command = true,
+                    .distance = true,
+                    .adaptive_literal = false,
+                    .adaptive_command = false,
+                    .adaptive_distance = false,
+                },
+                .use_recent_distances = true,
+                .dictionary = .{
+                    .static_dictionary = true,
+                    .extended_search = false,
+                    .max_probes = 0,
+                },
+            },
+        };
+    }
+
+    fn fromSchedule(schedule: quality_schedule.Schedule) PlannedMetaBlockPolicy {
+        return .{
+            .quality = schedule.quality,
+            .family = schedule.family,
+            .lazy = schedule.lazy,
+            .optimal = schedule.optimal,
+            .context = schedule.context,
+            .dictionary = schedule.dictionary,
+            .split = schedule.split,
+            .use_recent_distances = schedule.use_recent_distances,
+            .search_distance_parameters = schedule.search_distance_parameters,
+            .font_distance_candidate = schedule.mode == .font and schedule.quality.int() >= 4,
+            .fragment_variant = if (schedule.fragment_parser) |parser| switch (parser) {
+                .q0 => fast_fragment.Variant.q0,
+                .q1 => fast_fragment.Variant.q1,
+            } else null,
+        };
+    }
+};
+
+const PlannedMetaBlockCandidate = struct {
+    bit_index: u3 = 0,
+    bit_count: usize = 0,
+    wire_state: PlannedWireState = .{},
+};
+
+const Q0OnePassCandidate = struct {
+    meta_block: PlannedMetaBlockCandidate,
+    next_entropy_state: fast_fragment_one_pass.State,
+};
+
+const Q0OnePassPayloadWriter = struct {
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(64),
+    literal_encoder: *const huffman.HuffmanTable(256).Encoder,
+    command_encoder: *const huffman.HuffmanTable(704).Encoder,
+    distance_encoder: *const huffman.HuffmanTable(64).Encoder,
+    last_distances: [4]usize,
+    next_histogram: [128]u32 = fast_fragment_one_pass.initialHistogram(),
+
+    pub fn event(self: *@This(), value: fast_fragment_one_pass.Event) Error!void {
+        self.next_histogram[value.code] += 1;
+        if (value.code < 64) {
+            const symbol = fast_fragment_one_pass.commandSymbol(@intCast(value.code));
+            if (self.command_alphabet.len > 1) {
+                if (self.command_alphabet.len <= 4) {
+                    const code = self.command_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.command_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.command_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        } else {
+            const symbol: u6 = @intCast(value.code - 64);
+            if (self.distance_alphabet.len > 1) {
+                if (self.distance_alphabet.len <= 4) {
+                    const code = self.distance_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.distance_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.distance_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        }
+        if (value.extra_bits != 0)
+            try self.writer.writeBits(self.allocator, value.extra, value.extra_bits);
+    }
+
+    pub fn literals(self: *@This(), bytes: []const u8) Error!void {
+        if (self.literal_alphabet.len <= 1) return;
+        for (bytes) |literal| {
+            if (self.literal_alphabet.len <= 4) {
+                const code = self.literal_alphabet.simpleCode(literal) orelse
+                    return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+            } else {
+                const bits = self.literal_encoder.bits[literal];
+                if (bits == 0) return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(
+                    self.allocator,
+                    self.literal_encoder.codes[literal],
+                    bits,
+                );
+            }
+        }
+    }
+
+    pub fn distance(self: *@This(), actual: usize, pushes_ring: bool) Error!void {
+        if (pushes_ring) pushLastDistance(&self.last_distances, actual);
+    }
+};
+
+fn encodeQ0OnePassMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+    entropy_state: *const fast_fragment_one_pass.State,
+) Error!Q0OnePassCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+
+    const literal_frequencies = fast_fragment_one_pass.literalFrequencies(input) catch
+        return error.InvalidBlockPlan;
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        256,
+        &literal_alphabet,
+        &literal_frequencies,
+    );
+    const command_alphabet = fast_fragment_one_pass.commandAlphabet(entropy_state);
+    const distance_alphabet = fast_fragment_one_pass.distanceAlphabet(entropy_state);
+    if (command_alphabet.len == 0 or distance_alphabet.len == 0)
+        return error.InvalidBlockPlan;
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &literal_frequencies,
+        &literal_alphabet,
+        8,
+    );
+    const command_lengths = fast_fragment_one_pass.expandCommandLengths(
+        &entropy_state.command_lengths,
+    );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        literal_context.mode_lsb6,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        encoder_distance.Parameters.init(0, 0),
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &entropy_state.distance_lengths,
+    );
+
+    const literal_encoder = if (literal_alphabet.len <= 4)
+        huffman.HuffmanTable(256).Encoder{}
+    else if (literal_alphabet.len <= 64)
+        try huffman.HuffmanTable(256).Encoder.initSparseTrusted(
+            &literal_lengths,
+            literal_alphabet.symbols[0..literal_alphabet.len],
+        )
+    else
+        try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(
+            &command_lengths,
+            command_alphabet.symbols[0..command_alphabet.len],
+        );
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(64).Encoder{}
+    else
+        try huffman.HuffmanTable(64).Encoder.initSparseTrusted(
+            &entropy_state.distance_lengths,
+            distance_alphabet.symbols[0..distance_alphabet.len],
+        );
+    var payload_writer = Q0OnePassPayloadWriter{
+        .allocator = allocator,
+        .writer = &writer,
+        .literal_alphabet = &literal_alphabet,
+        .command_alphabet = &command_alphabet,
+        .distance_alphabet = &distance_alphabet,
+        .literal_encoder = &literal_encoder,
+        .command_encoder = &command_encoder,
+        .distance_encoder = &distance_encoder,
+        .last_distances = initial_wire_state.last_distances,
+    };
+    _ = fast_fragment_one_pass.walk(input, commands, &payload_writer) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidBlockPlan,
+    };
+    var next_entropy_state = entropy_state.*;
+    next_entropy_state.update(&payload_writer.next_histogram);
+    if (builtin.is_test) test_q0_one_pass_writer_hits += 1;
+    return .{
+        .meta_block = .{
+            .bit_index = writer.bit_index,
+            .bit_count = writer.bitPosition() - start_bit_position,
+            .wire_state = .{
+                .last_distances = payload_writer.last_distances,
+                .output_pos = std.math.add(
+                    usize,
+                    initial_wire_state.output_pos,
+                    input.len,
+                ) catch return error.IntegerOverflow,
+            },
+        },
+        .next_entropy_state = next_entropy_state,
+    };
+}
+
+const Q1TwoPassPayloadWriter = struct {
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(64),
+    literal_encoder: *const huffman.HuffmanTable(256).Encoder,
+    command_encoder: *const huffman.HuffmanTable(704).Encoder,
+    distance_encoder: *const huffman.HuffmanTable(64).Encoder,
+    last_distances: [4]usize,
+
+    pub fn event(self: *@This(), value: fast_fragment_two_pass.Event) Error!void {
+        if (value.code < 64) {
+            const symbol = fast_fragment_two_pass.commandSymbol(@intCast(value.code));
+            if (self.command_alphabet.len > 1) {
+                if (self.command_alphabet.len <= 4) {
+                    const code = self.command_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.command_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.command_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        } else {
+            const symbol: u6 = @intCast(value.code - 64);
+            if (self.distance_alphabet.len > 1) {
+                if (self.distance_alphabet.len <= 4) {
+                    const code = self.distance_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.distance_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.distance_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        }
+        if (value.extraBits() != 0)
+            try self.writer.writeBits(self.allocator, value.extra, value.extraBits());
+    }
+
+    pub fn literals(self: *@This(), bytes: []const u8) Error!void {
+        if (self.literal_alphabet.len <= 1) return;
+        for (bytes) |literal| {
+            if (self.literal_alphabet.len <= 4) {
+                const code = self.literal_alphabet.simpleCode(literal) orelse
+                    return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+            } else {
+                const bits = self.literal_encoder.bits[literal];
+                if (bits == 0) return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(
+                    self.allocator,
+                    self.literal_encoder.codes[literal],
+                    bits,
+                );
+            }
+        }
+    }
+
+    pub fn distance(self: *@This(), actual: usize, pushes_ring: bool) Error!void {
+        if (pushes_ring) pushLastDistance(&self.last_distances, actual);
+    }
+};
+
+fn q1TreeLengths(
+    comptime alphabet_size: usize,
+    frequencies: *const [alphabet_size]u32,
+    alphabet: *const command_plan.PrefixAlphabetFor(alphabet_size),
+    max_bits: u4,
+) Error![alphabet_size]u4 {
+    if (alphabet.len <= 4) return alphabet.codeLengths(frequencies);
+    return huffman.treeCodeLengths(alphabet_size, frequencies, max_bits);
+}
+
+fn encodeQ1TwoPassMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+    const histograms = fast_fragment_two_pass.collect(input, commands) catch
+        return error.InvalidBlockPlan;
+    if (histograms.literal_count == 0) return error.InvalidBlockPlan;
+
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        256,
+        &literal_alphabet,
+        &histograms.literals,
+    );
+    var compact_command_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        64,
+        &compact_command_alphabet,
+        &histograms.commands,
+    );
+    var distance_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        64,
+        &distance_alphabet,
+        &histograms.distances,
+    );
+    const command_alphabet = fast_fragment_two_pass.expandCommandAlphabet(
+        &compact_command_alphabet,
+    );
+
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &histograms.literals,
+        &literal_alphabet,
+        8,
+    );
+    const compact_command_lengths = try q1TreeLengths(
+        64,
+        &histograms.commands,
+        &compact_command_alphabet,
+        15,
+    );
+    const command_lengths = fast_fragment_two_pass.expandCommandLengths(
+        &compact_command_lengths,
+    );
+    const distance_lengths = try q1TreeLengths(
+        64,
+        &histograms.distances,
+        &distance_alphabet,
+        14,
+    );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    const parameters = encoder_distance.Parameters.init(0, 0);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        literal_context.mode_lsb6,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        parameters,
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &distance_lengths,
+    );
+
+    const literal_encoder = if (literal_alphabet.len <= 4)
+        huffman.HuffmanTable(256).Encoder{}
+    else if (literal_alphabet.len <= 64)
+        try huffman.HuffmanTable(256).Encoder.initSparseTrusted(
+            &literal_lengths,
+            literal_alphabet.symbols[0..literal_alphabet.len],
+        )
+    else
+        try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(
+            &command_lengths,
+            command_alphabet.symbols[0..command_alphabet.len],
+        );
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(64).Encoder{}
+    else
+        try huffman.HuffmanTable(64).Encoder.initSparseTrusted(
+            &distance_lengths,
+            distance_alphabet.symbols[0..distance_alphabet.len],
+        );
+    var payload_writer = Q1TwoPassPayloadWriter{
+        .allocator = allocator,
+        .writer = &writer,
+        .literal_alphabet = &literal_alphabet,
+        .command_alphabet = &command_alphabet,
+        .distance_alphabet = &distance_alphabet,
+        .literal_encoder = &literal_encoder,
+        .command_encoder = &command_encoder,
+        .distance_encoder = &distance_encoder,
+        .last_distances = initial_wire_state.last_distances,
+    };
+    const emitted = fast_fragment_two_pass.walk(
+        input,
+        commands,
+        &payload_writer,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidBlockPlan,
+    };
+    if (emitted.event_count != histograms.event_count or
+        emitted.literal_count != histograms.literal_count or
+        emitted.explicit_distance_count != histograms.explicit_distance_count)
+    {
+        return error.InvalidBlockPlan;
+    }
+    if (builtin.is_test) test_q1_two_pass_writer_hits += 1;
+    return .{
+        .bit_index = writer.bit_index,
+        .bit_count = writer.bitPosition() - start_bit_position,
+        .wire_state = .{
+            .last_distances = payload_writer.last_distances,
+            .output_pos = std.math.add(
+                usize,
+                initial_wire_state.output_pos,
+                input.len,
+            ) catch return error.IntegerOverflow,
+        },
+    };
+}
+
+const Q23EntropyMode = enum {
+    q2_fast,
+    q3_trivial,
+};
+
+const Q23ResolvedCommand = struct {
+    encoding: CommandEncoding,
+    distance: ?encoder_distance.Encoding,
+    recent_symbol: ?u4,
+    wire_distance: usize,
+};
+
+const Q23Frequencies = struct {
+    literals: [256]u32 = @splat(0),
+    commands: [704]u32 = @splat(0),
+    distances: [64]u32 = @splat(0),
+    final_last_distances: [4]usize,
+    literal_count: usize = 0,
+    explicit_distance_count: usize = 0,
+};
+
+const q2_static_command_lengths: [704]u4 = blk: {
+    var lengths: [704]u4 = undefined;
+    for (&lengths, 0..) |*bits, symbol| bits.* = if (symbol < 448) 9 else 11;
+    break :blk lengths;
+};
+const q2_static_distance_lengths: [64]u4 = @splat(6);
+
+fn fullPrefixAlphabet(comptime capacity: usize) command_plan.PrefixAlphabetFor(capacity) {
+    var alphabet: command_plan.PrefixAlphabetFor(capacity) = undefined;
+    alphabet.len = capacity;
+    for (alphabet.symbols[0..capacity], 0..) |*symbol, index| symbol.* = @intCast(index);
+    return alphabet;
+}
+
+fn resolveQ23Command(
+    mode: Q23EntropyMode,
+    command: command_plan.Command,
+    wire_distance: usize,
+    last_distances: *const [4]usize,
+) Error!Q23ResolvedCommand {
+    const recent_symbol: ?u4 = if (!command.has_copy)
+        null
+    else switch (mode) {
+        .q2_fast => if (wire_distance == last_distances[3]) 0 else null,
+        .q3_trivial => recentDistanceSymbol(wire_distance, last_distances),
+    };
+    const encoding = commandEntryForLengthsAndDistance(
+        command.insert_len,
+        command.copy_len,
+        recent_symbol == 0,
+    ) orelse commandEntryForLengths(command.insert_len, command.copy_len) orelse
+        return error.InvalidBlockPlan;
+    const distance = if (command.has_copy and encoding.command.distance_code == -1)
+        if (recent_symbol) |symbol|
+            encoder_distance.Encoding{ .symbol = symbol }
+        else
+            encoder_distance.encodeWithParameters(
+                wire_distance,
+                encoder_distance.Parameters.init(0, 0),
+            ) orelse return error.InvalidBlockPlan
+    else
+        null;
+    return .{
+        .encoding = encoding,
+        .distance = distance,
+        .recent_symbol = recent_symbol,
+        .wire_distance = wire_distance,
+    };
+}
+
+fn q23PushDistance(
+    last_distances: *[4]usize,
+    command: command_plan.Command,
+    resolved: Q23ResolvedCommand,
+) void {
+    if (!command.has_copy) return;
+    if (resolved.recent_symbol == null or resolved.recent_symbol.? != 0)
+        pushLastDistance(last_distances, resolved.wire_distance);
+}
+
+fn collectQ23Frequencies(
+    mode: Q23EntropyMode,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    wire_context: PlannedWireContext,
+) Error!Q23Frequencies {
+    if (commands.len == 0) return error.InvalidBlockPlan;
+    var result = Q23Frequencies{ .final_last_distances = wire_context.starting_last_distances };
+    var cursor: usize = 0;
+    for (commands) |command| {
+        if (!command.isLz77() or command.insert_start != cursor or
+            command.insert_len > input.len - cursor)
+        {
+            return error.InvalidBlockPlan;
+        }
+        const literal_end = cursor + command.insert_len;
+        for (input[cursor..literal_end]) |literal| result.literals[literal] += 1;
+        result.literal_count += command.insert_len;
+        cursor = literal_end;
+        const wire_distance = if (command.has_copy)
+            try commandWireDistance(
+                command,
+                wire_context.window_bits,
+                wire_context.compound_dictionary_size,
+                wire_context.initial_output_pos,
+            )
+        else
+            0;
+        const resolved = try resolveQ23Command(
+            mode,
+            command,
+            wire_distance,
+            &result.final_last_distances,
+        );
+        result.commands[resolved.encoding.symbol] += 1;
+        if (resolved.distance) |distance| {
+            if (distance.symbol >= result.distances.len) return error.InvalidBlockPlan;
+            result.distances[distance.symbol] += 1;
+            result.explicit_distance_count += 1;
+        }
+        q23PushDistance(&result.final_last_distances, command, resolved);
+        if (command.has_copy) {
+            if (command.copy_len > input.len - cursor) return error.InvalidBlockPlan;
+            cursor += command.copy_len;
+        }
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (result.literal_count == 0) result.literals[0] = 1;
+    if (result.explicit_distance_count == 0) result.distances[0] = 1;
+    return result;
+}
+
+fn writeQ23Symbol(
+    comptime capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    alphabet: *const command_plan.PrefixAlphabetFor(capacity),
+    encoder: *const huffman.HuffmanTable(capacity).Encoder,
+    symbol: usize,
+) Error!void {
+    if (symbol >= capacity) return error.InvalidBlockPlan;
+    if (alphabet.len <= 1) return;
+    if (alphabet.len <= 4) {
+        const code = alphabet.simpleCode(@intCast(symbol)) orelse
+            return error.InvalidBlockPlan;
+        return writer.writeHuffmanBits(allocator, code.code, code.bits);
+    }
+    const bits = encoder.bits[symbol];
+    if (bits == 0) return error.InvalidBlockPlan;
+    return writer.writeHuffmanBits(allocator, encoder.codes[symbol], bits);
+}
+
+fn q23Encoder(
+    comptime capacity: usize,
+    lengths: *const [capacity]u4,
+    alphabet: *const command_plan.PrefixAlphabetFor(capacity),
+) Error!huffman.HuffmanTable(capacity).Encoder {
+    if (alphabet.len <= 4) return .{};
+    if (alphabet.len <= 64)
+        return huffman.HuffmanTable(capacity).Encoder.initSparseTrusted(
+            lengths,
+            alphabet.symbols[0..alphabet.len],
+        );
+    return huffman.HuffmanTable(capacity).Encoder.init(lengths);
+}
+
+fn encodeQ23MetaBlockCandidate(
+    mode: Q23EntropyMode,
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    initial_wire_state: PlannedWireState,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+    const wire_context = PlannedWireContext{
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+        .initial_output_pos = initial_wire_state.output_pos,
+        .starting_last_distances = initial_wire_state.last_distances,
+    };
+    const frequencies = try collectQ23Frequencies(mode, input, commands, wire_context);
+
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &frequencies.literals);
+    const static_q2 = mode == .q2_fast and commands.len <= 128;
+    var command_alphabet: command_plan.PrefixAlphabet = undefined;
+    var distance_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    if (static_q2) {
+        command_alphabet = fullPrefixAlphabet(704);
+        distance_alphabet = fullPrefixAlphabet(64);
+    } else {
+        try command_plan.alphabetFromFrequenciesInto(704, &command_alphabet, &frequencies.commands);
+        try command_plan.alphabetFromFrequenciesInto(64, &distance_alphabet, &frequencies.distances);
+    }
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &frequencies.literals,
+        &literal_alphabet,
+        if (mode == .q2_fast) 8 else 15,
+    );
+    const command_lengths = if (static_q2)
+        q2_static_command_lengths
+    else
+        try q1TreeLengths(
+            704,
+            &frequencies.commands,
+            &command_alphabet,
+            if (mode == .q2_fast) 10 else 15,
+        );
+    const distance_lengths = if (static_q2)
+        q2_static_distance_lengths
+    else
+        try q1TreeLengths(
+            64,
+            &frequencies.distances,
+            &distance_alphabet,
+            if (mode == .q2_fast) 6 else 15,
+        );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        literal_context.mode_lsb6,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        encoder_distance.Parameters.init(0, 0),
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &distance_lengths,
+    );
+    const literal_encoder = try q23Encoder(256, &literal_lengths, &literal_alphabet);
+    const command_encoder = try q23Encoder(704, &command_lengths, &command_alphabet);
+    const distance_encoder = try q23Encoder(64, &distance_lengths, &distance_alphabet);
+
+    var cursor: usize = 0;
+    var last_distances = initial_wire_state.last_distances;
+    for (commands) |command| {
+        const literal_end = cursor + command.insert_len;
+        const wire_distance = if (command.has_copy)
+            try commandWireDistance(
+                command,
+                window_bits,
+                compound_dictionary_size,
+                initial_wire_state.output_pos,
+            )
+        else
+            0;
+        const resolved = try resolveQ23Command(mode, command, wire_distance, &last_distances);
+        try writeQ23Symbol(
+            704,
+            allocator,
+            &writer,
+            &command_alphabet,
+            &command_encoder,
+            resolved.encoding.symbol,
+        );
+        try writeCommandLengthExtras(
+            allocator,
+            &writer,
+            resolved.encoding,
+            command.insert_len,
+            command.copy_len,
+        );
+        for (input[cursor..literal_end]) |literal|
+            try writeQ23Symbol(
+                256,
+                allocator,
+                &writer,
+                &literal_alphabet,
+                &literal_encoder,
+                literal,
+            );
+        cursor = literal_end;
+        if (resolved.distance) |distance| {
+            try writeQ23Symbol(
+                64,
+                allocator,
+                &writer,
+                &distance_alphabet,
+                &distance_encoder,
+                distance.symbol,
+            );
+            if (distance.extra_bits != 0)
+                try writer.writeBits(allocator, distance.extra, distance.extra_bits);
+        }
+        q23PushDistance(&last_distances, command, resolved);
+        if (command.has_copy) cursor += command.copy_len;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (builtin.is_test) switch (mode) {
+        .q2_fast => {
+            test_q2_fast_writer_hits += 1;
+            if (static_q2)
+                test_q2_static_tree_hits += 1
+            else
+                test_q2_dynamic_tree_hits += 1;
+        },
+        .q3_trivial => test_q3_trivial_writer_hits += 1,
+    };
+    return .{
+        .bit_index = writer.bit_index,
+        .bit_count = writer.bitPosition() - start_bit_position,
+        .wire_state = .{
+            .last_distances = last_distances,
+            .output_pos = std.math.add(
+                usize,
+                initial_wire_state.output_pos,
+                input.len,
+            ) catch return error.IntegerOverflow,
+        },
+    };
+}
+
+fn encodePlannedMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+    base_options: CommandPlanEncodeOptions,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    var candidate: PlannedMetaBlockCandidate = .{ .wire_state = initial_wire_state };
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    var options = base_options;
+    options.write_stream_prefix = false;
+    options.final_meta_block = false;
+    options.initial_output_pos = initial_wire_state.output_pos;
+    options.starting_last_distances = initial_wire_state.last_distances;
+    options.final_wire_state = &candidate.wire_state;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    try encodeCommandPlanWithOptionsWrite(
+        allocator,
+        &writer,
+        input,
+        commands,
+        null,
+        &stats,
+        options,
+    );
+    candidate.bit_index = writer.bit_index;
+    candidate.bit_count = writer.bitPosition() - start_bit_index;
+    return candidate;
+}
+
+fn retainSmallerMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+    candidate: PlannedMetaBlockCandidate,
+) Error!void {
+    if (best.* == null or candidate.bit_count < best.*.?.bit_count) {
+        best_wire.clearRetainingCapacity();
+        try best_wire.appendSlice(allocator, candidate_wire.items);
+        candidate_wire.clearRetainingCapacity();
+        best.* = candidate;
+    } else {
+        candidate_wire.clearRetainingCapacity();
+    }
+}
+
+fn considerPlannedMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    wire_state: PlannedWireState,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+) Error!void {
+    if (policy.fragment_variant == .q0 and !state.adaptive_blocks) {
+        if (encodeQ0OnePassMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            &state.q0_entropy_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate.meta_block,
+            );
+            state.q0_entropy_state = candidate.next_entropy_state;
+            return;
+        } else |err| switch (err) {
+            // Compound-dictionary commands retain the general writer and do
+            // not perturb q0's learned local-LZ tree state.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    if (policy.fragment_variant == .q1) {
+        if (encodeQ1TwoPassMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate,
+            );
+            return;
+        } else |err| switch (err) {
+            // Compound-dictionary command plans and any future command source
+            // outside q1's local LZ subset retain the complete general writer.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    const q23_mode: ?Q23EntropyMode = if (policy.quality) |quality| switch (quality) {
+        .q2 => .q2_fast,
+        .q3 => .q3_trivial,
+        else => null,
+    } else null;
+    if (q23_mode) |mode| {
+        if (encodeQ23MetaBlockCandidate(
+            mode,
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            window_bits,
+            compound_dictionary_size,
+            wire_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate,
+            );
+            return;
+        } else |err| switch (err) {
+            // Static/compound dictionary command sources retain the complete
+            // general writer and its out-of-window distance handling.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    const common = CommandPlanEncodeOptions{
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+        .initial_previous = state.context_previous,
+    };
+    if (encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        common,
+    )) |candidate| {
+        try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+    if (!policy.use_recent_distances and !policy.context.literal_contexts and
+        !policy.split.literal and !policy.split.command and
+        !policy.split.distance and !policy.split.adaptive_literal and
+        !policy.split.adaptive_command and !policy.split.adaptive_distance and
+        !policy.font_distance_candidate and !policy.search_distance_parameters)
+        return;
+
+    const literal_context_candidate = if (policy.context.literal_contexts)
+        if (policy.context.cluster_contexts)
+            try literal_context_split.choose(allocator, input, commands)
+        else
+            try literal_context_split.chooseSuffix(allocator, input, commands)
+    else
+        null;
+    const literal_split = if (policy.split.literal)
+        literal_block_split.choose(
+            input,
+            commands,
+            if (literal_context_candidate) |candidate| candidate.suffixCutoff() else null,
+        )
+    else
+        null;
+    var adaptive_literal = if (policy.split.adaptive_literal)
+        try chooseAdaptiveLiteralSplitAlloc(allocator, input, commands)
+    else
+        null;
+    defer if (adaptive_literal) |*plan| plan.deinit(allocator);
+    var joint_literal = if (adaptive_literal != null and policy.context.joint_block_contexts)
+        literal_joint_context_split.chooseAlloc(
+            allocator,
+            input,
+            commands,
+            adaptive_literal.?,
+            .{},
+        ) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => null,
+        }
+    else
+        null;
+    defer if (joint_literal) |*plan| plan.deinit(allocator);
+    var symbol_splits = try chooseCommandAndDistanceSplitsAlloc(
+        allocator,
+        commands,
+        policy.use_recent_distances,
+        policy.split.command,
+        policy.split.adaptive_command,
+        policy.split.distance,
+        policy.split.adaptive_distance,
+        .{
+            .window_bits = window_bits,
+            .compound_dictionary_size = compound_dictionary_size,
+            .initial_output_pos = wire_state.output_pos,
+            .starting_last_distances = wire_state.last_distances,
+        },
+    );
+    defer symbol_splits.deinit(allocator);
+    const enhanced = CommandPlanEncodeOptions{
+        .use_recent_distances = policy.use_recent_distances,
+        .literal_context_candidate = if (joint_literal == null) literal_context_candidate else null,
+        .literal_split = if (adaptive_literal == null and joint_literal == null) literal_split else null,
+        .adaptive_literal_split = if (joint_literal == null)
+            if (adaptive_literal) |*plan| plan else null
+        else
+            null,
+        .literal_entropy_plan = if (joint_literal) |*plan| plan else null,
+        .command_split = if (symbol_splits.adaptive_command == null)
+            symbol_splits.command.three orelse symbol_splits.command.two
+        else
+            null,
+        .adaptive_command_split = if (symbol_splits.adaptive_command) |*plan| plan else null,
+        .distance_split = if (symbol_splits.adaptive_distance == null)
+            symbol_splits.distance.three orelse symbol_splits.distance.two
+        else
+            null,
+        .adaptive_distance_split = if (symbol_splits.adaptive_distance) |*plan| plan else null,
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+        .initial_previous = state.context_previous,
+    };
+    if (encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        enhanced,
+    )) |candidate| {
+        try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+    if (policy.font_distance_candidate) {
+        var font = enhanced;
+        font.distance_parameters = encoder_distance.Parameters.init(1, 6);
+        font.optimize_same_last_distance = false;
+        if (encodePlannedMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            font,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+        } else |err| switch (err) {
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    if (policy.search_distance_parameters and policy.use_recent_distances and
+        enhanced.distance_split == null and enhanced.adaptive_distance_split == null)
+    {
+        if (try chooseDistanceParameterAlternativeAlloc(
+            allocator,
+            commands,
+            enhanced,
+        )) |parameters| {
+            var distance_candidate = enhanced;
+            distance_candidate.distance_parameters = parameters;
+            distance_candidate.optimize_same_last_distance = false;
+            if (encodePlannedMetaBlockCandidate(
+                allocator,
+                candidate_wire,
+                start_byte,
+                start_bit_index,
+                input,
+                commands,
+                wire_state,
+                distance_candidate,
+            )) |candidate| {
+                try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+            } else |err| switch (err) {
+                error.InvalidBlockPlan => {},
+                else => return err,
+            }
+        }
+    }
+}
+
+fn considerPlannedLongDistanceMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    if (policy.family != .ratio or state.window_bits < 17 or
+        state.history.items.len == 0)
+    {
+        return;
+    }
+    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+    const literal_commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const proposal_count: usize = if (commandPlanHasCopy(commands)) 2 else 1;
+    for (0..proposal_count) |proposal_index| {
+        const proposal = if (proposal_index == 0)
+            commands
+        else
+            &literal_commands;
+        const augmented = try long_distance.augmentAllocWithHistoryAndMaxDistance(
+            allocator,
+            state.history.items,
+            input,
+            proposal,
+            max_backward_distance,
+        ) orelse continue;
+        defer allocator.free(augmented);
+        try considerPlannedMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            augmented,
+            policy,
+            state.window_bits,
+            state.compound_dictionary_size,
+            start_byte,
+            start_bit_index,
+            state.wire_state,
+            best,
+            &state.candidate_wire,
+            &state.best_wire,
+        );
+    }
+}
+
+/// Serialized dictionary addresses below are selected with `context_mode`, so
+/// the plain single-tree header must emit that exact mode. Other safe baseline
+/// candidates may use adaptive literal contexts because they contain no
+/// contextual static references.
+fn considerSerializedMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    context_mode: u2,
+    initial_previous: [2]u8,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    wire_state: PlannedWireState,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+) Error!void {
+    const candidate = encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        .{
+            .window_bits = window_bits,
+            .compound_dictionary_size = compound_dictionary_size,
+            .literal_context_mode = context_mode,
+            .initial_previous = initial_previous,
+        },
+    ) catch |err| switch (err) {
+        error.InvalidBlockPlan => return,
+        else => return err,
+    };
+    try retainSmallerMetaBlockCandidate(
+        allocator,
+        best,
+        candidate_wire,
+        best_wire,
+        candidate,
+    );
+
+    const proposals = try literal_context_split.chooseProposalsForModeWithPrefix(
+        allocator,
+        input,
+        commands,
+        context_mode,
+        initial_previous,
+    );
+    const alternatives = [_]?literal_context_split.Candidate{
+        proposals.suffix,
+        proposals.up_to_16,
+        proposals.full,
+    };
+    for (alternatives, 0..) |maybe_context, index| {
+        const context = maybe_context orelse continue;
+        std.debug.assert(context.mode == context_mode);
+        var duplicate = false;
+        for (alternatives[0..index]) |prior| {
+            if (prior) |existing| {
+                duplicate = duplicate or literal_context_split.Candidate.eql(
+                    context,
+                    existing,
+                );
+            }
+        }
+        if (duplicate) continue;
+        const context_candidate = encodePlannedMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            .{
+                .literal_context_candidate = context,
+                .window_bits = window_bits,
+                .compound_dictionary_size = compound_dictionary_size,
+                .literal_context_mode = context_mode,
+                .initial_previous = initial_previous,
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => continue,
+            else => return err,
+        };
+        try retainSmallerMetaBlockCandidate(
+            allocator,
+            best,
+            candidate_wire,
+            best_wire,
+            context_candidate,
+        );
+    }
+}
+
+fn considerPlannedMetaBlockPolicy(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    policy: PlannedMetaBlockPolicy,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+    const parser_options = lz77.GreedyOptions{
+        .window_len = @min(
+            if (state.history.items.len == 0)
+                @min(input.len, max_backward_distance)
+            else
+                max_backward_distance,
+            lz77.max_window_len,
+        ),
+        .max_chain = policy.lazy.max_chain,
+        .nice_len = policy.lazy.nice_len,
+        .max_candidates = if (policy.family == .fast) policy.hash_candidates else 1,
+        .lazy_min_gain = policy.lazy.min_gain,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    };
+    var match_count: usize = 0;
+    if (policy.fragment_variant) |variant| {
+        // q0/q1 deliberately ignore earlier meta-block history. Their fixed
+        // hash state is fragment-local, which keeps streaming memory bounded
+        // and makes PROCESS/FLUSH boundaries independent parser units.
+        const fragment_stats = try fast_fragment.planReuse(
+            &state.commands,
+            &state.fragment_scratch,
+            allocator,
+            input,
+            variant,
+            max_backward_distance,
+        );
+        match_count = fragment_stats.matches;
+    } else {
+        const plan_stats = if (state.history.items.len == 0)
+            switch (policy.family) {
+                .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(
+                    &state.tokens,
+                    &state.greedy_scratch,
+                    allocator,
+                    input,
+                    parser_options,
+                ),
+                .balanced, .ratio => if (input.len <= 32 * 1024)
+                    try lz77.lazyGreedyPlanTinyReuse(
+                        &state.tokens,
+                        allocator,
+                        input,
+                        parser_options,
+                    )
+                else
+                    try lz77.lazyGreedyPlanWithDictionaryReuse(
+                        &state.tokens,
+                        &state.dictionary_greedy_scratch,
+                        allocator,
+                        input,
+                        "",
+                        parser_options,
+                    ),
+            }
+        else switch (policy.family) {
+            .fast => try lz77.hashGreedyPlanWithDictionaryReuse(
+                &state.tokens,
+                &state.dictionary_greedy_scratch,
+                allocator,
+                input,
+                state.history.items,
+                parser_options,
+            ),
+            .balanced, .ratio => try lz77.lazyGreedyPlanWithDictionaryReuse(
+                &state.tokens,
+                &state.dictionary_greedy_scratch,
+                allocator,
+                input,
+                state.history.items,
+                parser_options,
+            ),
+        };
+        match_count = plan_stats.matches;
+        _ = if (state.history.items.len == 0)
+            try command_plan.buildTrustedReuse(&state.commands, allocator, input, state.tokens.items)
+        else
+            try command_plan.buildWithDictionaryReuse(
+                &state.commands,
+                allocator,
+                input,
+                state.history.items.len,
+                state.tokens.items,
+            );
+    }
+    const q0_one_pass = policy.fragment_variant == .q0 and !state.adaptive_blocks;
+    const has_serialized_static = state.shared_dictionary.hasSerializedStatic();
+    if (match_count != 0 or state.compound_dictionary_size != 0 or
+        has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass)
+    {
+        const mixed = if (state.compound_dictionary_size != 0)
+            try command_plan.mixCompoundDictionaryAlloc(
+                allocator,
+                input,
+                state.commands.items,
+                &state.compound_matcher.?,
+                compound_dictionary_matcher.bucket_ways,
+            )
+        else
+            null;
+        defer if (mixed) |plan| plan.deinit(allocator);
+        const commands = if (mixed) |plan| plan.commands else state.commands.items;
+        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0) or q0_one_pass)
+            try considerPlannedMetaBlockCommands(
+                allocator,
+                state,
+                input,
+                commands,
+                policy,
+                state.window_bits,
+                state.compound_dictionary_size,
+                start_byte,
+                start_bit_index,
+                state.wire_state,
+                best,
+                &state.candidate_wire,
+                &state.best_wire,
+            );
+        try considerPlannedLongDistanceMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            commands,
+            policy,
+            start_byte,
+            start_bit_index,
+            best,
+        );
+        if (has_serialized_static) {
+            const serialized = state.shared_dictionary.serialized.?;
+            const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
+            for (0..mode_count) |mode| {
+                const with_serialized = try mixSerializedDictionaryAlloc(
+                    allocator,
+                    input,
+                    commands,
+                    serialized,
+                    if (state.serialized_matcher) |*matcher| matcher else null,
+                    @intCast(mode),
+                    state.context_previous,
+                );
+                defer with_serialized.deinit(allocator);
+                if (with_serialized.match_count != 0)
+                    try considerSerializedMetaBlockCommands(
+                        allocator,
+                        input,
+                        with_serialized.commands,
+                        @intCast(mode),
+                        state.context_previous,
+                        state.window_bits,
+                        state.compound_dictionary_size,
+                        start_byte,
+                        start_bit_index,
+                        state.wire_state,
+                        best,
+                        &state.candidate_wire,
+                        &state.best_wire,
+                    );
+            }
+        }
+        if (!has_serialized_static and policy.dictionary.static_dictionary and
+            input.len <= ratio_extended_static_dictionary_max_input_len)
+        {
+            const with_static = if (input.len <= ratio_static_dictionary_max_input_len)
+                try command_plan.mixStaticDictionaryAlloc(
+                    allocator,
+                    input,
+                    commands,
+                )
+            else if (policy.dictionary.extended_search and policy.dictionary.max_probes != 0)
+                try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(
+                    allocator,
+                    input,
+                    commands,
+                    null,
+                    policy.dictionary.max_probes,
+                )
+            else
+                null;
+            defer if (with_static) |plan| plan.deinit(allocator);
+            if (with_static) |plan| if (plan.match_count != 0)
+                try considerPlannedMetaBlockCommands(
+                    allocator,
+                    state,
+                    input,
+                    plan.commands,
+                    policy,
+                    state.window_bits,
+                    state.compound_dictionary_size,
+                    start_byte,
+                    start_bit_index,
+                    state.wire_state,
+                    best,
+                    &state.candidate_wire,
+                    &state.best_wire,
+                );
+        }
+    }
+
+    if (policy.optimal.enabled and input.len >= 4 * 1024 and
+        input.len <= policy.optimal.max_input_len)
+    {
+        const optimal = try lz77.optimalPlanAlloc(allocator, input, .{
+            .window_len = @min(input.len, @min(max_backward_distance, lz77.default_window_len)),
+            .max_chain = policy.optimal.max_chain,
+            .nice_len = policy.optimal.nice_len,
+            .max_candidates = policy.optimal.max_candidates,
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        });
+        defer optimal.deinit(allocator);
+        if (optimal.stats.matches != 0) {
+            const commands = try command_plan.buildAlloc(allocator, input, optimal.tokens);
+            defer commands.deinit(allocator);
+            try considerPlannedMetaBlockCommands(
+                allocator,
+                state,
+                input,
+                commands.commands,
+                policy,
+                state.window_bits,
+                state.compound_dictionary_size,
+                start_byte,
+                start_bit_index,
+                state.wire_state,
+                best,
+                &state.candidate_wire,
+                &state.best_wire,
+            );
+            if (policy.optimal.entropy_feedback)
+                try considerPlannedMetaBlockOptimalFeedback(
+                    allocator,
+                    state,
+                    input,
+                    commands.commands,
+                    policy,
+                    @min(input.len, @min(max_backward_distance, lz77.default_window_len)),
+                    start_byte,
+                    start_bit_index,
+                    best,
+                );
+        }
+    }
+}
+
+fn considerPlannedMetaBlockOptimalFeedback(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    seed_commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    search_window: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    var model = try entropy_feedback.buildWithStartingDistances(
+        allocator,
+        input,
+        seed_commands,
+        search_window,
+        state.wire_state.last_distances,
+    );
+    defer model.deinit(allocator);
+    const parser_options = lz77.GreedyOptions{
+        .window_len = search_window,
+        .max_chain = policy.optimal.max_chain,
+        .nice_len = policy.optimal.nice_len,
+        .max_candidates = policy.optimal.max_candidates,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    };
+    const modeled = try lz77.optimalPlanAllocWithCostModel(
+        allocator,
+        input,
+        parser_options,
+        model.lz77Model(),
+    );
+    defer modeled.deinit(allocator);
+    if (modeled.stats.matches != 0) {
+        const commands = try command_plan.buildAlloc(allocator, input, modeled.tokens);
+        defer commands.deinit(allocator);
+        try considerPlannedMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            commands.commands,
+            policy,
+            state.window_bits,
+            state.compound_dictionary_size,
+            start_byte,
+            start_bit_index,
+            state.wire_state,
+            best,
+            &state.candidate_wire,
+            &state.best_wire,
+        );
+    }
+
+    if (policy.optimal.command_state_max_input_len == 0 or
+        input.len > policy.optimal.command_state_max_input_len)
+    {
+        return;
+    }
+    try considerPlannedMetaBlockCommandState(
+        allocator,
+        state,
+        input,
+        policy,
+        search_window,
+        start_byte,
+        start_bit_index,
+        best,
+        &model,
+    );
+}
+
+noinline fn considerPlannedMetaBlockCommandState(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    policy: PlannedMetaBlockPolicy,
+    search_window: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+    model: *const entropy_feedback.Model,
+) linksection(command_state_text_section) Error!void {
+    const hq = try hq_command_parser.planAllocWithStartingDistances(
+        allocator,
+        input,
+        .{
+            .window_len = search_window,
+            .max_chain = @min(policy.optimal.max_chain, 64),
+            .nice_len = policy.optimal.nice_len,
+            .max_candidates = @min(policy.optimal.max_candidates, 8),
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        },
+        model,
+        state.wire_state.last_distances,
+    );
+    defer hq.deinit(allocator);
+    if (hq.lz.stats.matches == 0) return;
+    const commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+    defer commands.deinit(allocator);
+    const before_bits = if (best.*) |candidate| candidate.bit_count else std.math.maxInt(usize);
+    const compact = try encodePlannedMetaBlockCandidate(
+        allocator,
+        &state.candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands.commands,
+        state.wire_state,
+        commandStateCompactEncodeOptions(.{
+            .try_recent_distances = policy.use_recent_distances,
+            .try_literal_contexts = policy.context.literal_contexts,
+            .window_bits = state.window_bits,
+            .compound_dictionary_size = state.compound_dictionary_size,
+            .initial_output_pos = state.wire_state.output_pos,
+            .starting_last_distances = state.wire_state.last_distances,
+        }),
+    );
+    const run_full_wire = commandStateFullMetaBlockEligible(
+        compact.bit_count,
+        before_bits,
+    );
+    try retainSmallerMetaBlockCandidate(
+        allocator,
+        best,
+        &state.candidate_wire,
+        &state.best_wire,
+        compact,
+    );
+    if (!run_full_wire) {
+        if (builtin.is_test) {
+            test_stream_hq_command_candidate_attempts += 1;
+            test_stream_hq_command_candidate_selections += @intFromBool(
+                best.*.?.bit_count < before_bits,
+            );
+        }
+        return;
+    }
+    try considerPlannedMetaBlockCommands(
+        allocator,
+        state,
+        input,
+        commands.commands,
+        policy,
+        state.window_bits,
+        state.compound_dictionary_size,
+        start_byte,
+        start_bit_index,
+        state.wire_state,
+        best,
+        &state.candidate_wire,
+        &state.best_wire,
+    );
+    if (builtin.is_test) {
+        test_stream_hq_command_candidate_attempts += 1;
+        test_stream_hq_command_candidate_selections += @intFromBool(
+            best.*.?.bit_count < before_bits,
+        );
+    }
+}
+
+fn commitPlannedMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    start_bit_index: u3,
+    bytes: []const u8,
+) Error!void {
+    try @import("br/encoder/hq_codec/transaction.zig").appendCandidate(allocator, out, start_bit_index, bytes);
+}
+
+fn prepareAdaptiveBranch(
+    allocator: std.mem.Allocator,
+    branch: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+) Error!void {
+    branch.clearRetainingCapacity();
+    if (start_bit_index != 0) try branch.append(allocator, start_byte);
+}
+
+fn restorePlannedHistory(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+) Error!void {
+    state.history.clearRetainingCapacity();
+    try state.history.appendSlice(allocator, state.history_snapshot.items);
+}
+
+fn plannedStateRetainsMatchHistory(
+    state: *const IncrementalPlannedEncoderCodec.State,
+) Error!bool {
+    const quality = state.quality orelse return true;
+    const schedule = quality_schedule.getInt(quality, state.mode) catch
+        return error.InvalidBlockPlan;
+    return schedule.fragment_parser == null;
+}
+
+fn writeAdaptivePlannedStreamBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    state: *IncrementalPlannedEncoderCodec.State,
+    block: []const u8,
+    split_plan: stream_block_split.Plan,
+) Error!void {
+    const Choice = enum { single, halves, grid };
+    std.debug.assert(block.len == stream_block_split.full_block_len);
+    const start_len = out.items.len;
+    const start_bit_index = state.bit_index;
+    const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+    const start_wire_state = state.wire_state;
+    const start_context_previous = state.context_previous;
+    const start_q0_entropy_state = state.q0_entropy_state;
+    state.history_snapshot.clearRetainingCapacity();
+    try state.history_snapshot.appendSlice(allocator, state.history.items);
+    errdefer {
+        restorePlannedHistory(allocator, state) catch {};
+        state.bit_index = start_bit_index;
+        state.wire_state = start_wire_state;
+        state.context_previous = start_context_previous;
+        state.q0_entropy_state = start_q0_entropy_state;
+    }
+
+    try prepareAdaptiveBranch(
+        allocator,
+        &state.adaptive_single_wire,
+        start_byte,
+        start_bit_index,
+    );
+    state.bit_index = start_bit_index;
+    state.wire_state = start_wire_state;
+    state.context_previous = start_context_previous;
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_single_wire,
+        state,
+        block,
+        false,
+    );
+    const single_bit_index = state.bit_index;
+    const single_wire_state = state.wire_state;
+    const single_context_previous = state.context_previous;
+    const single_q0_entropy_state = state.q0_entropy_state;
+    const single_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+        state.adaptive_single_wire.items.len,
+        single_bit_index,
+    ) - start_bit_index;
+
+    try prepareAdaptiveBranch(
+        allocator,
+        &state.adaptive_split_wire,
+        start_byte,
+        start_bit_index,
+    );
+    state.bit_index = start_bit_index;
+    state.wire_state = start_wire_state;
+    state.context_previous = start_context_previous;
+    state.q0_entropy_state = start_q0_entropy_state;
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_split_wire,
+        state,
+        block[0..stream_block_split.half_block_len],
+        true,
+    );
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_split_wire,
+        state,
+        block[stream_block_split.half_block_len..],
+        true,
+    );
+    const split_bit_index = state.bit_index;
+    const split_wire_state = state.wire_state;
+    const split_context_previous = state.context_previous;
+    const split_q0_entropy_state = state.q0_entropy_state;
+    const split_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+        state.adaptive_split_wire.items.len,
+        split_bit_index,
+    ) - start_bit_index;
+    const grid_plans = split_plan.gridPlans();
+    var grid_bits: ?usize = null;
+    var grid_bit_index: u3 = undefined;
+    var grid_wire_state: PlannedWireState = undefined;
+    var grid_context_previous: [2]u8 = undefined;
+    var grid_q0_entropy_state: fast_fragment_one_pass.State = undefined;
+    if (grid_plans.len != 0) {
+        state.adaptive_split_history.clearRetainingCapacity();
+        try state.adaptive_split_history.appendSlice(allocator, state.history.items);
+        state.adaptive_grid_wire.clearRetainingCapacity();
+        state.adaptive_grid_history.clearRetainingCapacity();
+        for (grid_plans) |*grid_plan| {
+            try prepareAdaptiveBranch(
+                allocator,
+                &state.adaptive_grid_candidate_wire,
+                start_byte,
+                start_bit_index,
+            );
+            try restorePlannedHistory(allocator, state);
+            state.bit_index = start_bit_index;
+            state.wire_state = start_wire_state;
+            state.context_previous = start_context_previous;
+            state.q0_entropy_state = start_q0_entropy_state;
+            var segment_start: usize = 0;
+            for (grid_plan.slice()) |boundary_u16| {
+                const boundary: usize = boundary_u16;
+                try writePlannedStreamMetaBlock(
+                    allocator,
+                    &state.adaptive_grid_candidate_wire,
+                    state,
+                    block[segment_start..boundary],
+                    true,
+                );
+                segment_start = boundary;
+            }
+            try writePlannedStreamMetaBlock(
+                allocator,
+                &state.adaptive_grid_candidate_wire,
+                state,
+                block[segment_start..],
+                true,
+            );
+            const candidate_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+                state.adaptive_grid_candidate_wire.items.len,
+                state.bit_index,
+            ) - start_bit_index;
+            if (grid_bits == null or candidate_bits < grid_bits.?) {
+                grid_bits = candidate_bits;
+                state.adaptive_grid_wire.clearRetainingCapacity();
+                try state.adaptive_grid_wire.appendSlice(
+                    allocator,
+                    state.adaptive_grid_candidate_wire.items,
+                );
+                state.adaptive_grid_history.clearRetainingCapacity();
+                try state.adaptive_grid_history.appendSlice(
+                    allocator,
+                    state.history.items,
+                );
+                grid_bit_index = state.bit_index;
+                grid_wire_state = state.wire_state;
+                grid_context_previous = state.context_previous;
+                grid_q0_entropy_state = state.q0_entropy_state;
+            }
+        }
+    }
+
+    var choice: Choice = .single;
+    var selected_bits = single_bits;
+    if (split_bits < selected_bits) {
+        choice = .halves;
+        selected_bits = split_bits;
+    }
+    if (grid_bits) |bits| {
+        if (bits < selected_bits) choice = .grid;
+    }
+    const selected = switch (choice) {
+        .single => state.adaptive_single_wire.items,
+        .halves => state.adaptive_split_wire.items,
+        .grid => state.adaptive_grid_wire.items,
+    };
+    const shared_byte_count: usize = @intFromBool(start_bit_index != 0);
+    try out.ensureUnusedCapacity(allocator, selected.len - shared_byte_count);
+    switch (choice) {
+        .single => {
+            try restorePlannedHistory(allocator, state);
+            state.bit_index = single_bit_index;
+            state.wire_state = single_wire_state;
+            state.context_previous = single_context_previous;
+            state.q0_entropy_state = single_q0_entropy_state;
+            if (try plannedStateRetainsMatchHistory(state)) {
+                const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+                try IncrementalPlannedEncoderCodec.appendHistory(
+                    &state.history,
+                    allocator,
+                    block,
+                    max_backward_distance,
+                );
+            }
+        },
+        .halves => {
+            if (grid_plans.len != 0) {
+                state.history.clearRetainingCapacity();
+                try state.history.appendSlice(
+                    allocator,
+                    state.adaptive_split_history.items,
+                );
+            }
+            state.bit_index = split_bit_index;
+            state.wire_state = split_wire_state;
+            state.context_previous = split_context_previous;
+            state.q0_entropy_state = split_q0_entropy_state;
+        },
+        .grid => {
+            state.history.clearRetainingCapacity();
+            try state.history.appendSlice(
+                allocator,
+                state.adaptive_grid_history.items,
+            );
+            state.bit_index = grid_bit_index;
+            state.wire_state = grid_wire_state;
+            state.context_previous = grid_context_previous;
+            state.q0_entropy_state = grid_q0_entropy_state;
+        },
+    }
+    try commitPlannedMetaBlockCandidate(
+        allocator,
+        out,
+        start_bit_index,
+        selected,
+    );
+}
+
+fn writePlannedStreamMetaBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    state: *IncrementalPlannedEncoderCodec.State,
+    block: []const u8,
+    update_history: bool,
+) Error!void {
+    if (state.hq != null) return writeHqPlannedStreamMetaBlock(allocator, out, state, block, false);
+    if (block.len == 0 or block.len > planned_chunk_max_input_len)
+        return error.InvalidBlockPlan;
+    const start_len = out.items.len;
+    const start_bit_index = state.bit_index;
+    const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+    const start_bits = IncrementalPlannedEncoderCodec.startBitPosition(start_len, start_bit_index);
+    const stored_end_bits = try addStoredUncompressedMetaBlockBitsLen(start_bits, block.len);
+    const stored_bit_count = stored_end_bits - start_bits;
+    const start_wire_state = state.wire_state;
+    const start_q0_entropy_state = state.q0_entropy_state;
+    errdefer state.q0_entropy_state = start_q0_entropy_state;
+    state.candidate_wire.clearRetainingCapacity();
+    state.best_wire.clearRetainingCapacity();
+    var best: ?PlannedMetaBlockCandidate = null;
+    var retain_match_history = true;
+
+    if (state.quality) |quality| {
+        var schedule = quality_schedule.getInt(quality, state.mode) catch
+            return error.InvalidBlockPlan;
+        try applyCommandStateLimit(&schedule, state.command_state_max_input_kib);
+        retain_match_history = schedule.fragment_parser == null;
+        if (schedule.quality == .q11) {
+            var q10 = quality_schedule.get(.q10, schedule.mode);
+            try applyCommandStateLimit(&q10, state.command_state_max_input_kib);
+            try considerPlannedMetaBlockPolicy(
+                allocator,
+                state,
+                block,
+                PlannedMetaBlockPolicy.fromSchedule(q10),
+                start_byte,
+                start_bit_index,
+                &best,
+            );
+        }
+        try considerPlannedMetaBlockPolicy(
+            allocator,
+            state,
+            block,
+            PlannedMetaBlockPolicy.fromSchedule(schedule),
+            start_byte,
+            start_bit_index,
+            &best,
+        );
+    } else {
+        try considerPlannedMetaBlockPolicy(
+            allocator,
+            state,
+            block,
+            PlannedMetaBlockPolicy.fromLevel(state.level),
+            start_byte,
+            start_bit_index,
+            &best,
+        );
+    }
+
+    if (best) |candidate| {
+        if (candidate.bit_count <= stored_bit_count) {
+            try commitPlannedMetaBlockCandidate(
+                allocator,
+                out,
+                start_bit_index,
+                state.best_wire.items,
+            );
+            state.bit_index = candidate.bit_index;
+            state.wire_state = candidate.wire_state;
+        } else {
+            var writer = BitWriter{ .out = out, .bit_index = start_bit_index };
+            try writeUncompressedMetaBlock(allocator, &writer, block);
+            state.bit_index = writer.bit_index;
+            state.wire_state = start_wire_state;
+            state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
+                return error.IntegerOverflow;
+        }
+    } else {
+        var writer = BitWriter{ .out = out, .bit_index = start_bit_index };
+        try writeUncompressedMetaBlock(allocator, &writer, block);
+        state.bit_index = writer.bit_index;
+        state.wire_state = start_wire_state;
+        state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
+            return error.IntegerOverflow;
+    }
+    if (update_history and retain_match_history) {
+        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+        try IncrementalPlannedEncoderCodec.appendHistory(
+            &state.history,
+            allocator,
+            block,
+            max_backward_distance,
+        );
+    }
+    appendPreviousBytes(&state.context_previous, block);
+}
+
+fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *IncrementalPlannedEncoderCodec.State, block: []const u8, final: bool) Error!void {
+    if (block.len == 0 or block.len > hq_options.max_block_len) return error.InvalidBlockPlan;
+    const raw = state.hq orelse return error.InvalidBlockPlan;
+    const format: encoder_distance.Format = if (state.large_window) .large_window else .standard;
+    const resolved = try raw.resolveForFormat(state.quality orelse return error.InvalidBlockPlan, state.mode, format);
+    defer if (raw.profile) |p| p.recordEffective(resolved);
+    const previous_emitted = if (raw.profile) |p| p.emitted() else null;
+    errdefer if (raw.profile) |p| p.restoreEmitted(previous_emitted.?);
+    if (raw.profile) |p| p.recordEffective(resolved);
+    var source = try hq_types.Source.initWithFormat(state.history.items, block, state.window_bits, state.hq_state.frame_offset, format);
+    source.recent = state.wire_state.last_distances;
+    const original_resources = state.hq_state;
+    errdefer {
+        if (original_resources.budget == null) {
+            state.hq_state.deinit();
+            state.hq_state = original_resources;
+        } else if (original_resources.model == null) {
+            const cleanup_allocator = state.hq_state.budget.?.allocator();
+            if (state.hq_state.provider) |*provider| provider.deinit();
+            if (state.hq_state.matcher) |*matcher| matcher.deinit(cleanup_allocator);
+            if (state.hq_state.model) |model| cleanup_allocator.destroy(model);
+            state.hq_state = original_resources;
+        }
+    }
+    const literal_mode: u2 = if (state.mode == .text) literal_context.mode_utf8 else literal_context.mode_lsb6;
+    state.hq_state.ensure(allocator, resolved, state.shared_dictionary, raw.profile, literal_mode) catch |err| return hqCodecError(err);
+    defer if (raw.profile) |p| p.recordPeak(state.hq_state.budget.?.peak);
+    state.hq_state.prepareMatcher(source, resolved, raw.profile) catch |err| return hqWorkingError(err, state.hq_state.budget.?);
+    const a = state.hq_state.budget.?.allocator();
+    const context: hq_codec.wire.Context = .{
+        .start_byte = if (out.items.len == 0) 0 else out.items[out.items.len - 1],
+        .start_bit_index = state.bit_index,
+        .window_bits = state.window_bits,
+        .literal_mode = state.hq_state.model.?.literal_mode,
+        .format = format,
+        .previous = state.context_previous,
+        .distance_parameters = resolved.distance_parameters,
+        .compound_dictionary_size = state.hq_state.provider.?.dictionarySize(),
+        .final_meta_block = final,
+    };
+    var best = encodeHqStoredCandidate(a, source, context) catch |err| return hqWorkingError(err, state.hq_state.budget.?);
+    defer best.deinit(a);
+    if (resolved.quality == 11) {
+        const q10 = try raw.resolveForFormat(10, state.mode, format);
+        var baseline = try hq_codec.native.candidate(BrotliHqEncoderCodec, source, q10, raw.profile, .{ state.context_previous[1], state.context_previous[0] }, &state.hq_state, context);
+        if (baseline.bit_count <= best.bit_count) {
+            best.deinit(a);
+            best = baseline;
+        } else baseline.deinit(a);
+    }
+    var native = try hq_codec.native.candidate(BrotliHqEncoderCodec, source, resolved, raw.profile, .{ state.context_previous[1], state.context_previous[0] }, &state.hq_state, context);
+    if (native.bit_count <= best.bit_count) {
+        best.deinit(a);
+        best = native;
+    } else native.deinit(a);
+    var next_matcher = state.hq_state.nextMatcher(source, resolved, raw.profile) catch |err| return hqWorkingError(err, state.hq_state.budget.?);
+    var matcher_transferred = false;
+    defer if (!matcher_transferred) next_matcher.deinit(a);
+    try state.history.ensureTotalCapacity(allocator, hq_codec.history.capacity(state.history.items.len, block.len, source.window_len));
+    try hq_codec.publication.appendCandidate(allocator, out, state.bit_index, best.bytes.items);
+    state.hq_state.matcher.?.deinit(a);
+    state.hq_state.matcher = next_matcher;
+    matcher_transferred = true;
+    hq_codec.history.appendPrepared(&state.history, block, source.window_len);
+    state.bit_index = best.bit_index;
+    state.wire_state.last_distances = best.last_distances;
+    state.wire_state.output_pos = hq_codec.native.normalHistoryBase(best.frame_offset, source.window_len);
+    state.hq_state.frame_offset = best.frame_offset;
+    if (best.model) |model| state.hq_state.model.?.* = model.*;
+    state.context_previous = if (block.len >= 2) .{ block[block.len - 2], block[block.len - 1] } else .{ state.context_previous[1], block[0] };
+    if (raw.profile) |p| {
+        p.recordEffective(resolved);
+        p.mergeEmitted(best.emitted);
+        p.recordPeak(state.hq_state.budget.?.peak);
+    }
+}
+
+fn encodeHqWholeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    const raw = options.hq orelse return error.InvalidBlockPlan;
+    if (raw.copy_lengths == .complete)
+        return encodeHqCompleteLengthStreamAlloc(allocator, chunks, options);
+    return encodeHqParseModeStreamAlloc(allocator, chunks, options);
+}
+
+fn encodeHqCompleteLengthStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    try validatePlannedStreamChunksOptions(options);
+    var effective = options;
+    effective.hq.?.block_len = try plannedStreamBlockLen(options);
+    const raw = effective.hq orelse return error.InvalidBlockPlan;
+    const resolved = try raw.resolveForFormat(effective.quality orelse return error.InvalidBlockPlan, effective.mode, if (effective.large_window) .large_window else .standard);
+    var sampled_profile: hq_options.HqProfile = .{};
+    var complete_profile: hq_options.HqProfile = .{};
+    defer if (raw.profile) |profile| {
+        profile.mergeWork(sampled_profile);
+        profile.mergeWork(complete_profile);
+        profile.recordEffective(resolved);
+    };
+    var sampled_options = effective;
+    sampled_options.hq.?.copy_lengths = .sampled;
+    sampled_options.hq.?.profile = if (raw.profile != null) &sampled_profile else null;
+    const sampled = try encodeHqParseModeStreamAlloc(allocator, chunks, sampled_options);
+    errdefer allocator.free(sampled);
+    var complete_options = effective;
+    complete_options.hq.?.profile = if (raw.profile != null) &complete_profile else null;
+    // All frames use the same allocator and per-plan search limit. Complete
+    // must succeed even when the sampled counterpart already supplies a wire.
+    const complete = try encodeHqParseModeStreamAlloc(allocator, chunks, complete_options);
+    if (sampled.len <= complete.len) {
+        allocator.free(complete);
+        if (raw.profile) |profile| profile.mergeEmitted(sampled_profile.emitted());
+        return sampled;
+    }
+    allocator.free(sampled);
+    if (raw.profile) |profile| profile.mergeEmitted(complete_profile.emitted());
+    return complete;
+}
+
+fn encodeHqParseModeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    const raw = options.hq orelse return error.InvalidBlockPlan;
+    if (raw.parse_mode == .bounded)
+        return encodeHqWholeStreamSelectedAlloc(allocator, chunks, options);
+    try validatePlannedStreamChunksOptions(options);
+    var effective = options;
+    effective.hq.?.block_len = try plannedStreamBlockLen(options);
+    const resolved = try effective.hq.?.resolveForFormat(effective.quality orelse return error.InvalidBlockPlan, effective.mode, if (effective.large_window) .large_window else .standard);
+    var bounded_profile: hq_options.HqProfile = .{};
+    var whole_profile: hq_options.HqProfile = .{};
+    defer if (raw.profile) |profile| {
+        profile.mergeWork(bounded_profile);
+        profile.mergeWork(whole_profile);
+        profile.recordEffective(resolved);
+    };
+    var bounded_options = effective;
+    bounded_options.hq.?.parse_mode = .bounded;
+    bounded_options.hq.?.profile = if (raw.profile != null) &bounded_profile else null;
+    const bounded = try encodeHqWholeStreamSelectedAlloc(allocator, chunks, bounded_options);
+    errdefer allocator.free(bounded);
+    var whole_options = effective;
+    whole_options.hq.?.profile = if (raw.profile != null) &whole_profile else null;
+    // The requested whole operation must complete even when bounded already
+    // supplies a smaller valid frame. A quota failure remains an error.
+    const whole = try encodeHqWholeStreamSelectedAlloc(allocator, chunks, whole_options);
+    if (bounded.len <= whole.len) {
+        allocator.free(whole);
+        if (raw.profile) |profile| profile.mergeEmitted(bounded_profile.emitted());
+        return bounded;
+    }
+    allocator.free(bounded);
+    if (raw.profile) |profile| profile.mergeEmitted(whole_profile.emitted());
+    return whole;
+}
+
+fn encodeHqWholeStreamSelectedAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    try validatePlannedStreamChunksOptions(options);
+    var effective = options;
+    effective.hq.?.block_len = try plannedStreamBlockLen(options);
+    const raw = effective.hq orelse return error.InvalidBlockPlan;
+    const resolved = try raw.resolveForFormat(effective.quality orelse return error.InvalidBlockPlan, effective.mode, if (effective.large_window) .large_window else .standard);
+    var q10_profile: hq_options.HqProfile = .{};
+    var native_profile: hq_options.HqProfile = .{};
+    defer if (raw.profile) |profile| {
+        profile.mergeWork(q10_profile);
+        profile.mergeWork(native_profile);
+        profile.recordEffective(resolved);
+    };
+    var first_options = effective;
+    first_options.quality = 10;
+    first_options.hq.?.profile = if (raw.profile != null) &q10_profile else null;
+    var first = try hq_codec.frame.encodeAlloc(IncrementalPlannedStreamEncoder, allocator, chunks, .{ .stream = first_options, .block_len = 0 });
+    errdefer allocator.free(first);
+    first = try selectSameShapeLegacyWhole(allocator, chunks, effective, resolved, first, &q10_profile);
+    if (resolved.quality == 10) {
+        if (raw.profile) |profile| profile.mergeEmitted(q10_profile.emitted());
+        return first;
+    }
+    var native_options = effective;
+    native_options.hq.?.profile = if (raw.profile != null) &native_profile else null;
+    const second = try hq_codec.frame.encodeAlloc(IncrementalPlannedStreamEncoder, allocator, chunks, .{ .stream = native_options, .block_len = 0 });
+    if (first.len <= second.len) {
+        allocator.free(second);
+        if (raw.profile) |profile| profile.mergeEmitted(q10_profile.emitted());
+        return first;
+    }
+    allocator.free(first);
+    if (raw.profile) |profile| profile.mergeEmitted(native_profile.emitted());
+    return second;
+}
+
+fn selectSameShapeLegacyWhole(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions, resolved: hq_options.Resolved, baseline: []u8, profile: *hq_options.HqProfile) Error![]u8 {
+    // The legacy planner emits standard window headers. Such a wire is not
+    // eligible for an explicitly requested extension, even below window 25.
+    if (resolved.format == .large_window) return baseline;
+    var input_len: usize = 0;
+    for (chunks) |chunk| input_len = std.math.add(usize, input_len, chunk.len) catch return baseline;
+    if (input_len == 0) return baseline;
+    var legacy_options = options;
+    legacy_options.hq = null;
+    legacy_options.quality = 10;
+    legacy_options.block_len = @min(resolved.block_len, planned_chunk_max_input_len);
+    legacy_options.adaptive_blocks = false;
+    const candidate = try encodePlannedStreamChunksWithOptionsAlloc(allocator, chunks, legacy_options);
+    errdefer allocator.free(candidate);
+    if (candidate.len < baseline.len) {
+        if (try hq_codec.legacy.inspect(LegacyHqInspectionCodec, allocator, candidate, legacy_options, resolved, input_len)) |emitted| {
+            allocator.free(baseline);
+            profile.restoreEmitted(emitted);
+            return candidate;
+        }
+    }
+    allocator.free(candidate);
+    return baseline;
+}
+
+const LegacyHqInspectionCodec = struct {
+    pub const Error = br.Error;
+    pub const Options = PlannedStreamChunksOptions;
+    pub const Reader = bitstream.BitReader;
+    pub const History = LiteralHistory;
+    pub const Stats = StreamSummaryMetaBlockStats;
+    pub const history_capacity = planner_max_backward_distance;
+
+    pub fn readWindow(reader: *Reader, options: Options) br.Error!WindowInfo {
+        return readWindowInfo(reader, .{ .shared_dictionary = options.shared_dictionary, .allow_large_window = options.large_window });
+    }
+    pub fn dictionary(options: Options) br.Error!?DecodeSharedDictionary {
+        return decodeSharedDictionary(.{ .shared_dictionary = options.shared_dictionary, .allow_large_window = options.large_window });
+    }
+    pub fn readMetaBlock(reader: *Reader) br.Error!StreamMetaBlockHeader {
+        return readStreamMetaBlockHeader(reader);
+    }
+    pub fn checkEnd(reader: Reader) br.Error!void {
+        return ensureZeroPaddingAndEnd(reader);
+    }
+    pub fn skipMetadata(reader: *Reader) br.Error!void {
+        _ = try skipMetadataMetaBlockAndReturnLen(reader);
+    }
+    pub fn consumePadding(reader: *Reader) br.Error!void {
+        return consumeZeroPaddingToByte(reader);
+    }
+    pub fn pushHistory(history: *History, bytes: []const u8) void {
+        history.pushSlice(bytes);
+    }
+    pub fn skipCompressed(reader: *Reader, offset: usize, len: usize, recent: *[4]usize, history: *History, stats: *Stats, window: WindowInfo, shared: ?*const DecodeSharedDictionary) br.Error!void {
+        skipMinimalCompressedMetaBlock(reader, offset, len, recent, history, stats, window, shared) catch |err| return hqCodecError(err);
+    }
+};
+
+fn writeLegacyFinalPlannedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *IncrementalPlannedEncoderCodec.State, block: []const u8) Error!void {
+    const original_bit_index = state.bit_index;
+    const original_wire_state = state.wire_state;
+    const original_previous = state.context_previous;
+    const original_entropy = state.q0_entropy_state;
+    var published = false;
+    defer if (!published) {
+        state.bit_index = original_bit_index;
+        state.wire_state = original_wire_state;
+        state.context_previous = original_previous;
+        state.q0_entropy_state = original_entropy;
+    };
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(allocator);
+    if (original_bit_index != 0) {
+        if (out.items.len == 0) return error.InvalidBlockPlan;
+        try candidate.append(allocator, out.items[out.items.len - 1]);
+    }
+    try writePlannedStreamMetaBlock(allocator, &candidate, state, block, false);
+    try IncrementalPlannedEncoderCodec.writeFinal(allocator, &candidate, state);
+    const retain_history = try plannedStateRetainsMatchHistory(state);
+    const window_len = (@as(usize, 1) << state.window_bits) - 16;
+    if (retain_history) try state.history.ensureTotalCapacity(allocator, hq_codec.history.capacity(state.history.items.len, block.len, window_len));
+    try hq_codec.publication.appendCandidate(allocator, out, original_bit_index, candidate.items);
+    if (retain_history) hq_codec.history.appendPrepared(&state.history, block, window_len);
+    published = true;
+}
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
+const command_state_full_wire_slack_bytes: usize = 128;
 const LazyWireOptions = struct {
     try_recent_distances: bool = false,
+    /// Null preserves the legacy coupling where recent-distance search also
+    /// probes literal contexts. Quality schedules set an explicit boolean so
+    /// q3/q4 recent distances do not enable contexts before q5.
+    try_literal_contexts: ?bool = null,
+    try_clustered_literal_contexts: bool = true,
+    try_joint_literal_contexts: bool = true,
+    preferred_literal_context_mode: ?u2 = null,
     try_literal_split: bool = false,
+    try_adaptive_literal_split: bool = false,
     try_command_split: bool = false,
+    try_adaptive_command_split: bool = false,
     try_distance_split: bool = false,
+    try_adaptive_distance_split: bool = false,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
+    compound_dictionary_size: usize = 0,
+    initial_output_pos: usize = 0,
+    starting_last_distances: [4]usize = initial_last_distances,
 };
+
+fn commandStateCompactEncodeOptions(options: LazyWireOptions) CommandPlanEncodeOptions {
+    const use_contexts = options.try_literal_contexts orelse
+        options.try_recent_distances;
+    return .{
+        .use_recent_distances = options.try_recent_distances,
+        .literal_context_candidate = if (use_contexts)
+            literal_context_split.Candidate.suffix(
+                options.preferred_literal_context_mode orelse literal_context.mode_utf8,
+                56,
+                0,
+            )
+        else
+            null,
+        .window_bits = options.window_bits,
+        .metadata = options.metadata,
+        .compound_dictionary_size = options.compound_dictionary_size,
+        .initial_output_pos = options.initial_output_pos,
+        .starting_last_distances = options.starting_last_distances,
+    };
+}
+
+fn commandStateFullWireEligible(compact_len: usize, best_len: usize) bool {
+    return compact_len <= std.math.add(
+        usize,
+        best_len,
+        command_state_full_wire_slack_bytes,
+    ) catch std.math.maxInt(usize);
+}
+
+fn commandStateFullMetaBlockEligible(compact_bits: usize, best_bits: usize) bool {
+    const slack_bits = command_state_full_wire_slack_bytes * 8;
+    return compact_bits <= std.math.add(usize, best_bits, slack_bits) catch
+        std.math.maxInt(usize);
+}
+
+test "command-state full-wire slack keeps near candidates only" {
+    try std.testing.expect(commandStateFullWireEligible(228, 100));
+    try std.testing.expect(!commandStateFullWireEligible(229, 100));
+    try std.testing.expect(commandStateFullMetaBlockEligible(1824, 800));
+    try std.testing.expect(!commandStateFullMetaBlockEligible(1825, 800));
+    try std.testing.expect(commandStateFullWireEligible(
+        std.math.maxInt(usize),
+        std.math.maxInt(usize),
+    ));
+}
 
 fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions, wire_options: LazyWireOptions) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
@@ -2727,7 +8880,7 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
     // often a net loss after its unique command/distance symbols are included.
     // Evaluate the one exact alternative instead of relying on DEFLATE's local
     // fixed-bit profitability model, which cannot see Brotli tree overhead.
-    if (commands.len == 2 and commands[0].has_copy and commands[0].dictionary_output_len == 0 and commands[0].copy_len == 3) {
+    if (commands.len == 2 and commands[0].has_copy and commands[0].isLz77() and commands[0].copy_len == 3) {
         const baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
         errdefer allocator.free(baseline.encoded);
         var candidate_storage: [2]command_plan.Command = undefined;
@@ -2790,24 +8943,150 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
 }
 
 /// Experimental planner-backed encoder for the built-in RFC 7932 static
-/// dictionary. It establishes complete command/wire support with an exhaustive
-/// reference matcher; stable compression levels remain on the faster LZ path.
+/// dictionary. It establishes complete command/wire support with a lazy
+/// supplemental index; stable compression levels remain on the faster LZ path.
 pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    return encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, null);
+    return encodePlannedStreamStaticDictionaryPlanAlloc(allocator, input, false);
 }
 
-fn encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*command_plan.StaticDictionaryMatchCache) Error![]u8 {
+pub fn encodePlannedStreamStaticDictionaryAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+) Error!void {
+    const start = out.items.len;
+    errdefer out.shrinkRetainingCapacity(start);
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(allocator, input);
+    defer allocator.free(encoded);
+    try out.appendSlice(allocator, encoded);
+}
+
+pub fn encodePlannedStreamStaticDictionaryInto(
+    input: []const u8,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+        allocator_dispatch.singleton,
+        input,
+    );
+    defer allocator_dispatch.singleton.free(encoded);
+    if (output.len < encoded.len) return error.OutOfMemory;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+/// Slow correctness oracle for reproducible matcher benchmarks. Applications
+/// should use `encodePlannedStreamStaticDictionaryAlloc`.
+pub fn encodePlannedStreamStaticDictionaryReferenceAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryPlanAlloc(allocator, input, true);
+}
+
+fn encodePlannedStreamStaticDictionaryPlanAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    reference: bool,
+) Error![]u8 {
     const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
     if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
-    const plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, cache);
+    const plan = if (reference)
+        try command_plan.buildStaticDictionaryReferenceAlloc(allocator, input)
+    else
+        try command_plan.buildStaticDictionaryCompleteAlloc(allocator, input);
     defer plan.deinit(allocator);
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
 }
 
+pub fn encodePlannedStreamStaticDictionaryChunksAlloc(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+        allocator,
+        chunks,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    options: StaticDictionaryStreamOptions,
+) Error![]u8 {
+    return static_dictionary_stream.encodeChunksWithOptionsAlloc(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        allocator,
+        chunks,
+        options,
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+) Error!void {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+        allocator,
+        out,
+        chunks,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    options: StaticDictionaryStreamOptions,
+) Error!void {
+    return static_dictionary_stream.encodeChunksWithOptionsAppend(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        allocator,
+        out,
+        chunks,
+        options,
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksInto(
+    chunks: []const []const u8,
+    output: []u8,
+) Error!usize {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+        chunks,
+        output,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+    chunks: []const []const u8,
+    output: []u8,
+    options: StaticDictionaryStreamOptions,
+) Error!usize {
+    return static_dictionary_stream.encodeChunksWithOptionsInto(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        chunks,
+        output,
+        options,
+    );
+}
+
 pub fn plannedStaticDictionaryIndexBytes() usize {
     return command_plan.staticDictionaryIndexBytes();
+}
+
+pub fn plannedCompleteStaticDictionaryIndexBytes() Error!usize {
+    return (try static_dictionary_matcher.CompleteIndex.sharedIndex()).byteSize();
+}
+
+pub fn plannedCompleteStaticDictionaryIndexEntries() Error!usize {
+    return (try static_dictionary_matcher.CompleteIndex.sharedIndex()).entryCount();
 }
 
 pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
@@ -2888,17 +9167,57 @@ pub const PlannedStreamEncoder = struct {
     commands: std.ArrayList(command_plan.Command) = .empty,
     output: std.ArrayList(u8) = .empty,
     greedy_scratch: lz77.TinyGreedyScratch = .{},
+    compound_matcher: compound_dictionary_matcher.Matcher,
+    serialized_matcher: serialized_dictionary_matcher.Matcher,
+    stream_state: IncrementalPlannedEncoderCodec.State = .{},
+    total_memory_lease: ?@import("br/encoder/total_budget.zig").Lease = null,
+    total_memory_inherited: bool = false,
+    total_operation_depth: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
-        return .{ .allocator = allocator };
+        return .{
+            .allocator = allocator,
+            .compound_matcher = compound_dictionary_matcher.Matcher.init(allocator),
+            .serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator),
+        };
     }
 
     pub fn deinit(self: *PlannedStreamEncoder) void {
-        self.greedy_scratch.deinit(self.allocator);
-        self.tokens.deinit(self.allocator);
-        self.commands.deinit(self.allocator);
-        self.output.deinit(self.allocator);
+        const allocator = if (self.total_memory_lease) |lease| lease.allocator() else self.allocator;
+        IncrementalPlannedEncoderCodec.deinitState(&self.stream_state, allocator);
+        self.greedy_scratch.deinit(allocator);
+        self.compound_matcher.deinit();
+        self.serialized_matcher.deinit();
+        self.tokens.deinit(allocator);
+        self.commands.deinit(allocator);
+        self.output.deinit(allocator);
+        if (self.total_memory_lease) |*lease| lease.deinit();
         self.* = undefined;
+    }
+
+    pub fn rebindTotalStateAllocator(self: *PlannedStreamEncoder, allocator: std.mem.Allocator) void {
+        IncrementalPlannedEncoderCodec.rebindStateAllocator(&self.stream_state, allocator);
+    }
+
+    pub fn isTotalOwnedOutput(self: *PlannedStreamEncoder, output: *std.ArrayList(u8)) bool {
+        if (output == &self.output) return true;
+        inline for (.{ "history", "candidate_wire", "best_wire", "adaptive_single_wire", "adaptive_split_wire", "adaptive_grid_wire", "adaptive_grid_candidate_wire", "history_snapshot", "adaptive_split_history", "adaptive_grid_history" }) |field| {
+            if (output == &@field(self.stream_state, field)) return true;
+        }
+        return false;
+    }
+
+    pub fn isTotalOwnedRange(self: *const PlannedStreamEncoder, bytes: []const u8) bool {
+        const overlap = hq_codec.alias.overlaps;
+        if (overlap(bytes, self.output.items.ptr[0..self.output.capacity])) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.tokens.items.ptr[0..self.tokens.capacity]))) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.commands.items.ptr[0..self.commands.capacity]))) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.greedy_scratch.prev.items.ptr[0..self.greedy_scratch.prev.capacity]))) return true;
+        inline for (.{ "history", "candidate_wire", "best_wire", "adaptive_single_wire", "adaptive_split_wire", "adaptive_grid_wire", "adaptive_grid_candidate_wire", "history_snapshot", "adaptive_split_history", "adaptive_grid_history" }) |field| {
+            const list = @field(self.stream_state, field);
+            if (overlap(bytes, list.items.ptr[0..list.capacity])) return true;
+        }
+        return false;
     }
 
     pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -2910,6 +9229,10 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").owned(self, allocator, chunks, options, @This().encodeChunksWithOptionsAlloc);
+        if (options.hq != null) return encodeHqWholeStreamAlloc(allocator, chunks, options);
         return allocator.dupe(u8, try self.encodeChunksScratchWithOptions(chunks, options));
     }
 
@@ -2920,6 +9243,8 @@ pub const PlannedStreamEncoder = struct {
     pub fn encodeChunksWithOptionsInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
         const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
         if (output.len < needed) return error.OutOfMemory;
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").into(self, chunks, output, options, @This().encodeChunksWithOptionsAlloc);
         const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
@@ -2930,6 +9255,17 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").append(self, out, chunks, options, @This().encodeChunksWithOptionsAlloc);
+        if (options.hq) |raw| {
+            const emitted = if (raw.profile) |p| p.emitted() else null;
+            errdefer if (raw.profile) |p| p.restoreEmitted(emitted.?);
+            const encoded = try encodeHqWholeStreamAlloc(self.allocator, chunks, options);
+            defer self.allocator.free(encoded);
+            try out.appendSlice(self.allocator, encoded);
+            return;
+        }
         try out.appendSlice(self.allocator, try self.encodeChunksScratchWithOptions(chunks, options));
     }
 
@@ -2938,6 +9274,33 @@ pub const PlannedStreamEncoder = struct {
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
         try validatePlannedEncodeOptions(input.len, options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").owned(self, allocator, input, options, @This().encodeWithOptionsAlloc);
+        if (options.hq != null) {
+            const chunks = [_][]const u8{input};
+            return encodeHqWholeStreamAlloc(allocator, &chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
+        }
+        if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
+            const chunks = [_][]const u8{input};
+            return self.encodeChunksWithOptionsAlloc(
+                allocator,
+                &chunks,
+                try plannedStreamChunksOptionsFromEncodeOptions(options),
+            );
+        }
+        const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
+        if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
+            return encodePlannedStreamWithPreparedSharedDictionaryAlloc(
+                allocator,
+                input,
+                options,
+                &self.compound_matcher,
+                &self.serialized_matcher,
+                compound_size,
+            );
+        }
+        if (options.quality != null)
+            return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (options.window_bits != null or options.metadata.len != 0)
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (options.level == .fast and input.len <= 32 * 1024)
@@ -2977,20 +9340,19 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
-        return self.tokens.capacity * @sizeOf(lz77.Token) +
-            self.commands.capacity * @sizeOf(command_plan.Command) +
-            self.output.capacity +
-            self.greedy_scratch.retainedCapacity();
+        const bytes = @import("br/encoder/total_retained.zig").reusable(self) catch return std.math.maxInt(usize);
+        const control = if (self.total_memory_lease) |lease| if (lease.snapshot().available and !self.total_memory_inherited) lease.snapshot().control_bytes else 0 else 0;
+        return std.math.add(usize, bytes, control) catch std.math.maxInt(usize);
     }
 
-    /// Encode a fast-level stream into retained encoder-owned output. The
+    /// Encode a planned stream into retained encoder-owned output. The
     /// returned slice is invalidated by the next call or by `deinit`. This path
     /// avoids allocating an owned result once input/output capacities stabilize.
     pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
         return self.encodeScratchWithOptions(input, .{});
     }
 
-    /// Encode one Brotli stream containing multiple independently planned fast
+    /// Encode one Brotli stream containing multiple history-aware planned
     /// meta-blocks. Empty chunks are ignored, and chunks above 32 KiB are split
     /// to keep parser state bounded. The returned slice is invalidated by the
     /// next call or by `deinit`.
@@ -2999,65 +9361,48 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").scratch(self, chunks, options, @This().encodeChunksScratchWithOptions);
+        if (options.hq) |raw| {
+            const emitted = if (raw.profile) |p| p.emitted() else null;
+            errdefer if (raw.profile) |p| p.restoreEmitted(emitted.?);
+            const encoded = try encodeHqWholeStreamAlloc(self.allocator, chunks, options);
+            defer self.allocator.free(encoded);
+            try self.output.ensureTotalCapacity(self.allocator, encoded.len);
+            self.output.clearRetainingCapacity();
+            self.output.appendSliceAssumeCapacity(encoded);
+            return self.output.items;
+        }
+        const block_len = try plannedStreamBlockLen(options);
+        _ = try plannedStreamAdaptiveBlocks(options);
+        IncrementalPlannedEncoderCodec.resetState(&self.stream_state);
         self.output.clearRetainingCapacity();
-        var writer = BitWriter{ .out = &self.output };
-        try writeWindowBits(self.allocator, &writer, options.window_bits);
-        if (options.metadata.len != 0) try writeMetadataMetaBlock(self.allocator, &writer, options.metadata);
-        const window_len = (@as(usize, 1) << options.window_bits) - 16;
-        var stored_ceiling_bits = writer.bitPosition();
+        try IncrementalPlannedEncoderCodec.writePrefix(
+            self.allocator,
+            &self.output,
+            &self.stream_state,
+            options,
+        );
         for (chunks) |chunk| {
             var offset: usize = 0;
             while (offset < chunk.len) {
-                const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
-                stored_ceiling_bits = try addStoredUncompressedMetaBlockBitsLen(stored_ceiling_bits, block_len);
-                try self.encodeFastMetaBlock(&writer, chunk[offset..][0..block_len], stored_ceiling_bits, window_len);
-                offset += block_len;
+                const current_len = @min(chunk.len - offset, block_len);
+                try IncrementalPlannedEncoderCodec.writeBlock(
+                    self.allocator,
+                    &self.output,
+                    &self.stream_state,
+                    chunk[offset..][0..current_len],
+                );
+                offset += current_len;
             }
         }
-        try writer.writeBits(self.allocator, 1, 1); // ISLAST.
-        try writer.writeBits(self.allocator, 1, 1); // ISLASTEMPTY.
+        try IncrementalPlannedEncoderCodec.writeFinal(
+            self.allocator,
+            &self.output,
+            &self.stream_state,
+        );
         return self.output.items;
-    }
-
-    fn encodeFastMetaBlock(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, stored_ceiling_bits: usize, window_len: usize) Error!void {
-        std.debug.assert(input.len != 0 and input.len <= planned_chunk_max_input_len);
-        const start_len = self.output.items.len;
-        const start_bit_index = writer.bit_index;
-        const start_byte = self.output.items[start_len - 1];
-        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
-            .window_len = @min(input.len, window_len),
-            .max_chain = 64,
-            .nice_len = 64,
-            .max_candidates = 8,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        });
-        if (stats.matches == 0)
-            return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
-        _ = command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items) catch |err| switch (err) {
-            error.InvalidBlockPlan => return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte),
-            else => return err,
-        };
-        var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        const compressed_ok = blk: {
-            encodeCommandPlanWithOptionsWrite(self.allocator, writer, input, self.commands.items, null, &stats_out, .{
-                .write_stream_prefix = false,
-                .final_meta_block = false,
-            }) catch |err| switch (err) {
-                error.InvalidBlockPlan => break :blk false,
-                else => return err,
-            };
-            break :blk true;
-        };
-        if (compressed_ok and writer.bitPosition() <= stored_ceiling_bits) return;
-        try self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
-    }
-
-    fn replacePlannedBlockWithStored(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, start_len: usize, start_bit_index: u3, start_byte: u8) Error!void {
-        self.output.shrinkRetainingCapacity(start_len);
-        self.output.items[start_len - 1] = start_byte;
-        writer.bit_index = start_bit_index;
-        try writeUncompressedMetaBlock(self.allocator, writer, input);
     }
 
     /// Encode into retained encoder-owned output. Fast and balanced reuse their
@@ -3066,7 +9411,37 @@ pub const PlannedStreamEncoder = struct {
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
         try validatePlannedEncodeOptions(input.len, options);
-        if (options.window_bits != null or options.metadata.len != 0 or options.level == .ratio or input.len > 32 * 1024) {
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").scratch(self, input, options, @This().encodeScratchWithOptions);
+        if (options.hq != null) {
+            try validatePlannedEncodeOptions(input.len, options);
+            const chunks = [_][]const u8{input};
+            return self.encodeChunksScratchWithOptions(&chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
+        }
+        try validatePlannedEncodeOptions(input.len, options);
+        if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
+            const chunks = [_][]const u8{input};
+            return self.encodeChunksScratchWithOptions(
+                &chunks,
+                try plannedStreamChunksOptionsFromEncodeOptions(options),
+            );
+        }
+        const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
+        if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
+            const encoded = try encodePlannedStreamWithPreparedSharedDictionaryAlloc(
+                self.allocator,
+                input,
+                options,
+                &self.compound_matcher,
+                &self.serialized_matcher,
+                compound_size,
+            );
+            defer self.allocator.free(encoded);
+            self.output.clearRetainingCapacity();
+            try self.output.appendSlice(self.allocator, encoded);
+            return self.output.items;
+        }
+        if (options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level == .ratio or input.len > 32 * 1024) {
             const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
             defer self.allocator.free(encoded);
             self.output.clearRetainingCapacity();
@@ -3105,7 +9480,7 @@ pub const PlannedStreamEncoder = struct {
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         const balanced_alternatives = options.level == .balanced and
-            ((self.commands.items.len == 2 and self.commands.items[0].has_copy and self.commands.items[0].dictionary_output_len == 0 and self.commands.items[0].copy_len == 3) or
+            ((self.commands.items.len == 2 and self.commands.items[0].has_copy and self.commands.items[0].isLz77() and self.commands.items[0].copy_len == 3) or
                 short_match_candidates.collect(self.commands.items).len != 0);
         if (balanced_alternatives) {
             const encoded = try encodeLazyCommandPlanAlloc(self.allocator, input, self.commands.items, &stats_out, .{});
@@ -3132,7 +9507,11 @@ pub const PlannedStreamEncoder = struct {
     pub fn encodeIntoWithOptions(self: *PlannedStreamEncoder, input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
         const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
         if (output.len < needed) return error.OutOfMemory;
-        if (options.window_bits != null or options.metadata.len != 0 or options.level != .fast) {
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").into(self, input, output, options, @This().encodeWithOptionsAlloc);
+        if (options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level != .fast or
+            (try plannedSharedDictionarySize(options.shared_dictionary)) != 0)
+        {
             // Route balanced through this encoder's retained token/command
             // buffers; ratio still delegates inside encodeWithOptionsAlloc.
             const encoded = try self.encodeWithOptionsAlloc(self.allocator, input, options);
@@ -3190,7 +9569,7 @@ pub fn encodeRleStreamInto(input: []const u8, output: []u8) Error!usize {
     _ = try encodedRleStreamBound(input.len);
     var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeRleStreamWrite(std.heap.smp_allocator, &writer, input);
+    try encodeRleStreamWrite(allocator_dispatch.singleton, &writer, input);
     return out.items.len;
 }
 
@@ -3234,21 +9613,21 @@ pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
     if (isRleInput(input)) return encodeRleStreamInto(input, output);
     if (alternatingLength(input)) |len| {
-        const encoded = try encodeAlternatingStreamAlloc(std.heap.smp_allocator, input[0], input[1], len);
-        defer std.heap.smp_allocator.free(encoded);
+        const encoded = try encodeAlternatingStreamAlloc(allocator_dispatch.singleton, input[0], input[1], len);
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
     if (pattern.repeatedDistinctPrefixLength(input)) |period| {
-        const encoded = try encodeRepeatedPrefixStreamAlloc(std.heap.smp_allocator, input[0..period], input.len / period);
-        defer std.heap.smp_allocator.free(encoded);
+        const encoded = try encodeRepeatedPrefixStreamAlloc(allocator_dispatch.singleton, input[0..period], input.len / period);
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
-    if (encodePlannedStreamAlloc(std.heap.smp_allocator, input)) |encoded| {
-        defer std.heap.smp_allocator.free(encoded);
+    if (encodePlannedStreamAlloc(allocator_dispatch.singleton, input)) |encoded| {
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
@@ -3272,46 +9651,18 @@ fn alternatingLength(input: []const u8) ?usize {
     return input.len;
 }
 
-const CommandEncoding = struct { symbol: u16, command: command_lut.Entry };
-
-const explicit_command_symbol_index = blk: {
-    @setEvalBranchQuota(100_000);
-    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
-    for (command_lut.entries, 0..) |entry, symbol| {
-        if (entry.distance_code != -1) continue;
-        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
-        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
-        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
-    }
-    break :blk index;
-};
-const last_distance_command_symbol_index = blk: {
-    @setEvalBranchQuota(100_000);
-    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
-    for (command_lut.entries, 0..) |entry, symbol| {
-        if (entry.distance_code != 0) continue;
-        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
-        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
-        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
-    }
-    break :blk index;
-};
+const CommandEncoding = command_encoding.Encoding;
 
 fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
     return commandEntryForLengthsAndDistance(insert_len, copy_len, false);
 }
 
 fn commandEntryForLengthsAndDistance(insert_len: usize, copy_len: usize, use_last_distance: bool) ?CommandEncoding {
-    const insert_code = lengthCodeForValue(insert_len, true) orelse return null;
-    const copy_code = lengthCodeForValue(copy_len, false) orelse return null;
-    return commandEntryForCodes(insert_code, copy_code, use_last_distance);
+    return command_encoding.forLengths(insert_len, copy_len, use_last_distance);
 }
 
 fn commandEntryForCodes(insert_code: u5, copy_code: u5, use_last_distance: bool) ?CommandEncoding {
-    const index = if (use_last_distance) &last_distance_command_symbol_index else &explicit_command_symbol_index;
-    const symbol = index[insert_code][copy_code];
-    if (symbol == std.math.maxInt(u16)) return null;
-    return .{ .symbol = symbol, .command = command_lut.entries[symbol] };
+    return command_encoding.forCodes(insert_code, copy_code, use_last_distance);
 }
 
 const SameLastDistancePlan = struct {
@@ -3321,8 +9672,8 @@ const SameLastDistancePlan = struct {
 
 const SameLastDistanceShape = struct { insert_code: u5, copy_code: u5 };
 
-fn sameLastDistanceShape(command: command_plan.Command, last_distance: usize) ?SameLastDistanceShape {
-    if (!command.has_copy or command.dictionary_output_len != 0 or command.distance != last_distance) return null;
+fn sameLastDistanceShape(command: command_plan.Command, wire_distance: usize, last_distance: usize) ?SameLastDistanceShape {
+    if (!command.has_copy or !compound_wire.canUseRecentDistance(command.source) or wire_distance != last_distance) return null;
     const insert_code = lengthCodeForValue(command.insert_len, true) orelse return null;
     const copy_code = lengthCodeForValue(command.copy_len, false) orelse return null;
     if (commandEntryForCodes(insert_code, copy_code, true) == null) return null;
@@ -3460,41 +9811,7 @@ fn chooseSameLastDistancePlan(
     return plan;
 }
 
-fn lengthCodeForValue(value: usize, comptime insert: bool) ?u5 {
-    if (comptime insert) return switch (value) {
-        0...5 => @intCast(value),
-        6...9 => @intCast(6 + ((value - 6) >> 1)),
-        10...17 => @intCast(8 + ((value - 10) >> 2)),
-        18...33 => @intCast(10 + ((value - 18) >> 3)),
-        34...65 => @intCast(12 + ((value - 34) >> 4)),
-        66...129 => @intCast(14 + ((value - 66) >> 5)),
-        130...193 => 16,
-        194...321 => 17,
-        322...577 => 18,
-        578...1089 => 19,
-        1090...2113 => 20,
-        2114...6209 => 21,
-        6210...22593 => 22,
-        22594...16_799_809 => 23,
-        else => null,
-    };
-    return switch (value) {
-        2...9 => @intCast(value - 2),
-        10...13 => @intCast(8 + ((value - 10) >> 1)),
-        14...21 => @intCast(10 + ((value - 14) >> 2)),
-        22...37 => @intCast(12 + ((value - 22) >> 3)),
-        38...69 => @intCast(14 + ((value - 38) >> 4)),
-        70...101 => 16,
-        102...133 => 17,
-        134...197 => 18,
-        198...325 => 19,
-        326...581 => 20,
-        582...1093 => 21,
-        1094...2117 => 22,
-        2118...16_779_333 => 23,
-        else => null,
-    };
-}
+const lengthCodeForValue = br_length.codeForValue;
 
 fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, command: CommandEncoding, insert_len: usize, copy_len: usize) Error!void {
     if (command.command.insert_extra_bits != 0)
@@ -3510,41 +9827,155 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
 const PreferredCommandPlan = struct {
     encoded: []u8,
     use_recent_distances: bool,
+    literal_context_candidate: ?literal_context_split.Candidate = null,
+    alternate_literal_context_candidates: [3]literal_context_split.Candidate = undefined,
+    alternate_literal_context_count: u2 = 0,
+    alternate_plain_literals: bool = false,
+    literal_split_utf8_cutoff: ?u6 = null,
 };
 
 /// Try Brotli's recent-distance symbols as a complete stream alternative. Tree
 /// changes can occasionally outweigh saved distance bits, so ratio mode keeps
 /// the candidate only when the final byte length is smaller.
 fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
-    // A second full wire encode is worthwhile on ratio-sized plans with many
-    // reusable distances, but would dominate latency for small inputs.
-    const use_context = options.try_recent_distances and countReusableRecentDistances(commands) >= min_recent_distance_candidate_count;
+    // Additional full wire candidates are worthwhile only on ratio-sized plans
+    // already paying for recent-distance analysis.
+    const use_recent_distances = options.try_recent_distances and try countReusableRecentDistances(commands, .{
+        .window_bits = options.window_bits,
+        .compound_dictionary_size = options.compound_dictionary_size,
+        .initial_output_pos = options.initial_output_pos,
+        .starting_last_distances = options.starting_last_distances,
+    }) >= min_recent_distance_candidate_count;
+    const try_literal_contexts = options.try_literal_contexts orelse options.try_recent_distances;
+    const explicit_literal_contexts = options.try_literal_contexts orelse false;
+    const primary_context_enabled = explicit_literal_contexts or use_recent_distances;
+    const primary_context: ?literal_context_split.Candidate = if (primary_context_enabled)
+        literal_context_split.Candidate.suffix(options.preferred_literal_context_mode orelse literal_context.mode_utf8, 56, 0)
+    else
+        null;
     const primary_options = CommandPlanEncodeOptions{
-        .use_recent_distances = use_context,
-        .use_utf8_text_contexts = use_context,
+        .use_recent_distances = use_recent_distances,
+        .literal_context_candidate = primary_context,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
+        .compound_dictionary_size = options.compound_dictionary_size,
+        .initial_output_pos = options.initial_output_pos,
+        .starting_last_distances = options.starting_last_distances,
     };
-    if (!use_context) return .{
-        .encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, primary_options),
-        .use_recent_distances = false,
-    };
-    const context_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, primary_options);
+    const initial_stats = stats.*;
+    var primary_stats = initial_stats;
+    var selected = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &primary_stats, primary_options);
+    errdefer allocator.free(selected);
+    var selected_stats = primary_stats;
+    var selected_context = primary_context;
+    var alternate_contexts: [3]literal_context_split.Candidate = undefined;
+    var alternate_context_count: usize = 0;
+    var alternate_plain = false;
+    var literal_split_utf8_cutoff: ?u6 = if (primary_context) |candidate| candidate.suffixCutoff() else null;
+    const context_proposals = if (try_literal_contexts and options.try_clustered_literal_contexts)
+        try literal_context_split.chooseProposals(allocator, input, commands)
+    else
+        literal_context_split.Proposals{};
+    const adaptive_contexts = if (try_literal_contexts)
+        [3]?literal_context_split.Candidate{
+            context_proposals.suffix,
+            context_proposals.up_to_16,
+            context_proposals.full,
+        }
+    else
+        [3]?literal_context_split.Candidate{ null, null, null };
+    for (adaptive_contexts, 0..) |adaptive_context_optional, proposal_index| {
+        if (adaptive_context_optional) |adaptive_context| {
+            var duplicate = if (selected_context) |current| literal_context_split.Candidate.eql(adaptive_context, current) else false;
+            for (alternate_contexts[0..alternate_context_count]) |alternate|
+                duplicate = duplicate or literal_context_split.Candidate.eql(adaptive_context, alternate);
+            if (!duplicate) {
+                var adaptive_stats = initial_stats;
+                const adaptive = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &adaptive_stats, .{
+                    .use_recent_distances = use_recent_distances,
+                    .literal_context_candidate = adaptive_context,
+                    .window_bits = options.window_bits,
+                    .metadata = options.metadata,
+                    .compound_dictionary_size = options.compound_dictionary_size,
+                    .initial_output_pos = options.initial_output_pos,
+                    .starting_last_distances = options.starting_last_distances,
+                });
+                if (adaptive.len < selected.len) {
+                    allocator.free(selected);
+                    selected = adaptive;
+                    selected_stats = adaptive_stats;
+                    if (selected_context) |previous_context| {
+                        if (alternate_context_count >= alternate_contexts.len) return error.InvalidBlockPlan;
+                        alternate_contexts[alternate_context_count] = previous_context;
+                        alternate_context_count += 1;
+                    } else {
+                        alternate_plain = true;
+                    }
+                    selected_context = adaptive_context;
+                } else {
+                    allocator.free(adaptive);
+                    if (alternate_context_count >= alternate_contexts.len) return error.InvalidBlockPlan;
+                    alternate_contexts[alternate_context_count] = adaptive_context;
+                    alternate_context_count += 1;
+                }
+            }
+        }
+        if (proposal_index == 0)
+            literal_split_utf8_cutoff = if (selected_context) |candidate|
+                if (candidate.mode == literal_context.mode_utf8) candidate.suffixCutoff() else null
+            else
+                null;
+    }
+    if (!use_recent_distances and !explicit_literal_contexts) {
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = false,
+            .literal_context_candidate = selected_context,
+            .alternate_literal_context_candidates = alternate_contexts,
+            .alternate_literal_context_count = @intCast(alternate_context_count),
+            .alternate_plain_literals = alternate_plain,
+            .literal_split_utf8_cutoff = literal_split_utf8_cutoff,
+        };
+    }
     // A result below this conservative ratio already wins by far more than the
     // few-byte regressions observed when switching command/literal alphabets.
     // Avoid materializing the explicit baseline in that common ratio-mode case.
-    if (byteRatioAtMost(context_candidate.len, input.len, 80)) return .{
-        .encoded = context_candidate,
-        .use_recent_distances = true,
-    };
-    errdefer allocator.free(context_candidate);
-    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{ .window_bits = options.window_bits, .metadata = options.metadata });
-    errdefer allocator.free(baseline);
-    if (context_candidate.len < baseline.len) {
-        allocator.free(baseline);
-        return .{ .encoded = context_candidate, .use_recent_distances = true };
+    if (!explicit_literal_contexts and byteRatioAtMost(selected.len, input.len, 80)) {
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = use_recent_distances,
+            .literal_context_candidate = selected_context,
+            .alternate_literal_context_candidates = alternate_contexts,
+            .alternate_literal_context_count = @intCast(alternate_context_count),
+            .alternate_plain_literals = alternate_plain,
+            .literal_split_utf8_cutoff = literal_split_utf8_cutoff,
+        };
     }
-    allocator.free(context_candidate);
+    var baseline_stats = initial_stats;
+    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &baseline_stats, .{
+        .window_bits = options.window_bits,
+        .metadata = options.metadata,
+        .compound_dictionary_size = options.compound_dictionary_size,
+        .initial_output_pos = options.initial_output_pos,
+        .starting_last_distances = options.starting_last_distances,
+    });
+    if (selected.len < baseline.len) {
+        allocator.free(baseline);
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = use_recent_distances,
+            .literal_context_candidate = selected_context,
+            .alternate_literal_context_candidates = alternate_contexts,
+            .alternate_literal_context_count = @intCast(alternate_context_count),
+            .alternate_plain_literals = alternate_plain,
+            .literal_split_utf8_cutoff = literal_split_utf8_cutoff,
+        };
+    }
+    allocator.free(selected);
+    stats.* = baseline_stats;
     return .{ .encoded = baseline, .use_recent_distances = false };
 }
 
@@ -3554,24 +9985,175 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
 /// chooses the two- or three-command-type proposal before one full-wire trial
 /// and strict size arbitration against the chosen unsplit stream.
 fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
-    const literal_split = if (options.try_literal_split)
-        literal_block_split.choose(input, commands, if (baseline.use_recent_distances) 56 else null)
+    const literal_splits = if (options.try_literal_split)
+        literal_block_split.chooseProposals(input, commands, baseline.literal_split_utf8_cutoff)
+    else
+        literal_block_split.Proposals{};
+    const literal_split = literal_splits.three orelse literal_splits.two;
+    var adaptive_literal = if (options.try_adaptive_literal_split)
+        try chooseAdaptiveLiteralSplitAlloc(allocator, input, commands)
     else
         null;
-    const symbol_splits = try chooseCommandAndDistanceSplitsAlloc(allocator, commands, baseline.use_recent_distances, options.try_command_split, options.try_distance_split);
-    const distance_split = symbol_splits.distance;
+    defer if (adaptive_literal) |plan| plan.deinit(allocator);
+    var joint_literal = if (adaptive_literal != null and options.try_joint_literal_contexts)
+        literal_joint_context_split.chooseAlloc(allocator, input, commands, adaptive_literal.?, .{}) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidBlockPlan,
+        }
+    else
+        null;
+    defer if (joint_literal) |plan| plan.deinit(allocator);
+    var symbol_splits = try chooseCommandAndDistanceSplitsAlloc(
+        allocator,
+        commands,
+        baseline.use_recent_distances,
+        options.try_command_split,
+        options.try_adaptive_command_split,
+        options.try_distance_split,
+        options.try_adaptive_distance_split,
+        .{
+            .window_bits = options.window_bits,
+            .compound_dictionary_size = options.compound_dictionary_size,
+            .initial_output_pos = options.initial_output_pos,
+            .starting_last_distances = options.starting_last_distances,
+        },
+    );
+    defer symbol_splits.deinit(allocator);
+    const distance_splits = symbol_splits.distance;
+    const distance_split = distance_splits.three orelse distance_splits.two;
     const command_split = symbol_splits.command.three orelse symbol_splits.command.two;
-    if (literal_split == null and command_split == null and distance_split == null) return null;
+    const has_legacy_split = literal_split != null or command_split != null or distance_split != null;
+    if (!has_legacy_split and adaptive_literal == null and symbol_splits.adaptive_command == null and symbol_splits.adaptive_distance == null) return null;
     const baseline_stats = stats.*;
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
-    const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline.use_recent_distances, literal_split, command_split, distance_split);
+    const candidate = if (has_legacy_split)
+        try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
+    else if (adaptive_literal) |*split|
+        try encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &candidate_stats,
+            options,
+            baseline,
+            split,
+        )
+    else if (symbol_splits.adaptive_command) |*adaptive_command|
+        try encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &candidate_stats,
+            options,
+            baseline,
+            adaptive_command,
+        )
+    else
+        try encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &candidate_stats,
+            options,
+            baseline,
+            &symbol_splits.adaptive_distance.?,
+        );
     var best = candidate;
     var best_stats = candidate_stats;
     errdefer allocator.free(best);
+    if (literal_splits.three != null) if (literal_splits.two) |two_literal| {
+        var two_literal_stats = baseline_stats;
+        const two_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_literal_stats, options, baseline, two_literal, command_split, distance_split);
+        if (two_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = two_literal_candidate;
+            best_stats = two_literal_stats;
+        } else allocator.free(two_literal_candidate);
+    };
+    if (literal_splits.clustered) |clustered_literal| {
+        var clustered_literal_stats = baseline_stats;
+        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_literal_stats, options, baseline, clustered_literal, command_split, distance_split);
+        if (clustered_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = clustered_literal_candidate;
+            best_stats = clustered_literal_stats;
+        } else allocator.free(clustered_literal_candidate);
+    }
+    if (literal_splits.alternating_four) |alternating_literal| {
+        var alternating_literal_stats = baseline_stats;
+        const alternating_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_literal_stats, options, baseline, alternating_literal, command_split, distance_split);
+        if (alternating_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = alternating_literal_candidate;
+            best_stats = alternating_literal_stats;
+        } else allocator.free(alternating_literal_candidate);
+    }
+    if (literal_splits.reuse_first_four) |reused_literal| {
+        var reused_literal_stats = baseline_stats;
+        const reused_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_literal_stats, options, baseline, reused_literal, command_split, distance_split);
+        if (reused_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = reused_literal_candidate;
+            best_stats = reused_literal_stats;
+        } else allocator.free(reused_literal_candidate);
+    }
+    if (literal_splits.four) |four_literal| {
+        var four_literal_stats = baseline_stats;
+        const four_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_literal_stats, options, baseline, four_literal, command_split, distance_split);
+        if (four_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = four_literal_candidate;
+            best_stats = four_literal_stats;
+        } else allocator.free(four_literal_candidate);
+    }
+    if (literal_splits.dynamic) |dynamic_literal| {
+        var dynamic_literal_stats = baseline_stats;
+        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_literal_stats, options, baseline, dynamic_literal, command_split, distance_split);
+        if (dynamic_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = dynamic_literal_candidate;
+            best_stats = dynamic_literal_stats;
+        } else allocator.free(dynamic_literal_candidate);
+    }
+    if (has_legacy_split) if (adaptive_literal) |*split| {
+        var adaptive_literal_stats = baseline_stats;
+        const adaptive_literal_candidate = try encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &adaptive_literal_stats,
+            options,
+            baseline,
+            split,
+        );
+        if (adaptive_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = adaptive_literal_candidate;
+            best_stats = adaptive_literal_stats;
+        } else allocator.free(adaptive_literal_candidate);
+    };
+    if (joint_literal) |*joint| {
+        var joint_stats = baseline_stats;
+        const joint_candidate = try encodeEntropyAdaptiveLiteralContextWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &joint_stats,
+            options,
+            baseline,
+            joint,
+        );
+        if (joint_candidate.len < best.len) {
+            allocator.free(best);
+            best = joint_candidate;
+            best_stats = joint_stats;
+        } else allocator.free(joint_candidate);
+    }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
-        const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline.use_recent_distances, literal_split, clustered, distance_split);
+        const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline, literal_split, clustered, distance_split);
         if (clustered_candidate.len < best.len) {
             allocator.free(best);
             best = clustered_candidate;
@@ -3580,7 +10162,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.alternating_four) |alternating| {
         var alternating_stats = baseline_stats;
-        const alternating_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_stats, options, baseline.use_recent_distances, literal_split, alternating, distance_split);
+        const alternating_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_stats, options, baseline, literal_split, alternating, distance_split);
         if (alternating_candidate.len < best.len) {
             allocator.free(best);
             best = alternating_candidate;
@@ -3589,13 +10171,137 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.reuse_first_four) |reused| {
         var reused_stats = baseline_stats;
-        const reused_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_stats, options, baseline.use_recent_distances, literal_split, reused, distance_split);
+        const reused_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_stats, options, baseline, literal_split, reused, distance_split);
         if (reused_candidate.len < best.len) {
             allocator.free(best);
             best = reused_candidate;
             best_stats = reused_stats;
         } else allocator.free(reused_candidate);
     }
+    if (symbol_splits.command.four) |four| {
+        var four_stats = baseline_stats;
+        const four_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_stats, options, baseline, literal_split, four, distance_split);
+        if (four_candidate.len < best.len) {
+            allocator.free(best);
+            best = four_candidate;
+            best_stats = four_stats;
+        } else allocator.free(four_candidate);
+    }
+    if (symbol_splits.command.dynamic) |dynamic| {
+        var dynamic_stats = baseline_stats;
+        const dynamic_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_stats, options, baseline, literal_split, dynamic, distance_split);
+        if (dynamic_candidate.len < best.len) {
+            allocator.free(best);
+            best = dynamic_candidate;
+            best_stats = dynamic_stats;
+        } else allocator.free(dynamic_candidate);
+    }
+    if (distance_splits.three != null) if (distance_splits.two) |two_distance| {
+        var two_distance_stats = baseline_stats;
+        const two_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_distance_stats, options, baseline, literal_split, command_split, two_distance);
+        if (two_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = two_distance_candidate;
+            best_stats = two_distance_stats;
+        } else allocator.free(two_distance_candidate);
+    };
+    if (distance_splits.clustered) |clustered_distance| {
+        var clustered_distance_stats = baseline_stats;
+        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_distance_stats, options, baseline, literal_split, command_split, clustered_distance);
+        if (clustered_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = clustered_distance_candidate;
+            best_stats = clustered_distance_stats;
+        } else allocator.free(clustered_distance_candidate);
+    }
+    if (distance_splits.alternating_four) |alternating_distance| {
+        var alternating_distance_stats = baseline_stats;
+        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_distance_stats, options, baseline, literal_split, command_split, alternating_distance);
+        if (alternating_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = alternating_distance_candidate;
+            best_stats = alternating_distance_stats;
+        } else allocator.free(alternating_distance_candidate);
+    }
+    if (distance_splits.reuse_first_four) |reused_distance| {
+        var reused_distance_stats = baseline_stats;
+        const reused_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_distance_stats, options, baseline, literal_split, command_split, reused_distance);
+        if (reused_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = reused_distance_candidate;
+            best_stats = reused_distance_stats;
+        } else allocator.free(reused_distance_candidate);
+    }
+    if (distance_splits.four) |four_distance| {
+        var four_distance_stats = baseline_stats;
+        const four_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_distance_stats, options, baseline, literal_split, command_split, four_distance);
+        if (four_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = four_distance_candidate;
+            best_stats = four_distance_stats;
+        } else allocator.free(four_distance_candidate);
+    }
+    if (distance_splits.dynamic) |dynamic_distance| {
+        var dynamic_distance_stats = baseline_stats;
+        const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
+        if (dynamic_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = dynamic_distance_candidate;
+            best_stats = dynamic_distance_stats;
+        } else allocator.free(dynamic_distance_candidate);
+    }
+    if (has_legacy_split or adaptive_literal != null) if (symbol_splits.adaptive_command) |*adaptive_command| {
+        var adaptive_stats = baseline_stats;
+        const adaptive_candidate = try encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &adaptive_stats,
+            options,
+            baseline,
+            adaptive_command,
+        );
+        if (adaptive_candidate.len < best.len) {
+            allocator.free(best);
+            best = adaptive_candidate;
+            best_stats = adaptive_stats;
+        } else allocator.free(adaptive_candidate);
+    };
+    if (has_legacy_split or adaptive_literal != null or symbol_splits.adaptive_command != null) if (symbol_splits.adaptive_distance) |*adaptive_distance| {
+        var adaptive_stats = baseline_stats;
+        const adaptive_candidate = try encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &adaptive_stats,
+            options,
+            baseline,
+            adaptive_distance,
+        );
+        if (adaptive_candidate.len < best.len) {
+            allocator.free(best);
+            best = adaptive_candidate;
+            best_stats = adaptive_stats;
+        } else allocator.free(adaptive_candidate);
+    };
+    if (symbol_splits.adaptive_command) |*adaptive_command| if (symbol_splits.adaptive_distance) |*adaptive_distance| {
+        var combined_stats = baseline_stats;
+        const combined_candidate = try encodeEntropyAdaptiveCombinedSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            &combined_stats,
+            options,
+            baseline,
+            adaptive_command,
+            adaptive_distance,
+        );
+        if (combined_candidate.len < best.len) {
+            allocator.free(best);
+            best = combined_candidate;
+            best_stats = combined_stats;
+        } else allocator.free(combined_candidate);
+    };
     if (best.len < baseline.encoded.len) {
         stats.* = best_stats;
         return best;
@@ -3604,67 +10310,400 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     return null;
 }
 
-fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, use_recent_distances: bool, literal_split: ?usize, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
-    return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
-        // The ordinary-vs-UTF8 decision is made first. A literal block split
-        // then inherits that winner's distance coding instead of accidentally
-        // enabling recent-distance symbols when the context candidate lost.
-        .use_recent_distances = use_recent_distances,
-        .use_utf8_text_contexts = use_recent_distances and literal_split == null,
+fn chooseAdaptiveLiteralSplitAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+) Error!?block_split_plan.Plan {
+    var literal_count: usize = 0;
+    for (commands) |command| {
+        if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start)
+            return error.InvalidBlockPlan;
+        literal_count = std.math.add(usize, literal_count, command.insert_len) catch
+            return error.IntegerOverflow;
+    }
+    if (literal_count < 2 * 1024 or literal_count > 32 * 1024) return null;
+    const literals = try allocator.alloc(u8, literal_count);
+    defer allocator.free(literals);
+    var written: usize = 0;
+    for (commands) |command| {
+        @memcpy(literals[written..][0..command.insert_len], input[command.insert_start..][0..command.insert_len]);
+        written += command.insert_len;
+    }
+    std.debug.assert(written == literals.len);
+    return literal_block_split.chooseAdaptiveAlloc(
+        allocator,
+        literals,
+        .{
+            .type_count = 8,
+            .iterations = 1,
+            .min_symbols = 2 * 1024,
+            .max_symbols = 32 * 1024,
+            .scratch_budget_bytes = 2 * 1024 * 1024,
+        },
+    ) catch |err| switch (err) {
+        error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded, error.InvalidBlockPlan => return error.InvalidBlockPlan,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+}
+
+fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        literal_split,
+        null,
+        null,
+        command_split,
+        null,
+        distance_split,
+        null,
+    );
+}
+
+fn encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    adaptive_command_split: *const block_split_plan.Plan,
+) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        null,
+        null,
+        null,
+        null,
+        adaptive_command_split,
+        null,
+        null,
+    );
+}
+
+fn encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    adaptive_distance_split: *const block_split_plan.Plan,
+) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        adaptive_distance_split,
+    );
+}
+
+fn encodeEntropyAdaptiveCombinedSplitWireCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    adaptive_command_split: *const block_split_plan.Plan,
+    adaptive_distance_split: *const block_split_plan.Plan,
+) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        null,
+        null,
+        null,
+        null,
+        adaptive_command_split,
+        null,
+        adaptive_distance_split,
+    );
+}
+
+fn encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    adaptive_literal_split: *const block_split_plan.Plan,
+) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        null,
+        adaptive_literal_split,
+        null,
+        null,
+        null,
+        null,
+        null,
+    );
+}
+
+fn encodeEntropyAdaptiveLiteralContextWireCandidateAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    joint: *const literal_entropy_plan.Plan,
+) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAlloc(
+        allocator,
+        input,
+        commands,
+        stats,
+        options,
+        baseline,
+        null,
+        &joint.block_plan,
+        joint,
+        null,
+        null,
+        null,
+        null,
+    );
+}
+
+fn encodeEntropySplitWireCandidateInternalAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: LazyWireOptions,
+    baseline: PreferredCommandPlan,
+    literal_split: ?literal_block_split.Result,
+    adaptive_literal_split: ?*const block_split_plan.Plan,
+    joint_literal: ?*const literal_entropy_plan.Plan,
+    command_split: ?command_block_split.Result,
+    adaptive_command_split: ?*const block_split_plan.Plan,
+    distance_split: ?distance_block_split.Result,
+    adaptive_distance_split: ?*const block_split_plan.Plan,
+) Error![]u8 {
+    const initial_stats = stats.*;
+    var selected_stats = initial_stats;
+    var selected = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &selected_stats, .{
+        // Literal block splitting disables context trees, while command and
+        // distance splitting retain the winning context candidate.
+        .use_recent_distances = baseline.use_recent_distances,
+        .literal_context_candidate = if (literal_split == null and adaptive_literal_split == null) baseline.literal_context_candidate else null,
         .literal_split = literal_split,
+        .adaptive_literal_split = adaptive_literal_split,
+        .literal_entropy_plan = joint_literal,
         .command_split = command_split,
-        .distance_split = if (distance_split) |result| result.split else null,
+        .adaptive_command_split = adaptive_command_split,
+        .distance_split = distance_split,
+        .adaptive_distance_split = adaptive_distance_split,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
+        .compound_dictionary_size = options.compound_dictionary_size,
+        .initial_output_pos = options.initial_output_pos,
+        .starting_last_distances = options.starting_last_distances,
     });
+    errdefer allocator.free(selected);
+    if (literal_split == null and adaptive_literal_split == null) {
+        for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
+            var alternate_stats = initial_stats;
+            const alternate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &alternate_stats, .{
+                .use_recent_distances = baseline.use_recent_distances,
+                .literal_context_candidate = alternate_context,
+                .command_split = command_split,
+                .adaptive_command_split = adaptive_command_split,
+                .distance_split = distance_split,
+                .adaptive_distance_split = adaptive_distance_split,
+                .window_bits = options.window_bits,
+                .metadata = options.metadata,
+                .compound_dictionary_size = options.compound_dictionary_size,
+                .initial_output_pos = options.initial_output_pos,
+                .starting_last_distances = options.starting_last_distances,
+            });
+            if (alternate.len < selected.len) {
+                allocator.free(selected);
+                selected = alternate;
+                selected_stats = alternate_stats;
+            } else allocator.free(alternate);
+        }
+        if (baseline.alternate_plain_literals) {
+            var plain_stats = initial_stats;
+            const plain = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &plain_stats, .{
+                .use_recent_distances = baseline.use_recent_distances,
+                .command_split = command_split,
+                .adaptive_command_split = adaptive_command_split,
+                .distance_split = distance_split,
+                .adaptive_distance_split = adaptive_distance_split,
+                .window_bits = options.window_bits,
+                .metadata = options.metadata,
+                .compound_dictionary_size = options.compound_dictionary_size,
+                .initial_output_pos = options.initial_output_pos,
+                .starting_last_distances = options.starting_last_distances,
+            });
+            if (plain.len < selected.len) {
+                allocator.free(selected);
+                selected = plain;
+                selected_stats = plain_stats;
+            } else allocator.free(plain);
+        }
+    }
+    stats.* = selected_stats;
+    return selected;
 }
 
 const EntropySymbolSplits = struct {
     command: command_block_split.Proposals = .{},
-    distance: ?distance_block_split.Result = null,
+    adaptive_command: ?block_split_plan.Plan = null,
+    distance: distance_block_split.Proposals = .{},
+    adaptive_distance: ?block_split_plan.Plan = null,
+
+    fn deinit(self: *EntropySymbolSplits, allocator: std.mem.Allocator) void {
+        if (self.adaptive_command) |plan| plan.deinit(allocator);
+        self.adaptive_command = null;
+        if (self.adaptive_distance) |plan| plan.deinit(allocator);
+        self.adaptive_distance = null;
+    }
 };
 
 /// Command and distance splitting consume the same derived command encoding
 /// and recent-distance state. Collect both in one pass so ratio mode does not
 /// allocate and parse the complete command stream twice.
-fn chooseCommandAndDistanceSplitsAlloc(allocator: std.mem.Allocator, commands: []const command_plan.Command, use_recent_distances: bool, try_command_split: bool, try_distance_split: bool) Error!EntropySymbolSplits {
+fn chooseCommandAndDistanceSplitsAlloc(
+    allocator: std.mem.Allocator,
+    commands: []const command_plan.Command,
+    use_recent_distances: bool,
+    try_command_split: bool,
+    try_adaptive_command_split: bool,
+    try_distance_split: bool,
+    try_adaptive_distance_split: bool,
+    wire_context: PlannedWireContext,
+) Error!EntropySymbolSplits {
     var command_accumulator = if (try_command_split) command_block_split.Accumulator.init(commands.len) else null;
+    const collect_adaptive_commands = try_adaptive_command_split and command_block_split.eligible(commands.len);
+    const collect_commands = command_accumulator != null or collect_adaptive_commands;
     // There cannot be more explicit distance symbols than commands, so short
     // plans cannot qualify. Keep candidate discovery bounded on large plans.
-    const collect_distances = try_distance_split and distance_block_split.eligible(commands.len);
-    if (command_accumulator == null and !collect_distances) return .{};
+    const collect_distances = (try_distance_split or try_adaptive_distance_split) and distance_block_split.eligible(commands.len);
+    if (!collect_commands and !collect_distances) return .{};
+    const command_symbols = if (collect_commands) try allocator.alloc(u16, commands.len) else null;
+    defer if (command_symbols) |symbols| allocator.free(symbols);
     const distance_symbols = if (collect_distances) try allocator.alloc(u16, commands.len) else null;
     defer if (distance_symbols) |symbols| allocator.free(symbols);
     var distance_symbol_count: usize = 0;
-    var last_distances = initial_last_distances;
-    for (commands) |command| {
-        const recent_symbol = if (use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+    var last_distances = wire_context.starting_last_distances;
+    for (commands, 0..) |command, command_index| {
+        const wire_distance = if (command.has_copy) try commandWireDistance(
+            command,
+            wire_context.window_bits,
+            wire_context.compound_dictionary_size,
+            wire_context.initial_output_pos,
+        ) else 0;
+        const recent_symbol = if (use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
+            recentDistanceSymbol(wire_distance, &last_distances)
+        else
+            null;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, recent_symbol == 0) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         if (command_accumulator) |*accumulator| if (!accumulator.add(encoding.symbol)) return error.InvalidBlockPlan;
+        if (command_symbols) |symbols| symbols[command_index] = encoding.symbol;
         if (collect_distances and command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(wire_distance, 15) orelse return error.InvalidBlockPlan;
             distance_symbols.?[distance_symbol_count] = distance.symbol;
             distance_symbol_count += 1;
         }
-        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+        if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+            pushLastDistance(&last_distances, wire_distance);
     }
+    const adaptive_command = if (collect_adaptive_commands) command_block_split.chooseAdaptiveAlloc(
+        allocator,
+        command_symbols.?,
+        .{
+            // One deterministic pass over eight seeds covers more types than
+            // the legacy six-region search without imposing the 3x16 research
+            // budget on every ratio-mode command plan. Complete-wire
+            // arbitration remains authoritative.
+            .type_count = 8,
+            .iterations = 1,
+            .min_symbols = 2 * 1024,
+            .max_symbols = 32 * 1024,
+            .scratch_budget_bytes = 2 * 1024 * 1024,
+        },
+    ) catch |err| switch (err) {
+        error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded => return error.InvalidBlockPlan,
+        error.InvalidBlockPlan => return error.InvalidBlockPlan,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        error.OutOfMemory => return error.OutOfMemory,
+    } else null;
+    errdefer if (adaptive_command) |plan| plan.deinit(allocator);
+    const adaptive_distance = if (try_adaptive_distance_split and distance_symbol_count >= 2 * 1024 and distance_symbol_count <= 32 * 1024) distance_block_split.chooseAdaptiveAlloc(
+        allocator,
+        distance_symbols.?[0..distance_symbol_count],
+        .{
+            .type_count = 8,
+            .iterations = 1,
+            .min_symbols = 2 * 1024,
+            .max_symbols = 32 * 1024,
+            .scratch_budget_bytes = 2 * 1024 * 1024,
+        },
+    ) catch |err| switch (err) {
+        error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded => return error.InvalidBlockPlan,
+        error.InvalidBlockPlan => return error.InvalidBlockPlan,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        error.OutOfMemory => return error.OutOfMemory,
+    } else null;
     return .{
         .command = if (command_accumulator) |*accumulator| accumulator.finishProposals() else .{},
-        .distance = if (distance_symbols) |symbols| distance_block_split.choose(symbols[0..distance_symbol_count]) else null,
+        .adaptive_command = adaptive_command,
+        .distance = if (distance_symbols) |symbols| distance_block_split.chooseProposals(symbols[0..distance_symbol_count]) else .{},
+        .adaptive_distance = adaptive_distance,
     };
 }
 
-fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
-    var last_distances = initial_last_distances;
+fn countReusableRecentDistances(commands: []const command_plan.Command, wire_context: PlannedWireContext) Error!usize {
+    var last_distances = wire_context.starting_last_distances;
     var count: usize = 0;
     for (commands) |command| {
-        if (!command.has_copy or command.dictionary_output_len != 0) continue;
-        const symbol = recentDistanceSymbol(command.distance, &last_distances);
+        if (!command.has_copy or !compound_wire.canUseRecentDistance(command.source)) continue;
+        const wire_distance = try commandWireDistance(
+            command,
+            wire_context.window_bits,
+            wire_context.compound_dictionary_size,
+            wire_context.initial_output_pos,
+        );
+        const symbol = recentDistanceSymbol(wire_distance, &last_distances);
         if (symbol != null) count += 1;
         // Code zero reuses the newest distance without changing ring order;
         // every other short or regular distance becomes the new front.
-        if (symbol != 0) pushLastDistance(&last_distances, command.distance);
+        if (symbol != 0) pushLastDistance(&last_distances, wire_distance);
     }
     return count;
 }
@@ -3689,7 +10728,7 @@ fn commandShapeStats(allocator: std.mem.Allocator, commands: []const command_pla
         const copy_code = lengthCodeForValue(command.copy_len, false) orelse continue;
         stats.insert_codes[insert_code] += 1;
         stats.copy_codes[copy_code] += 1;
-        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        if (!command.has_copy or !command.isLz77()) continue;
         const symbol = recentDistanceSymbol(command.distance, &last_distances);
         if (symbol) |recent| {
             stats.recent += 1;
@@ -3702,7 +10741,7 @@ fn commandShapeStats(allocator: std.mem.Allocator, commands: []const command_pla
     defer allocator.free(distance_counts);
     @memset(distance_counts, 0);
     for (commands) |command| {
-        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        if (!command.has_copy or !command.isLz77()) continue;
         if (command.distance > lz77.max_window_len) return error.InvalidBlockPlan;
         distance_counts[command.distance] += 1;
     }
@@ -3726,7 +10765,7 @@ fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceSta
     var last_distances = initial_last_distances;
     var stats: RecentDistanceStats = .{};
     for (commands) |command| {
-        if (!command.has_copy or command.dictionary_output_len != 0) continue;
+        if (!command.has_copy or !command.isLz77()) continue;
         const symbol = recentDistanceSymbol(command.distance, &last_distances);
         if (symbol) |recent| {
             stats.recent += 1;
@@ -3735,21 +10774,6 @@ fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceSta
         if (symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     return stats;
-}
-
-fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
-    const deltas = [_]i8{ -1, 1, -2, 2, -3, 3 };
-    if (distance == last_distances[3]) return 0;
-    if (distance == last_distances[2]) return 1;
-    if (distance == last_distances[1]) return 2;
-    if (distance == last_distances[0]) return 3;
-    for (deltas, 4..) |delta, symbol| {
-        if (distanceWithDelta(last_distances[3], delta) catch null == distance) return @intCast(symbol);
-    }
-    for (deltas, 10..) |delta, symbol| {
-        if (distanceWithDelta(last_distances[2], delta) catch null == distance) return @intCast(symbol);
-    }
-    return null;
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
@@ -3778,47 +10802,299 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 }
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    if (options.large_window)
+        return encodeCommandPlanWithLargeWindowWrite(allocator, writer, input, commands, io, stats, options);
+    if (options.distance_parameters.alphabetSize() > planned_distance_alphabet_size)
+        return encodeCommandPlanWithWideDistanceWrite(
+            allocator,
+            writer,
+            input,
+            commands,
+            io,
+            stats,
+            options,
+        );
+    if (options.adaptive_literal_split != null or options.adaptive_command_split != null or options.adaptive_distance_split != null)
+        return encodeCommandPlanWithAdaptiveSplitWrite(
+            allocator,
+            writer,
+            input,
+            commands,
+            io,
+            stats,
+            options,
+        );
+    return encodeCommandPlanWithOptionsWriteInternal(
+        false,
+        planned_distance_alphabet_size,
+        allocator,
+        writer,
+        input,
+        commands,
+        io,
+        stats,
+        options,
+    );
+}
+
+noinline fn encodeCommandPlanWithAdaptiveSplitWrite(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) linksection(adaptive_split_text_section) Error!void {
+    return encodeCommandPlanWithOptionsWriteInternal(
+        true,
+        planned_distance_alphabet_size,
+        allocator,
+        writer,
+        input,
+        commands,
+        io,
+        stats,
+        options,
+    );
+}
+
+noinline fn encodeCommandPlanWithWideDistanceWrite(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) linksection(distance_parameter_text_section) Error!void {
+    return encodeCommandPlanWithOptionsWriteInternal(
+        false,
+        planned_wide_distance_alphabet_size,
+        allocator,
+        writer,
+        input,
+        commands,
+        io,
+        stats,
+        options,
+    );
+}
+
+noinline fn encodeCommandPlanWithLargeWindowWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    return encodeCommandPlanWithOptionsWriteInternal(false, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
+}
+
+inline fn encodeCommandPlanWithOptionsWriteInternal(
+    comptime allow_adaptive_split: bool,
+    comptime distance_capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error!void {
+    comptime {
+        if (distance_capacity != planned_distance_alphabet_size and
+            distance_capacity != planned_wide_distance_alphabet_size and
+            distance_capacity != large_max_distance_alphabet_size)
+            @compileError("unsupported planned Brotli distance capacity");
+        if (allow_adaptive_split and distance_capacity != planned_distance_alphabet_size)
+            @compileError("adaptive Brotli split writer must use narrow distance capacity");
+    }
     if (commands.len == 0) return error.InvalidBlockPlan;
-    if (options.literal_split != null and options.use_utf8_text_contexts) return error.InvalidBlockPlan;
-    // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
-    // directly represents values 0...15.
-    if (options.ndirect > 15) return error.InvalidBlockPlan;
+    if (options.large_window) {
+        if (distance_capacity != large_max_distance_alphabet_size) return error.InvalidBlockPlan;
+    } else if (distance_capacity == large_max_distance_alphabet_size or
+        ((options.distance_parameters.alphabetSize() > planned_distance_alphabet_size) !=
+            (distance_capacity == planned_wide_distance_alphabet_size))) return error.InvalidBlockPlan;
+    const has_exact_commands = for (commands) |command| {
+        if (command.hq_encoding != null) break true;
+    } else false;
+    const adaptive_command_split: ?*const block_split_plan.Plan = if (allow_adaptive_split)
+        options.adaptive_command_split
+    else
+        null;
+    const adaptive_distance_split: ?*const block_split_plan.Plan = if (allow_adaptive_split)
+        options.adaptive_distance_split
+    else
+        null;
+    const adaptive_literal_split: ?*const block_split_plan.Plan = if (allow_adaptive_split)
+        options.adaptive_literal_split
+    else
+        null;
+    if (allow_adaptive_split != (adaptive_literal_split != null or adaptive_command_split != null or adaptive_distance_split != null))
+        return error.InvalidBlockPlan;
+    const context_candidate = options.literal_context_candidate orelse if (options.use_utf8_text_contexts)
+        literal_context_split.Candidate.suffix(literal_context.mode_utf8, options.utf8_context_cutoff, 0)
+    else
+        null;
+    if (context_candidate) |candidate| {
+        if (candidate.mode > literal_context.mode_signed or candidate.tree_count < 2 or candidate.tree_count > literal_context_split.max_trees)
+            return error.InvalidBlockPlan;
+        var used: [literal_context_split.max_trees]bool = @splat(false);
+        for (candidate.context_map) |tree| {
+            if (tree >= candidate.tree_count) return error.InvalidBlockPlan;
+            used[tree] = true;
+        }
+        for (used[0..candidate.tree_count]) |is_used| if (!is_used) return error.InvalidBlockPlan;
+    }
+    if ((options.literal_split != null or adaptive_literal_split != null) and context_candidate != null) return error.InvalidBlockPlan;
+    if (options.literal_split != null and adaptive_literal_split != null) return error.InvalidBlockPlan;
+    if (adaptive_literal_split) |split| {
+        if (split.blockCount() == 0 or split.types.len != split.lengths.len or split.type_count < 2)
+            return error.InvalidBlockPlan;
+        var literal_count: usize = 0;
+        for (commands) |command| {
+            if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start)
+                return error.InvalidBlockPlan;
+            literal_count = std.math.add(usize, literal_count, command.insert_len) catch
+                return error.IntegerOverflow;
+        }
+        try split.validate(literal_count);
+        if (options.literal_entropy_plan) |joint| {
+            joint.validate(literal_count) catch |err| switch (err) {
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidBlockPlan,
+            };
+            if (joint.block_plan.type_count != split.type_count or
+                !std.mem.eql(u32, joint.block_plan.lengths, split.lengths) or
+                !std.mem.eql(u8, joint.block_plan.types, split.types))
+                return error.InvalidBlockPlan;
+        }
+    } else if (options.literal_entropy_plan != null) {
+        return error.InvalidBlockPlan;
+    }
+    if (options.literal_split) |split| {
+        if (split.split == 0 or split.typeCount() < 2 or split.typeCount() > split.regionCount()) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and split.regionCount() > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and split.regionCount() != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var previous: usize = 0;
+        for (0..split.regionCount() - 1) |boundary_index| {
+            const boundary = split.boundary(boundary_index);
+            if (boundary <= previous) return error.InvalidBlockPlan;
+            previous = boundary;
+        }
+    }
+    const distance_format: encoder_distance.Format = if (options.large_window) .large_window else .standard;
+    if (options.distance_parameters.activeAlphabetSize(distance_format) > distance_capacity)
+        return error.InvalidBlockPlan;
+    if (comptime distance_capacity == planned_wide_distance_alphabet_size) {
+        if (options.literal_split != null or options.adaptive_literal_split != null or options.literal_entropy_plan != null or options.command_split != null or
+            options.adaptive_command_split != null or options.distance_split != null or
+            options.adaptive_distance_split != null or (options.optimize_same_last_distance and !has_exact_commands))
+            return error.InvalidBlockPlan;
+    }
     if (options.command_split) |split| {
-        if (split.split == 0 or commands.len <= split.split) return error.InvalidBlockPlan;
-        if (split.second_split) |second| {
-            if (second <= split.split or commands.len <= second) return error.InvalidBlockPlan;
-            if (split.third_split) |third| {
-                if (split.alternate_two_types == split.reuse_first_for_fourth or third <= second or commands.len <= third) return error.InvalidBlockPlan;
-            }
-        } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.split == 0 or split.typeCount() < 2 or split.typeCount() > split.regionCount()) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and split.regionCount() > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and split.regionCount() != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var previous: usize = 0;
+        for (0..split.regionCount() - 1) |boundary_index| {
+            const boundary = split.boundary(boundary_index);
+            if (boundary <= previous or boundary >= commands.len) return error.InvalidBlockPlan;
+            previous = boundary;
+        }
+    }
+    if (options.command_split != null and adaptive_command_split != null)
+        return error.InvalidBlockPlan;
+    if (adaptive_command_split) |split| {
+        try split.validate(commands.len);
+        if (split.type_count < 2) return error.InvalidBlockPlan;
+    }
+    if (options.distance_split) |split| {
+        if (split.split == 0 or split.typeCount() < 2 or split.typeCount() > split.regionCount()) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and split.regionCount() > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and split.regionCount() != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var previous: usize = 0;
+        for (0..split.regionCount() - 1) |boundary_index| {
+            const boundary = split.boundary(boundary_index);
+            if (boundary <= previous) return error.InvalidBlockPlan;
+            previous = boundary;
+        }
+    }
+    if (options.distance_split != null and adaptive_distance_split != null)
+        return error.InvalidBlockPlan;
+    if (adaptive_distance_split) |split| {
+        if (split.blockCount() == 0 or split.types.len != split.lengths.len or split.type_count < 2)
+            return error.InvalidBlockPlan;
     }
     var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
     var literal_seen: [4]u64 = @splat(0);
     var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     literal_alphabet.len = 0;
-    var literal_context_frequencies: [2][256]u32 = undefined;
+    var literal_context_frequencies: [literal_context_split.max_trees][256]u32 = undefined;
     // Fast and balanced encoding use one literal tree. Avoid clearing two
     // additional dense histograms unless a ratio candidate requests context
     // trees; the ordinary ratio path benefits too when it keeps one tree.
-    if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
-    var literal_block_frequencies: [2][256]u32 = undefined;
+    if (context_candidate != null) @memset(&literal_context_frequencies, @splat(0));
+    var literal_block_frequencies: [literal_block_split.max_regions][256]u32 = undefined;
     if (options.literal_split != null) @memset(&literal_block_frequencies, @splat(0));
+    const adaptive_literal_type_count: usize = if (adaptive_literal_split) |split| split.type_count else 0;
+    const identity_adaptive_literal_type_count: usize = if (options.literal_entropy_plan == null)
+        adaptive_literal_type_count
+    else
+        0;
+    const adaptive_literal_block_frequencies = if (identity_adaptive_literal_type_count != 0)
+        try allocator.alloc([256]u32, identity_adaptive_literal_type_count)
+    else
+        null;
+    defer if (adaptive_literal_block_frequencies) |frequencies| allocator.free(frequencies);
+    if (adaptive_literal_block_frequencies) |frequencies| @memset(frequencies, @splat(0));
+    const joint_literal_tree_count: usize = if (options.literal_entropy_plan) |joint| joint.tree_count else 0;
+    const joint_literal_tree_frequencies = if (joint_literal_tree_count != 0)
+        try allocator.alloc([256]u32, joint_literal_tree_count)
+    else
+        null;
+    defer if (joint_literal_tree_frequencies) |frequencies| allocator.free(frequencies);
+    if (joint_literal_tree_frequencies) |frequencies| @memset(frequencies, @splat(0));
     var command_frequencies: [704]u32 = undefined;
     var command_alphabet: command_plan.PrefixAlphabet = undefined;
     command_alphabet.len = 0;
-    var command_block_frequencies: [3][704]u32 = undefined;
+    var command_block_frequencies: [command_block_split.max_regions][704]u32 = undefined;
     if (options.command_split != null) @memset(&command_block_frequencies, @splat(0));
-    var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
-    var distance_block_frequencies: [2][planned_distance_alphabet_size]u32 = undefined;
+    const adaptive_command_type_count: usize = if (adaptive_command_split) |split| split.type_count else 0;
+    const adaptive_command_block_frequencies = if (adaptive_command_type_count != 0)
+        try allocator.alloc([704]u32, adaptive_command_type_count)
+    else
+        null;
+    defer if (adaptive_command_block_frequencies) |frequencies| allocator.free(frequencies);
+    if (adaptive_command_block_frequencies) |frequencies| @memset(frequencies, @splat(0));
+    var distance_frequencies: [distance_capacity]u32 = @splat(0);
+    var distance_block_frequencies: [distance_block_split.max_regions][distance_capacity]u32 = undefined;
     if (options.distance_split != null) @memset(&distance_block_frequencies, @splat(0));
-    const optimize_same_last_distance = options.optimize_same_last_distance and !options.use_recent_distances and options.command_split == null and options.distance_split == null;
+    const adaptive_distance_type_count: usize = if (adaptive_distance_split) |split| split.type_count else 0;
+    const adaptive_distance_block_frequencies = if (adaptive_distance_type_count != 0)
+        try allocator.alloc([distance_capacity]u32, adaptive_distance_type_count)
+    else
+        null;
+    defer if (adaptive_distance_block_frequencies) |frequencies| allocator.free(frequencies);
+    if (adaptive_distance_block_frequencies) |frequencies| @memset(frequencies, @splat(0));
+    const optimize_same_last_distance = !has_exact_commands and options.optimize_same_last_distance and !options.use_recent_distances and options.command_split == null and adaptive_command_split == null and options.distance_split == null and adaptive_distance_split == null;
     var same_last_shape_counts: [24][24]u32 = @splat(@splat(0));
-    var same_last_distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
+    var same_last_distance_frequencies: [distance_capacity]u32 = @splat(0);
     var same_last_distance_extra_bits: u64 = 0;
     var has_same_last_candidate = false;
     var prepared_command_lengths: [704]u4 = undefined;
-    var prepared_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    var prepared_distance_lengths: [planned_distance_alphabet_size]u4 = undefined;
+    var prepared_distance_alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = undefined;
+    var prepared_distance_lengths: [distance_capacity]u4 = undefined;
     // Frequency collection already resolves every command symbol. Retain the
     // common small-plan result so payload emission does not repeat both length
     // classifications and the 24x24 command-table lookup. Large plans keep the
@@ -3826,15 +11102,33 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var command_symbols: [planned_command_symbol_cache_capacity]u16 = undefined;
     const cache_command_symbols = commands.len <= command_symbols.len;
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var last_distances = initial_last_distances;
+    var last_distances = options.starting_last_distances;
     var literal_index: usize = 0;
+    var adaptive_literal_block_index: usize = 0;
+    var adaptive_literal_block_end: usize = if (adaptive_literal_split) |split| split.lengths[0] else 0;
     var distance_index: usize = 0;
+    var adaptive_command_block_index: usize = 0;
+    var adaptive_command_block_end: usize = if (adaptive_command_split) |split| split.lengths[0] else 0;
+    var adaptive_distance_block_index: usize = 0;
+    var adaptive_distance_block_end: usize = if (adaptive_distance_split) |split| split.lengths[0] else 0;
     for (commands, 0..) |command, command_index| {
-        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const wire_distance = if (command.has_copy) try commandWireDistance(
+            command,
+            options.window_bits,
+            options.compound_dictionary_size,
+            options.initial_output_pos,
+        ) else 0;
+        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
+        const recent_symbol = if (exact_selection) |selected|
+            selected.recent_symbol
+        else if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
+            recentDistanceSymbol(wire_distance, &last_distances)
+        else
+            null;
         const use_last_distance = recent_symbol == 0;
-        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+        const encoding = if (exact_selection) |selected| selected.command else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, last_distances[3]) else null;
+        const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
         if (same_last_shape) |shape| {
             has_same_last_candidate = true;
             same_last_shape_counts[shape.insert_code][shape.copy_code] += 1;
@@ -3842,99 +11136,249 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
         if (options.command_split) |split| {
             command_block_frequencies[split.blockIndex(command_index)][encoding.symbol] += 1;
+        } else if (adaptive_command_split) |split| {
+            while (command_index >= adaptive_command_block_end) {
+                adaptive_command_block_index += 1;
+                if (adaptive_command_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                adaptive_command_block_end = std.math.add(
+                    usize,
+                    adaptive_command_block_end,
+                    split.lengths[adaptive_command_block_index],
+                ) catch return error.IntegerOverflow;
+            }
+            adaptive_command_block_frequencies.?[split.types[adaptive_command_block_index]][encoding.symbol] += 1;
         } else try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.literal_split) |split| {
-                literal_block_frequencies[@intFromBool(literal_index >= split)][literal] += 1;
+                literal_block_frequencies[split.blockIndex(literal_index)][literal] += 1;
+                literal_index += 1;
+            } else if (adaptive_literal_split) |split| {
+                while (literal_index >= adaptive_literal_block_end) {
+                    adaptive_literal_block_index += 1;
+                    if (adaptive_literal_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    adaptive_literal_block_end = std.math.add(
+                        usize,
+                        adaptive_literal_block_end,
+                        split.lengths[adaptive_literal_block_index],
+                    ) catch return error.IntegerOverflow;
+                }
+                const block_type: usize = split.types[adaptive_literal_block_index];
+                if (options.literal_entropy_plan) |joint| {
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        joint.context_modes[block_type],
+                        history[0],
+                        history[1],
+                    );
+                    const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
+                        error.IntegerOverflow => return error.IntegerOverflow,
+                        else => return error.InvalidBlockPlan,
+                    };
+                    joint_literal_tree_frequencies.?[tree][literal] += 1;
+                } else {
+                    adaptive_literal_block_frequencies.?[block_type][literal] += 1;
+                }
                 literal_index += 1;
             } else {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
-                if (options.use_utf8_text_contexts) {
-                    const previous = if (position == 0) 0 else input[position - 1];
-                    const second_previous = if (position < 2) 0 else input[position - 2];
-                    const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                    literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
+                if (context_candidate) |candidate| {
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        candidate.mode,
+                        history[0],
+                        history[1],
+                    );
+                    literal_context_frequencies[candidate.treeFor(context)][literal] += 1;
                 }
             }
         }
         if (!command.has_copy) continue;
         if (encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse return error.InvalidBlockPlan;
-            if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
+            const distance = if (exact_selection) |selected|
+                selected.distance orelse return error.InvalidBlockPlan
+            else if (recent_symbol) |symbol|
+                encoder_distance.Encoding{ .symbol = symbol }
+            else
+                encoder_distance.encodeWithFormat(
+                    wire_distance,
+                    options.distance_parameters,
+                    distance_format,
+                ) orelse return error.InvalidBlockPlan;
+            if (distance.symbol >= distance_capacity) return error.InvalidBlockPlan;
             if (same_last_shape != null) {
                 same_last_distance_frequencies[distance.symbol] += 1;
                 same_last_distance_extra_bits += distance.extra_bits;
             }
             if (options.distance_split) |split| {
-                distance_block_frequencies[@intFromBool(distance_index >= split)][distance.symbol] += 1;
+                distance_block_frequencies[split.blockIndex(distance_index)][distance.symbol] += 1;
+                distance_index += 1;
+            } else if (adaptive_distance_split) |split| {
+                while (distance_index >= adaptive_distance_block_end) {
+                    adaptive_distance_block_index += 1;
+                    if (adaptive_distance_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    adaptive_distance_block_end = std.math.add(
+                        usize,
+                        adaptive_distance_block_end,
+                        split.lengths[adaptive_distance_block_index],
+                    ) catch return error.IntegerOverflow;
+                }
+                adaptive_distance_block_frequencies.?[split.types[adaptive_distance_block_index]][distance.symbol] += 1;
                 distance_index += 1;
             } else distance_frequencies[distance.symbol] += 1;
         }
-        if (command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+        if (exact_selection) |selected|
+            last_distances = selected.repeated_distances
+        else if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+            pushLastDistance(&last_distances, wire_distance);
     }
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
     // without adding payload bits.
-    if (options.literal_split == null and literal_alphabet.len == 0)
+    if (options.literal_split == null and adaptive_literal_split == null and literal_alphabet.len == 0)
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
-    if (options.literal_split) |split| if (split == 0 or literal_index <= split) return error.InvalidBlockPlan;
-    const same_last_distance_plan = if (has_same_last_candidate)
-        try chooseSameLastDistancePlan(
-            allocator,
-            &command_frequencies,
-            &command_alphabet,
-            &distance_frequencies,
-            &same_last_shape_counts,
-            &same_last_distance_frequencies,
-            same_last_distance_extra_bits,
-            16 + @as(usize, options.ndirect) + 48,
-            &command_alphabet,
-            &prepared_command_lengths,
-            &prepared_distance_alphabet,
-            &prepared_distance_lengths,
-        )
+    if (options.literal_split) |split| {
+        for (0..split.regionCount() - 1) |boundary_index|
+            if (literal_index <= split.boundary(boundary_index)) return error.InvalidBlockPlan;
+    }
+    if (adaptive_literal_split) |split| {
+        try split.validate(literal_index);
+        if (adaptive_literal_block_index + 1 != split.blockCount() or
+            adaptive_literal_block_end != literal_index) return error.InvalidBlockPlan;
+    }
+    if (adaptive_command_split != null and
+        (adaptive_command_block_index + 1 != adaptive_command_split.?.blockCount() or
+            adaptive_command_block_end != commands.len)) return error.InvalidBlockPlan;
+    if (adaptive_literal_split != null and
+        (adaptive_literal_block_index + 1 != adaptive_literal_split.?.blockCount() or
+            adaptive_literal_block_end != literal_index)) return error.InvalidBlockPlan;
+    if (adaptive_distance_split) |split| {
+        try split.validate(distance_index);
+        if (adaptive_distance_block_index + 1 != split.blockCount() or
+            adaptive_distance_block_end != distance_index) return error.InvalidBlockPlan;
+    }
+    const same_last_distance_plan = if (comptime distance_capacity == planned_distance_alphabet_size)
+        if (has_same_last_candidate)
+            try chooseSameLastDistancePlan(
+                allocator,
+                &command_frequencies,
+                &command_alphabet,
+                &distance_frequencies,
+                &same_last_shape_counts,
+                &same_last_distance_frequencies,
+                same_last_distance_extra_bits,
+                options.distance_parameters.alphabetSize(),
+                &command_alphabet,
+                &prepared_command_lengths,
+                &prepared_distance_alphabet,
+                &prepared_distance_lengths,
+            )
+        else
+            SameLastDistancePlan{}
     else
         SameLastDistancePlan{};
     if (options.distance_split) |split| {
-        if (split == 0 or distance_index <= split) return error.InvalidBlockPlan;
-    } else if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
+        for (0..split.regionCount() - 1) |boundary_index|
+            if (distance_index <= split.boundary(boundary_index)) return error.InvalidBlockPlan;
+    } else if (adaptive_distance_split == null and allZeroFrequencies(distance_capacity, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
-    var literal_block_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
-    var command_block_alphabets: [3]command_plan.PrefixAlphabet = undefined;
-    var distance_block_alphabets: [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
-    if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
-    if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
+    var literal_context_alphabets: [literal_context_split.max_trees]command_plan.PrefixAlphabetFor(256) = undefined;
+    var literal_block_alphabets: [literal_block_split.max_regions]command_plan.PrefixAlphabetFor(256) = undefined;
+    const adaptive_literal_block_alphabets = if (identity_adaptive_literal_type_count != 0)
+        try allocator.alloc(command_plan.PrefixAlphabetFor(256), identity_adaptive_literal_type_count)
+    else
+        null;
+    defer if (adaptive_literal_block_alphabets) |alphabets| allocator.free(alphabets);
+    const joint_literal_tree_alphabets = if (joint_literal_tree_count != 0)
+        try allocator.alloc(command_plan.PrefixAlphabetFor(256), joint_literal_tree_count)
+    else
+        null;
+    defer if (joint_literal_tree_alphabets) |alphabets| allocator.free(alphabets);
+    var command_block_alphabets: [command_block_split.max_regions]command_plan.PrefixAlphabet = undefined;
+    const adaptive_command_block_alphabets = if (adaptive_command_type_count != 0)
+        try allocator.alloc(command_plan.PrefixAlphabet, adaptive_command_type_count)
+    else
+        null;
+    defer if (adaptive_command_block_alphabets) |alphabets| allocator.free(alphabets);
+    var distance_block_alphabets: [distance_block_split.max_regions]command_plan.PrefixAlphabetFor(distance_capacity) = undefined;
+    const adaptive_distance_block_alphabets = if (adaptive_distance_type_count != 0)
+        try allocator.alloc(command_plan.PrefixAlphabetFor(distance_capacity), adaptive_distance_type_count)
+    else
+        null;
+    defer if (adaptive_distance_block_alphabets) |alphabets| allocator.free(alphabets);
+    var distance_alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
+    if (options.literal_split == null and adaptive_literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
+    if (context_candidate) |candidate| for (literal_context_alphabets[0..candidate.tree_count], literal_context_frequencies[0..candidate.tree_count]) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     };
-    if (options.literal_split != null) for (&literal_block_alphabets, &literal_block_frequencies) |*alphabet, *frequencies|
+    if (options.literal_split) |split| for (literal_block_alphabets[0..split.typeCount()], literal_block_frequencies[0..split.typeCount()]) |*alphabet, *frequencies|
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
+    if (adaptive_literal_block_alphabets) |alphabets| for (alphabets, adaptive_literal_block_frequencies.?) |*alphabet, *frequencies|
+        try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
+    if (joint_literal_tree_alphabets) |alphabets| for (alphabets, joint_literal_tree_frequencies.?) |*alphabet, *frequencies| {
+        if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
+        try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
+    };
     if (options.command_split != null) {
         for (command_block_alphabets[0..options.command_split.?.typeCount()], command_block_frequencies[0..options.command_split.?.typeCount()]) |*alphabet, *frequencies|
+            try command_plan.alphabetFromFrequenciesInto(704, alphabet, frequencies);
+    } else if (adaptive_command_block_alphabets) |alphabets| {
+        for (alphabets, adaptive_command_block_frequencies.?) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(704, alphabet, frequencies);
     } else if (!has_same_last_candidate)
         try command_alphabet.sortByFrequencies(&command_frequencies);
     if (options.distance_split != null) {
-        for (&distance_block_alphabets, &distance_block_frequencies) |*alphabet, *frequencies|
-            try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, alphabet, frequencies);
+        for (distance_block_alphabets[0..options.distance_split.?.typeCount()], distance_block_frequencies[0..options.distance_split.?.typeCount()]) |*alphabet, *frequencies|
+            try command_plan.alphabetFromFrequenciesInto(distance_capacity, alphabet, frequencies);
+    } else if (adaptive_distance_block_alphabets) |alphabets| {
+        for (alphabets, adaptive_distance_block_frequencies.?) |*alphabet, *frequencies|
+            try command_plan.alphabetFromFrequenciesInto(distance_capacity, alphabet, frequencies);
     } else if (!has_same_last_candidate)
-        try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
-    stats.literal_symbol_count = if (options.literal_split != null)
-        literal_block_alphabets[0].len + literal_block_alphabets[1].len
-    else
-        literal_alphabet.len;
+        try command_plan.alphabetFromFrequenciesInto(distance_capacity, &distance_alphabet, &distance_frequencies);
+    stats.literal_symbol_count = if (options.literal_split) |split| blk: {
+        var symbol_count: usize = 0;
+        for (literal_block_alphabets[0..split.typeCount()]) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else if (adaptive_literal_block_alphabets) |alphabets| blk: {
+        var symbol_count: usize = 0;
+        for (alphabets) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else if (joint_literal_tree_alphabets) |alphabets| blk: {
+        var symbol_count: usize = 0;
+        for (alphabets) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else if (context_candidate) |candidate| blk: {
+        var symbol_count: usize = 0;
+        for (literal_context_alphabets[0..candidate.tree_count]) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else literal_alphabet.len;
     stats.command_symbol_count = if (options.command_split != null) blk: {
         var symbol_count: usize = 0;
         for (command_block_alphabets[0..options.command_split.?.typeCount()]) |alphabet| symbol_count += alphabet.len;
         break :blk symbol_count;
+    } else if (adaptive_command_block_alphabets) |alphabets| blk: {
+        var symbol_count: usize = 0;
+        for (alphabets) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
     } else command_alphabet.len;
-    stats.distance_symbol_count = if (options.distance_split != null)
-        distance_block_alphabets[0].len + distance_block_alphabets[1].len
-    else
-        distance_alphabet.len;
+    stats.distance_symbol_count = if (options.distance_split) |split| blk: {
+        var symbol_count: usize = 0;
+        for (distance_block_alphabets[0..split.typeCount()]) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else if (adaptive_distance_block_alphabets) |alphabets| blk: {
+        var symbol_count: usize = 0;
+        for (alphabets) |alphabet| symbol_count += alphabet.len;
+        break :blk symbol_count;
+    } else distance_alphabet.len;
     if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
 
     // Useful planner streams are usually a small fraction of input. Reserving
@@ -3942,28 +11386,47 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // scratch memory with multi-megabyte inputs.
     if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
     if (options.write_stream_prefix) {
-        try writeWindowBits(allocator, writer, options.window_bits);
+        try writePlannedWindowBits(allocator, writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
     } else if (options.metadata.len != 0) return error.InvalidBlockPlan;
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
-    const distance_alphabet_size = 16 + @as(usize, options.ndirect) + 48;
+    const distance_alphabet_size = options.distance_parameters.wireAlphabetSize(distance_format);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_lengths = if (options.literal_split == null)
+    const literal_lengths = if (options.literal_split == null and adaptive_literal_split == null)
         try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
     else
         undefined;
-    const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
-        var lengths: [2][256]u4 = undefined;
-        for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
+    const literal_context_lengths = if (context_candidate != null) blk: {
+        var lengths: [literal_context_split.max_trees][256]u4 = undefined;
+        const tree_count = context_candidate.?.tree_count;
+        for (lengths[0..tree_count], literal_context_alphabets[0..tree_count], literal_context_frequencies[0..tree_count]) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
-    const literal_block_lengths = if (options.literal_split != null) blk: {
-        var lengths: [2][256]u4 = undefined;
-        for (&lengths, &literal_block_alphabets, &literal_block_frequencies) |*tree_lengths, *alphabet, *frequencies|
+    const literal_block_lengths = if (options.literal_split) |split| blk: {
+        var lengths: [literal_block_split.max_regions][256]u4 = undefined;
+        for (lengths[0..split.typeCount()], literal_block_alphabets[0..split.typeCount()], literal_block_frequencies[0..split.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
-    const command_lengths = if (options.command_split == null)
+    const adaptive_literal_block_lengths = if (identity_adaptive_literal_type_count != 0)
+        try allocator.alloc([256]u4, identity_adaptive_literal_type_count)
+    else
+        null;
+    defer if (adaptive_literal_block_lengths) |lengths| allocator.free(lengths);
+    if (adaptive_literal_block_lengths) |lengths| {
+        for (lengths, adaptive_literal_block_alphabets.?, adaptive_literal_block_frequencies.?) |*tree_lengths, *alphabet, *frequencies|
+            tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
+    }
+    const joint_literal_tree_lengths = if (joint_literal_tree_count != 0)
+        try allocator.alloc([256]u4, joint_literal_tree_count)
+    else
+        null;
+    defer if (joint_literal_tree_lengths) |lengths| allocator.free(lengths);
+    if (joint_literal_tree_lengths) |lengths| {
+        for (lengths, joint_literal_tree_alphabets.?, joint_literal_tree_frequencies.?) |*tree_lengths, *alphabet, *frequencies|
+            tree_lengths.* = try alphabet.codeLengths(frequencies);
+    }
+    const command_lengths = if (options.command_split == null and adaptive_command_split == null)
         if (has_same_last_candidate)
             prepared_command_lengths
         else if (command_alphabet.len <= 4)
@@ -3973,67 +11436,200 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     else
         undefined;
     const command_block_lengths = if (options.command_split != null) blk: {
-        var lengths: [3][704]u4 = undefined;
+        var lengths: [command_block_split.max_regions][704]u4 = undefined;
         for (lengths[0..options.command_split.?.typeCount()], command_block_alphabets[0..options.command_split.?.typeCount()], command_block_frequencies[0..options.command_split.?.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
-    const distance_lengths = if (options.distance_split == null)
+    const adaptive_command_block_lengths = if (adaptive_command_type_count != 0)
+        try allocator.alloc([704]u4, adaptive_command_type_count)
+    else
+        null;
+    defer if (adaptive_command_block_lengths) |lengths| allocator.free(lengths);
+    if (adaptive_command_block_lengths) |lengths| {
+        for (lengths, adaptive_command_block_alphabets.?, adaptive_command_block_frequencies.?) |*tree_lengths, *alphabet, *frequencies|
+            tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
+    }
+    const distance_lengths = if (options.distance_split == null and adaptive_distance_split == null)
         if (has_same_last_candidate)
             prepared_distance_lengths
         else if (distance_alphabet.len <= 4)
-            @as([planned_distance_alphabet_size]u4, @splat(0))
+            @as([distance_capacity]u4, @splat(0))
         else
             try distance_alphabet.codeLengths(&distance_frequencies)
     else
         undefined;
     const distance_block_lengths = if (options.distance_split != null) blk: {
-        var lengths: [2][planned_distance_alphabet_size]u4 = undefined;
-        for (&lengths, &distance_block_alphabets, &distance_block_frequencies) |*tree_lengths, *alphabet, *frequencies|
+        var lengths: [distance_block_split.max_regions][distance_capacity]u4 = undefined;
+        for (lengths[0..options.distance_split.?.typeCount()], distance_block_alphabets[0..options.distance_split.?.typeCount()], distance_block_frequencies[0..options.distance_split.?.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
+    const adaptive_distance_block_lengths = if (adaptive_distance_type_count != 0)
+        try allocator.alloc([distance_capacity]u4, adaptive_distance_type_count)
+    else
+        null;
+    defer if (adaptive_distance_block_lengths) |lengths| allocator.free(lengths);
+    if (adaptive_distance_block_lengths) |lengths| {
+        for (lengths, adaptive_distance_block_alphabets.?, adaptive_distance_block_frequencies.?) |*tree_lengths, *alphabet, *frequencies|
+            tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
+    }
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_split_code = if (options.literal_split) |split| try TwoBlockLengthCode.init(split, literal_index - split) else undefined;
+    const literal_split_code = if (options.literal_split) |split| try LiteralBlockLengthCode.init(split, literal_index) else undefined;
+    var adaptive_literal_split_code: ?adaptive_block_code.Code = if (adaptive_literal_split) |split|
+        try adaptive_block_code.Code.init(allocator, split, literal_index)
+    else
+        null;
+    defer if (adaptive_literal_split_code) |code| code.deinit(allocator);
+    const adaptive_literal_context_map: ?identity_context_map.Plan = if (adaptive_literal_split) |split|
+        if (options.literal_entropy_plan == null)
+            try identity_context_map.Plan.init(allocator, split.type_count, 64)
+        else
+            null
+    else
+        null;
+    var joint_literal_context_map_code: ?dynamic_context_map.Plan = if (options.literal_entropy_plan) |joint|
+        try dynamic_context_map.choose(allocator, joint.context_map, joint.tree_count)
+    else
+        null;
+    defer if (joint_literal_context_map_code) |code| code.deinit(allocator);
     const command_split_code = if (options.command_split) |split| try CommandBlockLengthCode.init(split, commands.len) else undefined;
-    const command_split_header: ?CommandBlockSplitHeader = if (options.command_split) |split| .{
-        .block_count = split.typeCount(),
-        .alphabets = &command_block_alphabets,
-        .lengths = &command_block_lengths,
-        .split_code = &command_split_code,
-    } else null;
-    const distance_split_code = if (options.distance_split) |split| try TwoBlockLengthCode.init(split, distance_index - split) else undefined;
-    const distance_split_header: ?DistanceBlockSplitHeader = if (options.distance_split != null) .{
-        .alphabets = &distance_block_alphabets,
-        .lengths = &distance_block_lengths,
-        .split_code = &distance_split_code,
-    } else null;
+    var adaptive_command_split_code: ?AdaptiveCommandBlockCode = if (adaptive_command_split) |split|
+        try AdaptiveCommandBlockCode.init(allocator, split, commands.len)
+    else
+        null;
+    defer if (adaptive_command_split_code) |code| code.deinit(allocator);
+    const command_split_header: ?CommandBlockSplitHeader = if (options.command_split) |split|
+        .{ .legacy = .{
+            .block_count = split.typeCount(),
+            .alphabets = &command_block_alphabets,
+            .lengths = &command_block_lengths,
+            .split_code = &command_split_code,
+        } }
+    else if (adaptive_command_split) |split|
+        .{ .adaptive = .{
+            .type_count = split.type_count,
+            .alphabets = adaptive_command_block_alphabets.?,
+            .lengths = adaptive_command_block_lengths.?,
+            .split_code = &adaptive_command_split_code.?,
+        } }
+    else
+        null;
+    const distance_split_code = if (options.distance_split) |split| try DistanceBlockLengthCode.init(split, distance_index) else undefined;
+    var adaptive_distance_split_code: ?adaptive_block_code.Code = if (adaptive_distance_split) |split|
+        try adaptive_block_code.Code.init(allocator, split, distance_index)
+    else
+        null;
+    defer if (adaptive_distance_split_code) |code| code.deinit(allocator);
+    const adaptive_distance_context_map: ?identity_context_map.Plan = if (adaptive_distance_split) |split|
+        try identity_context_map.Plan.init(allocator, split.type_count, 4)
+    else
+        null;
+    const distance_split_header: ?DistanceBlockSplitHeaderFor(distance_capacity) = if (options.distance_split) |split|
+        .{ .legacy = .{
+            .type_count = split.typeCount(),
+            .alphabets = &distance_block_alphabets,
+            .lengths = &distance_block_lengths,
+            .split_code = &distance_split_code,
+        } }
+    else if (adaptive_distance_split) |split|
+        .{ .adaptive = .{
+            .type_count = split.type_count,
+            .alphabets = adaptive_distance_block_alphabets.?,
+            .lengths = adaptive_distance_block_lengths.?,
+            .split_code = &adaptive_distance_split_code.?,
+            .context_map = &adaptive_distance_context_map.?,
+        } }
+    else
+        null;
     if (options.literal_split != null) {
-        try writePlannedCompressedHeaderTwoLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderLiteralBlocks(distance_capacity, allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.distance_parameters, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else if (adaptive_literal_split) |split| {
+        if (options.literal_entropy_plan) |joint|
+            try writePlannedCompressedHeaderAdaptiveLiteralContexts(
+                distance_capacity,
+                allocator,
+                writer,
+                split,
+                joint,
+                joint_literal_tree_alphabets.?,
+                joint_literal_tree_lengths.?,
+                &adaptive_literal_split_code.?,
+                &joint_literal_context_map_code.?,
+                options.distance_parameters,
+                &command_alphabet,
+                command_split_header,
+                &distance_alphabet,
+                distance_split_header,
+                distance_alphabet_size,
+                &command_lengths,
+                &distance_lengths,
+            )
+        else
+            try writePlannedCompressedHeaderAdaptiveLiteralBlocks(
+                distance_capacity,
+                allocator,
+                writer,
+                split,
+                adaptive_literal_block_alphabets.?,
+                adaptive_literal_block_lengths.?,
+                &adaptive_literal_split_code.?,
+                &adaptive_literal_context_map.?,
+                options.distance_parameters,
+                &command_alphabet,
+                command_split_header,
+                &distance_alphabet,
+                distance_split_header,
+                distance_alphabet_size,
+                &command_lengths,
+                &distance_lengths,
+            );
+    } else if (context_candidate) |candidate| {
+        try writePlannedCompressedHeaderLiteralContexts(distance_capacity, allocator, writer, &literal_context_alphabets, &literal_context_lengths, candidate, options.distance_parameters, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(distance_capacity, allocator, writer, options.literal_context_mode, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.distance_parameters, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_encoder = if (options.literal_split == null) try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet) else undefined;
-    const literal_context_encoders = if (options.use_utf8_text_contexts) [2]huffman.HuffmanTable(256).Encoder{
-        try initPlannedLiteralEncoder(&literal_context_lengths[0], &literal_context_alphabets[0]),
-        try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
+    const literal_encoder = if (options.literal_split == null and adaptive_literal_split == null) try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet) else undefined;
+    const literal_context_encoders = if (context_candidate) |candidate| blk: {
+        var encoders: [literal_context_split.max_trees]huffman.HuffmanTable(256).Encoder = undefined;
+        for (encoders[0..candidate.tree_count], literal_context_lengths[0..candidate.tree_count], literal_context_alphabets[0..candidate.tree_count]) |*encoder, *lengths, *alphabet|
+            encoder.* = try initPlannedLiteralEncoder(lengths, alphabet);
+        break :blk encoders;
     } else undefined;
-    const literal_block_encoders = if (options.literal_split != null) [2]huffman.HuffmanTable(256).Encoder{
-        try initPlannedLiteralEncoder(&literal_block_lengths[0], &literal_block_alphabets[0]),
-        try initPlannedLiteralEncoder(&literal_block_lengths[1], &literal_block_alphabets[1]),
+    const literal_block_encoders = if (options.literal_split) |split| blk: {
+        var encoders: [literal_block_split.max_regions]huffman.HuffmanTable(256).Encoder = undefined;
+        for (encoders[0..split.typeCount()], literal_block_lengths[0..split.typeCount()], literal_block_alphabets[0..split.typeCount()]) |*active_encoder, *tree_lengths, *alphabet|
+            active_encoder.* = try initPlannedLiteralEncoder(tree_lengths, alphabet);
+        break :blk encoders;
     } else undefined;
-    const command_encoder = if (options.command_split != null or command_alphabet.len <= 4)
+    const adaptive_literal_block_encoders = if (identity_adaptive_literal_type_count != 0)
+        try allocator.alloc(huffman.HuffmanTable(256).Encoder, identity_adaptive_literal_type_count)
+    else
+        null;
+    defer if (adaptive_literal_block_encoders) |encoders| allocator.free(encoders);
+    if (adaptive_literal_block_encoders) |encoders| {
+        for (encoders, adaptive_literal_block_alphabets.?, adaptive_literal_block_lengths.?) |*encoder, *alphabet, *lengths|
+            encoder.* = try initPlannedLiteralEncoder(lengths, alphabet);
+    }
+    const joint_literal_tree_encoders = if (joint_literal_tree_count != 0)
+        try allocator.alloc(huffman.HuffmanTable(256).Encoder, joint_literal_tree_count)
+    else
+        null;
+    defer if (joint_literal_tree_encoders) |encoders| allocator.free(encoders);
+    if (joint_literal_tree_encoders) |encoders| {
+        for (encoders, joint_literal_tree_alphabets.?, joint_literal_tree_lengths.?) |*encoder, *alphabet, *lengths|
+            encoder.* = try initPlannedLiteralEncoder(lengths, alphabet);
+    }
+    const command_encoder = if (options.command_split != null or adaptive_command_split != null or command_alphabet.len <= 4)
         huffman.HuffmanTable(704).Encoder{}
     else if (command_alphabet.len <= 64)
         try huffman.HuffmanTable(704).Encoder.initSparseTrusted(&command_lengths, command_alphabet.symbols[0..command_alphabet.len])
     else
         try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const command_block_encoders = if (options.command_split != null) blk: {
-        var encoders: [3]huffman.HuffmanTable(704).Encoder = undefined;
+        var encoders: [command_block_split.max_regions]huffman.HuffmanTable(704).Encoder = undefined;
         for (encoders[0..options.command_split.?.typeCount()], command_block_alphabets[0..options.command_split.?.typeCount()], command_block_lengths[0..options.command_split.?.typeCount()]) |*encoder, *alphabet, *lengths|
             encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
                 try huffman.HuffmanTable(704).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
@@ -4041,54 +11637,115 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 try huffman.HuffmanTable(704).Encoder.init(lengths);
         break :blk encoders;
     } else undefined;
-    const distance_encoder = if (options.distance_split != null or distance_alphabet.len <= 4)
-        huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{}
-    else if (distance_alphabet.len <= 64)
-        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+    const adaptive_command_block_encoders = if (adaptive_command_type_count != 0)
+        try allocator.alloc(huffman.HuffmanTable(704).Encoder, adaptive_command_type_count)
     else
-        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_lengths);
-    const distance_block_encoders = if (options.distance_split != null) [2]huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{
-        if (distance_block_alphabets[0].len <= 4) .{} else if (distance_block_alphabets[0].len <= 64)
-            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_block_lengths[0], distance_block_alphabets[0].symbols[0..distance_block_alphabets[0].len])
-        else
-            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_block_lengths[0]),
-        if (distance_block_alphabets[1].len <= 4) .{} else if (distance_block_alphabets[1].len <= 64)
-            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_block_lengths[1], distance_block_alphabets[1].symbols[0..distance_block_alphabets[1].len])
-        else
-            try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_block_lengths[1]),
+        null;
+    defer if (adaptive_command_block_encoders) |encoders| allocator.free(encoders);
+    if (adaptive_command_block_encoders) |encoders| {
+        for (encoders, adaptive_command_block_alphabets.?, adaptive_command_block_lengths.?) |*encoder, *alphabet, *lengths|
+            encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
+                try huffman.HuffmanTable(704).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
+            else
+                try huffman.HuffmanTable(704).Encoder.init(lengths);
+    }
+    const distance_encoder = if (options.distance_split != null or adaptive_distance_split != null or distance_alphabet.len <= 4)
+        huffman.HuffmanTable(distance_capacity).Encoder{}
+    else if (distance_alphabet.len <= 64)
+        try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+    else
+        try huffman.HuffmanTable(distance_capacity).Encoder.init(&distance_lengths);
+    const distance_block_encoders = if (options.distance_split) |split| blk: {
+        var encoders: [distance_block_split.max_regions]huffman.HuffmanTable(distance_capacity).Encoder = undefined;
+        for (encoders[0..split.typeCount()], distance_block_alphabets[0..split.typeCount()], distance_block_lengths[0..split.typeCount()]) |*encoder, *alphabet, *lengths|
+            encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
+                try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
+            else
+                try huffman.HuffmanTable(distance_capacity).Encoder.init(lengths);
+        break :blk encoders;
     } else undefined;
+    const adaptive_distance_block_encoders = if (adaptive_distance_type_count != 0)
+        try allocator.alloc(huffman.HuffmanTable(distance_capacity).Encoder, adaptive_distance_type_count)
+    else
+        null;
+    defer if (adaptive_distance_block_encoders) |encoders| allocator.free(encoders);
+    if (adaptive_distance_block_encoders) |encoders| {
+        for (encoders, adaptive_distance_block_alphabets.?, adaptive_distance_block_lengths.?) |*encoder, *alphabet, *lengths|
+            encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
+                try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
+            else
+                try huffman.HuffmanTable(distance_capacity).Encoder.init(lengths);
+    }
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    last_distances = initial_last_distances;
+    last_distances = options.starting_last_distances;
     literal_index = 0;
+    adaptive_literal_block_index = 0;
+    adaptive_literal_block_end = if (adaptive_literal_split) |split| split.lengths[0] else 0;
     distance_index = 0;
+    adaptive_command_block_index = 0;
+    adaptive_command_block_end = if (adaptive_command_split) |split| split.lengths[0] else 0;
+    adaptive_distance_block_index = 0;
+    adaptive_distance_block_end = if (adaptive_distance_split) |split| split.lengths[0] else 0;
     for (commands, 0..) |command, command_index| {
-        const optimized_shape = if (same_last_distance_plan.enabled) sameLastDistanceShape(command, last_distances[3]) else null;
-        const recent_symbol = if (optimized_shape != null)
+        const wire_distance = if (command.has_copy) try commandWireDistance(
+            command,
+            options.window_bits,
+            options.compound_dictionary_size,
+            options.initial_output_pos,
+        ) else 0;
+        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
+        const optimized_shape = if (same_last_distance_plan.enabled) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
+        const recent_symbol = if (exact_selection) |selected|
+            selected.recent_symbol
+        else if (optimized_shape != null)
             @as(?u4, 0)
-        else if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0)
-            recentDistanceSymbol(command.distance, &last_distances)
+        else if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
+            recentDistanceSymbol(wire_distance, &last_distances)
         else
             null;
         const use_last_distance = if (optimized_shape) |shape|
             same_last_distance_plan.use_implicit[shape.insert_code][shape.copy_code]
         else
             recent_symbol == 0;
-        const encoding = if (cache_command_symbols and !same_last_distance_plan.enabled) blk: {
+        const encoding = if (exact_selection) |selected| selected.command else if (cache_command_symbols and !same_last_distance_plan.enabled) blk: {
             const symbol = command_symbols[command_index];
             break :blk CommandEncoding{ .symbol = symbol, .command = command_lut.entries[symbol] };
         } else if (optimized_shape) |shape| commandEntryForCodes(shape.insert_code, shape.copy_code, use_last_distance) orelse unreachable else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
-        const active_command_alphabet = if (options.command_split) |split| &command_block_alphabets[split.blockIndex(command_index)] else &command_alphabet;
-        const active_command_encoder = if (options.command_split) |split| &command_block_encoders[split.blockIndex(command_index)] else &command_encoder;
+        if (adaptive_command_split) |split| {
+            if (command_index > adaptive_command_block_end) return error.InvalidBlockPlan;
+            if (command_index == adaptive_command_block_end) {
+                adaptive_command_block_index += 1;
+                if (adaptive_command_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                try adaptive_command_split_code.?.writeSwitch(
+                    allocator,
+                    writer,
+                    adaptive_command_block_index,
+                );
+                adaptive_command_block_end = std.math.add(
+                    usize,
+                    adaptive_command_block_end,
+                    split.lengths[adaptive_command_block_index],
+                ) catch return error.IntegerOverflow;
+            }
+        }
+        const active_command_alphabet = if (options.command_split) |split|
+            &command_block_alphabets[split.blockIndex(command_index)]
+        else if (adaptive_command_split) |split|
+            &adaptive_command_block_alphabets.?[split.types[adaptive_command_block_index]]
+        else
+            &command_alphabet;
+        const active_command_encoder = if (options.command_split) |split|
+            &command_block_encoders[split.blockIndex(command_index)]
+        else if (adaptive_command_split) |split|
+            &adaptive_command_block_encoders.?[split.types[adaptive_command_block_index]]
+        else
+            &command_encoder;
         if (options.command_split) |split| {
-            if (command_index == split.split) try command_split_code.writeLength(allocator, writer, 1);
-            if (split.second_split) |second| if (command_index == second) {
-                try command_split_code.writeLength(allocator, writer, 2);
-            };
-            if (split.third_split) |third| if (command_index == third) {
-                try command_split_code.writeLength(allocator, writer, 3);
-            };
+            for (0..split.regionCount() - 1) |boundary_index|
+                if (command_index == split.boundary(boundary_index))
+                    try command_split_code.writeLength(allocator, writer, boundary_index + 1);
         }
         if (active_command_alphabet.len > 1) {
             if (active_command_alphabet.len <= 4) {
@@ -4099,24 +11756,110 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.literal_split) |split| {
-                if (literal_index == split) try literal_split_code.writeLength(allocator, writer, 1);
-                const block_index = @intFromBool(literal_index >= split);
+                for (0..split.regionCount() - 1) |boundary_index|
+                    if (literal_index == split.boundary(boundary_index))
+                        try literal_split_code.writeLength(allocator, writer, boundary_index + 1);
+                const block_index = split.blockIndex(literal_index);
                 const encoder = &literal_block_encoders[block_index];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
                 literal_index += 1;
-            } else if (options.use_utf8_text_contexts) {
-                const previous = if (position == 0) 0 else input[position - 1];
-                const second_previous = if (position < 2) 0 else input[position - 2];
-                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                const encoder = &literal_context_encoders[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)];
+            } else if (adaptive_literal_split) |split| {
+                if (literal_index > adaptive_literal_block_end) return error.InvalidBlockPlan;
+                if (literal_index == adaptive_literal_block_end) {
+                    adaptive_literal_block_index += 1;
+                    if (adaptive_literal_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    try adaptive_literal_split_code.?.writeSwitch(
+                        allocator,
+                        writer,
+                        adaptive_literal_block_index,
+                    );
+                    adaptive_literal_block_end = std.math.add(
+                        usize,
+                        adaptive_literal_block_end,
+                        split.lengths[adaptive_literal_block_index],
+                    ) catch return error.IntegerOverflow;
+                }
+                const block_type: usize = split.types[adaptive_literal_block_index];
+                const encoder = if (options.literal_entropy_plan) |joint| blk: {
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        joint.context_modes[block_type],
+                        history[0],
+                        history[1],
+                    );
+                    const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
+                        error.IntegerOverflow => return error.IntegerOverflow,
+                        else => return error.InvalidBlockPlan,
+                    };
+                    break :blk &joint_literal_tree_encoders.?[tree];
+                } else &adaptive_literal_block_encoders.?[block_type];
+                if (encoder.bits[literal] != 0)
+                    try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
+                literal_index += 1;
+            } else if (context_candidate) |candidate| {
+                const history = literalContextHistory(
+                    input,
+                    position,
+                    options.initial_previous,
+                );
+                const context = literal_context.value(
+                    candidate.mode,
+                    history[0],
+                    history[1],
+                );
+                const encoder = &literal_context_encoders[candidate.treeFor(context)];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
             } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         }
         if (command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse unreachable;
-            const active_distance_alphabet = if (options.distance_split) |split| &distance_block_alphabets[@intFromBool(distance_index >= split)] else &distance_alphabet;
-            const active_distance_encoder = if (options.distance_split) |split| &distance_block_encoders[@intFromBool(distance_index >= split)] else &distance_encoder;
-            if (options.distance_split) |split| if (distance_index == split) try distance_split_code.writeLength(allocator, writer, 1);
+            const distance = if (exact_selection) |selected|
+                selected.distance orelse return error.InvalidBlockPlan
+            else if (recent_symbol) |symbol|
+                encoder_distance.Encoding{ .symbol = symbol }
+            else
+                encoder_distance.encodeWithFormat(
+                    wire_distance,
+                    options.distance_parameters,
+                    distance_format,
+                ) orelse unreachable;
+            if (adaptive_distance_split) |split| {
+                if (distance_index > adaptive_distance_block_end) return error.InvalidBlockPlan;
+                if (distance_index == adaptive_distance_block_end) {
+                    adaptive_distance_block_index += 1;
+                    if (adaptive_distance_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    try adaptive_distance_split_code.?.writeSwitch(
+                        allocator,
+                        writer,
+                        adaptive_distance_block_index,
+                    );
+                    adaptive_distance_block_end = std.math.add(
+                        usize,
+                        adaptive_distance_block_end,
+                        split.lengths[adaptive_distance_block_index],
+                    ) catch return error.IntegerOverflow;
+                }
+            }
+            const active_distance_alphabet = if (options.distance_split) |split|
+                &distance_block_alphabets[split.blockIndex(distance_index)]
+            else if (adaptive_distance_split) |split|
+                &adaptive_distance_block_alphabets.?[split.types[adaptive_distance_block_index]]
+            else
+                &distance_alphabet;
+            const active_distance_encoder = if (options.distance_split) |split|
+                &distance_block_encoders[split.blockIndex(distance_index)]
+            else if (adaptive_distance_split) |split|
+                &adaptive_distance_block_encoders.?[split.types[adaptive_distance_block_index]]
+            else
+                &distance_encoder;
+            if (options.distance_split) |split| {
+                for (0..split.regionCount() - 1) |boundary_index|
+                    if (distance_index == split.boundary(boundary_index))
+                        try distance_split_code.writeLength(allocator, writer, boundary_index + 1);
+            }
             if (active_distance_alphabet.len > 1) {
                 if (active_distance_alphabet.len <= 4) {
                     const code = active_distance_alphabet.simpleCode(distance.symbol).?;
@@ -4127,9 +11870,55 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
             distance_index += 1;
         }
-        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
+        if (exact_selection) |selected|
+            last_distances = selected.repeated_distances
+        else if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+            pushLastDistance(&last_distances, wire_distance);
     }
+    if (adaptive_command_split != null and
+        (adaptive_command_block_index + 1 != adaptive_command_split.?.blockCount() or
+            adaptive_command_block_end != commands.len)) return error.InvalidBlockPlan;
+    if (adaptive_distance_split != null and
+        (adaptive_distance_block_index + 1 != adaptive_distance_split.?.blockCount() or
+            adaptive_distance_block_end != distance_index)) return error.InvalidBlockPlan;
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
+    if (options.hq_model_output) |model| {
+        const capture = @import("br/encoder/hq_codec/huffman_model.zig");
+        model.format = distance_format;
+        model.distance_parameters = options.distance_parameters;
+        model.literal_mode = if (context_candidate) |candidate| candidate.mode else options.literal_context_mode;
+        model.literal_position_prices = null;
+        if (context_candidate) |candidate| {
+            for (&model.literal_prices, &model.literal_frequencies, 0..) |*model_prices, *model_frequencies, context| {
+                const tree = candidate.treeFor(@intCast(context));
+                try capture.table(256, model_prices, model_frequencies, &literal_context_alphabets[tree], &literal_context_lengths[tree], &literal_context_frequencies[tree]);
+            }
+        } else {
+            const alphabets = if (options.literal_split) |split| literal_block_alphabets[0..split.typeCount()] else if (joint_literal_tree_alphabets) |values| values else if (adaptive_literal_block_alphabets) |values| values else @as(*const [1]command_plan.PrefixAlphabetFor(256), @ptrCast(&literal_alphabet));
+            const lengths = if (options.literal_split) |split| literal_block_lengths[0..split.typeCount()] else if (joint_literal_tree_lengths) |values| values else if (adaptive_literal_block_lengths) |values| values else @as(*const [1][256]u4, @ptrCast(&literal_lengths));
+            const frequencies = if (options.literal_split) |split| literal_block_frequencies[0..split.typeCount()] else if (joint_literal_tree_frequencies) |values| values else if (adaptive_literal_block_frequencies) |values| values else @as(*const [1][256]u32, @ptrCast(&literal_frequencies));
+            try capture.tables(256, &model.literal_prices[0], &model.literal_frequencies[0], alphabets, lengths, frequencies);
+            for (1..64) |context| {
+                model.literal_prices[context] = model.literal_prices[0];
+                model.literal_frequencies[context] = model.literal_frequencies[0];
+            }
+        }
+        const command_alphabets = if (options.command_split) |split| command_block_alphabets[0..split.typeCount()] else if (adaptive_command_block_alphabets) |values| values else @as(*const [1]command_plan.PrefixAlphabet, @ptrCast(&command_alphabet));
+        const command_tree_lengths = if (options.command_split) |split| command_block_lengths[0..split.typeCount()] else if (adaptive_command_block_lengths) |values| values else @as(*const [1][704]u4, @ptrCast(&command_lengths));
+        const command_counts = if (options.command_split) |split| command_block_frequencies[0..split.typeCount()] else if (adaptive_command_block_frequencies) |values| values else @as(*const [1][704]u32, @ptrCast(&command_frequencies));
+        try capture.tables(704, &model.command_prices, &model.command_frequencies, command_alphabets, command_tree_lengths, command_counts);
+        const distance_alphabets = if (options.distance_split) |split| distance_block_alphabets[0..split.typeCount()] else if (adaptive_distance_block_alphabets) |values| values else @as(*const [1]command_plan.PrefixAlphabetFor(distance_capacity), @ptrCast(&distance_alphabet));
+        const distance_tree_lengths = if (options.distance_split) |split| distance_block_lengths[0..split.typeCount()] else if (adaptive_distance_block_lengths) |values| values else @as(*const [1][distance_capacity]u4, @ptrCast(&distance_lengths));
+        const distance_counts = if (options.distance_split) |split| distance_block_frequencies[0..split.typeCount()] else if (adaptive_distance_block_frequencies) |values| values else @as(*const [1][distance_capacity]u32, @ptrCast(&distance_frequencies));
+        model.distance_prices = @splat(capture.absent_price);
+        model.distance_frequencies = @splat(0);
+        try capture.tables(distance_capacity, model.distance_prices[0..distance_capacity], model.distance_frequencies[0..distance_capacity], distance_alphabets, distance_tree_lengths, distance_counts);
+    }
+    if (options.final_wire_state) |state| {
+        state.last_distances = last_distances;
+        state.output_pos = std.math.add(usize, options.initial_output_pos, input.len) catch
+            return error.IntegerOverflow;
+    }
     if (options.final_meta_block and writer.bit_index != 0) writer.alignToByte();
 }
 
@@ -4171,13 +11960,138 @@ fn chooseLiteralTreeLengths(allocator: std.mem.Allocator, frequencies: *const [2
     return candidate_lengths;
 }
 
-fn commandWireDistance(command: command_plan.Command) usize {
-    if (command.dictionary_output_len == 0) return command.distance;
-    // A dictionary copy is legal only when its distance exceeds the bytes
-    // already produced. This one-meta-block planner is capped below the 16-bit
-    // Brotli window, so the current output position is the active backward
-    // limit used by both Vort and conforming external decoders.
-    return command.insert_start + command.insert_len + 1 + command.dictionary_address;
+fn resolveHqCommand(command: command_plan.Command, wire_distance: usize, parameters: encoder_distance.Parameters, recent: [4]usize, format: encoder_distance.Format) Error!?@import("br/encoder/hq_codec/exact.zig").Selection {
+    const selected = command.hq_encoding orelse return null;
+    try selected.validate(command.insert_len, command.copy_len, command.has_copy);
+    if (!std.meta.eql(selected.distance_parameters, parameters) or selected.format != format) return error.InvalidBlockPlan;
+    if (command.has_copy and try @import("br/encoder/hq_types.zig").resolveDistanceCode(selected.distance_code, &recent) != wire_distance) return error.InvalidBlockPlan;
+    return try @import("br/encoder/hq_codec/exact.zig").resolveWithFormat(selected.command_symbol, command.insert_len, command.copy_len, command.has_copy, command.isStatic(), selected.distance_encoding, wire_distance, parameters, recent, format);
+}
+
+fn encodeHqCommandsCandidate(allocator: std.mem.Allocator, source: hq_types.Source, commands: []const command_plan.Command, context: hq_codec.wire.Context, actual_model: *hq_codec.Model) Error!hq_codec.wire.Artifact {
+    var result: hq_codec.wire.Artifact = .{ .last_distances = source.recent, .frame_offset = std.math.add(u64, source.frame_offset, source.input.len) catch return error.IntegerOverflow };
+    errdefer result.deinit(allocator);
+    if (context.start_bit_index != 0) try result.bytes.append(allocator, context.start_byte);
+    var writer = BitWriter{ .out = &result.bytes, .bit_index = context.start_bit_index };
+    var final_state: PlannedWireState = .{};
+    var stats: PlannedEncodeStats = .{};
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, source.input, commands, null, &stats, .{
+        .large_window = context.format == .large_window,
+        .hq_model_output = actual_model,
+        .use_recent_distances = true,
+        .optimize_same_last_distance = false,
+        .literal_context_mode = context.literal_mode,
+        .distance_parameters = context.distance_parameters,
+        .window_bits = context.window_bits,
+        .metadata = context.metadata,
+        .write_stream_prefix = context.write_stream_prefix,
+        .final_meta_block = context.final_meta_block,
+        .compound_dictionary_size = context.compound_dictionary_size,
+        .initial_output_pos = hq_codec.native.normalHistoryBase(source.frame_offset, source.window_len),
+        .initial_previous = context.previous,
+        .starting_last_distances = source.recent,
+        .final_wire_state = &final_state,
+    });
+    result.bit_index = writer.bit_index;
+    result.bit_count = writer.bitPosition() - context.start_bit_index;
+    result.last_distances = final_state.last_distances;
+    result.emitted.emitted_metablocks = 1;
+    result.emitted.emitted_commands = @intCast(commands.len);
+    for (commands) |command| {
+        if (!command.has_copy) continue;
+        result.emitted.emitted_copy_bytes +|= @intCast(command.outputLen());
+        if (command.isStatic()) result.emitted.emitted_static_commands +|= 1;
+        if (command.isCompound()) result.emitted.emitted_compound_commands +|= 1;
+        result.emitted.emitted_max_distance = @max(result.emitted.emitted_max_distance, try commandWireDistance(command, context.window_bits, context.compound_dictionary_size, hq_codec.native.normalHistoryBase(source.frame_offset, source.window_len)));
+    }
+    return result;
+}
+
+const BrotliHqEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const Context = hq_codec.wire.Context;
+    pub const Artifact = hq_codec.wire.Artifact;
+
+    pub fn planAlloc(allocator: std.mem.Allocator, source: hq_types.Source, resolved: hq_options.Resolved, profile: ?*hq_options.HqProfile, previous: [2]u8, model: *const hq_codec.Model, state: *hq_codec.State) br.Error!@import("br/encoder/hq_parser.zig").Plan {
+        var matcher = state.forkMatcher(source, resolved, profile) catch |err| return hqWorkingError(err, state.budget.?);
+        defer matcher.deinit(allocator);
+        return @import("br/encoder/hq_parser.zig").planAlloc(allocator, source, .{ .resolved = resolved, .profile = profile, .initial_recent_distances = source.recent, .previous = previous, .matcher = &matcher, .budget = state.budget }, model, &state.provider.?) catch |err| return hqCodecError(err);
+    }
+
+    pub fn writePlan(allocator: std.mem.Allocator, source: hq_types.Source, plan: anytype, context: Context, model: *hq_codec.Model) br.Error!Artifact {
+        if (plan.consumed != source.input.len or plan.pending_insert != 0 or !std.meta.eql(plan.distance_parameters, context.distance_parameters) or plan.format != context.format) return error.InvalidBlockPlan;
+        return encodeHqCommandsCandidate(allocator, source, plan.commands, context, model);
+    }
+
+    pub fn checkPlanState(plan: anytype, artifact: *const Artifact) br.Error!void {
+        if (!std.mem.eql(usize, &plan.final_recent_distances, &artifact.last_distances)) return error.InvalidBlockPlan;
+    }
+
+    pub fn statistics(plan: anytype) *const @import("br/encoder/hq_parser.zig").Statistics {
+        return &plan.statistics;
+    }
+};
+
+fn hqCodecError(err: anyerror) Error {
+    inline for (@typeInfo(Error).error_set.?) |known| {
+        if (err == @field(Error, known.name)) return @field(Error, known.name);
+    }
+    return error.InvalidBlockPlan;
+}
+
+fn hqWorkingError(err: anyerror, budget: *const hq_codec.Budget) Error {
+    if (err == error.OutOfMemory and budget.last_failure_was_limit) return error.WorkingMemoryLimitExceeded;
+    return hqCodecError(err);
+}
+
+fn encodeHqStoredCandidate(allocator: std.mem.Allocator, source: hq_types.Source, context: hq_codec.wire.Context) Error!hq_codec.wire.Artifact {
+    var result: hq_codec.wire.Artifact = .{ .last_distances = source.recent, .frame_offset = std.math.add(u64, source.frame_offset, source.input.len) catch return error.IntegerOverflow, .stored = true };
+    errdefer result.deinit(allocator);
+    if (context.start_bit_index != 0) try result.bytes.append(allocator, context.start_byte);
+    var writer = BitWriter{ .out = &result.bytes, .bit_index = context.start_bit_index };
+    if (context.write_stream_prefix) {
+        try writePlannedWindowBits(allocator, &writer, context.window_bits, context.format == .large_window);
+        if (context.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, context.metadata);
+    }
+    try writeUncompressedMetaBlock(allocator, &writer, source.input);
+    if (context.final_meta_block) {
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+    }
+    result.bit_index = writer.bit_index;
+    result.bit_count = writer.bitPosition() - context.start_bit_index;
+    result.emitted.emitted_metablocks = 1;
+    return result;
+}
+
+fn commandWireDistance(
+    command: command_plan.Command,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    initial_output_pos: usize,
+) Error!usize {
+    if (!command.has_copy) return error.InvalidBlockPlan;
+    const relative_copy_pos = std.math.add(usize, command.insert_start, command.insert_len) catch
+        return error.IntegerOverflow;
+    const absolute_copy_pos = std.math.add(usize, initial_output_pos, relative_copy_pos) catch
+        return error.IntegerOverflow;
+    const max_history = maxBackwardDistanceForWindow(window_bits, absolute_copy_pos);
+    const logical_value = switch (command.source) {
+        .lz77 => command.distance,
+        .compound => blk: {
+            const end = std.math.add(usize, command.dictionary_address, command.copy_len) catch
+                return error.IntegerOverflow;
+            if (end > compound_dictionary_size) return error.InvalidBlockPlan;
+            break :blk command.dictionary_address;
+        },
+        .static => command.dictionary_address,
+    };
+    return compound_wire.wireDistance(
+        command.source,
+        logical_value,
+        max_history,
+        compound_dictionary_size,
+    );
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -4241,7 +12155,7 @@ pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, option
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamWithOptionsWrite(std.heap.smp_allocator, &writer, input, options);
+    try encodeStoredStreamWithOptionsWrite(allocator_dispatch.singleton, &writer, input, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -4280,7 +12194,7 @@ pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, outpu
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamChunksWithOptionsWrite(std.heap.smp_allocator, &writer, chunks, options);
+    try encodeStoredStreamChunksWithOptionsWrite(allocator_dispatch.singleton, &writer, chunks, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -4485,12 +12399,12 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
 }
 
 pub fn decodeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAlloc(allocator, stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAlloc(allocator, stream);
     return try decodeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAllocLimited(allocator, stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAllocLimited(allocator, stream, max_output_len);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -4501,6 +12415,8 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
     // change caller-owned output when validation fails.
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
+    var shared = try decodeSharedDictionary(options);
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
     var written: usize = 0;
     var last_distances = initial_last_distances;
     while (true) {
@@ -4514,10 +12430,10 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
-                if (stream.len >= large_stream_decode_threshold)
+                if (dictionary == null and stream.len >= large_stream_decode_threshold)
                     try processLargeCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window)
                 else
-                    try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window);
+                    try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (written != meta_block_end) return error.SizeMismatch;
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);
@@ -4544,7 +12460,7 @@ pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const 
 }
 
 pub fn decodeStreamAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAllocExactSize(allocator, stream, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAllocExactSize(allocator, stream, expected_output_len);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = try decodeStreamIntoExactSizeWithOptions(stream, out, expected_output_len, options);
@@ -4573,12 +12489,12 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 pub fn decodeStreamAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppend(allocator, out, stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppend(allocator, out, stream);
     return try decodeStreamAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
     const decoded_len = try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, options);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
@@ -4610,7 +12526,7 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
 }
 
 pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
@@ -4700,7 +12616,7 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
 }
 
 pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamInto(stream, output);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamInto(stream, output);
     // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
     // Gate the colder shape validation on that exact-size relation so ordinary
     // compressed frames enter their established hot path without another call.
@@ -4711,7 +12627,10 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
             return payload.len;
         }
     }
-    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamIntoWithOptions(stream, output, options);
+    var shared = try decodeSharedDictionary(options);
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
+    if (dictionary == null and stream.len >= large_stream_decode_threshold)
+        return decodeLargeStreamIntoWithOptions(stream, output, options);
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
     var written: usize = 0;
@@ -4724,7 +12643,7 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
-                try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window);
+                try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);
                     return written;
@@ -4862,7 +12781,7 @@ pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len:
 }
 
 pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamIntoLimited(stream, output, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoLimited(stream, output, max_output_len);
     // Match the allocator-returning and append limited APIs: perform the full
     // Brotli preflight first so callers see `OutputLimitExceeded` before any
     // mutation when the stream's declared/decoded size is outside policy.
@@ -4887,7 +12806,7 @@ pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_outp
 }
 
 pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamIntoExactSize(stream, output, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoExactSize(stream, output, expected_output_len);
     if (output.len < expected_output_len) return error.OutputTooSmall;
     const written = decodeStreamIntoWithOptions(stream, output[0..expected_output_len], options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
@@ -4906,12 +12825,12 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
 }
 
 pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodedStreamSize(stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSize(stream);
     return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodedStreamSizeLimited(stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSizeLimited(stream, max_output_len);
     return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
 }
 
@@ -4925,12 +12844,12 @@ pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!S
 }
 
 pub fn summarizeStreamWithOptions(stream: []const u8, options: DecodeOptions) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStream(stream);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStream(stream);
     return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
 }
 
 pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStreamLimited(stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimited(stream, max_output_len);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics);
 }
@@ -4951,7 +12870,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
 }
 
 pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
@@ -5155,6 +13074,11 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
         recordSummaryError(diagnostics, .window_bits, reader, 0);
         return err;
     };
+    var shared = decodeSharedDictionary(options) catch |err| {
+        recordSummaryError(diagnostics, .stream, reader, 0);
+        return err;
+    };
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
     var summary = StreamSummary{
         .window_bits = window.bits,
         .large_window = window.large,
@@ -5229,7 +13153,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window, dictionary) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -5250,7 +13174,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window, dictionary) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -5583,6 +13507,11 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.uses_static_dictionary = true;
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
+    }
+    if (stats.shared_dictionary_copy_count != 0) {
+        summary.uses_shared_dictionary = true;
+        summary.shared_dictionary_copy_count = std.math.add(usize, summary.shared_dictionary_copy_count, stats.shared_dictionary_copy_count) catch return error.IntegerOverflow;
+        summary.shared_dictionary_bytes = std.math.add(usize, summary.shared_dictionary_bytes, stats.shared_dictionary_bytes) catch return error.IntegerOverflow;
     }
     summary.command_count = std.math.add(usize, summary.command_count, stats.command_count) catch return error.IntegerOverflow;
     summary.zero_insert_command_count = std.math.add(usize, summary.zero_insert_command_count, stats.zero_insert_command_count) catch return error.IntegerOverflow;
@@ -6169,10 +14098,10 @@ inline fn readCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: 
 inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     var literal_tree_index: u16 = 0;
     while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
-        const tree = try readPrefixCode(256, reader);
         if (literal_tree_index < inline_literal_tree_count) {
-            header.literal_trees[literal_tree_index] = tree;
+            try readPrefixCodeInto(256, reader, &header.literal_trees[literal_tree_index]);
         } else {
+            const tree = try readPrefixCode(256, reader);
             header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
         }
     }
@@ -6182,10 +14111,10 @@ inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header:
 inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     var command_tree_index: u16 = 0;
     while (command_tree_index < tree_count) : (command_tree_index += 1) {
-        const tree = try readPrefixCode(704, reader);
         if (command_tree_index < inline_command_tree_count) {
-            header.insert_copy_trees[command_tree_index] = tree;
+            try readPrefixCodeInto(704, reader, &header.insert_copy_trees[command_tree_index]);
         } else {
+            const tree = try readPrefixCode(704, reader);
             header.packed_insert_copy_trees[command_tree_index - inline_command_tree_count] = PackedPrefixCode(704).init(&tree);
         }
     }
@@ -6195,10 +14124,10 @@ inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header:
 inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
     var distance_tree_index: u16 = 0;
     while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
-        const tree = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
         if (distance_tree_index < inline_distance_tree_count) {
-            header.distance_trees[distance_tree_index] = tree;
+            try readPrefixCodeRuntimeInto(max_distance_alphabet_size, alphabet_size, reader, &header.distance_trees[distance_tree_index]);
         } else {
+            const tree = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
             header.packed_distance_trees[distance_tree_index - inline_distance_tree_count] = PackedPrefixCode(max_distance_alphabet_size).init(&tree);
         }
     }
@@ -6441,6 +14370,127 @@ pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stre
         }
     }
     return .{ .elapsed_ns = elapsedNs(start_time, io), .checksum = checksum };
+}
+
+pub const ClusteredDecodeStageSample = struct {
+    iterations: usize,
+    header_ns: u64,
+    literal_lookup_ns: u64,
+    command_lookup_ns: u64,
+    distance_lookup_ns: u64,
+    payload_ns: u64,
+    total_ns: u64,
+    checksum: usize,
+
+    pub fn lookupNs(self: ClusteredDecodeStageSample) u64 {
+        return self.literal_lookup_ns + self.command_lookup_ns + self.distance_lookup_ns;
+    }
+};
+
+/// Benchmark the three independently actionable stages of the standard
+/// high-tree-count decoder. This diagnostic path requires the exact flat
+/// multi-tree route used by `clustered_q8`; ordinary decode remains the
+/// correctness and end-to-end performance authority.
+pub fn benchmarkClusteredDecodeStages(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    stream: []const u8,
+    expected: []const u8,
+    iterations: usize,
+) Error!ClusteredDecodeStageSample {
+    if (iterations == 0 or expected.len == 0) return error.InvalidBlockPlan;
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+
+    var header_ns: u64 = 0;
+    var literal_lookup_ns: u64 = 0;
+    var command_lookup_ns: u64 = 0;
+    var distance_lookup_ns: u64 = 0;
+    var payload_ns: u64 = 0;
+    var checksum: usize = 0;
+    const total_start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        var reader = bitstream.BitReader.init(stream);
+        const window_bits = try readWindowBitsValue(&reader);
+        const meta = switch (try readStreamMetaBlockHeader(&reader)) {
+            .compressed => |compressed| compressed,
+            else => return error.UnsupportedBrotliFeature,
+        };
+        if (!meta.final or meta.decoded_len != expected.len) return error.UnsupportedBrotliFeature;
+
+        var header: MinimalCompressedHeader = undefined;
+        var stage_start = std.Io.Clock.awake.now(io);
+        try readMinimalCompressedHeaderInto(&reader, &header);
+        header_ns +%= elapsedNs(stage_start, io);
+        if (header.literal_tree_count < clustered_literal_tree_threshold or
+            header.literal_tree_count > inline_literal_tree_count or
+            header.command_block.block_type_count == 0 or
+            header.command_block.block_type_count > multi_tree_zero_insert_command_limit or
+            header.distance_tree_count > inline_distance_tree_count) return error.UnsupportedBrotliFeature;
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var literal_lookups: [inline_literal_tree_count]TailLiteralLookup = undefined;
+        if (!try prepareFlatLiteralTailLookups(&header, &literal_lookups)) return error.UnsupportedBrotliFeature;
+        literal_lookup_ns +%= elapsedNs(stage_start, io);
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var command_lookups: [multi_tree_zero_insert_command_limit]single_command_lookup.Lookup = undefined;
+        for (header.insert_copy_trees[0..header.command_block.block_type_count], 0..) |*tree, index| {
+            command_lookups[index] = if (tree.single_symbol) |symbol|
+                try single_command_lookup.Lookup.initSingle(symbol)
+            else
+                try single_command_lookup.Lookup.init(&tree.table);
+        }
+        command_lookup_ns +%= elapsedNs(stage_start, io);
+
+        stage_start = std.Io.Clock.awake.now(io);
+        var distance_lookups: [inline_distance_tree_count]ExternalDistanceLookup = undefined;
+        for (header.distance_trees[0..header.distance_tree_count], 0..) |*tree, index| {
+            distance_lookups[index] = if (tree.single_symbol) |symbol|
+                try ExternalDistanceLookup.initSingle(symbol)
+            else
+                try ExternalDistanceLookup.init(&tree.table);
+        }
+        distance_lookup_ns +%= elapsedNs(stage_start, io);
+
+        var fast_reader = fast_bit_reader.Reader.initFrom(reader);
+        var written: usize = 0;
+        var last_distances = initial_last_distances;
+        stage_start = std.Io.Clock.awake.now(io);
+        try processTailLookupCompressedPayload(
+            true,
+            true,
+            true,
+            &fast_reader,
+            output,
+            &written,
+            expected.len,
+            &last_distances,
+            window_bits,
+            &header,
+            &literal_lookups,
+            null,
+            &command_lookups,
+            &distance_lookups,
+        );
+        payload_ns +%= elapsedNs(stage_start, io);
+        fast_reader.syncTo(&reader);
+        if (written != expected.len) return error.SizeMismatch;
+        try ensureZeroPaddingAndEnd(reader);
+        checksum +%= written + reader.bitPosition() + output[0] + output[output.len - 1];
+    }
+    const total_ns = elapsedNs(total_start, io);
+    if (!std.mem.eql(u8, output, expected)) return error.SizeMismatch;
+    return .{
+        .iterations = iterations,
+        .header_ns = header_ns,
+        .literal_lookup_ns = literal_lookup_ns,
+        .command_lookup_ns = command_lookup_ns,
+        .distance_lookup_ns = distance_lookup_ns,
+        .payload_ns = payload_ns,
+        .total_ns = total_ns,
+        .checksum = checksum,
+    };
 }
 
 fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
@@ -6712,11 +14762,23 @@ fn processMinimalCompressedMetaBlock(
     last_distances: *[4]usize,
     window_bits: u5,
 ) Error!void {
+    return processMinimalCompressedMetaBlockImpl(reader, output, written, meta_block_len, last_distances, window_bits, null);
+}
+
+fn processMinimalCompressedMetaBlockImpl(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
+) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -6740,10 +14802,20 @@ fn processMinimalCompressedMetaBlock(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
-            @memcpy(output[written.*..][0..word.len], word);
-            written.* += word.len;
+            const dictionary_context = try literalContext(&header, output, written.*);
+            const kind = try appendOutOfWindowReference(
+                output,
+                written,
+                meta_block_end,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                &transformed_dictionary_word,
+            );
+            if (kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -6759,12 +14831,13 @@ fn processMinimalCompressedMetaBlockWithOptions(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window: WindowInfo,
+    dictionary: ?*const DecodeSharedDictionary,
 ) Error!void {
     if (window.large) {
         @branchHint(.unlikely);
-        return processMinimalCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits);
+        return processMinimalCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits, dictionary);
     }
-    return processMinimalCompressedMetaBlock(reader, output, written, meta_block_len, last_distances, window.bits);
+    return processMinimalCompressedMetaBlockImpl(reader, output, written, meta_block_len, last_distances, window.bits, dictionary);
 }
 
 noinline fn processMinimalCompressedMetaBlockLargeWindow(
@@ -6774,8 +14847,9 @@ noinline fn processMinimalCompressedMetaBlockLargeWindow(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) Error!void {
-    return processMinimalCompressedMetaBlockLargeWindowImpl(reader, output, written, meta_block_len, last_distances, window_bits);
+    return processMinimalCompressedMetaBlockLargeWindowImpl(reader, output, written, meta_block_len, last_distances, window_bits, dictionary);
 }
 
 fn processMinimalCompressedMetaBlockLargeWindowImpl(
@@ -6785,12 +14859,13 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: LargeWindowCompressedHeader = undefined;
     try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readLargeCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -6814,10 +14889,20 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
-            @memcpy(output[written.*..][0..word.len], word);
-            written.* += word.len;
+            const dictionary_context = try largeLiteralContext(&header, output, written.*);
+            const kind = try appendOutOfWindowReference(
+                output,
+                written,
+                meta_block_end,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                &transformed_dictionary_word,
+            );
+            if (kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -7713,7 +15798,12 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 /// Counterpart for the packed literal-tree tier. Root-table hits never expand
 /// the compact tree; a rare long-code miss falls back to the existing cached
 /// expansion path so the full canonical decoder remains the correctness oracle.
-noinline fn processWideExternalLiteralLookupCompressedPayload(
+const processWideExternalLiteralLookupCompressedPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookupCompressedPayloadPortable
+else
+    processWideExternalLiteralLookupCompressedPayloadNative;
+
+noinline fn processWideExternalLiteralLookupCompressedPayloadNative(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
     reader: anytype,
@@ -7725,6 +15815,36 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
     header: *MinimalCompressedHeader,
     literal_lookups: []const ExternalLiteralLookup,
 ) align(64) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookupCompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups });
+}
+
+noinline fn processWideExternalLiteralLookupCompressedPayloadPortable(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookupCompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups });
+}
+
+inline fn processWideExternalLiteralLookupCompressedPayloadCore(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     // The parsed context map is already bounded by literal_tree_count, which
@@ -7812,7 +15932,12 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
 /// Isolated 9-bit counterpart. Keeping this complete executor in a dedicated
 /// section prevents its smaller root policy from perturbing the established
 /// 10-bit executor's ordinary-text layout.
-noinline fn processWideExternalLiteralLookup9CompressedPayload(
+const processWideExternalLiteralLookup9CompressedPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookup9CompressedPayloadPortable
+else
+    processWideExternalLiteralLookup9CompressedPayloadNative;
+
+noinline fn processWideExternalLiteralLookup9CompressedPayloadNative(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
     comptime command_lookup10: bool,
@@ -7831,6 +15956,50 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup9CompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, command_lookup10, zero_postfix_distance, force_utf8_context, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processWideExternalLiteralLookup9CompressedPayloadPortable(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    comptime command_lookup10: bool,
+    comptime zero_postfix_distance: bool,
+    comptime force_utf8_context: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every optional lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const WideExternalLiteralLookup9,
+    command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(wide_literal_lookup9_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup9CompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, command_lookup10, zero_postfix_distance, force_utf8_context, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processWideExternalLiteralLookup9CompressedPayloadCore(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    comptime command_lookup10: bool,
+    comptime zero_postfix_distance: bool,
+    comptime force_utf8_context: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every optional lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const WideExternalLiteralLookup9,
+    command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = if (comptime force_utf8_context)
         true
@@ -8018,7 +16187,12 @@ noinline fn processWideExternalLiteralLookup10AuxiliarySetup(
     );
 }
 
-noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(
+const processWideExternalLiteralLookup10AuxiliaryPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookup10AuxiliaryPayloadPortable
+else
+    processWideExternalLiteralLookup10AuxiliaryPayloadNative;
+
+noinline fn processWideExternalLiteralLookup10AuxiliaryPayloadNative(
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -8030,6 +16204,36 @@ noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(
     command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup10_auxiliary_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup10AuxiliaryPayloadCore, .{ reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processWideExternalLiteralLookup10AuxiliaryPayloadPortable(
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(wide_literal_lookup10_auxiliary_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup10AuxiliaryPayloadCore, .{ reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processWideExternalLiteralLookup10AuxiliaryPayloadCore(
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr = literal_lookups.ptr;
@@ -8186,7 +16390,12 @@ noinline fn processPairedWideLiteralMetaBlock(
     return processPairedWideLiteralPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
 }
 
-noinline fn processPairedWideLiteralPayload(
+const processPairedWideLiteralPayload = if (builtin.target.cpu.arch.isWasm())
+    processPairedWideLiteralPayloadPortable
+else
+    processPairedWideLiteralPayloadNative;
+
+noinline fn processPairedWideLiteralPayloadNative(
     comptime force_utf8_context: bool,
     comptime direct_context_three: bool,
     // The wrapper owns this reservoir independently of output, header state,
@@ -8202,6 +16411,44 @@ noinline fn processPairedWideLiteralPayload(
     command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(paired_literal_text_section) Error!void {
+    return @call(.always_inline, processPairedWideLiteralPayloadCore, .{ force_utf8_context, direct_context_three, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processPairedWideLiteralPayloadPortable(
+    comptime force_utf8_context: bool,
+    comptime direct_context_three: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every prepared lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const paired_literal_lookup.Lookups,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(paired_literal_text_section) Error!void {
+    return @call(.always_inline, processPairedWideLiteralPayloadCore, .{ force_utf8_context, direct_context_three, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processPairedWideLiteralPayloadCore(
+    comptime force_utf8_context: bool,
+    comptime direct_context_three: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every prepared lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const paired_literal_lookup.Lookups,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = if (comptime force_utf8_context)
         true
@@ -8440,9 +16687,10 @@ fn skipMinimalCompressedMetaBlock(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     window: WindowInfo,
+    dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
-    if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits);
+    if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits, dictionary);
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
     if (stats) |s| {
@@ -8457,10 +16705,10 @@ fn skipMinimalCompressedMetaBlock(
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
         if (auxiliary_tail_lookups)
-            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
-        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
+        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
     }
-    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
 }
 
 noinline fn skipMinimalCompressedMetaBlockLargeWindow(
@@ -8471,6 +16719,7 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: LargeWindowCompressedHeader = undefined;
@@ -8487,10 +16736,10 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLargeLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareLargeAuxiliaryTailLookups(&header);
         if (auxiliary_tail_lookups)
-            return skipDecodedCompressedPayloadLargeWindow(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
-        return skipDecodedCompressedPayloadLargeWindow(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+            return skipDecodedCompressedPayloadLargeWindow(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
+        return skipDecodedCompressedPayloadLargeWindow(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
     }
-    return skipDecodedCompressedPayloadLargeWindow(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+    return skipDecodedCompressedPayloadLargeWindow(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
 }
 
 noinline fn skipDecodedCompressedPayload(
@@ -8504,8 +16753,9 @@ noinline fn skipDecodedCompressedPayload(
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
     header: *MinimalCompressedHeader,
+    dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = if (auxiliary_tail_lookups)
@@ -8543,16 +16793,32 @@ noinline fn skipDecodedCompressedPayload(
         );
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
+        if (stats) |s| s.max_wire_distance = @max(s.max_wire_distance, distance);
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written) return error.CorruptFrame;
-            if (stats) |s| {
-                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
-                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
-            }
-            literal_history.pushSlice(word);
-            written += word.len;
+            const dictionary_context = if (dictionary) |active|
+                if (active.dictionary.hasSerializedStatic())
+                    try literal_history.dictionaryContext(
+                        header.literal_context_modes[header.literal_block.current_type],
+                    )
+                else
+                    0
+            else
+                0;
+            const replayed = try replayOutOfWindowReference(
+                literal_history,
+                stats,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                meta_block_end - written,
+                &transformed_dictionary_word,
+            );
+            written += replayed.output_len;
+            if (replayed.kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -8586,8 +16852,9 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
     header: *LargeWindowCompressedHeader,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = if (auxiliary_tail_lookups)
@@ -8623,16 +16890,32 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
         );
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
+        if (stats) |s| s.max_wire_distance = @max(s.max_wire_distance, distance);
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written) return error.CorruptFrame;
-            if (stats) |s| {
-                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
-                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
-            }
-            literal_history.pushSlice(word);
-            written += word.len;
+            const dictionary_context = if (dictionary) |active|
+                if (active.dictionary.hasSerializedStatic())
+                    try literal_history.dictionaryContext(
+                        header.literal_context_modes[header.literal_block.current_type],
+                    )
+                else
+                    0
+            else
+                0;
+            const replayed = try replayOutOfWindowReference(
+                literal_history,
+                stats,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                meta_block_end - written,
+                &transformed_dictionary_word,
+            );
+            written += replayed.output_len;
+            if (replayed.kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -11376,13 +19659,22 @@ fn minimalStaticDictionaryWord(
     distance: usize,
     copy_len: usize,
     max_backward_distance: usize,
-    transformed_scratch: *[64]u8,
+    transformed_scratch: []u8,
 ) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
     // LZ77 distance: min(decoded bytes, 2^WBITS - 16). This differs from total
     // output after the stream has filled its window.
     if (distance <= max_backward_distance) return error.InvalidMatch;
     const address = distance - max_backward_distance - 1;
+
+    return minimalStaticDictionaryWordAtAddress(address, copy_len, transformed_scratch);
+}
+
+fn minimalStaticDictionaryWordAtAddress(
+    address: usize,
+    copy_len: usize,
+    transformed_scratch: []u8,
+) Error![]const u8 {
 
     // `static_dictionary.transform` is the complete RFC 7932 implementation.
     // The historical compatibility list is retained for introspection and
@@ -11391,6 +19683,166 @@ fn minimalStaticDictionaryWord(
     // that coverage list. RFC copy lengths are bounded to 4...24 before this
     // point, so no separate size-bit lookup is needed here.
     return static_dictionary.transform(address, copy_len, transformed_scratch) orelse error.UnsupportedBrotliFeature;
+}
+
+const ResolvedDictionaryReference = union(enum) {
+    compound: shared_dictionary.Cursor,
+    static: []const u8,
+    contextual_static: []const u8,
+};
+
+fn resolveOutOfWindowReference(
+    dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    static_scratch: []u8,
+) Error!ResolvedDictionaryReference {
+    const compound_size = if (dictionary) |active| active.total_size else 0;
+    const target = shared_dictionary.classifyDistance(distance, max_history, compound_size) catch
+        return error.InvalidMatch;
+    return switch (target) {
+        .history => error.InvalidMatch,
+        .compound => |address| .{ .compound = (dictionary orelse return error.InvalidMatch).dictionary.cursor(address, copy_len) catch |err| switch (err) {
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidMatch,
+        } },
+        .static_dictionary => |address| if (dictionary) |active| blk: {
+            if (!active.dictionary.hasSerializedStatic())
+                break :blk .{ .static = try minimalStaticDictionaryWordAtAddress(
+                    address,
+                    copy_len,
+                    static_scratch,
+                ) };
+            const word = active.dictionary.staticWord(
+                dictionary_context,
+                address,
+                copy_len,
+                static_scratch,
+            ) catch |err| switch (err) {
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidMatch,
+            };
+            break :blk .{ .contextual_static = word };
+        } else .{ .static = try minimalStaticDictionaryWordAtAddress(
+            address,
+            copy_len,
+            static_scratch,
+        ) },
+    };
+}
+
+const DictionaryReferenceKind = enum { compound, static, contextual_static };
+const ReplayedDictionaryReference = struct {
+    kind: DictionaryReferenceKind,
+    output_len: usize,
+};
+
+fn appendOutOfWindowReference(
+    output: []u8,
+    written: *usize,
+    output_end: usize,
+    dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    static_scratch: []u8,
+) Error!DictionaryReferenceKind {
+    var resolved = try resolveOutOfWindowReference(
+        dictionary,
+        dictionary_context,
+        distance,
+        copy_len,
+        max_history,
+        static_scratch,
+    );
+    switch (resolved) {
+        .compound => |*cursor| {
+            if (copy_len > output_end - written.*) return error.CorruptFrame;
+            const target = output[written.*..][0..copy_len];
+            const copied = cursor.copyInto(target);
+            if (copied != copy_len or !cursor.isDone()) return error.InvalidMatch;
+            written.* += copy_len;
+            return .compound;
+        },
+        .static => |word| {
+            if (word.len > output_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            return .static;
+        },
+        .contextual_static => |word| {
+            if (word.len > output_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            return .contextual_static;
+        },
+    }
+}
+
+fn replayOutOfWindowReference(
+    literal_history: *LiteralHistory,
+    stats: ?*StreamSummaryMetaBlockStats,
+    dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    remaining_output: usize,
+    static_scratch: []u8,
+) SummaryError!ReplayedDictionaryReference {
+    var resolved = try resolveOutOfWindowReference(
+        dictionary,
+        dictionary_context,
+        distance,
+        copy_len,
+        max_history,
+        static_scratch,
+    );
+    switch (resolved) {
+        .compound => |*cursor| {
+            if (copy_len > remaining_output) return error.CorruptFrame;
+            var scratch: [256]u8 = undefined;
+            while (!cursor.isDone()) {
+                const copied = cursor.copyInto(scratch[0..@min(scratch.len, cursor.remaining())]);
+                if (copied == 0) return error.InvalidMatch;
+                literal_history.pushSlice(scratch[0..copied]);
+            }
+            if (stats) |s| {
+                s.shared_dictionary_copy_count = std.math.add(usize, s.shared_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.shared_dictionary_bytes = std.math.add(usize, s.shared_dictionary_bytes, copy_len) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .compound, .output_len = copy_len };
+        },
+        .static => |word| {
+            if (word.len > remaining_output) return error.CorruptFrame;
+            literal_history.pushSlice(word);
+            if (stats) |s| {
+                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .static, .output_len = word.len };
+        },
+        .contextual_static => |word| {
+            if (word.len > remaining_output) return error.CorruptFrame;
+            literal_history.pushSlice(word);
+            if (stats) |s| {
+                s.shared_dictionary_copy_count = std.math.add(
+                    usize,
+                    s.shared_dictionary_copy_count,
+                    1,
+                ) catch return error.IntegerOverflow;
+                s.shared_dictionary_bytes = std.math.add(
+                    usize,
+                    s.shared_dictionary_bytes,
+                    word.len,
+                ) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .contextual_static, .output_len = word.len };
+        },
+    }
 }
 
 pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -12205,10 +20657,7 @@ fn insertCopyCodeRanges(symbol: u16) InsertCopyCodeRanges {
     return .{ .insert_base = 16, .copy_base = 16 };
 }
 
-const LengthSpec = struct {
-    base: usize,
-    extra_bits: u5,
-};
+const LengthSpec = br_length.Spec;
 
 fn readInsertLength(code: u16, reader: *bitstream.BitReader) Error!usize {
     const spec = insertLengthSpec(code);
@@ -12222,53 +20671,27 @@ fn readCopyLength(code: u16, reader: *bitstream.BitReader) Error!usize {
     return spec.base + extra;
 }
 
-fn insertLengthSpec(code: u16) LengthSpec {
-    return switch (code) {
-        0...5 => .{ .base = code, .extra_bits = 0 },
-        6...7 => .{ .base = 6 + (@as(usize, code - 6) << 1), .extra_bits = 1 },
-        8...9 => .{ .base = 10 + (@as(usize, code - 8) << 2), .extra_bits = 2 },
-        10...11 => .{ .base = 18 + (@as(usize, code - 10) << 3), .extra_bits = 3 },
-        12...13 => .{ .base = 34 + (@as(usize, code - 12) << 4), .extra_bits = 4 },
-        14...15 => .{ .base = 66 + (@as(usize, code - 14) << 5), .extra_bits = 5 },
-        16 => .{ .base = 130, .extra_bits = 6 },
-        17 => .{ .base = 194, .extra_bits = 7 },
-        18 => .{ .base = 322, .extra_bits = 8 },
-        19 => .{ .base = 578, .extra_bits = 9 },
-        20 => .{ .base = 1090, .extra_bits = 10 },
-        21 => .{ .base = 2114, .extra_bits = 12 },
-        22 => .{ .base = 6210, .extra_bits = 14 },
-        23 => .{ .base = 22594, .extra_bits = 24 },
-        else => unreachable,
-    };
-}
-
-fn copyLengthSpec(code: u16) LengthSpec {
-    return switch (code) {
-        0...7 => .{ .base = 2 + code, .extra_bits = 0 },
-        8...9 => .{ .base = 10 + (@as(usize, code - 8) << 1), .extra_bits = 1 },
-        10...11 => .{ .base = 14 + (@as(usize, code - 10) << 2), .extra_bits = 2 },
-        12...13 => .{ .base = 22 + (@as(usize, code - 12) << 3), .extra_bits = 3 },
-        14...15 => .{ .base = 38 + (@as(usize, code - 14) << 4), .extra_bits = 4 },
-        16 => .{ .base = 70, .extra_bits = 5 },
-        17 => .{ .base = 102, .extra_bits = 5 },
-        18 => .{ .base = 134, .extra_bits = 6 },
-        19 => .{ .base = 198, .extra_bits = 7 },
-        20 => .{ .base = 326, .extra_bits = 8 },
-        21 => .{ .base = 582, .extra_bits = 9 },
-        22 => .{ .base = 1094, .extra_bits = 10 },
-        23 => .{ .base = 2118, .extra_bits = 24 },
-        else => unreachable,
-    };
-}
+const insertLengthSpec = br_length.insertSpec;
+const copyLengthSpec = br_length.copySpec;
 
 fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
     return try readPrefixCodeRuntime(alphabet_size, alphabet_size, reader);
 }
 
 fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(max_alphabet_size) {
+    var result: PrefixCode(max_alphabet_size) = undefined;
+    try readPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, &result);
+    return result;
+}
+
+fn readPrefixCodeInto(comptime alphabet_size: usize, reader: *bitstream.BitReader, result: *PrefixCode(alphabet_size)) Error!void {
+    return readPrefixCodeRuntimeInto(alphabet_size, alphabet_size, reader, result);
+}
+
+fn readPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, result: *PrefixCode(max_alphabet_size)) Error!void {
     if (alphabet_size == 0 or alphabet_size > max_alphabet_size) return error.CorruptFrame;
     const kind = try reader.readBits(u2, 2);
-    if (kind != 1) return try readComplexPrefixCodeRuntime(max_alphabet_size, alphabet_size, reader, kind);
+    if (kind != 1) return readComplexPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, kind, result);
 
     const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
     const alphabet_bits = alphabetBitsRuntime(alphabet_size);
@@ -12284,7 +20707,10 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
 
     var lengths: [max_alphabet_size]u4 = undefined;
     switch (nsym) {
-        1 => return .{ .single_symbol = symbols[0] },
+        1 => {
+            result.* = .{ .single_symbol = symbols[0] };
+            return;
+        },
         2 => {
             lengths[0] = 1;
             lengths[1] = 1;
@@ -12308,7 +20734,8 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
         else => unreachable,
     }
 
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
+    result.single_symbol = null;
+    result.table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]);
 }
 
 // Keep Large Window header parsing on distinct generic instantiations. Sharing
@@ -12429,11 +20856,17 @@ fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_siz
     return result;
 }
 
-const code_length_alphabet_size = 18;
-const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5);
+const code_length_alphabet_size = code_length_decoder_mod.alphabet_size;
+const CodeLengthPrefixDecoder = code_length_decoder_mod.Decoder;
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
+    var result: PrefixCode(max_alphabet_size) = undefined;
+    try readComplexPrefixCodeRuntimeInto(max_alphabet_size, alphabet_size, reader, hskip, &result);
+    return result;
+}
+
+fn readComplexPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, result: *PrefixCode(max_alphabet_size)) Error!void {
     if (hskip == 1) return error.CorruptFrame;
 
     var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
@@ -12466,7 +20899,7 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     else
         null;
     const code_length_decoder = if (code_length_single_symbol == null)
-        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+        try CodeLengthPrefixDecoder.init(&code_length_lengths)
     else
         undefined;
 
@@ -12539,7 +20972,8 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
         }
     }
     if (active < 2) return error.InvalidHuffmanCode;
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+    result.single_symbol = null;
+    try result.table.initSparseTrustedInto(&lengths, active_symbols[0..active]);
 }
 
 fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
@@ -12576,7 +21010,7 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
     else
         null;
     const code_length_decoder = if (code_length_single_symbol == null)
-        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+        try CodeLengthPrefixDecoder.init(&code_length_lengths)
     else
         undefined;
     profile.code_length_header_ns +%= elapsedNs(header_start, io);
@@ -12669,15 +21103,33 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
     return result;
 }
 
+const code_length_code_prefix_lut = [16]u8{
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (2 << 3) | 3,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (1 << 3) | 4,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (2 << 3) | 3,
+    (0 << 3) | 2, (4 << 3) | 2, (3 << 3) | 2, (5 << 3) | 4,
+};
+
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {
-    const first = try reader.readBits(u1, 1);
-    const second = try reader.readBits(u1, 1);
-    if (first == 0) return if (second == 0) 0 else 3;
-    if (second == 0) return 4;
-    const third = try reader.readBits(u1, 1);
-    if (third == 0) return 2;
-    const fourth = try reader.readBits(u1, 1);
-    return if (fourth == 0) 1 else 5;
+    const entry = code_length_code_prefix_lut[reader.peekBitsPadded(u4, 4)];
+    const bits: u3 = @truncate(entry);
+    if (!reader.hasBits(bits)) return error.TruncatedFrame;
+    reader.advanceBitsStagedAssumeAvailable(bits);
+    return @truncate(entry >> 3);
+}
+
+test "br code-length-code-length prefix lookup covers every padded nibble" {
+    const expected_values = [16]u4{ 0, 4, 3, 2, 0, 4, 3, 1, 0, 4, 3, 2, 0, 4, 3, 5 };
+    const expected_bits = [16]u3{ 2, 2, 2, 3, 2, 2, 2, 4, 2, 2, 2, 3, 2, 2, 2, 4 };
+    for (0..16) |prefix| {
+        const input = [1]u8{@intCast(prefix)};
+        var reader = bitstream.BitReader.initBitLength(&input, expected_bits[prefix]);
+        try std.testing.expectEqual(expected_values[prefix], try readCodeLengthCodeLength(&reader));
+        try std.testing.expectEqual(@as(usize, expected_bits[prefix]), reader.bitPosition());
+
+        var truncated = bitstream.BitReader.initBitLength(&input, expected_bits[prefix] - 1);
+        try std.testing.expectError(error.TruncatedFrame, readCodeLengthCodeLength(&truncated));
+    }
 }
 
 fn singleSymbolPrefixCode(comptime alphabet_size: usize, lengths: *const [alphabet_size]u4) PrefixCode(alphabet_size) {
@@ -12840,26 +21292,26 @@ test "br large window decode is explicit and covers one-shot chunked and increme
         defer std.testing.allocator.free(chunked);
         try std.testing.expectEqualSlices(u8, expected, chunked);
 
-        var buffered = IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
+        var owned_progressive = IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
             .expected_output_len = expected.len,
             .decode = options,
         }, encoded.len);
-        defer buffered.deinit();
-        var buffered_output: [expected.len]u8 = undefined;
-        var buffered_input_offset: usize = 0;
-        var buffered_output_offset: usize = 0;
-        while (buffered.snapshot().phase != .done) {
-            const input_end = @min(encoded.len, buffered_input_offset + 1);
-            const output_end = @min(buffered_output.len, buffered_output_offset + 7);
-            const step = try buffered.step(
-                encoded[buffered_input_offset..input_end],
-                buffered_output[buffered_output_offset..output_end],
+        defer owned_progressive.deinit();
+        var owned_output: [expected.len]u8 = undefined;
+        var owned_input_offset: usize = 0;
+        var owned_output_offset: usize = 0;
+        while (owned_progressive.snapshot().phase != .done) {
+            const input_end = @min(encoded.len, owned_input_offset + 1);
+            const output_end = @min(owned_output.len, owned_output_offset + 7);
+            const step = try owned_progressive.step(
+                encoded[owned_input_offset..input_end],
+                owned_output[owned_output_offset..output_end],
             );
             try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
-            buffered_input_offset += step.progress.input_read;
-            buffered_output_offset += step.progress.output_written;
+            owned_input_offset += step.progress.input_read;
+            owned_output_offset += step.progress.output_written;
         }
-        try std.testing.expectEqualSlices(u8, expected, &buffered_output);
+        try std.testing.expectEqualSlices(u8, expected, &owned_output);
 
         var history: [expected.len]u8 = undefined;
         var progressive = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
@@ -12920,6 +21372,11 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
         },
         else => return error.InvalidBlockPlan,
     }
+}
+
+fn writePlannedWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5, large_window: bool) Error!void {
+    if (large_window) return writeLargeWindowBits(allocator, writer, window_bits);
+    return writeWindowBits(allocator, writer, window_bits);
 }
 
 fn writeLargeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
@@ -13544,17 +22001,18 @@ test "br same-last distance cost choice is strict and stable" {
 
 test "br same-last distance eligibility excludes non-copy and dictionary commands" {
     const eligible = command_plan.Command{ .insert_start = 0, .insert_len = 0, .copy_len = 4, .distance = 4, .has_copy = true };
-    try std.testing.expect(sameLastDistanceShape(eligible, 4) != null);
-    try std.testing.expect(sameLastDistanceShape(eligible, 5) == null);
+    try std.testing.expect(sameLastDistanceShape(eligible, 4, 4) != null);
+    try std.testing.expect(sameLastDistanceShape(eligible, 4, 5) == null);
     var literal_only = eligible;
     literal_only.has_copy = false;
-    try std.testing.expect(sameLastDistanceShape(literal_only, 4) == null);
+    try std.testing.expect(sameLastDistanceShape(literal_only, 0, 4) == null);
     var dictionary = eligible;
+    dictionary.source = .static;
     dictionary.dictionary_output_len = 4;
-    try std.testing.expect(sameLastDistanceShape(dictionary, 4) == null);
+    try std.testing.expect(sameLastDistanceShape(dictionary, 4, 4) == null);
     var unsupported = eligible;
     unsupported.insert_len = 66;
-    try std.testing.expect(sameLastDistanceShape(unsupported, 4) == null);
+    try std.testing.expect(sameLastDistanceShape(unsupported, 4, 4) == null);
 }
 
 test "br same-last distance recoding is byte-monotonic and preserves the ring" {
@@ -13610,7 +22068,7 @@ test "br recent-distance candidate tracks the RFC distance ring" {
         .{ .insert_start = 12, .insert_len = 1, .copy_len = 5, .distance = 4, .has_copy = true },
         .{ .insert_start = 18, .insert_len = 0, .copy_len = 2, .distance = 9, .has_copy = true },
     };
-    try std.testing.expectEqual(@as(usize, 4), countReusableRecentDistances(&commands));
+    try std.testing.expectEqual(@as(usize, 4), try countReusableRecentDistances(&commands, .{}));
     try std.testing.expectEqual(RecentDistanceStats{ .recent = 4, .last = 3 }, recentDistanceStats(&commands));
     const initial = initial_last_distances;
     try std.testing.expectEqual(@as(?u4, 0), recentDistanceSymbol(4, &initial));
@@ -13958,7 +22416,7 @@ test "br planned wire encodes a two-type literal entropy split" {
     const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
     defer std.testing.allocator.free(baseline);
     const split = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
-        .literal_split = payload.len / 4,
+        .literal_split = .{ .split = payload.len / 4, .savings_bits = 0 },
     });
     defer std.testing.allocator.free(split);
 
@@ -13969,6 +22427,725 @@ test "br planned wire encodes a two-type literal entropy split" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, split, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+const clustered_literal_payload_len = 6144;
+
+fn fillClusteredLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == clustered_literal_payload_len);
+    for (payload[0..2048], 0..) |*byte, i| byte.* = @intCast(i & 15);
+    for (payload[2048..4096], 0..) |*byte, i| byte.* = @intCast(240 + (i & 15));
+    for (payload[4096..], 0..) |*byte, i| byte.* = @intCast(i & 15);
+}
+
+test "br planned wire clusters literal tree types in A-B-A order" {
+    var payload: [clustered_literal_payload_len]u8 = undefined;
+    fillClusteredLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const two = proposals.two orelse return error.TestUnexpectedResult;
+    const clustered_plan = proposals.clustered orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const two_encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = two,
+    });
+    defer std.testing.allocator.free(two_encoded);
+    const clustered = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = clustered_plan,
+    });
+    defer std.testing.allocator.free(clustered);
+    try std.testing.expect(clustered.len < two_encoded.len);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, clustered, selected);
+
+    const summary = try summarizeStream(clustered);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, clustered, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br clustered literal candidate cleans up allocation failures" {
+    var payload: [clustered_literal_payload_len]u8 = undefined;
+    fillClusteredLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
+const three_literal_payload_len = 6144;
+
+fn fillThreeLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == three_literal_payload_len);
+    for (payload[0..2048], 0..) |*byte, i| byte.* = @intCast(i & 15);
+    for (payload[2048..4096], 0..) |*byte, i| byte.* = @intCast(112 + (i & 15));
+    for (payload[4096..], 0..) |*byte, i| byte.* = @intCast(240 + (i & 15));
+}
+
+test "br planned wire emits three literal tree types in A-B-C order" {
+    var payload: [three_literal_payload_len]u8 = undefined;
+    fillThreeLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const two = proposals.two orelse return error.TestUnexpectedResult;
+    const three_plan = proposals.three orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const two_encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = two,
+    });
+    defer std.testing.allocator.free(two_encoded);
+    const three = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = three_plan,
+    });
+    defer std.testing.allocator.free(three);
+    try std.testing.expect(three.len < two_encoded.len);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, three, selected);
+
+    const summary = try summarizeStream(three);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, three, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br three literal tree candidate cleans up allocation failures" {
+    var payload: [three_literal_payload_len]u8 = undefined;
+    fillThreeLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
+const alternating_literal_payload_len = 8192;
+
+fn fillAlternatingLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == alternating_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = if (region & 1 == 0)
+            @intCast(i & 15)
+        else
+            @intCast(240 + (i & 15));
+    }
+}
+
+test "br planned wire alternates literal tree types in A-B-A-B order" {
+    var payload: [alternating_literal_payload_len]u8 = undefined;
+    fillAlternatingLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const alternating_plan = proposals.alternating_four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const alternating = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = alternating_plan,
+    });
+    defer std.testing.allocator.free(alternating);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, alternating, selected);
+
+    const summary = try summarizeStream(alternating);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 2), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, alternating, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br alternating literal candidate cleans up allocation failures" {
+    var payload: [alternating_literal_payload_len]u8 = undefined;
+    fillAlternatingLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
+const reuse_first_literal_payload_len = 8192;
+
+fn fillReuseFirstLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == reuse_first_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = switch (region) {
+            0, 3 => @intCast(i & 15),
+            1 => @intCast(112 + (i & 15)),
+            2 => @intCast(240 + (i & 15)),
+            else => unreachable,
+        };
+    }
+}
+
+test "br planned wire reuses the first of three literal types in region four" {
+    var payload: [reuse_first_literal_payload_len]u8 = undefined;
+    fillReuseFirstLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const reused_plan = proposals.reuse_first_four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const reused = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = reused_plan,
+    });
+    defer std.testing.allocator.free(reused);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, reused, selected);
+
+    const summary = try summarizeStream(reused);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, reused, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br four-region three-type literal candidate cleans up allocation failures" {
+    var payload: [reuse_first_literal_payload_len]u8 = undefined;
+    fillReuseFirstLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
+const four_literal_payload_len = 8192;
+
+fn fillFourLiteralFixture(payload: []u8) void {
+    std.debug.assert(payload.len == four_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = @intCast(region * 80 + (i & 15));
+    }
+}
+
+const dynamic_literal_payload_len = 12_288;
+const dynamic_literal_region_len = dynamic_literal_payload_len / 6;
+const dynamic_literal_byte_bases = [6]u8{ 0, 48, 96, 144, 192, 224 };
+
+fn fillFiveLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 3, 4, 4 });
+}
+
+fn fillSixLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 3, 4, 5 });
+}
+
+fn fillSixRegionClusteredLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 0, 1, 2 });
+}
+
+fn fillDynamicLiteralFixture(payload: []u8, region_types: *const [6]usize) void {
+    std.debug.assert(payload.len == dynamic_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const tree_index = region_types[i / dynamic_literal_region_len];
+        byte.* = dynamic_literal_byte_bases[tree_index] + @as(u8, @intCast(i & 15));
+    }
+}
+
+fn encodeSelectedLiteralSplitFixtureAlloc(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{});
+    errdefer allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        allocator,
+        payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    );
+    if (selected) |encoded| {
+        allocator.free(baseline);
+        return encoded;
+    }
+    return baseline;
+}
+
+test "br planned wire emits four literal tree types in A-B-C-D order" {
+    var payload: [four_literal_payload_len]u8 = undefined;
+    fillFourLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const proposals = literal_block_split.chooseProposals(&payload, &commands, null);
+    const four_plan = proposals.four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const four = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .literal_split = four_plan,
+    });
+    defer std.testing.allocator.free(four);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, four, selected);
+
+    const summary = try summarizeStream(four);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, four, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br four literal tree candidate cleans up allocation failures" {
+    var payload: [four_literal_payload_len]u8 = undefined;
+    fillFourLiteralFixture(&payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            try std.testing.expect(candidate.?.len < base.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload[0..], commands[0..], baseline },
+    );
+}
+
+test "br planned wire supports five and six literal regions" {
+    const Shape = enum { five, six, six_clustered };
+    const cases = .{
+        .{ .shape = Shape.five, .region_count = @as(usize, 5), .type_count = @as(usize, 5) },
+        .{ .shape = Shape.six, .region_count = @as(usize, 6), .type_count = @as(usize, 6) },
+        .{ .shape = Shape.six_clustered, .region_count = @as(usize, 6), .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, dynamic_literal_payload_len);
+        defer std.testing.allocator.free(payload);
+        switch (case.shape) {
+            .five => fillFiveLiteralFixture(payload),
+            .six => fillSixLiteralFixture(payload),
+            .six_clustered => fillSixRegionClusteredLiteralFixture(payload),
+        }
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const proposal = proposals.dynamic orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqual(case.region_count, proposal.regionCount());
+        try std.testing.expectEqual(case.type_count, proposal.typeCount());
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{ .literal_split = proposal });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedLiteralSplitFixtureAlloc(std.testing.allocator, payload);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_literal_block_types);
+        try std.testing.expectEqual(case.type_count, summary.max_literal_context_trees);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br six-region literal candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, dynamic_literal_payload_len);
+    defer std.testing.allocator.free(payload);
+    fillSixRegionClusteredLiteralFixture(payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands[0..], baseline },
+    );
+}
+
+test "br adaptive literal split writes off-grid non-cyclic types" {
+    const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+    const region_types = [_]usize{ 0, 1, 0, 2, 0 };
+    const payload = try std.testing.allocator.alloc(u8, 8192);
+    defer std.testing.allocator.free(payload);
+    fillAdaptiveLiteralFixture(payload, &boundaries, &region_types);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+    const types = [_]u8{ 0, 1, 0, 2, 0 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        3,
+        payload.len,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const adaptive = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+        null,
+        &stats,
+        .{ .adaptive_literal_split = &plan },
+    );
+    defer std.testing.allocator.free(adaptive);
+    const summary = try summarizeStream(adaptive);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, adaptive, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const discovered = (try chooseAdaptiveLiteralSplitAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+    )) orelse return error.TestUnexpectedResult;
+    defer discovered.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, &types, discovered.types);
+    const joint = (try literal_joint_context_split.chooseAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+        discovered,
+        .{},
+    )) orelse return error.TestUnexpectedResult;
+    defer joint.deinit(std.testing.allocator);
+    try std.testing.expect(joint.tree_count >= 2);
+    var shared_tree = false;
+    for (joint.context_map[0..64]) |left_tree| {
+        for (joint.context_map[2 * 64 ..][0..64]) |right_tree|
+            shared_tree = shared_tree or left_tree == right_tree;
+    }
+    try std.testing.expect(shared_tree);
+    const forced_joint = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+        null,
+        &stats,
+        .{
+            .adaptive_literal_split = &joint.block_plan,
+            .literal_entropy_plan = &joint,
+        },
+    );
+    defer std.testing.allocator.free(forced_joint);
+    const baseline = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+        null,
+        &stats,
+        .{},
+    );
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        payload,
+        &commands,
+        &stats,
+        .{ .try_adaptive_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, forced_joint, selected);
+    try std.testing.expect(selected.len < adaptive.len);
+    const selected_summary = try summarizeStream(selected);
+    try std.testing.expectEqual(@as(usize, 3), selected_summary.max_literal_block_types);
+    try std.testing.expect(selected_summary.max_literal_context_trees >= 2);
+    const selected_decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+    defer std.testing.allocator.free(selected_decoded);
+    try std.testing.expectEqualSlices(u8, payload, selected_decoded);
+}
+
+test "br adaptive literal split writes all 256 types and context trees" {
+    const fixture = try IncrementalTestSupport.encodeMaximumAdaptiveLiteralTypes(std.testing.allocator);
+    defer std.testing.allocator.free(fixture.encoded);
+    defer std.testing.allocator.free(fixture.payload);
+    const summary = try summarizeStream(fixture.encoded);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        fixture.encoded,
+        fixture.payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, fixture.payload, decoded);
+}
+
+test "br joint literal plan writes dynamic 256-type context map" {
+    const fixture = try IncrementalTestSupport.encodeMaximumJointLiteralContexts(std.testing.allocator);
+    defer std.testing.allocator.free(fixture.encoded);
+    defer std.testing.allocator.free(fixture.payload);
+    const summary = try summarizeStream(fixture.encoded);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_literal_context_trees);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        fixture.encoded,
+        fixture.payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, fixture.payload, decoded);
+}
+
+test "br adaptive literal writer cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, 128);
+    defer std.testing.allocator.free(payload);
+    fillAdaptiveLiteralFixture(payload, &.{ 17, 53, 91 }, &.{ 0, 2, 1, 2 });
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &.{ 17, 36, 38, 37 },
+        &.{ 0, 2, 1, 2 },
+        3,
+        payload.len,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, command_stream: []const command_plan.Command, adaptive_plan: *const block_split_plan.Plan) !void {
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            const encoded = try encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                command_stream,
+                null,
+                &stats,
+                .{ .adaptive_literal_split = adaptive_plan },
+            );
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands[0..], &plan },
+    );
+}
+
+test "br joint literal context writer cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, 128);
+    defer std.testing.allocator.free(payload);
+    fillAdaptiveLiteralFixture(payload, &.{ 17, 53, 91 }, &.{ 0, 2, 1, 2 });
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    const block_plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &.{ 17, 36, 38, 37 },
+        &.{ 0, 2, 1, 2 },
+        3,
+        payload.len,
+        0,
+    );
+    defer block_plan.deinit(std.testing.allocator);
+    var context_map: [3 * 64]u8 = undefined;
+    for (&context_map, 0..) |*tree, index| tree.* = @intCast(index & 1);
+    const joint = try literal_entropy_plan.Plan.initCopy(
+        std.testing.allocator,
+        block_plan,
+        &.{ 0, 1, 2 },
+        &context_map,
+        2,
+        payload.len,
+    );
+    defer joint.deinit(std.testing.allocator);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, command_stream: []const command_plan.Command, active_joint: *const literal_entropy_plan.Plan) !void {
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            const encoded = try encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                command_stream,
+                null,
+                &stats,
+                .{
+                    .adaptive_literal_split = &active_joint.block_plan,
+                    .literal_entropy_plan = active_joint,
+                },
+            );
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands[0..], &joint },
+    );
+}
+
+test "br literal block length code rejects invalid four-way splits" {
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .third_split = 3072, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 2048, .alternate_two_types = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 3072, .alternate_two_types = true, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 4096, .alternate_two_types = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 1536, .fourth_split = 1536, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 1536, .fifth_split = 2560, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .cycle_type_count = 1, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .cycle_type_count = 3, .savings_bits = 0 }, 4096));
 }
 
 const three_command_region_count = 6144;
@@ -14080,6 +23257,258 @@ fn fillReuseFirstFourFixture(payload: []u8, commands: []command_plan.Command) vo
     std.debug.assert(position == payload.len);
 }
 
+const four_command_count = 8192;
+const four_command_first_split = four_command_count / 6;
+const four_command_second_split = four_command_count * 2 / 6;
+const four_command_third_split = four_command_count * 3 / 6;
+const command_fixture_insert_lens = [6][8]usize{
+    clustered_outer_insert_lens,
+    clustered_middle_insert_lens,
+    .{ 18, 20, 22, 24, 26, 28, 30, 32 },
+    .{ 2, 4, 6, 8, 10, 12, 14, 16 },
+    .{ 3, 5, 7, 9, 11, 13, 15, 17 },
+    .{ 6, 10, 14, 18, 22, 26, 30, 34 },
+};
+const command_fixture_copy_lens = [6]usize{ 2, 40, 6, 258, 12, 80 };
+const command_fixture_byte_bases = [6]u8{ 0, 64, 128, 192, 32, 224 };
+const four_command_payload_len = commandFixtureRegionPayloadLen(
+    command_fixture_insert_lens[0],
+    command_fixture_copy_lens[0],
+    0,
+    four_command_first_split,
+) + commandFixtureRegionPayloadLen(
+    command_fixture_insert_lens[1],
+    command_fixture_copy_lens[1],
+    four_command_first_split,
+    four_command_second_split - four_command_first_split,
+) + commandFixtureRegionPayloadLen(
+    command_fixture_insert_lens[2],
+    command_fixture_copy_lens[2],
+    four_command_second_split,
+    four_command_third_split - four_command_second_split,
+) + commandFixtureRegionPayloadLen(
+    command_fixture_insert_lens[3],
+    command_fixture_copy_lens[3],
+    four_command_third_split,
+    four_command_count - four_command_third_split,
+);
+
+fn commandFixtureRegionPayloadLen(insert_lens: [8]usize, copy_len: usize, start: usize, count: usize) usize {
+    var cycle_sum: usize = 0;
+    for (insert_lens) |insert_len| cycle_sum += insert_len;
+    var total = count / insert_lens.len * (cycle_sum + insert_lens.len * copy_len);
+    for (0..count % insert_lens.len) |offset|
+        total += insert_lens[(start + offset) & (insert_lens.len - 1)] + copy_len;
+    return total;
+}
+
+fn fillFourCommandFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillCommandTypeFixture(
+        payload,
+        commands,
+        &.{ four_command_first_split, four_command_second_split, four_command_third_split },
+        &.{ 0, 1, 2, 3 },
+    );
+}
+
+const dynamic_command_count = 12_288;
+const dynamic_command_region_len = dynamic_command_count / 6;
+const dynamic_command_boundaries = [5]usize{
+    dynamic_command_region_len,
+    2 * dynamic_command_region_len,
+    3 * dynamic_command_region_len,
+    4 * dynamic_command_region_len,
+    5 * dynamic_command_region_len,
+};
+const five_command_region_types = [5]usize{ 0, 1, 2, 3, 4 };
+const six_command_region_types = [6]usize{ 0, 1, 2, 3, 4, 5 };
+const six_clustered_command_region_types = [6]usize{ 0, 1, 2, 0, 1, 2 };
+const five_command_payload_len = commandTypeFixturePayloadLen(dynamic_command_count, dynamic_command_boundaries[0..4], &five_command_region_types);
+const six_command_payload_len = commandTypeFixturePayloadLen(dynamic_command_count, &dynamic_command_boundaries, &six_command_region_types);
+const dynamic_command_clustered_payload_len = commandTypeFixturePayloadLen(dynamic_command_count, &dynamic_command_boundaries, &six_clustered_command_region_types);
+
+fn commandTypeFixturePayloadLen(command_count: usize, boundaries: []const usize, region_types: []const usize) usize {
+    var total: usize = 0;
+    var start: usize = 0;
+    for (region_types, 0..) |tree_index, region| {
+        const end = if (region < boundaries.len) boundaries[region] else command_count;
+        total += commandFixtureRegionPayloadLen(
+            command_fixture_insert_lens[tree_index],
+            command_fixture_copy_lens[tree_index],
+            start,
+            end - start,
+        );
+        start = end;
+    }
+    return total;
+}
+
+fn fillFiveCommandFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillCommandTypeFixture(payload, commands, dynamic_command_boundaries[0..4], &five_command_region_types);
+}
+
+fn fillSixCommandFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillCommandTypeFixture(payload, commands, &dynamic_command_boundaries, &six_command_region_types);
+}
+
+fn fillSixRegionClusteredCommandFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillCommandTypeFixture(payload, commands, &dynamic_command_boundaries, &six_clustered_command_region_types);
+}
+
+fn fillCommandTypeFixture(payload: []u8, commands: []command_plan.Command, boundaries: []const usize, region_types: []const usize) void {
+    std.debug.assert(region_types.len == boundaries.len + 1);
+    var position: usize = 0;
+    var region: usize = 0;
+    for (commands, 0..) |*command, i| {
+        if (region < boundaries.len and i == boundaries[region]) region += 1;
+        const tree_index = region_types[region];
+        const insert_len = command_fixture_insert_lens[tree_index][i & 7];
+        const copy_len = command_fixture_copy_lens[tree_index];
+        const byte: u8 = command_fixture_byte_bases[tree_index] + @as(u8, @intCast(i & 15));
+        @memset(payload[position..][0 .. insert_len + copy_len], byte);
+        command.* = .{ .insert_start = position, .insert_len = insert_len, .copy_len = copy_len, .distance = 1, .has_copy = true };
+        position += insert_len + copy_len;
+    }
+    std.debug.assert(position == payload.len);
+}
+
+fn fillAdaptiveLiteralFixture(payload: []u8, boundaries: []const usize, region_types: []const usize) void {
+    std.debug.assert(region_types.len == boundaries.len + 1);
+    const bases = [_]u8{ 0, 96, 192 };
+    var region: usize = 0;
+    for (payload, 0..) |*literal, index| {
+        if (region < boundaries.len and index == boundaries[region]) region += 1;
+        literal.* = bases[region_types[region]] + @as(u8, @intCast(index & 31));
+    }
+}
+
+const four_distance_command_count = 8192;
+const four_distance_seed_len = 64 * 1024;
+const four_distance_copy_len = 4;
+const four_distance_payload_len = four_distance_seed_len + four_distance_command_count * four_distance_copy_len;
+const four_distance_first_split = four_distance_command_count / 6;
+const four_distance_second_split = four_distance_command_count * 2 / 6;
+const four_distance_third_split = four_distance_command_count * 3 / 6;
+const distance_fixture_values = [6][8]usize{
+    .{ 1, 5, 9, 13, 17, 21, 25, 29 },
+    .{ 64, 96, 128, 160, 192, 224, 256, 288 },
+    .{ 1024, 1536, 2048, 2560, 3072, 3584, 4096, 4608 },
+    .{ 32_768, 36_864, 40_960, 45_056, 49_152, 53_248, 57_344, 61_440 },
+    .{ 8192, 9216, 10_240, 11_264, 12_288, 13_312, 14_336, 15_360 },
+    .{ 16_384, 18_432, 20_480, 22_528, 24_576, 26_624, 28_672, 30_720 },
+};
+
+const clustered_distance_command_count = 12_288;
+const clustered_distance_first_split = clustered_distance_command_count / 3;
+const clustered_distance_second_split = clustered_distance_command_count * 2 / 3;
+const clustered_distance_payload_len = four_distance_seed_len + clustered_distance_command_count * four_distance_copy_len;
+const alternating_distance_command_count = four_distance_command_count;
+const alternating_distance_payload_len = four_distance_payload_len;
+const reuse_first_distance_command_count = four_distance_command_count;
+const reuse_first_distance_payload_len = four_distance_payload_len;
+const dynamic_distance_command_count = 12_288;
+const dynamic_distance_region_len = dynamic_distance_command_count / 6;
+const dynamic_distance_payload_len = four_distance_seed_len + dynamic_distance_command_count * four_distance_copy_len;
+const distance_parameter_command_count = 4096;
+const distance_parameter_values = [_]usize{ 1024, 2048, 3072, 4096, 5120 };
+const distance_parameter_payload_len = four_distance_seed_len + distance_parameter_command_count * four_distance_copy_len;
+
+fn fillFourDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 1, 2, 3 },
+    );
+}
+
+fn fillClusteredDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ clustered_distance_first_split, clustered_distance_second_split },
+        &.{ 0, 3, 0 },
+    );
+}
+
+fn fillAlternatingDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 3, 0, 3 },
+    );
+}
+
+fn fillReuseFirstDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 1, 3, 0 },
+    );
+}
+
+fn fillFiveDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ dynamic_distance_region_len, 2 * dynamic_distance_region_len, 3 * dynamic_distance_region_len, 4 * dynamic_distance_region_len },
+        &.{ 0, 1, 2, 3, 4 },
+    );
+}
+
+fn fillSixDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ dynamic_distance_region_len, 2 * dynamic_distance_region_len, 3 * dynamic_distance_region_len, 4 * dynamic_distance_region_len, 5 * dynamic_distance_region_len },
+        &.{ 0, 1, 2, 3, 4, 5 },
+    );
+}
+
+fn fillSixRegionClusteredDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ dynamic_distance_region_len, 2 * dynamic_distance_region_len, 3 * dynamic_distance_region_len, 4 * dynamic_distance_region_len, 5 * dynamic_distance_region_len },
+        &.{ 0, 1, 2, 0, 1, 2 },
+    );
+}
+
+fn fillDistanceTypeFixture(payload: []u8, commands: []command_plan.Command, boundaries: []const usize, region_types: []const usize) void {
+    std.debug.assert(payload.len == four_distance_seed_len + commands.len * four_distance_copy_len);
+    std.debug.assert(region_types.len == boundaries.len + 1);
+    @memset(payload, 'a');
+    var region: usize = 0;
+    for (commands, 0..) |*command, i| {
+        if (region < boundaries.len and i == boundaries[region]) region += 1;
+        const tree_index = region_types[region];
+        command.* = .{
+            .insert_start = if (i == 0) 0 else four_distance_seed_len + i * four_distance_copy_len,
+            .insert_len = if (i == 0) four_distance_seed_len else 0,
+            .copy_len = four_distance_copy_len,
+            .distance = distance_fixture_values[tree_index][i & 7],
+            .has_copy = true,
+        };
+    }
+}
+
+fn fillDistanceParameterFixture(payload: []u8, commands: []command_plan.Command) void {
+    std.debug.assert(commands.len == distance_parameter_command_count);
+    std.debug.assert(payload.len == distance_parameter_payload_len);
+    @memset(payload, 'a');
+    for (commands, 0..) |*command, index| {
+        command.* = .{
+            .insert_start = if (index == 0) 0 else four_distance_seed_len + index * four_distance_copy_len,
+            .insert_len = if (index == 0) four_distance_seed_len else 0,
+            .copy_len = four_distance_copy_len,
+            .distance = distance_parameter_values[index % distance_parameter_values.len],
+            .has_copy = true,
+        };
+    }
+}
+
 fn encodeSelectedCommandSplitFixtureAlloc(allocator: std.mem.Allocator, payload: []const u8, commands: []const command_plan.Command) Error![]u8 {
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, payload, commands, null, &stats, .{});
@@ -14092,6 +23521,645 @@ fn encodeSelectedCommandSplitFixtureAlloc(allocator: std.mem.Allocator, payload:
     return baseline;
 }
 
+fn commandFixtureProposals(commands: []const command_plan.Command) Error!command_block_split.Proposals {
+    var accumulator = command_block_split.Accumulator.init(commands.len) orelse return error.InvalidBlockPlan;
+    for (commands) |command| {
+        const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        if (!accumulator.add(encoding.symbol)) return error.InvalidBlockPlan;
+    }
+    return accumulator.finishProposals();
+}
+
+test "br adaptive command split writes off-grid non-cyclic types" {
+    const command_count = 8192;
+    const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+    const region_types = [_]usize{ 0, 1, 0, 2, 0 };
+    const payload_len = commandTypeFixturePayloadLen(command_count, &boundaries, &region_types);
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, command_count);
+    defer std.testing.allocator.free(commands);
+    fillCommandTypeFixture(payload, commands, &boundaries, &region_types);
+
+    const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+    const types = [_]u8{ 0, 1, 0, 2, 0 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        3,
+        command_count,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const adaptive = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{ .adaptive_command_split = &plan },
+    );
+    defer std.testing.allocator.free(adaptive);
+    const summary = try summarizeStream(adaptive);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_command_block_types);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, adaptive, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var proposals = try chooseCommandAndDistanceSplitsAlloc(
+        std.testing.allocator,
+        commands,
+        false,
+        true,
+        true,
+        false,
+        false,
+        .{},
+    );
+    defer proposals.deinit(std.testing.allocator);
+    const discovered = &(proposals.adaptive_command orelse return error.TestUnexpectedResult);
+    try std.testing.expectEqualSlices(u8, &types, discovered.types);
+    const baseline = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{},
+    );
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        &stats,
+        .{ .try_command_split = true, .try_adaptive_command_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, adaptive, selected);
+}
+
+test "br adaptive command split cleans up writer allocation failures" {
+    const command_count = 32;
+    const boundaries = [_]usize{ 5, 13, 22 };
+    const region_types = [_]usize{ 0, 2, 1, 2 };
+    const payload_len = commandTypeFixturePayloadLen(command_count, &boundaries, &region_types);
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, command_count);
+    defer std.testing.allocator.free(commands);
+    fillCommandTypeFixture(payload, commands, &boundaries, &region_types);
+    const lengths = [_]u32{ 5, 8, 9, 10 };
+    const types = [_]u8{ 0, 2, 1, 2 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        3,
+        command_count,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            input: []const u8,
+            command_stream: []const command_plan.Command,
+            adaptive_plan: *const block_split_plan.Plan,
+        ) !void {
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            const encoded = try encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                command_stream,
+                null,
+                &stats,
+                .{ .adaptive_command_split = adaptive_plan },
+            );
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands, &plan },
+    );
+}
+
+fn encodeSelectedDistanceSplitFixtureAlloc(allocator: std.mem.Allocator, payload: []const u8, commands: []const command_plan.Command) Error![]u8 {
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, payload, commands, null, &stats, .{ .optimize_same_last_distance = false });
+    errdefer allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(allocator, payload, commands, &stats, .{ .try_distance_split = true }, .{ .encoded = baseline, .use_recent_distances = false });
+    if (selected) |encoded| {
+        allocator.free(baseline);
+        return encoded;
+    }
+    return baseline;
+}
+
+fn distanceFixtureProposals(commands: []const command_plan.Command) Error!distance_block_split.Proposals {
+    if (commands.len > clustered_distance_command_count) return error.InvalidBlockPlan;
+    var symbols: [clustered_distance_command_count]u16 = undefined;
+    for (commands, symbols[0..commands.len]) |command, *symbol| {
+        const distance = encoder_distance.encode(try commandWireDistance(command, default_window_bits, 0, 0), 15) orelse return error.InvalidBlockPlan;
+        symbol.* = distance.symbol;
+    }
+    return distance_block_split.chooseProposals(symbols[0..commands.len]);
+}
+
+test "br adaptive distance split writes off-grid non-cyclic types" {
+    const command_count = 8192;
+    const boundaries = [_]usize{ 901, 2305, 5179, 7001 };
+    const region_types = [_]usize{ 0, 3, 0, 5, 0 };
+    const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, command_count);
+    defer std.testing.allocator.free(commands);
+    fillDistanceTypeFixture(payload, commands, &boundaries, &region_types);
+
+    const lengths = [_]u32{ 901, 1404, 2874, 1822, 1191 };
+    const types = [_]u8{ 0, 1, 0, 2, 0 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        3,
+        command_count,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const adaptive = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{
+            .adaptive_distance_split = &plan,
+            .optimize_same_last_distance = false,
+        },
+    );
+    defer std.testing.allocator.free(adaptive);
+    const summary = try summarizeStream(adaptive);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 3), summary.max_distance_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, adaptive, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var proposals = try chooseCommandAndDistanceSplitsAlloc(
+        std.testing.allocator,
+        commands,
+        false,
+        false,
+        false,
+        true,
+        true,
+        .{},
+    );
+    defer proposals.deinit(std.testing.allocator);
+    const discovered = &(proposals.adaptive_distance orelse return error.TestUnexpectedResult);
+    try std.testing.expectEqualSlices(u8, &types, discovered.types);
+
+    const baseline = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{ .optimize_same_last_distance = false },
+    );
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        &stats,
+        .{ .try_distance_split = true, .try_adaptive_distance_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, adaptive, selected);
+}
+
+test "br adaptive distance split cleans up writer allocation failures" {
+    const command_count = 32;
+    const boundaries = [_]usize{ 5, 13, 22 };
+    const region_types = [_]usize{ 0, 5, 3, 5 };
+    const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, command_count);
+    defer std.testing.allocator.free(commands);
+    fillDistanceTypeFixture(payload, commands, &boundaries, &region_types);
+    const lengths = [_]u32{ 5, 8, 9, 10 };
+    const types = [_]u8{ 0, 2, 1, 2 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        3,
+        command_count,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            input: []const u8,
+            command_stream: []const command_plan.Command,
+            adaptive_plan: *const block_split_plan.Plan,
+        ) !void {
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            const encoded = try encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                command_stream,
+                null,
+                &stats,
+                .{
+                    .adaptive_distance_split = adaptive_plan,
+                    .optimize_same_last_distance = false,
+                },
+            );
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands, &plan },
+    );
+}
+
+test "br adaptive distance split writes all 256 types and context trees" {
+    const fixture = try IncrementalTestSupport.encodeMaximumAdaptiveDistanceTypes(std.testing.allocator);
+    defer std.testing.allocator.free(fixture.encoded);
+    defer std.testing.allocator.free(fixture.payload);
+    const summary = try summarizeStream(fixture.encoded);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 256), summary.max_distance_context_trees);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        fixture.encoded,
+        fixture.payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, fixture.payload, decoded);
+}
+
+test "br planned writer emits nonzero distance postfix parameters" {
+    const fixture = try IncrementalTestSupport.encodeNonzeroDistanceParameters(std.testing.allocator);
+    defer std.testing.allocator.free(fixture.encoded);
+    defer std.testing.allocator.free(fixture.payload);
+    const summary = try summarizeStream(fixture.encoded);
+    try std.testing.expectEqual(@as(u2, 1), summary.max_distance_postfix_bits);
+    try std.testing.expectEqual(@as(u16, 12), summary.max_direct_distance_codes);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        fixture.encoded,
+        fixture.payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, fixture.payload, decoded);
+}
+
+test "br wide distance writer rejects unsupported split and same-last combinations" {
+    const command_count = 32;
+    const payload_len = four_distance_seed_len + command_count * four_distance_copy_len;
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, command_count);
+    defer std.testing.allocator.free(commands);
+    fillDistanceTypeFixture(payload, commands, &.{}, &.{0});
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{ .distance_parameters = encoder_distance.Parameters.init(1, 6) },
+    ));
+
+    const lengths = [_]u32{ 16, 16 };
+    const types = [_]u8{ 0, 1 };
+    const plan = try block_split_plan.Plan.initCopy(
+        std.testing.allocator,
+        &lengths,
+        &types,
+        2,
+        command_count,
+        0,
+    );
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{
+            .distance_parameters = encoder_distance.Parameters.init(1, 6),
+            .adaptive_distance_split = &plan,
+            .optimize_same_last_distance = false,
+        },
+    ));
+}
+
+test "br ratio distance parameter search selects a nonzero postfix complete wire" {
+    const payload = try std.testing.allocator.alloc(u8, distance_parameter_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, distance_parameter_command_count);
+    defer std.testing.allocator.free(commands);
+    fillDistanceParameterFixture(payload, commands);
+
+    const parameters = try chooseDistanceParameterAlternativeAlloc(
+        std.testing.allocator,
+        commands,
+        .{ .use_recent_distances = true },
+    ) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(parameters.npostfix != 0);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        null,
+        &stats,
+        .{
+            .use_recent_distances = true,
+            .distance_parameters = encoder_distance.Parameters.init(0, 0),
+            .optimize_same_last_distance = false,
+        },
+    );
+    defer std.testing.allocator.free(baseline);
+    const selected = try encodeCommandPlanWithDistanceParameterSearchAlloc(
+        std.testing.allocator,
+        payload,
+        commands,
+        true,
+        &stats,
+        .{
+            .use_recent_distances = true,
+            .distance_parameters = encoder_distance.Parameters.init(0, 0),
+            .optimize_same_last_distance = false,
+        },
+    );
+    defer std.testing.allocator.free(selected);
+    try std.testing.expect(selected.len < baseline.len);
+    const summary = try summarizeStream(selected);
+    try std.testing.expect(summary.max_distance_postfix_bits != 0);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br ratio distance parameter search unwinds allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, distance_parameter_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, distance_parameter_command_count);
+    defer std.testing.allocator.free(commands);
+    fillDistanceParameterFixture(payload, commands);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            input: []const u8,
+            command_stream: []const command_plan.Command,
+        ) !void {
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            const encoded = try encodeCommandPlanWithDistanceParameterSearchAlloc(
+                allocator,
+                input,
+                command_stream,
+                true,
+                &stats,
+                .{
+                    .use_recent_distances = true,
+                    .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                    .optimize_same_last_distance = false,
+                },
+            );
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands },
+    );
+}
+
+test "br planned wire uses three and four distinct distance types" {
+    const payload = try std.testing.allocator.alloc(u8, four_distance_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_distance_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourDistanceFixture(payload, commands);
+    const proposals = try distanceFixtureProposals(commands);
+    const three = proposals.three orelse return error.TestUnexpectedResult;
+    const four = proposals.four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const three_encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
+        .distance_split = three,
+        .optimize_same_last_distance = false,
+    });
+    defer std.testing.allocator.free(three_encoded);
+    const three_summary = try summarizeStream(three_encoded);
+    try std.testing.expectEqual(@as(usize, 3), three_summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 3), three_summary.max_distance_context_trees);
+    const three_decoded = try decodeStreamAllocExactSize(std.testing.allocator, three_encoded, payload.len);
+    defer std.testing.allocator.free(three_decoded);
+    try std.testing.expectEqualSlices(u8, payload, three_decoded);
+
+    const four_encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
+        .distance_split = four,
+        .optimize_same_last_distance = false,
+    });
+    defer std.testing.allocator.free(four_encoded);
+    const selected = try encodeSelectedDistanceSplitFixtureAlloc(std.testing.allocator, payload, commands);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, four_encoded, selected);
+    const summary = try summarizeStream(selected);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_distance_context_trees);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br planned wire clusters repeated distance tree types" {
+    const Shape = enum { clustered, alternating, reuse_first };
+    const cases = .{
+        .{ .shape = Shape.clustered, .payload_len = clustered_distance_payload_len, .command_count = clustered_distance_command_count, .type_count = @as(usize, 2) },
+        .{ .shape = Shape.alternating, .payload_len = alternating_distance_payload_len, .command_count = alternating_distance_command_count, .type_count = @as(usize, 2) },
+        .{ .shape = Shape.reuse_first, .payload_len = reuse_first_distance_payload_len, .command_count = reuse_first_distance_command_count, .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.payload_len);
+        defer std.testing.allocator.free(payload);
+        const commands = try std.testing.allocator.alloc(command_plan.Command, case.command_count);
+        defer std.testing.allocator.free(commands);
+        switch (case.shape) {
+            .clustered => fillClusteredDistanceFixture(payload, commands),
+            .alternating => fillAlternatingDistanceFixture(payload, commands),
+            .reuse_first => fillReuseFirstDistanceFixture(payload, commands),
+        }
+        const proposals = try distanceFixtureProposals(commands);
+        const proposal = switch (case.shape) {
+            .clustered => proposals.clustered,
+            .alternating => proposals.alternating_four,
+            .reuse_first => proposals.reuse_first_four,
+        } orelse return error.TestUnexpectedResult;
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
+            .distance_split = proposal,
+            .optimize_same_last_distance = false,
+        });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedDistanceSplitFixtureAlloc(std.testing.allocator, payload, commands);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_block_types);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_context_trees);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br clustered distance candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, clustered_distance_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, clustered_distance_command_count);
+    defer std.testing.allocator.free(commands);
+    fillClusteredDistanceFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .optimize_same_last_distance = false });
+    defer std.testing.allocator.free(baseline);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, unsplit: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_distance_split = true }, .{ .encoded = unsplit, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline });
+}
+
+test "br planned wire supports five and six distance regions" {
+    const Shape = enum { five, six, six_clustered };
+    const cases = .{
+        .{ .shape = Shape.five, .region_count = @as(usize, 5), .type_count = @as(usize, 5) },
+        .{ .shape = Shape.six, .region_count = @as(usize, 6), .type_count = @as(usize, 6) },
+        .{ .shape = Shape.six_clustered, .region_count = @as(usize, 6), .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, dynamic_distance_payload_len);
+        defer std.testing.allocator.free(payload);
+        const commands = try std.testing.allocator.alloc(command_plan.Command, dynamic_distance_command_count);
+        defer std.testing.allocator.free(commands);
+        switch (case.shape) {
+            .five => fillFiveDistanceFixture(payload, commands),
+            .six => fillSixDistanceFixture(payload, commands),
+            .six_clustered => fillSixRegionClusteredDistanceFixture(payload, commands),
+        }
+        const proposals = try distanceFixtureProposals(commands);
+        const proposal = proposals.dynamic orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqual(case.region_count, proposal.regionCount());
+        try std.testing.expectEqual(case.type_count, proposal.typeCount());
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
+            .distance_split = proposal,
+            .optimize_same_last_distance = false,
+        });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedDistanceSplitFixtureAlloc(std.testing.allocator, payload, commands);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_block_types);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_context_trees);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br six-region distance candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, dynamic_distance_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, dynamic_distance_command_count);
+    defer std.testing.allocator.free(commands);
+    fillSixRegionClusteredDistanceFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .optimize_same_last_distance = false });
+    defer std.testing.allocator.free(baseline);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, unsplit: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_distance_split = true }, .{ .encoded = unsplit, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 3), summary.max_distance_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline });
+}
+
+test "br four-type distance candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, four_distance_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_distance_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourDistanceFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .optimize_same_last_distance = false });
+    defer std.testing.allocator.free(baseline);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, unsplit: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_distance_split = true }, .{ .encoded = unsplit, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 4), summary.max_distance_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline });
+}
+
+test "br distance block length code rejects invalid multi-type splits" {
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 0, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .second_split = 512, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .second_split = 2048, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .third_split = 1536, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 1024, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 2048, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 256, .second_split = 512, .third_split = 768, .fourth_split = 768, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 256, .second_split = 512, .third_split = 768, .fifth_split = 1280, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .cycle_type_count = 1, .savings_bits = 0 }, 2048));
+    try std.testing.expectError(error.InvalidBlockPlan, DistanceBlockLengthCode.init(.{ .split = 512, .cycle_type_count = 3, .savings_bits = 0 }, 2048));
+}
+
 test "br planned wire combines literal command and distance entropy splits" {
     const payload = try std.testing.allocator.alloc(u8, three_command_region_payload_len);
     defer std.testing.allocator.free(payload);
@@ -14100,15 +24168,15 @@ test "br planned wire combines literal command and distance entropy splits" {
     fillThreeCommandRegionFixture(payload, commands);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const two_command_blocks = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
-        .literal_split = three_command_region_block_count,
+        .literal_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
         .command_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
-        .distance_split = three_command_region_count / 2,
+        .distance_split = .{ .split = three_command_region_count / 2, .savings_bits = 0 },
     });
     defer std.testing.allocator.free(two_command_blocks);
     const encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
-        .literal_split = three_command_region_block_count,
+        .literal_split = .{ .split = three_command_region_block_count, .savings_bits = 0 },
         .command_split = .{ .split = three_command_region_block_count, .second_split = 2 * three_command_region_block_count, .savings_bits = 0 },
-        .distance_split = three_command_region_count / 2,
+        .distance_split = .{ .split = three_command_region_count / 2, .savings_bits = 0 },
     });
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len < two_command_blocks.len);
@@ -14277,6 +24345,112 @@ test "br four-region three-type command candidate cleans up allocation failures"
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline_bytes });
 }
 
+test "br planned wire uses four distinct command types across four regions" {
+    const payload = try std.testing.allocator.alloc(u8, four_command_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourCommandFixture(payload, commands);
+    var accumulator = command_block_split.Accumulator.init(commands.len).?;
+    for (commands) |command| {
+        const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        try std.testing.expect(accumulator.add(encoding.symbol));
+    }
+    const proposal = accumulator.finishProposals().four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .command_split = proposal });
+    defer std.testing.allocator.free(forced);
+    const selected = try encodeSelectedCommandSplitFixtureAlloc(std.testing.allocator, payload, commands);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, forced, selected);
+    const summary = try summarizeStream(selected);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_command_block_types);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br four-type command candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, four_command_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourCommandFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline_bytes = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline_bytes);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, baseline: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_command_split = true }, .{ .encoded = baseline, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 4), summary.max_command_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline_bytes });
+}
+
+test "br planned wire supports five and six command regions" {
+    const Shape = enum { five, six, six_clustered };
+    const cases = .{
+        .{ .shape = Shape.five, .payload_len = five_command_payload_len, .type_count = @as(usize, 5) },
+        .{ .shape = Shape.six, .payload_len = six_command_payload_len, .type_count = @as(usize, 6) },
+        .{ .shape = Shape.six_clustered, .payload_len = dynamic_command_clustered_payload_len, .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.payload_len);
+        defer std.testing.allocator.free(payload);
+        const commands = try std.testing.allocator.alloc(command_plan.Command, dynamic_command_count);
+        defer std.testing.allocator.free(commands);
+        switch (case.shape) {
+            .five => fillFiveCommandFixture(payload, commands),
+            .six => fillSixCommandFixture(payload, commands),
+            .six_clustered => fillSixRegionClusteredCommandFixture(payload, commands),
+        }
+        const proposals = try commandFixtureProposals(commands);
+        const proposal = proposals.dynamic orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqual(@as(usize, if (case.shape == .five) 5 else 6), proposal.regionCount());
+        try std.testing.expectEqual(case.type_count, proposal.typeCount());
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .command_split = proposal });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedCommandSplitFixtureAlloc(std.testing.allocator, payload, commands);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_command_block_types);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br six-region command candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, dynamic_command_clustered_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, dynamic_command_count);
+    defer std.testing.allocator.free(commands);
+    fillSixRegionClusteredCommandFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, unsplit: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_command_split = true }, .{ .encoded = unsplit, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 3), summary.max_command_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline });
+}
+
 test "br command block length code rejects invalid three-way splits" {
     try std.testing.expectError(error.InvalidBlockPlan, CommandBlockLengthCode.init(.{ .split = 0, .second_split = 2048, .savings_bits = 0 }, 3072));
     try std.testing.expectError(error.InvalidBlockPlan, CommandBlockLengthCode.init(.{ .split = 1024, .second_split = 1024, .savings_bits = 0 }, 3072));
@@ -14289,6 +24463,9 @@ test "br command block length code rejects invalid three-way splits" {
     var stats: encoder_stats.PlannedEncodeStats = .{};
     try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
         .command_split = .{ .split = 1, .second_split = 2, .third_split = 3, .alternate_two_types = true, .reuse_first_for_fourth = true, .savings_bits = 0 },
+    }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .command_split = .{ .split = 1, .second_split = 2, .reuse_first_for_fourth = true, .savings_bits = 0 },
     }));
 }
 
@@ -14381,12 +24558,13 @@ test "br large single-tree stream selects the specialized decoder" {
     try std.testing.expectEqual(@as(usize, 1), test_single_tree_external_lookup_hits);
 }
 
-test "br ratio planner selects a profitable three-type command entropy split" {
+test "br ratio planner selects a profitable six-type command entropy split" {
     const payload = @embedFile("br/dictionary.bin");
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= 54_887);
     const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
-    try std.testing.expectEqual(@as(usize, 3), summary.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 6), summary.max_command_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_context_trees);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
@@ -14893,6 +25071,46 @@ test "br planner emits built-in static dictionary commands" {
     try std.testing.expect(encoded.len < payload.len);
 }
 
+test "br exhaustive static dictionary encoder emits omit-first transforms" {
+    const payload = "quot;";
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br exhaustive static dictionary encoder releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "quot;";
+            const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+                allocator,
+                payload,
+            );
+            defer allocator.free(encoded);
+            const decoded = try decodeStreamAllocExactSize(
+                allocator,
+                encoded,
+                payload.len,
+            );
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
+}
+
 test "br ratio planner selects short static dictionary streams by final size" {
     const dictionary_payload = "Information about compression performance and dictionary support.";
     const dictionary = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, dictionary_payload);
@@ -14991,6 +25209,663 @@ test "br ratio extended dictionary probes are bounded and size monotonic" {
     }));
 }
 
+test "br planned quality options validate selector mode level and window contracts" {
+    const payload = "quality contract payload quality contract payload";
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 12 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 12 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .mode = .text },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .quality = 4 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 5, .window_bits = 17 },
+    ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 6, .window_bits = 24 },
+    )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 8, .extended_dictionary_probes = max_extended_dictionary_probes + 1 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 6, .extended_dictionary_probes = 1 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 0, .distance_parameter_search = true },
+    ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 7, .extended_dictionary_probes = 1 },
+    )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .command_state_max_input_kib = 0 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 9, .command_state_max_input_kib = 0 },
+    ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 10, .command_state_max_input_kib = 64 },
+    )) >= payload.len);
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 11, .command_state_max_input_kib = 32 },
+    )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 10, .command_state_max_input_kib = 65 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 11, .command_state_max_input_kib = 33 },
+    ));
+    const oversized_len = max_uncompressed_meta_block_len + 1;
+    const oversized_quality_bound = try encodedPlannedStreamBoundWithOptions(oversized_len, .{ .quality = 8 });
+    const oversized_single_block_bound = try encodedStoredStreamBound(oversized_len);
+    try std.testing.expect(oversized_quality_bound > oversized_single_block_bound);
+}
+
+test "br planned quality and mode matrix is deterministic bounded and reusable" {
+    // Keep the exhaustive public-API matrix tiny; representative non-trivial
+    // strategy paths are covered separately and by the external probe corpus.
+    const payload = "vort";
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var q10_sizes: [3]usize = undefined;
+
+    for (0..12) |quality| {
+        inline for (std.meta.tags(PlannedMode), 0..) |mode, mode_index| {
+            const options = PlannedEncodeOptions{
+                .quality = @intCast(quality),
+                .mode = mode,
+            };
+            const bound = try encodedPlannedStreamBoundWithOptions(payload.len, options);
+            const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, options);
+            defer std.testing.allocator.free(expected);
+            try std.testing.expect(expected.len <= bound);
+
+            const repeated = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, options);
+            defer std.testing.allocator.free(repeated);
+            try std.testing.expectEqualSlices(u8, expected, repeated);
+
+            const decoded = try decodeStreamAllocExactSize(std.testing.allocator, expected, payload.len);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+
+            const scratch = try encoder.encodeScratchWithOptions(payload, options);
+            try std.testing.expectEqualSlices(u8, expected, scratch);
+            const output = try std.testing.allocator.alloc(u8, bound);
+            defer std.testing.allocator.free(output);
+            const written = try encoder.encodeIntoWithOptions(payload, output, options);
+            try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+
+            if (quality == 10) q10_sizes[mode_index] = expected.len;
+            if (quality == 11) try std.testing.expect(expected.len <= q10_sizes[mode_index]);
+        }
+    }
+}
+
+test "br q1 compact two-pass writer crosses the 64-symbol literal boundary" {
+    var payload: [8 * 1024]u8 = undefined;
+    for (&payload, 0..) |*byte, index| byte.* = @intCast(index & 127);
+    test_q1_two_pass_writer_hits = 0;
+    const encoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .quality = 1 },
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(test_q1_two_pass_writer_hits != 0);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.compressed_meta_block_count);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q0 one-pass writer learns command trees across fragments" {
+    var payload: [32 * 1024]u8 = undefined;
+    for (payload[0 .. 16 * 1024], 0..) |*byte, index|
+        byte.* = "abcd"[index & 3];
+    for (payload[16 * 1024 ..], 0..) |*byte, index|
+        byte.* = "0123456789abcdef"[index & 15];
+    const chunks = [_][]const u8{&payload};
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    test_q0_one_pass_writer_hits = 0;
+    const encoded = try encoder.encodeChunksScratchWithOptions(
+        &chunks,
+        .{ .quality = 0 },
+    );
+    try std.testing.expectEqual(@as(usize, 2), test_q0_one_pass_writer_hits);
+    const initial: fast_fragment_one_pass.State = .{};
+    try std.testing.expect(!std.mem.eql(
+        u4,
+        &initial.command_lengths,
+        &encoder.stream_state.q0_entropy_state.command_lengths,
+    ));
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 2), summary.compressed_meta_block_count);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q2 static and q3 trivial writers drive public quality paths" {
+    const payload = "balanced entropy writer payload 0123456789\n" ** 128;
+    test_q2_fast_writer_hits = 0;
+    test_q2_static_tree_hits = 0;
+    test_q3_trivial_writer_hits = 0;
+    const q2 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(q2);
+    const q3 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 3 },
+    );
+    defer std.testing.allocator.free(q3);
+    try std.testing.expect(test_q2_fast_writer_hits != 0);
+    try std.testing.expect(test_q2_static_tree_hits != 0);
+    try std.testing.expect(test_q3_trivial_writer_hits != 0);
+    for ([_][]const u8{ q2, q3 }) |encoded| {
+        const decoded = try decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br q2 dynamic fast writer covers more than 128 commands" {
+    const command_count = 129;
+    const payload = [_]u8{'a'} ** (command_count * 6);
+    test_q2_dynamic_tree_hits = 0;
+    const encoded = try IncrementalTestSupport.encodeQ2DynamicCommands(
+        std.testing.allocator,
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 1), test_q2_dynamic_tree_hits);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br planned quality releases every candidate on allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(allocator, payload, .{
+                .quality = 2,
+                .mode = .text,
+            });
+            defer allocator.free(encoded);
+            const decoded = try decodeStreamAllocExactSize(allocator, encoded, payload.len);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    };
+    const payload = "information information compression dictionary";
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{payload});
+}
+
+test "br quality eleven retains the complete quality ten winner" {
+    const payload = "q10 winner remains eligible while q11 deepens bounded search; " ** 4;
+    const q10 = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{
+        .quality = 10,
+        .mode = .font,
+    });
+    defer std.testing.allocator.free(q10);
+    const q11 = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{
+        .quality = 11,
+        .mode = .font,
+    });
+    defer std.testing.allocator.free(q11);
+    try std.testing.expect(q11.len <= q10.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, q11, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br q10 entropy feedback candidate is complete-wire monotonic" {
+    var payload: [4096]u8 = undefined;
+    var state: u32 = @as(u32, 2) *% @as(u32, 0x9e37_79b9);
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 7, 16, 31, 64, 127, 257 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 3 != 0) {
+            const copy_len = @min(payload.len - position, 3 + ((state >> 8) % 61));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate((state >> 24) & 15);
+            position += 1;
+        }
+    }
+    const schedule = quality_schedule.get(.q10, .generic);
+    const wire_options = qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits);
+    var baseline_budget = schedule.optimal;
+    baseline_budget.entropy_feedback = false;
+    const baseline = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        baseline_budget,
+        wire_options,
+    )).?;
+    defer std.testing.allocator.free(baseline);
+    const feedback = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        schedule.optimal,
+        wire_options,
+    )).?;
+    defer std.testing.allocator.free(feedback);
+    try std.testing.expect(feedback.len < baseline.len);
+    try std.testing.expectEqual(@as(usize, 230), baseline.len);
+    try std.testing.expectEqual(@as(usize, 221), feedback.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, feedback, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q10 entropy feedback releases every candidate on allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
+            const schedule = quality_schedule.get(.q10, .generic);
+            const encoded = (try encodeQualityOptimalCandidateAlloc(
+                allocator,
+                payload,
+                schedule.optimal,
+                qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits),
+            )) orelse return error.TestUnexpectedResult;
+            defer allocator.free(encoded);
+            const decoded = try decodeStreamAllocExactSize(allocator, encoded, payload.len);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    };
+    const payload = "entropy feedback allocation cleanup abcabcabcabc\n" ** 4;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{payload});
+}
+
+test "br q10 command-state candidate improves complete wire" {
+    var payload: [4096]u8 = undefined;
+    const schedule = quality_schedule.get(.q10, .generic);
+    const wire_options = qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits);
+    var state: u32 = 0x9e37_79b9;
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 3 != 0) {
+            const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate((state >> 24) & 31);
+            position += 1;
+        }
+    }
+    test_hq_command_candidate_attempts = 0;
+    test_hq_command_candidate_selections = 0;
+    const encoded = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        schedule.optimal,
+        wire_options,
+    )).?;
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_selections);
+    try std.testing.expectEqual(@as(usize, 233), test_hq_command_pre_bytes);
+    try std.testing.expectEqual(@as(usize, 231), test_hq_command_bytes);
+    try std.testing.expectEqual(@as(usize, 231), encoded.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    IncrementalTestSupport.resetStreamHqCommandCounters();
+    const chunks = [_][]const u8{&payload};
+    const chunked = try encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 10, .block_len = payload.len },
+    );
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqual(@as(usize, 1), IncrementalTestSupport.streamHqCommandAttempts());
+    try std.testing.expectEqual(@as(usize, 1), IncrementalTestSupport.streamHqCommandSelections());
+    const chunked_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        chunked,
+        payload.len,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, chunked_decoded);
+
+    test_hq_command_candidate_attempts = 0;
+    const disabled = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .quality = 10, .command_state_max_input_kib = 0 },
+    );
+    defer std.testing.allocator.free(disabled);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    const disabled_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        disabled,
+        payload.len,
+    );
+    defer std.testing.allocator.free(disabled_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, disabled_decoded);
+}
+
+test "br q10 command-state work limit preserves larger entropy feedback" {
+    const payload = ("abcd" ** 2048) ++ "x";
+    const schedule = quality_schedule.get(.q10, .generic);
+    test_hq_command_candidate_attempts = 0;
+    const encoded = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        payload,
+        schedule.optimal,
+        qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits),
+    )).?;
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br q10 command-state work override extends one-shot and reusable search" {
+    const payload = "command-state opt-in extends bounded HQ search 0123456789\n" ** 224;
+    try std.testing.expect(payload.len > 8 * 1024 and payload.len < 32 * 1024);
+
+    test_hq_command_candidate_attempts = 0;
+    const baseline = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 10 },
+    );
+    defer std.testing.allocator.free(baseline);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+
+    test_hq_command_candidate_attempts = 0;
+    const options = PlannedEncodeOptions{
+        .quality = 10,
+        .command_state_max_input_kib = @intCast(
+            std.math.divCeil(usize, payload.len, 1024) catch unreachable,
+        ),
+    };
+    const extended = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        options,
+    );
+    defer std.testing.allocator.free(extended);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    try std.testing.expect(extended.len <= baseline.len);
+
+    var reusable = PlannedStreamEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const retained = try reusable.encodeScratchWithOptions(payload, options);
+    try std.testing.expectEqualSlices(u8, extended, retained);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        extended,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br command-state override reaches q10 and q11 input ceilings" {
+    const q10_payload = "abcdefghijklmnopqrstuvwxyz012345" ** 2048;
+    const q11_payload = q10_payload[0 .. 32 * 1024];
+    try std.testing.expectEqual(@as(usize, 64 * 1024), q10_payload.len);
+
+    test_hq_command_candidate_attempts = 0;
+    const q10 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        q10_payload,
+        .{ .quality = 10, .command_state_max_input_kib = 64 },
+    );
+    defer std.testing.allocator.free(q10);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    const q10_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        q10,
+        q10_payload.len,
+    );
+    defer std.testing.allocator.free(q10_decoded);
+    try std.testing.expectEqualSlices(u8, q10_payload, q10_decoded);
+
+    test_hq_command_candidate_attempts = 0;
+    const q11 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        q11_payload,
+        .{ .quality = 11, .command_state_max_input_kib = 32 },
+    );
+    defer std.testing.allocator.free(q11);
+    try std.testing.expectEqual(@as(usize, 2), test_hq_command_candidate_attempts);
+    const q11_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        q11,
+        q11_payload.len,
+    );
+    defer std.testing.allocator.free(q11_decoded);
+    try std.testing.expectEqualSlices(u8, q11_payload, q11_decoded);
+}
+
+test "br quality optimal candidate honors the advertised small window" {
+    var payload: [4 * 1024]u8 = undefined;
+    var state: u32 = 0x91d7_4ac3;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    // An unrestricted optimal search would prefer this 2 KiB-back copy, but
+    // WBITS=10 permits at most 1,008 bytes of backward distance.
+    @memcpy(payload[2048..][0..258], payload[0..258]);
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 6,
+        .window_bits = 10,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br quality record candidate honors the advertised small window" {
+    var payload: [16 * 1024]u8 = undefined;
+    var row: [1024]u8 = undefined;
+    @memset(&row, 'a');
+    row[row.len - 1] = '\n';
+    var state: u32 = 0x9e37_79b9;
+    for (0..16) |row_index| {
+        const output = payload[row_index * row.len ..][0..row.len];
+        @memcpy(output, &row);
+        for (0..8) |mutation| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const column = (mutation * 97 + 4) % (row.len - 1);
+            output[column] = 32 + @as(u8, @truncate((state >> 16) % 95));
+        }
+    }
+    try std.testing.expect(vortBrStableFixedWidthRecord(&payload, payload.len) != 0);
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 10,
+        .window_bits = 10,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br adaptive command split option is ratio-only and size monotonic" {
+    const payload = "adaptive command split public option source-shaped payload alpha beta gamma\n" ** 96;
+    const baseline = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio },
+    );
+    defer std.testing.allocator.free(baseline);
+    const adaptive = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .adaptive_command_split = true },
+    );
+    defer std.testing.allocator.free(adaptive);
+    try std.testing.expect(adaptive.len <= baseline.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, adaptive, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .fast, .adaptive_command_split = true },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        max_uncompressed_meta_block_len + 1,
+        .{ .level = .ratio, .adaptive_command_split = true },
+    ));
+}
+
+test "br adaptive literal split option is ratio-only and size monotonic" {
+    const payload = "adaptive literal split public option source-shaped payload alpha beta gamma\n" ** 96;
+    const baseline = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio },
+    );
+    defer std.testing.allocator.free(baseline);
+    const adaptive = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .adaptive_literal_split = true },
+    );
+    defer std.testing.allocator.free(adaptive);
+    try std.testing.expect(adaptive.len <= baseline.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, adaptive, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .fast, .adaptive_literal_split = true },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        max_uncompressed_meta_block_len + 1,
+        .{ .level = .ratio, .adaptive_literal_split = true },
+    ));
+}
+
+test "br adaptive distance split is automatic ratio policy with explicit override" {
+    const payload = "adaptive distance split public option source-shaped payload alpha beta gamma\n" ** 96;
+    const disabled = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .adaptive_distance_split = false },
+    );
+    defer std.testing.allocator.free(disabled);
+    const automatic = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio },
+    );
+    defer std.testing.allocator.free(automatic);
+    const forced = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .adaptive_distance_split = true },
+    );
+    defer std.testing.allocator.free(forced);
+    try std.testing.expect(automatic.len <= disabled.len);
+    try std.testing.expectEqualSlices(u8, automatic, forced);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, automatic, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .fast, .adaptive_distance_split = true },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        max_uncompressed_meta_block_len + 1,
+        .{ .level = .ratio, .adaptive_distance_split = true },
+    ));
+}
+
+test "br distance parameter search exposes ratio auto force and disable policy" {
+    const payload = "pub fn distanceParameterPolicy(state: *State, distance: usize) void { state.total += distance; }\n" ** 128;
+    const disabled = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .distance_parameter_search = false },
+    );
+    defer std.testing.allocator.free(disabled);
+    const automatic = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio },
+    );
+    defer std.testing.allocator.free(automatic);
+    const forced = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .ratio, .distance_parameter_search = true },
+    );
+    defer std.testing.allocator.free(forced);
+    try std.testing.expectEqualSlices(u8, disabled, automatic);
+    try std.testing.expect(forced.len <= disabled.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, forced, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .distance_parameter_search = true },
+    ));
+}
+
 test "br ratio extended dictionary probes can start from a literal-only plan" {
     var input: [300]u8 = undefined;
     var state: u32 = 0x71c9_3a5d;
@@ -15025,6 +25900,37 @@ test "br ratio extended dictionary probes can start from a literal-only plan" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, extended, input.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
+
+    const raw_prefixes = [_][]const u8{&.{0}};
+    const shared = SharedDictionary{ .raw_prefixes = &raw_prefixes };
+    var shared_input = input;
+    @memcpy(shared_input[0.."information".len], "information");
+    @memcpy(shared_input[64..][0.."compression".len], "compression");
+    @memcpy(shared_input[128..][0.."performance".len], "performance");
+    @memcpy(shared_input[192..][0.."dictionary".len], "dictionary");
+    const shared_baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &shared_input, .{
+        .level = .ratio,
+        .shared_dictionary = shared,
+    });
+    defer std.testing.allocator.free(shared_baseline);
+    const shared_extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &shared_input, .{
+        .level = .ratio,
+        .extended_dictionary_probes = max_extended_dictionary_probes,
+        .shared_dictionary = shared,
+    });
+    defer std.testing.allocator.free(shared_extended);
+    // The extended candidate is exact-wire arbitrated. This corpus exercises
+    // the public shared+extended path even when the shifted static distances do
+    // not beat the baseline after complete header/tree costs.
+    try std.testing.expect(shared_extended.len <= shared_baseline.len);
+    const shared_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        shared_extended,
+        shared_input.len,
+        .{ .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(shared_decoded);
+    try std.testing.expectEqualSlices(u8, &shared_input, shared_decoded);
 }
 
 test "br ratio planner encodes a dictionary word without LZ77 matches" {
@@ -23005,6 +33911,117 @@ test "br UTF8 suffix context maps round trip candidate cutoffs" {
     }
 }
 
+test "br literal context suffix maps cover complete cutoff range" {
+    for ([_]u6{ 1, 2, 15, 31, 32, 48, 62, 63 }) |cutoff| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeLiteralSuffixContextMap(std.testing.allocator, &writer, cutoff);
+        var reader = bitstream.BitReader.init(encoded.items);
+        var context_map: [64]u8 = undefined;
+        try readContextMap(&reader, &context_map, 2);
+        for (context_map, 0..) |tree, context|
+            try std.testing.expectEqual(literal_context.suffixTree(context, cutoff), tree);
+    }
+}
+
+test "br planned writer emits every RFC literal context mode" {
+    var input: [512]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    inline for (0..4) |mode| {
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            std.testing.allocator,
+            &input,
+            &commands,
+            null,
+            &stats,
+            .{ .literal_context_candidate = literal_context_split.Candidate.suffix(mode, 32, 0) },
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStream(encoded);
+        try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[mode]);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &input, decoded);
+    }
+}
+
+test "br planned writer emits arbitrary four eight sixteen and sixty-four tree literal context maps" {
+    var input: [512]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
+    var context_map: [64]u8 = undefined;
+    for ([_]u7{ 4, 8, 16, 64 }) |tree_count| {
+        for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % tree_count);
+        const encoded = try IncrementalTestSupport.encodeLiteralContextMap(
+            std.testing.allocator,
+            &input,
+            literal_context.mode_lsb6,
+            tree_count,
+            context_map,
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStream(encoded);
+        try std.testing.expectEqual(@as(usize, tree_count), summary.max_literal_context_trees);
+        try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[literal_context.mode_lsb6]);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &input, decoded);
+    }
+
+    var missing_tree: [64]u8 = @splat(0);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        IncrementalTestSupport.encodeLiteralContextMap(
+            std.testing.allocator,
+            &input,
+            literal_context.mode_lsb6,
+            4,
+            missing_tree,
+        ),
+    );
+    missing_tree[0] = 4;
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        IncrementalTestSupport.encodeLiteralContextMap(
+            std.testing.allocator,
+            &input,
+            literal_context.mode_lsb6,
+            4,
+            missing_tree,
+        ),
+    );
+}
+
+test "br ratio candidate selects a smaller adaptive literal context wire" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 32) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 32);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    var plain_stats: encoder_stats.PlannedEncodeStats = .{};
+    const plain = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, input, &commands, null, &plain_stats, .{});
+    defer std.testing.allocator.free(plain);
+    var adaptive_stats: encoder_stats.PlannedEncodeStats = .{};
+    const adaptive = try encodePreferredCommandPlanAlloc(std.testing.allocator, input, &commands, null, &adaptive_stats, .{
+        .try_recent_distances = true,
+    });
+    defer std.testing.allocator.free(adaptive.encoded);
+    const candidate = adaptive.literal_context_candidate orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u7, 35), candidate.tree_count);
+    try std.testing.expect(adaptive.encoded.len < plain.len);
+    const summary = try summarizeStream(adaptive.encoded);
+    try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[candidate.mode]);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, adaptive.encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "br distance context map reader preserves nonzero tree indexes" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -23532,6 +34549,2266 @@ test "br large window simple distance tree uses wire width and safe limit" {
     );
 }
 
+test "br RAW shared dictionary decodes upstream compound fixture across public APIs" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const expected = "Kot lomom kolol slona!";
+    const without_dictionary = try decodeStreamAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(without_dictionary);
+    try std.testing.expectEqualSlices(u8, "alternate\" type=\"appli", without_dictionary);
+
+    const one_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{expected} },
+    };
+    const one = try decodeStreamAllocWithOptions(std.testing.allocator, &frame, one_options);
+    defer std.testing.allocator.free(one);
+    try std.testing.expectEqualSlices(u8, expected, one);
+
+    const two_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{ expected[0..13], expected[13..] } },
+    };
+    const exact = try decodeStreamAllocExactSizeWithOptions(std.testing.allocator, &frame, expected.len, two_options);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, expected, exact);
+
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(expected.len, try decodeStreamIntoExactSizeWithOptions(&frame, &into, expected.len, two_options));
+    try std.testing.expectEqualSlices(u8, expected, &into);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try decodeStreamAppendWithOptions(std.testing.allocator, &appended, &frame, two_options));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+
+    const chunks = [_][]const u8{ frame[0..1], frame[1..7], frame[7..] };
+    var compressed_scratch: [frame.len]u8 = undefined;
+    const chunked = try decodeStreamChunksAllocWithOptions(std.testing.allocator, &chunks, &compressed_scratch, two_options);
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, expected, chunked);
+
+    const summary = try summarizeStreamWithOptions(&frame, two_options);
+    try std.testing.expect(summary.uses_shared_dictionary);
+    try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+    try std.testing.expectEqual(expected.len, summary.shared_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), summary.static_dictionary_copy_count);
+}
+
+test "br RAW shared dictionary progressive decoder resumes across prefix and output boundaries" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const expected = "Kot lomom kolol slona!";
+    const decode_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{ expected[0..4], "", expected[4..13], expected[13..] } },
+    };
+    var history: [32]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = expected.len,
+        .max_output_len = expected.len,
+        .decode = decode_options,
+    });
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 1);
+        const step = try decoder.step(frame[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input) try std.testing.expect(input_offset < frame.len);
+        if (step.status == .need_output) try std.testing.expect(output_offset < output.len);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(frame.len, input_offset);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "br serialized shared dictionary decodes contextual static references across public APIs" {
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00,
+        3, 'r', 'a', 'w', // serialized RAW prefix
+        1, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[5 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "helloworld");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, // prefix/suffix table length
+        0, // empty stringlet
+        1, // transform count
+        0, 0, 0, // identity
+        1, // dictionary count
+        0, 0, // custom words and transforms
+        0, // context map disabled
+    });
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const dictionary = SharedDictionary{ .serialized = &serialized };
+    const options = DecodeOptions{ .shared_dictionary = dictionary };
+
+    const expected = "hello";
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = expected.len,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = expected.len,
+        .dictionary_address = 0,
+    }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const frame = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        expected,
+        &commands,
+        null,
+        &stats,
+        .{ .compound_dictionary_size = serialized.raw_prefix.len },
+    );
+    defer std.testing.allocator.free(frame);
+
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        frame,
+        expected.len,
+        options,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(
+        expected.len,
+        try decodeStreamIntoExactSizeWithOptions(frame, &into, expected.len, options),
+    );
+    try std.testing.expectEqualSlices(u8, expected, &into);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(
+        expected.len,
+        try decodeStreamAppendWithOptions(
+            std.testing.allocator,
+            &appended,
+            frame,
+            options,
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+
+    const chunks = [_][]const u8{ frame[0..1], frame[1 .. frame.len - 1], frame[frame.len - 1 ..] };
+    var compressed_scratch: [64]u8 = undefined;
+    const chunked = try decodeStreamChunksAllocWithOptions(
+        std.testing.allocator,
+        &chunks,
+        &compressed_scratch,
+        options,
+    );
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, expected, chunked);
+
+    const summary = try summarizeStreamWithOptions(frame, options);
+    try std.testing.expect(summary.uses_shared_dictionary);
+    try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+    try std.testing.expectEqual(expected.len, summary.shared_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), summary.static_dictionary_copy_count);
+
+    var history: [32]u8 = undefined;
+    var progressive = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = expected.len,
+        .max_output_len = expected.len,
+        .decode = options,
+    });
+    var progressive_output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (progressive.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(progressive_output.len, output_offset + 1);
+        const step = try progressive.step(
+            frame[input_offset..input_end],
+            progressive_output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input)
+            try std.testing.expect(input_offset < frame.len);
+        if (step.status == .need_output)
+            try std.testing.expect(output_offset < progressive_output.len);
+    }
+    try progressive.finish();
+    try std.testing.expectEqualSlices(u8, expected, &progressive_output);
+
+    var owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .expected_compressed_len = frame.len,
+            .expected_output_len = expected.len,
+            .max_output_len = expected.len,
+            .decode = options,
+        },
+    );
+    defer owned.deinit();
+    var owned_output: [expected.len]u8 = undefined;
+    input_offset = 0;
+    output_offset = 0;
+    while (owned.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(owned_output.len, output_offset + 1);
+        const step = try owned.step(
+            frame[input_offset..input_end],
+            owned_output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try owned.finish();
+    try std.testing.expectEqualSlices(u8, expected, &owned_output);
+
+    const reencoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        expected,
+        .{ .shared_dictionary = dictionary },
+    );
+    defer std.testing.allocator.free(reencoded);
+    const redecoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        reencoded,
+        expected.len,
+        options,
+    );
+    defer std.testing.allocator.free(redecoded);
+    try std.testing.expectEqualSlices(u8, expected, redecoded);
+}
+
+test "br serialized shared dictionary selects custom words from output context" {
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00, 0, // magic and empty RAW prefix
+        2, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[4 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "red!xxxx");
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "bluezzzz");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, // prefix/suffix table length
+        0, // empty stringlet
+        1, // transform count
+        0, 0, 0, // identity
+        2, // dictionary count
+        0, 0, // dictionary 0: red words
+        1, 0, // dictionary 1: blue words
+        1, // context map enabled
+    });
+    var context_map: [64]u8 = @splat(0);
+    // For a preceding 'a' and implicit zero second-previous byte, these are
+    // the possible contexts under the four RFC literal context modes. Keeping
+    // all mapped to dictionary 1 makes the fixture independent of the writer's
+    // selected mode while still proving that decoded history is consulted.
+    context_map[24] = 1;
+    context_map[33] = 1;
+    context_map[56] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &context_map);
+
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const options = DecodeOptions{
+        .shared_dictionary = .{ .serialized = &serialized },
+    };
+    const cases = [_][]const u8{ " red!", "ablue" };
+    for (cases) |expected| {
+        const commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = 1,
+            .copy_len = 4,
+            .has_copy = true,
+            .source = .static,
+            .dictionary_output_len = 4,
+            .dictionary_address = 0,
+        }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const frame = try encodeCommandPlanWithOptionsAlloc(
+            std.testing.allocator,
+            expected,
+            &commands,
+            null,
+            &stats,
+            .{},
+        );
+        defer std.testing.allocator.free(frame);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            frame,
+            expected.len,
+            options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+
+        const summary = try summarizeStreamWithOptions(frame, options);
+        try std.testing.expect(summary.uses_shared_dictionary);
+        try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+        try std.testing.expectEqual(@as(usize, 4), summary.shared_dictionary_bytes);
+    }
+}
+
+test "br serialized shared dictionary encodes across planned ownership models" {
+    const dictionary_word = "abcdefghijklmnopqrstuvwxyz12345";
+    const payload = dictionary_word ** 8;
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00, 0, // magic and empty RAW prefix
+        1, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[dictionary_word.len - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, dictionary_word);
+    try serialized_bytes.appendSlice(std.testing.allocator, "9876543210ZYXWVUTSRQPONMLKJIHGF");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, 0, // one empty stringlet
+        1, 0, 0, 0, // one identity transform
+        1, 0, 0, // one custom/custom dictionary choice
+        0, // context map disabled
+    });
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const shared = SharedDictionary{ .serialized = &serialized };
+    const decode_options = DecodeOptions{ .shared_dictionary = shared };
+
+    const one_shot = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .fast, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(one_shot);
+    const one_shot_summary = try summarizeStreamWithOptions(
+        one_shot,
+        decode_options,
+    );
+    try std.testing.expect(one_shot_summary.shared_dictionary_copy_count > 0);
+    const one_shot_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        one_shot,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(one_shot_decoded);
+    try std.testing.expectEqualSlices(u8, payload, one_shot_decoded);
+
+    var reusable = PlannedStreamEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const reusable_wire = try reusable.encodeWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(reusable_wire);
+    const reusable_summary = try summarizeStreamWithOptions(
+        reusable_wire,
+        decode_options,
+    );
+    try std.testing.expect(reusable_summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(reusable.serialized_matcher.usesIndex());
+    const serialized_index_capacity = reusable.serialized_matcher.retainedCapacity();
+    const reusable_wire_again = try reusable.encodeWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(reusable_wire_again);
+    try std.testing.expectEqualSlices(u8, reusable_wire, reusable_wire_again);
+    try std.testing.expectEqual(
+        serialized_index_capacity,
+        reusable.serialized_matcher.retainedCapacity(),
+    );
+
+    const chunks = [_][]const u8{
+        payload[0..73],
+        payload[73..159],
+        payload[159..],
+    };
+    const chunked = try reusable.encodeChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{
+            .level = .ratio,
+            .block_len = payload.len,
+            .shared_dictionary = shared,
+        },
+    );
+    defer std.testing.allocator.free(chunked);
+    const chunked_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        chunked,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, payload, chunked_decoded);
+    try std.testing.expect(
+        (try summarizeStreamWithOptions(chunked, decode_options))
+            .shared_dictionary_copy_count > 0,
+    );
+    try std.testing.expect(reusable.stream_state.serialized_matcher.?.usesIndex());
+
+    var incremental = IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{
+                .quality = 2,
+                .block_len = payload.len,
+                .shared_dictionary = shared,
+            },
+            .block_len = payload.len,
+        },
+    );
+    defer incremental.deinit();
+    var incremental_wire: std.ArrayList(u8) = .empty;
+    defer incremental_wire.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var output_scratch: [3]u8 = undefined;
+    while (input_offset < payload.len) {
+        const input_end = @min(payload.len, input_offset + 5);
+        const step = try incremental.step(
+            payload[input_offset..input_end],
+            &output_scratch,
+        );
+        input_offset += step.progress.input_read;
+        try incremental_wire.appendSlice(
+            std.testing.allocator,
+            output_scratch[0..step.progress.output_written],
+        );
+    }
+    try incremental.finish();
+    while (true) {
+        const step = try incremental.step("", &output_scratch);
+        try incremental_wire.appendSlice(
+            std.testing.allocator,
+            output_scratch[0..step.progress.output_written],
+        );
+        if (step.status == .done) break;
+    }
+    const incremental_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        incremental_wire.items,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(incremental_decoded);
+    try std.testing.expectEqualSlices(u8, payload, incremental_decoded);
+    try std.testing.expect(
+        (try summarizeStreamWithOptions(
+            incremental_wire.items,
+            decode_options,
+        )).shared_dictionary_copy_count > 0,
+    );
+}
+
+test "br serialized encoder retains every dictionary context mode across q0 blocks" {
+    const first_word = "9876543210ZYXWVUTSRQPONMLKJIHGF";
+    const contextual_word = "abcdefghijklmnopqrstuvwxyz12345";
+    const first_block = "0123456789012345678901234567890a";
+    const payload = first_block ++ contextual_word ++ "!";
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{ 0x91, 0, 0, 2 });
+    var bits: [28]u8 = @splat(0);
+    bits[31 - serialized_dictionary.min_word_len] = 8;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    for (0..256) |_| try serialized_bytes.appendSlice(
+        std.testing.allocator,
+        first_word,
+    );
+    bits[31 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, contextual_word ** 2);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        2, 0, 0, 1, 0, // two custom/custom choices
+        1, // context map enabled
+    });
+    const context_map_offset = serialized_bytes.items.len;
+    try serialized_bytes.appendNTimes(std.testing.allocator, 0, 64);
+    const chunks = [_][]const u8{payload};
+    const expected_contexts = [4]u6{ 33, 24, 58, 26 };
+    for (expected_contexts, 0..) |selected_context, selected_mode| {
+        @memset(serialized_bytes.items[context_map_offset..][0..64], 0);
+        serialized_bytes.items[context_map_offset + selected_context] = 1;
+        const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+        const shared = SharedDictionary{ .serialized = &serialized };
+        const encoded = try encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{
+                .quality = 0,
+                .block_len = first_block.len,
+                .shared_dictionary = shared,
+            },
+        );
+        defer std.testing.allocator.free(encoded);
+        const decode_options = DecodeOptions{ .shared_dictionary = shared };
+        const summary = try summarizeStreamWithOptions(encoded, decode_options);
+        try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+        try std.testing.expect(summary.literal_context_mode_bytes[selected_mode] > 0);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+            decode_options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br serialized encoder arbitrates every RFC dictionary context mode" {
+    const Test = struct {
+        const candidate_word_len: usize = 8;
+        const fallback_word_count: usize = 1 << 15;
+        const contextual_word_count: usize = 1 << 8;
+
+        fn word(index: usize) [candidate_word_len]u8 {
+            var value: u64 = @as(u64, index) *% 0x9e37_79b9_7f4a_7c15 +%
+                0xa5a5_5a5a_d3c1_b2e7;
+            var result: [candidate_word_len]u8 = undefined;
+            for (&result) |*byte| {
+                value ^= value >> 12;
+                value ^= value << 25;
+                value ^= value >> 27;
+                byte.* = @truncate(value);
+            }
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn appendWords(
+            allocator: std.mem.Allocator,
+            encoded: *std.ArrayList(u8),
+            count: usize,
+            contextual: bool,
+        ) !void {
+            var bits: [28]u8 = @splat(0);
+            bits[candidate_word_len - serialized_dictionary.min_word_len] =
+                if (contextual) 8 else 15;
+            try encoded.appendSlice(allocator, &bits);
+            for (0..count) |index| {
+                var bytes = word(index);
+                if (!contextual) bytes[0] &= 0x7f;
+                try encoded.appendSlice(allocator, &bytes);
+            }
+        }
+    };
+
+    var encoded_dictionary: std.ArrayList(u8) = .empty;
+    defer encoded_dictionary.deinit(std.testing.allocator);
+    try encoded_dictionary.appendSlice(
+        std.testing.allocator,
+        &.{ 0x91, 0, 0, 2 },
+    );
+    try Test.appendWords(
+        std.testing.allocator,
+        &encoded_dictionary,
+        Test.fallback_word_count,
+        false,
+    );
+    try Test.appendWords(
+        std.testing.allocator,
+        &encoded_dictionary,
+        Test.contextual_word_count,
+        true,
+    );
+    try encoded_dictionary.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // one identity transform list
+        2, 0, 0, 1, 0, // fallback then contextual dictionary
+        1, // context map enabled
+    });
+    const context_map_offset = encoded_dictionary.items.len;
+    try encoded_dictionary.appendNTimes(std.testing.allocator, 0, 64);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (0..Test.contextual_word_count) |index| {
+        try payload.appendSlice(std.testing.allocator, &.{ 0x30, 0x01 });
+        const bytes = Test.word(index);
+        try payload.appendSlice(std.testing.allocator, &bytes);
+    }
+    const expected_contexts = [4]u6{ 1, 0, 2, 10 };
+    for (expected_contexts, 0..) |selected_context, selected_mode| {
+        @memset(encoded_dictionary.items[context_map_offset..][0..64], 0);
+        encoded_dictionary.items[context_map_offset + selected_context] = 1;
+        const dictionary = try parseSerializedSharedDictionary(
+            encoded_dictionary.items,
+        );
+        const shared = SharedDictionary{ .serialized = &dictionary };
+        const options = DecodeOptions{ .shared_dictionary = shared };
+        const encoded = try encodePlannedStreamWithOptionsAlloc(
+            std.testing.allocator,
+            payload.items,
+            .{ .level = .fast, .shared_dictionary = shared },
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStreamWithOptions(encoded, options);
+        try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+        try std.testing.expect(summary.literal_context_mode_bytes[selected_mode] > 0);
+        for (0..4) |mode|
+            if (mode != selected_mode)
+                try std.testing.expectEqual(
+                    @as(usize, 0),
+                    summary.literal_context_mode_bytes[mode],
+                );
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            payload.items.len,
+            options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload.items, decoded);
+    }
+}
+
+test "br serialized dictionary commands jointly select literal context trees" {
+    const dictionary_word = "abcdefghijklmnopqrstuvwxyz12345";
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{ 0x91, 0, 0, 1 });
+    var bits: [28]u8 = @splat(0);
+    bits[dictionary_word.len - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, dictionary_word);
+    try serialized_bytes.appendSlice(
+        std.testing.allocator,
+        "9876543210ZYXWVUTSRQPONMLKJIHGF",
+    );
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // one identity transform list
+        1, 0, 0, // one custom/custom dictionary choice
+        0, // context map disabled
+    });
+    const dictionary = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const shared = SharedDictionary{ .serialized = &dictionary };
+    const decode_options = DecodeOptions{ .shared_dictionary = shared };
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.appendSlice(std.testing.allocator, dictionary_word);
+    for (0..256) |marker| {
+        const context: u8 = @intCast(marker & 63);
+        try payload.appendSlice(std.testing.allocator, &.{
+            @intCast(marker),
+            context,
+            if (context < 32) 'A' else 'B',
+        });
+    }
+
+    const commands = [_]command_plan.Command{
+        .{
+            .insert_start = 0,
+            .insert_len = 0,
+            .copy_len = dictionary_word.len,
+            .has_copy = true,
+            .source = .static,
+            .dictionary_output_len = dictionary_word.len,
+            .dictionary_address = 0,
+        },
+        .{
+            .insert_start = dictionary_word.len,
+            .insert_len = payload.items.len - dictionary_word.len,
+        },
+    };
+    var plain_stats: encoder_stats.PlannedEncodeStats = .{};
+    const plain = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload.items,
+        &commands,
+        null,
+        &plain_stats,
+        .{ .literal_context_mode = literal_context.mode_lsb6 },
+    );
+    defer std.testing.allocator.free(plain);
+    const encoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload.items,
+        .{ .level = .fast, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStreamWithOptions(encoded, decode_options);
+    try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(summary.max_literal_context_trees >= 2);
+    // The locked fixture moves from 627 to 523 bytes; retain a conservative
+    // percentage invariant rather than pinning unrelated header byte details.
+    try std.testing.expect(encoded.len * 100 <= plain.len * 85);
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        encoded,
+        payload.items.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    var prefix: [32]u8 = undefined;
+    for (&prefix, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    prefix[prefix.len - 2] = 0x30;
+    prefix[prefix.len - 1] = 0x01;
+    var second_block: std.ArrayList(u8) = .empty;
+    defer second_block.deinit(std.testing.allocator);
+    try second_block.appendSlice(
+        std.testing.allocator,
+        payload.items[dictionary_word.len..],
+    );
+    try second_block.appendSlice(std.testing.allocator, dictionary_word);
+    const chunks = [_][]const u8{ &prefix, second_block.items };
+    const chunked = try encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{
+            .level = .fast,
+            .block_len = 1024,
+            .shared_dictionary = shared,
+        },
+    );
+    defer std.testing.allocator.free(chunked);
+    const chunked_summary = try summarizeStreamWithOptions(
+        chunked,
+        decode_options,
+    );
+    try std.testing.expect(chunked_summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(chunked_summary.max_literal_context_trees >= 2);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try expected.appendSlice(std.testing.allocator, &prefix);
+    try expected.appendSlice(std.testing.allocator, second_block.items);
+    const chunked_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        chunked,
+        expected.items.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, expected.items, chunked_decoded);
+}
+
+test "br serialized dictionary trainer retains held-out complete-wire wins" {
+    const phrases = [_][]const u8{
+        "A1b2C3d4E5f6G7h8",
+        "J9k0L1m2N3p4Q5r6",
+        "S7t8U9v0W1x2Y3z4",
+        "B5c6D7e8F9g0H1i2",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x1000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_context_clustering = false,
+        .train_omit_transforms = false,
+        .train_prefix_suffix_transforms = false,
+        .train_shift_transforms = false,
+        .quality = 5,
+    };
+    const first = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer first.deinit(std.testing.allocator);
+    const second = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    try std.testing.expectEqual(first.id, second.id);
+    try std.testing.expectEqual(first.id.asInt(), second.id.asInt());
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.identity,
+        first.transform_profile,
+    );
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryWordSelectionProfile.cover,
+        first.word_selection_profile,
+    );
+    try std.testing.expectEqual(@as(?u8, 6), first.cover_dmer_size);
+    try std.testing.expectEqual(@as(?u8, 16), first.cover_hash_log);
+    try std.testing.expectEqual(@as(u16, 4), first.cover_candidates_evaluated);
+    try std.testing.expectEqual(@as(u5, 16), first.selected_min_word_len);
+    try std.testing.expectEqual(@as(u5, 16), first.selected_max_word_len);
+    try std.testing.expectEqual(@as(u16, 8), first.selected_max_words_per_length);
+    try std.testing.expectEqual(@as(u16, 1), first.word_bucket_candidates_evaluated);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.cutoff,
+        first.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 2), first.context_cluster_count);
+    try std.testing.expectEqual(
+        @as(?u2, literal_context.mode_msb6),
+        first.trained_context_mode,
+    );
+    try std.testing.expectEqual(@as(?u6, 32), first.context_cutoff);
+    try std.testing.expect(first.bucket_count != 0 and first.word_count >= 2);
+    try std.testing.expect(first.total_savings_bytes >= options.min_savings_bytes);
+    // Locked evidence: 4,608 baseline bytes versus 2,416 frame bytes plus a
+    // 266-byte dictionary. Keep a conservative complete-total improvement.
+    try std.testing.expectEqual(@as(usize, 4_608), first.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_416), first.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 266), first.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 1_926), first.total_savings_bytes);
+    try std.testing.expect(
+        first.total_savings_bytes * 100 >= first.baseline_frame_bytes * 40,
+    );
+    try std.testing.expectEqual(
+        first.baseline_frame_bytes - first.total_savings_bytes,
+        first.trained_frame_bytes + first.charged_dictionary_bytes,
+    );
+    const parsed = try first.parse();
+    try std.testing.expectEqual(@as(u7, 2), parsed.word_list_count);
+
+    var baseline_cover_options = options;
+    baseline_cover_options.optimize_cover_words = false;
+    const baseline_cover = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        baseline_cover_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer baseline_cover.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryWordSelectionProfile.cover,
+        baseline_cover.word_selection_profile,
+    );
+    try std.testing.expectEqual(@as(?u8, 8), baseline_cover.cover_dmer_size);
+    try std.testing.expectEqual(@as(?u8, 16), baseline_cover.cover_hash_log);
+    try std.testing.expectEqual(@as(u16, 1), baseline_cover.cover_candidates_evaluated);
+    try std.testing.expectEqual(@as(usize, 2_527), baseline_cover.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 172), baseline_cover.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 1_909), baseline_cover.total_savings_bytes);
+
+    var heavy_options = options;
+    heavy_options.train_cover_words = false;
+    const heavy = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        heavy_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer heavy.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryWordSelectionProfile.heavy_hitter,
+        heavy.word_selection_profile,
+    );
+    try std.testing.expectEqual(@as(u16, 0), heavy.cover_candidates_evaluated);
+    try std.testing.expectEqual(@as(usize, 2_632), heavy.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 172), heavy.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 1_804), heavy.total_savings_bytes);
+}
+
+test "br serialized dictionary trainer selects smaller word bucket profiles and uncharged ties" {
+    const words = [_][]const u8{
+        "azbycxdw",
+        "qwertyui",
+        "mnbvcxzl",
+        "plmoknij",
+        "abcdefgh",
+        "ijklmnop",
+        "qrstuvwx",
+        "yz012345",
+    };
+    var training_storage: [8][112]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples) |*storage, *sample| {
+        var cursor: usize = 0;
+        for (0..4) |_| {
+            @memcpy(storage[cursor..][0..8], words[0]);
+            @memcpy(storage[cursor + 8 ..][0..8], words[1]);
+            cursor += 16;
+        }
+        for (words[2..]) |word| {
+            @memcpy(storage[cursor..][0..8], word);
+            cursor += 8;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [256][16]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples) |*storage, *sample| {
+        @memcpy(storage[0..8], words[0]);
+        @memcpy(storage[8..16], words[1]);
+        sample.* = storage;
+    }
+    var sparse_two: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    var sparse_four: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    for (&sparse_two, &sparse_four, 4..) |*two, *four, word_len| {
+        two.* = .{ .word_len = @intCast(word_len), .max_words = 2 };
+        four.* = .{ .word_len = @intCast(word_len), .max_words = 4 };
+    }
+    const sparse_profiles = [_]SerializedSharedDictionarySparseWordProfile{
+        .{ .buckets = &sparse_two },
+        .{ .buckets = &sparse_four },
+    };
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 4,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 32,
+        .sparse_word_profiles = &sparse_profiles,
+        .train_cover_words = false,
+        .train_context_map = false,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .train_prefix_suffix_transforms = false,
+        .train_shift_transforms = false,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(@as(u5, 4), trained.selected_min_word_len);
+    try std.testing.expectEqual(@as(u5, 16), trained.selected_max_word_len);
+    try std.testing.expectEqual(@as(u16, 2), trained.selected_max_words_per_length);
+    try std.testing.expectEqual(@as(u16, 3), trained.word_bucket_candidates_evaluated);
+    try std.testing.expectEqual(@as(?u8, 0), trained.selected_sparse_word_profile);
+    try std.testing.expectEqual(@as(usize, 26), trained.word_count);
+    try std.testing.expectEqual(@as(usize, 13), trained.bucket_count);
+
+    var baseline_options = options;
+    baseline_options.sparse_word_profiles = &.{};
+    const baseline = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        baseline_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer baseline.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u5, 4), baseline.selected_min_word_len);
+    try std.testing.expectEqual(@as(u5, 16), baseline.selected_max_word_len);
+    try std.testing.expectEqual(@as(u16, 8), baseline.selected_max_words_per_length);
+    try std.testing.expectEqual(trained.trained_frame_bytes, baseline.trained_frame_bytes);
+    try std.testing.expect(trained.charged_dictionary_bytes < baseline.charged_dictionary_bytes);
+    try std.testing.expect(trained.total_savings_bytes > baseline.total_savings_bytes);
+
+    var marginal_caps: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    for (&marginal_caps, 4..) |*bucket, word_len| {
+        bucket.* = .{
+            .word_len = @intCast(word_len),
+            .max_words = if (word_len == 8) 4 else 8,
+        };
+    }
+    const marginal_profiles = [_]SerializedSharedDictionarySparseWordProfile{
+        .{ .buckets = &marginal_caps },
+    };
+    var marginal_options = options;
+    marginal_options.sparse_word_profiles = &marginal_profiles;
+    marginal_options.include_dictionary_size = false;
+    const marginal = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        marginal_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer marginal.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(?u8, 0), marginal.selected_sparse_word_profile);
+    try std.testing.expectEqual(@as(usize, 0), marginal.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(u8, 0), marginal.word_bucket_pruning_steps);
+    try std.testing.expectEqual(@as(u16, 4), marginal.selected_word_count_caps_by_length.?[8]);
+    try std.testing.expectEqual(baseline.trained_frame_bytes, marginal.trained_frame_bytes);
+    try std.testing.expect(marginal.bytes.len < baseline.bytes.len);
+
+    var automatic_one_options = marginal_options;
+    automatic_one_options.sparse_word_profiles = &.{};
+    automatic_one_options.optimize_word_bucket_caps = true;
+    automatic_one_options.max_word_bucket_pruning_steps = 1;
+    const automatic_one = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        automatic_one_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer automatic_one.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(?u8, null), automatic_one.selected_sparse_word_profile);
+    try std.testing.expectEqual(@as(u8, 1), automatic_one.word_bucket_pruning_steps);
+    try std.testing.expectEqual(@as(u16, 14), automatic_one.word_bucket_candidates_evaluated);
+    var first_reduction_steps: usize = 0;
+    for (automatic_one.selected_word_count_caps_by_length.?[4..17]) |cap| {
+        try std.testing.expect(cap == 8 or cap == 4);
+        if (cap == 4) first_reduction_steps += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 1), first_reduction_steps);
+
+    var automatic_two_options = automatic_one_options;
+    automatic_two_options.max_word_bucket_pruning_steps = 2;
+    const automatic_two = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        automatic_two_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer automatic_two.deinit(std.testing.allocator);
+    const automatic_two_repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        automatic_two_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer automatic_two_repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u8, 2), automatic_two.word_bucket_pruning_steps);
+    try std.testing.expectEqual(@as(u16, 27), automatic_two.word_bucket_candidates_evaluated);
+    try std.testing.expectEqual(
+        automatic_two.selected_word_count_caps_by_length,
+        automatic_two_repeated.selected_word_count_caps_by_length,
+    );
+    try std.testing.expectEqualSlices(u8, automatic_two.bytes, automatic_two_repeated.bytes);
+    var second_reduction_steps: usize = 0;
+    for (automatic_two.selected_word_count_caps_by_length.?[4..17]) |cap| {
+        try std.testing.expect(cap == 8 or cap == 4 or cap == 2);
+        second_reduction_steps += switch (cap) {
+            8 => 0,
+            4 => 1,
+            2 => 2,
+            else => unreachable,
+        };
+    }
+    try std.testing.expectEqual(@as(usize, 2), second_reduction_steps);
+    try std.testing.expect(automatic_two.trained_frame_bytes <= automatic_one.trained_frame_bytes);
+    try std.testing.expect(automatic_two.bytes.len < automatic_one.bytes.len);
+
+    var exhausted_options = automatic_two_options;
+    exhausted_options.max_words_per_length = 2;
+    const exhausted = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        exhausted_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer exhausted.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u8, 0), exhausted.word_bucket_pruning_steps);
+    try std.testing.expectEqual(@as(u16, 1), exhausted.word_bucket_candidates_evaluated);
+    try std.testing.expectEqual(@as(?[32]u16, null), exhausted.selected_word_count_caps_by_length);
+}
+
+test "br serialized dictionary trainer rejects non-wins and invalid evaluation" {
+    const samples = [_][]const u8{"one held-out sample with no amortization"};
+    try std.testing.expectEqual(
+        @as(?OwnedTrainedSerializedSharedDictionary, null),
+        try trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .min_word_len = 8,
+                .max_word_len = 8,
+                .max_words_per_length = 2,
+                .max_phrases_per_length = 8,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &.{},
+            .{},
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .min_savings_bytes = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .quality = 12 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .optimize_cover_words = false, .cover_dmer_size = 7 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .optimize_cover_words = false, .cover_hash_log = 7 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_cover_corpus_size = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .cover_dmer_sizes = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .cover_dmer_sizes = &.{ 8, 6 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .cover_hash_logs = &.{ 16, 16 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_cover_candidates = 3 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .word_bucket_profiles = &.{.{
+                .min_word_len = 3,
+                .max_word_len = 8,
+                .max_words_per_length = 2,
+            }} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .word_bucket_profiles = &.{.{
+                .min_word_len = 4,
+                .max_word_len = 8,
+                .max_words_per_length = 1,
+            }} },
+        ),
+    );
+    const duplicate_profile = SerializedSharedDictionaryWordBucketProfile{
+        .min_word_len = 4,
+        .max_word_len = 8,
+        .max_words_per_length = 2,
+    };
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .word_bucket_profiles = &.{ duplicate_profile, duplicate_profile } },
+        ),
+    );
+    const too_many_profiles: [max_serialized_word_bucket_profiles + 1]SerializedSharedDictionaryWordBucketProfile =
+        @splat(duplicate_profile);
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .word_bucket_profiles = &too_many_profiles },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &.{} }} },
+        ),
+    );
+    const invalid_sparse_buckets = [_]SerializedSharedDictionaryWordLengthBucketCap{
+        .{ .word_len = 8, .max_words = 3 },
+    };
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &invalid_sparse_buckets }} },
+        ),
+    );
+    const unordered_sparse_buckets = [_]SerializedSharedDictionaryWordLengthBucketCap{
+        .{ .word_len = 8, .max_words = 2 },
+        .{ .word_len = 6, .max_words = 2 },
+    };
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &unordered_sparse_buckets }} },
+        ),
+    );
+    const sparse_profile = SerializedSharedDictionarySparseWordProfile{
+        .buckets = &.{.{ .word_len = 8, .max_words = 2 }},
+    };
+    const too_many_sparse_profiles: [max_serialized_sparse_word_profiles + 1]SerializedSharedDictionarySparseWordProfile =
+        @splat(sparse_profile);
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &too_many_sparse_profiles },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .optimize_word_bucket_caps = true,
+                .max_word_bucket_pruning_steps = 0,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .optimize_word_bucket_caps = true,
+                .max_word_bucket_pruning_steps = max_serialized_word_bucket_pruning_steps + 1,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cutoffs = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cutoffs = &.{ 32, 16 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cutoffs = &.{ 16, 16 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_modes = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_modes = &.{ 1, 1 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{ 4, 3 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{17} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_context_signature_positions = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_context_positions_per_group = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_transform_cluster_dictionaries = 1 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_transform_scoring_positions = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_len = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_transforms = 65 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .max_prefix_suffix_transforms = 8,
+                .max_prefix_suffix_candidates = 7,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_words = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_shift_transforms = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .max_shift_transforms = 8,
+                .max_shift_candidates = 7,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_shift_positions = 0 },
+        ),
+    );
+}
+
+test "br serialized dictionary trainer retains identity when transforms cannot win" {
+    const word_a = [_]u8{
+        0x80, 0x11, 0x92, 0x23, 0xa4, 0x35, 0xb6, 0x47,
+        0xc8, 0x59, 0xda, 0x6b, 0xec, 0x7d, 0xfe, 0x0f,
+    };
+    const word_b = [_]u8{
+        0x81, 0x20, 0x93, 0x42, 0xa5, 0x64, 0xb7, 0x86,
+        0xc9, 0xa8, 0xdb, 0xca, 0xed, 0xec, 0xff, 0x0e,
+    };
+    const training_samples = [_][]const u8{
+        &word_a, &word_b, &word_a, &word_b,
+        &word_a, &word_b, &word_a, &word_b,
+    };
+    var validation_samples: [64][]const u8 = undefined;
+    for (&validation_samples, 0..) |*sample, index|
+        sample.* = if (index & 1 == 0) &word_a else &word_b;
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 2,
+            .max_phrases_per_length = 8,
+            .train_context_map = false,
+            .quality = 5,
+        },
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.identity,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 0), trained.learned_stringlet_count);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        trained.learned_prefix_suffix_transform_count,
+    );
+    try std.testing.expectEqual(@as(usize, 0), trained.learned_shift_parameter_count);
+    try std.testing.expectEqual(@as(usize, 0), trained.learned_shift_transform_count);
+}
+
+test "br serialized dictionary trainer selects profitable context maps" {
+    const Test = struct {
+        fn word(group: usize, index: usize) [8]u8 {
+            var value: u64 = (@as(u64, group) << 32) |
+                @as(u64, index + 1);
+            value *%= 0x9e37_79b9_7f4a_7c15;
+            var result: [8]u8 = undefined;
+            std.mem.writeInt(u64, &result, value, .little);
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn fill(storage: *[288]u8) []const u8 {
+            var cursor: usize = 0;
+            for (0..2) |group| {
+                for (0..16) |index| {
+                    storage[cursor] = if (group == 0) 24 else 40;
+                    cursor += 1;
+                    const bytes = word(group, index);
+                    @memcpy(storage[cursor..][0..bytes.len], &bytes);
+                    cursor += bytes.len;
+                }
+            }
+            return storage[0..cursor];
+        }
+    };
+    var training_storage: [8][288]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples) |*storage, *sample|
+        sample.* = Test.fill(storage);
+    var validation_storage: [64][288]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples) |*storage, *sample|
+        sample.* = Test.fill(storage);
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 8,
+            .max_word_len = 8,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_clustering = false,
+            .train_case_transforms = false,
+            .train_omit_transforms = false,
+            .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
+            .train_cover_words = false,
+            .quality = 5,
+        },
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expect(trained.context_based);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.cutoff,
+        trained.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 2), trained.context_cluster_count);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.identity,
+        trained.transform_profile,
+    );
+    // Locked evidence: 17,344 baseline bytes versus 14,272 frame bytes plus a
+    // 266-byte contextual dictionary.
+    try std.testing.expectEqual(@as(usize, 17_344), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 14_272), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 266), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 2_806), trained.total_savings_bytes);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 15,
+    );
+    try std.testing.expectEqual(
+        @as(?u2, literal_context.mode_msb6),
+        trained.trained_context_mode,
+    );
+    try std.testing.expectEqual(@as(?u6, 48), trained.context_cutoff);
+    const parsed = try trained.parse();
+    try std.testing.expect(parsed.context_based);
+    try std.testing.expectEqual(@as(u6, 0), parsed.context_map[47]);
+    try std.testing.expectEqual(@as(u6, 1), parsed.context_map[48]);
+}
+
+test "br serialized dictionary trainer selects non-contiguous context clusters" {
+    const Test = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [8]u8 {
+            var value = (@as(u64, group + 1) << 48) |
+                (@as(u64, index + 1) << 8) | 0x5b;
+            value *%= 0x9e37_79b9_7f4a_7c15;
+            var result: [8]u8 = undefined;
+            std.mem.writeInt(u64, &result, value, .little);
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn fill(storage: *[9]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            const marker_index = (shape / 8) % 2;
+            const word_index = shape % 8;
+            storage[0] = markers[group][marker_index];
+            const bytes = word(group, word_index);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+    };
+    var training_storage: [192][9]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fill(storage, index);
+    var validation_storage: [384][9]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fill(storage, index);
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 8,
+        .max_word_len = 8,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .train_prefix_suffix_transforms = false,
+        .train_shift_transforms = false,
+        .train_cover_words = false,
+        .context_modes = &.{literal_context.mode_lsb6},
+        .context_cluster_counts = &.{4},
+        .max_context_positions_per_group = 1024,
+        .max_context_signature_positions = 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 4_992), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 3_584), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 454), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 954), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.clustered,
+        trained.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 4), trained.context_cluster_count);
+    try std.testing.expectEqual(@as(?u6, null), trained.context_cutoff);
+    try std.testing.expectEqual(
+        @as(?u2, literal_context.mode_lsb6),
+        trained.trained_context_mode,
+    );
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 15,
+    );
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(u7, 4), parsed.word_list_count);
+    for (Test.markers) |pair|
+        try std.testing.expectEqual(parsed.context_map[pair[0]], parsed.context_map[pair[1]]);
+    try std.testing.expect(parsed.context_map[8] != parsed.context_map[16]);
+    try std.testing.expect(parsed.context_map[8] != parsed.context_map[24]);
+    try std.testing.expect(parsed.context_map[16] != parsed.context_map[24]);
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    const group_word = Test.word(2, 7);
+    try std.testing.expect((try parsed.findLongest(24, &group_word, &scratch)) != null);
+}
+
+test "br serialized dictionary trainer clusters transform lists by context dictionary" {
+    const Test = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [16]u8 {
+            var result: [16]u8 = undefined;
+            result[0] = @intCast('a' + group);
+            result[1] = @intCast('a' + index);
+            for (result[2..], 2..) |*byte, position|
+                byte.* = @intCast('a' + (group * 7 + index * 11 + position * 3) % 26);
+            return result;
+        }
+
+        fn fillTraining(storage: *[17]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            storage[0] = markers[group][(shape / 8) % 2];
+            const bytes = word(group, shape % 8);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+
+        fn fillValidation(storage: *[17]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const context_group = shape / 16;
+            const word_group = (context_group + 1) % 3;
+            storage[0] = markers[context_group][(shape / 8) % 2];
+            const bytes = word(word_group, shape % 8);
+            if (context_group == 0) {
+                for (bytes, 0..) |byte, position|
+                    storage[position + 1] = std.ascii.toUpper(byte);
+                return storage;
+            }
+            const word_len: usize = if (context_group == 1) 12 else bytes.len;
+            @memcpy(storage[1..][0..word_len], bytes[0..word_len]);
+            return storage[0 .. word_len + 1];
+        }
+    };
+    var training_storage: [192][17]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fillTraining(storage, index);
+    var validation_storage: [768][17]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        const shape = if (index < 64)
+            index % 16
+        else if (index < 704)
+            16 + (index - 64) % 16
+        else
+            32 + (index - 704) % 16;
+        sample.* = Test.fillValidation(storage, shape);
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_prefix_suffix_transforms = false,
+        .train_shift_transforms = false,
+        .train_cover_words = false,
+        .context_modes = &.{literal_context.mode_lsb6},
+        .context_cluster_counts = &.{4},
+        .max_context_positions_per_group = 1024,
+        .max_context_signature_positions = 1024,
+        .max_transform_scoring_positions = 16 * 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 13_568), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 7_680), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 831), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 5_057), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.clustered,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 2), trained.transform_list_count);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 35,
+    );
+    const parsed = try trained.parse();
+    const identity_dictionary = parsed.context_map[Test.markers[0][0]];
+    const case_dictionary = parsed.context_map[Test.markers[1][0]];
+    const omit_dictionary = parsed.context_map[Test.markers[2][0]];
+    const case_list = parsed.dictionaries[case_dictionary].transform_list_index;
+    const omit_list = parsed.dictionaries[omit_dictionary].transform_list_index;
+    const identity_list = parsed.dictionaries[identity_dictionary].transform_list_index;
+    try std.testing.expectEqual(
+        @as(usize, 21),
+        parsed.transform_lists[case_list].transformCount(),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 19),
+        parsed.transform_lists[omit_list].transformCount(),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 19),
+        parsed.transform_lists[identity_list].transformCount(),
+    );
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    const case_word = Test.word(1, 0);
+    var uppercase_word: [16]u8 = undefined;
+    for (case_word, 0..) |byte, index|
+        uppercase_word[index] = std.ascii.toUpper(byte);
+    try std.testing.expect((try parsed.findLongest(8, &uppercase_word, &scratch)) != null);
+    const omit_word = Test.word(2, 0);
+    try std.testing.expect((try parsed.findLongest(16, omit_word[0..12], &scratch)) != null);
+    const identity_word = Test.word(0, 0);
+    try std.testing.expect((try parsed.findLongest(24, &identity_word, &scratch)) != null);
+}
+
+test "br serialized dictionary trainer selects case transforms on held-out wire" {
+    const phrases = [_][]const u8{
+        "azbycxdwevfugths",
+        "qwertyuiopasdfgh",
+        "mnbvcxzlkjhgfdsa",
+        "plmoknijbuhvygct",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x2000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            for (phrase) |byte| {
+                storage[cursor] = std.ascii.toUpper(byte);
+                cursor += 1;
+            }
+        }
+        sample.* = storage[0..cursor];
+    }
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_map = false,
+            .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
+            .train_cover_words = false,
+            .quality = 5,
+        },
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 4_608), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_424), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 178), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 2_006), trained.total_savings_bytes);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 40,
+    );
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.ascii_case,
+        trained.transform_profile,
+    );
+    try std.testing.expect(!trained.context_based);
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 3), parsed.transform_lists[0].transformCount());
+}
+
+test "br serialized dictionary trainer selects omit transforms on held-out wire" {
+    const phrases = [_][]const u8{
+        "azbycxdwevfuTAIL",
+        "qwertyuiopasEND1",
+        "mnbvcxzlkjhgEND2",
+        "plmoknijbuhvEND3",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [64][52]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x3000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..12], phrase[0..12]);
+            cursor += 12;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_map = false,
+            .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
+            .train_cover_words = false,
+            .quality = 5,
+        },
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 3_584), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_647), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 226), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 711), trained.total_savings_bytes);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 15,
+    );
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.omit,
+        trained.transform_profile,
+    );
+    try std.testing.expect(!trained.context_based);
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 19), parsed.transform_lists[0].transformCount());
+}
+
+test "br serialized dictionary trainer learns UTF-8 shift transforms" {
+    const phrases = [_][]const u8{
+        "ĀāĂăĄąĆć",
+        "ĐđĒēĔĕĖė",
+        "ĠġĢģĤĥĦħ",
+        "İıĲĳĴĵĶķ",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [4][256]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, phrases) |*storage, *sample, phrase| {
+        var cursor: usize = 0;
+        for (0..16) |_| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage;
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x5000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases, 0..) |phrase, phrase_index| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            serialized_dictionary.applyShiftUtf8(
+                storage[cursor..][0..phrase.len],
+                1,
+                phrase_index >= 2,
+            );
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_context_map = false,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .train_cover_words = false,
+        .train_prefix_suffix_transforms = false,
+        .max_shift_transforms = 2,
+        .max_shift_candidates = 64,
+        .max_shift_words = 16,
+        .max_shift_positions = 4096,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 3_513), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_624), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 184), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 705), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.shift,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 1), trained.learned_shift_parameter_count);
+    try std.testing.expectEqual(@as(usize, 2), trained.learned_shift_transform_count);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 20,
+    );
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 3), parsed.transform_lists[0].transformCount());
+    var first_index: ?usize = null;
+    var all_index: ?usize = null;
+    for (0..parsed.transform_lists[0].transformCount()) |transform_index| {
+        const transform = parsed.transform_lists[0].transform(transform_index).?;
+        if (transform.parameter != 1) continue;
+        if (transform.kind == 21) first_index = transform_index;
+        if (transform.kind == 22) all_index = transform_index;
+    }
+    const words = &parsed.word_lists[0];
+    const word_count = words.wordCount(16);
+    var phrase_indices: [4]usize = undefined;
+    for (phrases, 0..) |phrase, phrase_number| {
+        for (0..word_count) |word_index| {
+            if (std.mem.eql(u8, words.word(16, word_index).?, phrase)) {
+                phrase_indices[phrase_number] = word_index;
+                break;
+            }
+        } else return error.TestUnexpectedResult;
+    }
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    try std.testing.expectEqualSlices(
+        u8,
+        validation_samples[0][4..20],
+        (try parsed.resolve(
+            0,
+            16,
+            first_index.? * word_count + phrase_indices[0],
+            &scratch,
+        )).bytes,
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        validation_samples[0][36..52],
+        (try parsed.resolve(
+            0,
+            16,
+            all_index.? * word_count + phrase_indices[2],
+            &scratch,
+        )).bytes,
+    );
+}
+
+test "br serialized dictionary trainer learns prefix suffix stringlets" {
+    const phrases = [_][]const u8{
+        "azbycxdwevfugths",
+        "qwertyuiopasdfgh",
+        "mnbvcxzlkjhgfdsa",
+        "plmoknijbuhvygct",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var wrapped_training_storage: [32][18]u8 = undefined;
+    var training_samples: [64][]const u8 = undefined;
+    var training_index: usize = 0;
+    for (phrases, 0..) |phrase, phrase_index| {
+        for (0..8) |_| {
+            training_samples[training_index] = phrase;
+            training_index += 1;
+        }
+        for (0..8) |repeat_index| {
+            const wrapped = &wrapped_training_storage[phrase_index * 8 + repeat_index];
+            wrapped[0] = '<';
+            @memcpy(wrapped[1..17], phrase);
+            wrapped[17] = '>';
+            training_samples[training_index] = wrapped;
+            training_index += 1;
+        }
+    }
+    std.debug.assert(training_index == training_samples.len);
+    var validation_storage: [64][76]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x4000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            storage[cursor] = '<';
+            cursor += 1;
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+            storage[cursor] = '>';
+            cursor += 1;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_context_map = false,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .train_shift_transforms = false,
+        .train_cover_words = false,
+        .max_prefix_suffix_len = 1,
+        .max_prefix_suffix_transforms = 1,
+        .max_prefix_suffix_candidates = 16,
+        .max_prefix_suffix_positions = 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 5_120), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 1_279), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 179), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 3_662), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.prefix_suffix,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 2), trained.learned_stringlet_count);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        trained.learned_prefix_suffix_transform_count,
+    );
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 70,
+    );
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 2), parsed.transform_lists[0].transformCount());
+    const words = &parsed.word_lists[0];
+    const word_count = words.wordCount(16);
+    var phrase_index: ?usize = null;
+    for (0..word_count) |word_index| {
+        const word = words.word(16, word_index).?;
+        if (std.mem.eql(u8, word, phrases[0])) {
+            phrase_index = word_index;
+            break;
+        }
+    }
+    const selected_index = phrase_index orelse return error.TestUnexpectedResult;
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    var expected: [18]u8 = undefined;
+    expected[0] = '<';
+    @memcpy(expected[1..17], phrases[0]);
+    expected[17] = '>';
+    try std.testing.expectEqualSlices(
+        u8,
+        &expected,
+        (try parsed.resolve(
+            0,
+            16,
+            word_count + selected_index,
+            &scratch,
+        )).bytes,
+    );
+}
+
+test "br RAW shared dictionary rejects invalid descriptors before output mutation" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const too_many: [shared_dictionary.max_raw_prefixes + 1][]const u8 = @splat("");
+    const options = DecodeOptions{ .shared_dictionary = .{ .raw_prefixes = &too_many } };
+    var output: [32]u8 = @splat(0xa5);
+    try std.testing.expectError(error.CorruptFrame, decodeStreamIntoWithOptions(&frame, &output, options));
+    try std.testing.expectEqual([_]u8{0xa5} ** output.len, output);
+    var history: [32]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .decode = options });
+    try std.testing.expectError(error.CorruptFrame, decoder.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().input_read);
+    var owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{ .decode = options },
+    );
+    defer owned.deinit();
+    try std.testing.expectError(error.CorruptFrame, owned.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), owned.snapshot().compressed_bytes);
+
+    const sentinel: [*]const u8 = @ptrFromInt(1);
+    const overflowing_prefixes = [_][]const u8{
+        sentinel[0..std.math.maxInt(usize)],
+        sentinel[0..1],
+    };
+    const overflowing_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &overflowing_prefixes },
+    };
+    var overflowing_decoder = IncrementalCopyStreamDecoder.initWithOptions(
+        &history,
+        .{ .decode = overflowing_options },
+    );
+    try std.testing.expectError(error.IntegerOverflow, overflowing_decoder.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), overflowing_decoder.snapshot().input_read);
+    var overflowing_owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{ .decode = overflowing_options },
+    );
+    defer overflowing_owned.deinit();
+    try std.testing.expectError(error.IntegerOverflow, overflowing_owned.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), overflowing_owned.snapshot().compressed_bytes);
+}
+
 test "br static dictionary addresses use the active window distance" {
     var scratch: [64]u8 = undefined;
     const output_len = (@as(usize, 1) << 16) + 4096;
@@ -23549,6 +36826,298 @@ test "br static dictionary addresses use the active window distance" {
         error.InvalidMatch,
         minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, output_len, &scratch),
     );
+}
+
+test "br RAW shared dictionary shifts static dictionary addresses after compound region" {
+    const prefix = "abc";
+    var shared = DecodeSharedDictionary{
+        .dictionary = .{ .raw_prefixes = &.{prefix} },
+        .total_size = prefix.len,
+    };
+    var scratch: [64]u8 = undefined;
+    const max_history: usize = 10;
+
+    var compound = try resolveOutOfWindowReference(
+        &shared,
+        0,
+        max_history + 1,
+        1,
+        max_history,
+        &scratch,
+    );
+    switch (compound) {
+        .compound => |*cursor| {
+            var output: [1]u8 = undefined;
+            try std.testing.expectEqual(@as(usize, 1), cursor.copyInto(&output));
+            try std.testing.expectEqualSlices(u8, "c", &output);
+        },
+        .static, .contextual_static => return error.TestUnexpectedResult,
+    }
+
+    const static_address: usize = 3;
+    const shifted_distance = max_history + prefix.len + 1 + static_address;
+    const shifted = try resolveOutOfWindowReference(
+        &shared,
+        0,
+        shifted_distance,
+        5,
+        max_history,
+        &scratch,
+    );
+    switch (shifted) {
+        .compound => return error.TestUnexpectedResult,
+        .static => |word| try std.testing.expectEqualSlices(u8, "world", word),
+        .contextual_static => return error.TestUnexpectedResult,
+    }
+}
+
+test "br planned RAW shared dictionary encodes every one-shot quality and level" {
+    var dictionary_bytes: [1024]u8 = undefined;
+    var random_state: u32 = 0x9e37_79b9;
+    for (&dictionary_bytes) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const prefixes = [_][]const u8{
+        dictionary_bytes[0..173],
+        dictionary_bytes[173..691],
+        dictionary_bytes[691..],
+    };
+    const dictionary = SharedDictionary{ .raw_prefixes = &prefixes };
+    const decode_options = DecodeOptions{ .shared_dictionary = dictionary };
+
+    inline for (.{ .fast, .balanced, .ratio }) |level| {
+        const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &dictionary_bytes, .{
+            .level = level,
+            .shared_dictionary = dictionary,
+        });
+        defer std.testing.allocator.free(encoded);
+        try std.testing.expect(encoded.len < dictionary_bytes.len / 4);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            dictionary_bytes.len,
+            decode_options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &dictionary_bytes, decoded);
+    }
+    for (0..12) |quality| {
+        const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &dictionary_bytes, .{
+            .quality = @intCast(quality),
+            .shared_dictionary = dictionary,
+        });
+        defer std.testing.allocator.free(encoded);
+        try std.testing.expect(encoded.len < dictionary_bytes.len / 4);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            dictionary_bytes.len,
+            decode_options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &dictionary_bytes, decoded);
+    }
+}
+
+test "br planned large-input bounds follow every chunked fallback" {
+    const input_len = max_uncompressed_meta_block_len + 1;
+    const prefix = [_][]const u8{"shared-prefix"};
+    const dictionary = SharedDictionary{ .raw_prefixes = &prefix };
+
+    inline for (.{ .fast, .balanced, .ratio }) |level| {
+        const options = PlannedEncodeOptions{
+            .level = level,
+            .shared_dictionary = dictionary,
+        };
+        const expected = try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{
+            .level = level,
+            .shared_dictionary = dictionary,
+        });
+        try std.testing.expectEqual(
+            expected,
+            try encodedPlannedStreamBoundWithOptions(input_len, options),
+        );
+    }
+
+    try std.testing.expectEqual(
+        try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{ .level = .ratio }),
+        try encodedPlannedStreamBoundWithOptions(input_len, .{ .level = .ratio }),
+    );
+
+    inline for (.{ 0, 2, 11 }) |quality| {
+        try std.testing.expectEqual(
+            try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{
+                .quality = quality,
+            }),
+            try encodedPlannedStreamBoundWithOptions(input_len, .{
+                .quality = quality,
+            }),
+        );
+    }
+}
+
+test "br planned RAW shared dictionary covers reusable chunked and incremental encoders" {
+    var dictionary_bytes: [1024]u8 = undefined;
+    var random_state: u32 = 0xa341_316c;
+    for (&dictionary_bytes) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const prefixes = [_][]const u8{ dictionary_bytes[0..417], dictionary_bytes[417..] };
+    const dictionary = SharedDictionary{ .raw_prefixes = &prefixes };
+    const decode_options = DecodeOptions{ .shared_dictionary = dictionary };
+
+    var reusable = PlannedStreamEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const reusable_encoded = try reusable.encodeWithOptionsAlloc(std.testing.allocator, &dictionary_bytes, .{
+        .quality = 5,
+        .shared_dictionary = dictionary,
+    });
+    defer std.testing.allocator.free(reusable_encoded);
+    try std.testing.expect(reusable.retainedCapacity() >= compound_dictionary_matcher.index_bytes);
+    const reusable_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        reusable_encoded,
+        dictionary_bytes.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(reusable_decoded);
+    try std.testing.expectEqualSlices(u8, &dictionary_bytes, reusable_decoded);
+
+    const chunks = [_][]const u8{
+        dictionary_bytes[0..211],
+        dictionary_bytes[211..733],
+        dictionary_bytes[733..],
+    };
+    const chunked = try reusable.encodeChunksWithOptionsAlloc(std.testing.allocator, &chunks, .{
+        .shared_dictionary = dictionary,
+    });
+    defer std.testing.allocator.free(chunked);
+    const chunked_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        chunked,
+        dictionary_bytes.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, &dictionary_bytes, chunked_decoded);
+
+    var incremental = IncrementalPlannedStreamEncoder.initWithOptions(std.testing.allocator, .{
+        .stream = .{ .shared_dictionary = dictionary },
+        .block_len = dictionary_bytes.len,
+    });
+    defer incremental.deinit();
+    var incremental_wire: std.ArrayList(u8) = .empty;
+    defer incremental_wire.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var output_scratch: [3]u8 = undefined;
+    while (input_offset < dictionary_bytes.len) {
+        const end = @min(dictionary_bytes.len, input_offset + 2);
+        const result = try incremental.step(dictionary_bytes[input_offset..end], &output_scratch);
+        input_offset += result.progress.input_read;
+        try incremental_wire.appendSlice(std.testing.allocator, output_scratch[0..result.progress.output_written]);
+    }
+    try incremental.finish();
+    while (true) {
+        const result = try incremental.step("", &output_scratch);
+        try incremental_wire.appendSlice(std.testing.allocator, output_scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const incremental_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        incremental_wire.items,
+        dictionary_bytes.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(incremental_decoded);
+    try std.testing.expectEqualSlices(u8, &dictionary_bytes, incremental_decoded);
+}
+
+test "br planned empty shared dictionary preserves legacy wire and invalid descriptors fail early" {
+    const input = "empty dictionary wire stability payload " ** 16;
+    const empty_prefixes: [shared_dictionary.max_raw_prefixes][]const u8 = @splat("");
+    const empty_dictionary = SharedDictionary{ .raw_prefixes = &empty_prefixes };
+    inline for (.{ .fast, .balanced, .ratio }) |level| {
+        const baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+        defer std.testing.allocator.free(baseline);
+        const empty = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{
+            .level = level,
+            .shared_dictionary = empty_dictionary,
+        });
+        defer std.testing.allocator.free(empty);
+        try std.testing.expectEqualSlices(u8, baseline, empty);
+    }
+    for (0..12) |quality| {
+        const baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .quality = @intCast(quality) });
+        defer std.testing.allocator.free(baseline);
+        const empty = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{
+            .quality = @intCast(quality),
+            .shared_dictionary = empty_dictionary,
+        });
+        defer std.testing.allocator.free(empty);
+        try std.testing.expectEqualSlices(u8, baseline, empty);
+    }
+    const legacy_chunks = [_][]const u8{ input[0..97], input[97..] };
+    const baseline_chunks = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &legacy_chunks, .{});
+    defer std.testing.allocator.free(baseline_chunks);
+    const empty_chunks = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &legacy_chunks, .{
+        .shared_dictionary = empty_dictionary,
+    });
+    defer std.testing.allocator.free(empty_chunks);
+    try std.testing.expectEqualSlices(u8, baseline_chunks, empty_chunks);
+    const too_many: [shared_dictionary.max_raw_prefixes + 1][]const u8 = @splat("");
+    const invalid = SharedDictionary{ .raw_prefixes = &too_many };
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .shared_dictionary = invalid },
+    ));
+    const chunks = [_][]const u8{input};
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamChunksBoundWithOptions(
+        &chunks,
+        .{ .shared_dictionary = invalid },
+    ));
+    var incremental = IncrementalPlannedStreamEncoder.initWithOptions(std.testing.allocator, .{
+        .stream = .{ .shared_dictionary = invalid },
+    });
+    defer incremental.deinit();
+    var output: [8]u8 = @splat(0xa5);
+    try std.testing.expectError(error.InvalidBlockPlan, incremental.step("x", &output));
+    try std.testing.expectEqual([_]u8{0xa5} ** output.len, output);
+}
+
+test "br planned static dictionary wire addresses shift past RAW shared bytes" {
+    const input = "world";
+    const prefixes = [_][]const u8{"xyz"};
+    const dictionary = SharedDictionary{ .raw_prefixes = &prefixes };
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = input.len,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = input.len,
+        .dictionary_address = 3,
+    }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const encoded = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        &commands,
+        null,
+        &stats,
+        .{ .compound_dictionary_size = prefixes[0].len },
+    );
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        encoded,
+        input.len,
+        .{ .shared_dictionary = dictionary },
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {
@@ -23984,29 +37553,89 @@ const BlockLengthEncoding = struct {
     extra_bits: u5,
 };
 
-const TwoBlockLengthCode = struct {
+const DistanceBlockLengthCode = struct {
     alphabet: command_plan.PrefixAlphabetFor(26),
     lengths: [26]u4,
-    block_lengths: [2]BlockLengthEncoding,
+    block_lengths: [distance_block_split.max_regions]BlockLengthEncoding,
+    block_count: usize,
 
-    fn init(first_len: usize, second_len: usize) Error!TwoBlockLengthCode {
-        if (first_len == 0 or second_len == 0) return error.InvalidBlockPlan;
-        const first = blockLengthEncoding(first_len) orelse return error.InvalidBlockPlan;
-        const second = blockLengthEncoding(second_len) orelse return error.InvalidBlockPlan;
+    fn init(split: distance_block_split.Result, symbol_count: usize) Error!DistanceBlockLengthCode {
+        const block_count = split.regionCount();
+        if (split.typeCount() < 2 or split.typeCount() > block_count) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var block_lengths: [distance_block_split.max_regions]BlockLengthEncoding = undefined;
+        var previous: usize = 0;
+        for (0..block_count) |region| {
+            const end = if (region + 1 == block_count) symbol_count else split.boundary(region);
+            if (end <= previous or end > symbol_count) return error.InvalidBlockPlan;
+            block_lengths[region] = blockLengthEncoding(end - previous) orelse return error.InvalidBlockPlan;
+            previous = end;
+        }
         var frequencies: [26]u32 = @splat(0);
-        frequencies[first.symbol] += 1;
-        frequencies[second.symbol] += 1;
+        for (block_lengths[0..block_count]) |encoding| frequencies[encoding.symbol] += 1;
         var alphabet: command_plan.PrefixAlphabetFor(26) = undefined;
         try command_plan.alphabetFromFrequenciesInto(26, &alphabet, &frequencies);
         return .{
             .alphabet = alphabet,
             .lengths = try alphabet.codeLengths(&frequencies),
-            .block_lengths = .{ first, second },
+            .block_lengths = block_lengths,
+            .block_count = block_count,
         };
     }
 
-    fn writeLength(self: *const TwoBlockLengthCode, allocator: std.mem.Allocator, writer: *BitWriter, index: usize) Error!void {
-        if (index >= self.block_lengths.len) return error.InvalidBlockPlan;
+    fn writeLength(self: *const DistanceBlockLengthCode, allocator: std.mem.Allocator, writer: *BitWriter, index: usize) Error!void {
+        if (index >= self.block_count) return error.InvalidBlockPlan;
+        const encoding = self.block_lengths[index];
+        if (self.alphabet.len > 1) {
+            const code = self.alphabet.simpleCode(encoding.symbol) orelse return error.InvalidBlockPlan;
+            try writer.writeHuffmanBits(allocator, code.code, code.bits);
+        }
+        try writer.writeBits(allocator, encoding.extra, encoding.extra_bits);
+    }
+};
+
+const LiteralBlockLengthCode = struct {
+    alphabet: command_plan.PrefixAlphabetFor(26),
+    lengths: [26]u4,
+    block_lengths: [literal_block_split.max_regions]BlockLengthEncoding,
+    block_count: usize,
+    type_count: usize,
+
+    fn init(split: literal_block_split.Result, literal_count: usize) Error!LiteralBlockLengthCode {
+        const block_count = split.regionCount();
+        if (split.typeCount() < 2 or split.typeCount() > block_count) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and block_count > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and block_count != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var block_lengths: [literal_block_split.max_regions]BlockLengthEncoding = undefined;
+        var previous: usize = 0;
+        for (0..block_count) |region| {
+            const end = if (region + 1 == block_count) literal_count else split.boundary(region);
+            if (end <= previous or end > literal_count) return error.InvalidBlockPlan;
+            block_lengths[region] = blockLengthEncoding(end - previous) orelse return error.InvalidBlockPlan;
+            previous = end;
+        }
+        var frequencies: [26]u32 = @splat(0);
+        for (block_lengths[0..block_count]) |encoding| frequencies[encoding.symbol] += 1;
+        var alphabet: command_plan.PrefixAlphabetFor(26) = undefined;
+        try command_plan.alphabetFromFrequenciesInto(26, &alphabet, &frequencies);
+        return .{
+            .alphabet = alphabet,
+            .lengths = try alphabet.codeLengths(&frequencies),
+            .block_lengths = block_lengths,
+            .block_count = block_count,
+            .type_count = split.typeCount(),
+        };
+    }
+
+    fn writeLength(self: *const LiteralBlockLengthCode, allocator: std.mem.Allocator, writer: *BitWriter, index: usize) Error!void {
+        if (index >= self.block_count) return error.InvalidBlockPlan;
         const encoding = self.block_lengths[index];
         if (self.alphabet.len > 1) {
             const code = self.alphabet.simpleCode(encoding.symbol) orelse return error.InvalidBlockPlan;
@@ -24019,25 +37648,22 @@ const TwoBlockLengthCode = struct {
 const CommandBlockLengthCode = struct {
     alphabet: command_plan.PrefixAlphabetFor(26),
     lengths: [26]u4,
-    block_lengths: [4]BlockLengthEncoding,
+    block_lengths: [command_block_split.max_regions]BlockLengthEncoding,
     block_count: usize,
 
     fn init(split: command_block_split.Result, command_count: usize) Error!CommandBlockLengthCode {
         const block_count = split.regionCount();
-        if (split.split == 0 or split.split >= command_count) return error.InvalidBlockPlan;
-        var block_lengths: [4]BlockLengthEncoding = undefined;
-        block_lengths[0] = blockLengthEncoding(split.split) orelse return error.InvalidBlockPlan;
-        if (split.second_split) |second| {
-            if (second <= split.split or second >= command_count) return error.InvalidBlockPlan;
-            block_lengths[1] = blockLengthEncoding(second - split.split) orelse return error.InvalidBlockPlan;
-            if (split.third_split) |third| {
-                if (third <= second or third >= command_count) return error.InvalidBlockPlan;
-                block_lengths[2] = blockLengthEncoding(third - second) orelse return error.InvalidBlockPlan;
-                block_lengths[3] = blockLengthEncoding(command_count - third) orelse return error.InvalidBlockPlan;
-            } else block_lengths[2] = blockLengthEncoding(command_count - second) orelse return error.InvalidBlockPlan;
-        } else {
-            if (split.third_split != null) return error.InvalidBlockPlan;
-            block_lengths[1] = blockLengthEncoding(command_count - split.split) orelse return error.InvalidBlockPlan;
+        if (split.typeCount() < 2 or split.typeCount() > block_count) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var block_lengths: [command_block_split.max_regions]BlockLengthEncoding = undefined;
+        var previous: usize = 0;
+        for (0..block_count) |region| {
+            const end = if (region + 1 == block_count) command_count else split.boundary(region);
+            if (end <= previous or end > command_count) return error.InvalidBlockPlan;
+            block_lengths[region] = blockLengthEncoding(end - previous) orelse return error.InvalidBlockPlan;
+            previous = end;
         }
         var frequencies: [26]u32 = @splat(0);
         for (block_lengths[0..block_count]) |encoding| frequencies[encoding.symbol] += 1;
@@ -24062,47 +37688,141 @@ const CommandBlockLengthCode = struct {
     }
 };
 
-const CommandBlockSplitHeader = struct {
+const AdaptiveCommandBlockCode = adaptive_block_code.Code;
+
+const LegacyCommandBlockSplitHeader = struct {
     block_count: usize,
-    alphabets: *const [3]command_plan.PrefixAlphabet,
-    lengths: *const [3][704]u4,
+    alphabets: *const [command_block_split.max_regions]command_plan.PrefixAlphabet,
+    lengths: *const [command_block_split.max_regions][704]u4,
     split_code: *const CommandBlockLengthCode,
 };
 
-const DistanceBlockSplitHeader = struct {
-    alphabets: *const [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
-    lengths: *const [2][planned_distance_alphabet_size]u4,
-    split_code: *const TwoBlockLengthCode,
+const AdaptiveCommandBlockSplitHeader = struct {
+    type_count: usize,
+    alphabets: []const command_plan.PrefixAlphabet,
+    lengths: []const [704]u4,
+    split_code: *const AdaptiveCommandBlockCode,
 };
 
+const CommandBlockSplitHeader = union(enum) {
+    legacy: LegacyCommandBlockSplitHeader,
+    adaptive: AdaptiveCommandBlockSplitHeader,
+};
+
+fn LegacyDistanceBlockSplitHeaderFor(comptime distance_capacity: usize) type {
+    return struct {
+        type_count: usize,
+        alphabets: *const [distance_block_split.max_regions]command_plan.PrefixAlphabetFor(distance_capacity),
+        lengths: *const [distance_block_split.max_regions][distance_capacity]u4,
+        split_code: *const DistanceBlockLengthCode,
+    };
+}
+
+fn AdaptiveDistanceBlockSplitHeaderFor(comptime distance_capacity: usize) type {
+    return struct {
+        type_count: usize,
+        alphabets: []const command_plan.PrefixAlphabetFor(distance_capacity),
+        lengths: []const [distance_capacity]u4,
+        split_code: *const adaptive_block_code.Code,
+        context_map: *const identity_context_map.Plan,
+    };
+}
+
+fn DistanceBlockSplitHeaderFor(comptime distance_capacity: usize) type {
+    return union(enum) {
+        legacy: LegacyDistanceBlockSplitHeaderFor(distance_capacity),
+        adaptive: AdaptiveDistanceBlockSplitHeaderFor(distance_capacity),
+    };
+}
+
 fn writeCommandBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWriter, split: ?CommandBlockSplitHeader) Error!void {
-    if (split) |header| {
-        try writeBlockTypeCount(allocator, writer, @intCast(header.block_count));
-        try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, header.block_count + 2, 1);
-        try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
-        try header.split_code.writeLength(allocator, writer, 0);
-    } else try writeBlockTypeCount(allocator, writer, 1);
+    if (split == null) return writeBlockTypeCount(allocator, writer, 1);
+    switch (split.?) {
+        .legacy => |header| {
+            try writeBlockTypeCount(allocator, writer, @intCast(header.block_count));
+            try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, header.block_count + 2, 1);
+            try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
+            try header.split_code.writeLength(allocator, writer, 0);
+        },
+        .adaptive => |header| {
+            try writeBlockTypeCount(allocator, writer, @intCast(header.type_count));
+            try writePrefixSymbolsWithLengths(
+                allocator,
+                writer,
+                header.type_count + 2,
+                &header.split_code.type_alphabet,
+                &header.split_code.type_lengths,
+            );
+            try writePrefixSymbolsWithLengths(
+                allocator,
+                writer,
+                26,
+                &header.split_code.length_alphabet,
+                &header.split_code.length_lengths,
+            );
+            try header.split_code.writeInitialLength(allocator, writer);
+        },
+    }
 }
 
 fn writePlannedCommandTrees(allocator: std.mem.Allocator, writer: *BitWriter, alphabet: *const command_plan.PrefixAlphabet, lengths: *const [704]u4, split: ?CommandBlockSplitHeader) Error!void {
-    if (split) |header| {
-        for (0..header.block_count) |tree|
-            try writePrefixSymbolsWithLengths(allocator, writer, 704, &header.alphabets[tree], &header.lengths[tree]);
-    } else try writePrefixSymbolsWithLengths(allocator, writer, 704, alphabet, lengths);
+    if (split == null) return writePrefixSymbolsWithLengths(allocator, writer, 704, alphabet, lengths);
+    switch (split.?) {
+        .legacy => |header| for (0..header.block_count) |tree|
+            try writePrefixSymbolsWithLengths(allocator, writer, 704, &header.alphabets[tree], &header.lengths[tree]),
+        .adaptive => |header| for (0..header.type_count) |tree|
+            try writePrefixSymbolsWithLengths(allocator, writer, 704, &header.alphabets[tree], &header.lengths[tree]),
+    }
 }
 
-fn writeDistanceBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
-    if (split) |header| {
-        try writeBlockTypeCount(allocator, writer, 2);
-        try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 4, 1);
-        try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
-        try header.split_code.writeLength(allocator, writer, 0);
-    } else try writeBlockTypeCount(allocator, writer, 1);
-}
-
-fn writeDistanceTreeContextMap(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
+fn writeDistanceBlockSwitchHeader(comptime distance_capacity: usize, allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeaderFor(distance_capacity)) Error!void {
     if (split == null) return writeBlockTypeCount(allocator, writer, 1);
-    try writeBlockTypeCount(allocator, writer, 2);
+    switch (split.?) {
+        .legacy => |header| {
+            try writeBlockTypeCount(allocator, writer, @intCast(header.type_count));
+            try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, header.type_count + 2, 1);
+            try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
+            try header.split_code.writeLength(allocator, writer, 0);
+        },
+        .adaptive => |header| {
+            try writeBlockTypeCount(allocator, writer, @intCast(header.type_count));
+            try writePrefixSymbolsWithLengths(
+                allocator,
+                writer,
+                header.type_count + 2,
+                &header.split_code.type_alphabet,
+                &header.split_code.type_lengths,
+            );
+            try writePrefixSymbolsWithLengths(
+                allocator,
+                writer,
+                26,
+                &header.split_code.length_alphabet,
+                &header.split_code.length_lengths,
+            );
+            try header.split_code.writeInitialLength(allocator, writer);
+        },
+    }
+}
+
+fn writeDistanceTreeContextMap(comptime distance_capacity: usize, allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeaderFor(distance_capacity)) Error!void {
+    if (split == null) return writeBlockTypeCount(allocator, writer, 1);
+    switch (split.?) {
+        .adaptive => |header| {
+            try writeBlockTypeCount(allocator, writer, @intCast(header.type_count));
+            return header.context_map.write(allocator, writer);
+        },
+        .legacy => |header| return writeLegacyDistanceTreeContextMap(allocator, writer, header.type_count),
+    }
+}
+
+fn writeLegacyDistanceTreeContextMap(allocator: std.mem.Allocator, writer: *BitWriter, type_count: usize) Error!void {
+    try writeBlockTypeCount(allocator, writer, @intCast(type_count));
+    if (type_count == 3) return writeThreeDistanceBlockContextMap(allocator, writer);
+    if (type_count == 4) return writeFourDistanceBlockContextMap(allocator, writer);
+    if (type_count == 5 or type_count == 6)
+        return writeWideDistanceBlockContextMap(allocator, writer, type_count);
+    if (type_count != 2) return error.InvalidBlockPlan;
     // Eight entries: block type 0 uses tree 0 for all four contexts; block
     // type 1 uses tree 1. With IMTF the latter becomes [1,0,0,0].
     try writer.writeBits(allocator, 1, 1); // use RLE for zeros
@@ -24120,11 +37840,54 @@ fn writeDistanceTreeContextMap(allocator: std.mem.Allocator, writer: *BitWriter,
     try writer.writeBits(allocator, 1, 1); // IMTF
 }
 
-fn writePlannedDistanceTrees(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size), lengths: *const [planned_distance_alphabet_size]u4, split: ?DistanceBlockSplitHeader) Error!void {
-    if (split) |header| {
-        inline for (0..2) |tree|
-            try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, &header.alphabets[tree], &header.lengths[tree]);
-    } else try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, alphabet, lengths);
+fn writeThreeDistanceBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 2, 2); // NSYM = 3
+    try writer.writeBits(allocator, 0, alphabetBits(3));
+    try writer.writeBits(allocator, 1, alphabetBits(3));
+    try writer.writeBits(allocator, 2, alphabetBits(3));
+    for (0..3) |tree|
+        for (0..4) |_| try writeThreeSymbolContextMapCode(allocator, writer, @intCast(tree));
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeFourDistanceBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 3, 2); // NSYM = 4
+    for (0..4) |symbol| try writer.writeBits(allocator, symbol, alphabetBits(4));
+    try writer.writeBits(allocator, 0, 1); // balanced four-symbol tree
+    const codes = [4]u2{ 0, 2, 1, 3 };
+    for (0..4) |tree|
+        for (0..4) |_| try writer.writeBits(allocator, codes[tree], 2);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeWideDistanceBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter, type_count: usize) Error!void {
+    if (type_count != 5 and type_count != 6) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    const lengths: [6]u4 = if (type_count == 5)
+        .{ 2, 2, 2, 3, 3, 0 }
+    else
+        .{ 2, 2, 3, 3, 3, 3 };
+    try complex_prefix.write(allocator, writer, type_count, &lengths);
+    const encoder = try huffman.HuffmanTable(6).Encoder.init(&lengths);
+    for (0..type_count) |tree|
+        for (0..4) |_| try writer.writeHuffmanBits(allocator, encoder.codes[tree], encoder.bits[tree]);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writePlannedDistanceTrees(comptime distance_capacity: usize, allocator: std.mem.Allocator, writer: *BitWriter, parameters: encoder_distance.Parameters, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity), lengths: *const [distance_capacity]u4, split: ?DistanceBlockSplitHeaderFor(distance_capacity)) Error!void {
+    const format: encoder_distance.Format = if (distance_capacity == large_max_distance_alphabet_size) .large_window else .standard;
+    const active_size = parameters.activeAlphabetSize(format);
+    if (split == null) return writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, alphabet, lengths);
+    switch (split.?) {
+        .legacy => |header| for (0..header.type_count) |tree|
+            try writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
+        .adaptive => |header| for (0..header.type_count) |tree|
+            try writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
+    }
 }
 
 fn blockLengthEncoding(len: usize) ?BlockLengthEncoding {
@@ -24137,39 +37900,185 @@ fn blockLengthEncoding(len: usize) ?BlockLengthEncoding {
     return null;
 }
 
-fn writePlannedCompressedHeaderTwoLiteralBlocks(
+fn writePlannedCompressedHeaderLiteralBlocks(
+    comptime distance_capacity: usize,
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
-    literal_lengths: *const [2][256]u4,
-    split_code: *const TwoBlockLengthCode,
-    ndirect: u7,
+    literal_alphabets: *const [literal_block_split.max_regions]command_plan.PrefixAlphabetFor(256),
+    literal_lengths: *const [literal_block_split.max_regions][256]u4,
+    split_code: *const LiteralBlockLengthCode,
+    distance_parameters: encoder_distance.Parameters,
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
-    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
-    distance_split: ?DistanceBlockSplitHeader,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_split: ?DistanceBlockSplitHeaderFor(distance_capacity),
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
-    distance_lengths: *const [planned_distance_alphabet_size]u4,
+    distance_lengths: *const [distance_capacity]u4,
 ) Error!void {
-    try writeBlockTypeCount(allocator, writer, 2);
-    // Types are 0 then 1, so the implicit next-type code is the only symbol.
-    try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 4, 1);
+    try writeBlockTypeCount(allocator, writer, @intCast(split_code.type_count));
+    // Production literal regions advance in type order and may wrap to zero,
+    // so the implicit next-type code is the only symbol.
+    try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, split_code.type_count + 2, 1);
     try writePrefixSymbolsWithLengths(allocator, writer, 26, &split_code.alphabet, &split_code.lengths);
     try split_code.writeLength(allocator, writer, 0);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
-    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, ndirect, 4);
-    try writer.writeBits(allocator, 0, 2); // literal context mode, block 0
-    try writer.writeBits(allocator, 0, 2); // literal context mode, block 1
-    try writeBlockTypeCount(allocator, writer, 2);
-    try writeTwoLiteralBlockContextMap(allocator, writer);
-    try writeDistanceTreeContextMap(allocator, writer, distance_split);
-    inline for (0..2) |tree|
+    try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
+    try writer.writeBits(allocator, distance_parameters.npostfix, 2);
+    try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
+    for (0..split_code.type_count) |_| try writer.writeBits(allocator, 0, 2); // literal context modes
+    try writeBlockTypeCount(allocator, writer, @intCast(split_code.type_count));
+    try writeLiteralBlockContextMap(allocator, writer, split_code.type_count);
+    try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
+    for (0..split_code.type_count) |tree|
         try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+}
+
+fn writePlannedCompressedHeaderAdaptiveLiteralBlocks(
+    comptime distance_capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    split: *const block_split_plan.Plan,
+    literal_alphabets: []const command_plan.PrefixAlphabetFor(256),
+    literal_lengths: []const [256]u4,
+    split_code: *const adaptive_block_code.Code,
+    context_map: *const identity_context_map.Plan,
+    distance_parameters: encoder_distance.Parameters,
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    command_split: ?CommandBlockSplitHeader,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_split: ?DistanceBlockSplitHeaderFor(distance_capacity),
+    distance_alphabet_size: usize,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [distance_capacity]u4,
+) Error!void {
+    if (split.type_count < 2 or literal_alphabets.len != split.type_count or
+        literal_lengths.len != split.type_count or context_map.tree_count != split.type_count or
+        context_map.contexts_per_type != 64)
+        return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, @intCast(split.type_count));
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        @as(usize, split.type_count) + 2,
+        &split_code.type_alphabet,
+        &split_code.type_lengths,
+    );
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        26,
+        &split_code.length_alphabet,
+        &split_code.length_lengths,
+    );
+    try split_code.writeInitialLength(allocator, writer);
+    try writeCommandBlockSwitchHeader(allocator, writer, command_split);
+    try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
+    try writer.writeBits(allocator, distance_parameters.npostfix, 2);
+    try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
+    for (0..split.type_count) |_| try writer.writeBits(allocator, 0, 2);
+    try writeBlockTypeCount(allocator, writer, @intCast(split.type_count));
+    try context_map.write(allocator, writer);
+    try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
+    for (0..split.type_count) |tree|
+        try writePrefixSymbolsWithLengths(
+            allocator,
+            writer,
+            256,
+            &literal_alphabets[tree],
+            &literal_lengths[tree],
+        );
+    try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
+    try writePlannedDistanceTrees(
+        distance_capacity,
+        allocator,
+        writer,
+        distance_parameters,
+        distance_alphabet_size,
+        distance_alphabet,
+        distance_lengths,
+        distance_split,
+    );
+}
+
+fn writePlannedCompressedHeaderAdaptiveLiteralContexts(
+    comptime distance_capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    split: *const block_split_plan.Plan,
+    joint: *const literal_entropy_plan.Plan,
+    literal_alphabets: []const command_plan.PrefixAlphabetFor(256),
+    literal_lengths: []const [256]u4,
+    split_code: *const adaptive_block_code.Code,
+    context_map: *const dynamic_context_map.Plan,
+    distance_parameters: encoder_distance.Parameters,
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    command_split: ?CommandBlockSplitHeader,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_split: ?DistanceBlockSplitHeaderFor(distance_capacity),
+    distance_alphabet_size: usize,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [distance_capacity]u4,
+) Error!void {
+    if (joint.block_plan.type_count != split.type_count or
+        literal_alphabets.len != joint.tree_count or literal_lengths.len != joint.tree_count or
+        context_map.tree_count != joint.tree_count or context_map.map_len != joint.context_map.len)
+        return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, @intCast(split.type_count));
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        @as(usize, split.type_count) + 2,
+        &split_code.type_alphabet,
+        &split_code.type_lengths,
+    );
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        26,
+        &split_code.length_alphabet,
+        &split_code.length_lengths,
+    );
+    try split_code.writeInitialLength(allocator, writer);
+    try writeCommandBlockSwitchHeader(allocator, writer, command_split);
+    try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
+    try writer.writeBits(allocator, distance_parameters.npostfix, 2);
+    try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
+    for (joint.context_modes) |mode| try writer.writeBits(allocator, mode, 2);
+    try writeBlockTypeCount(allocator, writer, joint.tree_count);
+    try context_map.write(allocator, writer);
+    try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
+    for (0..joint.tree_count) |tree|
+        try writePrefixSymbolsWithLengths(
+            allocator,
+            writer,
+            256,
+            &literal_alphabets[tree],
+            &literal_lengths[tree],
+        );
+    try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
+    try writePlannedDistanceTrees(
+        distance_capacity,
+        allocator,
+        writer,
+        distance_parameters,
+        distance_alphabet_size,
+        distance_alphabet,
+        distance_lengths,
+        distance_split,
+    );
+}
+
+fn writeLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter, type_count: usize) Error!void {
+    return switch (type_count) {
+        2 => writeTwoLiteralBlockContextMap(allocator, writer),
+        3 => writeLiteralBlockSwitchThreeTypesContextMap(allocator, writer),
+        4 => writeFourLiteralBlockContextMap(allocator, writer),
+        5, 6 => writeWideLiteralBlockContextMap(allocator, writer, type_count),
+        else => error.InvalidBlockPlan,
+    };
 }
 
 fn writeTwoLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
@@ -24191,60 +38100,103 @@ fn writeTwoLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWrit
     try writer.writeBits(allocator, 1, 1); // IMTF
 }
 
+fn writeFourLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 3, 2); // NSYM = 4
+    for (0..4) |symbol| try writer.writeBits(allocator, symbol, alphabetBits(4));
+    try writer.writeBits(allocator, 0, 1); // balanced four-symbol tree
+    const codes = [4]u2{ 0, 2, 1, 3 };
+    for (0..4) |tree|
+        for (0..64) |_| try writer.writeBits(allocator, codes[tree], 2);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeWideLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter, type_count: usize) Error!void {
+    if (type_count != 5 and type_count != 6) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    const lengths: [6]u4 = if (type_count == 5)
+        .{ 2, 2, 2, 3, 3, 0 }
+    else
+        .{ 2, 2, 3, 3, 3, 3 };
+    try complex_prefix.write(allocator, writer, type_count, &lengths);
+    const encoder = try huffman.HuffmanTable(6).Encoder.init(&lengths);
+    for (0..type_count) |tree|
+        for (0..64) |_| try writer.writeHuffmanBits(allocator, encoder.codes[tree], encoder.bits[tree]);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
 fn writePlannedCompressedHeader(
+    comptime distance_capacity: usize,
     allocator: std.mem.Allocator,
     writer: *BitWriter,
+    literal_context_mode: u2,
     literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
-    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
-    distance_split: ?DistanceBlockSplitHeader,
-    ndirect: u7,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_split: ?DistanceBlockSplitHeaderFor(distance_capacity),
+    distance_parameters: encoder_distance.Parameters,
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
     command_lengths: *const [704]u4,
-    distance_lengths: *const [planned_distance_alphabet_size]u4,
+    distance_lengths: *const [distance_capacity]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
-    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, ndirect, 4);
-    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
+    try writer.writeBits(allocator, distance_parameters.npostfix, 2);
+    try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
+    try writer.writeBits(allocator, literal_context_mode, 2);
     try writeBlockTypeCount(allocator, writer, 1);
-    try writeDistanceTreeContextMap(allocator, writer, distance_split);
+    try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
     try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
-fn writePlannedCompressedHeaderTwoLiteralContexts(
+fn writePlannedCompressedHeaderLiteralContexts(
+    comptime distance_capacity: usize,
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
-    literal_lengths: *const [2][256]u4,
-    context_cutoff: u6,
-    ndirect: u7,
+    literal_alphabets: *const [literal_context_split.max_trees]command_plan.PrefixAlphabetFor(256),
+    literal_lengths: *const [literal_context_split.max_trees][256]u4,
+    context_candidate: literal_context_split.Candidate,
+    distance_parameters: encoder_distance.Parameters,
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
-    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
-    distance_split: ?DistanceBlockSplitHeader,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_split: ?DistanceBlockSplitHeaderFor(distance_capacity),
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
-    distance_lengths: *const [planned_distance_alphabet_size]u4,
+    distance_lengths: *const [distance_capacity]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeCommandBlockSwitchHeader(allocator, writer, command_split);
-    try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
-    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, ndirect, 4);
-    try writer.writeBits(allocator, literal_context.mode_utf8, 2);
-    try writeBlockTypeCount(allocator, writer, 2);
-    try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
-    try writeDistanceTreeContextMap(allocator, writer, distance_split);
-    inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
+    try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
+    try writer.writeBits(allocator, distance_parameters.npostfix, 2);
+    try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
+    try writer.writeBits(allocator, context_candidate.mode, 2);
+    try writeBlockTypeCount(allocator, writer, context_candidate.tree_count);
+    try writeLiteralContextMap(allocator, writer, context_candidate);
+    try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
+    for (0..context_candidate.tree_count) |tree|
+        try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+}
+
+fn writeLiteralContextMap(allocator: std.mem.Allocator, writer: *BitWriter, candidate: literal_context_split.Candidate) Error!void {
+    if (candidate.tree_count < 2 or candidate.tree_count > literal_context_split.max_trees)
+        return error.InvalidBlockPlan;
+    var used: [literal_context_split.max_trees]bool = @splat(false);
+    for (candidate.context_map) |tree| {
+        if (tree >= candidate.tree_count) return error.InvalidBlockPlan;
+        used[tree] = true;
+    }
+    for (used[0..candidate.tree_count]) |is_used| if (!is_used) return error.InvalidBlockPlan;
+    const plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
+    try context_map_encoder.write(allocator, writer, &plan);
 }
 
 fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
@@ -24253,6 +38205,22 @@ fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Err
 
 fn writeUtf8SuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
     if (cutoff < 32 or cutoff > 63) return error.InvalidBlockPlan;
+    return writeLiteralSuffixContextMap(allocator, writer, cutoff);
+}
+
+fn writeLiteralSuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
+    if (cutoff == 0 or cutoff > 63) return error.InvalidBlockPlan;
+    if (cutoff < 32) {
+        try writer.writeBits(allocator, 0, 1); // RLEMAX = 0.
+        try writer.writeBits(allocator, 1, 2); // Simple prefix.
+        try writer.writeBits(allocator, 1, 2); // NSYM = 2.
+        try writer.writeBits(allocator, 0, alphabetBits(2));
+        try writer.writeBits(allocator, 1, alphabetBits(2));
+        for (0..cutoff) |_| try writer.writeBits(allocator, 0, 1);
+        for (cutoff..64) |_| try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 0, 1); // IMTF = false.
+        return;
+    }
     try writer.writeBits(allocator, 1, 1); // Use zero-run RLE.
     try writer.writeBits(allocator, 5, 4); // RLEMAX = 6.
     try writer.writeBits(allocator, 1, 2); // Simple prefix.
@@ -24267,11 +38235,15 @@ fn writeUtf8SuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, c
 }
 
 fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
+    return writePrefixSymbolsWithAlphabetSizes(allocator, writer, alphabet_size, alphabet_size, alphabet, lengths);
+}
+
+fn writePrefixSymbolsWithAlphabetSizes(allocator: std.mem.Allocator, writer: *BitWriter, active_size: usize, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
         var highest: usize = 0;
         for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
-        return complex_prefix.writeWithStopIndex(allocator, writer, alphabet_size, lengths, highest + 1);
+        return complex_prefix.writeWithStopIndex(allocator, writer, active_size, lengths, highest + 1);
     }
     try writer.writeBits(allocator, 1, 2);
     try writer.writeBits(allocator, alphabet.len - 1, 2);

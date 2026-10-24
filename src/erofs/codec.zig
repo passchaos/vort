@@ -4,12 +4,19 @@ const deflate = @import("../deflate.zig");
 const lzma = @import("../lzma.zig");
 const zstd = @import("../zstd.zig");
 const format = @import("format.zig");
+const lz4_codec = @import("codec/lz4.zig");
+const prefix_codec = @import("codec/prefix.zig");
+pub const DecodeOptions = @import("codec/options.zig").DecodeOptions;
 
 pub const Error = core.Error || deflate.Error || lzma.Error || zstd.Error ||
     std.mem.Allocator.Error || error{
     InvalidErofs,
     UnsupportedErofsCompression,
 };
+
+test {
+    _ = @import("codec/tests.zig");
+}
 
 pub fn decodeExtentAlloc(
     allocator: std.mem.Allocator,
@@ -18,16 +25,19 @@ pub fn decodeExtentAlloc(
     expected_size: usize,
     zero_padding: bool,
 ) Error![]u8 {
-    var input_offset: usize = 0;
-    if (zero_padding or algorithm != .lz4)
-        while (input_offset < input.len and input[input_offset] == 0) : (input_offset += 1) {};
-    if (input_offset == input.len) return error.InvalidErofs;
-    const payload = input[input_offset..];
+    return decodeExtentWithOptionsAlloc(allocator, algorithm, input, expected_size, zero_padding, false, .{});
+}
+
+pub fn decodeExtentWithOptionsAlloc(allocator: std.mem.Allocator, algorithm: format.Compression, input: []const u8, expected_size: usize, zero_padding: bool, partial: bool, options: DecodeOptions) Error![]u8 {
+    if (expected_size == 0 and partial) return allocator.alloc(u8, 0);
+    const payload = try payloadInput(input, algorithm, zero_padding);
+    if (partial or (algorithm == .deflate and options.deflate_max_distance != 32768))
+        return prefix_codec.decodeWithOptionsAlloc(allocator, algorithm, payload, expected_size, partial, options);
     return switch (algorithm) {
         .lz4 => blk: {
             const output = try allocator.alloc(u8, expected_size);
             errdefer allocator.free(output);
-            _ = try decodeLz4Into(payload, output, false);
+            _ = try lz4_codec.decodeWithDistance(payload, output, false, false, options.lz4_max_distance);
             break :blk output;
         },
         .deflate => blk: {
@@ -41,6 +51,8 @@ pub fn decodeExtentAlloc(
             break :blk result.bytes;
         },
         .zstandard => blk: {
+            const header = try zstd.inspectNativeFrameHeader(payload);
+            if (header.window_size > options.zstandard_max_window_size) return error.InvalidErofs;
             var iterator = try zstd.NativeFrameBlockIterator.init(payload);
             while (try iterator.next()) |_| {}
             const output = try zstd.decodeFrameAllocExactSize(
@@ -54,82 +66,26 @@ pub fn decodeExtentAlloc(
             allocator,
             payload,
             expected_size,
-            8 * 1024 * 1024,
+            options.lzma_dictionary_size,
             expected_size,
         ),
     };
 }
 
-pub fn decodeLz4Into(
-    input: []const u8,
-    output: []u8,
-    zero_padding: bool,
-) Error!usize {
-    var input_offset: usize = 0;
-    if (zero_padding)
-        while (input_offset < input.len and input[input_offset] == 0) : (input_offset += 1) {};
-    if (input_offset == input.len) return error.InvalidErofs;
-    var output_offset: usize = 0;
-    while (input_offset < input.len) {
-        const token = input[input_offset];
-        input_offset += 1;
-        var literal_len: usize = token >> 4;
-        if (literal_len == 15)
-            literal_len = std.math.add(
-                usize,
-                literal_len,
-                try readLength(input, &input_offset),
-            ) catch return error.IntegerOverflow;
-        const literal_end = try checkedInputEnd(input_offset, literal_len, input.len);
-        const output_literal_end = try checkedOutputEnd(output_offset, literal_len, output.len);
-        @memcpy(output[output_offset..output_literal_end], input[input_offset..literal_end]);
-        input_offset = literal_end;
-        output_offset = output_literal_end;
-        if (output_offset == output.len) return output_offset;
-        if (input.len - input_offset < 2) return error.TruncatedFrame;
-        const distance: usize = std.mem.readInt(
-            u16,
-            input[input_offset..][0..2],
-            .little,
-        );
-        input_offset += 2;
-        if (distance == 0 or distance > output_offset) return error.InvalidMatch;
-        var match_len: usize = (token & 0x0f) + 4;
-        if (token & 0x0f == 15)
-            match_len = std.math.add(
-                usize,
-                match_len,
-                try readLength(input, &input_offset),
-            ) catch return error.IntegerOverflow;
-        const match_end = try checkedOutputEnd(output_offset, match_len, output.len);
-        while (output_offset < match_end) : (output_offset += 1)
-            output[output_offset] = output[output_offset - distance];
-        if (output_offset == output.len) return output_offset;
-    }
-    return error.SizeMismatch;
+pub fn decodeLz4Into(input: []const u8, output: []u8, zero_padding: bool) Error!usize {
+    return lz4_codec.decode(input, output, zero_padding, false);
 }
 
-fn readLength(input: []const u8, offset: *usize) Error!usize {
-    var length: usize = 0;
-    while (true) {
-        if (offset.* >= input.len) return error.TruncatedFrame;
-        const byte = input[offset.*];
-        offset.* += 1;
-        length = std.math.add(usize, length, byte) catch return error.IntegerOverflow;
-        if (byte != 255) return length;
-    }
+pub fn decodePrefixExtentAlloc(allocator: std.mem.Allocator, algorithm: format.Compression, input: []const u8, size: usize, zero_padding: bool) Error![]u8 {
+    return decodeExtentWithOptionsAlloc(allocator, algorithm, input, size, zero_padding, true, .{});
 }
 
-fn checkedInputEnd(start: usize, length: usize, limit: usize) Error!usize {
-    const end = std.math.add(usize, start, length) catch return error.IntegerOverflow;
-    if (end > limit) return error.TruncatedFrame;
-    return end;
-}
-
-fn checkedOutputEnd(start: usize, length: usize, limit: usize) Error!usize {
-    const end = std.math.add(usize, start, length) catch return error.IntegerOverflow;
-    if (end > limit) return error.OutputTooSmall;
-    return end;
+fn payloadInput(input: []const u8, algorithm: format.Compression, zero_padding: bool) Error![]const u8 {
+    var offset: usize = 0;
+    if (zero_padding or algorithm != .lz4)
+        while (offset < input.len and input[offset] == 0) : (offset += 1) {};
+    if (offset == input.len) return error.InvalidErofs;
+    return input[offset..];
 }
 
 test "EROFS decodes zero-padded MicroLZMA extents" {

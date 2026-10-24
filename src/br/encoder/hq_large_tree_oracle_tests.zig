@@ -1,0 +1,158 @@
+const std = @import("std");
+const tree = @import("hq_tree.zig");
+const scalar = @import("hq_large_tree_oracle_tests/scalar.zig");
+const WorkingAllocator = @import("../../io/working_allocator.zig").WorkingAllocator;
+const allocator = std.testing.allocator;
+
+test "Brotli LargeWindow tree tiny thirty bit source preserves auxiliary anchors across rebind" {
+    const first = "abXabcY";
+    const second = "abQabcZ";
+    const frame_offset: u64 = (@as(u64, 1) << 32) + 57;
+    const options: tree.HqOptions = .{ .search_depth = 64, .nice_len = 128 };
+    var profile: tree.HqProfile = .{};
+    var matcher = try tree.Matcher.init(allocator, try tree.Source.initWithFormat("", first, 30, frame_offset, .large_window), options, &profile);
+    defer matcher.deinit(allocator);
+    try matcher.advanceTo(first.len);
+    matcher.detachSource();
+    try matcher.rebindSource(allocator, try tree.Source.initWithFormat(first, second, 30, frame_offset + first.len, .large_window), options, &profile);
+    try std.testing.expect(matcher.workingBytes() < 1024 * 1024);
+    try std.testing.expectEqual(@as(u64, 0), profile.history_seed_positions);
+    try std.testing.expectEqual(frame_offset + first.len, matcher.metadata.input_begin);
+    try std.testing.expectEqual(frame_offset, matcher.metadata.begin);
+    const two = try matcher.getMatches();
+    try scalar.validate(first, second, 0, (@as(usize, 1) << 30) - 16, two.slice());
+    try std.testing.expectEqual(@as(usize, 2), two.best().length);
+    try std.testing.expectEqual(@as(usize, 4), two.best().distance);
+    try matcher.advanceTo(3);
+    const three = try matcher.getMatches();
+    try scalar.validate(first, second, 3, (@as(usize, 1) << 30) - 16, three.slice());
+    try std.testing.expectEqual(@as(usize, 3), three.best().length);
+    try std.testing.expectEqual(@as(usize, 7), three.best().distance);
+    try std.testing.expect(profile.short_hash_probes != 0);
+}
+
+// This is the one designated actual >16 MiB BT fixture. Run once in
+// ReleaseFast: the ordinary Debug narrow target selects only the tiny case.
+test "Brotli LargeWindow tree real seventeen MiB history reaches far key and stitches without reseeding" {
+    const history_len = 17 * 1024 * 1024 + 57;
+    const first_len = 512;
+    const window25 = (@as(usize, 1) << 25) - 16;
+    const window24 = (@as(usize, 1) << 24) - 16;
+    const frame_offset: u64 = (@as(u64, 1) << 32) + history_len + 17;
+    var key: [192]u8 = undefined;
+    @memcpy(key[0..4], &[_]u8{ 1, 2, 3, 4 });
+    scalar.fill(key[4..], 0xa3419738);
+    var tail: [127]u8 = undefined;
+    @memcpy(tail[0..4], &[_]u8{ 5, 6, 7, 8 });
+    scalar.fill(tail[4..], 0x713ab10d);
+    var first: [first_len]u8 = @splat(224);
+    @memcpy(first[0..key.len], &key);
+    first[key.len] = 254;
+    @memcpy(first[first.len - tail.len ..], &tail);
+    var second: [256]u8 = undefined;
+    for (&second, 0..) |*byte, i| byte.* = tail[i % tail.len];
+    const storage = try allocator.alloc(u8, history_len + first.len);
+    defer allocator.free(storage);
+    @memset(storage[0..history_len], 255);
+    @memcpy(storage[0..key.len], &key);
+    // The closest 2/3-byte anchors match only three bytes. Depth one forces
+    // the full far copy through the unique four-byte BT root, not aux3 replay.
+    for (0..32) |i| {
+        const offset = history_len - 128 + i * 4;
+        @memcpy(storage[offset..][0..3], key[0..3]);
+        storage[offset + 3] = 255;
+    }
+    @memcpy(storage[history_len..], &first);
+    const history = storage[0..history_len];
+    const large = try tree.Source.initWithFormat(history, &first, 25, frame_offset, .large_window);
+    try std.testing.expectEqual(history_len, large.history.len);
+    try std.testing.expectEqual(window25, large.window_len);
+    try std.testing.expectEqual(@as(usize, 192), scalar.length(history, &first, 0, history_len, window25));
+    try std.testing.expect(history_len > window24);
+    const standard = try tree.Source.init(history, &first, 24, frame_offset);
+    try std.testing.expectEqual(window24, standard.history.len);
+    try std.testing.expectEqual(@as(usize, 0), scalar.length(standard.history, &first, 0, history_len, standard.window_len));
+    try std.testing.expectError(error.InvalidBlockPlan, tree.Source.init(history, &first, 25, frame_offset));
+    var invalid_standard = standard;
+    invalid_standard.history = history;
+    try std.testing.expectError(error.InvalidBlockPlan, tree.requiredWorkingMemory(invalid_standard, tree.HqOptions{}));
+    const expected_bytes = 3 * 65536 * 4 + (@as(usize, 1) << 25) * 16 + 3 * 2 * @sizeOf(usize);
+    const graph_bytes = 2 * expected_bytes;
+    var budget = WorkingAllocator.init(allocator, graph_bytes);
+    const working_allocator = budget.allocator();
+    const options: tree.HqOptions = .{ .search_depth = 1, .nice_len = 16, .max_working_memory = expected_bytes };
+    try std.testing.expectEqual(expected_bytes, try tree.requiredWorkingMemory(large, options));
+    var profile: tree.HqProfile = .{};
+    var matcher = try tree.Matcher.init(working_allocator, large, options, &profile);
+    defer matcher.deinit(working_allocator);
+    try std.testing.expectEqual(expected_bytes, matcher.workingBytes());
+    try std.testing.expectEqual(expected_bytes, budget.live);
+    try std.testing.expectEqual(expected_bytes, budget.peak);
+    try std.testing.expectEqual(expected_bytes, profile.peak_working_memory);
+    try std.testing.expectEqual(@as(u64, history_len), profile.history_seed_positions);
+    try std.testing.expectEqual(@as(u64, history_len), profile.indexed_positions);
+    try std.testing.expectEqual(frame_offset, matcher.metadata.input_begin);
+    try std.testing.expectEqual(frame_offset - history_len, matcher.metadata.begin);
+    const tree_nodes_before = profile.tree_nodes;
+    const far = try matcher.getMatches();
+    try scalar.validate(history, &first, 0, window25, far.slice());
+    try std.testing.expectEqual(@as(usize, 192), far.best().length);
+    try std.testing.expectEqual(@as(usize, history_len), far.best().distance);
+    try std.testing.expect(profile.tree_nodes > tree_nodes_before);
+    const far_distance = far.best().distance;
+    const next = try tree.Source.initWithFormat(storage, &second, 25, frame_offset + first.len, .large_window);
+    var cloned_continuation: [3]tree.Match = undefined;
+    var cloned_count: usize = 0;
+    var failing = std.testing.FailingAllocator.init(working_allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.WorkingMemoryLimitExceeded, matcher.fork(failing.allocator(), graph_bytes - 1, null));
+    try std.testing.expectEqual(@as(usize, 0), failing.alloc_index);
+    try std.testing.expectEqual(expected_bytes, budget.live);
+    try std.testing.expectEqual(@as(usize, 1), matcher.position());
+    var clone_profile: tree.HqProfile = .{};
+    {
+        var clone = try matcher.fork(working_allocator, graph_bytes, &clone_profile);
+        defer clone.deinit(working_allocator);
+        try std.testing.expectEqual(graph_bytes, budget.live);
+        try std.testing.expectEqual(graph_bytes, budget.peak);
+        try std.testing.expectEqual(graph_bytes, clone_profile.peak_working_memory);
+        try std.testing.expectEqual(expected_bytes, clone.workingBytes());
+        try std.testing.expect(clone.nodes.ptr != matcher.nodes.ptr and clone.heads2.ptr != matcher.heads2.ptr and clone.heads3.ptr != matcher.heads3.ptr and clone.heads4.ptr != matcher.heads4.ptr and clone.candidates.ptr != matcher.candidates.ptr);
+        try std.testing.expectEqualDeep(far.slice(), clone.candidates[0..clone.candidate_count]);
+        const copied = try clone.getMatches();
+        try scalar.validate(history, &first, 1, window25, copied.slice());
+        try std.testing.expectEqual(@as(usize, key.len - 1), copied.best().length);
+        try std.testing.expectEqual(@as(usize, history_len), copied.best().distance);
+        try std.testing.expectEqual(@as(usize, 1), matcher.position());
+        try std.testing.expectEqual(@as(usize, 192), far.best().length);
+        try clone.advanceTo(first.len);
+        clone.detachSource();
+        try clone.rebindSource(working_allocator, next, options, &clone_profile);
+        const cloned = try clone.getMatches();
+        try scalar.validate(storage, &second, 0, window25, cloned.slice());
+        try std.testing.expectEqual(@as(usize, second.len), cloned.best().length);
+        try std.testing.expectEqual(@as(usize, 127), cloned.best().distance);
+        try std.testing.expectEqual(@as(u64, 0), clone_profile.history_seed_positions);
+        try std.testing.expectEqual(@as(u64, 127), clone_profile.stitch_positions);
+        cloned_count = cloned.slice().len;
+        @memcpy(cloned_continuation[0..cloned_count], cloned.slice());
+        try std.testing.expectEqual(@as(usize, 1), matcher.position());
+    }
+    try std.testing.expectEqual(expected_bytes, budget.live);
+    try matcher.advanceTo(first.len);
+    matcher.detachSource();
+    const seeded = profile.history_seed_positions;
+    const indexed = profile.indexed_positions;
+    const stitched = profile.stitch_positions;
+    try matcher.rebindSource(working_allocator, next, options, &profile);
+    try std.testing.expectEqual(seeded, profile.history_seed_positions);
+    try std.testing.expectEqual(@as(u64, 127), profile.stitch_positions - stitched);
+    try std.testing.expectEqual(@as(u64, 127), profile.indexed_positions - indexed);
+    try std.testing.expectEqual(expected_bytes, matcher.workingBytes());
+    const continued = try matcher.getMatches();
+    try scalar.validate(storage, &second, 0, window25, continued.slice());
+    try std.testing.expectEqual(@as(usize, second.len), continued.best().length);
+    try std.testing.expectEqual(@as(usize, 127), continued.best().distance);
+    try std.testing.expectEqualDeep(cloned_continuation[0..cloned_count], continued.slice());
+    try std.testing.expectEqual(graph_bytes, budget.peak);
+    std.debug.print("LARGE_TREE history={d} far_distance={d} far_copy=192 cycle={d} matcher_bytes={d} seed_positions={d} rebind_stitch=127 continued_distance={d} continued_copy={d} absolute_frame_offset={d} fork_graph_peak={d} fork_below_allocations={d}\n", .{ history_len, far_distance, matcher.cycle, matcher.workingBytes(), profile.history_seed_positions, continued.best().distance, continued.best().length, frame_offset, budget.peak, failing.alloc_index });
+}

@@ -94,6 +94,16 @@ pub fn numOffsetSlots(uncompressed_size: usize) usize {
     return findSlot(@intCast(uncompressed_size - 1), &offset_slot_base);
 }
 
+pub fn offsetSlot(value: u32) error{InvalidLzms}!usize {
+    if (value == 0 or value > max_match_offset) return error.InvalidLzms;
+    return findSlot(value, &offset_slot_base) - 1;
+}
+
+pub fn lengthSlot(value: u32) error{InvalidLzms}!usize {
+    if (value < 2 or value > max_match_length) return error.InvalidLzms;
+    return findSlot(value, &length_slot_base) - 1;
+}
+
 fn findSlot(value: u32, bases: []const u32) usize {
     var low: usize = 0;
     var high = bases.len - 2;

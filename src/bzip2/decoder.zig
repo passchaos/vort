@@ -2,6 +2,8 @@ const std = @import("std");
 const core = @import("../core.zig");
 const bit_reader = @import("bit_reader.zig");
 const bzip2_crc = @import("crc.zig");
+const inverse_bwt = @import("inverse_bwt.zig");
+const output_cursor = @import("output_cursor.zig");
 
 pub const Error = core.Error || error{
     InvalidBzip2Header,
@@ -207,6 +209,103 @@ pub fn decodedSizeConcatenatedLimited(
     return sink.len();
 }
 
+pub const IncrementalPart = union(enum) {
+    block: struct {
+        next_bit_offset: usize,
+        crc32: u32,
+    },
+    end: struct {
+        next_bit_offset: usize,
+        combined_crc32: u32,
+    },
+};
+
+pub const IncrementalCursorPart = union(enum) {
+    block: struct { next_bit_offset: usize, crc32: u32, decoded_len: usize, cursor: output_cursor.Cursor },
+    end: struct { next_bit_offset: usize, combined_crc32: u32 },
+};
+
+/// Validate one buffered block into bounded transformed/permutation storage.
+/// No plaintext is materialized; the numeric cursor must be drained while
+/// `transformed` and `links` remain unchanged.
+pub fn decodeIncrementalCursorPart(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    bit_offset: usize,
+    block_limit: usize,
+    max_decoded_block_len: usize,
+    transformed: *std.ArrayList(u8),
+    links: *std.ArrayList(u32),
+) !IncrementalCursorPart {
+    const input_bits = std.math.mul(usize, input.len, 8) catch return error.IntegerOverflow;
+    if (bit_offset > input_bits) return error.TruncatedFrame;
+    var reader = bit_reader.BitReader.init(input);
+    reader.bit_offset = bit_offset;
+    const marker = try reader.readMarker();
+    if (marker == end_magic) {
+        const combined_crc32 = try reader.readBits(32);
+        reader.alignToByte();
+        return .{ .end = .{ .next_bit_offset = reader.bit_offset, .combined_crc32 = combined_crc32 } };
+    }
+    if (marker != block_magic) return error.InvalidBzip2Stream;
+    if (block_limit == 0 or block_limit > 900_000) return error.InvalidBzip2Header;
+    const stored_crc = try reader.readBits(32);
+    const randomized = try reader.readBit() != 0;
+    const original_pointer = try reader.readBits(24);
+    transformed.clearRetainingCapacity();
+    links.clearRetainingCapacity();
+    try decodeBlock(allocator, &reader, transformed, block_limit);
+    if (transformed.items.len == 0 or original_pointer >= transformed.items.len) return error.InvalidBzip2Stream;
+    try links.ensureTotalCapacityPrecise(allocator, transformed.items.len);
+    links.items.len = transformed.items.len;
+    const position = try inverse_bwt.prepare(transformed.items, original_pointer, links.items);
+    const cursor = output_cursor.Cursor.init(position, transformed.items.len, randomized);
+    const summary = try output_cursor.summarize(cursor, transformed.items, links.items, max_decoded_block_len);
+    if (summary.crc32 != stored_crc) return error.ChecksumMismatch;
+    return .{ .block = .{ .next_bit_offset = reader.bit_offset, .crc32 = summary.crc32, .decoded_len = summary.length, .cursor = cursor } };
+}
+
+/// Decode one block or end marker from a buffered Bzip2 member body. The bit
+/// offset and returned offset are relative to `input`; transformed and decoded
+/// scratch are caller-owned so retries after split input retain their capacity.
+/// Decoded bytes are published in `decoded` only after the block CRC succeeds.
+pub fn decodeIncrementalPart(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    bit_offset: usize,
+    block_limit: usize,
+    max_decoded_block_len: usize,
+    transformed: *std.ArrayList(u8),
+    decoded: *std.ArrayList(u8),
+) !IncrementalPart {
+    decoded.clearRetainingCapacity();
+    errdefer decoded.clearRetainingCapacity();
+    var links: std.ArrayList(u32) = .empty;
+    defer links.deinit(allocator);
+    const part = try decodeIncrementalCursorPart(allocator, input, bit_offset, block_limit, max_decoded_block_len, transformed, &links);
+    switch (part) {
+        .block => |block| {
+            var output = Output{ .dynamic = .{
+                .allocator = allocator,
+                .bytes = decoded,
+                .limit = max_decoded_block_len,
+            } };
+            var cursor = block.cursor;
+            while (try cursor.nextSpan(transformed.items, links.items)) |span| try output.appendRepeat(span.byte, span.count);
+            return .{ .block = .{
+                .next_bit_offset = block.next_bit_offset,
+                .crc32 = block.crc32,
+            } };
+        },
+        .end => |end| {
+            return .{ .end = .{
+                .next_bit_offset = end.next_bit_offset,
+                .combined_crc32 = end.combined_crc32,
+            } };
+        },
+    }
+}
+
 fn decodeConcatenated(allocator: std.mem.Allocator, input: []const u8, sink: *Output) !void {
     if (input.len == 0) return error.InvalidMagic;
     var offset: usize = 0;
@@ -234,10 +333,10 @@ fn decodeOne(allocator: std.mem.Allocator, input: []const u8, output: *Output) !
             block_magic => {
                 block.clearRetainingCapacity();
                 const stored_crc = try reader.readBits(32);
-                if (try reader.readBit() != 0) return error.UnsupportedBzip2Feature;
+                const randomized = try reader.readBit() != 0;
                 const original_pointer = try reader.readBits(24);
-                try decodeBlock(&reader, &block, block_limit);
-                const actual_crc = try inverseBwtAndWrite(allocator, block.items, original_pointer, output);
+                try decodeBlock(allocator, &reader, &block, block_limit);
+                const actual_crc = try inverseBwtAndWrite(allocator, block.items, original_pointer, randomized, output);
                 if (actual_crc != stored_crc) return error.ChecksumMismatch;
                 combined_crc = std.math.rotl(u32, combined_crc, 1) ^ actual_crc;
             },
@@ -251,7 +350,7 @@ fn decodeOne(allocator: std.mem.Allocator, input: []const u8, output: *Output) !
     }
 }
 
-fn decodeBlock(reader: *bit_reader.BitReader, block: *std.ArrayList(u8), block_limit: usize) !void {
+fn decodeBlock(allocator: std.mem.Allocator, reader: *bit_reader.BitReader, block: *std.ArrayList(u8), block_limit: usize) !void {
     var group_used: [16]bool = @splat(false);
     for (&group_used) |*used| used.* = try reader.readBit() != 0;
 
@@ -327,7 +426,7 @@ fn decodeBlock(reader: *bit_reader.BitReader, block: *std.ArrayList(u8), block_l
                 weight = std.math.mul(usize, weight, 2) catch return error.InvalidBzip2Stream;
                 symbol = try selector_state.next(reader, selectors[0..selector_count], tables[0..group_count]);
             }
-            try appendBlockRepeat(block, sequence[mtf[0]], run, block_limit);
+            try appendBlockRepeat(allocator, block, sequence[mtf[0]], run, block_limit);
             if (symbol == end_of_block) break;
         }
 
@@ -337,14 +436,18 @@ fn decodeBlock(reader: *bit_reader.BitReader, block: *std.ArrayList(u8), block_l
         var index = mtf_index;
         while (index > 0) : (index -= 1) mtf[index] = mtf[index - 1];
         mtf[0] = sequence_index;
-        try appendBlockRepeat(block, sequence[sequence_index], 1, block_limit);
+        try appendBlockRepeat(allocator, block, sequence[sequence_index], 1, block_limit);
         symbol = try selector_state.next(reader, selectors[0..selector_count], tables[0..group_count]);
     }
 }
 
-fn appendBlockRepeat(block: *std.ArrayList(u8), byte: u8, count: usize, block_limit: usize) !void {
+fn appendBlockRepeat(allocator: std.mem.Allocator, block: *std.ArrayList(u8), byte: u8, count: usize, block_limit: usize) !void {
     const end = std.math.add(usize, block.items.len, count) catch return error.InvalidBzip2Stream;
     if (end > block_limit) return error.InvalidBzip2Stream;
+    if (end > block.capacity) {
+        const grown = std.math.add(usize, block.capacity, block.capacity / 2 + 8) catch block_limit;
+        try block.ensureTotalCapacityPrecise(allocator, @min(block_limit, @max(end, grown)));
+    }
     const start = block.items.len;
     block.items.len = end;
     @memset(block.items[start..end], byte);
@@ -354,47 +457,19 @@ fn inverseBwtAndWrite(
     allocator: std.mem.Allocator,
     block: []const u8,
     original_pointer_u32: u32,
+    randomized: bool,
     output: *Output,
 ) !u32 {
     if (block.len == 0 or original_pointer_u32 >= block.len) return error.InvalidBzip2Stream;
-    const original_pointer: usize = original_pointer_u32;
     const next = try allocator.alloc(u32, block.len);
     defer allocator.free(next);
-
-    var cumulative: [257]usize = @splat(0);
-    for (block) |byte| cumulative[@as(usize, byte) + 1] += 1;
-    for (1..cumulative.len) |index| cumulative[index] += cumulative[index - 1];
-    var positions = cumulative;
-    for (block, 0..) |byte, index| {
-        const position = positions[byte];
-        next[position] = @intCast(index);
-        positions[byte] += 1;
-    }
-
+    const position = try inverse_bwt.prepare(block, original_pointer_u32, next);
+    var cursor = output_cursor.Cursor.init(position, block.len, randomized);
     var crc = bzip2_crc.Crc32{};
-    var position: usize = next[original_pointer];
-    var previous: u8 = 0;
-    var run_length: u8 = 0;
-    for (0..block.len) |_| {
-        const byte = block[position];
-        position = next[position];
-        if (run_length == 4) {
-            try output.appendRepeat(previous, byte);
-            crc.updateRepeat(previous, byte);
-            run_length = 0;
-            continue;
-        }
-
-        try output.appendRepeat(byte, 1);
-        crc.updateByte(byte);
-        if (run_length != 0 and byte == previous) {
-            run_length += 1;
-        } else {
-            previous = byte;
-            run_length = 1;
-        }
+    while (try cursor.nextSpan(block, next)) |span| {
+        try output.appendRepeat(span.byte, span.count);
+        crc.updateRepeat(span.byte, span.count);
     }
-    if (run_length == 4) return error.InvalidBzip2Stream;
     return crc.digest();
 }
 
@@ -462,7 +537,22 @@ test "Bzip2 decoder expands first-stage run-length encoding" {
     for (decoded) |byte| try std.testing.expectEqual(@as(u8, 'A'), byte);
 }
 
-test "Bzip2 decoder rejects malformed headers truncation randomization and CRC" {
+test "Bzip2 decoder accepts a legacy randomized block" {
+    const encoded_hex = "425a68313141592653597d0435b980077dc10000186000200050669a052534e42abb456c0d8856d02af5555da546c026d2ab6a889f1772453850907d0435b9";
+    var encoded: [encoded_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    const expected = "a\n" ** 2500;
+
+    const decoded = try decodeAlloc(std.testing.allocator, &encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+    try std.testing.expectEqual(expected.len, try decodedSize(std.testing.allocator, &encoded));
+    var output: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(expected.len, try decodeInto(std.testing.allocator, &encoded, &output));
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "Bzip2 decoder rejects malformed headers truncation and CRC" {
     const encoded_hex = "425a6831314159265359e2c777e0000054d100001040000244a00030c002950c9a55855e13c4c2ad157c5dc914e142438b1ddf80";
     var encoded: [encoded_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
@@ -472,10 +562,6 @@ test "Bzip2 decoder rejects malformed headers truncation randomization and CRC" 
     bad_level[3] = '0';
     try std.testing.expectError(error.InvalidBzip2Header, decodeAlloc(std.testing.allocator, &bad_level));
     try std.testing.expectError(error.TruncatedFrame, decodeAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
-
-    var randomized = encoded;
-    randomized[14] |= 0x80;
-    try std.testing.expectError(error.UnsupportedBzip2Feature, decodeAlloc(std.testing.allocator, &randomized));
 
     var bad_crc = encoded;
     bad_crc[10] ^= 1;

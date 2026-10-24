@@ -89,6 +89,13 @@ static int decode(const char *input_path, const char *output_path,
 	output_size = strtoull(size_text, &end, 10);
 	if (errno || *end || output_size == 0 || output_size > (1U << 30))
 		goto out;
+	/* Pinned wimlib cd5e231 initializes a zero-/one-symbol offset code for
+	 * these outputs and faults even on the unchanged literal reference.
+	 * Preserve the unmodified library and report this oracle limitation. */
+	if (output_size < 3) {
+		fprintf(stderr, "reference limitation: LZMS output below 3 bytes\n");
+		return 4;
+	}
 	if (read_file(input_path, &input, &input_size))
 		goto out;
 	output = malloc(output_size);
@@ -111,6 +118,10 @@ out:
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && strcmp(argv[1], "version") == 0) {
+        printf("%s\n", wimlib_get_version_string());
+        return 0;
+    }
 	if (argc == 4 && strcmp(argv[1], "encode") == 0)
 		return encode(argv[2], argv[3]);
 	if (argc == 5 && strcmp(argv[1], "decode") == 0)

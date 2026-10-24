@@ -4,6 +4,7 @@ const vort = @import("vort");
 const payload = "incremental planned Brotli payload with repeated fields and values=1234567890\n" ** 64;
 const repeated_block_len = 4096;
 const Sample = struct { elapsed_ns: u64, checksum: usize };
+const SingleBlockSamples = struct { one_shot: Sample, reusable: Sample };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -12,8 +13,7 @@ pub fn main(init: std.process.Init) !void {
     const iterations = if (args.next()) |arg| try std.fmt.parseInt(usize, arg, 10) else 1_000;
     if (iterations == 0 or args.next() != null) return error.InvalidBlockPlan;
 
-    const one_shot = try measureOneShot(init.io, init.gpa, iterations);
-    const reusable = try measureReusable(init.io, init.gpa, iterations);
+    const single = try measureSingleBlockInterleaved(init.io, init.gpa, iterations);
     var buffer: [512]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     const one_shot_wire = try vort.brEncodePlannedStreamAlloc(init.gpa, payload);
@@ -29,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     try stdout.interface.writeAll("case,input_bytes,iterations,one_shot_bytes,reusable_bytes,one_shot_ns,reusable_ns,speedup,one_shot_checksum,reusable_checksum,retained_bytes\n");
-    try stdout.interface.print("single_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ payload.len, iterations, one_shot_wire.len, reusable_len, one_shot.elapsed_ns, reusable.elapsed_ns, @as(f64, @floatFromInt(one_shot.elapsed_ns)) / @as(f64, @floatFromInt(reusable.elapsed_ns)), one_shot.checksum, reusable.checksum, reusableRetainedCapacity(init.gpa) });
+    try stdout.interface.print("single_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ payload.len, iterations, one_shot_wire.len, reusable_len, single.one_shot.elapsed_ns, single.reusable.elapsed_ns, @as(f64, @floatFromInt(single.one_shot.elapsed_ns)) / @as(f64, @floatFromInt(single.reusable.elapsed_ns)), single.one_shot.checksum, single.reusable.checksum, reusableRetainedCapacity(init.gpa) });
     try writeCrossBlockRow(init.io, init.gpa, &stdout.interface, iterations);
     try stdout.interface.flush();
 }
@@ -43,8 +43,8 @@ fn writeCrossBlockRow(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.
     }
     const input = first ++ first;
     const chunks = [_][]const u8{ &first, &first };
-    const independent = try vort.brEncodePlannedStreamChunksAlloc(allocator, &chunks);
-    defer allocator.free(independent);
+    const one_shot_chunked = try vort.brEncodePlannedStreamChunksAlloc(allocator, &chunks);
+    defer allocator.free(one_shot_chunked);
 
     var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(allocator, .{ .block_len = first.len });
     defer encoder.deinit();
@@ -71,7 +71,7 @@ fn writeCrossBlockRow(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.
             checksum = run_checksum;
         }
     }
-    try writer.print("cross_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ input.len, iterations, independent.len, encoded_len, best_ns, best_ns, 1.0, checksum, checksum, encoder.retainedCapacity() });
+    try writer.print("cross_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ input.len, iterations, one_shot_chunked.len, encoded_len, best_ns, best_ns, 1.0, checksum, checksum, encoder.retainedCapacity() });
 }
 
 fn encodeCrossBlock(encoder: *vort.BrotliIncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {
@@ -90,38 +90,61 @@ fn encodeCrossBlock(encoder: *vort.BrotliIncrementalPlannedStreamEncoder, input:
     }
 }
 
-fn measureOneShot(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Sample {
-    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .checksum = 0 };
-    for (0..5) |_| {
-        var checksum: usize = 0;
-        const start = std.Io.Clock.awake.now(io);
-        for (0..iterations) |_| {
-            const encoded = try vort.brEncodePlannedStreamAlloc(allocator, payload);
-            checksum +%= std.hash.Wyhash.hash(0, encoded);
-            allocator.free(encoded);
-        }
-        const elapsed_ns = elapsed(start, io);
-        if (elapsed_ns < best.elapsed_ns) best = .{ .elapsed_ns = elapsed_ns, .checksum = checksum };
-    }
-    return best;
-}
-
-fn measureReusable(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Sample {
+fn measureSingleBlockInterleaved(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    iterations: usize,
+) !SingleBlockSamples {
+    const pair_count = 7;
+    var pairs: [pair_count]SingleBlockSamples = undefined;
     var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(allocator, .{ .block_len = payload.len });
     defer encoder.deinit();
     try warmEncoder(&encoder);
-    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .checksum = 0 };
-    for (0..5) |_| {
-        var checksum: usize = 0;
-        const start = std.Io.Clock.awake.now(io);
-        for (0..iterations) |_| {
-            if (encoder.snapshot().done) try encoder.nextStream(.{ .block_len = payload.len });
-            checksum +%= try encodeReusable(&encoder);
+    for (&pairs, 0..) |*pair, round| {
+        if (round & 1 == 0) {
+            pair.one_shot = try measureOneShotOnce(io, allocator, iterations);
+            pair.reusable = try measureReusableOnce(io, &encoder, iterations);
+        } else {
+            pair.reusable = try measureReusableOnce(io, &encoder, iterations);
+            pair.one_shot = try measureOneShotOnce(io, allocator, iterations);
         }
-        const elapsed_ns = elapsed(start, io);
-        if (elapsed_ns < best.elapsed_ns) best = .{ .elapsed_ns = elapsed_ns, .checksum = checksum };
     }
-    return best;
+    std.mem.sort(SingleBlockSamples, &pairs, {}, lessSingleBlockRatio);
+    return pairs[pair_count / 2];
+}
+
+fn measureOneShotOnce(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Sample {
+    var checksum: usize = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = try vort.brEncodePlannedStreamAlloc(allocator, payload);
+        checksum +%= std.hash.Wyhash.hash(0, encoded);
+        allocator.free(encoded);
+    }
+    return .{ .elapsed_ns = elapsed(start, io), .checksum = checksum };
+}
+
+fn measureReusableOnce(
+    io: std.Io,
+    encoder: *vort.BrotliIncrementalPlannedStreamEncoder,
+    iterations: usize,
+) !Sample {
+    var checksum: usize = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (encoder.snapshot().done) try encoder.nextStream(.{ .block_len = payload.len });
+        checksum +%= try encodeReusable(encoder);
+    }
+    return .{ .elapsed_ns = elapsed(start, io), .checksum = checksum };
+}
+
+fn lessSingleBlockRatio(
+    _: void,
+    left: SingleBlockSamples,
+    right: SingleBlockSamples,
+) bool {
+    return @as(u128, left.one_shot.elapsed_ns) * right.reusable.elapsed_ns <
+        @as(u128, right.one_shot.elapsed_ns) * left.reusable.elapsed_ns;
 }
 
 fn warmEncoder(encoder: *vort.BrotliIncrementalPlannedStreamEncoder) !void {

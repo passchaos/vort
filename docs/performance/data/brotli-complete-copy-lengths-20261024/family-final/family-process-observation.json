@@ -1,0 +1,81 @@
+{
+  "utc": "2026-10-24T11:30:13.305506+00:00",
+  "roots": [
+    4037538
+  ],
+  "processes": [
+    {
+      "pid": 4037538,
+      "ppid": 2745587,
+      "argv": [
+        "python3",
+        "/tmp/vort-br-complete-final-20261024-qy09p5f8/family-final/family-run.py",
+        "family-rf",
+        "zig",
+        "build",
+        "-fno-incremental",
+        "test-br",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ]
+    },
+    {
+      "pid": 4037539,
+      "ppid": 4037538,
+      "argv": [
+        "zig",
+        "build",
+        "-fno-incremental",
+        "test-br",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ]
+    },
+    {
+      "pid": 4037542,
+      "ppid": 4037539,
+      "argv": [
+        ".zig-cache/o/65724f98e8b3e50b2062fc0b1cfba15f/build",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib",
+        "/home/passchaos/project-z/vort-stream-contracts",
+        ".zig-cache",
+        "/home/passchaos/.cache/zig",
+        "--seed",
+        "0x305f5bd9",
+        "-Z4bfbcb17cecfc5f8",
+        "-fno-incremental",
+        "test-br",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ]
+    },
+    {
+      "pid": 4037546,
+      "ppid": 4037542,
+      "argv": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        ".zig-cache/o/a975e198daf1c08dc02b311878b81563/vort-br-record-optimal.o",
+        "-OReleaseFast",
+        "-I",
+        ".zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d",
+        "-Mroot=/home/passchaos/project-z/vort-stream-contracts/src/br.zig",
+        "--cache-dir",
+        ".zig-cache",
+        "--global-cache-dir",
+        "/home/passchaos/.cache/zig",
+        "--name",
+        "vort-br-tests",
+        "--zig-lib-dir",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/",
+        "-fno-incremental",
+        "--listen=-"
+      ]
+    }
+  ],
+  "scope": "Final family read-only /proc observation restricted to this gate tree; no environment capture"
+}

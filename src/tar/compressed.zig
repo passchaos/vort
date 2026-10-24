@@ -192,9 +192,17 @@ pub fn decodeAlloc(
 
 test "compressed TAR wrappers round trip every available encoder" {
     const allocator = std.testing.allocator;
+    const sparse_extents = [_]writer.SparseDataExtent{
+        .{ .offset = 0, .data = "HEAD" },
+        .{ .offset = 8188, .data = "TAIL" },
+    };
     const entries = [_]writer.EncodeEntry{
         .{ .name = "folder/", .kind = .directory },
         .{ .name = "folder/data.txt", .data = "tarball payload " ** 64 },
+        .{
+            .name = "folder/sparse.bin",
+            .sparse = .{ .logical_size = 8192, .extents = &sparse_extents },
+        },
     };
     inline for (.{ Compression.none, .gzip, .bzip2, .brotli, .compress_z, .lzma, .xz, .lz4, .lzip, .lzf, .zstandard, .lzop }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{ .compression = compression });
@@ -219,10 +227,18 @@ test "compressed TAR wrappers round trip every available encoder" {
         const decoded = try decodeAutoAlloc(allocator, encoded, 1024 * 1024);
         defer decoded.deinit(allocator);
         try std.testing.expectEqual(compression, decoded.compression);
-        try std.testing.expectEqual(@as(usize, 2), decoded.archive.entry_count);
+        try std.testing.expectEqual(@as(usize, 3), decoded.archive.entry_count);
         const payload = try decoded.archive.extractByNameAlloc(allocator, "folder/data.txt");
         defer allocator.free(payload);
         try std.testing.expectEqualSlices(u8, entries[1].data, payload);
+        const sparse_payload = try decoded.archive.extractByNameAlloc(
+            allocator,
+            "folder/sparse.bin",
+        );
+        defer allocator.free(sparse_payload);
+        try std.testing.expectEqual(@as(usize, 8192), sparse_payload.len);
+        try std.testing.expectEqualSlices(u8, "HEAD", sparse_payload[0..4]);
+        try std.testing.expectEqualSlices(u8, "TAIL", sparse_payload[8188..]);
     }
 }
 

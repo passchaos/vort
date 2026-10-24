@@ -27,6 +27,198 @@ def main() -> int:
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    quality_modes = ("generic", "text", "font")
+    fast_quality_sizes = {
+        0: {"generic": 122, "text": 143, "font": 142},
+        1: {"generic": 69, "text": 95, "font": 92},
+        2: {"generic": 80, "text": 115, "font": 97},
+        3: {"generic": 62, "text": 103, "font": 86},
+    }
+    for quality in range(12):
+        for planned_mode, (name, expected) in zip(quality_modes, cases):
+            mode = f"q{quality}-{planned_mode}-{name}"
+            encoded = subprocess.check_output([sys.argv[1], mode])
+            if quality in fast_quality_sizes and len(encoded) != fast_quality_sizes[quality][planned_mode]:
+                raise SystemExit(f"{mode}: fast-quality wire size changed: {len(encoded)}")
+            actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+            if actual != expected:
+                raise SystemExit(f"{mode}: node output mismatch")
+            print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytes(range(128)) * 512
+    encoded = subprocess.check_output([sys.argv[1], "q1-wide-literals"])
+    if len(encoded) != 137:
+        raise SystemExit(f"q1-wide-literals: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q1-wide-literals: node output mismatch")
+    print(f"brotli planned q1-wide-literals node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = (b"abcd" * 4096) + (b"0123456789abcdef" * 1024)
+    encoded = subprocess.check_output([sys.argv[1], "q0-adaptive-trees"])
+    if len(encoded) != 140:
+        raise SystemExit(f"q0-adaptive-trees: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q0-adaptive-trees: node output mismatch")
+    print(f"brotli planned q0-adaptive-trees node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (129 * 6)
+    encoded = subprocess.check_output([sys.argv[1], "q2-dynamic-commands"])
+    if len(encoded) != 27:
+        raise SystemExit(f"q2-dynamic-commands: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-dynamic-commands: node output mismatch")
+    print(f"brotli planned q2-dynamic-commands node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    quarter_len = input_len // 4
+    expected = bytearray(input_len)
+    state = 0x4A117E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        expected[i] = nibble if (i // quarter_len) & 1 == 0 else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-quarter-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-quarter-segmentation: node output mismatch")
+    if len(encoded) != 39_169:
+        raise SystemExit(f"q2-quarter-segmentation: four-block wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-quarter-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    boundary = 24 * 1024
+    expected = bytearray(input_len)
+    state = 0x8A117E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        expected[i] = nibble if i < boundary else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-grid-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-grid-segmentation: node output mismatch")
+    if len(encoded) != 38_753:
+        raise SystemExit(f"q2-grid-segmentation: 24-KiB-cut wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-grid-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    boundary = 20 * 1024
+    expected = bytearray(input_len)
+    state = 0x4F1E7E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        expected[i] = nibble if i < boundary else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-fine-grid-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-fine-grid-segmentation: node output mismatch")
+    if len(encoded) != 38_735:
+        raise SystemExit(f"q2-fine-grid-segmentation: 20-KiB-cut wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-fine-grid-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    first_boundary = 16 * 1024
+    second_boundary = 40 * 1024
+    expected = bytearray(input_len)
+    state = 0x70F01E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        if i < first_boundary:
+            expected[i] = nibble
+        elif i < second_boundary:
+            expected[i] = 96 + nibble
+        else:
+            expected[i] = 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-frontier-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-frontier-segmentation: node output mismatch")
+    if len(encoded) != 38_513:
+        raise SystemExit(f"q2-frontier-segmentation: three-region wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-frontier-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytearray(4096)
+    state = (2 * 0x9E3779B9) & 0xFFFFFFFF
+    position = 0
+    distances = (7, 16, 31, 64, 127, 257)
+    while position < len(expected):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        selected_distance = distances[(state >> 16) % len(distances)]
+        if position >= selected_distance and state & 3:
+            copy_len = min(len(expected) - position, 3 + ((state >> 8) % 61))
+            for i in range(copy_len):
+                expected[position + i] = expected[position + i - selected_distance]
+            position += copy_len
+        else:
+            expected[position] = (state >> 24) & 15
+            position += 1
+    encoded = subprocess.check_output([sys.argv[1], "q10-entropy-feedback"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-entropy-feedback: node output mismatch")
+    if len(encoded) > 221:
+        raise SystemExit(f"q10-entropy-feedback: expected the retained feedback wire, got {len(encoded)} bytes")
+    print(f"brotli planned q10-entropy-feedback node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytearray(4096)
+    state = 0x9E3779B9
+    position = 0
+    distances = (4, 7, 11, 16, 31, 64, 127, 257)
+    while position < len(expected):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        selected_distance = distances[(state >> 16) % len(distances)]
+        if position >= selected_distance and state & 3:
+            copy_len = min(len(expected) - position, 4 + ((state >> 8) % 61))
+            for i in range(copy_len):
+                expected[position + i] = expected[position + i - selected_distance]
+            position += copy_len
+        else:
+            expected[position] = (state >> 24) & 31
+            position += 1
+    encoded = subprocess.check_output([sys.argv[1], "q10-command-state"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-command-state: node output mismatch")
+    if len(encoded) > 231:
+        raise SystemExit(f"q10-command-state: expected the retained stateful wire, got {len(encoded)} bytes")
+    print(f"brotli planned q10-command-state node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytearray(8192)
+    state = 0x7F4A7C15
+    position = 0
+    distances = (4, 7, 11, 16, 31, 64, 127, 257)
+    while position < len(expected):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        selected_distance = distances[(state >> 16) % len(distances)]
+        if position >= selected_distance and state & 3:
+            copy_len = min(len(expected) - position, 4 + ((state >> 8) % 61))
+            for i in range(copy_len):
+                expected[position + i] = expected[position + i - selected_distance]
+            position += copy_len
+        else:
+            expected[position] = (state >> 24) & 31
+            position += 1
+    encoded = subprocess.check_output([sys.argv[1], "q10-command-state-chunked"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-command-state-chunked: node output mismatch")
+    print(f"brotli planned q10-command-state-chunked node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"streaming command-state override payload 0123456789abcdef\n" * 224
+    encoded = subprocess.check_output([sys.argv[1], "q10-command-state-extended"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-command-state-extended: node output mismatch")
+    print(f"brotli planned q10-command-state-extended node diff: encoded={len(encoded)} decoded={len(actual)}")
+    block_len = 64 * 1024
+    repeated_len = 8 * 1024
+    expected = bytearray(block_len + repeated_len)
+    state = 0x17B17B1D
+    for i in range(block_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        expected[i] = (state >> 24) & 0xFF
+    expected[block_len:] = expected[:repeated_len]
+    encoded = subprocess.check_output([sys.argv[1], "q8-wide-history"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q8-wide-history: node output mismatch")
+    if len(encoded) != 65_554:
+        raise SystemExit(f"q8-wide-history: cross-64-KiB wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q8-wide-history node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
@@ -87,6 +279,31 @@ def main() -> int:
         raise SystemExit("clustered-command-types: node output mismatch")
     print(f"brotli planned clustered-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     command_count = 8192
+    boundaries = (901, 2305, 5179, 7001)
+    region_types = (0, 1, 0, 2, 0)
+    adaptive_insert_lens = (
+        outer_insert_lens,
+        middle_insert_lens,
+        (18, 20, 22, 24, 26, 28, 30, 32),
+    )
+    adaptive_copy_lens = (2, 40, 6)
+    adaptive_byte_bases = (0, 64, 128)
+    expected = bytearray()
+    region = 0
+    for i in range(command_count):
+        if region < len(boundaries) and i == boundaries[region]:
+            region += 1
+        tree = region_types[region]
+        insert_len = adaptive_insert_lens[tree][i & 7]
+        copy_len = adaptive_copy_lens[tree]
+        byte = adaptive_byte_bases[tree] + (i & 15)
+        expected.extend(bytes([byte]) * (insert_len + copy_len))
+    encoded = subprocess.check_output([sys.argv[1], "adaptive-command-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("adaptive-command-types: node output mismatch")
+    print(f"brotli planned adaptive-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    command_count = 8192
     first_split = command_count // 6
     second_split = command_count * 2 // 6
     third_split = command_count * 3 // 6
@@ -129,6 +346,141 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("reuse-first-three-command-types: node output mismatch")
     print(f"brotli planned reuse-first-three-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    command_count = 8192
+    first_split = command_count // 6
+    second_split = command_count * 2 // 6
+    third_split = command_count * 3 // 6
+    insert_lens = (
+        outer_insert_lens,
+        middle_insert_lens,
+        (18, 20, 22, 24, 26, 28, 30, 32),
+        (2, 4, 6, 8, 10, 12, 14, 16),
+    )
+    copy_lens = (2, 40, 6, 258)
+    expected = bytearray()
+    for i in range(command_count):
+        region = 0 if i < first_split else 1 if i < second_split else 2 if i < third_split else 3
+        insert_len = insert_lens[region][i & 7]
+        copy_len = copy_lens[region]
+        byte = region * 64 + (i & 15)
+        expected.extend(bytes([byte]) * (insert_len + copy_len))
+    encoded = subprocess.check_output([sys.argv[1], "four-command-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("four-command-types: node output mismatch")
+    print(f"brotli planned four-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    dynamic_literal_cases = (
+        ("five-literal-types", (0, 1, 2, 3, 4, 4)),
+        ("six-literal-types", (0, 1, 2, 3, 4, 5)),
+        ("six-region-clustered-literal-types", (0, 1, 2, 0, 1, 2)),
+    )
+    literal_bases = (0, 48, 96, 144, 192, 224)
+    for mode, region_types in dynamic_literal_cases:
+        expected = bytearray(12288)
+        for i in range(len(expected)):
+            tree = region_types[i // 2048]
+            expected[i] = literal_bases[tree] + (i & 15)
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    boundaries = (901, 2305, 5179, 7001)
+    region_types = (0, 1, 0, 2, 0)
+    literal_bases = (0, 96, 192)
+    expected = bytearray(8192)
+    region = 0
+    for i in range(len(expected)):
+        if region < len(boundaries) and i == boundaries[region]:
+            region += 1
+        expected[i] = literal_bases[region_types[region]] + (i & 31)
+    encoded = subprocess.check_output([sys.argv[1], "adaptive-literal-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("adaptive-literal-types: node output mismatch")
+    print(f"brotli planned adaptive-literal-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    encoded = subprocess.check_output([sys.argv[1], "adaptive-literal-context-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("adaptive-literal-context-types: node output mismatch")
+    print(f"brotli planned adaptive-literal-context-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytes(range(256))
+    encoded = subprocess.check_output([sys.argv[1], "maximum-adaptive-literal-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("maximum-adaptive-literal-types: node output mismatch")
+    print(f"brotli planned maximum-adaptive-literal-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    encoded = subprocess.check_output([sys.argv[1], "maximum-joint-literal-contexts"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("maximum-joint-literal-contexts: node output mismatch")
+    print(f"brotli planned maximum-joint-literal-contexts node diff: encoded={len(encoded)} decoded={len(actual)}")
+    dynamic_command_insert_lens = (
+        outer_insert_lens,
+        middle_insert_lens,
+        (18, 20, 22, 24, 26, 28, 30, 32),
+        (2, 4, 6, 8, 10, 12, 14, 16),
+        (3, 5, 7, 9, 11, 13, 15, 17),
+        (6, 10, 14, 18, 22, 26, 30, 34),
+    )
+    dynamic_command_copy_lens = (2, 40, 6, 258, 12, 80)
+    dynamic_command_byte_bases = (0, 64, 128, 192, 32, 224)
+    dynamic_command_cases = (
+        ("five-command-types", (0, 1, 2, 3, 4, 4)),
+        ("six-command-types", (0, 1, 2, 3, 4, 5)),
+        ("six-region-clustered-command-types", (0, 1, 2, 0, 1, 2)),
+    )
+    for mode, region_types in dynamic_command_cases:
+        expected = bytearray()
+        for i in range(12288):
+            tree = region_types[i // 2048]
+            insert_len = dynamic_command_insert_lens[tree][i & 7]
+            copy_len = dynamic_command_copy_lens[tree]
+            byte = dynamic_command_byte_bases[tree] + (i & 15)
+            expected.extend(bytes([byte]) * (insert_len + copy_len))
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (64 * 1024 + 8192 * 4)
+    encoded = subprocess.check_output([sys.argv[1], "four-distance-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("four-distance-types: node output mismatch")
+    print(f"brotli planned four-distance-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    distance_cluster_cases = (
+        ("adaptive-distance-types", 64 * 1024 + 8192 * 4),
+        ("maximum-adaptive-distance-types", 64 * 1024 + 256 * 4),
+        ("clustered-distance-types", 64 * 1024 + 12288 * 4),
+        ("alternating-distance-types", 64 * 1024 + 8192 * 4),
+        ("reuse-first-three-distance-types", 64 * 1024 + 8192 * 4),
+    )
+    for mode, decoded_len in distance_cluster_cases:
+        expected = b"a" * decoded_len
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (64 * 1024 + 4096 * 4)
+    encoded = subprocess.check_output([sys.argv[1], "selected-distance-parameters"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("selected-distance-parameters: node output mismatch")
+    print(f"brotli planned selected-distance-parameters node diff: encoded={len(encoded)} decoded={len(actual)}")
+    dynamic_distance_cases = (
+        "five-distance-types",
+        "six-distance-types",
+        "six-region-clustered-distance-types",
+    )
+    expected = b"a" * (64 * 1024 + 12288 * 4)
+    for mode in dynamic_distance_cases:
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

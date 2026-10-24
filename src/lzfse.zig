@@ -5,19 +5,31 @@ const fse = @import("lzfse/fse.zig");
 const format = @import("lzfse/format.zig");
 const decoder = @import("lzfse/decoder.zig");
 const container = @import("lzfse/container.zig");
+const encoder = @import("lzfse/encoder.zig");
+const incremental = @import("lzfse/incremental_decoder.zig");
 
-pub const Error = container.Error || std.mem.Allocator.Error;
+pub const Error = container.Error || incremental.Decoder.Error || std.mem.Allocator.Error;
 
 pub const Archive = container.Archive;
 pub const Block = container.Block;
 pub const BlockIterator = container.BlockIterator;
 pub const BlockKind = container.BlockKind;
 pub const Options = container.Options;
+pub const Strategy = encoder.Strategy;
+pub const FseVersion = encoder.FseVersion;
+pub const Summary = encoder.Summary;
+pub const Encoded = encoder.Encoded;
+pub const EncodePlan = encoder.Plan;
+pub const EncodeRecord = encoder.Record;
+pub const encodeFsePlanAlloc = encoder.encodeFsePlanAlloc;
+pub const IncrementalDecoder = incremental.Decoder;
+pub const IncrementalDecodeOptions = incremental.Decoder.Options;
 
 pub const parse = container.parse;
 pub const parseLimited = container.parseLimited;
 pub const parseBlock = container.parseBlock;
 pub const encodeAlloc = container.encodeAlloc;
+pub const encodeWithSummaryAlloc = container.encodeWithSummaryAlloc;
 pub const encodeAppend = container.encodeAppend;
 pub const encodeInto = container.encodeInto;
 pub const decodeAlloc = container.decodeAlloc;
@@ -41,4 +53,11 @@ test {
     _ = format;
     _ = decoder;
     _ = container;
+    _ = @import("lzfse/encoder/block_plan.zig");
+    _ = @import("lzfse/encoder/match_finder.zig");
+    _ = @import("lzfse/encoder/block_encoder.zig");
+    _ = @import("lzfse/encoder_tests.zig");
+    _ = @import("lzfse/incremental/fse_cursor.zig");
+    _ = @import("lzfse/incremental/lzvn_cursor.zig");
+    _ = incremental;
 }

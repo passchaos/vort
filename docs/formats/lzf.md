@@ -30,6 +30,17 @@ also controls the optional EOF marker. Allocating, caller-owned, transactional
 append, encoded-bound, decoded-size, bounded decode, and metadata inspection
 APIs are exposed for both raw blocks and framed streams.
 
+`LzfIncrementalDecoder` accepts arbitrary compressed input slices and drains
+decoded bytes through caller-owned output. Stored payloads copy directly;
+compressed records retain at most one explicitly limited 65,535-byte input
+block and its validated decoded block. Independent compressed/decoded block,
+total-output and expected-output limits apply before output becomes visible.
+EOF is valid at a block boundary, while the optional zero marker must still be
+the last encoded byte. Snapshots expose retained capacities and exact progress.
+For an outer member dispatcher, `stop_after_eof_marker` treats that marker as
+the exact stream boundary and leaves following caller input unconsumed; marker-
+less LZF still requires physical EOF and cannot provide this boundary.
+
 ```zig
 const encoded = try vort.encodeLzfAlloc(allocator, input, .{
     .block_size = 32 * 1024,
@@ -49,6 +60,17 @@ defer allocator.free(decoded);
 TAR composition recognizes and writes `.tar.lzf` through
 `TarCompression.lzf`. Automatic detection uses the unambiguous `ZV` signature
 after first checking for a structurally valid raw TAR.
+`TarLzfIncrementalReader` connects this decoder to the bounded TAR state
+machine without retaining the decompressed archive.
+
+`LzfIncrementalEncoder` is the symmetric block-bounded writer. It retains at
+most one caller-selected 1...65,535-byte plaintext block plus compressed and
+pending scratch, applies the same complete-block compressed-versus-stored rule
+as the one-shot writer, and optionally emits the final zero marker. Block
+scheduling depends only on `block_size`, so arbitrary input/output
+fragmentation is byte-identical to `encodeLzfAlloc`.
+`TarLzfIncrementalWriter` composes it with the raw TAR writer without
+materializing the archive.
 
 CLI validation surfaces:
 
@@ -71,6 +93,5 @@ make
 zig build run-lzf-diff -- --reference path/to/liblzf-3.6/lzf
 ```
 
-Incremental input/output state machines and the unused type-2 checksum
-extension remain future functionality. They are not needed to decode streams
-emitted by the upstream liblzf 3.6 utility.
+The unused type-2 checksum extension remains future functionality. It is not
+needed to decode streams emitted by the upstream liblzf 3.6 utility.

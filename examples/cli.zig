@@ -13,9 +13,13 @@ const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
+const lz4_controls_cli = @import("cli/lz4_controls.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
+const microlzma_cli = @import("cli/microlzma.zig");
+const lzma_cli = @import("cli/lzma.zig");
+const xz_cli = @import("cli/xz.zig");
 const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const decmpfs_cli = @import("cli/decmpfs.zig");
@@ -42,12 +46,16 @@ const zchunk_cli = @import("cli/zchunk.zig");
 const squashfs_cli = @import("cli/squashfs.zig");
 const erofs_cli = @import("cli/erofs.zig");
 const wim_cli = @import("cli/wim.zig");
+const zip_cli = @import("cli/zip.zig");
 const lzip_cli = @import("cli/lzip.zig");
 const lzf_cli = @import("cli/lzf.zig");
 const lha_cli = @import("cli/lha.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
+const zstd_controls_cli = @import("cli/zstd_controls.zig");
+const fast_cover_cli = @import("cli/fast_cover.zig");
+const brotli_cli = @import("cli/brotli.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -122,20 +130,32 @@ pub fn main(init: std.process.Init) !void {
         });
     } else if (std.mem.eql(u8, command, "encode-xerial-snappy-file")) {
         try snappy_framing_cli.encodeXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-xerial-snappy-incremental-file")) {
+        try snappy_framing_cli.encodeXerialIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-xerial-snappy-file")) {
         try snappy_framing_cli.decodeXerial(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-xerial-snappy-incremental-file")) {
+        try snappy_framing_cli.decodeXerialIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xerial-snappy-file")) {
         try snappy_framing_cli.inspectXerial(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-hadoop-snappy-file")) {
         try snappy_framing_cli.encodeHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-hadoop-snappy-incremental-file")) {
+        try snappy_framing_cli.encodeHadoopIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-hadoop-snappy-file")) {
         try snappy_framing_cli.decodeHadoop(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-snappy-incremental-file")) {
+        try snappy_framing_cli.decodeHadoopIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-snappy-file")) {
         try snappy_framing_cli.inspectHadoop(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-file")) {
         try snappy_framing_cli.encodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-hadoop-lz4-incremental-file")) {
+        try snappy_framing_cli.encodeHadoopLz4Incremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-hadoop-lz4-file")) {
         try snappy_framing_cli.decodeHadoopLz4(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decode-hadoop-lz4-incremental-file")) {
+        try snappy_framing_cli.decodeHadoopLz4Incremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-hadoop-lz4-file")) {
         try snappy_framing_cli.inspectHadoopLz4(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-hadoop-lzo-index")) {
@@ -168,6 +188,8 @@ pub fn main(init: std.process.Init) !void {
         try xpress_cli.decodeHuffman(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xpress-huffman-file")) {
         try xpress_cli.inspectHuffman(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzms-file")) {
+        try lzms_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzms-file")) {
         try lzms_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-wof-file")) {
@@ -226,6 +248,8 @@ pub fn main(init: std.process.Init) !void {
         try qcow2_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-qcow2")) {
         try qcow2_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-qcow2-external")) {
+        try qcow2_cli.encodeExternal(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-vmdk")) {
         try vmdk_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-vmdk")) {
@@ -242,6 +266,8 @@ pub fn main(init: std.process.Init) !void {
         try ewf_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-ewf")) {
         try ewf_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-ewf-segments")) {
+        try ewf_cli.encodeSegments(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-chd")) {
         try chd_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-chd")) {
@@ -348,12 +374,22 @@ pub fn main(init: std.process.Init) !void {
         try android_sparse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-android-ota")) {
         try android_ota_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-android-ota-source")) {
+        try android_ota_cli.inspectSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota")) {
         try android_ota_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-android-ota-source")) {
+        try android_ota_cli.extractSource(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "verify-android-ota-signatures")) {
+        try android_ota_cli.verifySignatures(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "verify-android-ota-source-signatures")) {
+        try android_ota_cli.verifySourceSignatures(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota-range")) {
         try android_ota_cli.extractRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-android-ota")) {
         try android_ota_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-android-ota-source")) {
+        try android_ota_cli.encodeSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "puff-android-deflate")) {
         try android_ota_cli.puffDeflate(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "huff-android-deflate")) {
@@ -378,6 +414,8 @@ pub fn main(init: std.process.Init) !void {
         try erofs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-erofs-file")) {
         try erofs_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-erofs-xattrs")) {
+        try erofs_cli.listXattrs(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-wim-file")) {
         try wim_cli.list(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-resource")) {
@@ -388,6 +426,24 @@ pub fn main(init: std.process.Init) !void {
         try wim_cli.listImage(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-path")) {
         try wim_cli.extractPath(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-stream")) {
+        try wim_cli.extractNamedStream(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-reparse")) {
+        try wim_cli.extractReparseData(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-encrypted-raw")) {
+        try wim_cli.extractEncryptedRawData(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-pipable-stream-path")) {
+        try wim_cli.extractPipablePathIncremental(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-wim-encrypted-esd")) {
+        try wim_cli.inspectEncryptedEsd(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decrypt-wim-encrypted-esd")) {
+        try wim_cli.decryptEncryptedEsd(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decrypt-wim-encrypted-esd-key")) {
+        try wim_cli.decryptEncryptedEsdWithKey(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-wim-parts-image")) {
+        try wim_cli.listSetImage(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-parts-path")) {
+        try wim_cli.extractSetPath(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-bgzf-file")) {
         try bgzf_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-bgzf-file")) {
@@ -420,6 +476,12 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-br-file")) {
+        try brotli_cli.encodeFile(init, &args, stdout, false);
+    } else if (std.mem.eql(u8, command, "encode-br-stream-file")) {
+        try brotli_cli.encodeFile(init, &args, stdout, true);
+    } else if (std.mem.eql(u8, command, "encode-br-hex")) {
+        try brotli_cli.encodeHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-br-stored-hex")) {
         const payload = args.next() orelse "";
         const options = try parseBrotliStoredOptions(args.next(), args.next());
@@ -556,10 +618,14 @@ pub fn main(init: std.process.Init) !void {
         try rpm_cli.extractPayload(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arj-file")) {
         try arj_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-arj-volumes")) {
+        try arj_cli.createVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arj-file")) {
         try arj_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-arj-file")) {
         try arj_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-arj-volumes")) {
+        try arj_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arc-file")) {
         try arc_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arc-file")) {
@@ -602,23 +668,20 @@ pub fn main(init: std.process.Init) !void {
         try seven_zip_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-7z-file")) {
         try seven_zip_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-7z-source-file")) {
+        try seven_zip_cli.listSourceFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-7z-file")) {
         try seven_zip_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-source-file")) {
+        try seven_zip_cli.extractSourceFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-source-stream-file")) {
+        try seven_zip_cli.extractSourceStreamFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-7z-volumes")) {
+        try seven_zip_cli.listVolumes(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-volumes")) {
+        try seven_zip_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzma-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const size_mode = try parseLzmaSizeMode(args.next());
-        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
-        defer init.gpa.free(input);
-        const encoded = try vort.encodeLzmaAlloc(init.gpa, input, .{ .size_mode = size_mode });
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("lzma_size_mode={s} input_bytes={d} compressed_bytes={d} path={s}\n", .{
-            @tagName(size_mode),
-            input.len,
-            encoded.len,
-            output_path,
-        });
+        try lzma_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -633,32 +696,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-microlzma-file")) {
+        try microlzma_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-microlzma-prefix-file")) {
+        try microlzma_cli.encodeLimited(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-microlzma-aligned-prefix-file")) {
+        try microlzma_cli.encodeAlignedLimited(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-microlzma-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const expected_size_text = args.next() orelse return error.MissingCorpusPath;
-        const expected_size = try std.fmt.parseInt(usize, expected_size_text, 10);
-        const dictionary_size = if (args.next()) |text|
-            try std.fmt.parseInt(u32, text, 10)
-        else
-            8 * 1024 * 1024;
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(8 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = try vort.decodeMicroLzmaAllocLimited(
-            init.gpa,
-            compressed,
-            expected_size,
-            dictionary_size,
-            12 * 1024 * 1024,
-        );
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("microlzma_compressed_bytes={d} decoded_bytes={d} dictionary={d} path={s}\n", .{
-            compressed.len,
-            decoded.len,
-            dictionary_size,
-            output_path,
-        });
+        try microlzma_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -670,9 +715,9 @@ pub fn main(init: std.process.Init) !void {
             try vort.lzmaDecodedSize(init.gpa, compressed);
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "encode-xz-file")) {
-        try encodeXzFile(init, &args, stdout, false);
+        try xz_cli.encode(init, &args, stdout, false);
     } else if (std.mem.eql(u8, command, "encode-xz-stored-file")) {
-        try encodeXzFile(init, &args, stdout, true);
+        try xz_cli.encode(init, &args, stdout, true);
     } else if (std.mem.eql(u8, command, "decode-xz-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -770,6 +815,14 @@ pub fn main(init: std.process.Init) !void {
                 name,
             });
             if (entry.link_name.len != 0) try stdout.print(" link={s}", .{entry.link_name});
+            if (entry.sparse) |sparse_info| try stdout.print(
+                " sparse={s} extents={d} stored_size={d}",
+                .{
+                    @tagName(sparse_info.format),
+                    sparse_info.extent_count,
+                    sparse_info.data.len,
+                },
+            );
             try stdout.writeByte('\n');
         }
     } else if (std.mem.eql(u8, command, "extract-tar-file")) {
@@ -950,6 +1003,10 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "create-zip-split-file")) {
+        try zip_cli.createSplit(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-zip-split-stream-file")) {
+        try zip_cli.createSplitStream(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -994,15 +1051,149 @@ pub fn main(init: std.process.Init) !void {
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
         const max_dictionary_size = (try parseOptionalLimit(args.next())) orelse 64 * 1024 * 1024;
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
         const decoded = try vort.zipExtractByNameAllocWithOptions(init.gpa, bytes, entry_name, .{
             .max_output_len = max_output_len orelse std.math.maxInt(usize),
             .max_dictionary_size = max_dictionary_size,
+            .password = password,
         });
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("zip_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{ bytes.len, decoded.len, entry_name, output_path });
+    } else if (std.mem.eql(u8, command, "extract-zip-split-files")) {
+        try zip_cli.extractSplitOwned(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-zip-split-stream-files")) {
+        try zip_cli.extractSplitStream(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-zip-split-source-files")) {
+        try zip_cli.extractSplitSource(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-zip-file-incremental")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const archive = try vort.parseZipArchive(bytes);
+        const entry = (try archive.find(entry_name)) orelse return error.ZipEntryNotFound;
+        const compressed = if (entry.isEncrypted())
+            try archive.rawEntryData(entry)
+        else
+            try archive.compressedData(entry);
+        var decoder = try vort.ZipOwnedIncrementalEntryDecoder.initWithOptions(init.gpa, entry, .{
+            .max_output_len = max_output_len,
+            .password = password,
+        });
+        defer decoder.deinit();
+        var decoded: std.ArrayList(u8) = .empty;
+        defer decoded.deinit(init.gpa);
+        try decoded.ensureTotalCapacity(init.gpa, entry.uncompressed_size);
+        var input_offset: usize = 0;
+        var calls: usize = 0;
+        while (true) {
+            const input_end = @min(compressed.len, input_offset + 3);
+            var output: [5]u8 = undefined;
+            const result = try decoder.step(compressed[input_offset..input_end], &output);
+            input_offset += result.progress.input_read;
+            try decoded.appendSlice(init.gpa, output[0..result.progress.output_written]);
+            calls += 1;
+            if (result.status == .done) break;
+            if (result.progress.input_read == 0 and result.progress.output_written == 0)
+                return error.InvalidBlockPlan;
+        }
+        if (input_offset != compressed.len or decoded.items.len != entry.uncompressed_size)
+            return error.SizeMismatch;
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded.items });
+        try stdout.print("zip_bytes={d} compressed_bytes={d} decoded_bytes={d} calls={d} entry={s} path={s}\n", .{
+            bytes.len,
+            compressed.len,
+            decoded.items.len,
+            calls,
+            entry_name,
+            output_path,
+        });
+    } else if (std.mem.eql(u8, command, "extract-zip-stream-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        const parsed_archive = try vort.parseZipArchive(bytes);
+        const stream_offset = if (parsed_archive.entry_count == 0)
+            parsed_archive.central_directory_offset
+        else
+            (try parsed_archive.entryAt(0)).local_header_offset;
+        var reader = try vort.ZipIncrementalReader.initWithOptions(init.gpa, .{
+            .initial_offset = stream_offset,
+            .password = password,
+        });
+        defer reader.deinit();
+        var decoded: std.ArrayList(u8) = .empty;
+        defer decoded.deinit(init.gpa);
+        var input_offset = stream_offset;
+        var selected = false;
+        var found = false;
+        var calls: usize = 0;
+        while (true) {
+            const input_end = @min(bytes.len, input_offset + 3);
+            var output: [5]u8 = undefined;
+            const result = try reader.step(bytes[input_offset..input_end], &output);
+            input_offset += result.progress.input_read;
+            if (selected and result.progress.output_written != 0) {
+                if (result.progress.output_written > max_output_len -| decoded.items.len)
+                    return error.OutputLimitExceeded;
+                try decoded.appendSlice(init.gpa, output[0..result.progress.output_written]);
+            }
+            calls += 1;
+            switch (result.status) {
+                .entry_header => {
+                    const current = reader.currentEntry().?;
+                    selected = !found and std.mem.eql(
+                        u8,
+                        current.preferredName(),
+                        entry_name,
+                    );
+                },
+                .entry_done => {
+                    if (selected) found = true;
+                    selected = false;
+                },
+                .done => break,
+                .need_input, .need_output => {},
+            }
+            if (result.status != .done and
+                result.progress.input_read == 0 and
+                result.progress.output_written == 0 and
+                result.status != .entry_header and
+                result.status != .entry_done)
+                return error.InvalidBlockPlan;
+        }
+        if (!found) return error.ZipEntryNotFound;
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded.items });
+        try stdout.print("zip_bytes={d} entries={d} decoded_bytes={d} calls={d} entry={s} path={s}\n", .{
+            bytes.len,
+            reader.snapshot().completed_entries,
+            decoded.items.len,
+            calls,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1401,61 +1592,17 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-hex")) {
-        const payload = args.next() orelse "";
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeTextHex(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "train-zstd-fastcover-dictionary")) {
+        try fast_cover_cli.train(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "optimize-zstd-fastcover-dictionary")) {
+        try fast_cover_cli.optimize(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeBytesHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file-hex")) {
-        const path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeFileHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = result.frame });
-        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ result.frame.len, payload.len, output_path });
+        try zstd_controls_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1527,14 +1674,11 @@ pub fn main(init: std.process.Init) !void {
         };
         try printZstdNativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const frame = try vort.lz4EncodeNativeFrameAlloc(init.gpa, payload);
-        defer init.gpa.free(frame);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = frame });
-        try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ frame.len, payload.len, output_path });
+        try lz4_controls_cli.encodeNativeFile(init, &args, stdout, false);
+    } else if (std.mem.eql(u8, command, "encode-lz4-native-stream-file")) {
+        try lz4_controls_cli.encodeNativeFile(init, &args, stdout, true);
+    } else if (std.mem.eql(u8, command, "encode-lz4-block-file")) {
+        try lz4_controls_cli.encodeBlockFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lz4-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1590,12 +1734,7 @@ pub fn main(init: std.process.Init) !void {
         const summary = try vort.lz4SummarizeBlock(block);
         try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const encoded = try vort.lz4EncodeBlockAlloc(init.gpa, payload);
-        defer init.gpa.free(encoded);
-        try printHex(stdout, encoded);
+        try lz4_controls_cli.encodeBlockHex(init, &args, stdout, false);
     } else if (std.mem.eql(u8, command, "decode-lz4-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1783,15 +1922,7 @@ pub fn main(init: std.process.Init) !void {
         const summary = try vort.lz4SummarizeBlockWithPrefix(block, prefix);
         try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-prefix-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const prefix_hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const prefix = try hexToOwnedBytes(init.gpa, prefix_hex);
-        defer init.gpa.free(prefix);
-        const encoded = try vort.lz4EncodeBlockWithPrefixAlloc(init.gpa, payload, prefix);
-        defer init.gpa.free(encoded);
-        try printHex(stdout, encoded);
+        try lz4_controls_cli.encodeBlockHex(init, &args, stdout, true);
     } else if (std.mem.eql(u8, command, "decode-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -2501,13 +2632,19 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\  encode-xerial-snappy-file <in> <out> [block_size]
+        \\  encode-xerial-snappy-incremental-file <in> <out> [block_size] [input_step] [output_step]
         \\  decode-xerial-snappy-file <in> <out> [max_output]
+        \\  decode-xerial-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-xerial-snappy-file <path>
         \\  encode-hadoop-snappy-file <in> <out> [block_size] [chunk_size]
+        \\  encode-hadoop-snappy-incremental-file <in> <out> [block_size] [chunk_size] [input_step] [output_step]
         \\  decode-hadoop-snappy-file <in> <out> [max_output]
+        \\  decode-hadoop-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-hadoop-snappy-file <path>
         \\  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
+        \\  encode-hadoop-lz4-incremental-file <in> <out> [block_size] [chunk_size] [input_step] [output_step]
         \\  decode-hadoop-lz4-file <in> <out> [max_output]
+        \\  decode-hadoop-lz4-incremental-file <in> <out> <expected_output> [input_step] [output_step]
         \\  inspect-hadoop-lz4-file <path>
         \\  create-hadoop-lzo-index <input.lzo> [output.lzo.index]
         \\  inspect-hadoop-lzo-index <input.lzo> <input.lzo.index>
@@ -2524,12 +2661,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-xpress-huffman-file <in> <out>
         \\  decode-xpress-huffman-file <in> <out> <decoded_size>
         \\  inspect-xpress-huffman-file <path> <decoded_size>
+        \\  encode-lzms-file <in> <out> [--strategy=greedy|literals] [--no-delta] [--hash-log=8..20] [--max-distance=bytes] [--working-memory-limit=bytes] [--output-limit=bytes]
         \\  decode-lzms-file <in> <out> <decoded_size>
         \\  encode-wof-file <in> <out> <xpress4k|xpress8k|xpress16k|lzx>
         \\  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]
         \\  decode-wof-range <in> <out> <algorithm> <decoded_size> <offset> <length>
         \\  inspect-wof-file <in> <algorithm> <decoded_size>
-        \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
+        \\  encode-lzfse-file <in> <out> [block_size] [auto|fse|lzvn|stored]
+        \\    [--fse-version=v1|v2] [--hash-log=8..20] [--max-distance=bytes]
+        \\    [--working-memory-limit=bytes] [--output-limit=bytes]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]
         \\  inspect-decmpfs <xattr> [resource|-]
@@ -2552,7 +2692,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-qcow2 <path>
         \\  decode-qcow2 <in> <out> [max_output] [backing|-] [data_file|-]
         \\  decode-qcow2-range <in> <out> <offset> <length> [backing|-] [data_file|-]
-        \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version]
+        \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version] [backing backing_name]
+        \\  encode-qcow2-external <in> <image_out> <data_out> <data_name> [cluster_bits]
         \\  inspect-vmdk <path>
         \\  decode-vmdk <in> <out> [max_output] [logical_backing|-]
         \\  decode-vmdk-range <in> <out> <offset> <length> [logical_backing|-]
@@ -2561,6 +2702,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-ewf <first_segment> <out> [max_output] [additional_segments...]
         \\  decode-ewf-range <first_segment> <out> <offset> <length> [additional_segments...]
         \\  encode-ewf <in> <out> <none|zlib|auto> [sectors_per_chunk]
+        \\  encode-ewf-segments <in> <output_prefix> <none|zlib|auto> <max_segment_size> [sectors_per_chunk]
         \\  inspect-chd <image.chd> [parent.chd]
         \\  decode-chd <image.chd> <out> [max_output] [parent.chd]
         \\  decode-chd-range <image.chd> <out> <offset> <length> [parent.chd]
@@ -2611,9 +2753,14 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-android-sparse-range <in> <out> <offset> <length>
         \\  encode-android-sparse <in> <out> [block_size] [sparse|store-zero] [fill|raw-fill] [crc|no-crc] [checksum|no-checksum]
         \\  inspect-android-ota <payload.bin>
+        \\  inspect-android-ota-source <payload.bin>
         \\  extract-android-ota <payload> <partition> <out> [max_output] [source|-]
+        \\  extract-android-ota-source <payload> <partition> <out> <chunk_size> [source|-]
+        \\  verify-android-ota-signatures <payload> <public_key.pem> [additional_keys...]
+        \\  verify-android-ota-source-signatures <payload> <public_key.pem> [additional_keys...]
         \\  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
         \\  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
+        \\  encode-android-ota-source <in> <out> <partition> [mode] [block_size] [operation_size] [input_step] [output_step]
         \\  puff-android-deflate <in> <out> [bit_offset] [bit_length]
         \\  huff-android-deflate <in> <out> <bit_offset> <bit_length>
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
@@ -2623,14 +2770,24 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-squashfs-file <path>
         \\  create-squashfs-file <out> <entry> <in> [stored|gzip|lzma|lzo|xz|lz4|zstd] [block_size]
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
-        \\  list-erofs-file <path>
-        \\  create-erofs-file <out> <entry> <in> [stored|lz4|deflate|zstd]
-        \\  extract-erofs-file <image> <entry> <out> [max_output]
+        \\  list-erofs-file <path> [--working-memory-limit=bytes] [--max-directory-bytes=bytes] [device...]
+        \\  create-erofs-file <out> <entry> <in> [stored|lz4|lzma|deflate|zstd] [extent_size] [max_pcluster_size] [working_memory_limit] [--output-chunk-size=bytes] [--working-memory-limit=bytes] [--compressed-index-format=full|compact-4byte|compact]
+        \\  extract-erofs-file <image> <entry> <out> [max_output] [device...] [--working-memory-limit=bytes] [--output-chunk-size=bytes]
+        \\  list-erofs-xattrs <image> <entry> [--working-memory-limit=bytes] [device...]
         \\  list-wim-file <path>
         \\  extract-wim-resource <image> <sha1> <out> [max_output]
         \\  extract-wim-xml <image> <out> [max_output]
         \\  list-wim-image <image> [image_index]
         \\  extract-wim-path <image> <image_index> <entry> <out> [max_output]
+        \\  extract-wim-stream <image> <image_index> <entry> <stream> <out> [max_output]
+        \\  extract-wim-reparse <image> <image_index> <entry> <out> [max_output]
+        \\  extract-wim-encrypted-raw <image> <image_index> <entry> <out> [max_output]
+        \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name] [early-exit|verify-integrity]
+        \\  inspect-wim-encrypted-esd <image> [max_xml] [max_ranges]
+        \\  decrypt-wim-encrypted-esd <image> <private_key_blob> <out> <max_output>
+        \\  decrypt-wim-encrypted-esd-key <image> <aes256_key_hex> <out> <max_output>
+        \\  list-wim-parts-image <image_index> <part>...
+        \\  extract-wim-parts-path <image_index> <entry> <out> <max_output> <part>...
         \\  encode-bgzf-file <in> <out> [block_size]
         \\                              Encode deterministic blocked gzip/BGZF
         \\  decode-bgzf-file <in> <out> [max_output]
@@ -2638,6 +2795,25 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-bgzf-file <path>    List BGZF blocks and virtual offsets
         \\  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
         \\                              Decode an indexed BGZF virtual range
+        \\  encode-br-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
+        \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
+        \\    --large-window explicitly selects the Brotli Large Window extension (HQ quality 10/11 only)
+        \\                              With --large-window, --window-bits accepts 10..30; default remains 16
+        \\    --hq (quality 10/11 only); HQ parameters also explicitly select HQ:
+        \\    --hq-depth=1..65536 --hq-nice-len=2..16777216 --hq-beam-width=0..32
+        \\    --hq-iterations=0..8 --hq-block-len=1..16777216 --hq-memory=bytes
+        \\    --hq-parse-mode=bounded|whole_block (default bounded; HQ quality 10/11 only)
+        \\                              Whole-block parsing spans the target meta-block within configured limits
+        \\    --hq-copy-lengths=sampled|complete (default sampled; independent of parse mode)
+        \\    --hq-max-price-evaluations=NUM limits each parser plan; 0 rejects its first price evaluation
+        \\                              Complete lengths can require more work; finite beam search is not globally optimal
+        \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
+        \\    --max-total-memory=bytes --memory-profile (all planned qualities)
+        \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
+        \\                              Zero beam/iterations selects the public quality defaults
+        \\                              HQ controls describe Vort native effort, not upstream speed parity
         \\  encode-br-stored-hex [text] [window_bits] [metadata]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
@@ -2679,10 +2855,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-lha-file <path>        List LHA level-0/1/2/3 and SFX entries
         \\  extract-lha-file <lha> <entry> <out> [max_output]
         \\                              Extract common stored/LH/LArc LHA data
-        \\  create-ar-file <out> <entry> <in>
+        \\  create-ar-file <out> <entry> <in> [regular|thin]
         \\                              Create a deterministic Unix ar archive
         \\  list-ar-file <path>         List GNU/BSD Unix ar members
-        \\  extract-ar-file <ar> <entry> <out> [max_output]
+        \\  extract-ar-file <ar> <entry> <out> [max_output] [thin_source]
         \\                              Extract a bounded Unix ar member
         \\  create-deb-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
         \\                              Create a deterministic Debian binary package
@@ -2696,11 +2872,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a bounded RPM payload member
         \\  extract-rpm-payload <rpm> <out> [max_output]
         \\                              Decode the raw RPM CPIO payload
-        \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4]
+        \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4] [password modifier_hex]
         \\                              Create a deterministic ARJ archive
+        \\  create-arj-volumes <prefix> <entry> <in> <max_payload> [method] [password modifier_hex]
+        \\                              Create deterministic compressed-payload-limited ARJ volumes
         \\  list-arj-file <path>        List ARJ entries and methods
-        \\  extract-arj-file <arj> <entry> <out> [max_output]
-        \\                              Extract ARJ methods 0 through 4
+        \\  extract-arj-file <arj> <entry> <out> [max_output] [password]
+        \\                              Extract one ARJ methods 0 through 4 entry
+        \\  extract-arj-volumes <entry> <out> <max_output> <password|-> <volume.arj> [volume.a01...]
+        \\                              Extract an ordered ARJ continuation set
         \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed|crushed|distilled]
         \\                              Create a deterministic ARC/PAK archive
         \\  list-arc-file <path>        List ARC/PAK entries and methods
@@ -2716,14 +2896,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
         \\  extract-cpio-file <cpio> <entry> <out> [max_output]
         \\                              Extract a regular file or symlink target
-        \\  create-rar-file <out> <entry> <in> [rar4|rar5] [stored|rar29|rar29-ppmd|rar50] [none|delta:N|e8|e8e9|arm|itanium|rgb:W:R|audio:N] [solid]
+        \\  create-rar-file <out> <entry> <in> [rar4|rar5] [method] [filter] [solid] [version-specific encryption args]
         \\                              Create a deterministic stored/compressed RAR archive
         \\  create-rar-volumes <prefix> <entry> <in> <payload_size> [stored|rar50] [filter] [solid]
         \\                              Create an ordered RAR5 volume set
-        \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
-        \\  extract-rar-file <rar> <entry> <out> [max_output]
-        \\                              Extract a supported stored RAR entry
-        \\  extract-rar-volumes <entry> <out> <max_output> <vol1> [vol2...]
+        \\  list-rar-file <path> [password]
+        \\                              List RAR4/RAR5 entries and methods
+        \\  extract-rar-file <rar> <entry> <out> [max_output] [password]
+        \\                              Extract a supported RAR entry
+        \\  extract-rar-volumes <entry> <out> <max_output> [--password=...] <vol1> [vol2...]
         \\                              Extract across an ordered RAR5 volume set
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks
@@ -2734,24 +2915,43 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
-        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header]
+        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header] [start_position|-]
         \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path> [password|-]
+        \\  list-7z-source-file <path> [password|-]
         \\                              List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+        \\  extract-7z-source-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+        \\  extract-7z-source-stream-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+        \\  list-7z-volumes <password|-> <ordered-part>...
+        \\  extract-7z-volumes <entry> <out> [max_output] [max_dictionary] [max_folder] <password|-> <ordered-part>...
         \\                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
-        \\  encode-lzma-file <in> <out> [end-marker|known]
+        \\  encode-lzma-file <in> <out> [end-marker|known] [LZMA options]
         \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
+        \\  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+        \\                              Encode a complete raw MicroLZMA stream
+        \\  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+        \\                              Encode a terminated source prefix within capacity
+        \\  encode-microlzma-aligned-prefix-file <in> <out> <capacity> <alignment> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+        \\                              Align partial input consumption to a caller-selected boundary
         \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]
         \\                              Decode and report an LZMA-Alone stream's size
-        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]
+        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
-        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters]
+        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
         \\                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
+        \\  LZMA options (after positionals): --preset=0...9 [--extreme]
+        \\    --match-finder=hc3|hc4|bt2|bt3|bt4 --nice-len=2...273 --depth=u32
+        \\    --dict-size=4096...1610612736 --mode=fast|normal|greedy|lazy|literal-only
+        \\    --lc=0...4 --lp=0...4 --pb=0...4 --match-memory=bytes --profile
+        \\                              lc+lp must be <=4; --extreme requires --preset
+        \\                              Explicit options override the preset regardless of flag order
+        \\                              --profile requires a preset, matcher option, or fast/normal mode
+        \\  XZ-only option: --chunk-size=1...2097152 (default 65536)
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
         \\  decode-xz-concat-file <in> <out> [max_output]
@@ -2774,18 +2974,48 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a Stored/MSZIP/LZX/Quantum CAB entry with explicit limits
         \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]
         \\                              Extract an entry across an explicitly ordered cabinet set
+        \\  create-zip-split-file <prefix> <entry> <in> <max_part> [stored|deflate] [auto|zip32|zip64] [descriptor|sizes]
+        \\                              Create a standard atomic-record split ZIP set
+        \\  create-zip-split-stream-file <prefix> <entry> <in> <max_part> [stored|deflate] [auto|zip32|zip64]
+        \\                              Incrementally create split ZIP parts with bounded output memory
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
-        \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary]
+        \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary] [password|-]
         \\                              Extract a supported ZIP entry with CRC validation
+        \\  extract-zip-split-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+        \\                              Extract from an owned normalized split/multi-disk ZIP view
+        \\  extract-zip-split-stream-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+        \\                              Sequentially extract split ZIP without a joined archive copy
+        \\  extract-zip-split-source-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+        \\                              Extract while retaining at most one physical part file
+        \\  extract-zip-file-incremental <zip> <entry> <out> [max_output] [password|-]
+        \\                              Incrementally extract one Stored/Deflate ZIP entry
+        \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
+        \\                              Sequentially parse and extract a supported ZIP entry
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
-        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode text as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\    zstd_options: --level=N | --level N (-131072..22)
+        \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
+        \\                  --fast-acceleration=N (1..131072; fast or double_fast)
+        \\                  HQ strategies: --hq-depth=1..65536 --hq-nice-len=3..131072
+        \\                  --hq-min-match=3..7 --hq-memory=bytes
+        \\                  HQ flags require an HQ strategy and a positive level; nice_len >= min_match
+        \\                  Native controls specify local effort, not reference compressor speed parity
+        \\                  --profile shows optional encoder work counters
+        \\    Negative level -N selects fast acceleration N. New controls default to level 1.
+        \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
+        \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
+        \\    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.
+        \\    fastcover_options: --dmer=6|8 --segment=N --hash-log=1..31 --accel=1..10
+        \\                       --max-corpus=BYTES --max-working=BYTES --max-dictionary=BYTES --json --profile
+        \\    optimize_options: --steps=N --threads=N --shrink[=true|false] --split-num=N --split-den=N
+        \\    Split defaults to 3/4; 1/1 uses every sample for both partitions. Use -- before option-like sample names.
         \\                              Encode file bytes as dependency-free native-subset Zstandard file
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
@@ -2799,8 +3029,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
         \\  summary-zstd-native-file [path] [text|json]
         \\                              Summarize dependency-free native-subset Zstandard frame/stream blocks
-        \\  encode-lz4-native-file <in> <out>
+        \\  encode-lz4-native-file <in> <out> [lz4_options]
         \\                              Encode file bytes as dependency-free native LZ4 frame
+        \\  encode-lz4-native-stream-file <in> <out> [lz4_options]
+        \\  encode-lz4-block-file <in> <out> [lz4_options]
+        \\    lz4_options: --acceleration=NUM --chain-depth=0..16 --profile
+        \\                              Acceleration <=0 uses 1; values above 65537 clamp to 65537
+        \\                              Default acceleration 1 preserves Vort's bytewise scan; chain depth is independent
         \\  size-lz4-native-file [path] [max_output]
         \\                              Preflight dependency-free native LZ4 frame decoded size
         \\  summary-lz4-native-file [path] [text|json]
@@ -2811,7 +3046,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight LZ4 block decoded size
         \\  summary-lz4-block-hex [hex]
         \\                              Summarize LZ4 block literal/match tokens
-        \\  encode-lz4-block-hex [hex]
+        \\  encode-lz4-block-hex [hex] [lz4_options]
         \\                              Encode LZ4 block
         \\  decode-lz4-block-hex [hex] [max_output]
         \\                              Decode LZ4 block
@@ -2851,7 +3086,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight LZ4 block decoded size with prefix history
         \\  summary-lz4-block-prefix-hex [hex] [prefix_hex]
         \\                              Summarize LZ4 block tokens with prefix history
-        \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
+        \\  encode-lz4-block-prefix-hex [hex] [prefix_hex] [lz4_options]
         \\                              Encode LZ4 block with prefix history
         \\  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Decode LZ4 block with prefix history
@@ -3714,56 +3949,6 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     return parsed;
 }
 
-fn encodeXzFile(
-    init: std.process.Init,
-    args: *std.process.Args.Iterator,
-    stdout: *std.Io.Writer,
-    stored_only: bool,
-) !void {
-    const input_path = args.next() orelse return error.MissingCorpusPath;
-    const output_path = args.next() orelse return error.MissingCorpusPath;
-    const check = try parseXzCheck(args.next());
-    const block_size = try parseBlockLen(args.next(), 1024 * 1024);
-    var filter_storage: [3]vort.XzFilter = undefined;
-    const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
-    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
-    defer init.gpa.free(input);
-    const options = vort.XzEncodeOptions{
-        .check = check,
-        .block_size = block_size,
-        .filters = xz_filters,
-    };
-    const encoded = if (stored_only)
-        try vort.encodeXzStoredAlloc(init.gpa, input, options)
-    else
-        try vort.encodeXzAlloc(init.gpa, input, options);
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("xz_mode={s} input_bytes={d} compressed_bytes={d} blocks={d} path={s}\n", .{
-        if (stored_only) "stored" else "compressed",
-        input.len,
-        encoded.len,
-        if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
-        output_path,
-    });
-}
-
-fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
-    const value = text orelse return .crc64;
-    if (std.mem.eql(u8, value, "none")) return .none;
-    if (std.mem.eql(u8, value, "crc32")) return .crc32;
-    if (std.mem.eql(u8, value, "crc64")) return .crc64;
-    if (std.mem.eql(u8, value, "sha256")) return .sha256;
-    return error.InvalidChecksumMode;
-}
-
-fn parseLzmaSizeMode(text: ?[]const u8) !vort.LzmaSizeMode {
-    const value = text orelse return .end_marker;
-    if (std.mem.eql(u8, value, "end-marker") or std.mem.eql(u8, value, "unknown")) return .end_marker;
-    if (std.mem.eql(u8, value, "known")) return .known;
-    return error.InvalidLzmaSizeMode;
-}
-
 fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
     const value = text orelse return .none;
     if (std.mem.eql(u8, value, "none") or std.mem.eql(u8, value, "tar")) return .none;
@@ -3874,15 +4059,6 @@ fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
     if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
     if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
     return vort.optionsForCompressionLevel(.default);
-}
-
-fn parseZstdNativeSelection(text: ?[]const u8) !vort.ZstdNativeFrameSelection {
-    const value = text orelse return .auto;
-    if (std.mem.eql(u8, value, "auto")) return .auto;
-    if (std.mem.eql(u8, value, "raw_or_rle") or std.mem.eql(u8, value, "raw-rle")) return .raw_or_rle;
-    if (std.mem.eql(u8, value, "literal_only") or std.mem.eql(u8, value, "literal-only")) return .literal_only;
-    if (std.mem.eql(u8, value, "fast_compressed") or std.mem.eql(u8, value, "fast-compressed")) return .fast_compressed;
-    return error.InvalidZstdNativeSelection;
 }
 
 fn parseOptionalBool(text: ?[]const u8, default: bool) !bool {

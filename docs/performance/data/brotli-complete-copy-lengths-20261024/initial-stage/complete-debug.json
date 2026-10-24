@@ -1,0 +1,21 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-br-complete-lengths",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 154.59200798813254,
+  "utc": "2026-10-24T11:20:39.679973+00:00",
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig",
+    "/home/passchaos/project-z/vort-stream-contracts/tools/br/wasm_public_gate.js"
+  ],
+  "source_sha256": "660907ab56212e4cb4ca0337ee0b4f065a7e38da1663ad2ac96604217b2dbc72",
+  "log": "/tmp/vort-br-complete-final-20261024-qy09p5f8/complete-debug.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

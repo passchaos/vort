@@ -24,6 +24,14 @@ pub const Resource = struct {
     chunk_data_offset: usize,
 };
 
+pub const PartSource = struct {
+    context: *anyopaque,
+    bytes_for_part: *const fn (
+        context: *anyopaque,
+        part_number: u16,
+    ) Error![]const u8,
+};
+
 const ResourceRecord = struct {
     resource: Resource,
     part_number: u16,
@@ -41,6 +49,27 @@ pub fn resolveEntries(
     version: u32,
     entries: anytype,
 ) Error!void {
+    const Context = struct {
+        bytes: []const u8,
+
+        fn bytesForPart(context: *anyopaque, _: u16) Error![]const u8 {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            return self.bytes;
+        }
+    };
+    var context = Context{ .bytes = archive_bytes };
+    return resolveEntriesFromParts(allocator, version, entries, .{
+        .context = &context,
+        .bytes_for_part = Context.bytesForPart,
+    });
+}
+
+pub fn resolveEntriesFromParts(
+    allocator: std.mem.Allocator,
+    version: u32,
+    entries: anytype,
+    source: PartSource,
+) Error!void {
     var index: usize = 0;
     while (index < entries.len) {
         if (!entries[index].resource.isSolid()) {
@@ -53,16 +82,16 @@ pub fn resolveEntries(
             index += 1;
         try resolveRun(
             allocator,
-            archive_bytes,
             entries[run_start..index],
+            source,
         );
     }
 }
 
 fn resolveRun(
     allocator: std.mem.Allocator,
-    archive_bytes: []const u8,
     entries: anytype,
+    source: PartSource,
 ) Error!void {
     var resources: std.ArrayList(ResourceRecord) = .empty;
     defer resources.deinit(allocator);
@@ -70,6 +99,10 @@ fn resolveRun(
         if (entry.resource.uncompressed_size != resource_magic) continue;
         if (!entry.hashIsZero() or entry.reference_count == 0)
             return error.InvalidWim;
+        const archive_bytes = try source.bytes_for_part(
+            source.context,
+            entry.part_number,
+        );
         try resources.append(allocator, .{
             .resource = try parseResource(archive_bytes, entry.resource),
             .part_number = entry.part_number,

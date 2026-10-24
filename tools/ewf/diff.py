@@ -87,6 +87,8 @@ def main() -> None:
     external_encode = 0
     external_decode = 0
     multisegment = 0
+    segmented_writer = 0
+    segmented_writer_external = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-ewf-") as temp_text:
         temp = Path(temp_text)
@@ -128,6 +130,68 @@ def main() -> None:
                 if exported != plain:
                     raise AssertionError(f"libewf decode of Vort {compression} mismatch")
                 external_encode += 1
+
+        segmented_prefix = temp / "vort-segmented"
+        segmented_repeat_prefix = temp / "vort-segmented-repeat"
+        max_segment_size = 40000
+        first_result = run(
+            args.cli,
+            "encode-ewf-segments",
+            source,
+            segmented_prefix,
+            "auto",
+            max_segment_size,
+            64,
+        ).stdout
+        run(
+            args.cli,
+            "encode-ewf-segments",
+            source,
+            segmented_repeat_prefix,
+            "auto",
+            max_segment_size,
+            64,
+        )
+        segmented = sorted(temp.glob("vort-segmented.E*"))
+        segmented_repeat = sorted(temp.glob("vort-segmented-repeat.E*"))
+        if len(segmented) < 2 or f"segments={len(segmented)}".encode() not in first_result:
+            raise AssertionError("Vort EWF segmented writer did not split")
+        if len(segmented) != len(segmented_repeat):
+            raise AssertionError("Vort EWF segmented writer is not deterministic")
+        for first, repeated in zip(segmented, segmented_repeat):
+            if first.stat().st_size > max_segment_size:
+                raise AssertionError(f"Vort EWF segment exceeds limit: {first}")
+            if first.read_bytes() != repeated.read_bytes():
+                raise AssertionError(f"Vort EWF segment differs: {first.name}")
+        segmented_summary = run(
+            args.cli,
+            "inspect-ewf",
+            segmented[0],
+            *segmented[1:],
+        ).stdout
+        if f"segments={len(segmented)}".encode() not in segmented_summary:
+            raise AssertionError("Vort EWF segmented summary mismatch")
+        segmented_output = temp / "vort-segmented.raw"
+        run(
+            args.cli,
+            "decode-ewf",
+            segmented[0],
+            segmented_output,
+            len(plain),
+            *segmented[1:],
+        )
+        if segmented_output.read_bytes() != plain:
+            raise AssertionError("Vort EWF segmented round trip mismatch")
+        segmented_writer = 1
+        multisegment += 1
+        if libewf:
+            run(ewfinfo, segmented[0])
+            run(ewfverify, "-q", segmented[0])
+            exported = run(ewfexport, "-u", "-q", "-t", "-", segmented[0]).stdout
+            if exported != plain:
+                raise AssertionError("libewf decode of Vort segmented image mismatch")
+            segmented_writer_external = 1
+            external_encode += 1
 
         single = read_fixture("src/ewf/testdata/libewf-encase6-mixed.E01.bz2.b64")
         if hashlib.sha256(single).hexdigest() != PINNED_SINGLE_SHA256:
@@ -276,7 +340,8 @@ def main() -> None:
     print(
         f"self={self_cases} pinned={pinned} libewf={libewf} "
         f"external_encode={external_encode} external_decode={external_decode} "
-        f"multisegment={multisegment} malformed={malformed}"
+        f"multisegment={multisegment} segmented_writer={segmented_writer} "
+        f"segmented_writer_external={segmented_writer_external} malformed={malformed}"
     )
 
 

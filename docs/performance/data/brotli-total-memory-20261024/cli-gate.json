@@ -1,0 +1,82 @@
+{
+  "round_trips": 44,
+  "profile_wire_checks": 14,
+  "exact_cap_checks": 14,
+  "one_below_checks": 14,
+  "rejected_output_preserved": 44,
+  "same_path_checks": 2,
+  "measurements": [
+    {
+      "command": "encode-br-file",
+      "case": "legacy_default",
+      "peak_requested_bytes": 990
+    },
+    {
+      "command": "encode-br-file",
+      "case": "quality0",
+      "peak_requested_bytes": 4073
+    },
+    {
+      "command": "encode-br-file",
+      "case": "quality5",
+      "peak_requested_bytes": 689855
+    },
+    {
+      "command": "encode-br-file",
+      "case": "quality8_window",
+      "peak_requested_bytes": 689855
+    },
+    {
+      "command": "encode-br-file",
+      "case": "quality11",
+      "peak_requested_bytes": 689855
+    },
+    {
+      "command": "encode-br-file",
+      "case": "hq10_text",
+      "peak_requested_bytes": 8824829
+    },
+    {
+      "command": "encode-br-file",
+      "case": "hq11_font",
+      "peak_requested_bytes": 9138392
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "legacy_default",
+      "peak_requested_bytes": 2209
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "quality0",
+      "peak_requested_bytes": 4358
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "quality5",
+      "peak_requested_bytes": 689955
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "quality8_window",
+      "peak_requested_bytes": 689957
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "quality11",
+      "peak_requested_bytes": 689955
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "hq10_text",
+      "peak_requested_bytes": 8824674
+    },
+    {
+      "command": "encode-br-stream-file",
+      "case": "hq11_font",
+      "peak_requested_bytes": 9138195
+    }
+  ],
+  "reference_brotli_version": 16777225,
+  "external_dictionary_cli_cases": 0
+}

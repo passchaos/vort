@@ -225,15 +225,21 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         /// Format parsers that already discovered this set can avoid rescanning
         /// a large sparse alphabet solely to reconstruct the same list.
         pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Self {
-            if (lengths.len > max_symbols or active_symbols.len > max_symbols) return error.CorruptFrame;
-            if (active_symbols.len == 0) return Self{};
-            return initSparseTrustedNonEmpty(lengths, active_symbols);
+            var table: Self = undefined;
+            try initSparseTrustedInto(&table, lengths, active_symbols);
+            return table;
         }
 
-        // Keep the non-empty path separate so callers with a proven active set
-        // do not retain the large zero-value return as a cold copy path.
-        fn initSparseTrustedNonEmpty(lengths: []const u4, active_symbols: []const u16) Error!Self {
-            if (lengths.len > max_symbols or active_symbols.len == 0 or active_symbols.len > max_symbols) return error.CorruptFrame;
+        /// Caller-owned form of `initSparseTrusted`. Large format headers can
+        /// build directly in their final table slot instead of returning a
+        /// max-alphabet-sized temporary through an error union.
+        pub fn initSparseTrustedInto(destination: *Self, lengths: []const u4, active_symbols: []const u16) Error!void {
+            if (lengths.len > max_symbols or active_symbols.len > max_symbols) return error.CorruptFrame;
+            destination.len = 0;
+            destination.max_bits = 0;
+            destination.first_by_bits = @splat(0);
+            destination.count_by_bits = @splat(0);
+            if (active_symbols.len == 0) return;
 
             var counts: [max_code_bits + 1]u16 = @splat(0);
             var max_bits_seen: u4 = 0;
@@ -255,13 +261,14 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 next_code[bits] = code;
             }
 
-            var table = Self{ .len = active_symbols.len, .max_bits = max_bits_seen };
+            destination.len = active_symbols.len;
+            destination.max_bits = max_bits_seen;
             var write_offsets: [max_code_bits + 1]u16 = @splat(0);
             var offset: u16 = 0;
             for (1..max_code_bits + 1) |bits| {
-                table.first_by_bits[bits] = offset;
+                destination.first_by_bits[bits] = offset;
                 write_offsets[bits] = offset;
-                table.count_by_bits[bits] = counts[bits];
+                destination.count_by_bits[bits] = counts[bits];
                 offset += counts[bits];
             }
             for (active_symbols) |symbol| {
@@ -270,13 +277,12 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 next_code[bits] += 1;
                 const entry_index = write_offsets[bits];
                 write_offsets[bits] += 1;
-                table.entries[entry_index] = .{
+                destination.entries[entry_index] = .{
                     .symbol = symbol,
                     .code = reverseBits(canonical, bits),
                     .bits = bits,
                 };
             }
-            return table;
         }
 
         /// Build a small decoder when code lengths and wire symbols are already
@@ -558,11 +564,18 @@ test "sparse trusted decoder matches dense canonical table" {
 
     const dense = try HuffmanTable(704).init(&lengths);
     const sparse = try HuffmanTable(704).initSparseTrusted(&lengths, &active);
+    var into: HuffmanTable(704) = undefined;
+    try into.initSparseTrustedInto(&lengths, &active);
     try std.testing.expectEqual(dense.len, sparse.len);
     try std.testing.expectEqual(dense.max_bits, sparse.max_bits);
     try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
     try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
     try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
+    try std.testing.expectEqual(sparse.len, into.len);
+    try std.testing.expectEqual(sparse.max_bits, into.max_bits);
+    try std.testing.expectEqualSlices(HuffmanTable(704).Entry, sparse.entries[0..sparse.len], into.entries[0..into.len]);
+    try std.testing.expectEqual(sparse.first_by_bits, into.first_by_bits);
+    try std.testing.expectEqual(sparse.count_by_bits, into.count_by_bits);
 }
 
 test "explicit-symbol decoder matches dense simple trees" {

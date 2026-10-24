@@ -64,6 +64,7 @@ pub const EncodeOptions = struct {
 
 pub fn parse(bytes: []const u8) Error!Package {
     const archive_value = try ar.parse(bytes);
+    if (archive_value.thin) return error.InvalidDebPackage;
     if (archive_value.entry_count < 3) return error.InvalidDebPackage;
     var iterator_value = archive_value.iterator();
     const version = (try iterator_value.next()) orelse return error.InvalidDebPackage;
@@ -230,4 +231,8 @@ test "Debian package writer round trips compressed control and data archives" {
         defer allocator.free(payload);
         try std.testing.expectEqualStrings(data_entries[0].data, payload);
     }
+}
+
+test "Debian package rejects external thin ar members" {
+    try std.testing.expectError(error.InvalidDebPackage, parse(ar.thin_signature));
 }

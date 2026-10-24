@@ -9,10 +9,13 @@ pub const Archive = archive.Archive;
 pub const OpenOptions = archive.OpenOptions;
 pub const Compression = writer.Compression;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const ExternalDataEncodeOptions = writer.ExternalDataEncodeOptions;
+pub const EncodedExternalData = writer.EncodedExternalData;
 pub const magic = format.magic;
 pub const parseHeader = format.parseHeader;
 pub const parse = archive.Archive.init;
 pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeExternalDataAlloc = writer.encodeExternalDataAlloc;
 
 test {
     _ = format;

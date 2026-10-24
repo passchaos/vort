@@ -20,6 +20,16 @@ payload. It validates:
 - old partition, per-operation source, and final partition SHA-256 values when
   the corresponding data is supplied.
 
+Vendor signatures use bounded proto2 `Signatures` messages with repeated data
+and optional fixed32 unpadded lengths. Metadata verification hashes exactly
+`header + manifest`; payload verification hashes that same metadata followed
+by data blobs while skipping both signature protobufs, matching AOSP
+update_engine. Multiple signatures and trusted keys are tried under explicit
+count/blob/signature/key limits. Vail owns strict SubjectPublicKeyInfo PEM/DER
+parsing plus RSA-2048/4096 PKCS#1-v1.5 SHA-256 and P-256 ECDSA verification.
+Unsigned payloads fail by default; either section becomes optional only through
+an explicit verification option.
+
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
 Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, `BROTLI_BSDIFF`, and
 `PUFFDIFF` operations are also supported with an explicit old partition image.
@@ -42,10 +52,39 @@ varints, ordered equivalences, exact extra-data accounting, raw-delta offsets,
 target-pool limits, trailing bytes, and output limits. NoOp/raw elements apply
 equivalence copies, literal gaps, and byte deltas and are available through the
 standalone `parseAndroidZucchiniAlloc` and `applyAndroidZucchiniAlloc` APIs as
-well as OTA extraction. Executable elements that require PE/ELF/DEX/ZTF
-reference correction are parsed but explicitly return
-`UnsupportedZucchiniPatch` until their architecture-specific disassemblers are
-implemented.
+well as OTA extraction. AArch32/AArch64 ELF (`EA32` / `EA64`), Intel
+ELF32/ELF64 (`Ex86` / `Ex64`), and PE32/PE32+ (`Px86` / `Px64`) elements are
+also supported. The
+bounded ELF readers validate headers, sections, program ranges, file/RVA
+mapping units, relocation tables, and reference quotas. The PE readers
+additionally validate DOS/COFF/optional headers, data-directory geometry,
+executable sections, image bases, and bounded base-relocation blocks.
+Correction covers `R_ARM_RELATIVE`, `R_AARCH64_RELATIVE`, `R_386_RELATIVE`,
+`R_X86_64_RELATIVE`, and PE HIGHLOW/DIR64 relocation targets;
+width-appropriate absolute targets; AArch32 A24 plus Thumb-2 T8, T11, T20, and
+T24 branches; AArch64 14-, 19-, and 26-bit branch immediates; Intel `CALL`,
+`JMP`, and long-form conditional rel32 branches; and x86-64 RIP-relative call,
+jump, move, and address-load instructions. AArch32 sections reproduce AOSP's
+ARM-versus-Thumb-2 conditional-density heuristic and require branch targets to
+land in executable sections. The shared application engine reproduces
+Zucchini's source-pruned offset mapper, projected/extra target pools,
+nearest-key tie breaking, and global signed reference-delta order.
+
+DEX 035/037/038/039 (`DEX `) elements are supported with bounded header/map
+parsing, fixed identifier tables, flattened type and annotation lists,
+annotation directories, ULEB128/SLEB128 code-item tails, Dalvik instruction
+layouts, and payload boundaries. All 42 AOSP reference types and 17 target
+pools are covered: string/type/proto/field/method/call-site/method-handle
+indices, variable-item offsets, annotations, encoded arrays, and 8-/16-/32-bit
+relative code targets. DEX SHA-1 and Adler-32 changes remain ordinary Zucchini
+raw deltas, matching upstream wire semantics.
+
+Zucchini Text Format (`ZTF `) elements support all 24 AOSP reference groups:
+four delimiter pools, absolute and relative line/column addressing, and one-
+through three-digit fields. Parsing pins the first `txTZ\n` footer, bounds lines
+and columns below 1000, rejects negative zero and out-of-range targets, and
+protects newlines during writes. Repository fixtures are byte-identical to
+AOSP's `old.ztf` and `new.ztf` corpus files.
 
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
@@ -110,6 +149,61 @@ const lz4diff_patched = try vort.applyAndroidLz4diffAlloc(
     .{ .max_output_len = expected_physical_size },
 );
 defer allocator.free(lz4diff_patched);
+
+const trusted = try vort.AndroidOtaSignaturePublicKey.parsePem(public_key_pem);
+const verified = try payload.verifySignatures(&.{trusted}, .{});
+```
+
+Large seekable payloads and old partition images can remain outside memory.
+`AndroidOtaSource` is a stable caller-owned length plus short-read-capable
+`read_at` callback. `AndroidOtaSourceArchive` copies only the bounded header,
+manifest, and metadata signature; operation blobs and old-image extents are
+read on demand. The same range engine covers every supported operation and
+retains at most one explicitly limited operation blob/output plus the caller's
+requested range. Opening verifies operation-data hashes by streaming each blob;
+callers may disable that pass explicitly, while decode still enforces source,
+operation, and final partition hashes according to `AndroidOtaDecodeOptions`.
+
+```zig
+var source_archive = try vort.parseAndroidOtaSourceAlloc(
+    allocator,
+    .{ .context = ctx, .len = payload_len, .read_at = readAt },
+    .{},
+);
+defer source_archive.deinit();
+
+const index = source_archive.findPartition("system") orelse
+    return error.RangeOutOfBounds;
+try source_archive.readPartitionRangeInto(
+    allocator,
+    index,
+    null, // or a second AndroidOtaSource for delta payloads
+    range_offset,
+    output,
+    .{ .max_output_len = output.len, .verify_partition_hash = false },
+);
+```
+
+The symmetric seekable writer is `encodeAndroidOtaSourcesTo`. Its first pass
+reads one operation at a time, selects compression, hashes the partition and
+wire blob, and retains only the manifest plan. Its second pass re-reads and
+deterministically recompresses each operation into a short-write-capable caller
+sink. A changed source is rejected as `UnstableAndroidOtaSource` before its
+changed blob is emitted. Memory is bounded by one input operation, the codec's
+candidate buffers, manifest metadata, and the sink's own state; neither whole
+partitions nor the complete payload are retained. For identical stable inputs,
+all four compression policies are byte-identical to `encodeAndroidOtaAlloc`.
+
+```zig
+const result = try vort.encodeAndroidOtaSourcesTo(
+    allocator,
+    &.{.{
+        .name = "system",
+        .source = .{ .context = input_ctx, .len = image_len, .read_at = readAt },
+    }},
+    .{ .compression = .auto },
+    .{ .context = output_ctx, .write = write },
+);
 ```
 
 The deterministic full-payload writer accepts multiple named, block-aligned
@@ -140,9 +234,14 @@ CLI and validation surface:
 
 ```sh
 zig build run -- inspect-android-ota payload.bin
+zig build run -- inspect-android-ota-source payload.bin
 zig build run -- extract-android-ota payload.bin system system.img 8589934592
+zig build run -- extract-android-ota-source payload.bin system system.img 1048576 old-system.img
+zig build run -- verify-android-ota-signatures payload.bin vendor-public.pem
+zig build run -- verify-android-ota-source-signatures payload.bin vendor-public.pem
 zig build run -- extract-android-ota-range payload.bin system range.bin 1048576 65536
 zig build run -- encode-android-ota system.img payload.bin system auto 4096 1048576
+zig build run -- encode-android-ota-source system.img payload.bin system auto 4096 1048576 65536 65536
 zig build run -- puff-android-deflate input.deflate output.puff
 zig build run -- huff-android-deflate output.puff restored.deflate 0 12345
 zig build test-android-ota
@@ -174,13 +273,38 @@ ordinary and zero-padded LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF payloads with
 both complete clusters and bounded ranges byte-for-byte. The LZ4HC cases span
 hash-chain levels 5 and 9 plus optimal-parser levels 10 and 12.
 When Python's Brotli module is available, the same driver independently emits
-a canonical Zucchini v1 NoOp patch with equivalences and raw deltas, wraps it
-in Brotli, and verifies whole-partition and bounded-range OTA extraction.
+a canonical Zucchini v1 NoOp patch with equivalences and raw deltas plus an
+`EA64` patch that retargets an AArch64 branch and `Ex86`/`Ex64` patches that
+retarget relocation, absolute, and rel32 references. Independent `Px86`/`Px64`
+fixtures cover the corresponding PE base-relocation and image-base semantics.
+An `EA32` fixture additionally retargets an ARM A24 branch. A DEX 039 fixture
+with valid SHA-1/Adler-32 retargets a Dalvik string index while raw deltas update
+the integrity fields and a NoOp element preserves block padding. It wraps all
+eight binary fixtures plus an independent ZTF reference patch in Brotli and
+verifies whole-partition and bounded-range OTA extraction.
+The required source-backed matrix uses real positional file callbacks for all
+four writer modes, the independent Python mixed payload, SOURCE_COPY,
+SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and nine Zucchini variants.
+It writes outputs in 257-byte chunks, checks final bytes and SHA-256, reports
+physical read counts, and currently requires `source_reader=23` plus
+`source_inspect=4`. Supplying the local AOSP update-engine corpus additionally
+requires both full and both delta kernel/root partitions through this path,
+raising the result to `source_reader=27`, `source_aosp=4`.
+The source writer differential forces three-byte input reads and five-byte sink
+writes for raw, Bzip2, XZ, and automatic policies, requires exact equality with
+the corresponding one-shot payloads, and independently decodes all four with
+Rust `payload_dumper` (`source_writer=4`, `source_writer_oracle=4`).
+When OpenSSL is available, the differential independently generates temporary
+RSA-2048 and P-256 keys, signs both metadata and payload ranges, verifies all
+four raw signatures with OpenSSL, then requires both Vort slice/source APIs to
+select the correct key after a wrong-key candidate. Wrong-only keys, damaged
+signatures, and unsigned payloads fail (`signature_cases=9`,
+`signature_openssl=4`). Fixed Vail vectors additionally cover RSA-4096.
 
-Current explicit limitations are major-version-1 payloads, cryptographic
-verification of vendor metadata/payload signatures, and architecture-specific
-Zucchini reference correction for PE, ELF, DEX, and ZTF elements. DISCARD is
+Current explicit limitations are major-version-1 payloads and certificate-bundle
+trust-store discovery/revocation policy. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
-Streaming file I/O remains future work.
+Non-seekable network input and a single-pass writer for callers unable to replay
+input remain future work.

@@ -1,6 +1,21 @@
 //! Vort: next-generation compression experiments and compatibility-oriented primitives.
 
 const std = @import("std");
+const byte_source = @import("io/source.zig");
+const file_source = @import("io/file_source.zig");
+const byte_sink = @import("io/sink.zig");
+const file_sink = @import("io/file_sink.zig");
+const working_allocator = @import("io/working_allocator.zig");
+
+pub const ByteSource = byte_source.Source;
+pub const ByteSourceError = byte_source.Error;
+pub const SliceByteSource = byte_source.SliceSource;
+pub const FileByteSource = file_source.FileSource;
+pub const ByteSink = byte_sink.Sink;
+pub const ByteSinkError = byte_sink.Error;
+pub const BufferByteSink = byte_sink.BufferSink;
+pub const FileByteSink = file_sink.FileSink;
+pub const WorkingAllocator = working_allocator.WorkingAllocator;
 
 pub const checksum = @import("checksum.zig");
 pub const core = @import("core.zig");
@@ -27,6 +42,8 @@ pub const lz4_legacy = @import("lz4_legacy.zig");
 pub const lznt1 = @import("lznt1.zig");
 pub const xpress = @import("xpress.zig");
 pub const lzms = @import("lzms.zig");
+pub const lzx = @import("lzx.zig");
+pub const quantum = @import("quantum.zig");
 pub const wof = @import("wof.zig");
 pub const lzfse = @import("lzfse.zig");
 pub const decmpfs = @import("decmpfs.zig");
@@ -57,6 +74,7 @@ pub const erofs = @import("erofs.zig");
 pub const wim = @import("wim.zig");
 pub const cab = @import("cab.zig");
 pub const zip = @import("zip.zig");
+pub const ppmd8 = @import("ppmd8.zig");
 pub const bzip2 = @import("bzip2.zig");
 pub const xz = @import("xz.zig");
 pub const lzma = @import("lzma.zig");
@@ -151,18 +169,86 @@ pub const encodeCabinetSetAlloc = cab.encodeSetAlloc;
 
 pub const ZipError = zip.Error;
 pub const ZipArchive = zip.Archive;
+pub const ZipSplitArchive = zip.SplitArchive;
+pub const ZipSplitOptions = zip.SplitOptions;
+pub const ZipSplitNormalizedStream = zip.SplitNormalizedStream;
+pub const ZipSplitPartSource = zip.SplitPartSource;
+pub const ZipSplitNormalizedSourceStream = zip.SplitNormalizedSourceStream;
+pub const ZipSplitIncrementalReader = zip.SplitIncrementalReader;
+pub const ZipSplitIncrementalReaderOptions = zip.SplitIncrementalReaderOptions;
+pub const ZipSplitIncrementalReaderError = zip.SplitIncrementalReaderError;
+pub const ZipSplitEncodeOptions = zip.SplitEncodeOptions;
+pub const ZipSplitEncodedArchive = zip.SplitEncodedArchive;
+pub const ZipSplitWriterError = zip.SplitWriterError;
+pub const ZipSplitIncrementalWriter = zip.SplitIncrementalWriter;
+pub const ZipSplitIncrementalWriterOptions = zip.SplitIncrementalWriterOptions;
+pub const ZipSplitIncrementalWriterStepResult = zip.SplitIncrementalWriterStepResult;
+pub const ZipSplitIncrementalWriterError = zip.SplitIncrementalWriterError;
 pub const ZipEntry = zip.Entry;
 pub const ZipIterator = zip.Iterator;
 pub const ZipCompressionMethod = zip.CompressionMethod;
+pub const ZipCreatorSystem = zip.CreatorSystem;
+pub const ZipDosTimestamp = zip.DosTimestamp;
+pub const ZipExtendedTimestamp = zip.ExtendedTimestamp;
+pub const ZipNtfsTimestamp = zip.NtfsTimestamp;
+pub const zipFileTimeFromUnixSeconds = zip.fileTimeFromUnixSeconds;
+pub const zipFileTimeToUnixSeconds = zip.fileTimeToUnixSeconds;
+pub const zipUnixExternalAttributes = zip.unixExternalAttributes;
 pub const Zip64Mode = zip.Zip64Mode;
 pub const ZipEncodeEntry = zip.EncodeEntry;
 pub const ZipEncodeOptions = zip.EncodeOptions;
+pub const ZipTraditionalEncryptionOptions = zip.TraditionalEncryptionOptions;
+pub const ZipWinZipAesOptions = zip.WinZipAesOptions;
+pub const ZipWinZipAesStrength = zip.WinZipAesStrength;
+pub const ZipWinZipAesVendorVersion = zip.WinZipAesVendorVersion;
+pub const ZipWinZipAesInfo = zip.WinZipAesInfo;
+pub const ZipPkwareStrongEncryptionOptions = zip.PkwareStrongEncryptionOptions;
+pub const ZipPkwareStrongEncryptionStrength = zip.PkwareStrongEncryptionStrength;
+pub const ZipPkwareStrongEncryptionInfo = zip.PkwareStrongEncryptionInfo;
 pub const ZipDecodeOptions = zip.DecodeOptions;
+pub const ZipIncrementalWriter = zip.IncrementalWriter;
+pub const ZipIncrementalWriterError = zip.IncrementalWriterError;
+pub const ZipIncrementalWriterOptions = zip.IncrementalWriterOptions;
+pub const ZipIncrementalEntryOptions = zip.IncrementalEntryOptions;
+pub const ZipIncrementalWriterPhase = zip.IncrementalWriterPhase;
+pub const ZipIncrementalEntryDecoder = zip.IncrementalEntryDecoder;
+pub const ZipOwnedIncrementalEntryDecoder = zip.OwnedIncrementalEntryDecoder;
+pub const ZipIncrementalEntryDecoderError = zip.IncrementalEntryDecoderError;
+pub const ZipIncrementalEntryDecoderOptions = zip.IncrementalEntryDecoderOptions;
+pub const ZipIncrementalEntryDecoderPhase = zip.IncrementalEntryDecoderPhase;
+pub const ZipIncrementalReader = zip.IncrementalReader;
+pub const ZipIncrementalReaderError = zip.IncrementalReaderError;
+pub const ZipIncrementalReaderOptions = zip.IncrementalReaderOptions;
+pub const ZipIncrementalReaderPhase = zip.IncrementalReaderPhase;
+pub const ZipIncrementalReaderStepResult = zip.IncrementalReaderStepResult;
+pub const ZipIncrementalReaderEntryInfo = zip.IncrementalReaderEntryInfo;
 pub const ZipDclImplodeDictionary = zip.DclImplodeDictionary;
 pub const ZipDclImplodeOptions = zip.DclImplodeOptions;
+pub const ZipDclImplodeIncrementalDecoder = zip.DclImplodeIncrementalDecoder;
+pub const ZipDclImplodeIncrementalEncoder = zip.DclImplodeIncrementalEncoder;
+pub const ZipShrinkIncrementalDecoder = zip.ShrinkIncrementalDecoder;
+pub const ZipShrinkIncrementalWorkspace = zip.ShrinkIncrementalWorkspace;
+pub const ZipShrinkIncrementalEncoder = zip.ShrinkIncrementalEncoder;
+pub const ZipReduceIncrementalDecoder = zip.ReduceIncrementalDecoder;
+pub const ZipReduceIncrementalWorkspace = zip.ReduceIncrementalWorkspace;
+pub const ZipReduceIncrementalEncoder = zip.ReduceIncrementalEncoder;
+pub const ZipReduceFollowerTable = zip.ReduceFollowerTable;
+pub const trainZipReduceFollowerTable = zip.trainReduceFollowerTable;
+pub const ZipReduceFactor = zip.ReduceFactor;
+pub const ZipImplodeDictionary = zip.ImplodeDictionary;
+pub const ZipImplodeOptions = zip.ImplodeOptions;
+pub const ZipImplodeIncrementalDecoder = zip.ImplodeIncrementalDecoder;
+pub const ZipImplodeIncrementalWorkspace = zip.ImplodeIncrementalWorkspace;
+pub const ZipImplodeIncrementalEncoder = zip.ImplodeIncrementalEncoder;
+pub const Ppmd8IncrementalDecoder = ppmd8.IncrementalDecoder;
+pub const Ppmd8IncrementalEncoder = ppmd8.IncrementalEncoder;
+pub const Ppmd8RestoreMethod = ppmd8.RestoreMethod;
+pub const Ppmd8ZipProperties = ppmd8.ZipProperties;
 pub const parseZipArchive = zip.parse;
+pub const parseSplitZipArchiveAlloc = zip.parseSplitArchiveAlloc;
 pub const zipEncodeAlloc = zip.encodeAlloc;
 pub const zipEncodeAppend = zip.encodeAppend;
+pub const zipEncodeSplitAlloc = zip.encodeSplitAlloc;
 pub const zipExtractEntryInto = zip.extractEntryInto;
 pub const zipExtractEntryIntoWithAllocator = zip.extractEntryIntoWithAllocator;
 pub const zipExtractEntryIntoWithOptions = zip.extractEntryIntoWithOptions;
@@ -175,6 +261,8 @@ pub const zipExtractByNameAllocWithOptions = zip.extractByNameAllocWithOptions;
 
 pub const Bzip2Error = bzip2.Error;
 pub const Bzip2EncodeOptions = bzip2.EncodeOptions;
+pub const Bzip2IncrementalDecoder = bzip2.IncrementalDecoder;
+pub const Bzip2IncrementalEncoder = bzip2.IncrementalEncoder;
 pub const encodeBzip2Alloc = bzip2.encodeAlloc;
 pub const encodeBzip2Append = bzip2.encodeAppend;
 pub const encodeBzip2Into = bzip2.encodeInto;
@@ -192,9 +280,30 @@ pub const bzip2DecodedSizeConcatenatedLimited = bzip2.decodedSizeConcatenatedLim
 pub const XzError = xz.Error;
 pub const XzCheck = xz.Check;
 pub const XzStreamInfo = xz.StreamInfo;
+pub const XzDecodeOptions = xz.DecodeOptions;
+pub const XzDecodeWorkspace = xz.DecodeWorkspace;
 pub const XzEncodeOptions = xz.EncodeOptions;
+pub const RawLzma2EncodeOptions = xz.RawLzma2EncodeOptions;
+pub const validateXzEncodeOptions = xz.validateEncodeOptions;
+pub const XzEncodeParser = xz.Parser;
+pub const xzMaxEncodeDictionarySize = xz.max_encode_dictionary_size;
+pub const lzma2MaxCompressedPlainSize = xz.max_encode_chunk_size;
+pub const lzma2MaxCompressedPayloadSize = xz.max_compressed_payload_size;
+pub const lzma2MaxStoredChunkSize = xz.max_stored_chunk_size;
 pub const XzFilter = xz.Filter;
+pub const XzIncrementalDecoder = xz.IncrementalDecoder;
+pub const XzIncrementalEncoder = xz.IncrementalEncoder;
+pub const RawLzma2IncrementalDecoder = xz.RawLzma2IncrementalDecoder;
+pub const RawLzma2IncrementalEncoder = xz.RawLzma2IncrementalEncoder;
+pub const encodeRawLzma2Append = xz.encodeRawLzma2Append;
+pub const encodeRawLzma2AppendWithOptions = xz.encodeRawLzma2AppendWithOptions;
+pub const encodeRawLzma2StoredAppend = xz.encodeRawLzma2StoredAppend;
+pub const XzIncrementalFilterDecoder = xz.IncrementalFilterDecoder;
+pub const XzIncrementalFilterEncoder = xz.IncrementalFilterEncoder;
 pub const encodeXzAlloc = xz.encodeAlloc;
+pub const encodeXzLazyAlloc = xz.encodeLazyAlloc;
+pub const encodeXzLazyAppend = xz.encodeLazyAppend;
+pub const encodeXzLazyInto = xz.encodeLazyInto;
 pub const encodeXzAppend = xz.encodeAppend;
 pub const encodeXzInto = xz.encodeInto;
 pub const encodeXzStoredAlloc = xz.encodeStoredAlloc;
@@ -216,13 +325,32 @@ pub const xzDecodedSizeConcatenatedLimited = xz.decodedSizeConcatenatedLimited;
 pub const LzmaError = lzma.Error;
 pub const LzmaHeader = lzma.Header;
 pub const LzmaDecodeOptions = lzma.DecodeOptions;
+pub const LzmaDecodeWorkspaceOptions = lzma.DecodeWorkspaceOptions;
+pub const LzmaDecodeWorkspace = lzma.DecodeWorkspace;
 pub const MicroLzmaDecodeOptions = lzma.MicroDecodeOptions;
+pub const MicroLzmaEncodeOptions = lzma.MicroEncodeOptions;
+pub const MicroLzmaDestSizeResult = lzma.MicroDestSizeResult;
+pub const MicroLzmaEncodedPrefix = lzma.MicroEncodedPrefix;
 pub const LzmaEncodeOptions = lzma.EncodeOptions;
+pub const LzmaCompressionPreset = lzma.CompressionPreset;
+pub const LzmaMatchFinder = lzma.MatchFinder;
+pub const LzmaMatchOptions = lzma.MatchOptions;
+pub const LzmaEncodeWorkProfile = lzma.EncodeWorkProfile;
+pub const LzmaZipEncodeOptions = lzma.ZipEncodeOptions;
+pub const lzmaResolvePreset = lzma.resolvePreset;
+pub const lzmaMaxEncodeDictionarySize = lzma.max_encode_dictionary_size;
+pub const validateLzmaEncodeOptions = lzma.validateEncodeOptions;
+pub const validateLzmaZipEncodeOptions = lzma.validateZipEncodeOptions;
+pub const encodeLzmaZipPayloadAlloc = lzma.encodeZipPayloadAlloc;
+pub const encodeLzmaZipPayloadAppend = lzma.encodeZipPayloadAppend;
 pub const LzmaProperties = lzma.Properties;
 pub const LzmaEncodeMode = lzma.EncodeMode;
 pub const LzmaSizeMode = lzma.SizeMode;
+pub const LzmaIncrementalDecoder = lzma.IncrementalDecoder;
+pub const LzmaIncrementalEncoder = lzma.IncrementalEncoder;
 pub const parseLzmaHeader = lzma.parseHeader;
 pub const decodeLzmaInto = lzma.decodeInto;
+pub const decodeLzmaIntoWithOptions = lzma.decodeIntoWithOptions;
 pub const decodeLzmaAlloc = lzma.decodeAlloc;
 pub const decodeLzmaAllocLimited = lzma.decodeAllocLimited;
 pub const decodeLzmaAllocWithOptions = lzma.decodeAllocWithOptions;
@@ -230,8 +358,16 @@ pub const decodeMicroLzmaInto = lzma.decodeMicroInto;
 pub const decodeMicroLzmaAllocExactSize = lzma.decodeMicroAllocExactSize;
 pub const decodeMicroLzmaAllocLimited = lzma.decodeMicroAllocLimited;
 pub const decodeMicroLzmaAllocWithOptions = lzma.decodeMicroAllocWithOptions;
+pub const encodeMicroLzmaAlloc = lzma.encodeMicroAlloc;
+pub const encodeMicroLzmaAppend = lzma.encodeMicroAppend;
+pub const encodeMicroLzmaInto = lzma.encodeMicroInto;
+pub const encodeMicroLzmaDestSizeAlloc = lzma.encodeMicroDestSizeAlloc;
+pub const encodeMicroLzmaDestSizeInto = lzma.encodeMicroDestSizeInto;
+pub const encodeMicroLzmaAlignedDestSizeAlloc = lzma.encodeMicroAlignedDestSizeAlloc;
+pub const encodeMicroLzmaAlignedDestSizeInto = lzma.encodeMicroAlignedDestSizeInto;
 pub const lzmaDecodedSize = lzma.decodedSize;
 pub const lzmaDecodedSizeLimited = lzma.decodedSizeLimited;
+pub const lzmaDecodedSizeWithOptions = lzma.decodedSizeWithOptions;
 pub const encodeLzmaAlloc = lzma.encodeAlloc;
 pub const encodeLzmaAppend = lzma.encodeAppend;
 pub const encodeLzmaInto = lzma.encodeInto;
@@ -240,9 +376,60 @@ pub const TarError = tar.Error;
 pub const TarKind = tar.Kind;
 pub const TarPath = tar.Path;
 pub const TarEntry = tar.Entry;
+pub const TarSparseFormat = tar.SparseFormat;
+pub const TarSparseExtent = tar.SparseExtent;
+pub const TarSparseInfo = tar.SparseInfo;
 pub const TarArchive = tar.Archive;
 pub const TarIterator = tar.Iterator;
 pub const TarEncodeEntry = tar.EncodeEntry;
+pub const TarSparseDataExtent = tar.SparseDataExtent;
+pub const TarSparseWriteFormat = tar.SparseWriteFormat;
+pub const TarSparseEncodeOptions = tar.SparseEncodeOptions;
+pub const TarIncrementalReader = tar.IncrementalReader;
+pub const TarIncrementalReaderOptions = tar.IncrementalReaderOptions;
+pub const TarIncrementalReaderEntryInfo = tar.IncrementalReaderEntryInfo;
+pub const TarIncrementalReaderPhase = tar.IncrementalReaderPhase;
+pub const TarIncrementalReaderStepResult = tar.IncrementalReaderStepResult;
+pub const TarIncrementalReaderError = tar.IncrementalReaderError;
+pub const TarIncrementalCompressedReader = tar.IncrementalCompressedReader;
+pub const TarIncrementalAutoReader = tar.IncrementalAutoReader;
+pub const TarIncrementalAutoReaderOptions = tar.IncrementalAutoReaderOptions;
+pub const TarIncrementalAutoReaderFormat = tar.IncrementalAutoReaderFormat;
+pub const TarIncrementalAutoReaderPhase = tar.IncrementalAutoReaderPhase;
+pub const TarIncrementalAutoReaderError = tar.IncrementalAutoReaderError;
+pub const TarIncrementalCompressedWriter = tar.IncrementalCompressedWriter;
+pub const TarGzipIncrementalWriter = tar.GzipIncrementalWriter;
+pub const TarBzip2IncrementalWriter = tar.Bzip2IncrementalWriter;
+pub const TarBrotliIncrementalWriter = tar.BrotliIncrementalWriter;
+pub const TarCompressZIncrementalWriter = tar.CompressZIncrementalWriter;
+pub const TarLzmaIncrementalWriter = tar.LzmaIncrementalWriter;
+pub const TarXzIncrementalWriter = tar.XzIncrementalWriter;
+pub const TarLz4IncrementalWriter = tar.Lz4IncrementalWriter;
+pub const TarLz4LegacyIncrementalWriter = tar.Lz4LegacyIncrementalWriter;
+pub const TarLzfIncrementalWriter = tar.LzfIncrementalWriter;
+pub const TarLzipIncrementalWriter = tar.LzipIncrementalWriter;
+pub const TarZstandardIncrementalWriter = tar.ZstandardIncrementalWriter;
+pub const TarLzopIncrementalWriter = tar.LzopIncrementalWriter;
+pub const TarGzipIncrementalReader = tar.GzipIncrementalReader;
+pub const TarBzip2IncrementalReader = tar.Bzip2IncrementalReader;
+pub const TarBrotliIncrementalReader = tar.BrotliIncrementalReader;
+pub const TarCompressZIncrementalReader = tar.CompressZIncrementalReader;
+pub const TarLzmaIncrementalReader = tar.LzmaIncrementalReader;
+pub const TarXzIncrementalReader = tar.XzIncrementalReader;
+pub const TarLz4IncrementalReader = tar.Lz4IncrementalReader;
+pub const TarLz4LegacyIncrementalReader = tar.Lz4LegacyIncrementalReader;
+pub const TarLzfIncrementalReader = tar.LzfIncrementalReader;
+pub const TarLzipIncrementalReader = tar.LzipIncrementalReader;
+pub const TarZstandardIncrementalReader = tar.ZstandardIncrementalReader;
+pub const TarLzopIncrementalReader = tar.LzopIncrementalReader;
+pub const TarIncrementalWriter = tar.IncrementalWriter;
+pub const TarIncrementalWriterOptions = tar.IncrementalWriterOptions;
+pub const TarIncrementalEntryOptions = tar.IncrementalEntryOptions;
+pub const TarIncrementalSparseOptions = tar.IncrementalSparseOptions;
+pub const TarIncrementalSparseExtent = tar.IncrementalSparseExtent;
+pub const TarIncrementalWriterPhase = tar.IncrementalWriterPhase;
+pub const TarIncrementalWriterStepResult = tar.IncrementalWriterStepResult;
+pub const TarIncrementalWriterError = tar.IncrementalWriterError;
 pub const TarCompression = tar.Compression;
 pub const TarCompressedEncodeOptions = tar.CompressedEncodeOptions;
 pub const TarOwnedArchive = tar.OwnedArchive;
@@ -262,6 +449,8 @@ pub const decodeTarAutoAlloc = tar.decodeAutoAlloc;
 pub const CompressZError = compress_z.Error;
 pub const CompressZHeader = compress_z.Header;
 pub const CompressZEncodeOptions = compress_z.EncodeOptions;
+pub const CompressZIncrementalDecoder = compress_z.IncrementalDecoder;
+pub const CompressZIncrementalEncoder = compress_z.IncrementalEncoder;
 pub const parseCompressZHeader = compress_z.parseHeader;
 pub const encodeCompressZAlloc = compress_z.encodeAlloc;
 pub const encodeCompressZAppend = compress_z.encodeAppend;
@@ -279,6 +468,8 @@ pub const LzipDecodeOptions = lzip.DecodeOptions;
 pub const LzipEncodeOptions = lzip.EncodeOptions;
 pub const LzipEncodeMember = lzip.EncodeMember;
 pub const LzipEncodeMode = lzip.EncodeMode;
+pub const LzipIncrementalDecoder = lzip.IncrementalDecoder;
+pub const LzipIncrementalEncoder = lzip.IncrementalEncoder;
 pub const parseLzipHeader = lzip.parseHeader;
 pub const inspectLzip = lzip.inspect;
 pub const decodeLzipInto = lzip.decodeInto;
@@ -298,6 +489,8 @@ pub const encodeLzipMembersInto = lzip.encodeMembersInto;
 pub const LzfError = lzf.Error;
 pub const LzfEncodeOptions = lzf.EncodeOptions;
 pub const LzfFileInfo = lzf.FileInfo;
+pub const LzfIncrementalDecoder = lzf.IncrementalDecoder;
+pub const LzfIncrementalEncoder = lzf.IncrementalEncoder;
 pub const inspectLzf = lzf.inspect;
 pub const lzfEncodedBound = lzf.encodedBound;
 pub const lzfDecodedSize = lzf.decodedSize;
@@ -352,16 +545,25 @@ pub const encodeLh1Into = lha.encodeLh1Into;
 
 pub const ArjError = arj.Error;
 pub const ArjMethod = arj.Method;
+pub const ArjEncryption = arj.Encryption;
+pub const ArjDecodeOptions = arj.DecodeOptions;
 pub const ArjName = arj.Name;
 pub const ArjEntry = arj.Entry;
 pub const ArjArchive = arj.Archive;
 pub const ArjIterator = arj.Iterator;
 pub const ArjEncodeEntry = arj.EncodeEntry;
 pub const ArjEntryKind = arj.EntryKind;
+pub const ArjEncodeEncryptionOptions = arj.EncodeEncryptionOptions;
+pub const ArjEncodedVolumes = arj.EncodedVolumes;
+pub const ArjVolumeSet = arj.VolumeSet;
+pub const ArjVolumeEntry = arj.VolumeEntry;
+pub const ArjVolumeIterator = arj.VolumeIterator;
 pub const parseArjArchive = arj.parse;
 pub const encodeArjAlloc = arj.encodeAlloc;
 pub const encodeArjAppend = arj.encodeAppend;
 pub const encodeArjInto = arj.encodeInto;
+pub const encodeArjVolumesAlloc = arj.encodeVolumesAlloc;
+pub const parseArjVolumeSetAlloc = arj.parseVolumeSetAlloc;
 pub const decodeArjMethod4Into = arj.decodeMethod4Into;
 pub const decodeArjMethod4Alloc = arj.decodeMethod4Alloc;
 pub const decodeArjMethod4AllocLimited = arj.decodeMethod4AllocLimited;
@@ -409,16 +611,89 @@ pub const encodeCompressedCpioAlloc = cpio.encodeCompressedAlloc;
 pub const encodeCompressedCpioAppend = cpio.encodeCompressedAppend;
 pub const decodeCompressedCpioAlloc = cpio.decodeCompressedAlloc;
 pub const decodeAutoCpioAlloc = cpio.decodeAutoAlloc;
+pub const CpioIncrementalAutoReader = cpio.IncrementalAutoReader;
+pub const CpioIncrementalAutoReaderOptions = cpio.IncrementalAutoReaderOptions;
+pub const CpioIncrementalAutoReaderFormat = cpio.IncrementalAutoReaderFormat;
+pub const CpioIncrementalAutoReaderPhase = cpio.IncrementalAutoReaderPhase;
+pub const CpioIncrementalAutoReaderError = cpio.IncrementalAutoReaderError;
+pub const CpioIncrementalCompressedReader = cpio.IncrementalCompressedReader;
+pub const CpioGzipIncrementalReader = cpio.GzipIncrementalReader;
+pub const CpioBzip2IncrementalReader = cpio.Bzip2IncrementalReader;
+pub const CpioBrotliIncrementalReader = cpio.BrotliIncrementalReader;
+pub const CpioCompressZIncrementalReader = cpio.CompressZIncrementalReader;
+pub const CpioLzmaIncrementalReader = cpio.LzmaIncrementalReader;
+pub const CpioXzIncrementalReader = cpio.XzIncrementalReader;
+pub const CpioLz4IncrementalReader = cpio.Lz4IncrementalReader;
+pub const CpioLz4LegacyIncrementalReader = cpio.Lz4LegacyIncrementalReader;
+pub const CpioLzfIncrementalReader = cpio.LzfIncrementalReader;
+pub const CpioLzipIncrementalReader = cpio.LzipIncrementalReader;
+pub const CpioZstandardIncrementalReader = cpio.ZstandardIncrementalReader;
+pub const CpioLzopIncrementalReader = cpio.LzopIncrementalReader;
+pub const CpioIncrementalCompressedWriter = cpio.IncrementalCompressedWriter;
+pub const CpioGzipIncrementalWriter = cpio.GzipIncrementalWriter;
+pub const CpioBzip2IncrementalWriter = cpio.Bzip2IncrementalWriter;
+pub const CpioBrotliIncrementalWriter = cpio.BrotliIncrementalWriter;
+pub const CpioCompressZIncrementalWriter = cpio.CompressZIncrementalWriter;
+pub const CpioLzmaIncrementalWriter = cpio.LzmaIncrementalWriter;
+pub const CpioXzIncrementalWriter = cpio.XzIncrementalWriter;
+pub const CpioLz4IncrementalWriter = cpio.Lz4IncrementalWriter;
+pub const CpioLz4LegacyIncrementalWriter = cpio.Lz4LegacyIncrementalWriter;
+pub const CpioLzfIncrementalWriter = cpio.LzfIncrementalWriter;
+pub const CpioLzipIncrementalWriter = cpio.LzipIncrementalWriter;
+pub const CpioZstandardIncrementalWriter = cpio.ZstandardIncrementalWriter;
+pub const CpioLzopIncrementalWriter = cpio.LzopIncrementalWriter;
+pub const CpioIncrementalMixedReader = cpio.IncrementalMixedReader;
+pub const CpioIncrementalMixedReaderOptions = cpio.IncrementalMixedReaderOptions;
+pub const CpioIncrementalMixedReaderArchiveInfo = cpio.IncrementalMixedReaderArchiveInfo;
+pub const CpioIncrementalMixedReaderPhase = cpio.IncrementalMixedReaderPhase;
+pub const CpioIncrementalMixedReaderStatus = cpio.IncrementalMixedReaderStatus;
+pub const CpioIncrementalMixedReaderStepResult = cpio.IncrementalMixedReaderStepResult;
+pub const CpioIncrementalReader = cpio.IncrementalReader;
+pub const CpioIncrementalReaderOptions = cpio.IncrementalReaderOptions;
+pub const CpioIncrementalReaderEntryInfo = cpio.IncrementalReaderEntryInfo;
+pub const CpioIncrementalReaderPhase = cpio.IncrementalReaderPhase;
+pub const CpioIncrementalReaderStatus = cpio.IncrementalReaderStatus;
+pub const CpioIncrementalReaderStepResult = cpio.IncrementalReaderStepResult;
+pub const CpioIncrementalSequenceReader = cpio.IncrementalSequenceReader;
+pub const CpioIncrementalSequenceReaderOptions = cpio.IncrementalSequenceReaderOptions;
+pub const CpioIncrementalSequenceReaderArchiveInfo = cpio.IncrementalSequenceReaderArchiveInfo;
+pub const CpioIncrementalSequenceReaderPhase = cpio.IncrementalSequenceReaderPhase;
+pub const CpioIncrementalSequenceReaderStatus = cpio.IncrementalSequenceReaderStatus;
+pub const CpioIncrementalSequenceReaderStepResult = cpio.IncrementalSequenceReaderStepResult;
+pub const CpioIncrementalWriter = cpio.IncrementalWriter;
+pub const CpioIncrementalWriterOptions = cpio.IncrementalWriterOptions;
+pub const CpioIncrementalWriterEntryOptions = cpio.IncrementalWriterEntryOptions;
+pub const CpioIncrementalWriterPhase = cpio.IncrementalWriterPhase;
+pub const CpioIncrementalWriterStatus = cpio.IncrementalWriterStatus;
+pub const CpioIncrementalWriterStepResult = cpio.IncrementalWriterStepResult;
 
 pub const ArError = ar.Error;
 pub const ArEntry = ar.Entry;
 pub const ArArchive = ar.Archive;
 pub const ArIterator = ar.Iterator;
+pub const ArSymbol = ar.Symbol;
+pub const ArSymbolIterator = ar.SymbolIterator;
+pub const ArSymbolTable = ar.SymbolTable;
+pub const ArSymbolTableFormat = ar.SymbolTableFormat;
 pub const ArEncodeEntry = ar.EncodeEntry;
+pub const ArEncodeOptions = ar.EncodeOptions;
+pub const ArBsdSymbolIndexFormat = ar.BsdSymbolIndexFormat;
+pub const ArThinEncodeEntry = ar.ThinEncodeEntry;
+pub const ArThinEncodeOptions = ar.ThinEncodeOptions;
+pub const ArThinSymbolIndexFormat = ar.ThinSymbolIndexFormat;
 pub const parseArArchive = ar.parse;
 pub const encodeArAlloc = ar.encodeAlloc;
 pub const encodeArAppend = ar.encodeAppend;
 pub const encodeArInto = ar.encodeInto;
+pub const encodeArAllocWithOptions = ar.encodeAllocWithOptions;
+pub const encodeArAppendWithOptions = ar.encodeAppendWithOptions;
+pub const encodeArIntoWithOptions = ar.encodeIntoWithOptions;
+pub const encodeThinArAlloc = ar.encodeThinAlloc;
+pub const encodeThinArAppend = ar.encodeThinAppend;
+pub const encodeThinArInto = ar.encodeThinInto;
+pub const encodeThinArAllocWithOptions = ar.encodeThinAllocWithOptions;
+pub const encodeThinArAppendWithOptions = ar.encodeThinAppendWithOptions;
+pub const encodeThinArIntoWithOptions = ar.encodeThinIntoWithOptions;
 pub const isSafeArPath = ar.isSafePath;
 
 pub const DebError = deb.Error;
@@ -447,21 +722,34 @@ pub const encodeRpmInto = rpm.encodeInto;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;
+pub const RarEncryption = rar.Encryption;
+pub const Rar4Encryption = rar.Rar4Encryption;
+pub const RarHeaderEncryption = rar.HeaderEncryption;
+pub const RarParseOptions = rar.ParseOptions;
 pub const RarDecodeOptions = rar.DecodeOptions;
 pub const RarMethod = rar.Method;
 pub const RarName = rar.Name;
 pub const RarEntry = rar.Entry;
+pub const RarRedirectionType = rar.RedirectionType;
+pub const RarRedirection = rar.Redirection;
 pub const RarArchive = rar.Archive;
+pub const RarOwnedHeaderArchive = rar.OwnedHeaderArchive;
 pub const RarIterator = rar.Iterator;
 pub const RarExtractSession = rar.ExtractSession;
 pub const RarDecodedEntry = rar.DecodedEntry;
 pub const RarEncodeKind = rar.EncodeKind;
 pub const RarEncodeCompression = rar.EncodeCompression;
 pub const RarEncodeFilter = rar.EncodeFilter;
+pub const RarEncodeEncryptionOptions = rar.EncodeEncryptionOptions;
+pub const RarEncodeRar4EncryptionOptions = rar.EncodeRar4EncryptionOptions;
+pub const RarEncodeRar4HeaderEncryptionOptions = rar.EncodeRar4HeaderEncryptionOptions;
+pub const RarEncodeHeaderEncryptionOptions = rar.EncodeHeaderEncryptionOptions;
 pub const RarEncodeEntry = rar.EncodeEntry;
+pub const RarEncodeRedirectionOptions = rar.EncodeRedirectionOptions;
 pub const RarEncodeOptions = rar.EncodeOptions;
 pub const RarEncodedVolumes = rar.EncodedVolumes;
 pub const parseRarArchive = rar.parse;
+pub const parseRarOwnedHeadersAllocWithOptions = rar.parseOwnedHeadersAllocWithOptions;
 pub const encodeRarAlloc = rar.encodeAlloc;
 pub const encodeRarAppend = rar.encodeAppend;
 pub const encodeRarInto = rar.encodeInto;
@@ -470,9 +758,13 @@ pub const isSafeRarPath = rar.isSafePath;
 pub const decodeRar15Into = rar.decodeRar15Into;
 pub const decodeRar15Alloc = rar.decodeRar15Alloc;
 pub const decodeRar15AllocLimited = rar.decodeRar15AllocLimited;
+pub const Rar15Session = rar.Rar15Session;
 pub const decodeRar20Into = rar.decodeRar20Into;
 pub const decodeRar20Alloc = rar.decodeRar20Alloc;
 pub const decodeRar20AllocLimited = rar.decodeRar20AllocLimited;
+pub const Rar20Session = rar.Rar20Session;
+pub const RarLegacyMethod = rar.RarLegacyMethod;
+pub const RarLegacySession = rar.RarLegacySession;
 pub const decodeRar29Into = rar.decodeRar29Into;
 pub const decodeRar29Alloc = rar.decodeRar29Alloc;
 pub const decodeRar29AllocLimited = rar.decodeRar29AllocLimited;
@@ -481,10 +773,12 @@ pub const decodeRar29IntoWithOptions = rar.decodeRar29IntoWithOptions;
 pub const Rar29DecodeOptions = rar.Rar29DecodeOptions;
 pub const Rar29Session = rar.Rar29Session;
 pub const Rar29PpmdEncodeOptions = rar.Rar29PpmdEncodeOptions;
+pub const Rar29PpmdFilter = rar.Rar29PpmdFilter;
 pub const Rar29PpmdEncoder = rar.Rar29PpmdEncoder;
 pub const Rar29InitialMode = rar.Rar29InitialMode;
 pub const inspectRar29InitialMode = rar.inspectRar29InitialMode;
 pub const encodeRar29PpmdAlloc = rar.encodeRar29PpmdAlloc;
+pub const encodeRar29PpmdFilteredAlloc = rar.encodeRar29PpmdFilteredAlloc;
 pub const decodeRar50Into = rar.decodeRar50Into;
 pub const decodeRar50Alloc = rar.decodeRar50Alloc;
 pub const Rar50DecodeOptions = rar.Rar50DecodeOptions;
@@ -495,6 +789,7 @@ pub const RarVolumeIterator = rar.VolumeIterator;
 pub const RarVolumeExtractSession = rar.VolumeExtractSession;
 pub const RarVolumeDecodedEntry = rar.VolumeDecodedEntry;
 pub const parseRarVolumeSetAlloc = rar.parseVolumeSetAlloc;
+pub const parseRarVolumeSetAllocWithOptions = rar.parseVolumeSetAllocWithOptions;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;
@@ -530,6 +825,8 @@ pub const LzopDecodeOptions = lzop.DecodeOptions;
 pub const LzopFileInfo = lzop.FileInfo;
 pub const LzopChecksum = lzop.Checksum;
 pub const LzopEncodeOptions = lzop.EncodeOptions;
+pub const LzopIncrementalDecoder = lzop.IncrementalDecoder;
+pub const LzopIncrementalEncoder = lzop.IncrementalEncoder;
 pub const parseLzopHeader = lzop.parseHeader;
 pub const inspectLzop = lzop.inspect;
 pub const decodeLzopInto = lzop.decodeInto;
@@ -550,6 +847,13 @@ pub const SevenZipError = seven_zip.Error;
 pub const SevenZipKind = seven_zip.Kind;
 pub const SevenZipEntry = seven_zip.Entry;
 pub const SevenZipArchive = seven_zip.Archive;
+pub const SevenZipSource = seven_zip.Source;
+pub const SevenZipSourceArchive = seven_zip.SourceArchive;
+pub const SevenZipSourceEntryDecoder = seven_zip.SourceEntryDecoder;
+pub const SevenZipSplitSourceOptions = seven_zip.SplitSourceOptions;
+pub const SevenZipSplitPartSource = seven_zip.SplitPartSource;
+pub const SevenZipSplitSliceSource = seven_zip.SplitSliceSource;
+pub const SevenZipSplitCallbackSource = seven_zip.SplitCallbackSource;
 pub const SevenZipDecodeOptions = seven_zip.DecodeOptions;
 pub const SevenZipParseOptions = seven_zip.ParseOptions;
 pub const SevenZipEncodeEntry = seven_zip.EncodeEntry;
@@ -557,8 +861,17 @@ pub const SevenZipCompression = seven_zip.Compression;
 pub const SevenZipFilter = seven_zip.Filter;
 pub const SevenZipEncryptionOptions = seven_zip.EncryptionOptions;
 pub const SevenZipEncodeOptions = seven_zip.EncodeOptions;
+pub const SevenZipIncrementalWriter = seven_zip.IncrementalWriter;
+pub const SevenZipIncrementalWriterOptions = seven_zip.IncrementalWriterOptions;
+pub const SevenZipIncrementalEntryOptions = seven_zip.IncrementalEntryOptions;
+pub const SevenZipIncrementalWriterPhase = seven_zip.IncrementalWriterPhase;
+pub const SevenZipIncrementalWriterSnapshot = seven_zip.IncrementalWriterSnapshot;
+pub const SevenZipIncrementalWriterError = seven_zip.IncrementalWriterError;
+pub const SevenZipIncrementalSecondarySpool = seven_zip.IncrementalSecondarySpool;
 pub const parseSevenZipArchiveAlloc = seven_zip.parseAlloc;
 pub const parseSevenZipArchiveAllocWithOptions = seven_zip.parseAllocWithOptions;
+pub const parseSevenZipSourceArchiveAlloc = seven_zip.parseSourceAlloc;
+pub const parseSevenZipSourceArchiveAllocWithOptions = seven_zip.parseSourceAllocWithOptions;
 pub const sevenZipExtractByNameAlloc = seven_zip.extractByNameAlloc;
 pub const sevenZipExtractByNameAllocLimited = seven_zip.extractByNameAllocLimited;
 pub const encodeSevenZipAlloc = seven_zip.encodeAlloc;
@@ -591,13 +904,51 @@ pub const brEncodePlannedStreamAlloc = br.encodePlannedStreamAlloc;
 pub const brEncodePlannedStreamLazyAlloc = br.encodePlannedStreamLazyAlloc;
 pub const brEncodePlannedStreamRatioAlloc = br.encodePlannedStreamRatioAlloc;
 pub const brProfilePlannedRatioBlockAlloc = br.profilePlannedRatioBlockAlloc;
+pub const brProfileLiteralContextSearch = br.profileLiteralContextSearch;
 pub const brEncodePlannedStreamAllocWithStats = br.encodePlannedStreamAllocWithStats;
 pub const brEncodePlannedStreamAllocWithStatsTimed = br.encodePlannedStreamAllocWithStatsTimed;
 pub const BrotliPlannedEncodeStats = br.PlannedEncodeStats;
 pub const BrotliRatioEncodeProfile = br.RatioEncodeProfile;
+pub const BrotliQualityCommandStateProfile = br.QualityCommandStateProfile;
+pub const brProfileQualityCommandStateCandidateAlloc = br.profileQualityCommandStateCandidateAlloc;
+pub const BrotliLiteralContextProfile = br.LiteralContextProfile;
 pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
+pub const BrotliPlannedMode = br.PlannedMode;
+pub const BrotliHqOptions = br.HqOptions;
+pub const BrotliHqProfile = br.HqProfile;
+pub const BrotliHqResolvedOptions = br.HqResolvedOptions;
+pub const BrotliHqDistanceParameters = br.HqDistanceParameters;
+pub const BrotliHqDistanceFormat = br.HqDistanceFormat;
+pub const BrotliHqParseMode = br.HqParseMode;
+pub const BrotliHqCopyLengthPolicy = br.HqCopyLengthPolicy;
+pub const BrotliEncodeMemoryProfile = br.EncodeMemoryProfile;
+pub const BrotliSharedDictionary = br.SharedDictionary;
+pub const BrotliSerializedSharedDictionary = br.SerializedSharedDictionary;
+pub const BrotliSerializedSharedDictionaryError = br.SerializedSharedDictionaryError;
+pub const BrotliSerializedSharedDictionaryMatcher = br.SerializedSharedDictionaryMatcher;
+pub const BrotliSerializedSharedDictionarySpec = br.SerializedSharedDictionarySpec;
+pub const BrotliSerializedSharedDictionaryChoice = br.SerializedSharedDictionaryChoice;
+pub const BrotliSerializedSharedDictionaryWordListSpec = br.SerializedSharedDictionaryWordListSpec;
+pub const BrotliSerializedSharedDictionaryTransformListSpec = br.SerializedSharedDictionaryTransformListSpec;
+pub const BrotliSerializedSharedDictionaryBuildError = br.SerializedSharedDictionaryBuildError;
+pub const BrotliSerializedSharedDictionaryTransformProfile = br.SerializedSharedDictionaryTransformProfile;
+pub const BrotliSerializedSharedDictionaryContextProfile = br.SerializedSharedDictionaryContextProfile;
+pub const BrotliSerializedSharedDictionaryWordSelectionProfile = br.SerializedSharedDictionaryWordSelectionProfile;
+pub const BrotliSerializedSharedDictionaryWordBucketProfile = br.SerializedSharedDictionaryWordBucketProfile;
+pub const BrotliSerializedSharedDictionaryWordLengthBucketCap = br.SerializedSharedDictionaryWordLengthBucketCap;
+pub const BrotliSerializedSharedDictionarySparseWordProfile = br.SerializedSharedDictionarySparseWordProfile;
+pub const BrotliMaxSerializedWordBucketPruningSteps = br.max_serialized_word_bucket_pruning_steps;
+pub const BrotliSerializedSharedDictionaryTrainOptions = br.SerializedSharedDictionaryTrainOptions;
+pub const BrotliOwnedTrainedSerializedSharedDictionary = br.OwnedTrainedSerializedSharedDictionary;
+pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
+pub const brSerializedSharedDictionaryEncodedSize = br.serializedSharedDictionaryEncodedSize;
+pub const brSerializeSharedDictionaryInto = br.serializeSharedDictionaryInto;
+pub const brSerializeSharedDictionaryAppend = br.serializeSharedDictionaryAppend;
+pub const brSerializeSharedDictionaryAlloc = br.serializeSharedDictionaryAlloc;
+pub const brTrainSerializedSharedDictionaryAlloc = br.trainSerializedSharedDictionaryAlloc;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
+pub const brotliCommandStateDefaultMaxInputKiB = br.command_state_default_max_input_kib;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
 pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
 pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;
@@ -615,7 +966,17 @@ pub const brEncodePlannedStreamChunksInto = br.encodePlannedStreamChunksInto;
 pub const brEncodePlannedStreamChunksWithOptionsInto = br.encodePlannedStreamChunksWithOptionsInto;
 pub const brEncodePlannedStreamLazyWithOptionsAlloc = br.encodePlannedStreamLazyWithOptionsAlloc;
 pub const brEncodePlannedStreamStaticDictionaryAlloc = br.encodePlannedStreamStaticDictionaryAlloc;
+pub const brEncodePlannedStreamStaticDictionaryAppend = br.encodePlannedStreamStaticDictionaryAppend;
+pub const brEncodePlannedStreamStaticDictionaryInto = br.encodePlannedStreamStaticDictionaryInto;
+pub const brEncodePlannedStreamStaticDictionaryChunksAlloc = br.encodePlannedStreamStaticDictionaryChunksAlloc;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsAlloc = br.encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc;
+pub const brEncodePlannedStreamStaticDictionaryChunksAppend = br.encodePlannedStreamStaticDictionaryChunksAppend;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsAppend = br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend;
+pub const brEncodePlannedStreamStaticDictionaryChunksInto = br.encodePlannedStreamStaticDictionaryChunksInto;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsInto = br.encodePlannedStreamStaticDictionaryChunksWithOptionsInto;
 pub const brPlannedStaticDictionaryIndexBytes = br.plannedStaticDictionaryIndexBytes;
+pub const brPlannedCompleteStaticDictionaryIndexBytes = br.plannedCompleteStaticDictionaryIndexBytes;
+pub const brPlannedCompleteStaticDictionaryIndexEntries = br.plannedCompleteStaticDictionaryIndexEntries;
 pub const brEncodePlannedStreamWithScratchAlloc = br.encodePlannedStreamWithScratchAlloc;
 pub const BrotliPlannedStreamEncoder = br.PlannedStreamEncoder;
 pub const brEncodedSimpleStreamBound = br.encodedSimpleStreamBound;
@@ -649,6 +1010,22 @@ pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
 pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
+pub const BrotliIncrementalStaticDictionaryStreamEncoder =
+    br.IncrementalStaticDictionaryStreamEncoder;
+pub const BrotliStaticDictionaryStreamEncoder = br.StaticDictionaryStreamEncoder;
+pub const BrotliStaticDictionaryStreamOptions = br.StaticDictionaryStreamOptions;
+
+test "root Brotli planned mode is part of the public options API" {
+    inline for (.{
+        BrotliPlannedMode.generic,
+        BrotliPlannedMode.text,
+        BrotliPlannedMode.font,
+    }) |mode| {
+        const options: BrotliPlannedEncodeOptions = .{ .mode = mode };
+        const internal: br.PlannedMode = options.mode;
+        try std.testing.expectEqual(mode, internal);
+    }
+}
 
 test "root Brotli incremental decoder continues framed payloads" {
     const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
@@ -658,11 +1035,23 @@ test "root Brotli incremental decoder continues framed payloads" {
     var decoder = BrotliIncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{ .expected_output_len = 3 }, first.len);
     defer decoder.deinit();
     var output: [3]u8 = undefined;
-    _ = try decoder.step(first, &.{});
-    _ = try decoder.step("", &output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(first[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqualSlices(u8, "one", &output);
     try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 3 }, second.len);
-    _ = try decoder.step(second, &.{});
-    _ = try decoder.step("", &output);
+    input_offset = 0;
+    output_offset = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(second[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqualSlices(u8, "two", &output);
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
 }
 
@@ -921,6 +1310,10 @@ pub const HadoopSnappyArchive = snappy_framing.HadoopArchive;
 pub const HadoopSnappyBlock = snappy_framing.HadoopBlock;
 pub const HadoopSnappyChunk = snappy_framing.HadoopChunk;
 pub const HadoopSnappyOptions = snappy_framing.HadoopOptions;
+pub const XerialSnappyIncrementalDecoder = snappy_framing.XerialIncrementalDecoder;
+pub const HadoopSnappyIncrementalDecoder = snappy_framing.HadoopIncrementalDecoder;
+pub const XerialSnappyIncrementalEncoder = snappy_framing.XerialIncrementalEncoder;
+pub const HadoopSnappyIncrementalEncoder = snappy_framing.HadoopIncrementalEncoder;
 pub const parseXerialSnappy = snappy_framing.parseXerial;
 pub const encodeXerialSnappyAlloc = snappy_framing.encodeXerialAlloc;
 pub const encodeXerialSnappyAppend = snappy_framing.encodeXerialAppend;
@@ -938,6 +1331,8 @@ pub const decodeHadoopSnappyInto = snappy_framing.decodeHadoopInto;
 pub const HadoopLz4Archive = hadoop_lz4.Archive;
 pub const HadoopLz4Block = hadoop_lz4.Block;
 pub const HadoopLz4Options = hadoop_lz4.Options;
+pub const HadoopLz4IncrementalDecoder = hadoop_lz4.IncrementalDecoder;
+pub const HadoopLz4IncrementalEncoder = hadoop_lz4.IncrementalEncoder;
 pub const parseHadoopLz4 = hadoop_lz4.parse;
 pub const parseHadoopLz4Block = hadoop_lz4.parseBlock;
 pub const encodeHadoopLz4Alloc = hadoop_lz4.encodeAlloc;
@@ -959,6 +1354,8 @@ pub const Lz4LegacyArchive = lz4_legacy.Archive;
 pub const Lz4LegacyBlock = lz4_legacy.Block;
 pub const Lz4LegacyBlockIterator = lz4_legacy.BlockIterator;
 pub const Lz4LegacyOptions = lz4_legacy.Options;
+pub const Lz4LegacyIncrementalDecoder = lz4_legacy.IncrementalDecoder;
+pub const Lz4LegacyIncrementalEncoder = lz4_legacy.IncrementalEncoder;
 pub const lz4LegacyMagic = lz4_legacy.magic;
 pub const lz4LegacyMaxBlockSize = lz4_legacy.max_block_size;
 pub const isLz4Legacy = lz4_legacy.isLegacy;
@@ -977,11 +1374,21 @@ pub const LzfseBlock = lzfse.Block;
 pub const LzfseBlockIterator = lzfse.BlockIterator;
 pub const LzfseBlockKind = lzfse.BlockKind;
 pub const LzfseOptions = lzfse.Options;
+pub const LzfseEncodeStrategy = lzfse.Strategy;
+pub const LzfseFseVersion = lzfse.FseVersion;
+pub const LzfseEncodeSummary = lzfse.Summary;
+pub const LzfseEncoded = lzfse.Encoded;
+pub const LzfseEncodePlan = lzfse.EncodePlan;
+pub const LzfseEncodeRecord = lzfse.EncodeRecord;
+pub const LzfseIncrementalDecoder = lzfse.IncrementalDecoder;
+pub const LzfseIncrementalDecodeOptions = lzfse.IncrementalDecodeOptions;
 pub const LzfseError = lzfse.Error;
 pub const parseLzfse = lzfse.parse;
 pub const parseLzfseLimited = lzfse.parseLimited;
 pub const parseLzfseBlock = lzfse.parseBlock;
 pub const encodeLzfseAlloc = lzfse.encodeAlloc;
+pub const encodeLzfseWithSummaryAlloc = lzfse.encodeWithSummaryAlloc;
+pub const encodeLzfseFsePlanAlloc = lzfse.encodeFsePlanAlloc;
 pub const encodeLzfseAppend = lzfse.encodeAppend;
 pub const encodeLzfseInto = lzfse.encodeInto;
 pub const decodeLzfseAlloc = lzfse.decodeAlloc;
@@ -1100,10 +1507,13 @@ pub const Qcow2Archive = qcow2.Archive;
 pub const Qcow2OpenOptions = qcow2.OpenOptions;
 pub const Qcow2Compression = qcow2.Compression;
 pub const Qcow2EncodeOptions = qcow2.EncodeOptions;
+pub const Qcow2ExternalDataEncodeOptions = qcow2.ExternalDataEncodeOptions;
+pub const Qcow2EncodedExternalData = qcow2.EncodedExternalData;
 pub const qcow2Magic = qcow2.magic;
 pub const parseQcow2Header = qcow2.parseHeader;
 pub const parseQcow2 = qcow2.parse;
 pub const encodeQcow2Alloc = qcow2.encodeAlloc;
+pub const encodeQcow2ExternalDataAlloc = qcow2.encodeExternalDataAlloc;
 
 pub const VmdkError = vmdk.Error;
 pub const VmdkHeader = vmdk.Header;
@@ -1126,11 +1536,13 @@ pub const EwfArchive = ewf.Archive;
 pub const EwfOpenOptions = ewf.OpenOptions;
 pub const EwfCompression = ewf.Compression;
 pub const EwfEncodeOptions = ewf.EncodeOptions;
+pub const EwfEncodedSegments = ewf.EncodedSegments;
 pub const ewfSignature = ewf.signature;
 pub const parseEwfFileHeader = ewf.parseFileHeader;
 pub const parseEwfAlloc = ewf.parseOneAlloc;
 pub const parseEwfSegmentsAlloc = ewf.parseSegmentsAlloc;
 pub const encodeEwfAlloc = ewf.encodeAlloc;
+pub const encodeEwfSegmentsAlloc = ewf.encodeSegmentsAlloc;
 
 pub const ChdError = chd.Error;
 pub const ChdCodec = chd.Codec;
@@ -1282,8 +1694,15 @@ pub const AndroidOtaExtent = android_ota.Extent;
 pub const AndroidOtaOperation = android_ota.Operation;
 pub const AndroidOtaPartition = android_ota.Partition;
 pub const AndroidOtaArchive = android_ota.Archive;
+pub const AndroidOtaSource = android_ota.Source;
+pub const AndroidOtaSourceArchive = android_ota.SourceArchive;
 pub const AndroidOtaOpenOptions = android_ota.OpenOptions;
 pub const AndroidOtaDecodeOptions = android_ota.DecodeOptions;
+pub const AndroidOtaSignatureLimits = android_ota.SignatureLimits;
+pub const AndroidOtaSignaturePublicKey = android_ota.SignaturePublicKey;
+pub const AndroidOtaSignatureMatch = android_ota.SignatureMatch;
+pub const AndroidOtaSignatureVerificationOptions = android_ota.SignatureVerificationOptions;
+pub const AndroidOtaSignatureVerificationResult = android_ota.SignatureVerificationResult;
 pub const AndroidBsdiffApplyOptions = android_ota.BsdiffApplyOptions;
 pub const AndroidPuffinApplyOptions = android_ota.PuffinApplyOptions;
 pub const AndroidLz4diffCompressionType = android_ota.Lz4diffCompressionType;
@@ -1303,8 +1722,13 @@ pub const AndroidPuffResult = android_ota.PuffResult;
 pub const AndroidOtaCompression = android_ota.Compression;
 pub const AndroidOtaEncodePartition = android_ota.EncodePartition;
 pub const AndroidOtaEncodeOptions = android_ota.EncodeOptions;
+pub const AndroidOtaSourceEncodePartition = android_ota.SourceEncodePartition;
+pub const AndroidOtaEncodeSink = android_ota.EncodeSink;
+pub const AndroidOtaSourceEncodeResult = android_ota.SourceEncodeResult;
 pub const parseAndroidOtaAlloc = android_ota.parseAlloc;
+pub const parseAndroidOtaSourceAlloc = android_ota.parseSourceAlloc;
 pub const encodeAndroidOtaAlloc = android_ota.encodeAlloc;
+pub const encodeAndroidOtaSourcesTo = android_ota.encodeSourcesTo;
 pub const applyAndroidBsdiffAlloc = android_ota.applyBsdiffAlloc;
 pub const applyAndroidPuffinAlloc = android_ota.applyPuffinAlloc;
 pub const parseAndroidLz4diffAlloc = android_ota.parseLz4diffAlloc;
@@ -1352,25 +1776,68 @@ pub const encodeSquashfsAppend = squashfs.encodeAppend;
 pub const ErofsArchive = erofs.Archive;
 pub const ErofsDirectory = erofs.Directory;
 pub const ErofsDirectoryEntry = erofs.DirectoryEntry;
+pub const ErofsDeviceInfo = erofs.DeviceInfo;
 pub const ErofsEntry = erofs.Entry;
 pub const ErofsEntryKind = erofs.EntryKind;
 pub const ErofsFileType = erofs.FileType;
 pub const ErofsInode = erofs.Inode;
+pub const ErofsLoadedMetaboxArchive = erofs.LoadedMetaboxArchive;
 pub const ErofsLayout = erofs.Layout;
+pub const ErofsReadLimits = erofs.ReadLimits;
+pub const ErofsXattrReadLimits = erofs.XattrReadLimits;
 pub const ErofsSuperblock = erofs.Superblock;
+pub const ErofsXattr = erofs.Xattr;
+pub const ErofsXattrs = erofs.Xattrs;
 pub const ErofsWriterCompression = erofs.WriterCompression;
+pub const ErofsWriterInodeVersion = erofs.WriterInodeVersion;
+pub const ErofsWriterIndexFormat = erofs.WriterIndexFormat;
+pub const ErofsEncodedExternalChunks = erofs.EncodedExternalChunks;
 pub const ErofsWriterOptions = erofs.WriterOptions;
+pub const ErofsEncoder = erofs.Encoder;
+pub const ErofsEncodeProgress = erofs.EncodeProgress;
+pub const ErofsEncodeTarget = erofs.EncodeTarget;
+pub const ErofsSource = erofs.Source;
+pub const ErofsSourceArchive = erofs.SourceArchive;
+pub const ErofsSourceLimits = erofs.SourceLimits;
+pub const ErofsSourceReadResult = erofs.SourceReadResult;
+pub const ErofsExtractor = erofs.Extractor;
+pub const ErofsExtractProgress = erofs.ExtractProgress;
+pub const ErofsDirectoryIterator = erofs.DirectoryIterator;
+pub const ErofsDirectoryDiagnostics = erofs.DirectoryDiagnostics;
+pub const ErofsSliceExtractor = erofs.SliceExtractor;
+pub const ErofsSliceDirectoryIterator = erofs.SliceDirectoryIterator;
+pub const ErofsSinkLimits = erofs.SinkLimits;
+pub const ErofsSinkResult = erofs.SinkResult;
+pub const encodeErofsToSink = erofs.encodeToSink;
+pub const encodeErofsExternalChunksToSinks = erofs.encodeExternalChunksToSinks;
+pub const ErofsWriterTailPacking = erofs.WriterTailPacking;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
+pub const encodeErofsExternalChunksAlloc = erofs.encodeExternalChunksAlloc;
 pub const parseErofs = erofs.parse;
+pub const parseErofsWithDevices = erofs.parseWithDevices;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
+pub const erofsDefaultPackedExtentLimit = erofs.defaultPackedExtentLimit;
 
 pub const WimArchive = wim.Archive;
+pub const WimArchiveSet = wim.ArchiveSet;
+pub const WimPipableStreamLimits = wim.PipableStreamLimits;
+pub const WimPipableStreamOptions = wim.PipableStreamOptions;
+pub const WimPipableStreamPathExtractor = wim.PipableStreamPathExtractor;
+pub const WimEncryptedEsdInfo = wim.EncryptedEsdInfo;
+pub const WimEncryptedEsdLimits = wim.EncryptedEsdLimits;
+pub const WimEncryptedEsdRange = wim.EncryptedEsdRange;
 pub const WimError = wim.Error;
 pub const WimCompression = wim.Compression;
 pub const WimDentry = wim.Dentry;
 pub const WimDirectory = wim.Directory;
 pub const WimExtraStream = wim.ExtraStream;
 pub const WimExtraStreamIterator = wim.ExtraStreamIterator;
+pub const WimTaggedItem = wim.TaggedItem;
+pub const WimTaggedItemIterator = wim.TaggedItemIterator;
+pub const WimUnixMetadata = wim.UnixMetadata;
+pub const WimObjectId = wim.ObjectId;
+pub const WimXattr = wim.Xattr;
+pub const WimXattrIterator = wim.XattrIterator;
 pub const WimHeader = wim.Header;
 pub const WimImageMetadata = wim.ImageMetadata;
 pub const WimLookupEntry = wim.LookupEntry;
@@ -1380,10 +1847,76 @@ pub const WimPathLimits = wim.PathLimits;
 pub const WimResourceHeader = wim.ResourceHeader;
 pub const WimSecurityData = wim.SecurityData;
 pub const WimSolidResource = wim.SolidResource;
+pub const WimStreamSelector = wim.StreamSelector;
+pub const WimEncodeEntry = wim.EncodeEntry;
+pub const WimEncodeEntryKind = wim.EncodeEntryKind;
+pub const WimEncodeNamedStream = wim.EncodeNamedStream;
+pub const WimEncodeReparseData = wim.EncodeReparseData;
+pub const WimEncodeTaggedItem = wim.EncodeTaggedItem;
+pub const WimEncodeXattr = wim.EncodeXattr;
+pub const WimEncodeCompression = wim.EncodeCompression;
+pub const WimEncodeOptions = wim.EncodeOptions;
+pub const WimEncodeImage = wim.EncodeImage;
+pub const WimEncodeImagesOptions = wim.EncodeImagesOptions;
+pub const WimSplitEncodeOptions = wim.SplitEncodeOptions;
+pub const WimEncodedSplitPart = wim.EncodedSplitPart;
+pub const WimEncodedSplitArchive = wim.EncodedSplitArchive;
+pub const WimPipableEncodeOptions = wim.PipableEncodeOptions;
+pub const WimAppendImageOptions = wim.AppendImageOptions;
+pub const WimCompactOptions = wim.CompactOptions;
+pub const WimDeleteImageOptions = wim.DeleteImageOptions;
+pub const WimReplaceImageOptions = wim.ReplaceImageOptions;
+pub const WimSolidEncodeOptions = wim.SolidEncodeOptions;
+pub const WimSolidEncodeImagesOptions = wim.SolidEncodeImagesOptions;
 pub const parseWim = wim.parse;
 pub const parseWimHeader = wim.parseHeader;
 pub const parseWimImageMetadataOwned = wim.parseImageMetadataOwned;
 pub const wimSolidResourceMagic = wim.solidResourceMagic;
+pub const wimTaggedItemObjectId = wim.taggedItemObjectId;
+pub const wimTaggedItemXattrs = wim.taggedItemXattrs;
+pub const wimTaggedItemWimlibUnixData = wim.taggedItemWimlibUnixData;
+pub const wimTaggedItemWimlibLinuxXattrs = wim.taggedItemWimlibLinuxXattrs;
+pub const encodeWimXattrsAlloc = wim.encodeXattrsAlloc;
+pub const encodeWimObjectId = wim.encodeObjectId;
+pub const encodeWimUnixMetadata = wim.encodeUnixMetadata;
+pub const encodeWimAlloc = wim.encodeAlloc;
+pub const encodeWimAppend = wim.encodeAppend;
+pub const encodeWimInto = wim.encodeInto;
+pub const encodeWimImagesAlloc = wim.encodeImagesAlloc;
+pub const encodeWimImagesAppend = wim.encodeImagesAppend;
+pub const encodeWimImagesInto = wim.encodeImagesInto;
+pub const appendWimImageAlloc = wim.appendImageAlloc;
+pub const appendWimImageAppend = wim.appendImageAppend;
+pub const appendWimImageInto = wim.appendImageInto;
+pub const compactWimAlloc = wim.compactAlloc;
+pub const compactWimAppend = wim.compactAppend;
+pub const compactWimInto = wim.compactInto;
+pub const deleteWimImageAlloc = wim.deleteImageAlloc;
+pub const deleteWimImageAppend = wim.deleteImageAppend;
+pub const deleteWimImageInto = wim.deleteImageInto;
+pub const replaceWimImageAlloc = wim.replaceImageAlloc;
+pub const replaceWimImageAppend = wim.replaceImageAppend;
+pub const replaceWimImageInto = wim.replaceImageInto;
+pub const encodeWimSolidAlloc = wim.encodeSolidAlloc;
+pub const encodeWimSolidAppend = wim.encodeSolidAppend;
+pub const encodeWimSolidInto = wim.encodeSolidInto;
+pub const encodeWimImagesSolidAlloc = wim.encodeImagesSolidAlloc;
+pub const encodeWimImagesSolidAppend = wim.encodeImagesSolidAppend;
+pub const encodeWimImagesSolidInto = wim.encodeImagesSolidInto;
+pub const splitWimAlloc = wim.splitAlloc;
+pub const encodeWimSplitAlloc = wim.encodeSplitAlloc;
+pub const encodeWimImagesSplitAlloc = wim.encodeImagesSplitAlloc;
+pub const toPipableWimAlloc = wim.toPipableAlloc;
+pub const toPipableWimAppend = wim.toPipableAppend;
+pub const toPipableWimInto = wim.toPipableInto;
+pub const encodeWimPipableAlloc = wim.encodePipableAlloc;
+pub const encodeWimPipableAppend = wim.encodePipableAppend;
+pub const encodeWimPipableInto = wim.encodePipableInto;
+pub const encodeWimImagesPipableAlloc = wim.encodeImagesPipableAlloc;
+pub const encodeWimImagesPipableAppend = wim.encodeImagesPipableAppend;
+pub const encodeWimImagesPipableInto = wim.encodeImagesPipableInto;
+pub const encodeWimPipableSplitAlloc = wim.encodePipableSplitAlloc;
+pub const encodeWimImagesPipableSplitAlloc = wim.encodeImagesPipableSplitAlloc;
 
 pub const Lznt1Error = lznt1.Error;
 pub const Lznt1EncodeOptions = lznt1.EncodeOptions;
@@ -1426,9 +1959,51 @@ pub const encodeXpressHuffmanInto = xpress.encodeHuffmanInto;
 pub const encodeXpressHuffmanAppend = xpress.encodeHuffmanAppend;
 pub const encodeXpressHuffmanAlloc = xpress.encodeHuffmanAlloc;
 
+pub const LzxError = lzx.Error;
+pub const LzxEncodeOptions = lzx.Options;
+pub const LzxStreamFormat = lzx.StreamFormat;
+pub const LzxCabinetEncoder = lzx.CabinetEncoder;
+pub const LzxEncodedBlock = lzx.EncodedBlock;
+pub const LzxEncodeSummary = lzx.EncodeSummary;
+pub const LzxBlockType = lzx.BlockType;
+pub const encodeLzxAlloc = lzx.encodeAlloc;
+pub const encodeLzxInto = lzx.encodeInto;
+pub const encodeLzxAppend = lzx.encodeAppend;
+pub const encodeLzxWimChunkAlloc = lzx.encodeWimChunkAlloc;
+pub const decodeLzxAlloc = lzx.decodeAlloc;
+pub const decodeLzxAllocWithFormat = lzx.decodeAllocWithFormat;
+pub const decodeLzxAllocLimited = lzx.decodeAllocLimited;
+pub const decodeLzxInto = lzx.decodeInto;
+
 pub const LzmsError = lzms.Error;
+pub const QuantumError = quantum.Error;
+pub const QuantumEncoder = quantum.Encoder;
+pub const QuantumEncodeOptions = quantum.Options;
+pub const QuantumEncodeStrategy = quantum.Strategy;
+pub const QuantumEncoded = quantum.Encoded;
+pub const QuantumEncodeSummary = quantum.EncodeSummary;
+pub const encodeQuantumAlloc = quantum.encodeAlloc;
+pub const encodeQuantumWithSummaryAlloc = quantum.encodeWithSummaryAlloc;
+pub const encodeQuantumInto = quantum.encodeInto;
+pub const encodeQuantumAppend = quantum.encodeAppend;
+pub const encodeQuantumLiteralAlloc = quantum.encodeLiteralAlloc;
+pub const decodeQuantumAlloc = quantum.decodeAlloc;
+pub const decodeQuantumAllocLimited = quantum.decodeAllocLimited;
+pub const decodeQuantumInto = quantum.decodeInto;
 pub const LzmsDecoder = lzms.Decoder;
 pub const lzmsMaxBufferSize = lzms.maxBufferSize;
+pub const encodeLzmsAlloc = lzms.encodeAlloc;
+pub const LzmsEncodeOptions = lzms.EncodeOptions;
+pub const LzmsEncodeStrategy = lzms.EncodeStrategy;
+pub const LzmsEncoded = lzms.Encoded;
+pub const LzmsEncodeSummary = lzms.EncodeSummary;
+pub const encodeLzmsWithOptionsAlloc = lzms.encodeWithOptionsAlloc;
+pub const encodeLzmsWithSummaryAlloc = lzms.encodeWithSummaryAlloc;
+pub const encodeLzmsWithOptionsInto = lzms.encodeWithOptionsInto;
+pub const encodeLzmsWithOptionsAppend = lzms.encodeWithOptionsAppend;
+pub const encodeLzmsLiteralAlloc = lzms.encodeLiteralAlloc;
+pub const encodeLzmsAppend = lzms.encodeAppend;
+pub const encodeLzmsInto = lzms.encodeInto;
 pub const decodeLzmsInto = lzms.decodeInto;
 pub const decodeLzmsAllocExactSize = lzms.decodeAllocExactSize;
 pub const decodeLzmsAllocLimited = lzms.decodeAllocLimited;
@@ -1472,6 +2047,11 @@ pub const lz4EncodeSkippableFrameAppend = lz4.encodeSkippableFrameAppend;
 pub const lz4EncodeSkippableFrameIntoSlice = lz4.encodeSkippableFrameIntoSlice;
 pub const Lz4FrameOptions = lz4.FrameOptions;
 pub const Lz4NativeFrameOptions = lz4.NativeFrameOptions;
+pub const Lz4BlockEncodeOptions = lz4.BlockEncodeOptions;
+pub const Lz4FastResolvedOptions = lz4.FastResolvedOptions;
+pub const Lz4FastEncodeProfile = lz4.FastEncodeProfile;
+pub const lz4NormalizeFastAcceleration = lz4.normalizeFastAcceleration;
+pub const lz4FastMaxAcceleration = lz4.max_fast_acceleration;
 pub const lz4NativeMaxChainDepth = lz4.native_max_chain_depth;
 pub const Lz4NativeFrameHeader = lz4.NativeFrameHeader;
 pub const Lz4NativeFrameBlockHeader = lz4.NativeFrameBlockHeader;
@@ -1499,6 +2079,12 @@ pub const lz4IterateNativeStream = lz4.iterateNativeStream;
 pub const Lz4BlockSizeId = lz4.BlockSizeId;
 pub const Lz4BlockMode = lz4.BlockMode;
 pub const Lz4BlockEncoder = lz4.BlockEncoder;
+pub const lz4EncodeBlockWithOptionsAlloc = lz4.encodeBlockWithOptionsAlloc;
+pub const lz4EncodeBlockWithOptionsAppend = lz4.encodeBlockWithOptionsAppend;
+pub const lz4EncodeBlockIntoSliceWithOptions = lz4.encodeBlockIntoSliceWithOptions;
+pub const lz4EncodeBlockWithPrefixAndOptionsAlloc = lz4.encodeBlockWithPrefixAndOptionsAlloc;
+pub const lz4EncodeBlockWithPrefixAndOptionsAppend = lz4.encodeBlockWithPrefixAndOptionsAppend;
+pub const lz4EncodeBlockWithPrefixIntoSliceAndOptions = lz4.encodeBlockWithPrefixIntoSliceAndOptions;
 pub const Lz4BlockDecoder = lz4.BlockDecoder;
 pub const Lz4NativeFrameEncoder = lz4.NativeFrameEncoder;
 pub const Lz4NativeIncrementalFrameEncoder = lz4.NativeIncrementalFrameEncoder;
@@ -1779,7 +2365,27 @@ pub const lz4EncodeNativeFrameIntoSliceWithDictionarySet = lz4.encodeNativeFrame
 pub const lz4EncodeBlockAlloc = lz4.encodeBlockAlloc;
 pub const lz4EncodeBlockDestSize = lz4.encodeBlockDestSize;
 pub const Lz4HcDestSizeEncoder = lz4.HcDestSizeEncoder;
+pub const Lz4BlockHcEncoder = lz4.BlockHcEncoder;
+pub const Lz4HcFrameEncoder = lz4.HcFrameEncoder;
+pub const Lz4HcIncrementalFrameEncoder = lz4.HcIncrementalFrameEncoder;
+pub const Lz4HcFrameOptions = lz4.HcFrameOptions;
 pub const lz4EncodeBlockHcDestSize = lz4.encodeBlockHcDestSize;
+pub const lz4EncodeBlockHcAlloc = lz4.encodeBlockHcAlloc;
+pub const lz4EncodeBlockHcIntoSlice = lz4.encodeBlockHcIntoSlice;
+pub const lz4EncodeBlockHcWithPrefixAlloc = lz4.encodeBlockHcWithPrefixAlloc;
+pub const lz4EncodeBlockHcWithPrefixIntoSlice = lz4.encodeBlockHcWithPrefixIntoSlice;
+pub const lz4EncodedHcFrameBound = lz4.encodedHcFrameBound;
+pub const lz4EncodedHcFrameBoundWithDictionary = lz4.encodedHcFrameBoundWithDictionary;
+pub const lz4EncodedHcFrameBoundWithDictionarySet = lz4.encodedHcFrameBoundWithDictionarySet;
+pub const lz4EncodeHcFrameAlloc = lz4.encodeHcFrameAlloc;
+pub const lz4EncodeHcFrameAppend = lz4.encodeHcFrameAppend;
+pub const lz4EncodeHcFrameIntoSlice = lz4.encodeHcFrameIntoSlice;
+pub const lz4EncodeHcFrameWithDictionaryAlloc = lz4.encodeHcFrameWithDictionaryAlloc;
+pub const lz4EncodeHcFrameAppendWithDictionary = lz4.encodeHcFrameAppendWithDictionary;
+pub const lz4EncodeHcFrameIntoSliceWithDictionary = lz4.encodeHcFrameIntoSliceWithDictionary;
+pub const lz4EncodeHcFrameWithDictionarySetAlloc = lz4.encodeHcFrameWithDictionarySetAlloc;
+pub const lz4EncodeHcFrameAppendWithDictionarySet = lz4.encodeHcFrameAppendWithDictionarySet;
+pub const lz4EncodeHcFrameIntoSliceWithDictionarySet = lz4.encodeHcFrameIntoSliceWithDictionarySet;
 pub const lz4EncodeBlockWithChainDepthAlloc = lz4.encodeBlockWithChainDepthAlloc;
 pub const lz4EncodeBlockWithPrefixAlloc = lz4.encodeBlockWithPrefixAlloc;
 pub const lz4EncodeBlockWithPrefixAndChainDepthAlloc = lz4.encodeBlockWithPrefixAndChainDepthAlloc;
@@ -1995,6 +2601,13 @@ pub const zstdEncodeFrameIntoSliceWithAdvancedOptions = zstd.encodeFrameIntoSlic
 pub const zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionary = zstd.encodeFrameIntoSliceWithAdvancedOptionsAndDictionary;
 pub const zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = zstd.encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet;
 pub const ZstdFrameOptions = zstd.FrameOptions;
+pub const ZstdStrategy = zstd.Strategy;
+pub const ZstdHqOptions = zstd.HqOptions;
+pub const ZstdCanonicalCompressionParameters = zstd.CanonicalCompressionParameters;
+pub const ZstdCanonicalCompressionOptions = zstd.CanonicalCompressionOptions;
+pub const zstdResolveCanonicalCompressionParameters = zstd.resolveCanonicalCompressionParameters;
+pub const ZstdEncoderControlProfile = zstd.EncoderControlProfile;
+pub const resolveZstdFrameOptionsForLevel = zstd.resolveFrameOptionsForLevel;
 pub const ZstdFrameSelection = zstd.FrameSelection;
 pub const ZstdAdvancedFrameOptions = zstd.AdvancedFrameOptions;
 pub const ZstdFrameMode = zstd.FrameMode;
@@ -2008,6 +2621,9 @@ pub const ZstdIncrementalFrameDecoder = zstd.IncrementalFrameDecoder;
 pub const ZstdDictionary = zstd.Dictionary;
 pub const ZstdDictionaryKind = zstd.DictionaryKind;
 pub const ZstdDictionaryTrainOptions = zstd.DictionaryTrainOptions;
+pub const ZstdCoverDictionaryTrainOptions = zstd.CoverDictionaryTrainOptions;
+pub const ZstdCoverDictionaryOptimizeOptions = zstd.CoverDictionaryOptimizeOptions;
+pub const ZstdCoverDictionaryCodecOptimizeOptions = zstd.CoverDictionaryCodecOptimizeOptions;
 pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
 pub const ZstdDictionarySet = zstd.DictionarySet;
 pub const ZstdOwnedDictionarySet = zstd.OwnedDictionarySet;
@@ -2015,6 +2631,23 @@ pub const ZstdStandardDictionaryView = zstd.StandardDictionaryView;
 pub const ZstdStandardDictionaryEntropySummary = zstd.StandardDictionaryEntropySummary;
 pub const ZstdStandardDictionaryNativeView = zstd.StandardDictionaryNativeView;
 pub const ZstdOwnedStandardDictionary = zstd.OwnedStandardDictionary;
+pub const ZstdOwnedOptimizedCoverStandardDictionary = zstd.OwnedOptimizedCoverStandardDictionary;
+pub const ZstdFastCoverDictionaryTrainOptions = zstd.FastCoverDictionaryTrainOptions;
+pub const ZstdFastCoverDictionaryOptimizeOptions = zstd.FastCoverDictionaryOptimizeOptions;
+pub const ZstdFastCoverDictionaryCodecOptimizeOptions = zstd.FastCoverDictionaryCodecOptimizeOptions;
+pub const ZstdOwnedOptimizedFastCoverStandardDictionary = zstd.OwnedOptimizedFastCoverStandardDictionary;
+pub const ZstdFastCoverStandardDictionaryTrainingProfile = zstd.FastCoverStandardDictionaryTrainingProfile;
+pub const ZstdFastCoverCodecSearchProfile = zstd.FastCoverCodecSearchProfile;
+pub const zstdTrainFastCoverStandardDictionaryAlloc = zstd.trainFastCoverStandardDictionaryAlloc;
+pub const zstdTrainOptimizedFastCoverStandardDictionaryAlloc = zstd.trainOptimizedFastCoverStandardDictionaryAlloc;
+pub const zstdTrainCodecOptimizedFastCoverStandardDictionaryAlloc = zstd.trainCodecOptimizedFastCoverStandardDictionaryAlloc;
+pub const zstdProfileFastCoverStandardDictionaryAlloc = zstd.profileFastCoverStandardDictionaryAlloc;
+pub const zstdProfileOptimizedFastCoverStandardDictionaryAlloc = zstd.profileOptimizedFastCoverStandardDictionaryAlloc;
+pub const zstdProfileCodecOptimizedFastCoverStandardDictionaryAlloc = zstd.profileCodecOptimizedFastCoverStandardDictionaryAlloc;
+pub const ZstdStandardDictionaryTrainingProfile = zstd.StandardDictionaryTrainingProfile;
+pub const ZstdProfiledStandardDictionary = zstd.ProfiledStandardDictionary;
+pub const ZstdCoverCodecSearchProfile = zstd.CoverCodecSearchProfile;
+pub const ZstdProfiledCodecOptimizedCoverStandardDictionary = zstd.ProfiledCodecOptimizedCoverStandardDictionary;
 pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
 pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
@@ -2023,7 +2656,13 @@ pub const zstdStandardDictionaryHeaderLen = zstd.standard_dictionary_header_len;
 pub const zstdStandardDictionaryFromContentBound = zstd.standardDictionaryFromContentBound;
 pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromContentInto;
 pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
+pub const zstdTrainStandardDictionaryFromContentAlloc = zstd.trainStandardDictionaryFromContentAlloc;
+pub const zstdProfileStandardDictionaryFromContentAlloc = zstd.profileStandardDictionaryFromContentAlloc;
 pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
+pub const zstdTrainCoverStandardDictionaryAlloc = zstd.trainCoverStandardDictionaryAlloc;
+pub const zstdTrainOptimizedCoverStandardDictionaryAlloc = zstd.trainOptimizedCoverStandardDictionaryAlloc;
+pub const zstdTrainCodecOptimizedCoverStandardDictionaryAlloc = zstd.trainCodecOptimizedCoverStandardDictionaryAlloc;
+pub const zstdProfileCodecOptimizedCoverStandardDictionaryAlloc = zstd.profileCodecOptimizedCoverStandardDictionaryAlloc;
 pub const zstdTrainValidatedStandardDictionaryAlloc = zstd.trainValidatedStandardDictionaryAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
@@ -2043,6 +2682,8 @@ pub const ZstdNativeFrameOptions = zstd.NativeFrameOptions;
 pub const zstdNativeMaxMatchSearchBudget = zstd.native_max_match_search_budget;
 pub const zstdNativeMaxDirectHuffmanSymbol = zstd.native_max_direct_huffman_symbol;
 pub const zstdNativeDictionaryWindowLen = zstd.native_dictionary_window_len;
+pub const zstdNativeExplicitWindowMatchLenDefault = zstd.native_explicit_window_match_len_default;
+pub const zstdNativeExplicitWindowMatchLenMax = zstd.native_explicit_window_match_len_max;
 pub const ZstdNativeFrameSelection = zstd.NativeFrameSelection;
 pub const ZstdNativeFrameMode = zstd.NativeFrameMode;
 pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
@@ -2365,10 +3006,13 @@ pub const zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet = zstd.d
 pub const zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 
 pub const Error = core.Error;
+pub const CompressedInputPolicy = core.CompressedInputPolicy;
 pub const DeflateError = deflate.Error;
 pub const Deflate64Error = deflate64.Error;
 pub const Deflate64DecodeResult = deflate64.DecodeResult;
 pub const Deflate64EncodeOptions = deflate64.EncodeOptions;
+pub const Deflate64IncrementalDecoder = deflate64.IncrementalDecoder;
+pub const Deflate64IncrementalStoredEncoder = deflate64.IncrementalStoredEncoder;
 pub const decodeDeflate64Into = deflate64.decodeInto;
 pub const decodeDeflate64Alloc = deflate64.decodeAlloc;
 pub const decodeDeflate64AllocLimited = deflate64.decodeAllocLimited;
@@ -2648,6 +3292,16 @@ pub const ZlibIncrementalBestEncoder = deflate.ZlibIncrementalBestEncoder;
 pub const GzipIncrementalBestEncoder = deflate.GzipIncrementalBestEncoder;
 pub const RawDeflateIncrementalStoredDecoder = deflate.RawDeflateIncrementalStoredDecoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+pub const RawDeflateSyncPoint = deflate.RawDeflateSyncPoint;
+pub const RawDeflateSyncScanner = deflate.RawDeflateSyncScanner;
+pub const RawDeflateSyncScanResult = deflate.RawDeflateSyncScanResult;
+pub const RawDeflateSyncDecodeResult = deflate.RawDeflateSyncDecodeResult;
+pub const RawDeflateOwnedSyncDecodeResult = deflate.RawDeflateOwnedSyncDecodeResult;
+pub const DeflateSyncError = deflate.SyncError;
+pub const findRawDeflateSyncPoint = deflate.findRawDeflateSyncPoint;
+pub const decodeRawDeflateAfterSync = deflate.decodeRawDeflateAfterSync;
+pub const decodeRawDeflateAfterSyncAlloc = deflate.decodeRawDeflateAfterSyncAlloc;
+pub const decodeRawDeflateAfterSyncAllocLimited = deflate.decodeRawDeflateAfterSyncAllocLimited;
 pub const ZlibIncrementalDecoder = deflate.ZlibIncrementalDecoder;
 pub const ZlibDictionaryEntry = deflate.ZlibDictionaryEntry;
 pub const ZlibDictionarySet = deflate.ZlibDictionarySet;
@@ -2661,6 +3315,8 @@ pub const RawDeflateProbeResult = deflate.RawDeflateProbeResult;
 pub const DecodeProbeResult = deflate.DecodeProbeResult;
 pub const CompressionOptions = deflate.CompressionOptions;
 pub const CompressionStrategy = deflate.CompressionStrategy;
+pub const DeflateParams = deflate.DeflateParams;
+pub const DeflateParamsError = deflate.ParamsError;
 pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
 pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
@@ -3252,6 +3908,11 @@ pub const planBlocksWithLongDistanceAlloc = planner.planBlocksWithLongDistanceAl
 pub const planBlocksAligningLongDistanceAlloc = planner.planBlocksAligningLongDistanceAlloc;
 
 test {
+    _ = byte_source;
+    _ = file_source;
+    _ = byte_sink;
+    _ = file_sink;
+    _ = working_allocator;
     _ = checksum;
     _ = core;
     _ = store;
@@ -3264,6 +3925,7 @@ test {
     _ = long_distance;
     _ = planner;
     _ = lz4;
+    _ = lz4_legacy;
     _ = zstd;
     _ = cab;
     _ = zip;
@@ -3277,6 +3939,8 @@ test {
     _ = lzip;
     _ = lzf;
     _ = lha;
+    _ = ar;
+    _ = deb;
     _ = arj;
     _ = arc;
     _ = zoo;
@@ -3304,6 +3968,8 @@ test {
     _ = wux;
     _ = android_sparse;
     _ = android_ota;
+    _ = erofs;
+    _ = wim;
 }
 
 test "root 7z exports create list and extract Copy archives" {
@@ -3321,6 +3987,49 @@ test "root 7z exports create list and extract Copy archives" {
     try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
 }
 
+test "root Bzip2 incremental decoder drains a Python stream" {
+    const encoded_hex = "425a6831314159265359e2c777e0000054d100001040000244a00030c002950c9a55855e13c4c2ad157c5dc914e142438b1ddf80";
+    var encoded: [encoded_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&encoded, encoded_hex);
+    const expected = "hello hello hello\n" ** 20;
+    var decoder = Bzip2IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    var output: [expected.len]u8 = undefined;
+    const accepted = try decoder.step(&encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, accepted.status);
+    decoder.finish();
+    const done = try decoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "root Bzip2 incremental encoder writes a complete stream" {
+    const input = "root Bzip2 incremental encoder" ** 32;
+    var encoder = try Bzip2IncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .block_size_100k = 1,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [2048]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeBzip2Alloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "root 7z exports compressed archive writing" {
     const payload = "root 7z compressed writer" ** 64;
     const entries = [_]SevenZipEncodeEntry{.{ .name = "payload.txt", .data = payload }};
@@ -3335,6 +4044,11 @@ test "root 7z exports compressed archive writing" {
 }
 
 test "root XZ exports compressed LZMA2 writing" {
+    try std.testing.expectEqual(@as(usize, 1610612736), xzMaxEncodeDictionarySize);
+    try std.testing.expectEqual(xzMaxEncodeDictionarySize, lzmaMaxEncodeDictionarySize);
+    try std.testing.expectEqual(@as(usize, 2097152), lzma2MaxCompressedPlainSize);
+    try std.testing.expectEqual(@as(usize, 65536), lzma2MaxCompressedPayloadSize);
+    try std.testing.expectEqual(@as(usize, 65536), lzma2MaxStoredChunkSize);
     const payload = "root XZ compressed writer\n" ** 256;
     const encoded = try encodeXzAlloc(std.testing.allocator, payload, .{ .check = .crc32 });
     defer std.testing.allocator.free(encoded);
@@ -3342,6 +4056,43 @@ test "root XZ exports compressed LZMA2 writing" {
     const decoded = try decodeXzAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var incremental = XzIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+    });
+    defer incremental.deinit();
+    var incremental_output: [payload.len]u8 = undefined;
+    _ = try incremental.step(encoded, &incremental_output);
+    incremental.finish();
+    const done = try incremental.step("", &incremental_output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try std.testing.expectEqualSlices(u8, payload, &incremental_output);
+}
+
+test "root XZ incremental encoder writes a complete stream" {
+    const input = "root XZ incremental encoder" ** 64;
+    var encoder = try XzIncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .check = .crc32,
+        .block_size = 257,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [4096]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeXzAlloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root LZMA-Alone exports compressed writing" {
@@ -3352,6 +4103,47 @@ test "root LZMA-Alone exports compressed writing" {
     const decoded = try decodeLzmaAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var incremental = LzmaIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+    });
+    defer incremental.deinit();
+    var incremental_output: [payload.len]u8 = undefined;
+    const initial = try incremental.step(encoded, &incremental_output);
+    incremental.finish();
+    var output_offset = initial.progress.output_written;
+    while (true) {
+        const result = try incremental.step("", incremental_output[output_offset..]);
+        output_offset += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, payload, &incremental_output);
+}
+
+test "root LZMA-Alone incremental encoder writes a complete stream" {
+    const input = "root LZMA incremental encoder" ** 64;
+    var encoder = try LzmaIncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .dictionary_size = 32 * 1024,
+        .input_buffer_len = 512,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [4096]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeLzmaAlloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root Unix compress exports round trip .Z streams" {
@@ -3397,9 +4189,47 @@ test "root LZOP exports compressed-or-stored and stored-only writing" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
 
+    var incremental = LzopIncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = input.len,
+        .max_block_size = 128,
+    });
+    defer incremental.deinit();
+    var incremental_output: [input.len]u8 = undefined;
+    const incremental_result = try incremental.step(encoded, &incremental_output);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, incremental_result.status);
+    try incremental.finish();
+    try std.testing.expectEqualSlices(u8, input, &incremental_output);
+
     const stored = try encodeLzopStoredAlloc(std.testing.allocator, input, .{ .block_size = 128 });
     defer std.testing.allocator.free(stored);
     try std.testing.expectEqual(@as(usize, 0), (try inspectLzop(stored)).compressed_block_count);
+}
+
+test "root LZOP incremental encoder writes a complete stream" {
+    const input = "root LZOP incremental encoder" ** 64;
+    var encoder = try LzopIncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .block_size = 257,
+        .checksum = .crc32,
+        .compressed_checksum = true,
+    }, input.len);
+    defer encoder.deinit();
+    var encoded: [4096]u8 = undefined;
+    var encoded_len: usize = 0;
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], encoded[encoded_len..]);
+        input_offset += result.progress.input_read;
+        encoded_len += result.progress.output_written;
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", encoded[encoded_len..]);
+        encoded_len += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    const decoded = try decodeLzopAlloc(std.testing.allocator, encoded[0..encoded_len]);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "root exports lz4 and zstd codec helpers" {
@@ -3437,6 +4267,51 @@ test "root exports lz4 and zstd codec helpers" {
 
     _ = BrotliError;
     _ = BrotliDecodeOptions;
+    _ = BrotliSerializedSharedDictionary;
+    _ = BrotliSerializedSharedDictionaryError;
+    _ = BrotliSerializedSharedDictionaryMatcher;
+    _ = BrotliSerializedSharedDictionarySpec;
+    _ = BrotliSerializedSharedDictionaryChoice;
+    _ = BrotliSerializedSharedDictionaryWordListSpec;
+    _ = BrotliSerializedSharedDictionaryTransformListSpec;
+    _ = BrotliSerializedSharedDictionaryBuildError;
+    _ = BrotliSerializedSharedDictionaryTransformProfile;
+    _ = BrotliSerializedSharedDictionaryContextProfile;
+    _ = BrotliSerializedSharedDictionaryWordSelectionProfile;
+    _ = BrotliSerializedSharedDictionaryWordBucketProfile;
+    _ = BrotliSerializedSharedDictionaryWordLengthBucketCap;
+    _ = BrotliSerializedSharedDictionarySparseWordProfile;
+    _ = BrotliMaxSerializedWordBucketPruningSteps;
+    _ = BrotliSerializedSharedDictionaryTrainOptions;
+    _ = BrotliOwnedTrainedSerializedSharedDictionary;
+    _ = brParseSerializedSharedDictionary;
+    _ = brSerializedSharedDictionaryEncodedSize;
+    _ = brSerializeSharedDictionaryInto;
+    _ = brSerializeSharedDictionaryAppend;
+    _ = brSerializeSharedDictionaryAlloc;
+    _ = brTrainSerializedSharedDictionaryAlloc;
+    const default_serialized_dictionary = try brParseSerializedSharedDictionary(
+        &.{ 0x91, 0x00, 0x00, 0x00, 0x00 },
+    );
+    try std.testing.expectEqual(
+        @as(u7, 1),
+        default_serialized_dictionary.dictionary_count,
+    );
+    try std.testing.expect(!default_serialized_dictionary.context_based);
+    const attached_serialized_dictionary = BrotliSharedDictionary{
+        .serialized = &default_serialized_dictionary,
+    };
+    try attached_serialized_dictionary.validate();
+    var rebuilt_serialized_dictionary: [5]u8 = undefined;
+    try std.testing.expectEqual(
+        rebuilt_serialized_dictionary.len,
+        try brSerializeSharedDictionaryInto(.{}, &rebuilt_serialized_dictionary),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &.{ 0x91, 0, 0, 0, 0 },
+        &rebuilt_serialized_dictionary,
+    );
     try std.testing.expectEqual(@as(usize, 1 << 24), brotliMaxUncompressedMetaBlockLen);
     try std.testing.expectEqual(@as(u5, 16), brotliDefaultWindowBits);
     _ = brEncodedStoredStreamBound;
@@ -3459,6 +4334,15 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodePlannedStreamChunksAlloc;
     _ = brEncodePlannedStreamChunksAppend;
     _ = brEncodePlannedStreamChunksInto;
+    _ = brEncodePlannedStreamStaticDictionaryAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryAppend;
+    _ = brEncodePlannedStreamStaticDictionaryInto;
+    _ = brEncodePlannedStreamStaticDictionaryChunksAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryChunksAppend;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsAppend;
+    _ = brEncodePlannedStreamStaticDictionaryChunksInto;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
@@ -3469,6 +4353,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliPrefixCode;
     _ = BrotliStoredStreamEncoder;
     _ = BrotliIncrementalPlannedStreamEncoder;
+    _ = BrotliIncrementalStaticDictionaryStreamEncoder;
+    _ = BrotliStaticDictionaryStreamEncoder;
+    _ = BrotliStaticDictionaryStreamOptions;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;
@@ -3669,6 +4556,28 @@ test "root exports lz4 and zstd codec helpers" {
     _ = Lz4BlockMode;
     _ = Lz4BlockEncoder;
     _ = Lz4BlockDecoder;
+    _ = Lz4HcDestSizeEncoder;
+    _ = Lz4BlockHcEncoder;
+    _ = Lz4HcFrameEncoder;
+    _ = Lz4HcIncrementalFrameEncoder;
+    _ = Lz4HcFrameOptions;
+    _ = lz4EncodeBlockHcDestSize;
+    _ = lz4EncodeBlockHcAlloc;
+    _ = lz4EncodeBlockHcIntoSlice;
+    _ = lz4EncodeBlockHcWithPrefixAlloc;
+    _ = lz4EncodeBlockHcWithPrefixIntoSlice;
+    _ = lz4EncodedHcFrameBound;
+    _ = lz4EncodedHcFrameBoundWithDictionary;
+    _ = lz4EncodedHcFrameBoundWithDictionarySet;
+    _ = lz4EncodeHcFrameAlloc;
+    _ = lz4EncodeHcFrameAppend;
+    _ = lz4EncodeHcFrameIntoSlice;
+    _ = lz4EncodeHcFrameWithDictionaryAlloc;
+    _ = lz4EncodeHcFrameAppendWithDictionary;
+    _ = lz4EncodeHcFrameIntoSliceWithDictionary;
+    _ = lz4EncodeHcFrameWithDictionarySetAlloc;
+    _ = lz4EncodeHcFrameAppendWithDictionarySet;
+    _ = lz4EncodeHcFrameIntoSliceWithDictionarySet;
     _ = Lz4NativeFrameEncoder;
     _ = Lz4NativeFrameDecoder;
     _ = Lz4NativeIncrementalFrameDecoder;
@@ -4191,6 +5100,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdNativeMaxMatchSearchBudget;
     _ = zstdNativeMaxDirectHuffmanSymbol;
     _ = zstdNativeDictionaryWindowLen;
+    _ = zstdNativeExplicitWindowMatchLenDefault;
+    _ = zstdNativeExplicitWindowMatchLenMax;
     _ = ZstdNativeFrameSelection;
     _ = ZstdNativeFrameMode;
     _ = ZstdNativeFrameEncodeResult;
@@ -5754,12 +6665,102 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     );
     defer trained_standard.deinit(std.testing.allocator);
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, trained_standard.asDictionary().kind());
+    const finalized_content = try zstdTrainStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        dict.content,
+        &samples,
+        dict.id +% 1,
+    );
+    defer finalized_content.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, dict.content, finalized_content.view.content);
+    const profiled_content: ZstdProfiledStandardDictionary = try zstdProfileStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        dict.content,
+        &samples,
+        dict.id +% 1,
+    );
+    defer profiled_content.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, finalized_content.bytes, profiled_content.dictionary.bytes);
+    try std.testing.expect(profiled_content.profile.total_ns != 0);
+    const cover_samples = [_][]const u8{
+        samples[0],
+        samples[1],
+        samples[2],
+        "root zstd public dictionary sample delta delta delta",
+        "root zstd public dictionary sample epsilon epsilon epsilon",
+    };
+    const cover_options: ZstdCoverDictionaryTrainOptions = .{
+        .target_size = 32,
+        .segment_size = 16,
+        .hash_log = dictionary.cover.min_hash_log,
+    };
+    const cover_standard = try zstdTrainCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &cover_samples,
+        cover_options,
+        dict.id +% 2,
+    );
+    defer cover_standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, cover_standard.asDictionary().kind());
+    const optimized_cover = try zstdTrainOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &cover_samples,
+        &.{"root zstd public dictionary sample alpha gamma"},
+        .{
+            .target_size = 32,
+            .segment_sizes = &.{ 12, 16 },
+            .dmer_sizes = &.{ 6, 8 },
+            .hash_logs = &.{8},
+        },
+        dict.id +% 3,
+    );
+    defer optimized_cover.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, optimized_cover.asDictionary().kind());
+    try std.testing.expectEqual(@as(usize, 4), optimized_cover.candidates_evaluated);
+    const codec_cover = try zstdTrainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &cover_samples,
+        &.{"root zstd public dictionary sample alpha gamma"},
+        .{
+            .cover = .{
+                .target_size = 32,
+                .segment_sizes = &.{16},
+                .dmer_sizes = &.{6},
+                .hash_logs = &.{8},
+            },
+            .levels = &.{1},
+        },
+        dict.id +% 4,
+    );
+    defer codec_cover.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, codec_cover.asDictionary().kind());
+    try std.testing.expectEqual(@as(usize, 1), codec_cover.candidates_evaluated);
+    const profiled_codec: ZstdProfiledCodecOptimizedCoverStandardDictionary = try zstdProfileCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        &cover_samples,
+        &.{"root zstd public dictionary sample alpha gamma"},
+        .{
+            .cover = .{
+                .target_size = 32,
+                .segment_sizes = &.{16},
+                .dmer_sizes = &.{6},
+                .hash_logs = &.{8},
+            },
+            .levels = &.{1},
+        },
+        dict.id +% 4,
+    );
+    defer profiled_codec.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, codec_cover.bytes, profiled_codec.dictionary.bytes);
+    try std.testing.expectEqual(@as(usize, 1), profiled_codec.profile.candidate_frames);
     const validated_standard = try zstdTrainValidatedStandardDictionaryAlloc(
         std.testing.allocator,
         &samples,
         &.{"root zstd public dictionary sample alpha beta"},
         train_options,
-        dict.id +% 2,
+        dict.id +% 5,
     );
     defer validated_standard.deinit(std.testing.allocator);
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, validated_standard.asDictionary().kind());

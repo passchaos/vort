@@ -42,6 +42,9 @@ const encoded = try vort.encodeCabAlloc(allocator, &entries, .{
     .compression = .quantum,
     .quantum_window_bits = 18,
     .quantum_level = 3,
+    .quantum_strategy = .greedy,
+    .quantum_hash_log = 15,
+    .quantum_max_match_distance = 128 * 1024,
 });
 defer allocator.free(encoded);
 
@@ -107,16 +110,54 @@ non-zero CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes,
 and a caller-selected set ID. Stored/MSZIP permit configurable 1–32 KiB CFDATA
 blocks. MSZIP independently chooses fixed-Huffman or stored Deflate for each
 block while retaining the prior 32 KiB folder tail as its dictionary. The
-reference LZX writer emits interoperable uncompressed LZX blocks, selectable
-15–21 bit windows, mandatory 32 KiB non-final CFDATA records, restored recent
-offsets, word alignment, and odd final-block padding. Entropy-coded LZX writing
-is a later ratio optimization, not a distinct compatibility surface.
-The reference Quantum writer emits literal-only adaptive arithmetic frames,
-persists selector/literal models across 32 KiB CFDATA records, supports 10–21
-bit windows and declared levels 1–7, and writes bounded null padding before the
-CAB-injected frame sentinel. Quantum match selection is likewise a later ratio
-optimization. Owned, transactional append, and caller-buffer APIs share the
-same wire implementation.
+LZX writer emits adaptive verbatim/aligned blocks with 2...257-byte matches,
+all three repeat-offset slots, modulo-17 tree deltas and compressed code-length
+runs. Its bounded matcher indexes only the selected 15–21 bit window and
+preserves trees/recent offsets across mandatory 32 KiB non-final CFDATA records.
+Complete block bytes select compressed or uncompressed representation; raw
+blocks restore the current offsets and preserve prior trees. Word alignment and
+odd raw final-block padding remain required. The same state survives split
+CFDATA in multi-cabinet sets. Optimal parsing and calibrated levels remain
+ratio/performance work. The public raw LZX APIs are documented in [LZX](lzx.md).
+The Quantum writer defaults to deterministic greedy matching with fixed
+3-/4-byte and variable 5...259-byte matches. It supports 10–21 bit windows,
+preserves all adaptive arithmetic models and folder history across 32 KiB
+CFDATA records, and selects a match frame only when its complete payload is
+smaller than the literal reference from the same current model state. Later
+models follow the selected frame, so this rule does not guarantee that a whole
+greedy stream is smaller than an independently encoded literals-only stream.
+`.quantum_strategy = .literals` keeps the reference frame bytes. The shared item
+encoder places length/position extra
+fields beyond the arithmetic decoder's 16-bit lookahead and verifies the
+result by replay. Frame payloads have bounded null padding and omit the
+`0xff` sentinel; CAB extraction inserts the sentinel at each completed logical
+CFDATA block. Ordinary cabinets and cabinet sets use this same default codec
+and retain identical model/history state across split payloads. Owned,
+transactional append, and caller-buffer APIs share the same wire implementation.
+
+`CabEncodeOptions` exposes these Quantum controls:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `quantum_window_bits` | `18` | Declared 10...21-bit window, 1 KiB through 2 MiB. |
+| `quantum_level` | `1` | CAB header value in 1...7; no corresponding speed or high-quality level policy is implemented. |
+| `quantum_strategy` | `.greedy` | Match planning with literal-reference size arbitration, or explicit `.literals`. |
+| `quantum_hash_log` | `15` | 8...20; the greedy hash table requests `8 * 2^hash_log` bytes. |
+| `quantum_max_match_distance` | Maximum `usize` | Nonzero distance bound; effective history is also limited by the declared window. |
+| `quantum_max_working_memory` | Maximum `usize` | Maximum live requested allocation bytes for each codec frame. |
+| `quantum_max_output_len` | Maximum `usize` | Maximum selected compressed codec payload bytes per frame. |
+
+The working limit includes hash storage, item plans, reference/candidate buffers
+and the returned frame allocation. It excludes caller input, model state on the
+stack, allocator bookkeeping, and the CAB writer's folder/archive buffers.
+These two Quantum resource limits apply to the codec frame rather than the
+complete archive or cabinet set; CAB headers and checksums are outside the
+codec output limit. Invalid settings return `InvalidCabinetOptions`, a codec
+working-budget failure returns `WorkingMemoryLimitExceeded`, and a codec
+output-budget failure returns `OutputLimitExceeded`. See the
+[Quantum APIs and ownership rules](quantum.md) for the raw codec, bounded
+history frame interface and error contracts. Deeper parsing, calibrated quality
+levels and throughput optimization remain open.
 
 CLI validation surfaces:
 
@@ -129,6 +170,9 @@ zig build run -- list-cab-file archive.cab
 zig build run -- extract-cab-file archive.cab path\\file.bin output.bin 67108864 268435456
 zig build run -- extract-cab-set path\\file.bin output.bin part1.cab part2.cab part3.cab
 zig build run-cab-diff
+zig build test-quantum test-cab
+zig build run-quantum-match-diff -Doptimize=ReleaseFast -- \
+  --mspack-dir /path/to/libmspack --report /tmp/quantum-matches.json
 ```
 
 The required differential uses byte-exact public fixtures from libmspack. It
@@ -144,5 +188,13 @@ both directions, reserve bytes, and six independently hashed outputs.
 Vort-written Stored/MSZIP/LZX cabinets are
 decoded byte-exactly by libarchive, including multi-frame LZX output with an
 odd final block. Cabextract/libmspack independently decodes Vort's multi-frame
-Quantum output and all four Vort-written linked cabinet-set modes. Entropy-coded
-LZX blocks and Quantum match encoding remain future ratio work.
+Quantum output and all four Vort-written linked cabinet-set modes.
+The dedicated Quantum match differential covers every 10...21-bit window,
+all three match selectors and nonzero extra fields, complete/partial frames,
+cross-frame history, literal-reference size arbitration, deterministic output,
+resource limits, and fragmented compressed cabinet sets through unmodified
+libmspack. Retained
+[Quantum functional size evidence](../performance/quantum-match-functional-baseline.md)
+records the reproduction commands and reference provenance; it does not claim
+throughput or high-quality leadership. Deeper LZX parsing remains
+ratio/performance work.

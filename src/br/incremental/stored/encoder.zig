@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const memory = @import("allocator_adapter.zig");
 
 /// Build an incremental encoder for Brotli stored/uncompressed streams. Input
 /// is bounded to one format meta-block, while encoded bytes are drained through
@@ -8,6 +9,7 @@ pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
         options: Options,
+        memory_binding: memory.Binding = .{},
         codec_state: Codec.State = .{},
         plain: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
@@ -19,28 +21,31 @@ pub fn Encoder(comptime Codec: type) type {
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
-        stream_input: usize = 0,
-        stream_output: usize = 0,
+        total_input: Counter = 0,
+        total_output: Counter = 0,
+        stream_input: Counter = 0,
+        stream_output: Counter = 0,
         stream_count: usize = 0,
 
         const Self = @This();
-        pub const Error = Codec.Error;
+        /// Byte counts span complete streams, independently of address space.
+        /// Keep the established public type on targets with 64-bit `usize`.
+        pub const Counter = if (@bitSizeOf(usize) < 64) u64 else usize;
+        pub const Error = Codec.Error || memory.Error;
         pub const Options = struct {
             stream: Codec.StreamOptions = .{},
-            max_input_len: usize = std.math.maxInt(usize),
+            max_input_len: Counter = std.math.maxInt(Counter),
             block_len: usize = if (@hasDecl(Codec, "default_block_len")) Codec.default_block_len else 64 * 1024,
         };
         pub const Snapshot = struct {
             /// Cumulative source bytes accepted across all continued streams.
-            input_read: usize,
+            input_read: Counter,
             /// Cumulative encoded bytes returned across all continued streams.
-            output_written: usize,
+            output_written: Counter,
             /// Source bytes accepted for the current stream.
-            stream_input: usize,
+            stream_input: Counter,
             /// Encoded bytes returned for the current stream.
-            stream_output: usize,
+            stream_output: Counter,
             buffered_input: usize,
             pending_output: usize,
             stream_count: usize,
@@ -58,10 +63,17 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
             return .{ .allocator = allocator, .options = options };
         }
+        /// Internal composition surface for complete-frame operations whose
+        /// sibling encoders and retained wires share one total-memory policy.
+        pub fn initWithSharedLease(allocator: std.mem.Allocator, options: Options, lease: @import("../../encoder/total_budget.zig").Lease) Error!Self {
+            return .{ .allocator = allocator, .options = options, .memory_binding = try memory.Binding.initShared(allocator, lease) };
+        }
         pub fn deinit(self: *Self) void {
-            if (@hasDecl(Codec, "deinitState")) Codec.deinitState(&self.codec_state, self.allocator);
-            self.plain.deinit(self.allocator);
-            self.pending.deinit(self.allocator);
+            const allocator = self.memory_binding.current(self.allocator);
+            if (@hasDecl(Codec, "deinitState")) Codec.deinitState(&self.codec_state, allocator);
+            self.plain.deinit(allocator);
+            self.pending.deinit(allocator);
+            self.memory_binding.deinit();
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
@@ -90,6 +102,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = self.memory_binding.activate(Codec, self.allocator, &self.codec_state, options.stream, self.plain.capacity, self.pending.capacity) catch |err|
+                return @errorCast(self.memory_binding.mapError(err));
             self.resetStream(options);
         }
         pub fn snapshot(self: *const Self) Snapshot {
@@ -113,15 +127,25 @@ pub fn Encoder(comptime Codec: type) type {
             };
         }
         pub fn retainedCapacity(self: *const Self) usize {
-            var total = self.plain.capacity + self.pending.capacity;
-            if (@hasDecl(Codec, "stateRetainedCapacity")) total += Codec.stateRetainedCapacity(&self.codec_state);
-            return total;
+            const maximum = std.math.maxInt(usize);
+            var retained = std.math.add(usize, self.plain.capacity, self.pending.capacity) catch return maximum;
+            if (@hasDecl(Codec, "stateRetainedCapacity")) {
+                retained = std.math.add(usize, retained, Codec.stateRetainedCapacity(&self.codec_state)) catch return maximum;
+            }
+            if (!self.memory_binding.shared) {
+                if (self.memory_binding.lease) |lease| {
+                    const budget = lease.snapshot();
+                    if (budget.available)
+                        retained = std.math.add(usize, retained, budget.control_bytes) catch return maximum;
+                }
+            }
+            return retained;
         }
         pub fn finish(self: *Self) Error!void {
             self.finishing = true;
             self.flush_requested = false;
         }
-        /// Publish buffered bytes as a non-final uncompressed meta-block. The
+        /// Publish buffered bytes as a non-final meta-block. The
         /// bit-level writer state is retained so later input continues the same
         /// Brotli stream after `step` acknowledges the flush with `need_input`.
         pub fn flush(self: *Self) void {
@@ -138,7 +162,17 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            if (self.options.block_len == 0 or self.options.block_len > Codec.max_block_len) return error.InvalidBlockPlan;
+            return self.stepInner(input, output) catch |err|
+                return @errorCast(self.memory_binding.mapError(err));
+        }
+
+        fn stepInner(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            const block_len = if (@hasDecl(Codec, "resolveBlockLen"))
+                try Codec.resolveBlockLen(self.options.stream, self.options.block_len)
+            else
+                self.options.block_len;
+            if (block_len == 0 or block_len > Codec.max_block_len or
+                self.plain.items.len > block_len) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -148,8 +182,10 @@ pub fn Encoder(comptime Codec: type) type {
             // output. Otherwise an empty output buffer can hide a deterministic
             // input-limit error behind `need_output`, making error behavior
             // depend on caller output chunking.
-            const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
+            const offered_total = std.math.add(Counter, self.total_input, @as(Counter, input.len)) catch return error.IntegerOverflow;
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
+            _ = std.math.add(Counter, self.stream_input, @as(Counter, input.len)) catch return error.IntegerOverflow;
+            const allocator = try self.memory_binding.activate(Codec, self.allocator, &self.codec_state, self.options.stream, self.plain.capacity, self.pending.capacity);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -157,11 +193,13 @@ pub fn Encoder(comptime Codec: type) type {
                 if (self.pending_offset != ready_end) {
                     const remaining = self.pending.items[self.pending_offset..ready_end];
                     const n = @min(output.len - output_written, remaining.len);
+                    const total = std.math.add(Counter, self.total_output, @as(Counter, n)) catch return error.IntegerOverflow;
+                    const cumulative = std.math.add(Counter, self.stream_output, @as(Counter, n)) catch return error.IntegerOverflow;
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.pending_offset += n;
                     output_written += n;
-                    self.total_output += n;
-                    self.stream_output += n;
+                    self.total_output = total;
+                    self.stream_output = cumulative;
                     if (self.pending_offset != ready_end) return result(input_read, output_written, .need_output);
                     if (ready_end == self.pending.items.len) {
                         self.pending.clearRetainingCapacity();
@@ -170,28 +208,57 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.prefix_written) {
-                    try Codec.writePrefix(self.allocator, &self.pending, &self.codec_state, self.options.stream);
+                    if (@hasDecl(Codec, "writePrefixWithBlockLen")) {
+                        try Codec.writePrefixWithBlockLen(allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
+                    } else {
+                        try Codec.writePrefix(allocator, &self.pending, &self.codec_state, self.options.stream);
+                    }
                     self.prefix_written = true;
                     continue;
                 }
-                const room = self.options.block_len - self.plain.items.len;
+                const room = block_len - self.plain.items.len;
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
-                    const total = std.math.add(usize, self.total_input, n) catch return error.IntegerOverflow;
-                    try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
+                    const total = std.math.add(Counter, self.total_input, @as(Counter, n)) catch return error.IntegerOverflow;
+                    const cumulative = std.math.add(Counter, self.stream_input, @as(Counter, n)) catch return error.IntegerOverflow;
+                    try self.plain.appendSlice(allocator, input[input_read..][0..n]);
                     input_read += n;
                     self.total_input = total;
-                    self.stream_input += n;
+                    self.stream_input = cumulative;
                 }
-                if (self.plain.items.len == self.options.block_len or
+                // A codec can retain an exact full block until more input or
+                // finish determines whether its meta-block header is final.
+                const defer_full_block = if (@hasDecl(Codec, "deferFullBlock"))
+                    Codec.deferFullBlock(self.options.stream)
+                else if (@hasDecl(Codec, "defer_full_block_until_more_input"))
+                    Codec.defer_full_block_until_more_input
+                else
+                    false;
+                const full_block_ready = self.plain.items.len == block_len and
+                    (!defer_full_block or self.finishing or self.flush_requested or
+                        input_read != input.len);
+                if (full_block_ready or
                     ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
                 {
-                    try self.writeBlock();
+                    if (self.finishing) {
+                        if (comptime @hasDecl(Codec, "writeFinalBlock")) {
+                            try Codec.writeFinalBlock(
+                                allocator,
+                                &self.pending,
+                                &self.codec_state,
+                                self.plain.items,
+                            );
+                            self.plain.clearRetainingCapacity();
+                            self.final_written = true;
+                            continue;
+                        }
+                    }
+                    try self.writeBlock(allocator);
                     continue;
                 }
                 if (self.flush_requested) {
                     if (self.metadata_requested) {
-                        try Codec.writeMetadata(self.allocator, &self.pending, &self.codec_state, self.pending_metadata);
+                        try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, self.pending_metadata);
                         self.pending_metadata = &.{};
                         self.metadata_requested = false;
                         continue;
@@ -200,12 +267,12 @@ pub fn Encoder(comptime Codec: type) type {
                     return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
-                    try Codec.writeFinal(self.allocator, &self.pending, &self.codec_state);
+                    try Codec.writeFinal(allocator, &self.pending, &self.codec_state);
                     self.final_written = true;
                     continue;
                 }
                 if (self.finishing) {
-                    self.stream_count += 1;
+                    self.stream_count = std.math.add(usize, self.stream_count, 1) catch return error.IntegerOverflow;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }
@@ -216,10 +283,17 @@ pub fn Encoder(comptime Codec: type) type {
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
-        fn writeBlock(self: *Self) Error!void {
+        fn writeBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
             std.debug.assert(self.plain.items.len != 0);
-            try Codec.writeBlock(self.allocator, &self.pending, &self.codec_state, self.plain.items);
+            try Codec.writeBlock(allocator, &self.pending, &self.codec_state, self.plain.items);
             self.plain.clearRetainingCapacity();
         }
     };
+}
+
+test {
+    _ = @import("encoder_tests.zig");
+    _ = @import("encoder_counter_tests.zig");
+    _ = @import("encoder_block_options_tests.zig");
+    _ = @import("encoder_memory_tests.zig");
 }

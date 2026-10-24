@@ -5,7 +5,7 @@ objective is to surpass `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` in both
 functionality and performance while preserving explicit ownership, deterministic
 behavior, robust validation, and library-first APIs.
 
-The repository is currently in bootstrap form. The first implemented pieces are:
+The library is under active development. Its current capabilities include:
 
 - zlib-compatible Adler-32;
 - gzip/zip-compatible IEEE CRC-32;
@@ -13,28 +13,41 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, compile-time feature-gated ARMv8 CRC32 and x86 PCLMUL hardware dispatch, slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
 - shared progress/error/frame metadata types;
 - pure Zig LZ4 frame/block
-  decode/fallback encode with skippable/concatenated stream handling,
+  decode/fallback encode plus byte-exact liblz4-1.9.3-compatible LZ4HC block
+  encoding and independent/linked frame writing across levels 1...12, with
+  allocating, caller-buffer, append, and reusable APIs, skippable/concatenated
+  stream handling,
   optional content-size/checksum/block-checksum/Dictionary_ID fields,
-  configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
+  preset-dictionary and dictionary-set HC encoding, configurable frame block
+  sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
-  caller-owned encode/decode-into/append, incremental frame encode with optional pledged content size and preset dictionary, plus reusable
-  scratch encoder/decoder APIs; oversized incremental data frames release raw
-  blocks directly, and compressed blocks use a resumable token cursor under
-  arbitrary caller backpressure with no
-  decoded-block scratch, including linked-block and preset-dictionary history;
-  compressed-block checksums are validated before starting caller output;
-  complete prevalidated frames switch to the same cursor instead of
-  materializing the frame when a compressed block exceeds caller output;
-  compressed blocks without block checksums also consume split input directly
-  when the configured compressed-buffer cap is smaller than their payload;
+  caller-owned encode/decode-into/append, incremental fast/HC frame encode with
+  optional pledged content size, resumable flush, linked history, preset
+  dictionary, and dictionary-set resolution, plus reusable
+  scratch encoder/decoder APIs; native raw/prefix/frame encoding also supports
+  independent signed acceleration and chain-depth controls, actual search-work
+  profiles, and overlap-safe caller/reusable output through the
+  [fast-control APIs](docs/formats/lz4-fast-controls.md); incremental decode defaults to bounded block
+  streaming immediately after the frame header, using raw input directly and a
+  resumable token cursor for unchecked compressed payloads under caller
+  backpressure without decoded-block scratch, including linked-block and
+  preset-dictionary history. Raw and compressed blocks carrying block checksums
+  retain one encoded block until validation before starting its caller output;
+  explicit complete-frame preflight remains available with the existing
+  direct-to-cursor fallback;
   incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
-  options and decoded-size preflight, a
+  options and decoded-size preflight, including explicit 10...41-bit
+  `window_log` selection on both `FrameOptions` and `NativeFrameOptions` with
+  `null` preserving the established wire, strict block/history/dictionary
+  reach bounded by the selected window, an unchanged 8 MiB default history,
+  and a 16 MiB default / caller-budgeted 64 MiB maximum sparse long-distance
+  history for explicit windows of at least 24 bits, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
@@ -42,6 +55,16 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   RLE/predefined/compressed-FSE table arbitration, transactional cross-block
   sequence-table Repeat_Mode and repcode state, including wide blocks with more
   than 512 sequences, and
+  signed compression levels `-131072...22` with actual negative-magnitude
+  acceleration, explicit fast/double-fast/greedy/lazy matching and the legacy
+  bounded-optimal parser, plus lazy2/btlazy2/btopt/btultra/btultra2 HQ strategies
+  with complete-prefix binary-tree search, integer/fractional entropy costs,
+  conditional re-parsing, exact offset emission and search/parser memory budgets
+  over dictionary and frame history, a shared public level resolver across
+  one-shot/reusable/incremental/seekable APIs, and optional caller-owned work
+  profiles with transactional emission and deterministic parallel merge,
+  a versioned canonical parameter query and
+  [HQ functionality contracts](docs/performance/zstd-hq-functional-baseline.md),
   frequency-aware single-/four-stream Huffman literal emission
   (covering the full direct-tree symbol range `0...128`, FSE-compressed
   high-byte weights, non-4-divisible four-stream splits, and treeless repeat
@@ -61,14 +84,14 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native selection, configurable native block size, optional content
   checksum/content-size header fields, skippable frame append/encode-into writer,
   decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
-  history decode APIs, direct-output incremental decode for raw/RLE/compressed
-  native frames (including dictionary, dictionary-set, no-content-size,
-  bounded-history multi-block paths, per-block compressed-input retention when
-  a frame exceeds the configured buffer limit, and resumable zero-scratch
-  output for raw/RLE/Huffman literals and sequence execution across arbitrary
-  caller output boundaries (including complete frames prevalidated by the direct
-  path), plus header-only incremental discard/capture of arbitrarily large
-  skippable-frame payloads), zero-allocation native stream/block iterators, and
+  history decode APIs, default block-stream incremental decode for
+  raw/RLE/compressed native frames (including dictionary, dictionary-set,
+  no-content-size, all accepted windows and sequence-table modes,
+  block-bounded compressed-input retention, and resumable output for
+  raw/RLE/Huffman literals and sequence execution across caller output
+  boundaries without decoded-block scratch), explicit complete-frame
+  preflight/direct paths, plus header-only incremental discard/capture of
+  arbitrarily large skippable-frame payloads, zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
@@ -76,6 +99,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   baseline `1/4/8` values unless a retrained candidate strictly reduces the
   corpus's encoded bytes by at least 1%, with strict parsing and
   bidirectional libzstd interoperability validation,
+  Zig-native FastCover history selection and reusable preparation, bounded
+  deterministic serial/parallel parameter optimization and shrinking, complete
+  standard-dictionary direct/optimized/codec-aware training with training-only
+  entropy finalization, whole-operation heap/worker-stack budgets and thin CLI
+  workflows; [the FastCover baseline](docs/performance/fast-cover-training-x86.md)
+  records functional coverage and the remaining training-time/output gaps,
   standardized seekable-stream encoding with output-bound, caller-owned-buffer, reusable encoder, and deterministic caller-selected parallel frame APIs, plus zero-allocation terminal seek-table parsing/iteration and bounded range decode (including preset-dictionary encoding, dictionary-set frame selection, optional per-frame checksum verification, decompressed-offset lookup, and a reusable caller-owned cumulative index with O(1) entry access and O(log n) offset lookup),
   caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
   used by downstream
@@ -83,8 +112,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - pure Zig LZ4 legacy-frame parsing and deterministic writing with independent
   blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
-  bounded/caller-owned decode, system `lz4 -l` interoperability, and automatic
-  TAR/CPIO legacy-magic detection;
+  bounded/caller-owned decode, one-block-bounded incremental encode/decode, system
+  `lz4 -l` interoperability, and automatic TAR/CPIO legacy-magic detection;
 - pure Zig Windows LZNT1 encoding and decoding with 4 KiB chunks, dynamic
   length/displacement token partitions, overlapping-copy matches, stored-block
   fallback, optional end markers, inter-chunk zero padding, decoded-size
@@ -96,21 +125,29 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   512-symbol canonical tables, 64 KiB history, interwoven raw length bytes, and
   exact-size bounded decode. Both modes have caller-owned APIs, MS-XCA official
   vectors, fuzzing, and pinned Rust/Python plus wimlib interoperability;
-- pure Zig Windows LZMS raw-block decoding with forward 16-bit range coding,
-  backward adaptive canonical Huffman codes, LZ and delta matches, delayed LRU
-  repeat queues, mandatory x86 address postprocessing, reusable decoder state,
-  exact-size/caller-owned APIs, pinned fixtures, fuzzing, and wimlib-generated
-  text, delta, mixed, source, and x86-code differentials;
+- pure Zig Windows LZMS raw-block encoding and decoding with forward 16-bit
+  range coding, backward adaptive canonical Huffman codes, mandatory x86
+  address transforms, reusable decoder state, exact-size/caller-owned APIs,
+  pinned fixtures, fuzzing, and bidirectional wimlib text, delta, mixed, source,
+  and x86-code differentials, bounded greedy LZ/delta and delayed-repeat
+  match encoding with literal-reference wire arbitration, explicit history/hash/
+  working/output limits and summary metrics, plus normal/solid WIM composition;
 - dependency-free WOF/CompactOS file-provider metadata and backing-stream
   support with XPRESS4K/8K/16K and WIM-LZX chunks, strict 32-/64-bit cumulative
   offset tables, raw-chunk fallback, bounded whole-file and random-range decode,
-  deterministic XPRESS compression plus LZX raw writing, reparse/ioctl metadata
+  deterministic XPRESS and matched WIM-LZX compression with per-chunk raw
+  fallback, reparse/ioctl metadata
   parsing, pinned fixtures, fuzzing, and bidirectional wimlib differentials;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
-  and `bvx2` decoding, compressed frequency-table and four-way literal FSE
-  reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
-  writing, strict stream termination, and bidirectional Apple reference
-  interoperability;
+  and `bvx2` decoding and matched V1/V2 FSE writing, four interleaved literal
+  states and L/M/D records, count-driven blocks with borrowed history,
+  deterministic auto/FSE/LZVN/stored selection, explicit output and working
+  memory limits, caller-owned output and encoding summaries, strict stream
+  termination, an incremental decoder with caller output and optional stopping
+  at the end marker while leaving the input suffix to the caller, and
+  bidirectional Apple reference interoperability; see the
+  [LZFSE API and format contracts](docs/formats/lzfse.md) and
+  [functional compatibility and size baseline](docs/performance/lzfse-fse-functional-baseline.md);
 - pure Zig Apple `decmpfs` transparent-file decoding for inline types 1/3/7/9/11
   and resource-fork types 4/8/12, with strict 16-byte xattr headers, zlib
   resource descriptors, Apple LZVN/LZFSE offset tables, stored-block markers,
@@ -138,7 +175,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free QCOW2 v2/v3 image reading and deterministic writing with
   L1/L2 mapping, sparse and zero clusters, raw-DEFLATE and Zstandard compressed
   clusters, extended-L2 subclusters, caller-supplied raw backing/external data
-  files, bounded whole-image and random-range decoding, fuzzing, and
+  files, deterministic v2/v3 raw-backing overlays and v3 raw external-data
+  output, bounded whole-image and random-range decoding, fuzzing, and
   bidirectional QEMU plus 7-Zip interoperability;
 - dependency-free hosted-sparse VMDK reading and deterministic monolithicSparse
   plus streamOptimized writing, with grain directory/table lookup, unallocated
@@ -147,7 +185,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   decoding, a pinned QEMU version-3 fixture, fuzzing, and bidirectional QEMU plus
   7-Zip interoperability;
 - dependency-free EWF1/E01 forensic-image reading and deterministic EnCase-6
-  style writing, with explicit multi-segment sets, checked section chains,
+  style single/size-limited multi-segment writing, with explicit segment sets,
+  checked section chains,
   volume geometry, sectors/table/table2 chunk maps, raw chunks with Adler-32,
   zlib chunks, media MD5 verification, bounded whole-image and random-range
   decoding, pinned libewf single/multi-segment fixtures, fuzzing, and
@@ -214,9 +253,16 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   RAW/Bzip2/XZ/ZERO operations, SOURCE_COPY/SOURCE_BSDIFF/BROTLI_BSDIFF delta
   extraction, PUFFDIFF with byte- and bit-aligned Deflate extents,
   LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF with liblz4-compatible fixed-output LZ4 and
-  LZ4HC reconstruction plus postfix correction, bounded Zucchini v1 NoOp/raw
-  elements behind the Android Brotli envelope, BSDIFF40/BSDF2/PUF1 patch
-  streams, SHA-256 checks, bounded range reads, fuzzing, independent
+  LZ4HC reconstruction plus postfix correction, bounded Zucchini v1 NoOp/raw,
+  AArch32/AArch64 ELF, x86/x86-64 ELF, PE32/PE32+, DEX, and ZTF elements behind
+  the Android Brotli envelope,
+  BSDIFF40/BSDF2/PUF1 patch
+  streams, SHA-256 checks, bounded range reads, source-backed seekable payload
+  and old-partition callbacks with operation-bounded memory, plus a two-pass
+  seekable-source/short-write-sink writer byte-identical to one-shot output,
+  bounded AOSP metadata/payload signature verification through Vail-backed
+  RSA-2048/4096 PKCS#1 SHA-256 and P-256 ECDSA with multi-key selection,
+  fuzzing, independent
   Python/liblz4 validation, and Rust
   `payload_dumper` interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd
@@ -232,23 +278,78 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   fragments, with squashfs-tools interoperability;
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
-  symlinks, legacy full and modern compact compression indexes, big pclusters,
-  and LZ4/MicroLZMA/raw-Deflate/Zstandard extraction with explicit bounds, plus
-  deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
+  symlinks, bounded inline/shared xattrs with standard and plain/metabox/packed
+  long-prefix name indexes and configurable packed-extent limits, legacy full
+  and modern compact compression indexes, big
+  pclusters with independent HEAD1/HEAD2 algorithm IDs (including secondary LZ4),
+  whole/partial packed fragments, interlaced packed inodes, and
+  compressed inline tail packing with caller-bounded packed-extent scratch,
+  plus local/external chunk-based files with borrowed device tables, holes,
+  4-byte maps and 8-byte indexes, 48-bit superblock/flat/chunk/device addresses,
+  shared byte-range external-device mapping for flat and compressed extents,
+  packed data and metabox loading, including unaligned addresses and explicit-
+  only device slots,
+  4/8/16/32-byte compressed extent records with partial-reference decoding,
+  sparse holes and final packed fragments, legacy full-index partial references,
+  and owning bounded metabox metadata
+  caches with high-bit NIDs, LZ4/MicroLZMA/raw-Deflate/Zstandard extraction
+  with explicit bounds, and
+  deterministic stored/LZ4/MicroLZMA/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
-  multi-block directories, compression-configuration records, and per-cluster
-  compressed-or-plain full-index selection with erofs-utils interoperability;
+  deterministic whole/last-block packed fragments, hidden packed inodes,
+  raw-or-compressed inline pclusters with physical-block fallback, standard
+  whole-fragment LZ4/MicroLZMA/raw-Deflate/Zstandard directory compression,
+  deduplicated local chunk maps and owning external chunk/device-table output,
+  inline root/entry xattrs, cost-aware shared-xattr regions, and caller-selected
+  plain prefix tables, multi-block directories, compression-configuration
+  records, compact/extended/automatic inode writing with 32-bit IDs and
+  nanosecond timestamps, and per-cluster
+  compressed-or-plain selection with caller-selected legacy full, four-byte
+  compact or mixed two/four-byte compact index writing, optional 4 KiB...1 MiB decoded
+  groups with actual-sized big pclusters, optional physical byte caps, aligned
+  prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
+  Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
+  high-bit visible NIDs, optional MZ=id directory blocks in the primary
+  metadata zone before regular-file payloads, metabox combinations with
+  local/external chunks, file fragments and compressed-inline tails,
+  regular-file callback/file sources with bounded positional reads,
+  random-access file/buffer output sinks with explicit
+  working allocation limits and chunk deduplication using source locations,
+  byte-identical source/sink/memory output, owning Source archives with bounded
+  metadata/extent working memory and direct file/range Sink extraction,
+  allocation-free full/compact NONHEAD backward-chain validation shared by
+  range and inline/fragment-tail scans (with independent positional erofs-utils
+  differentials),
+  resumable caller-owned extraction with bounded decoded-extent caching,
+  resumable positional encoding with bounded current-cluster storage,
+  streamed directory traversal and lookup shared by slice/Source readers,
+  all with
+  bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw
   UTF-16 XML access, bounded resource extraction, validated image-metadata
   security tables, borrowed dentry/extra-stream views, directory iteration,
   UTF-16LE path lookup, and bounded regular-file extraction by image/path.
-  Stored, XPRESS-Huffman, and WIM-flavored LZX chunks are decoded across
+  Stored, XPRESS-Huffman, WIM-flavored LZX, and LZMS chunks are decoded across
   multi-chunk resources; LZMS metadata chunks and alternate-table solid LZMS
   resources support bounded individual-blob extraction without materializing
-  the whole solid stream. Pipable WIMs, cross-part SWM assembly, and encrypted/
-  reparse/ADS path extraction are reported explicitly as unsupported;
-- raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+  the whole solid stream. Pipable sequential extraction with optional bounded
+  terminal integrity-table verification, caller-ordered SWM sets,
+  encrypted/reparse/ADS path selectors, encrypted-ESD reconstruction,
+  DOS short-name aliases, generic tagged metadata, typed object-ID/Unix/xattr
+  helpers,
+  and deterministic stored/XPRESS/LZX/LZMS one-/multi-image, packed LZMS/ESD,
+  SWM, pipable and pipable-SWM writing plus ordinary/solid image append and
+  deletion/replacement plus physical compaction are also available;
+- raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
+  with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+  Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
+  zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
+  zlib/gzip fixed/best streams, while
+  raw/zlib/gzip Best encoders support asynchronous runtime level/strategy
+  changes through `DeflateParams` and `requestParams()`; raw recovery APIs scan
+  full-flush `00 00 ff ff` markers and decode or incrementally resume the next
+  independent segment after payload corruption;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -260,42 +361,129 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   legacy/current Zstandard-method-20/93, XZ-method-95, and PPMd-method-98
   multi-entry encoding/extraction (including fixed-Huffman or stored
   Deflate64 output with the extended 64 KiB distance alphabet),
-  transactional prefix append, 32-/64-bit data descriptors, archive/entry
-  comments, CRC-32/size validation, UTF-8 flags, and explicit
-  encrypted/multi-disk/unknown-method errors;
+  transactional one-shot prefix append plus caller-output incremental
+  writing for every listed method, including per-entry Traditional ZipCrypto,
+  borrowed raw/standard Zstandard preset dictionaries across one-shot and
+  incremental writing plus one-shot, sequential, split, and random-access
+  decoding,
+  signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
+  SFX offsets, and payload-bounded memory;
+  archive/entry comments, opaque Archive Extra Data Records with correct
+  central-offset/size and atomic split placement, configurable validated DOS modification timestamps,
+  Info-ZIP `0x5455` Unix times, NTFS `0x000a` 100 ns FILETIME values,
+  Info-ZIP `0x7075` Unicode paths and `0x6375` Unicode comments with CRC-bound
+  legacy-name fallback and preferred-name lookup,
+  creator-system/internal/external attributes, Unix mode/symlink helpers,
+  CRC-32/size validation, UTF-8 flags, per-entry
+  Traditional ZipCrypto one-shot writing/reading plus known-size and descriptor-
+  backed sequential reading backed by Vail's dedicated archive-crypto package
+  with explicit caller-supplied header entropy and passwords; WinZip AE-1/AE-2
+  AES-128/192/256 one-shot reading/writing, bounded incremental writing, and
+  known-size/descriptor-backed sequential reading with explicit caller salt and Vail-backed
+  PBKDF2/CTR/HMAC; password-based PKWARE Strong Encryption AES-128/192/256
+  one-shot reading plus one-shot/bounded incremental writing with caller-owned
+  IV/random/validation entropy,
+  strict `0x0017`/bit-6/decryption-header validation, and Vail-backed SHA-1
+  key derivation/AES-CBC/PKCS#7, plus known-size and signed/unsigned descriptor
+  sequential reading; ordered split/multi-disk ZIP32/ZIP64 normalization with
+  strict disk-coordinate and allocation limits, cross-volume payload/descriptor
+  extraction through the ordinary archive codecs, plus an O(parts + entries)
+  sparse metadata-patch stream and bounded sequential reader that avoid a
+  joined archive copy, an on-demand `PartSource` reader that can release prior
+  physical volumes, plus deterministic owned split writing that keeps all
+  structural records atomic while allowing payloads to cross volumes, and an
+  incremental split writer with bounded current-part/control storage plus
+  explicit `part_done` sink transitions; and explicit unsupported certificate/
+  non-AES strong-encryption and unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
-  multi-block and explicit concatenated-stream support, caller-owned/bounded
-  allocation APIs, decoded-size preflight, and block/combined CRC validation;
+  legacy randomized-block reversal, multi-block and explicit
+  concatenated-stream support, caller-owned/bounded allocation APIs,
+  decoded-size preflight, and block/combined CRC validation,
+  plus block-bounded caller-output incremental decoding with arbitrary input
+  fragmentation, non-byte-aligned block continuation, zero-output
+  backpressure, CRC-checked numeric plaintext replay without full decoded
+  staging, persistent working-allocation budgets, exact failed-call progress,
+  concatenated members, stopped-stream continuation and exact-size pledges,
+  plus block-bounded incremental encoding with split-independent deterministic
+  wire, cross-call RLE runs, flushable BWT blocks, concatenated continuation,
+  pledged input sizes, and caller-output backpressure;
 - dependency-free XZ decoding for LZMA2 streams with optional Delta and all
   eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
-  handling, bounded APIs and metadata inspection, plus deterministic
-  filter-aware XZ writing with greedy LZMA matches, repeat distances, and a
-  stored fallback;
+  handling, bounded APIs and metadata inspection, complete-stream-validated
+  caller-buffer replay and count-only size/inspection without full plaintext
+  staging, reusable budgeted one-shot workspaces with retained probability,
+  dictionary and filter scratch, plus deterministic
+  filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
+  fallback, caller-selected 4 KiB...64 MiB cross-chunk LZMA2 dictionary reuse,
+  and separate greedy/lazy ratio encode APIs, plus symbol-progressive
+  caller-output incremental decoding with
+  arbitrary input fragmentation, zero-output backpressure, stream padding,
+  concatenated members, independent compressed/decoded/dictionary/Index
+  limits, exact-size pledges, live working-allocation budgets, true failed-call
+  progress, stopped-stream continuation, and reusable container scratch. The
+  default emits before complete blocks; explicit `prevalidated_block` holds
+  decoded bytes until their check succeeds. Both share the same dictionary-
+  bounded raw core and progressive Index/Footer parser, plus block-bounded
+  incremental compressed/stored encoding with split-independent wire,
+  Delta/BCJ filters, selectable checks, flushable blocks, Index/Footer
+  generation, concatenated continuation, pledged input, and output backpressure,
+  plus a raw LZMA2 caller-output decoder with a 64-byte symbol guard, fixed
+  273-byte symbol staging, exact range termination and persistent
+  probability/dictionary state for embedding formats such as 7z;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
-  output, exact-size MicroLZMA decoding with inverted properties and strict
-  compressed-size/range termination, and ZIP method-14 writing/extraction
-  through the same LZMA core;
+  output, validated caller-buffer and count-only decoding without full plaintext
+  staging, reusable working-budgeted Alone/Micro/ZIP decoder scratch and
+  allocation limits including allocating Alone output, MicroLZMA complete-stream encoding and exact-size decoding with inverted
+  properties, strict compressed-size/range termination, and dictionaries
+  through 64 MiB, destination-capacity-limited MicroLZMA prefix encoding with
+  explicit consumed/written progress, and ZIP method-14 writing/extraction
+  through the same LZMA core, plus symbol-progressive LZMA-Alone decoding with
+  bounded compressed staging, rolling dictionary history, single-symbol output
+  staging, arbitrary input/output splits, zero-output backpressure, exact-size
+  pledges, and distinct known-size/end-marker completion semantics, plus
+  symbol-progressive literal/greedy encoding with persistent probability/range/
+  recent-distance state, bounded lookahead/history, split-independent wire,
+  pledged known-size headers, end-marker streams, reset, and output backpressure;
+- shared LZMA1/LZMA2 compression presets 0...9 and extreme configuration,
+  real HC3/HC4 and BT2/BT3/BT4 matchers, repeat-aware fast parsing with
+  next-position decisions, 4096-position/8-state normal cost search, adjustable
+  nice length/depth, 4 KiB...1.5 GiB encoder dictionaries and requested
+  matcher/parser memory limits, exposed through Alone, ZIP-LZMA, MicroLZMA,
+  raw LZMA2, XZ and their supported incremental APIs; configuration helpers,
+  actual work profiles and CLI flags share library behavior, while legacy
+  default wires remain covered by independent regression fixtures. See the
+  [compression-control contracts](docs/formats/lzma-encode-controls.md);
+  raw LZMA2/XZ additionally accept 1...2 MiB configured plaintext groups with
+  full 21-bit compressed lengths, bounded 64 KiB completed range payloads and
+  transactional 64 KiB stored fallback packets, while default groups remain
+  64 KiB. Raw incremental output limits can be explicit or derived from group
+  size, and snapshots support retry after a rejected group;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
-  dictionary freeze, caller-owned/bounded APIs, and decoded-size preflight;
+  dictionary freeze, caller-owned/bounded APIs, bit-progressive incremental
+  encoding/decoding, and decoded-size preflight;
 - pure Zig lzip v1 encoding and decoding with LZMA-302eos payloads, coded
   dictionary sizes, per-member CRC/data/member-size validation, deterministic
   concatenated writing, strict multimember handling, and caller-selected output
-  and dictionary limits;
+  and dictionary limits, plus bounded incremental multi-member encoding and decoding;
 - pure Zig raw LZF block and standard `ZV` stream encoding/decoding with
   8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
-  bounded/caller-owned APIs, decoded-size preflight, metadata inspection, and
+  bounded/caller-owned APIs, one-block-bounded incremental encode/decode,
+  decoded-size preflight, metadata inspection, and
   automatic `.tar.lzf` composition;
 - dependency-free LHA/LZH level-0/1/2/3 and SFX-prefix reading plus deterministic
   level-0 writing with stored, LH1, LH4, LH5, LH6, LH7, LZ5, LZS, and directory
   entries, chained filename/path and common-CRC extended headers, payload CRC-16,
   bounded extraction, adaptive/fixed Huffman models, and legacy LArc histories;
 - dependency-free Unix `ar` reading/writing with traditional, GNU string-table,
-  and BSD inline long names, bounded extraction, explicit thin-archive
-  rejection, plus Debian binary package parsing/writing with validated
+  and BSD inline long names, bounded extraction, GNU/LLVM thin archive metadata,
+  explicit external-member resolution, allocation-free GNU and BSD/Darwin
+  32/64-bit symbol-index lookup, deterministic regular BSD armap writing, and
+  deterministic thin writing with linker-usable GNU armap output, plus
+  Debian binary package parsing/writing with validated
   `debian-binary`, control/data TAR members, and none/gzip/Bzip2/LZMA/XZ/Zstd
   compression, validated bidirectionally with GNU `ar` and `dpkg-deb`, plus
   bounded RPM lead/signature/main-header parsing, MD5/SHA1/SHA256 integrity
@@ -303,8 +491,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   for none/gzip/Bzip2/LZMA/XZ/Zstd payloads with 7-Zip differential validation;
 - dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
   main/local/extended headers, stored and methods 1–4, no-data and directory
-  entries, bounded extraction, encrypted/multi-volume rejection, and external
-  ARJ plus 7-Zip interoperability;
+  entries, bounded extraction, Vail-backed legacy Garble encryption with
+  per-fragment modifiers, ordered multi-volume continuation reading and
+  compressed-payload-budgeted writing with independent fragment streams/CRCs,
+  explicit GOST rejection, and external ARJ, unarc-rs, plus 7-Zip
+  interoperability;
 - dependency-free ARC/PAK/SFX reading and deterministic ARC writing for stored,
   packed RLE90, Squeeze, old fixed-12-bit Crunch, dynamic Crunch, and Squash
   plus PAK Crushed and Distilled methods 1–11, including PAK trailers, CRC-16,
@@ -318,27 +509,60 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig LZO1X encoding/decoding plus LZOP parsing and deterministic
   compressed-or-stored writing, including Adler-32/CRC-32 header, data, and
   compressed-block checks, legacy delta filters, concatenated streams, and
-  bounded output/block APIs;
+  bounded output/block APIs, plus caller-output incremental decoding with
+  arbitrary input splits, zero-sized output backpressure, bounded header/block
+  retention, exact-size pledges, reusable state, and checksum-before-output,
+  plus block-bounded incremental compressed-or-stored/stored-only encoding with
+  split-independent wire, Adler/CRC metadata, flushable blocks, concatenated
+  continuation, pledged input sizes, and caller-output backpressure;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
-  Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
-  bounded linear Delta/BCJ filter chains including ARM64/RISC-V and BCJ2 four-stream graphs in
-  both directions,
+  Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 decode and encode,
+  bounded linear Delta/BCJ filter chains including ARM64/RISC-V, BCJ2
+  four-stream graphs in both directions, and independent 7zAES on all four
+  BCJ2 packed branches,
   compressed Next Header reading and writing, solid substream reading and
   writing, bounded AdditionalStreamsInfo decoding, external folder/name
-  references, inline/external FILETIME and platform attributes, optional
-  six-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
-  header reading/writing with explicit password/KDF limits and caller-supplied
-  IV material, CRC validation, UTF-16LE names, directories, empty files, and
-  bounded extraction;
+  references, inline/external FILETIME, StartPos, and platform attributes, optional
+  seven-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
+  header reading/writing backed by Vail crypto with explicit password/KDF
+  limits and caller-supplied IV material, CRC validation, UTF-16LE names,
+  directories, empty files, anti-file/anti-directory deletion records, and
+  bounded extraction, plus source-backed
+  positional parsing that avoids loading the complete archive and fetches only
+  tail/auxiliary metadata plus selected-folder packed ranges, and a
+  symbol-progressive source entry decoder for Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7,
+  7zAES, solid-substream selection, Delta, all classic BCJ filters, and BCJ2's
+  independently packed MAIN/CALL/JUMP/range branches, plus ordered standard
+  `.7z.001` multi-volume slices or on-demand part callbacks without a joined
+  archive allocation;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
-  safe-path classification, borrowed entry views, and automatic raw/gzip/
-  Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
+  old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
+  old-GNU writing with chained sparse extension headers,
+  strict extent validation, logical hole reconstruction, safe-path
+  classification, borrowed entry views, bounded caller-output incremental
+  raw reading and writing for regular/link/PAX/sparse entries, direct incremental
+  gzip/Bzip2/Brotli/Unix-compress/LZMA/XZ/modern+legacy-LZ4/LZF/lzip/
+  Zstandard/LZOP-to-TAR reading, bounded 512-byte incremental auto-dispatch
+  with streamed shared skippable frames, bounded gzip/Bzip2/Brotli/LZMA/XZ/
+  Unix-compress/modern+legacy-LZ4/LZF/lzip/Zstandard/LZOP compressed-TAR
+  writing, and automatic raw/gzip/Bzip2/Brotli/
+  Unix-compress/LZMA-Alone/XZ/
+  LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,
   directory, symlink, and special-file metadata, strict per-format alignment,
-  bounded extraction, CRC byte sums, safe-path classification, GNU cpio
-  bidirectional interoperability, and automatic composition with the same
-  twelve raw/gzip/Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP modes;
+  bounded extraction, bounded caller-output incremental reading and writing
+  for all five formats, streamed CRC/alignment/trailer verification, exact
+  entry events and progress, safe-path classification, GNU cpio bidirectional
+  interoperability, bounded incremental composition with twelve gzip/Bzip2/
+  Brotli/compress/LZMA/XZ/modern+legacy-LZ4/lzip/LZF/Zstd/LZOP wrappers,
+  14-byte bounded incremental auto-dispatch with structural LZMA probing,
+  Brotli fallback and streamed LZ4/Zstd skippable-frame handling, and
+  bounded concatenated raw-CPIO sequences with explicit archive boundaries,
+  mixed header families and initramfs zero padding, mixed raw/gzip/Bzip2/Brotli/
+  LZMA/XZ/modern-LZ4/Zstd/EOF-marked-LZF/lzip/LZOP sequence dispatch with
+  bounded suffix replay, plus explicitly sized Unix-compress/legacy-LZ4 members,
+  plus automatic one-shot composition with the corresponding raw/wrapped modes;
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and
@@ -348,38 +572,80 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded generic VM interpreter, SFX discovery, both header CRC variants,
   payload CRC-32,
   UTF-8 RAR5 names, RAR50 LZ and Delta/E8/E8E9/ARM filters, sequential solid
-  sessions with pre-filter history, bounded extraction, explicit encrypted/
-  redirection/unknown-size and unsupported RAR15/RAR20-solid errors, ordered RAR5
+  sessions with pre-filter history, bounded extraction, RAR5 AES-256-CBC
+  Stored/RAR50 file-data encryption through Vail with explicit PBKDF2 limits,
+  password checks and keyed CRCs, owned RAR5 encrypted-header parsing and
+  deterministic writing with independent per-header IVs, plus RAR4 salted or
+  unsalted AES-128 data/header encryption with historical long-password KDF
+  behavior, RAR15 byte-stream and RAR20/26 self-updating block decryption through
+  Vail, and allocator-owned custom Unicode preferred names with deterministic
+  UTF-16 writer fields, structured RAR5 symlink/junction/hardlink/file-copy
+  metadata plus deterministic safe-target writing, standard RAR5 service and
+  RAR4 NEWSUB archive comments with Stored/RAR15/RAR20/RAR29 payload reading,
+  legacy/UTF-16LE text, CRC-checked deterministic writing, Vail-backed
+  encrypted payloads, encrypted headers, and first-volume composition,
+  explicit unknown-size
+  errors, sequential
+  same-generation and mixed RAR15/RAR20 solid continuation, ordered RAR4/RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
   table-length RLE, multiblock output, 64 KiB through 4 MiB declared
   dictionaries and cross-member solid history, pure Zig RAR29 PPMd Variant H
   literal/escape writing with solid model continuation, RAR29 LZ writing with
-  E8/E8E9/Delta/Itanium/RGB/Audio VM filters, and 7-Zip interoperability, plus
+  E8/E8E9/Delta/Itanium/RGB/Audio VM filters across ordinary and solid members,
+  PPMd-attached VM records across
+  ordinary/solid/encrypted/split members, and 7-Zip/unrar interoperability, plus
   deterministic RAR50 LZ writing with canonical tables, multiblock output, and
-  Delta/E8/E8E9/ARM filters plus cross-member solid history and deterministic
-  stored/compressed/solid volume splitting, with 7-Zip and rars interoperability;
+  Delta/E8/E8E9/ARM filters plus cross-member solid history, post-compression
+  RAR5 file-data/header encryption, and deterministic stored/compressed/solid
+  volume splitting including encrypted headers and arbitrarily fragmented
+  ciphertext, with RAR, 7-Zip, and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
-  including Stored/MSZIP, reference uncompressed-block LZX, and literal
-  arithmetic Quantum writing, reserve areas, checksum validation, cross-block
+  including Stored/MSZIP, adaptive verbatim/aligned LZX with 2...257-byte
+  matches, repeat offsets and raw-block fallback, and deterministic greedy
+  Quantum writing with 3...259-byte matches, all three match selectors,
+  complete-frame literal-reference size arbitration and explicit literal mode,
+  reserve areas, checksum validation, cross-block
   history, complete LZX decode modes, Intel E8 postprocessing, adaptive Quantum
   models, deterministic size-bounded multi-cabinet writing and explicitly
   ordered set decoding with split CFDATA, mixed-folder archives, and safe
-  borrowed paths;
-- dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected two-type literal/command/distance entropy splitting for heterogeneous ratio inputs, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large ratio inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, and bounded cross-block LZ77 history, chunked encoding with bounded parser scratch into one mixed compressed/stored multi-meta-block stream plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, buffered-incremental, and byte-progressive copy APIs, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, a bounded split-input general facade that validates on explicit finish, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, caller-owned compressed-header scratch beyond the default 16 KiB bound, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is caller-owned;
-- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, skippable framed chunks, and caller-owned incremental framed encode/decode with 64 KiB input chunking, optional pledged input/output sizes, split headers/payloads, bounded input/output memory, tiny-output draining, exact-output continuation through following skippable chunks, reset/next-stream reuse with cumulative and per-stream counters, snapshots, and diagnostics;
+  borrowed paths; shared [standalone Quantum APIs](docs/formats/quantum.md)
+  provide caller-owned frame state and bounded borrowed history, deterministic
+  hash/distance/working/output limits, summary metrics and transactional encode
+  output, with independent libmspack match and split-cabinet validation;
+- dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including a Vort-native deterministic q0...q11 by generic/text/font preset matrix across one-shot, reusable, chunked, incremental, and larger-than-16-MiB multi-meta-block inputs, with dedicated reusable block-local fixed-hash q0/q1 fragment parsing shared by every planned surface, a q0 compact one-pass entropy writer with cross-fragment adaptive command/distance trees, a q1 compact two-pass 128-symbol entropy writer, a q2 static/dynamic bounded-tree fast writer, and a q3 trivial dynamic three-tree writer for ordinary LZ plans (the [exact capability and gap table](docs/performance/brotli-quality-presets.md) does not claim libbrotli algorithm, byte, ratio, or throughput parity), explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected bounded 2..6-region literal/command/distance entropy splitting and cyclic tree clustering for heterogeneous ratio inputs, adaptive literal context modeling across the complete 2..64 useful tree range with arbitrary clustered 64-entry maps, exact plain/MTF/zero-run map arbitration, and all RFC LSB6/MSB6/UTF8/Signed modes, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large planned inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, quality/level policy, and bounded cross-block LZ77/recent-distance history (q0/q1 deliberately reset LZ matching at each fragment), chunked encoding with the same block core plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, and symbol-progressive incremental APIs, borrowed RAW shared-prefix/compound-dictionary encoding and decoding with zero through fifteen ordered attachments across the planned surfaces, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, an allocator-owned general incremental decoder with bounded history, operation-wide working-allocation and output budgets, grow-on-demand bounded compressed-header storage, true failed-call progress, fatal sticky errors and recoverable caller-header expansion, without complete compressed or decoded payload buffering, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, optional caller-owned compressed-header scratch beyond the default 16 KiB embedded capacity, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is explicit or allocator-owned according to the selected API;
+- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, skippable framed chunks, and caller-owned incremental framed encode/decode with 64 KiB input chunking, optional pledged input/output sizes, split headers/payloads, bounded input/output memory, tiny-output draining, exact-output continuation through following skippable chunks, reset/next-stream reuse with cumulative and per-stream counters, operation-wide work/output budgets, validated raw-token replay with maximum-distance history instead of complete plaintext storage, zero-heap metadata streaming, snapshots, and exact error progress;
 - Xerial Snappy version-1 and Hadoop BlockCompressorStream Snappy framing with
   deterministic multi-block writing, strict big-endian nested lengths,
-  exact outer-block accounting, bounded allocation, and caller-owned decode;
+  exact outer-block accounting, bounded allocation, caller-owned decode, and
+  shared block-bounded incremental encoders/decoders with arbitrary
+  input/output fragmentation, zero-output backpressure, pledged input/output
+  sizes, deterministic one-shot-exact unflushed encoding, explicit flush,
+  compressed/decoded chunk and pending-output limits, reset, snapshots, and
+  diagnostics;
 - Hadoop LZ4 `BlockCompressorStream` framing with raw inner LZ4 blocks,
   token-derived decoded-size validation, deterministic nested-block writing,
-  bounded allocation, and caller-owned decode;
+  bounded allocation, caller-owned decode, and block-bounded incremental
+  encode/decode with arbitrary fragmentation, zero-output backpressure,
+  one-shot-exact unflushed output, explicit outer-block flush, pledged sizes,
+  compressed/decoded/pending limits, retained-scratch reset, snapshots, and
+  diagnostics;
 - Hadoop LZO `.lzo.index` parsing/generation with strict LZOP block-boundary
   validation, big-endian offset lookup, indexed block-range decode, filter and
   checksum handling, and explicit output limits;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
+
+Broad format coverage does not yet establish industry-best functionality or
+performance. The [current industry gap audit](docs/performance/industry-gap-audit.md)
+records the remaining API/encoder capabilities, dated competitor evidence and
+next functionality-first priorities.
+
+Brotli HQ also exposes independent
+[complete copy lengths and per-plan pricing limits](docs/formats/brotli-complete-copy-lengths.md).
+The default remains sampled. Complete search retains exact command selectors
+and sampled wire safeguards while preserving finite beam/matcher limitations.
 
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
@@ -396,11 +662,13 @@ the same inlined decode body through a target-safe unaligned wrapper.
 
 ```sh
 zig build test
+zig build test-br -Dbr-test-filter="serialized dictionary trainer"
 zig build check
 zig build check-wasm
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1
+zig build run-zstd-cover-trainer-compare
 zig build -Doptimize=ReleaseFast run-dictionary-train-bench-gate -j1
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
 zig build run -- checksum "hello vort"
@@ -462,6 +730,9 @@ zig build run -- encode-xz-stored-file README.md /tmp/readme.xz crc64 1048576 de
 zig build run -- decode-xz-file /tmp/readme.xz /tmp/readme.out 67108864
 zig build run -- inspect-xz-file /tmp/readme.xz
 zig build run-xz-diff
+zig build -Doptimize=ReleaseFast run-xz-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-xz-encode-bench -- --iterations 3 --rounds 5
+zig build run -- encode-xz-file README.md /tmp/readme-lazy.xz crc64 1048576 none 131072 lazy
 zig build run -- decode-lzma-file /tmp/archive.lzma /tmp/archive.out 67108864 67108864
 zig build run -- size-lzma-file /tmp/archive.lzma 67108864
 zig build run-lzma-diff
@@ -481,10 +752,20 @@ zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-complete-dictionary-bench -- --iterations 10
+zig build -Doptimize=ReleaseFast run-br-complete-dictionary-bench-gate
+zig build -Doptimize=ReleaseFast run-br-context-tree-report
+zig build -Doptimize=ReleaseFast run-br-context-tree-report-gate
+zig build run-br-context-tree-report-dir-smoke
+zig build -Doptimize=ReleaseFast run-br-context-tree-dashboard-gate
+# Optional deterministic directory discovery, bounded by file count and prefix:
+zig build -Doptimize=ReleaseFast run-br-context-tree-report -- \
+  --dir ~/corpora/silesia --max-files 64 --limit 32768
 zig build -Doptimize=ReleaseFast run-br-ratio-stage-profile-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
+zig build -Doptimize=ReleaseFast run-br-serialized-trainer-report
 # Optional real-corpus prefixes from neighboring checkouts:
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff -- \
   --extra-file ~/Work/godot/thirdparty/ufbx/ufbx.c \
@@ -727,7 +1008,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --li
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
 zig build -Doptimize=ReleaseFast run-snappy-report-gate
-zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional runtime libsnappy comparison
+zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # no-loss + copy/matrix-geomean libsnappy gate
 zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtime liblz4 comparison
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench -- --libzstd /path/to/libzstd  # explicit reference library
@@ -742,6 +1023,8 @@ zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --libzstd /path/to/lib
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate  # match-family timings plus single-beam search histograms
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-large-sequence-probe  # >512-sequence single/cross-block encode plus Vort/libzstd decode
+zig build test-zstd  # focused Zstandard codec suite
+zig build test-zstd-far-window  # explicit >8 MiB match boundary
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 # Build and select the current local upstream reference explicitly:
 make -C ~/Work/zstd/lib -j4 libzstd-release
@@ -890,23 +1173,38 @@ _ = try lz4_decoder.decodeChunksAppendExactSize(
 var lz4_incremental = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
 defer lz4_incremental.deinit();
 var lz4_incremental_out: ["payload payload".len]u8 = undefined;
-_ = try lz4_incremental.step(lz4_frame[0..4], lz4_incremental_out[0..0]);
-_ = try lz4_incremental.step(lz4_frame[4..], &lz4_incremental_out);
+const lz4_prefix = try lz4_incremental.step(lz4_frame[0..4], lz4_incremental_out[0..0]);
+var lz4_input_read = lz4_prefix.progress.input_read;
+var lz4_output_written = lz4_prefix.progress.output_written;
+while (true) {
+    const result = try lz4_incremental.step(
+        lz4_frame[lz4_input_read..],
+        lz4_incremental_out[lz4_output_written..],
+    );
+    lz4_input_read += result.progress.input_read;
+    lz4_output_written += result.progress.output_written;
+    if (result.status == .done) break;
+}
+try lz4_incremental.finish();
 // The same incremental decoder can continue through concatenated native
 // streams and LZ4 skippable metadata frames; feed more bytes after `.done` to
 // decode the next stream member without resetting cumulative diagnostics.
 var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .max_output_len = 8 << 20,
+    .max_working_memory = 2 << 20,
     .expected_output_len = "payload payload".len,
 });
 defer lz4_bounded_incremental.deinit();
 // Skippable frames retain only their 8-byte header; their metadata payload can
 // exceed max_compressed_buffer_len and is discarded or copied into caller-owned
-// skippable_output incrementally. Oversized data frames switch to block-bounded
-// input. Compressed LZ4 blocks without block checksums can stream under a
-// header-sized cap; checksummed blocks require the cap to hold one encoded
-// block so checksum failure is reported before caller output is exposed.
+// skippable_output incrementally. Default input_policy = .block_stream starts
+// bounded input after the header, even with unbounded buffer options. Raw and
+// token payloads without block checksums consume caller input directly;
+// checksummed raw/compressed blocks require the cap to hold one encoded block
+// and validate that block before output. Frame content checksums may fail after
+// earlier output has been emitted. Always retain the suffix after input_read.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };
@@ -1025,6 +1323,9 @@ _ = lz4_block_plain;
 const zstd_options: vort.ZstdNativeFrameOptions = .{
     .selection = .auto,
     .block_size_max = 32 * 1024,
+    // null preserves the legacy wire; 10...41 selects an explicit window.
+    // Known content no larger than that window still uses a single segment.
+    .window_log = 10,
     // 0 disables mixed dictionary/duplicate/repeated lookahead; values up to
     // the default keep more ratio-seeking branches at higher planning cost.
     // Dictionary-only matches remain available even when the budget is 0.
@@ -1066,34 +1367,62 @@ _ = zstd_plain;
 var zstd_incremental = vort.ZstdNativeIncrementalFrameDecoder.init(allocator);
 defer zstd_incremental.deinit();
 var zstd_incremental_out: ["payload payload".len]u8 = undefined;
-_ = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0]);
-_ = try zstd_incremental.step(zstd_result.frame[4..], &zstd_incremental_out);
+const zstd_prefix = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0]);
+var zstd_input_read = zstd_prefix.progress.input_read;
+var zstd_output_written = zstd_prefix.progress.output_written;
+while (true) {
+    const result = try zstd_incremental.step(
+        zstd_result.frame[zstd_input_read..],
+        zstd_incremental_out[zstd_output_written..],
+    );
+    zstd_input_read += result.progress.input_read;
+    zstd_output_written += result.progress.output_written;
+    if (result.status == .done) break;
+}
+try zstd_incremental.finish();
 // Zstd native incremental decode likewise walks concatenated frames and
 // skippable metadata frames through the same caller-owned StepResult API.
 var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .max_output_len = 8 << 20,
+    .max_working_memory = 2 << 20,
     .expected_output_len = "payload payload".len,
 });
 defer zstd_bounded_incremental.deinit();
-// If a data frame exceeds max_compressed_buffer_len, Vort releases input one
-// block at a time. isBlockStreaming() exposes that path and
-// compressedBufferedBytes()/compressedBufferCapacity() report logical and
-// allocated encoded-input storage; both stay within a finite configured cap.
+// Default input_policy = .block_stream starts after the frame header and
+// releases encoded input as each block progresses. Raw bytes stream directly,
+// RLE keeps one byte, and compressed input retains one block. isBlockStreaming()
+// exposes that path. compressedBufferedBytes()/compressedBufferCapacity()
+// report logical and allocated encoded-input storage; both stay within a finite configured cap.
 // Sequence-bearing blocks retain their FSE/Huffman cursors and pending
 // literal/match progress across calls without allocating decoded-block scratch,
-// including when a prevalidated direct frame meets a tiny output slice;
-// streamedSequenceBlockCount() reports path coverage.
+// including when an explicit .prevalidated_frame direct path meets a tiny
+// output slice. This option preserves existing preflight/fallback behavior;
+// frame checksum validation may occur after output. Retain unaccepted input
+// using progress.input_read; streamedSequenceBlockCount() reports cursor use.
 // Skippable frames retain only their 8-byte header; metadata payloads are
 // discarded or copied into caller-owned skippable_output storage incrementally.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
-// Brotli's general incremental decoder can instead pledge expected_compressed_len
-// (or use initExactCompressedSize) to auto-validate/decode stored or compressed
-// meta-block streams at a transport-provided boundary, then drain tiny output.
-// BrotliIncrementalCopyStreamDecoder uses an embedded 16 KiB compressed-header
-// buffer. For valid streams with unusually large entropy headers, pass a larger
-// caller-owned slice as Options.compressed_header_scratch; it must remain alive
-// and must not alias input, output, or history while the decoder is in use.
+// Native LZ4/Zstd dictionary requests expose requiredDictionaryId(); provide
+// the matching dictionary, then resume the unconsumed suffix using the failed
+// step's snapshot.last_step_progress. The override is borrowed for that frame.
+// Brotli's max_working_memory and max_total_output_len apply across nextFrame;
+// LZMA-Alone uses max_working_memory for model/history/input allocations and
+// fixed 273-byte output staging. See the dictionary/memory functional baseline.
+// Brotli's general incremental decoder owns its bounded history ring and emits
+// stored/compressed bytes as symbols become available. It can pledge
+// expected_compressed_len (or use initExactCompressedSize) for a transport
+// boundary; max_history_len bounds owned LZ77 history. The wrapper parses at
+// most two window-header bytes first, then allocates no more than the declared
+// window (and often only expected_output_len), rather than a fixed maximum.
+// Both it and the caller-history BrotliIncrementalCopyStreamDecoder use an
+// embedded 16 KiB compressed-header buffer. The owned facade grows reusable
+// header storage geometrically on demand up to max_compressed_header_len
+// (default 1 MiB); exceeding the bound reports OutputLimitExceeded. Supplying
+// Options.compressed_header_scratch avoids that allocation. The caller-history
+// decoder remains allocation-free and therefore requires explicit scratch for
+// an unusually large legal entropy header.
 // Non-RFC Large Window streams remain rejected by default. Opt in explicitly
 // on one-shot/chunked APIs with BrotliDecodeOptions, or on either general
 // incremental decoder through Options.decode.
@@ -1119,16 +1448,72 @@ defer zstd_incremental_encoder.deinit();
 // contract for RFC 1951 stored blocks, including pledged input size and flush.
 // RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
 // 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
+// blockFlush() publishes accepted input by ending the current non-final block,
+// matching zlib Z_BLOCK without an empty sync marker. Fixed/best streams do not
+// byte-align this boundary; stored blocks retain their inherent RFC alignment
+// but add no separate marker. Match history and any wrapper Adler-32 or
+// CRC-32/ISIZE state remain continuous. Raw fixed/best and wrapper snapshots
+// expose pending_bits so callers can diagnose the live partial output byte.
+// partialFlush() follows the published data with zlib's ten-bit empty fixed
+// block. It deliberately stays non-byte-aligned but emits enough bits for a
+// decoder to consume every accepted byte. Repeated requests are idempotent and
+// history/checksums remain continuous. Pending flush requests upgrade in
+// block < partial < sync < full order without duplicate boundaries, and
+// finish() honors a boundary requested before finalization.
+// Its fullFlush() method emits the same byte boundary and then drops retained
+// history, rolling match indexes, and any preset dictionary for the remainder
+// of the stream, matching Z_FULL_FLUSH. The best and zlib/gzip wrappers expose
+// the same method; the stored encoder exposes the equivalent history-free
+// non-final boundary. Wrapper Adler-32/CRC-32/ISIZE state remains continuous.
 // ZlibIncrementalFixedEncoder adds CMF/FLG, optional preset DICTID, streaming
 // Adler-32 and the footer while preserving the raw core's flush semantics.
 // GzipIncrementalFixedEncoder adds optional RFC 1952 metadata/FHCRC plus
 // streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
+// RawDeflateSyncScanner finds full-flush LEN/NLEN markers across arbitrary
+// caller chunks. findRawDeflateSyncPoint plus decodeRawDeflateAfterSync*, or
+// RawDeflateIncrementalFixedLiteralDecoder.resumeAfterSync(), recover the raw
+// independent suffix. Wrapped zlib/gzip checksums cannot be reconstructed after
+// discarded corrupt output, so this recovery surface is intentionally raw.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
 // Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor
 // ring and epoch-tagged hash heads across blocks; reset reuses them in O(1).
 // ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
-// through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
+// through wrapper checksums/metadata; optionsForZlibLevel maps levels 1...9,
+// while DeflateParams supplies the complete runtime level 0...9 domain.
+// Their requestParams() method accepts DeflateParams levels 0...9 and
+// default/filtered/huffman_only/rle/fixed strategies. Level 0 emits genuinely
+// stored-only blocks; fixed permits stored/fixed selection but never dynamic.
+// Request the initial pair before supplying data to apply it without output.
+// A level change within the current stored/fast/slow algorithm family takes
+// effect immediately when the strategy is unchanged, without cutting the
+// buffered block. A family or strategy change is asynchronous: step("", out)
+// first publishes already accepted input as one non-final, non-byte-aligned
+// block with no sync marker, then commits the newest request. Do not offer more
+// input until that drain acknowledges need_input.
+// Repeating the same request is idempotent; newer queued requests replace older
+// ones, and requesting the active pair cancels a queued change. Snapshots expose
+// active_params, requested_params, params_boundary_pending,
+// params_change_count, stored_only, and the combined flushing state. reset()
+// preserves the active pair, clears a queued request and counters, and starts a
+// fresh stream; resetWithOptions() explicitly returns to raw option control.
+// Parameter boundaries preserve the 32 KiB history, rolling matcher, preset
+// dictionary, and wrapper checksums. Only fullFlush() clears match/dictionary
+// history; zlib Adler-32 and gzip CRC-32/ISIZE remain continuous either way.
+// run-deflate-params-interop validates all three wrappers in both directions
+// against the selected libz; the local run reports runtime zlib 1.2.11. Vort
+// params streams inflate in libz, and libz deflateParams streams decode in
+// Vort. Its six cases use 3-byte output, issue 84 requests including 24
+// same-family requests, observe 45 Vort commits/30 implicit boundaries, and
+// retry three Z_BUF_ERROR results without losing parameter or stream state.
+// The same gate runs six bidirectional raw/zlib/gzip partial-flush cases under
+// 3-byte output and independently decodes each stream across Vort and libz.
+// Focused runtime-parameter tests pass 19/19 and the direct Deflate suite
+// passes 479/479; the full repository test graph passes 2621/2621.
+// Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
+// block flush. Raw inflateSync-style recovery is provided by
+// RawDeflateSyncScanner/findRawDeflateSyncPoint and the raw one-shot and
+// incremental resume helpers described above.
 // Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a
@@ -1144,6 +1529,11 @@ defer zstd_incremental_encoder.deinit();
 // losing bit-reservoir or history state. Fixed/dynamic Huffman symbols use
 // bounded prefix lookups, and matches copy in resumable spans rather than one
 // byte at a time.
+// stop_at_output_limit opts into a bounded prefix: step returns need_output at
+// max_output_len without requiring EOB, even inside a stored chunk or match.
+// The default keeps the ordinary output-limit and end-of-stream checks.
+// max_distance optionally tightens copy distances within the caller's 32 KiB
+// history ring for an enclosing format; it defaults to the full format window.
 // Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer
@@ -1153,6 +1543,11 @@ defer zstd_incremental_encoder.deinit();
 // the same step.
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
+// After NeedDictionary, requiredDictionaryId() exposes the complete DICTID.
+// provideDictionary(bytes) validates it and resumes the parsed stream in place;
+// a DictionaryMismatch leaves the requested ID available for another attempt.
+// On a step error, snapshot().last_step_progress records accepted input and
+// published output, so retain the corresponding unconsumed input suffix.
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
 // streaming CRC-32/ISIZE and batches raw input up to the exact member footer.
 // Set allow_concatenated to continue through RFC 1952 members while enforcing
@@ -1459,7 +1854,784 @@ _ = gzip_cat_chunked_written;
 // defer allocator.free(dict_encoded);
 ```
 
-### Brotli planned encoder knob
+### ZIP incremental reader, entry decoder, and writer
+
+After parsing an archive and selecting a canonical `ZipEntry`,
+`archive.compressedData(entry)` returns its validated borrowed payload.
+`ZipIncrementalEntryDecoder` then decodes Stored or raw-Deflate members under
+arbitrary input/output fragmentation without consuming bytes after the
+declared compressed payload. It enforces the central-directory compressed and
+uncompressed sizes, applies `max_output_len`, and validates IEEE CRC-32 before
+returning `.done`. Deflate uses a caller-owned 32 KiB history buffer;
+`ZipOwnedIncrementalEntryDecoder` supplies an allocator-owned reusable buffer.
+Both variants can `reset` across independent Stored and Deflate members, expose
+snapshots/streaming diagnostics, and treat a `step` error as terminal until
+reset. `finish` distinguishes truncated input when a source ends early.
+
+`ZipIncrementalReader` builds the complete sequential archive state machine on
+that data plane. It parses local headers and streams Stored, Shrink, all four
+Reduce factors, traditional Implode, Deflate, Deflate64, Bzip2, DCL Implode,
+LZMA, XZ, PPMd8, and legacy/current Zstandard payloads.
+When `ZipIncrementalReaderOptions.password` is provided, the same codec paths
+also stream known-size and descriptor-backed Traditional ZipCrypto entries.
+The reader incrementally verifies the 12-byte encrypted header with the CRC-
+high or DOS-time-high check byte, subtracts it from known codec pledges, and
+advances Vail's cipher only for input the codec actually accepts. Descriptor
+scanners receive paired raw/decrypted views, while self-delimiting codecs keep
+at most a 24-byte raw tail so their retained descriptor suffix is never
+mistaken for ciphertext.
+ZIP32/ZIP64 descriptors with
+or without the optional signature are accepted; the reader emits `entry_header`
+and `entry_done` boundaries and validates every central record,
+optional central-directory digital signature, ZIP64 EOCD/locator, legacy EOCD,
+entry count, offset, size, CRC, and archive comment before returning `done`.
+Stored unsigned descriptors use a bounded 16/24-byte lookbehind and require a
+following ZIP record signature plus matching CRC and sizes, so payload copies
+of `PK\x07\x08` do not create false boundaries. Deflate uses its final block as
+the unambiguous compressed boundary; Deflate64 shares the resumable block
+machine with a 64 KiB history, 32 distance symbols and extended code 285;
+Bzip2 uses its validated stream terminator and Zstandard its validated frame
+end. ZIP method 14 parses its 9-byte
+properties prefix and uses the mandatory EOS marker in descriptor mode; XZ
+stops after its validated Index/Footer before outer descriptor bytes can be
+mistaken for stream padding.
+PPMd method 98 parses its two-byte order/memory/restore properties, decodes one
+symbol transactionally, and stops exactly at the range-coded EOS.
+DCL Implode method 10 retains its partial fixed-Huffman code, LSB-first bit
+reservoir, match continuation, and 1/2/4 KiB history until its explicit
+length-519 end marker.
+Shrink retains its 9...13-bit LSB-first LZW dictionary, partial-clear state,
+and pending expanded string across calls. Because method 1 has no end marker,
+descriptor entries hold one bounded 16/24-byte candidate window: disproven
+bytes enter the decoder one at a time, while a boundary commits only after
+zero pad bits, CRC-32, compressed size and output size agree; unsigned
+descriptors additionally require a following ZIP record signature.
+Reduce methods 2...5 retain their complete 256-context follower tables,
+LSB-first reservoir, DLE command state, 512-byte...4 KiB circular history and
+overlapping match continuation. Reduce also lacks an EOS marker, and padding
+bits can themselves be valid one-bit follower selections. Descriptor mode
+therefore withholds the final compressed byte, transactionally decodes it in a
+second fixed workspace under the candidate descriptor's exact output size,
+and commits the state plus output only after CRC-32 and both sizes match.
+Traditional Implode method 6 incrementally parses its byte-aligned run-length
+tree descriptions, preserves partial 1...16-bit Shannon–Fano codes, supports
+raw or coded literals, and copies matches through a 4/8 KiB circular history.
+It shares Reduce's final-byte transactional adapter because it also lacks an
+EOS marker: descriptor size and CRC decide exactly which tail output commits.
+Arbitrary input/output fragmentation,
+zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
+trailing data, and explicit entry/total-output, entry-count, metadata, central-
+directory, and control-record limits share one API.
+
+The sequential reader retains 32 KiB Deflate and 64 KiB Deflate64 histories,
+at most one bounded Bzip2 block, bounded Zstandard frame/block scratch, LZMA
+range/dictionary state, at most one bounded XZ block, entry names and compact
+validation records, and the configured PPMd model arena until the central
+directory. DCL Implode keeps a fixed 4 KiB maximum history and Shrink uses a
+fixed 8,192-entry, approximately 40 KiB caller-owned LZW workspace. Reduce
+uses two approximately 12 KiB workspaces plus an 8 KiB speculative tail
+buffer only while a method-2...5 member is active. Traditional Implode uses
+two approximately 10 KiB workspaces plus the same 8 KiB bounded tail. The
+reader also retains the final archive comment and one bounded control record,
+but never complete decoded payloads, compressed members, or the whole archive.
+
+`ZipIncrementalWriter` streams Stored, Shrink, Reduce, traditional Implode,
+DCL Implode, raw-Deflate, stored-block Deflate64, Bzip2, LZMA, XZ, PPMd8, and
+legacy/current Zstandard entries into caller-owned output. `ZipIncrementalWriterOptions`
+configures archive comment, UTF-8, ZIP64, SFX `initial_offset`, codec policy,
+and resource limits;
+`ZipIncrementalEntryOptions` supplies the copied name/comment, method, and an
+optional exact `expected_size`. Every entry uses bit 3 and a signed data
+descriptor. Known and unknown sizes, one-byte output, and zero-output
+backpressure share the same `beginEntry` / `step` / `finishEntry` contract;
+after the last entry, `finishArchive` drains the retained central metadata and
+archive ending.
+
+Stored payload and previously emitted bytes are not retained; Deflate keeps one
+bounded planning block/lookahead, its 32 KiB history and match state, and one
+encoded pending block. Bzip2 keeps one caller-selected 100...900 KiB RLE/BWT
+block plus its bounded encoded pending output. `max_deflate_buffer_size`
+defaults to 1 MiB and caps the retained Deflate input portion before an entry
+starts; `bzip2_options` independently selects block size and input/pending
+limits. Zstandard keeps one configured block, bounded rolling history, and
+pending encoded block; `zstd_options` selects block/window/parser/checksum
+policy, while content-size signaling is derived from each entry pledge.
+LZMA retains its configured dictionary, bounded lookahead/input and pending
+range output; the adapter replaces the internal 13-byte Alone header with ZIP's
+9-byte properties prefix and always emits the mandatory EOS marker.
+XZ retains one configured plaintext block, bounded encoded output and compact
+Index records; `xz_options` selects LZMA2 dictionary/parser, check, payload
+mode, block limits, and a writer-owned copy of the Delta/BCJ filter chain.
+Deflate64 currently uses bounded stored blocks with no whole-member buffering;
+the separate one-shot encoder remains available for fixed-Huffman matches and
+extended 64 KiB distances.
+PPMd8 owns one explicitly bounded 1...256 MiB model arena and small pending
+range buffer; `ppmd_options` selects order, restart/cut-off restoration, model
+memory, input and pending-output limits, while finish emits the range-coded EOS.
+Shrink owns a fixed-capacity 8,192-code LZW dictionary and bounded pending
+output; `shrink_options` selects input and pending-output limits. Its
+deterministic encoder grows from 9 through 13 bits and freezes a full
+dictionary rather than retaining the complete member.
+DCL Implode retains its selected 1/2/4 KiB history, a 520-byte match lookahead,
+rolling hash chains and at most 16 pending output bytes. Its options select raw
+or fixed-Huffman literals, dictionary reach, match-chain depth and an input
+limit.
+Reduce methods 2...5 share one factor-parameterized encoder with a 512-byte...
+4 KiB history, at most 387 bytes of lookahead, DLE matches and a complete
+follower table. The default empty table enables a true bounded single pass;
+`trainZipReduceFollowerTable` supplies an optional replayable prepass whose
+result makes the incremental wire byte-identical to the trained one-shot path.
+Traditional Implode retains its selected 4/8 KiB history, at most 323 bytes of
+lookahead, fixed Shannon–Fano tree header, rolling matcher and bounded pending
+bits. Raw/tree literal modes share the same single-pass core.
+Encrypted incremental entries retain only Vail's three-key cipher state and
+the 12-byte header; codec bytes are encrypted in place in caller output.
+Memory therefore scales with those bounds plus central-directory
+metadata, not with the complete archive.
+Archive comments are copied by initialization, and names/comments by
+`beginEntry`, so those caller slices need not outlive the successful call.
+
+With `.auto`, unknown-size entries and every Shrink/Reduce/Implode/DCL-Implode/Deflate/
+Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard entry conservatively use ZIP64 before its non-seekable local
+header is emitted; a known-size Stored entry remains ZIP32 when its size and
+local offset fit.
+`.always` forces ZIP64.
+`.never` rejects known entry overflow up front, while a late unknown entry-size
+or codec overflow detected in `step` poisons the writer. After all descriptors
+drain, `finishArchive` preflights count, central-directory/ending offsets and
+sizes, and the archive-output limit; a failure there leaves the writer ready
+and recoverable. `initial_offset` includes an already-written SFX prefix in
+every ZIP offset but does not emit that prefix.
+
+`step` errors are deliberately non-transactional because earlier output may
+already be committed to an external sink; output from the failing call is
+invalid and must not be committed. After an error, mutating calls return
+`ZipWriterPoisoned` and the partial archive must be discarded. Direct
+validation errors from `beginEntry` and a premature short `finishEntry` remain
+recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
+guarantee and broader method support. Every compression method currently
+supported by the sequential reader now has a bounded incremental writer.
+The incremental writer and one-shot surface support per-entry Traditional
+ZipCrypto. The sequential reader supports both known-size and descriptor-
+backed forms. WinZip AES supports one-shot reading/writing, descriptor-backed
+incremental writing, and both known-size and descriptor-backed sequential
+reading. PKWARE Strong AES now has the same one-shot/bounded incremental writer
+and known-size/descriptor sequential reader coverage. `parseSplitZipArchiveAlloc`
+accepts explicitly ordered `.z01` ...
+`.zip` disk slices, validates ZIP32/ZIP64 disk-local offsets, the leading split
+marker, metadata-inconsistent missing/reordered layouts, part count and total
+size, then exposes an owned normalized `ZipArchive`; compressed data and
+descriptors are not rewritten. This compatibility surface allocates the
+complete joined archive. `ZipSplitNormalizedStream` instead retains borrowed
+part payloads plus O(parts + entries) disk bases/metadata patches, and
+`ZipSplitIncrementalReader` feeds that view through the existing all-codec,
+descriptor, ZipCrypto, WinZip AES, and PKWARE Strong sequential state machine with a bounded
+32 KiB bridge buffer. All part payload slices must remain alive, but no second
+joined archive is allocated. For non-resident media, `ZipSplitPartSource` plus
+`ZipSplitIncrementalReader.initSourceAlloc` copies only part lengths and uses a
+short-read callback, allowing the caller to open one volume and release the
+previous one on disk switches. `zipEncodeSplitAlloc` adds a deterministic owned
+writer for every one-shot method and all three supported encryption families. It
+emits the conventional split marker, keeps local headers/descriptors/central
+records/endings within one part, and exposes borrowed part slices over one
+owned backing allocation. `ZipSplitIncrementalWriter` reuses every incremental
+codec/encryption path, retains only the established codec state, central
+metadata, one atomic control record and caller-selected current-part storage,
+and reports `part_done` before output switches volumes. See
+[the ZIP format status](docs/formats/zip.md) for the full state and wire
+contract. Writer-specific additive errors are exposed separately as
+`ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
+
+The incremental `run-zip-diff` matrix generates the same forty-five-entry
+archive, including a known Deflate payload larger than 32 KiB that crosses a real
+planning-block boundary, under one-byte and micro-chunk output schedules in
+ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
+system Info-ZIP validate their supported members, including known,
+unknown-size, and empty Bzip2 method-12 entries with version-needed 4.6.
+System `zstd` independently decodes known method-93, unknown-size legacy
+method-20, and empty method-93 frames with version-needed 6.3. Four extra
+ZIP32/ZIP64 method-20/93 frames advertise a Vort-generated standard dictionary;
+system `zstd` must reject them without `-D` and decode them byte-exactly with
+that dictionary (`incremental_zstd_dictionary_cases=4`). Python `zipfile`
+independently reads known, unknown-size, and empty LZMA method-14 entries and verifies their bit-1
+EOS flag plus version-needed 6.3. Python `lzma.FORMAT_XZ` and system `xz`
+independently agree on known, unknown-size, and empty XZ method-95 streams.
+Python zlib and Info-ZIP independently decode known, unknown-size, and empty
+stored-block Deflate64 method-9 members; the fixed 7-Zip reference continues to
+cover extended-distance reader semantics.
+Known, unknown-size, and empty PPMd method-98 entries use order 12, 1 MiB and
+cut-off restoration; Vort's complete sequential reader validates them, while
+third-party extraction remains conditional on the unavailable 7z/7zz tool.
+Known, unknown-size, and empty Shrink method-1 entries are decoded by Vort's
+complete sequential reader and system Info-ZIP; Python validates their raw
+method, flags, CRC, sizes, descriptors, version metadata, and ZIP64 fields but
+does not provide a method-1 decoder. The ZIP32 and ZIP64 archives are 24,663
+and 26,251 bytes respectively. Known, unknown-size, and empty DCL Implode
+method-10 entries are decoded by the same Vort sequential path; Python pins
+their `{literal-mode=1,dictionary-bits=6}` payload header and all outer ZIP
+metadata. With those members the ZIP32 and ZIP64 archives are 25,208 and
+26,964 bytes. Known, unknown-size, and empty entries for every Reduce factor
+use the bounded single-pass table and pass Vort's sequential reader; Python
+pins their zero follower headers plus outer metadata. The final ZIP32 and
+ZIP64 archives are 29,787 and 32,215 bytes.
+Known, unknown-size, and empty default 8 KiB/tree Implode members pass both
+Vort's sequential reader and system Info-ZIP; Python pins flags, fixed tree
+headers and outer metadata. The final ZIP32 and ZIP64 archives are 30,453 and
+33,049 bytes before the entry-time compatibility fields; the current
+`0x5455`/`0x000a` matrix is 30,551 and 33,147 bytes.
+The aggregate reports 13/13 ZIP differential steps. The same gate incrementally decodes five
+Python-generated Stored/Deflate entries, including non-seekable descriptors
+and a forced-ZIP64 local header, with 3-byte input and 5-byte output. A separate
+six-entry Python non-seekable archive passes through the complete sequential
+reader with the same fragmentation, including Bzip2 method 12 and LZMA method
+14 (`incremental_archive_reader_cases=6`). System-zstd frames wrapped as legacy
+method 20 and current method 93 also pass the sequential path
+(`incremental_archive_zstd_cases=2`), as does an independently generated XZ
+method-95 member (`incremental_archive_xz_cases=1`). A fixed 7-Zip Deflate64
+payload wrapped as method 9 also passes the required sequential path
+(`incremental_archive_deflate64_cases=1`).
+A fixed zlib-blast DCL Implode payload wrapped as method 10 passes the required
+sequential path (`incremental_archive_dcl_cases=1`).
+Both Apache Commons Compress `SHRUNK.ZIP` members pass the required sequential
+path (`incremental_archive_shrink_cases=2`).
+Four known-size and four descriptor-backed SFX Reduce members cover methods
+2...5 through the required CLI path (`incremental_archive_reduce_cases=8`).
+Four known-size and four descriptor-backed SFX members cover every traditional
+Implode flag mode (`incremental_archive_implode_cases=8`); two Apache Commons
+Compress fixtures independently cover the 4 KiB/two-tree and 8 KiB/three-tree
+endpoints (`incremental_archive_implode_fixture_cases=2`).
+Traditional ZipCrypto has four Vort-to-Python/Info-ZIP Stored/Deflate cases
+covering CRC- and descriptor-time check bytes, plus two Info-ZIP-to-Vort cases.
+Missing/wrong passwords, encrypted-header corruption, ciphertext corruption,
+deterministic caller entropy and allocation failures are required coverage.
+The reusable cipher and secure-memory handling come from `../vail/archive_crypto`;
+Vort owns only ZIP wire policy and codec composition.
+PKWARE Strong Encryption adds six deterministic password-based AES-128/192/256
+one-shot cases across known-size and descriptor-backed entries. A locally built
+7-Zip 26.04 at source commit `9128b80e3a471108678e2b3ec3c985861c8d7b0f`
+independently decrypts all six Stored/Deflate/Bzip2 cases. Reader coverage also
+includes APPNOTE's synthesized zero-length-IV form, wrong passwords, corrupt
+validation/padding, malformed flags/algorithm metadata, and allocation failure.
+The incremental writer adds six deterministic ZIP32/ZIP64 known/unknown/empty
+cases (2,115/2,359 bytes) and uses a bounded 256-byte codec bridge plus two AES
+blocks; fixed 7-Zip independently decrypts another 6/6. The bounded reader adds
+twelve required one-shot/incremental-writer CLI cases plus all-codec
+known/descriptor and signed/unsigned ZIP32/ZIP64 coverage. Certificate
+recipients, non-AES algorithms and central-directory encryption remain explicit
+gaps.
+The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
+separate deterministic archives (1,695/1,939 bytes), decoded independently by
+Python, Vort's one-shot reader, and Info-ZIP.
+All four Vort one-shot cases, both independently written Info-ZIP bit-3 cases,
+and all six ZIP32/ZIP64 incremental-writer cases pass the sequential CLI reader
+with a password (`incremental_reader_zipcrypto_cases=12`).
+WinZip AES adds six OpenSSL/Python-verified one-shot cases, six deterministic
+ZIP32/ZIP64 incremental-writer cases (1,797/2,041 bytes), and twelve
+known-size/descriptor-backed sequential-reader cases. A committed Rust
+`zip 8.6.0` archive independently
+covers AE-1/AE-2, AES-128/192/256, Stored and Deflate, and Rust also extracts
+both Vort writer surfaces.
+The required Info-ZIP gate also generates a seven-part `zip -s 64k` archive:
+one Deflate payload crosses six volume boundaries, a trailing Stored member
+starts on the final disk, both extract through `parseSplitZipArchiveAlloc`, and
+a first-two-disk reorder is rejected. Both entries also pass the sparse
+sequential surface (`split_zip_parts=7`, `split_zip_cases=2`,
+`split_zip_stream_cases=2`, `split_zip_boundaries=6`,
+`split_zip_metadata_patches=8`).
+The same Info-ZIP set passes `ZipSplitPartSource` extraction while the CLI
+retains one physical part at a time; callback switch/release accounting is
+required so the gate cannot silently fall back to resident multi-slice input
+(`split_zip_source_cases=2`, `split_zip_source_switches=11`).
+Vort's split writer independently produces four-part ZIP32 and forced-ZIP64
+sets. Python wire parsing checks disk-local offsets and atomic record
+boundaries, raw zlib plus CRC-32 independently validate both payloads, and both
+Vort reader paths extract every member (`vort_split_writer_cases=8`, three
+payload boundaries per mode, sparse patch counts 8/13).
+The incremental split writer adds schedule-independent ZIP32/ZIP64 sets under
+one-byte and micro output, including known/unknown/empty Stored and Deflate
+members. Python independently verifies raw Deflate/CRC, disk-local metadata and
+atomic record placement before 24 owned/sparse extraction cases
+(`incremental_split_zip32_parts=10`, `incremental_split_zip64_parts=13`).
+Focused writer tests pass 73/73; the DCL, Reduce and Legacy Implode encoder
+suites pass 4/4 each, and the
+incremental entry decoder suite passes
+15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
+suites each pass 4/4, and the archive reader suite passes 28/28. Shrink covers known/signed/
+unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
+six literal/dictionary modes cover known/descriptor and ZIP32/ZIP64. Reduce
+covers all four factors, signed/unsigned descriptors, ZIP32/ZIP64, empty
+members and follower-coded padding ambiguity. Traditional Implode covers both
+dictionary sizes, raw/tree literals,
+signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
+implicit-zero and overlapping matches. PPMd restart/cut-off,
+descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
+unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
+The full repository graph passes 2719/2719 and `zig build check` passes 113/113.
+The refactored one-shot writer remains byte-identical to HEAD across 14 probe
+modes. The current host has no 7z/7zz, so that optional extraction branch is
+reported as skipped rather than passed.
+
+### Brotli HQ encoding
+
+Quality 10 and 11 can opt into standard-window HQ command parsing. Null `hq`
+keeps the established quality policy. The HQ parser preserves its exact command
+and distance choices, handles static/compound dictionaries and retained history,
+and uses caller-owned work profiles.
+
+```zig
+var profile: vort.BrotliHqProfile = .{};
+const options: vort.BrotliPlannedEncodeOptions = .{
+    .quality = 10,
+    .window_bits = 22,
+    .hq = .{ .profile = &profile },
+};
+const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options);
+defer allocator.free(encoded);
+```
+
+The same `hq` field is available on chunked and incremental stream options.
+The default HQ meta-block target is 256 KiB, through a maximum of 16 MiB.
+The work cap/profile covers HQ-managed allocation rather than total encoder
+memory or process RSS. See the [HQ contract](docs/formats/brotli-hq-command-parser.md)
+for block precedence, exact encodings, ownership and the remaining native search
+limitations. Quality numbers do not establish reference ratio or speed parity.
+
+`hq.parse_mode = .whole_block` opts into one position-state search across the
+complete meta-block. The default `.bounded` keeps the established 4096-position
+policy. Whole-block encoding still retains the complete bounded wire as a
+candidate and obeys the caller's workspace and total-heap limits. See the
+[whole-block search contract](docs/formats/brotli-whole-block-search.md) for
+actual pass statistics, memory costs and remaining finite-search limitations.
+
+HQ q10/q11 can also explicitly set `large_window = true` for window bits
+10...30. This writes the Large Window extension even at smaller windows;
+decoding requires opt-in. Ordinary defaults remain standard Brotli. The
+[Large Window contract](docs/formats/brotli-large-window-hq.md) explains wire
+alphabets, safe distances, cross-block history and dedicated large-data checks.
+
+All planned encoding levels and qualities also accept
+`max_total_working_memory` and a caller-owned `BrotliEncodeMemoryProfile`.
+This separate total cap includes buffers, retained history, dictionary/parser
+workspaces, alias snapshots and simultaneously live q10/q11 candidate streams.
+It preserves the HQ workspace cap's existing meaning. See the
+[total encoding-memory contract](docs/formats/brotli-total-encode-memory.md)
+for retained storage, output ownership and exact requested-byte accounting.
+
+### Brotli RAW shared-prefix dictionaries
+
+`BrotliSharedDictionary` describes zero through fifteen ordered RAW prefix
+attachments. Non-empty attachments form one logical compound dictionary in
+order. An empty attachment contributes no bytes but still occupies one of the
+fifteen slots.
+
+Encoding accepts the descriptor through three public option fields:
+
+- `BrotliPlannedEncodeOptions.shared_dictionary` covers one-shot and
+  `BrotliPlannedStreamEncoder` reusable frontends, including legacy
+  fast/balanced/ratio and every Vort-native q0...q11 preset;
+- `BrotliPlannedStreamChunksOptions.shared_dictionary` covers the chunked
+  planner together with its `level` or q0...q11 `quality`/`mode` policy and
+  optional `block_len` override;
+- `BrotliIncrementalPlannedStreamEncoder.Options.stream.shared_dictionary`
+  covers the incremental planner across flushes and meta-blocks, including its
+  stream-level `level` or `quality`/`mode` selection.
+
+`BrotliPlannedStreamChunksOptions` is now a distinct option type rather than an
+alias of `BrotliStoredStreamOptions`, because a RAW dictionary has meaning only
+for planned encoding. Callers that previously stored the latter type explicitly
+before passing it to a planned chunked API must construct the planned option
+value (or copy its `window_bits` and `metadata` fields) instead.
+
+The default empty descriptor does not introduce compound references on
+one-shot, reusable, chunked, or incremental paths. Chunked encoding now shares
+the incremental core and can therefore improve its former independent-block
+wire with bounded cross-block matches. Compound copies participate
+in Brotli's recent-distance ring; explicit compound distances update it, while
+an implicit rep0 reuses it in place. References to the built-in transformed
+static dictionary remain separate and do not update that ring. Across
+meta-blocks, a selected compressed candidate commits its actual output position
+and recent ring; falling back to stored output rolls back the candidate ring
+and advances only the output position.
+
+The compound matcher allocates a fixed 32,768-bucket, four-way address index
+after its first non-empty dictionary, about 1 MiB on a 64-bit target. Reusable
+and incremental encoders retain this index for later streams; the attachment
+bytes themselves are never flattened or owned. For a one-shot or chunked call,
+the outer slice and all bytes must remain alive and unchanged for that call.
+The same call-scoped rule applies to each reusable encode operation; retaining
+and reusing the index for an identical descriptor requires those bytes to stay
+unchanged across the calls. Incremental callers keep them valid through
+`finish()` and draining; `reset()` reuses the same options, while a completed
+stream may replace them through `nextStream`.
+
+Decoding accepts the same descriptor through
+`BrotliDecodeOptions.shared_dictionary`. The option is supported by the
+one-shot allocating, append, caller-buffer, exact-size, and limited
+`brDecodeStream*WithOptions` APIs;
+`brDecodedStreamSize*WithOptions`; their chunked counterparts; the allocating,
+caller-history, diagnostic, and chunked `brSummarizeStream*WithOptions`
+families; and both
+`BrotliIncrementalCopyStreamDecoder` and the allocator-owned
+`BrotliIncrementalStreamDecoder` through their nested `.decode` option.
+Summaries expose `uses_shared_dictionary`, `shared_dictionary_copy_count`, and
+`shared_dictionary_bytes`.
+
+The descriptor does not copy or own the outer attachment slice or any attached
+bytes. Keep both alive and unchanged for the entire one-shot/chunked/summary
+call. For progressive decoding, keep them alive and unchanged from decoder
+initialization through completion and through any reset that reuses the same
+options; an allocator-owned decoder may replace them only by installing new
+options for a completed frame with `nextFrame`.
+
+For example:
+
+```zig
+const raw_prefixes = [_][]const u8{ "shared ", "", "prefix" };
+const shared_dictionary: vort.BrotliSharedDictionary = .{
+    .raw_prefixes = &raw_prefixes,
+};
+const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+    allocator,
+    input,
+    .{ .quality = 8, .shared_dictionary = shared_dictionary },
+);
+defer allocator.free(encoded);
+const decoded = try vort.brDecodeStreamAllocWithOptions(
+    allocator,
+    encoded,
+    .{ .shared_dictionary = shared_dictionary },
+);
+defer allocator.free(decoded);
+const summary = try vort.brSummarizeStreamWithOptions(
+    encoded,
+    .{ .shared_dictionary = shared_dictionary },
+);
+_ = summary.shared_dictionary_copy_count;
+```
+
+The stable built-in RFC 7932 dictionary is also available through
+`brEncodePlannedStreamStaticDictionaryAlloc`. This dedicated, ratio-oriented
+surface combines the default canonical index with a lazy 59,904-entry
+supplement for omit-first and short-core-plus-suffix shapes, and can emit every
+one of the 121 standard transform families. The supplement occupies exactly
+370,692 bytes and is never constructed by default q0...q11 presets. Diagnostic
+helpers expose its entry and byte counts. The retained exhaustive reference
+matcher remains available internally to the reproducible A/B benchmark and its
+three-row gate.
+
+`BrotliIncrementalStaticDictionaryStreamEncoder` exposes the same complete
+121-family matcher through caller-owned resumable state. It accepts arbitrary
+input and output fragmentation, retains command/output capacity across
+`nextStream`, supports `flush` and in-stream metadata, and preserves Brotli
+output position plus the recent-distance ring across meta-blocks. The default
+block size is 65,520 bytes; callers can select any non-zero `block_len` through
+the encoder's nested `Options`, up to Brotli's 16 MiB meta-block limit, and can
+bound total accepted input with `max_input_len`. Default stream options and one
+block of 5...65,520 bytes produce exactly the same wire as
+`brEncodePlannedStreamStaticDictionaryAlloc`, including omit-first transforms.
+
+```zig
+var encoder = vort.BrotliIncrementalStaticDictionaryStreamEncoder.initWithOptions(
+    allocator,
+    .{ .block_len = 32 * 1024, .max_input_len = 8 * 1024 * 1024 },
+);
+defer encoder.deinit();
+
+var encoded: std.ArrayList(u8) = .empty;
+defer encoded.deinit(allocator);
+var scratch: [256]u8 = undefined;
+var input_offset: usize = 0;
+while (input_offset < input.len) {
+    const result = try encoder.step(input[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+}
+try encoder.finish();
+while (true) {
+    const result = try encoder.step("", &scratch);
+    try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+const output = encoded.items;
+```
+
+This dedicated coverage surface emits a complete-planner compressed block even
+when that block has no dictionary match; it does not perform the normal
+q0...q11 compressed-versus-stored size arbitration. Use the ordinary planned
+encoders when automatic size/speed policy is more important than guaranteed
+complete-transform search.
+
+One-shot callers can use
+`brEncodePlannedStreamStaticDictionaryAppend`/`Into` with the same strict
+5...65,520-byte, at-least-one-match contract as the original `Alloc` API.
+For multiple blocks, the
+`brEncodePlannedStreamStaticDictionaryChunks{Alloc,Append,Into}` family and its
+`WithOptions` variants drive the same incremental core. Every non-empty chunk
+is a meta-block boundary, empty chunks are ignored, and the final non-empty
+chunk is emitted directly as the final block. Options use
+`BrotliStaticDictionaryStreamOptions`, the same nested `stream`, `block_len`,
+and `max_input_len` layout exposed by the incremental encoder. Append calls are
+transactional on error. Into calls encode to internal temporary storage before
+checking capacity, so `OutOfMemory` leaves the complete caller buffer
+unchanged; callers that require retained scratch should use the reusable facade
+below or drive the incremental encoder directly.
+
+`BrotliStaticDictionaryStreamEncoder` is the reusable convenience layer for
+callers that want atomic Alloc/Append/Into operations without manually driving
+`step`. It retains both the incremental plain/pending/command state and the
+complete encoded scratch result across calls. `encodeChunksScratch*` returns a
+borrow invalidated by the next call; `encodeChunksInto*` copies only after a
+complete successful encode, so undersized output remains unchanged. A warmed
+three-meta-block regression succeeds with an allocator configured to fail its
+first new allocation, proving that stable repeated shapes reuse all retained
+capacity. Options may change between calls because each operation resets the
+stream state while keeping capacity.
+
+There is intentionally no guessed compressed-wire multiplier exposed as a
+bound: the complete planner writes dynamically constructed Huffman trees, and a
+strict general upper bound has not yet been derived. The stateless Into wrappers
+therefore retain their internal temporary result for atomicity; use the reusable
+encoder when repeated-call allocation behavior matters.
+
+Upstream still marks serialized shared dictionaries as
+`BROTLI_EXPERIMENTAL`/`DO NOT USE`. Vort now exposes a strict borrowed parser
+through `brParseSerializedSharedDictionary` and deterministic encoded-size,
+Into, Append, and Alloc builders for RAW prefixes, custom word/transform lists,
+mixed RFC built-in choices, and 64-entry contextual maps. Parsing includes all
+23 transform families, an exhaustive custom-only reference matcher, and
+complete mixed built-in/custom address replay. A parsed view can be attached through
+`BrotliSharedDictionary.serialized` for production one-shot, chunked, summary,
+caller-history, and allocator-owned or caller-history progressive decoding.
+The serialized RAW prefix follows explicit RAW attachments in Vort's compound
+address space. Planned one-shot, reusable, chunked, and incremental encoders
+use a bounded reusable contextual candidate index. Context-varying descriptors
+build independent LSB6, MSB6, UTF8, and Signed command plans and retain the
+smallest complete wire; mode-invariant maps keep the single LSB6 fast path.
+Each address-stable mode also arbitrates single-tree, suffix, bounded-16-tree,
+and complete clustered literal-context candidates. The exhaustive matcher
+remains the oracle and oversized-descriptor fallback, and the experimental
+upstream format carries no stability promise.
+
+The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
+against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for
+0/1/2/15 attachments at q0/q5/q9/q11 (16 cases), plus Vort encode to libbrotli
+decode for 16 one-shot, 16 reusable, four fast chunked, and four fast
+incremental cases. Four additional runtime regressions cover WBITS=10 window
+saturation and cross-block recent reuse, stored rollback followed by compound
+copy, incremental metadata/backpressure, and static addressing after a
+saturated compound region. A system libbrotli 1.0.9 without the optional shared-
+dictionary symbols reports the whole runtime matrix as skipped instead of
+silently reducing coverage.
+
+With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
+gate additionally passes twenty-two serialized custom-static cases:
+bidirectional non-contextual coverage, a UTF8-context winner, and identity-,
+case-, omit-, learned-prefix/suffix-, and non-contiguous-context-cluster-trained
+dictionaries, three payload shapes using a per-dictionary clustered transform-
+list result, and a learned UTF-8 SHIFT_FIRST/ALL dictionary. A non-experimental
+build reports them as skipped explicitly.
+
+`brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
+identity-word, multi-cutoff two-group, and arbitrary non-contiguous context-map
+training with held-out complete-wire arbitration. It compares a global
+dictionary with a caller-selected RFC mode list (all LSB6, MSB6, UTF8, and
+Signed modes by default) across bounded cutoffs 16/32/48 plus learned
+3/4-cluster maps. Each context receives
+a fixed 64-bin phrase signature; normalized integer L1 agglomeration produces
+stable maps without floating point or heap allocation. By default serialized
+bytes are charged once against the validation frame total; non-winning
+candidates return null.
+For every eligible word length, the trainer compares its bounded exact heavy-
+hitter bucket with a Vort-native COVER-class bucket. COVER uses `k == word_len`,
+requires full sample-boundary-safe segments, reverses the generic history order
+so the best segment receives the lowest Brotli word address, and retains the
+largest legal power-of-two prefix. The single-configuration fallback uses
+`d=8` and `hash_log=16`; callers may select `d=6`. By default an optimized grid evaluates
+`d={6,8} × hash_log={12,16}` in stable order and sends every configuration
+through the actual global/context/transform complete-wire matrix; callers can
+disable the grid for one explicit configuration. Results report selected
+`d/hash_log` and the evaluated parameter count. This reuses the shared COVER
+heuristic but does not claim byte-identical libzstd or libbrotli training
+output.
+Callers may additionally provide up to eight bounded word-bucket profiles
+`(min_word_len,max_word_len,max_words_per_length)`. The base profile is always
+evaluated first; every unique subprofile traverses the same heavy/COVER,
+context, and transform matrix, and results report the selected range/cap and
+evaluated profile count.
+For non-contiguous layouts, a sparse profile lists strictly increasing
+`(word_len,max_words)` entries; unlisted lengths are disabled, caps must be
+legal powers of two, and up to sixteen sparse profiles follow the base/range
+candidates in stable order. Results expose the selected sparse profile index.
+Callers may instead enable bounded automatic cap optimization. Each round
+generates every single-length half-cap neighbor from the previous complete-wire
+winner, evaluates the full heavy/COVER/context/transform matrix, and stops when
+no neighbor improves. The default bound is two rounds and the public hard limit
+is four; results expose the selected 32-entry cap array, accepted round count,
+and `u16` candidate counters.
+The trainer also compares identity-only word lists with canonical
+identity/uppercase-first/uppercase-all transform families without retraining
+the words, plus independent omit-first/last and combined case+omit families.
+Its bounded stringlet learner indexes the trained words, samples real training-
+corpus occurrences deterministically, ranks observed prefix-only, suffix-only,
+and prefix+suffix transforms, and combines the learned list independently with
+all four base families. Defaults cap stringlets at eight bytes, learned
+transforms at sixteen, distinct candidates at 4,096, and sampled word positions
+at 16,384; the word index retains at most 4,096 distinct trained words. Public
+hard ceilings keep these bounds at 64 transforms, 65,536 candidates/words, and
+1,048,576 sampled positions. For contextual candidates, one richest-family
+oracle attributes actual held-out transform kinds to their matched dictionary;
+each dictionary then selects the smallest identity/case/omit/affix profile that
+covers its demand, and equal profiles share one serialized transform list. The
+mixed result still competes by complete wire. The result reports
+global/cutoff/clustered context profile, actual context/transform-list counts,
+selected transform profile, learned stringlet/transform counts, stable content-
+derived ID, and exact byte accounting. A bounded shift learner additionally
+infers canonical signed 16-bit deltas from equal-width UTF-8/byte sequences,
+verifies every SHIFT_FIRST/ALL candidate with byte-exact replay, and can append
+those transforms to each existing family before per-dictionary clustering.
+Defaults cap shift transforms at eight, parameter candidates at 4,096, indexed
+words at 256, and sampled positions at 4,096. It does not claim
+FastCover-style accelerated search or broad-corpus calibration.
+`run-br-serialized-trainer-report` partitions 16 KiB prefixes of the required
+source, Markdown, structured JSON, and binary manifest cases into independent
+256-byte training/validation chunks, repeats training to prove deterministic
+selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
+profiles, time, logical peak allocation, and worst per-sample delta. The current
+four-category baseline has zero winners and zero regressions
+(`16170 -> 16170` aggregate); this is an explicit calibration gap, not a
+claimed ratio win.
+An out-of-band shadow run removes the one-time dictionary charge without
+changing primary frame-cost selection; equal-frame candidates now prefer the
+smaller distributed dictionary. Structured JSON accepts two greedy rounds,
+reducing the length-9 and length-8 caps from eight to four. Its frames fall
+`3658 -> 3636` with a 1,992-byte `d=6/hash_log=12` COVER dictionary; it breaks
+even after 91 equivalent validation batches, about 2,898 frames, while its
+worst individual frame grows by 12 bytes. Source separately falls from 4,288 to
+4,250 behind a 2,128-byte base-layout dictionary and breaks even around 1,792
+frames, with worst delta `+43`. Documentation and binary return null out of
+band. Aggregate shadow frames are 16,110, saving 60 bytes.
+
+### Brotli planned encoder controls
+
+`BrotliPlannedEncodeOptions.quality` selects a deterministic Vort-native
+quality schedule from `0...11`; `mode` selects `.generic`, `.text`, or `.font`.
+The quality selector is mutually exclusive with the historical `level`
+selector: keep `level` at its default `.fast` when `quality` is present.
+Leaving `quality = null` preserves the established bounded one-shot
+fast/balanced/ratio policy; streaming paths select their explicit/default
+level. Generic and text currently use identical parser, context, and
+dictionary policy. Font differs only from q4 onward, when it adds a complete
+wire candidate using `NPOSTFIX=1, NDIRECT=12`; it does not replace the common
+policy.
+For example:
+
+```zig
+const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+    allocator,
+    input,
+    .{ .quality = 8, .mode = .text },
+);
+defer allocator.free(encoded);
+```
+
+These are Vort policy presets that progressively increase bounded LZ search and
+enable existing context, split, distance, and static-dictionary candidates.
+They produce standard Brotli streams, but the numbers and modes do not select
+libbrotli's internal encoders and do not promise libbrotli-equivalent bytes,
+compressed size, memory use, or speed. q0/q1 now have dedicated block-local
+fixed-hash fragment parsers and reusable streaming scratch. q0 uses a compact
+one-pass writer with cross-fragment adaptive command/distance trees; q1 uses a
+compact two-pass 128-symbol writer; q2 uses static/dynamic bounded trees and q3
+uses a trivial dynamic three-tree writer for ordinary LZ plans. Dictionary
+command plans retain the general writer. Automatic 64 KiB stream blocks now
+run a deterministic Q8 entropy search over sixteen 4 KiB histograms, selecting
+at most four segments. It retains every new proxy minimum reached at 2/3/4
+segments plus the second-best distinct layout at that depth while it still
+beats the shallower frontier. At most six grid plans are compared with the
+exact single and midpoint wires. Locked q2 fixtures cover four
+alternating quarters (`39,169 -> 65,536`) and a non-quarter 24 KiB cut
+(`38,753 -> 65,536`). A 20 KiB cut outside the former 8 KiB grid reaches
+`38,735 -> 65,536`; a three-distribution fixture exercises the two- and
+three-segment proxy frontier before selecting `38,513 -> 65,536`. All stay
+byte-identical across one-shot, chunked, incremental, and caller-buffer
+surfaces and decode through Node/libbrotli. Sub-4-KiB and unrestricted
+exact-cost segmentation remain open.
+q10/q11 now add a deterministic
+second shortest-path proposal whose Q8 literal, copy-length, and
+distance-prefix costs are learned from the first optimal command plan. Complete
+wire arbitration makes the pass size-monotonic; a locked 4 KiB fixture improves
+230 to 221 bytes and is independently decoded by Node/libbrotli. This is still
+followed, for inputs through 8 KiB, by a two-state command beam carrying pending
+insert length and the complete four-entry recent-distance history. Its locked
+fixture improves the already-refined candidate from 233 to 231 bytes and is
+also independently decoded by Node/libbrotli. Complete-wire arbitration keeps
+both additions monotonic. This is still not libbrotli HQ parity: scaling the
+stateful search through the complete q10/q11 ceilings, additional refinement,
+contextual dictionary encoding, and global exact-cost segmentation remain
+future work.
+One-shot, chunk-list, reusable, and caller-driven incremental planned encoders
+share these q10/q11 feedback stages. Multi-meta-block encoding seeds each new
+cost model and command beam with the committed four-entry recent-distance ring;
+the required Node/libbrotli differential includes a two-block 8 KiB q10 stream,
+while internal tests require chunked and fragmented incremental schedules to
+produce identical wire.
+Explicit 17...24-bit windows at q6...q11 now drive actual sparse
+long-distance matching rather than only a wider stream header. The one-shot
+path augments literal runs in its ordinary command plan, while chunked and
+incremental encoders match against the immediately preceding retained history;
+all candidates remain subject to complete-wire and stored arbitration. The
+stream dictionary matcher also covers the upper 32...64 KiB half of a standard
+16-bit window. A locked q8 stream copies 8 KiB from exactly 65,536 bytes back,
+is byte-identical between chunked and fragmented incremental schedules, and is
+independently decoded by Node/libbrotli (`65,554 -> 73,728` bytes).
+`BrotliPlannedEncodeOptions.command_state_max_input_kib` and the corresponding
+chunked/incremental stream option expose the complete stateful search range for
+callers willing to pay for it: omission keeps the measured 8 KiB default, zero
+disables the command beam, q10 accepts up to 64 KiB, and q11 up to 32 KiB.
+Reusable encoding preserves the option and incremental `nextStream` replaces
+it transactionally with the next stream's options. Boundary tests execute both
+maximums; Node/libbrotli also decodes a 12,992-byte opt-in chunked fixture.
+Use `zig build run-br-quality-command-state-profile -- 3 10 src/br.zig 32768`
+to separate state-search work from compact and complete wire construction. A
+128-byte compact-wire prefilter preserves the locked 231-byte winner while
+avoiding most uncompetitive full-wire trials on the measured real-source
+prefixes; the complete 32 KiB opt-in A/B improves about `1.324x` with unchanged
+wire, while the default path remains neutral.
+The state loop additionally borrows beam states and hoists pending-insert code
+classification out of individual match transitions. The 32 KiB stage profile
+falls from roughly 43--45 ms to about 40.5 ms; fixed-CPU end-to-end opt-in A/B
+improves `1.0167x` median with a `0.9993x` default control.
+Ordinary hash candidates account for 97.9% of measured state transitions. A
+lazy per-position match-length cache now shares only visited ordinary matches
+between both beam states, reducing the profiled search to about 39.4 ms and
+improving the opt-in end-to-end median by `1.0053x` with a neutral `1.0004x`
+default control.
+Each beam state now computes its ordered recent-distance table once and reuses
+it for ordinary lookup plus direct recent probing. The 32 KiB state search falls
+from about 36.0 ms to 34.4 ms; fixed-CPU opt-in/default medians improve
+`1.0039x`/`1.0044x` with identical wire.
+A conservative pre-lookup bound using only state cost plus the globally minimum
+command cost moves roughly 454k transition rejections ahead of command/distance
+work. The 32 KiB search falls to about 32.9 ms; fixed-CPU opt-in/default medians
+improve `1.0161x`/`1.0009x`. A more detailed but slower bound was rejected.
+Because 97.0% of measured transitions target a full beam, a one-byte-per-
+position worst-slot cache now avoids loading both State costs for each bound.
+The 32 KiB search falls to about 31.05 ms; fixed-CPU opt-in/default medians
+improve `1.0063x`/`1.0022x` with identical wire. A larger u64 cost cache was
+rejected after regressing end-to-end throughput.
+An exact target-beam cost bound skips recent-history materialization for about
+95% of measured transitions that cannot enter the two-state beam. Isolating the
+opt-in branch in its own `noinline` text section keeps default layout neutral;
+seven fixed-CPU opt-in pairs improve `1.0218x` median with 7/7 wins and a
+`0.9999x` default control.
+Inputs beyond the 16 MiB
+format limit keep one Brotli stream and apply the selected policy independently
+to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and
+the recent-distance ring; q0/q1 intentionally reset LZ matching at each
+fragment. The exact
+per-quality and per-mode behavior, input/window bounds, verification scope, and
+benchmark command are recorded in
+[the Brotli quality preset status](docs/performance/brotli-quality-presets.md).
 
 `BrotliPlannedEncodeOptions.extended_dictionary_probes` lets ratio-mode callers
 explicitly spend more CPU looking for RFC 7932 static-dictionary matches in
@@ -1469,11 +2641,49 @@ and latency remain unchanged. Values `1...brotliMaxExtendedDictionaryProbes`
 (`4096` currently) cap the number of literal positions examined; `64` is a
 practical starting point for text-oriented workloads. A candidate replaces the
 ordinary LZ/stored result only when its complete Brotli wire is strictly
-smaller. Non-zero budgets require `.ratio`; inputs above 4 KiB and larger
-budgets return `error.InvalidBlockPlan`.
+smaller. In the historical level API, a non-zero budget requires `.ratio`.
+Quality presets use the same extended path and their scheduled budget from q7
+onward; q0...q6 do not schedule extended probing. Inputs above 4 KiB and
+budgets above the maximum return `error.InvalidBlockPlan` under either selector.
 The planned encode benchmark accepts `--extended-dictionary-probes N`, so this
 opt-in path can be measured with the same built-in and repeatable `--path`
 corpora as the default levels.
+`BrotliPlannedEncodeOptions.adaptive_command_split` enables a second ratio-only
+command-block candidate driven by a deterministic Viterbi assignment. Unlike
+the default bounded fixed-grid splitter, it can place boundaries at arbitrary
+command positions and reuse tree types in non-cyclic patterns such as
+`A-B-A-C-A`. The candidate is retained only when its complete Brotli wire is
+strictly smaller; the default remains `false` because the broader search costs
+material CPU and has not yet improved the built-in/source corpus. Measure it
+with `run-br-planned-encode-bench -- --adaptive-command-split ...`.
+`BrotliPlannedEncodeOptions.adaptive_literal_split` enables the matching
+ratio-only Viterbi search over the actual emitted literal stream. It supports
+arbitrary boundaries, boundaries inside one insert run, non-cyclic type reuse,
+and the complete 256 literal type/tree wire range. The production search also
+selects one RFC context mode per block type and globally clusters all
+`type_count * 64` context histograms into at most 256 shared trees using a
+dynamic variable-length context map. Identity-tree and joint candidates both
+remain in complete-wire arbitration. The default remains `false`
+because current built-in and 128 KiB source/Markdown corpora show no size win.
+Measure it with `--adaptive-literal-split` on the planned encode benchmark.
+`BrotliPlannedEncodeOptions.adaptive_distance_split` is a nullable ratio-mode
+override for the corresponding distance-symbol search. The default `null`
+automatically evaluates inputs of at least 64 KiB whose derived stream has
+2,048--32,768 explicit distance symbols; `false` disables the search and
+`true` forces the same bounded symbol policy on smaller inputs. Its dynamic block/tree
+writer supports arbitrary boundaries, non-cyclic type reuse, and the complete
+256-type Brotli range. Complete-wire arbitration keeps the automatic result
+size-monotonic. The benchmark accepts `--adaptive-distance-split` and
+`--no-adaptive-distance-split` for explicit A/B runs.
+`BrotliPlannedEncodeOptions.distance_parameter_search` controls the ratio
+encoder's complete 64-shape RFC `NPOSTFIX/NDIRECT` search. The default `null`
+enables it automatically for the stable record-optimal parser family, where
+current evidence shows a material size win; `false` disables it and `true`
+also enables it for the general bounded optimal proposal. A score-only pass
+examines all legal shapes, at most one alternative complete wire is emitted,
+and final byte length must strictly beat the historical `(0, 0)` candidate.
+The planned benchmark exposes matching `--distance-parameter-search` and
+`--no-distance-parameter-search` switches.
 `brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
 default-window 4--32 KiB ratio blocks. It reproduces the production wire while
 reporting lazy/optimal plan, command, wire, and selection timings plus optimal
@@ -1490,13 +2700,18 @@ The native LZ4/Zstd APIs are library-first.  CLI commands and probes call the
 same public symbols shown above; applications should use the allocator/append,
 caller-owned slice, reusable scratch, chunked, and incremental decoder APIs
 directly.
-Zstd native encoded-bound helpers now account for the same shortest
-single-segment `Frame_Content_Size` width used by the writer, so callers sizing
-`encode*IntoSlice` buffers do not reserve the old eight-byte content-size worst
-case for small and medium frames.
+Zstd native encoded-bound helpers account for the same header form and shortest
+legal `Frame_Content_Size` width used by the writer. With an explicit window,
+known content no larger than the window retains the compact single-segment
+form; larger known content emits a non-single-segment `Window_Descriptor` plus
+a two-, four-, or eight-byte content size, while unknown-size output emits the
+selected descriptor without a content size.
 
 | Codec | Option / symbol | Default / range | Use when | Tradeoff |
 | --- | --- | --- | --- | --- |
+| LZ4/Zstd incremental | `Options.input_policy` / `core.CompressedInputPolicy` | `.block_stream`; opt-in `.prevalidated_frame` | You need bounded incremental input or the existing complete-frame preflight/direct path. | Default retention follows blocks and history; explicit preflight preserves its established fallback and checksum timing. |
+| LZ4/Zstd incremental | `Options.max_compressed_buffer_len` | unlimited cap by default | You need an encoded-input retention limit. | Zstd compressed blocks and checksummed LZ4 raw/compressed blocks must fit; default raw/skippable and unchecked LZ4 token input stream directly. |
+| LZ4/Zstd incremental | `Options.max_decoded_buffer_len` / `max_output_len` / `max_working_memory` / `expected_output_len` | unlimited per-frame, cumulative-output and live-allocation caps / optional exact count | A container provides resource bounds or a precise concatenated-stream length. | Per-frame and cumulative caps include emitted bytes. Working memory counts decoder-owned requested heap bytes, including retained capacities and temporary scratch. The exact count applies across members and is checked at `finish()`. |
 | LZ4 native | `Lz4NativeFrameOptions.block_mode` | `.independent` or `.linked` | Consecutive frame blocks share recent history and ratio matters. | `.linked` can improve ratio across block boundaries; `.independent` is simpler for random block handling. |
 | LZ4 native | `Lz4NativeFrameOptions.block_size_id` | `.max4mb`; `.max64kb` / `.max256kb` / `.max1mb` / `.max4mb` | You need a latency/working-set knob for frame block size. | Smaller blocks can reduce latency and direct-output burst size; larger blocks usually reduce framing overhead. |
 | LZ4 native | `Lz4NativeFrameOptions.chain_depth` | `vort.lz4NativeMaxChainDepth` (`16` currently); `0...vort.lz4NativeMaxChainDepth` | You want to trade encode CPU for deeper hash-chain match search. | `0` disables match search and is fastest/least compact; the default enables the deeper parser used by the native bench ratio rows. |
@@ -1506,17 +2721,40 @@ case for small and medium frames.
 | LZ4 native | `Lz4NativeDictionarySet` / `Lz4NativeDictionarySet.initFromMetadata` / `lz4NativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Lets decoders resolve each frame without caller-side splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 | Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
 | Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
+| Zstd native | `window_log` / `max_match_history_len` on `ZstdFrameOptions` and `ZstdNativeFrameOptions` | `null`; explicit window `10...41`; optional history `1 KiB...64 MiB` | You need a standards-compatible advertised window and an explicit encode-memory/ratio budget. | Null window is byte-identical to the prior writer and retains 8 MiB. Explicit windows default to `zstdNativeExplicitWindowMatchLenDefault` (16 MiB); logs 24+ use a separate 1/256-sampled long-distance index, and callers may raise history through `zstdNativeExplicitWindowMatchLenMax` (64 MiB). Effective history is capped by the advertised window, and a history override without `window_log` is rejected. |
 | Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |
 | Zstd native | `ZstdNativeDictionary` / `ZstdNativeDictionary.initRawContent` | caller-owned bytes plus a non-zero ID, or explicit ID-less raw content | Payloads share preset history, including standard Zstd raw-content dictionary interoperability. | Non-zero IDs can be resolved through dictionary sets; ID-less frames require the caller to pass the raw dictionary explicitly, including through the `zstdDecodeNativeSeekableRange*WithDictionary` scan/index APIs, because the frame cannot select it from a set. |
 | Zstd native | `zstdStandardDictionaryFromContentBound` / `zstdStandardDictionaryFromContentInto` / `zstdStandardDictionaryFromContentAlloc` | non-zero ID and at least 8 bytes of caller-selected history; generated header is `zstdStandardDictionaryHeaderLen` bytes | You need a dependency-free RFC 8878 full-dictionary container accepted by Vort and libzstd. | Uses stable portable baseline Huffman/FSE tables and repcodes `1/4/8`; it wraps selected history but does not train corpus-specific entropy statistics like COVER/FastCover. |
+| Zstd native | `zstdTrainStandardDictionaryFromContentAlloc` / `zstdProfileStandardDictionaryFromContentAlloc` | caller-selected history, representative sample slices, and a non-zero ID | You already have a history selector but need corpus-trained standard Zstd entropy tables and repcodes. | Preserves history bytes exactly while training Huffman/FSE metadata and candidate repcodes; the profiled diagnostic returns identical bytes plus stage timings and work counters, without exposing a C ABI. |
 | Zstd native | `zstdTrainStandardDictionaryAlloc` | representative sample slices, native history `ZstdDictionaryTrainOptions`, and a non-zero ID | You want Vort to train selected history and first-block entropy models without libzstd. | Trains a complete 256-symbol Huffman table from raw sample-byte frequencies and OF/ML/LL FSE tables from dictionary-aware LZ77 sequence codes. It ranks the first two explicit offsets, retrains for that repcode candidate, and adopts it only when forced-compressed sample frames are strictly smaller by at least 1%; ties and sub-threshold changes retain `1/4/8`. The deterministic history selector is not COVER/FastCover. |
+| Zstd native | `zstdTrainCoverStandardDictionaryAlloc` / `ZstdCoverDictionaryTrainOptions` | at least five samples, non-zero ID, `d=6/8`, `hash_log=8...20` | You want pure-Zig COVER-class history plus corpus-trained standard Zstd entropy tables and repcodes. | Uses the sample-boundary-safe deterministic COVER selector, then the same Huffman/FSE/repcode finalizer as the standard trainer. The result is an RFC 8878 full dictionary, but its bytes are not promised to match libzstd COVER/FastCover. |
+| Zstd native | `zstdTrainOptimizedCoverStandardDictionaryAlloc` / `ZstdCoverDictionaryOptimizeOptions` | training and non-empty selector samples; automatic or explicit bounded `(d, k, hash_log)` grid | You want held-out COVER parameter selection plus a complete standard Zstd dictionary. | Minimizes the shared estimated dictionary/literal/match cost with stable enumeration-order ties, reports the selected parameters and candidate count, then trains entropy tables from both partitions. Reserve another corpus partition for unbiased evaluation. |
+| Zstd native | `zstdTrainCodecOptimizedCoverStandardDictionaryAlloc` / `ZstdCoverDictionaryCodecOptimizeOptions` | COVER grid plus one to eight Zstd levels | You need a slow maximum-ratio search using actual pure-Vort selector-frame sizes. | Finalizes and encodes every candidate with baseline repcodes, includes dictionary bytes in `validation_score.estimated_bits`, then fully retrains the winner; default levels are `1/3/9`. Set `candidate_repcodes=true` for exhaustive per-candidate repcode training at substantially higher cost. |
+| Zstd native | `zstdTrainFastCoverStandardDictionaryAlloc` / `zstdTrainOptimizedFastCoverStandardDictionaryAlloc` / `zstdTrainCodecOptimizedFastCoverStandardDictionaryAlloc` | nonzero ID, d=6/8, hash log 1...31, acceleration 1...10; bounded grids, threads and optional shrinking | You need complete standard dictionaries from sampled FastCover history with explicit resource limits and training/selector partitions. | Raw targets exclude the variable entropy header. Finalization uses only the acceleration-selected training prefix; codec-aware scores and returned winners use the same repcode policy. Profile and validation APIs expose actual work and charged output. [Contracts](docs/formats/fast-cover-training.md) and [measurements](docs/performance/fast-cover-training-x86.md) document limitations. |
 | Zstd native | `zstdTrainValidatedStandardDictionaryAlloc` | training samples, non-empty selector samples, history options, and non-zero ID | You can reserve representative payloads to select a better history without external trainers. | Evaluates total-frequency/cross-sample rankings, phrase configurations, ranked/reverse layouts, raw corpus-tail history, and five history sizes down to 25% using selector coverage plus estimated dictionary/literal/offset cost, then trains standard entropy tables from both input partitions; keep a separate held-out set for evaluation. This remains narrower than COVER/FastCover. |
+| Shared dictionary | `dictionary.trainCoverAlloc` / `dictionary.CoverTrainOptions` | at least five sample slices; `d=6/8`, `hash_log=8...20`, default 256 MiB corpus limit | You need dependency-free, deterministic COVER-class history selection before codec-specific dictionary finalization. | Scores distinct d-mer hashes in sliding `k`-byte segments, clears selected frequencies, rotates COVER epochs, and places the best segments nearest the history tail. It preserves sample boundaries and does not claim byte-identical libzstd COVER/FastCover output. |
+| Shared dictionary | `dictionary.trainOptimizedCoverAlloc` / `dictionary.CoverOptimizeOptions` | training and selector samples; default grid up to 16 candidates, caller cap up to 256 | You need deterministic held-out selection among COVER-class parameter sets. | Duplicate grid values collapse, incompatible `(d, k)` pairs are skipped, invalid or oversized grids fail before training, `max_corpus_size` bounds each input partition, and the owned result reports its exact score, selected concrete options, and evaluated count. |
+| Shared dictionary | `dictionary.trainFastCoverAlloc` / `dictionary.PreparedFastCover` / `dictionary.trainOptimizedFastCoverAlloc` / `dictionary.trainOptimizedFastCoverSplitAlloc` | d=6/8, hash log 1...31, acceleration 1...10; at most 256 candidates and 16 requested workers | You need sampled history selection, reusable preparation or stable bounded parameter search before codec finalization. | Sample boundaries are preserved. Frequency preparation is reused across compatible candidates; private worker tables, scorer state and requested stacks share a whole-operation budget. Integer sample splits and charged dictionary shrinking are explicit. |
 | Shared dictionary | `dictionary.trainValidatedTargetsAlloc` | training samples, selector samples, ordered target sizes, and shared phrase options | You need several validation-selected history sizes from the same corpus. | Collects every phrase configuration once, then independently assembles and scores each requested target without changing candidate or tie order. The returned optional slices are owned by `OwnedValidatedDictionaries`; use `take(index)` to transfer one before `deinit`. The Zstd validated standard trainer uses this internally for its five-size ladder. |
 | Shared dictionary | `summarizeDictionaryMatches` / `dictionary.validationScore` | borrowed dictionary, sample slices, and non-zero minimum match length | You need dictionary coverage/cost diagnostics without temporary allocation. | Streams the same greedy matches as `findDictionaryMatchesAlloc`; the legacy `summarizeDictionaryMatchesAlloc` and `dictionary.validationScoreAlloc` names remain compatible wrappers but no longer allocate. |
 | Zstd native | `ZstdOwnedNativeDictionary.metadata()` / `ZstdNativeDictionary.initFromMetadata` / `encodeDictionaryMetadata*` / `decodeDictionaryMetadata*` / `*DictionaryMetadataCatalog*` | shared `DictionaryMetadata` plus `std.compress.zstd.default_window_len`; single records are 32 bytes and catalogs are versioned counted records with strict and prefix decoders | You want to persist trained dictionary catalog metadata from the same object returned by `zstdTrainNativeDictionaryAlloc`, then verify received bytes before decoding. | Metadata uses the wider shared dictionary fingerprint; frame `Dictionary_ID` is still derived from validated bytes; dictionary bytes are still distributed separately. |
 | Zstd native | `ZstdNativeDictionarySet` / `ZstdNativeDictionarySet.initFromMetadata` / `zstdNativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Shared decoder APIs resolve per-frame IDs and avoid manual stream splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
+
+The same explicit-window policy is threaded through one-shot, reusable,
+incremental, explicit-dictionary, dictionary-set, and seekable native encoders;
+those surfaces share header construction, block sizing, rolling history, and
+dictionary-distance enforcement rather than maintaining separate window
+rules. Interoperability evidence includes a fixed libzstd 1.6.0 2,050-byte
+fixture with frame descriptor `0x44`, a 1 KiB `Window_Descriptor`, checksum,
+and two-byte FCS. Vort decodes that fixture through allocating,
+caller-buffer, chunked, and incremental APIs, while the runtime probe decodes
+Vort's corresponding explicit-window frame with libzstd. The bidirectional
+probe also verifies a raw dictionary's in-window suffix remains referenceable
+and its expired prefix is not emitted as a dictionary match. This closes the
+explicit-window slice; it does not imply complete Zstd format, ratio, or speed
+parity.
 
 For bounded-memory decode, prefer the `*Limited`, exact-size, chunked, append,
 and incremental forms when the surrounding container knows the expected output
@@ -1532,14 +2770,49 @@ decoder-owned scratch capacity while still appending into their own output
 buffers. Native one-shot, chunked, concatenated, and reusable decoders also provide
 `decode*Into*ExactSize` forms, including dictionary/dictionary-set variants, for
 caller-owned slices when a container-advertised byte count must match exactly.
-Incremental native decoders expose the shared `StepResult`
-contract: feed compressed bytes, provide caller-owned output slices, then call
-`finish()` when an exact EOF/size check matters. Direct-output paths are fastest
-when the caller supplies a large enough output slice; if a slice is too small
-for an atomic compressed block, the decoders intentionally fall back to bounded
-scratch and continue draining without losing correctness. Dictionary-set
-chunked APIs additionally accept caller-owned compressed join scratch so split
-input can be decoded without hidden global state. Public dictionary probes also
+Incremental native decoders default to
+`Options.input_policy = .block_stream` using the shared
+`core.CompressedInputPolicy` enum. A valid header starts bounded block/token
+execution immediately, so encoded and decoded scratch follow block/history
+state instead of the entire frame. Zstd preserves its accepted Huffman/FSE
+sequence modes, repeated offsets, dictionary forms, dictionary sets, and frame
+windows; raw input streams directly, RLE retains one byte, and compressed input
+retains one block. LZ4 unchecked raw/token payloads consume caller input
+directly, while both raw and compressed blocks carrying block checksums wait
+for validation before output. Skippable payloads also stream directly.
+
+In default mode, each `step` accepts only the input needed by its current state.
+Advance the input by `result.progress.input_read`, retain the unaccepted suffix for the next
+call, and use only `result.progress.output_written` newly produced output
+bytes. With `stop_after_first_frame`, `trailingInput()` reports accepted suffix
+bytes; the outer dispatcher must also retain the suffix still owned by the
+caller. `max_decoded_buffer_len` is a per-data-frame output limit that includes
+already-emitted bytes. `max_output_len` caps cumulative published output across
+members, while `expected_output_len` checks the exact decoded count across the
+logical stream. Call `finish()` after draining the final input and output to
+validate EOF and exact-size state. `nextStream()` resumes a stopped data-frame
+boundary while preserving accepted suffixes, cumulative counters and limits.
+Until then, `step()` keeps returning `.done` without consuming new input.
+
+`max_working_memory` caps decoder-owned live requested heap bytes, including
+retained capacities and temporary decode scratch. Caller buffers, borrowed
+dictionaries, fixed decoder state, stack tables and allocator bookkeeping are
+outside this accounting. `workingMemoryBytes()` and `peakWorkingMemoryBytes()`
+expose current and peak allocation counts. `reset()` retains capacity and
+starts fresh cumulative counters; `resetWithOptions()` validates the new
+configuration before releasing owned buffers. Budget rejection reports
+`WorkingMemoryLimitExceeded`, while a backing allocator failure reports
+`OutOfMemory`. Snapshot and diagnostics retain failed-call progress and byte
+offsets; parser/allocation failures require reset before replaying input.
+
+Explicit `.prevalidated_frame` preserves the existing complete-frame structural
+preflight/direct paths and bounded cursor fallback when a frame or compressed
+block cannot use that path. Their existing content-checksum timing is retained:
+frame checksum errors may arrive after earlier decoded bytes have been emitted,
+including on existing Zstd direct paths.
+
+Dictionary-set chunked APIs additionally accept caller-owned compressed join
+scratch so split input can be decoded without hidden global state. Public dictionary probes also
 pin error precedence for hostile frames that carry a missing or mismatched
 `Dictionary_ID` plus another defect: LZ4 covers content checksum, block
 checksum, and content-size conflicts across one-shot and incremental paths;

@@ -1,25 +1,64 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const tagged = @import("tagged.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidWimMetadata,
     InvalidWimPath,
     WimPathNotFound,
+    WimStreamNotFound,
     WimNotDirectory,
     WimNotRegularFile,
+    WimNotReparsePoint,
+    WimNotEncryptedFile,
+    WimSecurityDescriptorNotFound,
     UnsupportedWimFile,
 };
 
 pub const dentry_fixed_size: usize = 102;
 pub const extra_stream_fixed_size: usize = 38;
 
+pub const tagged_item_object_id = tagged.object_id_tag;
+pub const tagged_item_xattrs = tagged.xattrs_tag;
+pub const tagged_item_wimlib_unix_data = tagged.wimlib_unix_data_tag;
+pub const tagged_item_wimlib_linux_xattrs = tagged.wimlib_linux_xattrs_tag;
+
 pub const file_attribute_directory: u32 = 0x0000_0010;
 pub const file_attribute_reparse_point: u32 = 0x0000_0400;
 pub const file_attribute_encrypted: u32 = 0x0000_4000;
 
 pub const SecurityData = struct {
+    metadata_bytes: []const u8,
     total_length: usize,
     descriptor_count: u32,
+
+    /// Returns a borrowed self-relative Windows security descriptor.
+    pub fn descriptor(self: SecurityData, security_id: u32) Error![]const u8 {
+        if (security_id >= self.descriptor_count)
+            return error.WimSecurityDescriptorNotFound;
+        const sizes_bytes = std.math.mul(usize, self.descriptor_count, 8) catch
+            return error.IntegerOverflow;
+        var descriptor_offset = std.math.add(usize, 8, sizes_bytes) catch
+            return error.IntegerOverflow;
+        for (0..security_id) |index| {
+            const size = std.math.cast(
+                usize,
+                readU64(self.metadata_bytes, 8 + index * 8),
+            ) orelse return error.IntegerOverflow;
+            descriptor_offset = std.math.add(usize, descriptor_offset, size) catch
+                return error.IntegerOverflow;
+        }
+        const descriptor_size = std.math.cast(
+            usize,
+            readU64(self.metadata_bytes, 8 + @as(usize, security_id) * 8),
+        ) orelse return error.IntegerOverflow;
+        const end = try checkedEnd(
+            descriptor_offset,
+            descriptor_size,
+            self.total_length,
+        );
+        return self.metadata_bytes[descriptor_offset..end];
+    }
 };
 
 pub const ExtraStream = struct {
@@ -35,6 +74,20 @@ pub const ExtraStream = struct {
         allocator: std.mem.Allocator,
     ) Error![]u8 {
         return utf16LeBytesToUtf8Alloc(allocator, self.name_utf16le);
+    }
+
+    pub fn nameMatchesUtf8(
+        self: ExtraStream,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+    ) Error!bool {
+        if (!validStreamName(name)) return error.InvalidWimPath;
+        const units = std.unicode.utf8ToUtf16LeAlloc(allocator, name) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidUtf8 => return error.InvalidWimPath,
+        };
+        defer allocator.free(units);
+        return utf16LeBytesEqualUnits(self.name_utf16le, units);
     }
 };
 
@@ -52,6 +105,13 @@ pub const ExtraStreamIterator = struct {
     }
 };
 
+pub const TaggedItem = tagged.Item;
+pub const TaggedItemIterator = tagged.Iterator;
+pub const UnixMetadata = tagged.UnixMetadata;
+pub const ObjectId = tagged.ObjectId;
+pub const Xattr = tagged.Xattr;
+pub const XattrIterator = tagged.XattrIterator;
+
 pub const Dentry = struct {
     metadata_bytes: []const u8,
     offset: usize,
@@ -67,6 +127,8 @@ pub const Dentry = struct {
     reparse_or_hard_link: u64,
     extra_stream_count: u16,
     extra_stream_offset: usize,
+    tagged_items_offset: usize,
+    tagged_items_end: usize,
     name_utf16le: []const u8,
     short_name_utf16le: []const u8,
 
@@ -80,6 +142,17 @@ pub const Dentry = struct {
 
     pub fn isEncrypted(self: Dentry) bool {
         return self.attributes & file_attribute_encrypted != 0;
+    }
+
+    pub fn reparseTag(self: Dentry) ?u32 {
+        return if (self.isReparsePoint()) @truncate(self.reparse_or_hard_link) else null;
+    }
+
+    pub fn hardLinkId(self: Dentry) ?u64 {
+        return if (!self.isReparsePoint() and self.reparse_or_hard_link != 0)
+            self.reparse_or_hard_link
+        else
+            null;
     }
 
     pub fn nameUtf8Alloc(
@@ -104,11 +177,101 @@ pub const Dentry = struct {
         };
     }
 
+    pub fn taggedItems(self: Dentry) TaggedItemIterator {
+        return TaggedItemIterator.init(
+            self.metadata_bytes[self.tagged_items_offset..self.tagged_items_end],
+        );
+    }
+
+    pub fn findTaggedItem(
+        self: Dentry,
+        tag: u32,
+        min_length: usize,
+    ) Error!?TaggedItem {
+        var items = self.taggedItems();
+        while (try items.next()) |item|
+            if (item.tag == tag and item.data.len >= min_length) return item;
+        return null;
+    }
+
+    pub fn objectId(self: Dentry) Error!?[]const u8 {
+        const item = try self.findTaggedItem(tagged_item_object_id, 16) orelse
+            return null;
+        return item.data;
+    }
+
+    pub fn objectIdInfo(self: Dentry) Error!?ObjectId {
+        const bytes = try self.objectId() orelse return null;
+        return @as(?ObjectId, try tagged.decodeObjectId(bytes));
+    }
+
+    pub fn unixMetadata(self: Dentry) Error!?UnixMetadata {
+        const item = try self.findTaggedItem(
+            tagged_item_wimlib_unix_data,
+            16,
+        ) orelse return null;
+        return @as(?UnixMetadata, try tagged.decodeUnixMetadata(item.data));
+    }
+
+    pub fn xattrs(self: Dentry) Error!?XattrIterator {
+        const item = try self.findTaggedItem(tagged_item_xattrs, 6) orelse
+            return null;
+        try tagged.validateXattrs(item.data);
+        return .{ .bytes = item.data };
+    }
+
     pub fn hasNamedStreams(self: Dentry) Error!bool {
         var streams = self.extraStreams();
         while (try streams.next()) |stream|
             if (stream.isNamed()) return true;
         return false;
+    }
+
+    pub fn namedStreamSha1(
+        self: Dentry,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+    ) Error![20]u8 {
+        if (self.isEncrypted()) return error.UnsupportedWimFile;
+        if (!validStreamName(name)) return error.InvalidWimPath;
+        const units = std.unicode.utf8ToUtf16LeAlloc(allocator, name) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidUtf8 => return error.InvalidWimPath,
+        };
+        defer allocator.free(units);
+        var streams = self.extraStreams();
+        while (try streams.next()) |stream|
+            if (stream.isNamed() and utf16LeBytesEqualUnits(stream.name_utf16le, units))
+                return stream.hash;
+        return error.WimStreamNotFound;
+    }
+
+    pub fn reparseDataSha1(self: Dentry) Error![20]u8 {
+        if (self.isEncrypted()) return error.UnsupportedWimFile;
+        if (!self.isReparsePoint()) return error.WimNotReparsePoint;
+        if (!hashIsZero(&self.main_hash)) return self.main_hash;
+        var streams = self.extraStreams();
+        while (try streams.next()) |stream|
+            if (!stream.isNamed()) return stream.hash;
+        return error.WimNotRegularFile;
+    }
+
+    /// Returns the opaque MS-EFSR/EFSRPC raw stream used by
+    /// ReadEncryptedFileRaw()/WriteEncryptedFileRaw(). This is not plaintext.
+    pub fn encryptedRawDataSha1(self: Dentry) Error![20]u8 {
+        if (!self.isEncrypted()) return error.WimNotEncryptedFile;
+        if (self.isReparsePoint()) return error.InvalidWimMetadata;
+        var selected: ?[20]u8 = if (hashIsZero(&self.main_hash))
+            null
+        else
+            self.main_hash;
+        var streams = self.extraStreams();
+        while (try streams.next()) |stream| {
+            if (stream.isNamed() or hashIsZero(&stream.hash) or selected != null)
+                return error.InvalidWimMetadata;
+            selected = stream.hash;
+        }
+        return selected orelse error.InvalidWimMetadata;
     }
 
     /// Returns the SHA-1 of the ordinary unnamed data stream. A zero digest
@@ -168,7 +331,10 @@ pub const Directory = struct {
         };
         defer allocator.free(units);
         for (self.entries) |entry|
-            if (utf16LeBytesEqualUnits(entry.name_utf16le, units)) return entry;
+            if (utf16LeBytesEqualUnits(entry.name_utf16le, units) or
+                (entry.short_name_utf16le.len != 0 and
+                    utf16LeBytesEqualUnits(entry.short_name_utf16le, units)))
+                return entry;
         return null;
     }
 };
@@ -258,6 +424,16 @@ pub const ImageMetadata = struct {
                 return error.InvalidWimMetadata;
             const name_result = try seen_names.getOrPut(allocator, entry.name_utf16le);
             if (name_result.found_existing) return error.InvalidWimMetadata;
+            if (entry.short_name_utf16le.len != 0) {
+                if (!validDentryName(entry.short_name_utf16le))
+                    return error.InvalidWimMetadata;
+                const short_result = try seen_names.getOrPut(
+                    allocator,
+                    entry.short_name_utf16le,
+                );
+                if (short_result.found_existing)
+                    return error.InvalidWimMetadata;
+            }
             try entries.append(allocator, entry);
             offset = parsed.next_offset;
         }
@@ -343,6 +519,7 @@ fn parseSecurityData(bytes: []const u8) Error!SecurityData {
     if (try align8(descriptor_offset) != total_length)
         return error.InvalidWimMetadata;
     return .{
+        .metadata_bytes = bytes,
         .total_length = total_length,
         .descriptor_count = descriptor_count,
     };
@@ -378,12 +555,16 @@ fn parseDentry(
     }
     const short_name_end = try checkedEnd(name_offset, short_name_bytes, dentry_end);
     const short_name = bytes[name_offset..short_name_end];
+    var variable_end = short_name_end;
     if (short_name_bytes != 0) {
-        _ = try checkedEnd(short_name_end, 2, dentry_end);
+        variable_end = try checkedEnd(short_name_end, 2, dentry_end);
         if (readU16(bytes, short_name_end) != 0) return error.InvalidWimMetadata;
     }
     if (containsUtf16Unit(name, 0) or containsUtf16Unit(short_name, 0))
         return error.InvalidWimMetadata;
+    const tagged_items_offset = try align8(variable_end);
+    if (tagged_items_offset > dentry_end) return error.InvalidWimMetadata;
+    try tagged.validateItems(bytes[tagged_items_offset..dentry_end]);
 
     const extra_stream_count = readU16(bytes, offset + 96);
     var next_offset = dentry_end;
@@ -393,13 +574,21 @@ fn parseDentry(
     }
     var main_hash: [20]u8 = undefined;
     @memcpy(&main_hash, bytes[offset + 64 .. offset + 84]);
+    const attributes = readU32(bytes, offset + 8);
+    try validateExtraStreams(
+        bytes,
+        dentry_end,
+        extra_stream_count,
+        attributes,
+        &main_hash,
+    );
     return .{
         .dentry = .{
             .metadata_bytes = bytes,
             .offset = offset,
             .length = length,
             .next_offset = next_offset,
-            .attributes = readU32(bytes, offset + 8),
+            .attributes = attributes,
             .security_id = security_id,
             .subdir_offset = std.math.cast(usize, readU64(bytes, offset + 16)) orelse
                 return error.IntegerOverflow,
@@ -410,6 +599,8 @@ fn parseDentry(
             .reparse_or_hard_link = readU64(bytes, offset + 88),
             .extra_stream_count = extra_stream_count,
             .extra_stream_offset = dentry_end,
+            .tagged_items_offset = tagged_items_offset,
+            .tagged_items_end = dentry_end,
             .name_utf16le = name,
             .short_name_utf16le = short_name,
         },
@@ -461,6 +652,59 @@ fn validPathComponent(name: []const u8) bool {
         std.mem.eql(u8, name, ".."))
         return false;
     return std.mem.indexOfAny(u8, name, "/\\\x00") == null;
+}
+
+fn validStreamName(name: []const u8) bool {
+    if (name.len == 0 or !std.unicode.utf8ValidateSlice(name)) return false;
+    return std.mem.indexOfAny(u8, name, "/\\\x00") == null;
+}
+
+fn validUtf16StreamName(name: []const u8) bool {
+    return name.len != 0 and !containsUtf16Unit(name, 0) and
+        !containsUtf16Unit(name, '/') and !containsUtf16Unit(name, '\\');
+}
+
+fn validateExtraStreams(
+    bytes: []const u8,
+    first_offset: usize,
+    count: u16,
+    attributes: u32,
+    main_hash: *const [20]u8,
+) Error!void {
+    const reparse = attributes & file_attribute_reparse_point != 0;
+    const encrypted = attributes & file_attribute_encrypted != 0;
+    if (encrypted and reparse) return error.InvalidWimMetadata;
+    var offset = first_offset;
+    var unnamed_count: usize = 0;
+    for (0..count) |index| {
+        const parsed = try parseExtraStream(bytes, offset);
+        const stream = parsed.stream;
+        if (!stream.isNamed()) {
+            if (encrypted and hashIsZero(&stream.hash))
+                return error.InvalidWimMetadata;
+            unnamed_count += 1;
+        } else {
+            if (encrypted) return error.InvalidWimMetadata;
+            if (!validUtf16StreamName(stream.name_utf16le))
+                return error.InvalidWimMetadata;
+            var prior_offset = first_offset;
+            for (0..index) |_| {
+                const prior = try parseExtraStream(bytes, prior_offset);
+                if (prior.stream.isNamed() and
+                    std.mem.eql(u8, prior.stream.name_utf16le, stream.name_utf16le))
+                    return error.InvalidWimMetadata;
+                prior_offset = prior.next_offset;
+            }
+        }
+        offset = parsed.next_offset;
+    }
+    if (encrypted) {
+        const main_count: usize = @intFromBool(!hashIsZero(main_hash));
+        if (main_count + unnamed_count != 1) return error.InvalidWimMetadata;
+        return;
+    }
+    const max_unnamed: usize = if (reparse and hashIsZero(main_hash)) 2 else 1;
+    if (unnamed_count > max_unnamed) return error.InvalidWimMetadata;
 }
 
 fn containsUtf16Unit(bytes: []const u8, unit: u16) bool {
@@ -556,18 +800,129 @@ test "WIM metadata assigns unnamed and named streams" {
     const file = directory.entries[0];
     try std.testing.expect(try file.hasNamedStreams());
     try std.testing.expectEqual(data_hash, (try file.defaultDataSha1()).?);
+    const named_hash: [20]u8 = @splat(0xa5);
+    try std.testing.expectEqual(named_hash, try file.namedStreamSha1(allocator, "x"));
+    try std.testing.expectError(
+        error.WimStreamNotFound,
+        file.namedStreamSha1(allocator, "missing"),
+    );
+    const NamedFailureTest = struct {
+        fn run(failure_allocator: std.mem.Allocator, dentry: Dentry) !void {
+            _ = try dentry.namedStreamSha1(failure_allocator, "x");
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        NamedFailureTest.run,
+        .{file},
+    );
+    var named_iterator = file.extraStreams();
+    _ = (try named_iterator.next()).?;
+    const named_stream = (try named_iterator.next()).?;
+    try std.testing.expect(try named_stream.nameMatchesUtf8(allocator, "x"));
 
     var reparse = file;
     reparse.attributes |= file_attribute_reparse_point;
     std.mem.writeInt(u16, image.bytes[named_stream_offset + 36 ..][0..2], 0, .little);
     const reparse_data_hash: [20]u8 = @splat(0xa5);
+    try std.testing.expectEqual(data_hash, try reparse.reparseDataSha1());
     try std.testing.expectEqual(reparse_data_hash, (try reparse.defaultDataSha1()).?);
+    try std.testing.expectEqual(@as(?u32, 0), reparse.reparseTag());
+    try std.testing.expectError(error.WimNotReparsePoint, file.reparseDataSha1());
+    std.mem.writeInt(u16, image.bytes[named_stream_offset + 36 ..][0..2], 2, .little);
 
     var encrypted = file;
     encrypted.attributes |= file_attribute_encrypted;
+    encrypted.extra_stream_count = 1;
+    try std.testing.expectEqual(data_hash, try encrypted.encryptedRawDataSha1());
     try std.testing.expectError(error.UnsupportedWimFile, encrypted.defaultDataSha1());
+    try std.testing.expectError(error.WimNotEncryptedFile, file.encryptedRawDataSha1());
+    encrypted.extra_stream_count = 2;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+    encrypted.extra_stream_count = 0;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+    encrypted.main_hash = data_hash;
+    try std.testing.expectEqual(data_hash, try encrypted.encryptedRawDataSha1());
+    encrypted.attributes |= file_attribute_reparse_point;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+
+    std.mem.writeInt(
+        u32,
+        image.bytes[file_offset + 8 ..][0..4],
+        file_attribute_encrypted,
+        .little,
+    );
+    std.mem.writeInt(u16, image.bytes[file_offset + 96 ..][0..2], 1, .little);
+    std.mem.writeInt(u64, image.bytes[named_stream_offset..][0..8], 0, .little);
+    var encrypted_directory = try image.readDirectoryAlloc(allocator, image.root, 4);
+    defer encrypted_directory.deinit();
+    try std.testing.expectEqual(
+        data_hash,
+        try encrypted_directory.entries[0].encryptedRawDataSha1(),
+    );
+    std.mem.writeInt(u64, image.bytes[named_stream_offset..][0..8], 48, .little);
+    std.mem.writeInt(u16, image.bytes[file_offset + 96 ..][0..2], 2, .little);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image.readDirectoryAlloc(allocator, image.root, 4),
+    );
+    std.mem.writeInt(u32, image.bytes[file_offset + 8 ..][0..4], 0x80, .little);
+
+    image.bytes[named_stream_offset + 38] = '/';
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image.readDirectoryAlloc(allocator, image.root, 4),
+    );
+    image.bytes[named_stream_offset + 38] = 'x';
+    std.mem.writeInt(u16, image.bytes[named_stream_offset + 36 ..][0..2], 0, .little);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image.readDirectoryAlloc(allocator, image.root, 4),
+    );
+    std.mem.writeInt(u16, image.bytes[named_stream_offset + 36 ..][0..2], 2, .little);
 
     std.mem.writeInt(u16, image.bytes[file_offset + 96 ..][0..2], 3, .little);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image.readDirectoryAlloc(allocator, image.root, 4),
+    );
+}
+
+test "WIM metadata rejects duplicate named streams" {
+    const allocator = std.testing.allocator;
+    const bytes = try allocator.alloc(u8, 336);
+    @memset(bytes, 0);
+    std.mem.writeInt(u32, bytes[0..4], 8, .little);
+    std.mem.writeInt(u64, bytes[8..16], 104, .little);
+    std.mem.writeInt(u32, bytes[16..20], file_attribute_directory, .little);
+    std.mem.writeInt(u32, bytes[20..24], std.math.maxInt(u32), .little);
+    std.mem.writeInt(u64, bytes[24..32], 120, .little);
+
+    const file_offset: usize = 120;
+    std.mem.writeInt(u64, bytes[file_offset..][0..8], 112, .little);
+    std.mem.writeInt(u32, bytes[file_offset + 8 ..][0..4], 0x80, .little);
+    std.mem.writeInt(u32, bytes[file_offset + 12 ..][0..4], std.math.maxInt(u32), .little);
+    std.mem.writeInt(u16, bytes[file_offset + 96 ..][0..2], 2, .little);
+    std.mem.writeInt(u16, bytes[file_offset + 100 ..][0..2], 2, .little);
+    bytes[file_offset + 102] = 'a';
+
+    for ([_]usize{ 232, 280 }) |stream_offset| {
+        std.mem.writeInt(u64, bytes[stream_offset..][0..8], 48, .little);
+        @memset(bytes[stream_offset + 16 .. stream_offset + 36], 0xa5);
+        std.mem.writeInt(u16, bytes[stream_offset + 36 ..][0..2], 2, .little);
+        bytes[stream_offset + 38] = 'x';
+    }
+    var image = try ImageMetadata.fromOwnedBytes(allocator, bytes);
+    defer image.deinit();
     try std.testing.expectError(
         error.InvalidWimMetadata,
         image.readDirectoryAlloc(allocator, image.root, 4),

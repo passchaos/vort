@@ -1,0 +1,77 @@
+{
+  "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+  "formal_dedicated_filters": [
+    "Brotli whole block",
+    "Brotli whole-block",
+    "Brotli HQ whole block",
+    "BrHQ whole block",
+    "Brotli HQ command storage"
+  ],
+  "actual_declarations": [
+    {
+      "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak",
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+      "source_line": 8,
+      "dedicated_filter_matches": false,
+      "present_in_dedicated_modes": {
+        "whole-debug": false,
+        "whole-rf": false,
+        "whole-x86": false
+      },
+      "full_family_actual_TestFn": {
+        "index": 847,
+        "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak",
+        "name_address": "0x1335f1a",
+        "name_length": 140,
+        "function_address": "0x1886e00",
+        "function_symbols": [
+          "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak"
+        ],
+        "function_symbol_has_exact_name": true,
+        "metadata_address": "0x1323160",
+        "metadata_file_offset": 3289440,
+        "function_shared_with": [],
+        "group": "builder_integration",
+        "anonymous": false,
+        "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+        "source_line": 8,
+        "source_sha256": "d2a4e1cdc2a525b99d0df05d29a74b4318d53c1f22fff1d521d9d3835304a14e",
+        "compile_manifest_line": 984
+      },
+      "full_family_test_passed": true
+    },
+    {
+      "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands",
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+      "source_line": 43,
+      "dedicated_filter_matches": false,
+      "present_in_dedicated_modes": {
+        "whole-debug": false,
+        "whole-rf": false,
+        "whole-x86": false
+      },
+      "full_family_actual_TestFn": {
+        "index": 848,
+        "name": "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands",
+        "name_address": "0x1335fa6",
+        "name_length": 148,
+        "function_address": "0x1886d20",
+        "function_symbols": [
+          "br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands"
+        ],
+        "function_symbol_has_exact_name": true,
+        "metadata_address": "0x1323178",
+        "metadata_file_offset": 3289464,
+        "function_shared_with": [],
+        "group": "builder_integration",
+        "anonymous": false,
+        "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/command_storage_integration_tests.zig",
+        "source_line": 43,
+        "source_sha256": "d2a4e1cdc2a525b99d0df05d29a74b4318d53c1f22fff1d521d9d3835304a14e",
+        "compile_manifest_line": 984
+      },
+      "full_family_test_passed": true
+    }
+  ],
+  "status": "Both integration declarations are executed in the actual complete Brotli ReleaseFast ELF (1229/1229 passed). They remain outside all three dedicated 54-test arrays by their unchanged filters."
+}

@@ -3,14 +3,12 @@ const core = @import("../core.zig");
 const decoder = @import("decoder.zig");
 const format = @import("format.zig");
 const lzvn = @import("lzvn.zig");
+const encoder = @import("encoder.zig");
 
 pub const Error = core.Error || decoder.Error || format.Error || lzvn.Error ||
-    std.mem.Allocator.Error || error{InvalidLzfseStream};
+    std.mem.Allocator.Error || encoder.Error || error{InvalidLzfseStream};
 
-pub const Options = struct {
-    block_size: usize = 64 * 1024,
-    use_lzvn: bool = true,
-};
+pub const Options = encoder.Options;
 
 pub const BlockKind = enum {
     uncompressed,
@@ -148,68 +146,10 @@ fn parseBlockWithHistory(input: []const u8, offset: usize, history_size: usize) 
     return error.InvalidMagic;
 }
 
-pub fn encodeAlloc(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    options: Options,
-) Error![]u8 {
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-    _ = try encodeAppend(allocator, &output, input, options);
-    return output.toOwnedSlice(allocator);
-}
-
-pub fn encodeAppend(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    input: []const u8,
-    options: Options,
-) Error!usize {
-    if (options.block_size == 0 or options.block_size > std.math.maxInt(u32))
-        return error.InvalidLzfseStream;
-    const start = output.items.len;
-    errdefer output.items.len = start;
-    var input_offset: usize = 0;
-    if (input.len == 0) try appendStored(allocator, output, input);
-    while (input_offset < input.len) {
-        const block_len = @min(options.block_size, input.len - input_offset);
-        const block = input[input_offset..][0..block_len];
-        if (options.use_lzvn) {
-            const compressed = try lzvn.encodeAlloc(allocator, block);
-            defer allocator.free(compressed);
-            if (compressed.len + 12 < block.len + 8) {
-                try appendU32(allocator, output, format.compressed_lzvn_magic);
-                try appendU32(allocator, output, @intCast(block_len));
-                try appendU32(
-                    allocator,
-                    output,
-                    std.math.cast(u32, compressed.len) orelse return error.IntegerOverflow,
-                );
-                try output.appendSlice(allocator, compressed);
-            } else {
-                try appendStored(allocator, output, block);
-            }
-        } else {
-            try appendStored(allocator, output, block);
-        }
-        input_offset += block_len;
-    }
-    try appendU32(allocator, output, format.end_of_stream_magic);
-    return output.items.len - start;
-}
-
-pub fn encodeInto(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    options: Options,
-    output: []u8,
-) Error!usize {
-    const encoded = try encodeAlloc(allocator, input, options);
-    defer allocator.free(encoded);
-    if (output.len < encoded.len) return error.OutputTooSmall;
-    @memcpy(output[0..encoded.len], encoded);
-    return encoded.len;
-}
+pub const encodeAlloc = encoder.encodeAlloc;
+pub const encodeWithSummaryAlloc = encoder.encodeWithSummaryAlloc;
+pub const encodeAppend = encoder.encodeAppend;
+pub const encodeInto = encoder.encodeInto;
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return decodeAllocLimited(allocator, input, std.math.maxInt(usize));
@@ -265,26 +205,6 @@ fn decodeIntoParsed(archive: Archive, output: []u8) Error!usize {
         output_offset += block.raw_size;
     }
     return output_offset;
-}
-
-fn appendU32(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    value: u32,
-) Error!void {
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value, .little);
-    try output.appendSlice(allocator, &bytes);
-}
-
-fn appendStored(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    block: []const u8,
-) Error!void {
-    try appendU32(allocator, output, format.uncompressed_magic);
-    try appendU32(allocator, output, @intCast(block.len));
-    try output.appendSlice(allocator, block);
 }
 
 fn readMagic(input: []const u8, offset: usize) Error!u32 {

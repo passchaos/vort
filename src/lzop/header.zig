@@ -56,6 +56,89 @@ pub const WriteOptions = struct {
     modified_time: u64,
 };
 
+pub const SizeProbe = union(enum) {
+    need_more: usize,
+    complete: usize,
+};
+
+/// Report the exact encoded header length once enough structural bytes are
+/// available. `need_more` is the next total prefix length required, allowing
+/// incremental callers to stop before consuming the first block header.
+pub fn probeEncodedSize(input: []const u8) Error!SizeProbe {
+    const magic_prefix_len = @min(input.len, magic.len);
+    if (!std.mem.eql(u8, input[0..magic_prefix_len], magic[0..magic_prefix_len]))
+        return error.InvalidMagic;
+    if (input.len < magic.len) return .{ .need_more = magic.len };
+
+    var offset: usize = magic.len;
+    if (try needBytes(input.len, offset, 2)) |needed| return .{ .need_more = needed };
+    const version = std.mem.readInt(u16, input[offset..][0..2], .big);
+    offset += 2;
+    if (version < 0x0900) return error.InvalidLzopHeader;
+
+    if (try needBytes(input.len, offset, 2)) |needed| return .{ .need_more = needed };
+    offset += 2; // LZO library version.
+    if (version >= 0x0940) {
+        if (try needBytes(input.len, offset, 2)) |needed| return .{ .need_more = needed };
+        const version_needed = std.mem.readInt(u16, input[offset..][0..2], .big);
+        if (version_needed < 0x0900) return error.InvalidLzopHeader;
+        if (version_needed > current_version) return error.UnsupportedVersion;
+        offset += 2;
+    }
+
+    if (try needBytes(input.len, offset, 1)) |needed| return .{ .need_more = needed };
+    offset += 1; // Method.
+    if (version >= 0x0940) {
+        if (try needBytes(input.len, offset, 1)) |needed| return .{ .need_more = needed };
+        offset += 1; // Level.
+    }
+
+    if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+    const flags = std.mem.readInt(u32, input[offset..][0..4], .big);
+    if (flags & ~Flag.known != 0) return error.InvalidLzopHeader;
+    if (flags & Flag.adler32_compressed != 0 and flags & Flag.adler32_data == 0)
+        return error.InvalidLzopHeader;
+    if (flags & Flag.crc32_compressed != 0 and flags & Flag.crc32_data == 0)
+        return error.InvalidLzopHeader;
+    offset += 4;
+    if (flags & Flag.filter != 0) {
+        if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+        offset += 4;
+    }
+
+    if (try needBytes(input.len, offset, 8)) |needed| return .{ .need_more = needed };
+    offset += 8; // Mode and low modified time.
+    if (version >= 0x0940) {
+        if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+        offset += 4; // High modified time.
+    }
+
+    if (try needBytes(input.len, offset, 1)) |needed| return .{ .need_more = needed };
+    const name_len = input[offset];
+    offset += 1;
+    if (try needBytes(input.len, offset, name_len)) |needed| return .{ .need_more = needed };
+    offset += name_len;
+    if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+    offset += 4; // Header checksum.
+
+    if (flags & Flag.extra_field != 0) {
+        if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+        const extra_len = std.mem.readInt(u32, input[offset..][0..4], .big);
+        offset += 4;
+        if (try needBytes(input.len, offset, extra_len)) |needed| return .{ .need_more = needed };
+        offset += extra_len;
+        if (try needBytes(input.len, offset, 4)) |needed| return .{ .need_more = needed };
+        offset += 4; // Extra-field checksum.
+    }
+    return .{ .complete = offset };
+}
+
+fn needBytes(input_len: usize, offset: usize, count: anytype) Error!?usize {
+    const needed = std.math.add(usize, offset, @intCast(count)) catch
+        return error.IntegerOverflow;
+    return if (input_len < needed) needed else null;
+}
+
 pub fn parse(input: []const u8) Error!Header {
     if (input.len < magic.len) return error.TruncatedFrame;
     if (!std.mem.eql(u8, input[0..magic.len], &magic)) return error.InvalidMagic;

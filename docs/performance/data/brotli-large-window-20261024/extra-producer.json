@@ -1,0 +1,258 @@
+{
+  "schema": "vort-public-large-raw-extra-v1",
+  "api": "vort.br.encodePlannedStreamWithOptionsAlloc",
+  "inputpath": "/tmp/vort-br-large-raw-extra/input.raw",
+  "wirepath": "/tmp/vort-br-large-raw-extra/wire.br",
+  "rawdictpath": "/tmp/vort-br-large-raw-extra/dictionary.raw",
+  "input_bytes": 48,
+  "wire_bytes": 15,
+  "raw_dictionary_bytes": 67108921,
+  "requestedparams": {
+    "quality": 10,
+    "large_window": true,
+    "window_bits": 30,
+    "beam_width": 1,
+    "search_depth": 1,
+    "iterations": 1,
+    "npostfix": 0,
+    "ndirect_high": 0,
+    "max_working_memory": 67108864,
+    "max_total_working_memory": 67108864
+  },
+  "profile": {
+    "tree_nodes": 0,
+    "byte_comparisons": 3448,
+    "match_probes": 768,
+    "history_seed_positions": 0,
+    "short_hash_probes": 0,
+    "stitch_positions": 0,
+    "normalizations": 0,
+    "indexed_positions": 0,
+    "states": 48,
+    "transitions": 3957,
+    "price_evaluations": 3957,
+    "passes": 1,
+    "refinement_passes": 0,
+    "static_probes": 49,
+    "compound_probes": 48,
+    "static_candidates": 1299,
+    "compound_candidates": 48,
+    "peak_working_memory": 9790585,
+    "emitted_metablocks": 1,
+    "emitted_commands": 1,
+    "emitted_copy_bytes": 48,
+    "emitted_static_commands": 0,
+    "emitted_compound_commands": 1,
+    "emitted_max_distance": 67108921,
+    "effective": {
+      "quality": 10,
+      "search_depth": 1,
+      "nice_len": 128,
+      "beam_width": 1,
+      "iterations": 1,
+      "max_working_memory": 67108864,
+      "block_len": 262144,
+      "distance_parameters": {
+        "npostfix": 0,
+        "ndirect_high": 0
+      },
+      "format": "large_window"
+    }
+  },
+  "memory_profile": {
+    "available": true,
+    "peak_requested_bytes": 9791123,
+    "live_requested_bytes": 0,
+    "limit": 67108864
+  },
+  "extraBoundary": {
+    "expected_physical_distance": 67108921,
+    "standard_maximum_distance": 67108860,
+    "expected_symbol": 64,
+    "expected_extra_bits": 25,
+    "expected_extra_value": 60,
+    "expected_wire_alphabet_size": 140,
+    "expected_simple_symbol_bits": 8
+  },
+  "vort_roundtrip": true,
+  "scope": "one actual public encode; independent modern Large Window RAW decode pending; no reference encode",
+  "actualwire": {
+    "header_bits": 14,
+    "window_bits": 30,
+    "is_last": true,
+    "is_empty": false,
+    "npostfix": 0,
+    "ndirect_high": 0,
+    "literal_single_symbol": 0,
+    "command_single_symbol": 198,
+    "distance_single_symbol": 64,
+    "distance_extra_bits": 25,
+    "distance_extra_value": 60,
+    "decoded_physical_distance": 67108921,
+    "wire_distance_alphabet_size": 140,
+    "simple_distance_symbol_bits": 8,
+    "meta_output_bytes": 48,
+    "command_insert_bytes": 0,
+    "command_copy_bytes": 48,
+    "consumed_nonpadding_bits": 114,
+    "final_padding_bits": 6,
+    "bit_fields": {
+      "large_prefix_flag": {
+        "bit_offset": 0,
+        "bits": 1,
+        "value": 1
+      },
+      "large_prefix_upper": {
+        "bit_offset": 1,
+        "bits": 3,
+        "value": 0
+      },
+      "large_prefix_lower": {
+        "bit_offset": 4,
+        "bits": 3,
+        "value": 1
+      },
+      "large_reserved": {
+        "bit_offset": 7,
+        "bits": 1,
+        "value": 0
+      },
+      "window_bits": {
+        "bit_offset": 8,
+        "bits": 6,
+        "value": 30
+      },
+      "is_last": {
+        "bit_offset": 14,
+        "bits": 1,
+        "value": 1
+      },
+      "is_empty": {
+        "bit_offset": 15,
+        "bits": 1,
+        "value": 0
+      },
+      "meta_nibbles": {
+        "bit_offset": 16,
+        "bits": 2,
+        "value": 0
+      },
+      "meta_length_minus_one": {
+        "bit_offset": 18,
+        "bits": 16,
+        "value": 47
+      },
+      "literal_block_type_count_code": {
+        "bit_offset": 34,
+        "bits": 1,
+        "value": 0
+      },
+      "command_block_type_count_code": {
+        "bit_offset": 35,
+        "bits": 1,
+        "value": 0
+      },
+      "distance_block_type_count_code": {
+        "bit_offset": 36,
+        "bits": 1,
+        "value": 0
+      },
+      "npostfix": {
+        "bit_offset": 37,
+        "bits": 2,
+        "value": 0
+      },
+      "ndirect_high": {
+        "bit_offset": 39,
+        "bits": 4,
+        "value": 0
+      },
+      "literal_context_mode": {
+        "bit_offset": 43,
+        "bits": 2,
+        "value": 0
+      },
+      "literal_context_tree_count_code": {
+        "bit_offset": 45,
+        "bits": 1,
+        "value": 0
+      },
+      "distance_context_tree_count_code": {
+        "bit_offset": 46,
+        "bits": 1,
+        "value": 0
+      },
+      "literal_prefix_kind": {
+        "bit_offset": 47,
+        "bits": 2,
+        "value": 1
+      },
+      "literal_prefix_nsym_minus_one": {
+        "bit_offset": 49,
+        "bits": 2,
+        "value": 0
+      },
+      "literal_single_symbol": {
+        "bit_offset": 51,
+        "bits": 8,
+        "value": 0
+      },
+      "command_prefix_kind": {
+        "bit_offset": 59,
+        "bits": 2,
+        "value": 1
+      },
+      "command_prefix_nsym_minus_one": {
+        "bit_offset": 61,
+        "bits": 2,
+        "value": 0
+      },
+      "command_single_symbol": {
+        "bit_offset": 63,
+        "bits": 10,
+        "value": 198
+      },
+      "distance_prefix_kind": {
+        "bit_offset": 73,
+        "bits": 2,
+        "value": 1
+      },
+      "distance_prefix_nsym_minus_one": {
+        "bit_offset": 75,
+        "bits": 2,
+        "value": 0
+      },
+      "distance_single_symbol": {
+        "bit_offset": 77,
+        "bits": 8,
+        "value": 64
+      },
+      "copy_length_extra": {
+        "bit_offset": 85,
+        "bits": 4,
+        "value": 10
+      },
+      "distance_extra": {
+        "bit_offset": 89,
+        "bits": 25,
+        "value": 60
+      },
+      "final_padding": {
+        "bit_offset": 114,
+        "bits": 6,
+        "value": 0
+      }
+    }
+  },
+  "wire_hex": "115ebc000080000863024879000000",
+  "input_path": "/tmp/vort-br-large-raw-extra/input.raw",
+  "wire_path": "/tmp/vort-br-large-raw-extra/wire.br",
+  "dictionary_path": "/tmp/vort-br-large-raw-extra/dictionary.raw",
+  "sha256": {
+    "input.raw": "3c656fb71e110f5cface48c584e162b72449813ace71437b1b94bc5157353ad4",
+    "wire.br": "b16b4aa30c7f0fe0b5f19207d4f388baa9f9e05c9c39e682fa5d96eddc22d477",
+    "dictionary.raw": "79559dc48f4a5271c0f5a6c1c60facf8ff588fd9a426c288c23890693be9550b",
+    "encode": "a0afb18f1973e030342ec84250812398e507e30683c38ed5ccd01e9bd53786a8",
+    "encode.zig": "a6444e347003990f2b6866092715f5f2204ee05ca5d50ee6dff3250dbdec6308"
+  }
+}

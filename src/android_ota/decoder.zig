@@ -7,13 +7,15 @@ const puffin = @import("puffin.zig");
 const lz4diff = @import("lz4diff.zig");
 const zucchini = @import("zucchini.zig");
 const format = @import("format.zig");
+const source_mod = @import("source.zig");
 
 pub const Error = format.Error || bzip2.Error || xz.Error || bsdiff.Error || puffin.Error || lz4diff.Error || zucchini.Error ||
-    std.mem.Allocator.Error;
+    source_mod.Error || std.mem.Allocator.Error;
 
 pub const Options = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_operation_output_len: usize = 1024 * 1024 * 1024,
+    max_operation_blob_len: usize = std.math.maxInt(usize),
     max_bsdiff_control_bytes: usize = 64 * 1024 * 1024,
     max_puffin_header_len: usize = 16 * 1024 * 1024,
     max_puffin_extents: usize = 1 << 20,
@@ -25,14 +27,66 @@ pub const Options = struct {
     max_zucchini_elements: usize = 1 << 20,
     max_zucchini_equivalences: usize = 1 << 24,
     max_zucchini_target_pools: usize = 1 << 20,
+    max_zucchini_elf_sections: usize = 1 << 20,
+    max_zucchini_pe_sections: usize = 1 << 20,
+    max_zucchini_pe_reloc_blocks: usize = 1 << 20,
+    max_zucchini_dex_map_items: usize = 21,
+    max_zucchini_dex_items: usize = 1 << 24,
+    max_zucchini_ztf_lines: usize = 1000,
+    max_zucchini_references: usize = 1 << 24,
+    max_zucchini_targets: usize = 1 << 24,
     verify_partition_hash: bool = true,
     verify_source_hashes: bool = true,
     discard_as_zero: bool = false,
 };
 
-pub const View = struct {
+pub const Input = union(enum) {
     bytes: []const u8,
-    data_offset: usize,
+    source: source_mod.Source,
+
+    fn len(self: Input) u64 {
+        return switch (self) {
+            .bytes => |bytes| bytes.len,
+            .source => |source| source.len,
+        };
+    }
+
+    fn readExact(self: Input, offset: u64, output: []u8) Error!void {
+        switch (self) {
+            .bytes => |bytes| {
+                const start = std.math.cast(usize, offset) orelse
+                    return error.OutputLimitExceeded;
+                if (start > bytes.len or output.len > bytes.len - start)
+                    return error.TruncatedFrame;
+                @memcpy(output, bytes[start..][0..output.len]);
+            },
+            .source => |source| try source.readExact(offset, output),
+        }
+    }
+
+    fn verifySha256All(self: Input, expected: []const u8) Error!void {
+        if (expected.len != 32) return error.InvalidAndroidOta;
+        switch (self) {
+            .bytes => |bytes| try verifySha256(bytes, expected),
+            .source => |source| try source.verifySha256(0, source.len, expected),
+        }
+    }
+};
+
+const Blob = struct {
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    owned: ?[]u8 = null,
+
+    fn deinit(self: *Blob) void {
+        if (self.owned) |bytes| self.allocator.free(bytes);
+        self.* = undefined;
+    }
+};
+
+pub const View = struct {
+    payload: Input,
+    data_offset: u64,
     block_size: usize,
     partitions: []const format.Partition,
     operations: []const format.Operation,
@@ -59,9 +113,46 @@ pub const View = struct {
         return self.extents[operation.dst_extent_start..][0..operation.dst_extent_count];
     }
 
-    fn operationBlob(self: View, operation: format.Operation) []const u8 {
-        const start = self.data_offset + @as(usize, @intCast(operation.data_offset));
-        return self.bytes[start..][0..@intCast(operation.data_length)];
+    fn operationBlob(
+        self: View,
+        allocator: std.mem.Allocator,
+        operation: format.Operation,
+        max_length: usize,
+    ) Error!Blob {
+        const length = std.math.cast(usize, operation.data_length) orelse
+            return error.OutputLimitExceeded;
+        if (length > max_length) return error.OutputLimitExceeded;
+        if (length == 0) return .{ .allocator = allocator, .bytes = "" };
+        const start = std.math.add(
+            u64,
+            self.data_offset,
+            operation.data_offset,
+        ) catch return error.IntegerOverflow;
+        return switch (self.payload) {
+            .bytes => |bytes| blk: {
+                const local = std.math.cast(usize, start) orelse
+                    return error.OutputLimitExceeded;
+                if (local > bytes.len or length > bytes.len - local)
+                    return error.TruncatedFrame;
+                break :blk .{
+                    .allocator = allocator,
+                    .bytes = bytes[local..][0..length],
+                };
+            },
+            .source => |source| blk: {
+                const owned = try source.readAllocLimited(
+                    allocator,
+                    start,
+                    operation.data_length,
+                    max_length,
+                );
+                break :blk .{
+                    .allocator = allocator,
+                    .bytes = owned,
+                    .owned = owned,
+                };
+            },
+        };
     }
 };
 
@@ -70,6 +161,26 @@ pub fn readPartitionRangeInto(
     allocator: std.mem.Allocator,
     partition_index: usize,
     source: ?[]const u8,
+    offset: u64,
+    output: []u8,
+    options: Options,
+) Error!void {
+    return readPartitionRangeIntoInputs(
+        view,
+        allocator,
+        partition_index,
+        if (source) |bytes| .{ .bytes = bytes } else null,
+        offset,
+        output,
+        options,
+    );
+}
+
+pub fn readPartitionRangeIntoInputs(
+    view: View,
+    allocator: std.mem.Allocator,
+    partition_index: usize,
+    source: ?Input,
     offset: u64,
     output: []u8,
     options: Options,
@@ -83,7 +194,7 @@ pub fn readPartitionRangeInto(
         return error.IntegerOverflow;
     if (range_end > partition.new_info.size)
         return error.RangeOutOfBounds;
-    const source_bytes = try validateSource(
+    const source_input = try validateSource(
         view,
         partition,
         source,
@@ -114,10 +225,26 @@ pub fn readPartitionRangeInto(
             );
             continue;
         }
+        if (operation.kind == .replace) {
+            try copyReplaceRange(
+                view,
+                operation,
+                destinations,
+                offset,
+                output,
+                covered,
+            );
+            continue;
+        }
+        var blob = try view.operationBlob(
+            allocator,
+            operation,
+            options.max_operation_blob_len,
+        );
+        defer blob.deinit();
         var owned: ?[]u8 = null;
         defer if (owned) |bytes| allocator.free(bytes);
         const operation_bytes: []const u8 = switch (operation.kind) {
-            .replace => view.operationBlob(operation),
             .replace_bz => blk: {
                 const expected = try operationOutputLength(
                     destinations,
@@ -126,7 +253,7 @@ pub fn readPartitionRangeInto(
                 );
                 const decoded = try bzip2.decodeAllocLimited(
                     allocator,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     expected,
                 );
                 owned = decoded;
@@ -141,7 +268,7 @@ pub fn readPartitionRangeInto(
                 );
                 const decoded = try xz.decodeAllocLimited(
                     allocator,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     expected,
                 );
                 owned = decoded;
@@ -151,7 +278,7 @@ pub fn readPartitionRangeInto(
             .source_copy => blk: {
                 const decoded = try readSourceExtentsAlloc(
                     allocator,
-                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    source_input orelse return error.MissingAndroidOtaSource,
                     view.sourceExtents(operation),
                     view.block_size,
                     options.max_operation_output_len,
@@ -164,7 +291,7 @@ pub fn readPartitionRangeInto(
             .bsdiff, .source_bsdiff, .brotli_bsdiff => blk: {
                 const old_bytes = try readSourceExtentsAlloc(
                     allocator,
-                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    source_input orelse return error.MissingAndroidOtaSource,
                     view.sourceExtents(operation),
                     view.block_size,
                     options.max_operation_output_len,
@@ -180,7 +307,7 @@ pub fn readPartitionRangeInto(
                 const decoded = try bsdiff.applyAlloc(
                     allocator,
                     old_bytes,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     expected,
                     .{
                         .max_output_len = options.max_operation_output_len,
@@ -193,7 +320,7 @@ pub fn readPartitionRangeInto(
             .puffdiff => blk: {
                 const old_bytes = try readSourceExtentsAlloc(
                     allocator,
-                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    source_input orelse return error.MissingAndroidOtaSource,
                     view.sourceExtents(operation),
                     view.block_size,
                     options.max_operation_output_len,
@@ -219,7 +346,7 @@ pub fn readPartitionRangeInto(
                 else
                     try puffin.decodedSizeAlloc(
                         allocator,
-                        view.operationBlob(operation),
+                        blob.bytes,
                         puff_options,
                     );
                 if (actual_len > extent_output_len)
@@ -227,7 +354,7 @@ pub fn readPartitionRangeInto(
                 const patched = try puffin.applyAlloc(
                     allocator,
                     old_bytes,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     actual_len,
                     puff_options,
                 );
@@ -241,7 +368,7 @@ pub fn readPartitionRangeInto(
             .lz4diff_bsdiff, .lz4diff_puffdiff => blk: {
                 const old_bytes = try readSourceExtentsAlloc(
                     allocator,
-                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    source_input orelse return error.MissingAndroidOtaSource,
                     view.sourceExtents(operation),
                     view.block_size,
                     options.max_operation_output_len,
@@ -257,7 +384,7 @@ pub fn readPartitionRangeInto(
                 const decoded = try lz4diff.applyAlloc(
                     allocator,
                     old_bytes,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     expected,
                     .{
                         .max_output_len = options.max_operation_output_len,
@@ -276,7 +403,7 @@ pub fn readPartitionRangeInto(
             .zucchini => blk: {
                 const old_bytes = try readSourceExtentsAlloc(
                     allocator,
-                    source_bytes orelse return error.MissingAndroidOtaSource,
+                    source_input orelse return error.MissingAndroidOtaSource,
                     view.sourceExtents(operation),
                     view.block_size,
                     options.max_operation_output_len,
@@ -291,7 +418,7 @@ pub fn readPartitionRangeInto(
                 );
                 const decoded_patch = try br.decodeStreamAllocLimited(
                     allocator,
-                    view.operationBlob(operation),
+                    blob.bytes,
                     options.max_zucchini_patch_len,
                 );
                 defer allocator.free(decoded_patch);
@@ -305,6 +432,14 @@ pub fn readPartitionRangeInto(
                         .max_elements = options.max_zucchini_elements,
                         .max_equivalences = options.max_zucchini_equivalences,
                         .max_target_pools = options.max_zucchini_target_pools,
+                        .max_elf_sections = options.max_zucchini_elf_sections,
+                        .max_pe_sections = options.max_zucchini_pe_sections,
+                        .max_pe_reloc_blocks = options.max_zucchini_pe_reloc_blocks,
+                        .max_dex_map_items = options.max_zucchini_dex_map_items,
+                        .max_dex_items = options.max_zucchini_dex_items,
+                        .max_ztf_lines = options.max_zucchini_ztf_lines,
+                        .max_references = options.max_zucchini_references,
+                        .max_targets = options.max_zucchini_targets,
                     },
                 );
                 owned = decoded;
@@ -329,12 +464,70 @@ pub fn readPartitionRangeInto(
         try verifySha256(output, partition.new_info.hash);
 }
 
+fn copyReplaceRange(
+    view: View,
+    operation: format.Operation,
+    extents: []const format.Extent,
+    range_start: u64,
+    output: []u8,
+    covered: []u8,
+) Error!void {
+    const range_end = std.math.add(u64, range_start, output.len) catch
+        return error.IntegerOverflow;
+    const blob_start = std.math.add(
+        u64,
+        view.data_offset,
+        operation.data_offset,
+    ) catch return error.IntegerOverflow;
+    var operation_offset: u64 = 0;
+    for (extents) |extent| {
+        const extent_start = std.math.mul(
+            u64,
+            extent.start_block,
+            view.block_size,
+        ) catch return error.IntegerOverflow;
+        const extent_length = std.math.mul(
+            u64,
+            extent.num_blocks,
+            view.block_size,
+        ) catch return error.IntegerOverflow;
+        const extent_end = std.math.add(u64, extent_start, extent_length) catch
+            return error.IntegerOverflow;
+        const copy_start = @max(extent_start, range_start);
+        const copy_end = @min(extent_end, range_end);
+        if (copy_start < copy_end) {
+            const destination_start = std.math.cast(
+                usize,
+                copy_start - range_start,
+            ) orelse return error.OutputLimitExceeded;
+            const length = std.math.cast(usize, copy_end - copy_start) orelse
+                return error.OutputLimitExceeded;
+            for (covered[destination_start..][0..length]) |value|
+                if (value != 0) return error.InvalidAndroidOta;
+            const source_relative = std.math.add(
+                u64,
+                operation_offset,
+                copy_start - extent_start,
+            ) catch return error.IntegerOverflow;
+            try view.payload.readExact(
+                std.math.add(u64, blob_start, source_relative) catch
+                    return error.IntegerOverflow,
+                output[destination_start..][0..length],
+            );
+            @memset(covered[destination_start..][0..length], 1);
+        }
+        operation_offset = std.math.add(u64, operation_offset, extent_length) catch
+            return error.IntegerOverflow;
+    }
+    if (operation_offset != operation.data_length) return error.SizeMismatch;
+}
+
 fn validateSource(
     view: View,
     partition: format.Partition,
-    source: ?[]const u8,
+    source: ?Input,
     verify_hash: bool,
-) Error!?[]const u8 {
+) Error!?Input {
     var needs_source = false;
     for (view.partitionOperations(partition)) |operation|
         switch (operation.kind) {
@@ -350,17 +543,17 @@ fn validateSource(
             else => {},
         };
     if (!needs_source) return source;
-    const bytes = source orelse return error.MissingAndroidOtaSource;
+    const input = source orelse return error.MissingAndroidOtaSource;
     const old_info = partition.old_info orelse return error.InvalidAndroidOta;
-    if (bytes.len != old_info.size) return error.SizeMismatch;
+    if (input.len() != old_info.size) return error.SizeMismatch;
     if (verify_hash and old_info.hash.len != 0)
-        try verifySha256(bytes, old_info.hash);
-    return bytes;
+        try input.verifySha256All(old_info.hash);
+    return input;
 }
 
 fn readSourceExtentsAlloc(
     allocator: std.mem.Allocator,
-    source: []const u8,
+    source: Input,
     extents: []const format.Extent,
     block_size: usize,
     max_output_len: usize,
@@ -384,11 +577,16 @@ fn readSourceExtentsAlloc(
                 extent.start_block,
                 block_size,
             ) catch return error.IntegerOverflow;
-            const start = std.math.cast(usize, start_u64) orelse
+            const extent_length_u64 = std.math.cast(u64, extent_length) orelse
                 return error.OutputLimitExceeded;
-            if (start > source.len or extent_length > source.len - start)
+            const end = std.math.add(u64, start_u64, extent_length_u64) catch
+                return error.IntegerOverflow;
+            if (end > source.len())
                 return error.InvalidAndroidOta;
-            @memcpy(output[written..][0..extent_length], source[start..][0..extent_length]);
+            try source.readExact(
+                start_u64,
+                output[written..][0..extent_length],
+            );
         }
         written += extent_length;
     }

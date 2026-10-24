@@ -59,6 +59,8 @@ def main() -> None:
     payload = bytes((index * 41 + index // 19) & 0xFF for index in range(700_000))
     self_cases = 0
     reference_cases = 0
+    incremental_encode_cases = 0
+    incremental_decode_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-hadoop-lz4-") as temp_text:
         temp = Path(temp_text)
@@ -70,12 +72,32 @@ def main() -> None:
             run(args.cli, "encode-hadoop-lz4-file", source, output)
         if first.read_bytes() != second.read_bytes():
             raise AssertionError("Vort Hadoop LZ4 output is not deterministic")
+        incremental = temp / "vort-incremental.lz4"
+        run(args.cli, "encode-hadoop-lz4-incremental-file", source, incremental)
+        if incremental.read_bytes() != first.read_bytes():
+            raise AssertionError("Vort Hadoop LZ4 incremental encode is not one-shot exact")
+        if decode_reference(incremental.read_bytes()) != payload:
+            raise AssertionError("python-lz4 rejected Vort incremental Hadoop LZ4 output")
+        incremental_encode_cases += 1
         if decode_reference(first.read_bytes()) != payload:
             raise AssertionError("python-lz4 rejected Vort Hadoop LZ4 output")
         decoded = temp / "vort.out"
         run(args.cli, "decode-hadoop-lz4-file", first, decoded, len(payload))
         if decoded.read_bytes() != payload:
             raise AssertionError("Vort Hadoop LZ4 self decode mismatch")
+        incremental_decoded = temp / "vort-incremental.out"
+        run(
+            args.cli,
+            "decode-hadoop-lz4-incremental-file",
+            first,
+            incremental_decoded,
+            len(payload),
+            17,
+            31,
+        )
+        if incremental_decoded.read_bytes() != payload:
+            raise AssertionError("Vort Hadoop LZ4 incremental self decode mismatch")
+        incremental_decode_cases += 1
         listing = run(args.cli, "inspect-hadoop-lz4-file", first).stdout
         if "decoded_bytes=700000" not in listing or "hadoop_lz4_blocks=" not in listing:
             raise AssertionError(f"Vort Hadoop LZ4 metadata mismatch: {listing}")
@@ -87,6 +109,19 @@ def main() -> None:
         run(args.cli, "decode-hadoop-lz4-file", reference, reference_output, len(payload))
         if reference_output.read_bytes() != payload:
             raise AssertionError("Vort rejected python-lz4 Hadoop framing")
+        reference_incremental_output = temp / "python-incremental.out"
+        run(
+            args.cli,
+            "decode-hadoop-lz4-incremental-file",
+            reference,
+            reference_incremental_output,
+            len(payload),
+            17,
+            31,
+        )
+        if reference_incremental_output.read_bytes() != payload:
+            raise AssertionError("Vort incremental decoder rejected python-lz4 Hadoop framing")
+        incremental_decode_cases += 1
         reference_cases += 1
 
         limited = run(
@@ -111,7 +146,8 @@ def main() -> None:
 
     print(
         f"self_cases={self_cases} reference_cases={reference_cases} "
-        f"malformed={malformed}"
+        f"incremental_encode_cases={incremental_encode_cases} "
+        f"incremental_decode_cases={incremental_decode_cases} malformed={malformed}"
     )
 
 

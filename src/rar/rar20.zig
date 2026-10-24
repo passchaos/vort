@@ -1,7 +1,12 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const legacy_common = @import("legacy_common.zig");
 
-pub const Error = core.Error || error{InvalidRar20Stream};
+pub const Error = core.Error || error{
+    InvalidRar20Stream,
+    MissingRar20SolidState,
+    Rar20DecoderPoisoned,
+};
 
 const main_count: usize = 298;
 const offset_count: usize = 48;
@@ -11,6 +16,7 @@ const table_count: usize = main_count + offset_count + length_count;
 const audio_count: usize = 257;
 const max_channels: usize = 4;
 const old_level_count: usize = audio_count * max_channels;
+const max_history_size: usize = 1024 * 1024;
 
 const length_bases = [_]usize{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224 };
 const length_bits = [_]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5 };
@@ -42,6 +48,13 @@ const BitReader = struct {
             value = (value << 1) | ((self.input[bit / 8] >> @intCast(7 - bit % 8)) & 1);
         }
         return value;
+    }
+
+    fn remainingBits(self: BitReader) Error!usize {
+        const total = std.math.mul(usize, self.input.len, 8) catch
+            return error.IntegerOverflow;
+        if (self.bit_offset > total) return error.TruncatedFrame;
+        return total - self.bit_offset;
     }
 };
 
@@ -138,6 +151,19 @@ const Decoder = struct {
             }
             try self.decodeBlock();
         }
+    }
+
+    fn finishMember(self: *Decoder) Error!void {
+        if (try self.bits.remainingBits() < 40) return;
+        const end_symbol = if (self.audio_block)
+            try self.audio_tables[self.channel].decode(&self.bits)
+        else
+            try self.main.decode(&self.bits);
+        const expected = if (self.audio_block) @as(usize, 256) else 269;
+        if (end_symbol != expected) return;
+        self.in_block = false;
+        try self.readTables();
+        self.in_block = true;
     }
 
     fn readTables(self: *Decoder) Error!void {
@@ -340,6 +366,126 @@ const Decoder = struct {
 pub fn decodeInto(input: []const u8, output: []u8) Error!void {
     var decoder = Decoder{ .bits = .{ .input = input }, .output = output };
     try decoder.decode();
+}
+
+pub const Session = struct {
+    allocator: std.mem.Allocator,
+    decoder: Decoder,
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator) Session {
+        return .{
+            .allocator = allocator,
+            .decoder = newDecoder(),
+        };
+    }
+
+    pub fn deinit(self: *Session) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Session) void {
+        self.decoder = newDecoder();
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Session) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn synchronizeSolid(
+        self: *Session,
+        history: []const u8,
+        common: legacy_common.CommonState,
+        dictionary_size: usize,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (!validDictionarySize(dictionary_size)) return error.InvalidRar20Stream;
+        if (self.poisoned) return error.Rar20DecoderPoisoned;
+        errdefer self.poisoned = true;
+        self.history.clearRetainingCapacity();
+        const keep = @min(history.len, @min(dictionary_size, max_history_size));
+        try self.history.appendSlice(self.allocator, history[history.len - keep ..]);
+        self.decoder.old_offsets = common.recent_distances;
+        self.decoder.last_offset = common.last_distance;
+        self.decoder.last_length = common.last_length;
+        self.initialized = true;
+        self.poisoned = false;
+    }
+
+    pub fn commonState(self: *const Session) legacy_common.CommonState {
+        return .{
+            .recent_distances = self.decoder.old_offsets,
+            .last_distance = self.decoder.last_offset,
+            .last_length = self.decoder.last_length,
+        };
+    }
+
+    pub fn decodeMemberInto(
+        self: *Session,
+        input: []const u8,
+        output: []u8,
+        dictionary_size: usize,
+        solid: bool,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (!validDictionarySize(dictionary_size)) return error.InvalidRar20Stream;
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar20DecoderPoisoned;
+            if (!self.initialized) return error.MissingRar20SolidState;
+        }
+        errdefer self.poisoned = true;
+        const history_limit = @min(dictionary_size, max_history_size);
+        self.trimHistory(history_limit);
+        const combined_len = std.math.add(usize, self.history.items.len, output.len) catch
+            return error.IntegerOverflow;
+        const combined = try self.allocator.alloc(u8, combined_len);
+        defer self.allocator.free(combined);
+        @memcpy(combined[0..self.history.items.len], self.history.items);
+        const member_start = self.history.items.len;
+
+        self.decoder.bits = .{ .input = input };
+        self.decoder.output = combined;
+        self.decoder.output_offset = member_start;
+        defer {
+            self.decoder.bits = .{ .input = "" };
+            self.decoder.output = undefined;
+            self.decoder.output_offset = 0;
+        }
+        if (output.len == 0 and input.len != 0 and !self.decoder.in_block) {
+            try self.decoder.readTables();
+            self.decoder.in_block = true;
+        }
+        try self.decoder.decode();
+        if (self.decoder.output_offset != combined.len) return error.SizeMismatch;
+        try self.decoder.finishMember();
+        @memcpy(output, combined[member_start..]);
+        try self.history.appendSlice(self.allocator, output);
+        self.trimHistory(history_limit);
+        if (input.len != 0) self.initialized = true;
+        self.poisoned = false;
+    }
+
+    fn trimHistory(self: *Session, limit: usize) void {
+        if (self.history.items.len <= limit) return;
+        const discard = self.history.items.len - limit;
+        @memmove(self.history.items[0..limit], self.history.items[discard..]);
+        self.history.items.len = limit;
+    }
+};
+
+fn newDecoder() Decoder {
+    return .{ .bits = .{ .input = "" }, .output = undefined };
+}
+
+fn validDictionarySize(size: usize) bool {
+    return size >= 64 * 1024 and size <= 4 * 1024 * 1024 and
+        std.math.isPowerOfTwo(size);
 }
 
 pub fn decodeAlloc(

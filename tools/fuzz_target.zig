@@ -2,6 +2,8 @@ const std = @import("std");
 const vort = @import("vort");
 
 pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
+    try fuzzSevenZipSource(allocator, data);
+    try fuzzSevenZipSplitSource(allocator, data);
     _ = vort.store.parseHeader(data) catch |err| switch (err) {
         error.TruncatedFrame, error.InvalidMagic, error.UnsupportedVersion, error.CorruptFrame => {},
         else => return err,
@@ -81,6 +83,23 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
         error.TruncatedFrame,
         error.IntegerOverflow,
         error.OutputLimitExceeded,
+        => {},
+        else => return err,
+    }
+    if (vort.lz4DecodeFrameAllocLimited(allocator, data, 1 << 20)) |decoded| {
+        allocator.free(decoded);
+    } else |err| switch (err) {
+        error.CorruptFrame,
+        error.UnsupportedVersion,
+        error.TruncatedFrame,
+        error.ChecksumMismatch,
+        error.SizeMismatch,
+        error.InvalidMatch,
+        error.NeedDictionary,
+        error.TrailingData,
+        error.IntegerOverflow,
+        error.OutputLimitExceeded,
+        error.OutputTooSmall,
         => {},
         else => return err,
     }
@@ -1431,6 +1450,97 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     }
 }
 
+const SevenZipFuzzSource = struct {
+    bytes: []const u8,
+
+    fn readAt(
+        context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        const start = std.math.cast(usize, offset) orelse return error.SourceReadFailed;
+        if (start >= self.bytes.len) return 0;
+        const count = @min(output.len, self.bytes.len - start);
+        @memcpy(output[0..count], self.bytes[start..][0..count]);
+        return count;
+    }
+};
+
+fn fuzzSevenZipSource(allocator: std.mem.Allocator, data: []const u8) !void {
+    var context = SevenZipFuzzSource{ .bytes = data };
+    return fuzzSevenZipSourceValue(allocator, .{
+        .context = &context,
+        .len = data.len,
+        .read_at = SevenZipFuzzSource.readAt,
+    });
+}
+
+fn fuzzSevenZipSplitSource(allocator: std.mem.Allocator, data: []const u8) !void {
+    if (data.len < 6 or !std.mem.eql(u8, data[0..6], "7z\xbc\xaf\x27\x1c")) return;
+    const first_len = (data.len + 1) / 2;
+    const parts = [_][]const u8{ data[0..first_len], data[first_len..] };
+    var split = vort.SevenZipSplitSliceSource.initAlloc(allocator, &parts, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return,
+    };
+    defer split.deinit();
+    try fuzzSevenZipSourceValue(allocator, split.source());
+}
+
+fn fuzzSevenZipSourceValue(
+    allocator: std.mem.Allocator,
+    source: vort.SevenZipSource,
+) !void {
+    if (vort.parseSevenZipSourceArchiveAllocWithOptions(
+        allocator,
+        source,
+        .{
+            .max_next_header_size = 1 << 20,
+            .max_encoded_header_size = 1 << 20,
+            .max_packed_stream_size = 1 << 20,
+            .max_external_metadata_size = 1 << 20,
+            .max_dictionary_size = 4 << 20,
+            .max_entries = 4096,
+            .max_streams = 4096,
+            .max_kdf_cycles_power = 8,
+        },
+    )) |archive| {
+        defer archive.deinit();
+        for (archive.entries) |entry| {
+            if (entry.folder_index == null) continue;
+            if (archive.entryDecoder(allocator, entry, .{
+                .max_output_len = 1 << 20,
+                .max_dictionary_size = 4 << 20,
+                .max_folder_output_len = 1 << 20,
+                .max_packed_stream_size = 1 << 20,
+                .max_kdf_cycles_power = 8,
+                .input_buffer_size = 4096,
+                .decoded_buffer_size = 4096,
+            })) |decoder_value| {
+                var decoder = decoder_value;
+                defer decoder.deinit();
+                var scratch: [4096]u8 = undefined;
+                for (0..1_000_000) |_| {
+                    if (decoder.step(&scratch)) |stepped| {
+                        if (stepped.status == .done) break;
+                    } else |err| switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        else => break,
+                    }
+                }
+            } else |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => {},
+            }
+            break;
+        }
+    } else |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => {},
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const samples = [_][]const u8{
         "",
@@ -1459,6 +1569,36 @@ pub fn main(init: std.process.Init) !void {
         "EROFS",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
+
+    const seven_zip_entries = [_]vort.SevenZipEncodeEntry{
+        .{ .name = "fuzz-first.bin", .data = "7z source fuzz payload" },
+        .{ .name = "fuzz-second.bin", .data = "unselected folder" ** 32 },
+    };
+    const seven_zip = try vort.encodeSevenZipStoredAlloc(
+        init.gpa,
+        &seven_zip_entries,
+        .{},
+    );
+    defer init.gpa.free(seven_zip);
+    try fuzzOne(init.gpa, seven_zip);
+    const seven_zip_bcj2 = try vort.encodeSevenZipAlloc(
+        init.gpa,
+        &seven_zip_entries,
+        .{ .compression = .lzma2, .solid = true, .bcj2 = true },
+    );
+    defer init.gpa.free(seven_zip_bcj2);
+    try fuzzOne(init.gpa, seven_zip_bcj2);
+
+    const lz4hc_frame = try vort.lz4EncodeHcFrameAlloc(
+        init.gpa,
+        "LZ4HC public fuzz frame with repeated content\n" ** 128,
+        .{
+            .block_checksum = true,
+            .compression_level = 12,
+        },
+    );
+    defer init.gpa.free(lz4hc_frame);
+    try fuzzOne(init.gpa, lz4hc_frame);
 
     const base64 = std.base64.standard.decoderWithIgnore(" \r\n\t");
     const raw_lzms_text = vort.fuzz.lzms_raw_fixture_base64;
@@ -1736,6 +1876,31 @@ pub fn main(init: std.process.Init) !void {
     const zucchini_sample = try makeZucchiniFuzzSampleAlloc(init.gpa);
     defer init.gpa.free(zucchini_sample);
     try fuzzOne(init.gpa, zucchini_sample);
+    const zucchini_aarch64_sample = try makeZucchiniAarch64FuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_aarch64_sample);
+    try fuzzOne(init.gpa, zucchini_aarch64_sample);
+    const zucchini_pe_sample = try vort.fuzz.androidOtaZucchiniPeFuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_pe_sample);
+    try fuzzOne(init.gpa, zucchini_pe_sample);
+    const zucchini_aarch32_sample = try vort.fuzz.androidOtaZucchiniAarch32FuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_aarch32_sample);
+    try fuzzOne(init.gpa, zucchini_aarch32_sample);
+    const zucchini_dex_sample = try vort.fuzz.androidOtaZucchiniDexFuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_dex_sample);
+    try fuzzOne(init.gpa, zucchini_dex_sample);
+    const zucchini_ztf_sample = try vort.fuzz.androidOtaZucchiniZtfFuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_ztf_sample);
+    try fuzzOne(init.gpa, zucchini_ztf_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },
@@ -1841,7 +2006,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 38,
+        samples.len + 40,
         data.len,
     });
     try stdout.flush();
@@ -2532,6 +2697,97 @@ fn makeZucchiniFuzzSampleAlloc(allocator: std.mem.Allocator) ![]u8 {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     });
+}
+
+fn makeZucchiniAarch64FuzzSampleAlloc(
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var source: [4096]u8 = @splat(0);
+    @memcpy(source[0..4], "\x7fELF");
+    source[4] = 2;
+    source[5] = 1;
+    source[6] = 1;
+    std.mem.writeInt(u16, source[16..18], 2, .little);
+    std.mem.writeInt(u16, source[18..20], 183, .little);
+    std.mem.writeInt(u32, source[20..24], 1, .little);
+    std.mem.writeInt(u64, source[40..48], 4096 - 128, .little);
+    std.mem.writeInt(u16, source[52..54], 64, .little);
+    std.mem.writeInt(u16, source[54..56], 56, .little);
+    std.mem.writeInt(u16, source[58..60], 64, .little);
+    std.mem.writeInt(u16, source[60..62], 2, .little);
+    const section = 4096 - 64;
+    std.mem.writeInt(u32, source[section + 4 ..][0..4], 1, .little);
+    std.mem.writeInt(u64, source[section + 8 ..][0..8], 6, .little);
+    std.mem.writeInt(u64, source[section + 16 ..][0..8], 0x10000, .little);
+    std.mem.writeInt(u64, source[section + 24 ..][0..8], 0x100, .little);
+    std.mem.writeInt(u64, source[section + 32 ..][0..8], 0x20, .little);
+    std.mem.writeInt(u64, source[section + 48 ..][0..8], 4, .little);
+    std.mem.writeInt(u32, source[0x100..0x104], 0x1400_0002, .little);
+    for (source[0x104..0x120]) |*byte| byte.* = 0x1f;
+    var expected = source;
+    std.mem.writeInt(u32, expected[0x100..0x104], 0x1400_0003, .little);
+
+    var sample: std.ArrayList(u8) = .empty;
+    errdefer sample.deinit(allocator);
+    var prefix: [4]u8 = undefined;
+    std.mem.writeInt(u16, prefix[0..2], 4096, .little);
+    std.mem.writeInt(u16, prefix[2..4], 4096, .little);
+    try sample.appendSlice(allocator, &prefix);
+    try sample.appendSlice(allocator, &source);
+    try sample.appendSlice(allocator, "Zucc");
+    try appendLe16(allocator, &sample, 1);
+    try appendLe16(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, source.len);
+    try appendLe32(allocator, &sample, vort.crc32(&source));
+    try appendLe32(allocator, &sample, expected.len);
+    try appendLe32(allocator, &sample, vort.crc32(&expected));
+    try appendLe32(allocator, &sample, 1);
+    try appendLe32(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, source.len);
+    try appendLe32(allocator, &sample, 0);
+    try appendLe32(allocator, &sample, expected.len);
+    try sample.appendSlice(allocator, "EA64");
+    try appendLe16(allocator, &sample, 1);
+    try appendLengthPrefixed(allocator, &sample, &.{0});
+    try appendLengthPrefixed(allocator, &sample, &.{0});
+    try appendLengthPrefixed(allocator, &sample, &.{ 0x80, 0x20 });
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, "");
+    try appendLengthPrefixed(allocator, &sample, &.{2});
+    try appendLe32(allocator, &sample, 1);
+    try sample.append(allocator, 2);
+    try appendLengthPrefixed(allocator, &sample, &.{ 0x8c, 0x02 });
+    return sample.toOwnedSlice(allocator);
+}
+
+fn appendLengthPrefixed(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    bytes: []const u8,
+) !void {
+    try appendLe32(allocator, output, bytes.len);
+    try output.appendSlice(allocator, bytes);
+}
+
+fn appendLe16(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: u16,
+) !void {
+    var bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &bytes, value, .little);
+    try output.appendSlice(allocator, &bytes);
+}
+
+fn appendLe32(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: anytype,
+) !void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, @intCast(value), .little);
+    try output.appendSlice(allocator, &bytes);
 }
 
 fn makeDiscoverableWiiDiscAlloc(

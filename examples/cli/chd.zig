@@ -133,7 +133,7 @@ pub fn encode(
     else
         512;
     const level = if (args.next()) |text|
-        try std.fmt.parseInt(u8, text, 10)
+        try std.fmt.parseInt(c_int, text, 10)
     else
         6;
     const parent_path = args.next();

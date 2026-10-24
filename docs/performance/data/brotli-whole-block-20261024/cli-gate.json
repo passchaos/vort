@@ -1,0 +1,134 @@
+{
+  "round_trips": 29,
+  "default_bounded_wire_checks": 4,
+  "whole_profile_wire_checks": 8,
+  "whole_not_larger_checks": 8,
+  "whole_span_checks": 8,
+  "rejected_output_preserved": 21,
+  "same_path_checks": 2,
+  "exact_cap_checks": 1,
+  "one_below_checks": 1,
+  "observations": [
+    {
+      "quality": 10,
+      "large_window": false,
+      "input_bytes": 128,
+      "block_len": 64,
+      "command": "encode-br-file",
+      "bounded_bytes": 53,
+      "whole_bytes": 53,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 6,
+        "whole_block_passes": 2,
+        "max_parse_positions": 64
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": false,
+      "input_bytes": 4100,
+      "block_len": 4100,
+      "command": "encode-br-file",
+      "bounded_bytes": 46,
+      "whole_bytes": 46,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 3,
+        "whole_block_passes": 1,
+        "max_parse_positions": 4100
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "input_bytes": 128,
+      "block_len": 64,
+      "command": "encode-br-stream-file",
+      "bounded_bytes": 55,
+      "whole_bytes": 55,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 4,
+        "whole_block_passes": 2,
+        "max_parse_positions": 64
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "input_bytes": 4100,
+      "block_len": 4100,
+      "command": "encode-br-stream-file",
+      "bounded_bytes": 48,
+      "whole_bytes": 48,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 2,
+        "whole_block_passes": 1,
+        "max_parse_positions": 4100
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "input_bytes": 128,
+      "block_len": 64,
+      "command": "encode-br-stream-file",
+      "bounded_bytes": 53,
+      "whole_bytes": 53,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 8,
+        "whole_block_passes": 4,
+        "max_parse_positions": 64
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "input_bytes": 4100,
+      "block_len": 4100,
+      "command": "encode-br-stream-file",
+      "bounded_bytes": 46,
+      "whole_bytes": 46,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 4,
+        "whole_block_passes": 2,
+        "max_parse_positions": 4100
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "input_bytes": 128,
+      "block_len": 64,
+      "command": "encode-br-file",
+      "bounded_bytes": 55,
+      "whole_bytes": 55,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 18,
+        "whole_block_passes": 6,
+        "max_parse_positions": 64
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "input_bytes": 4100,
+      "block_len": 4100,
+      "command": "encode-br-file",
+      "bounded_bytes": 48,
+      "whole_bytes": 48,
+      "profile": {
+        "parse_mode": "whole_block",
+        "bounded_passes": 9,
+        "whole_block_passes": 3,
+        "max_parse_positions": 4100
+      }
+    }
+  ],
+  "reference_brotli_version": 16777225
+}

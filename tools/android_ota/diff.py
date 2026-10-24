@@ -67,6 +67,30 @@ def expect_failure(*args: object, error_name: str) -> None:
         )
 
 
+def source_extract(
+    cli: Path,
+    payload: Path,
+    partition: str,
+    output: Path,
+    expected: bytes,
+    old_image: Path | None = None,
+    chunk_size: int = 257,
+) -> None:
+    result = run(
+        cli,
+        "extract-android-ota-source",
+        payload,
+        partition,
+        output,
+        chunk_size,
+        old_image if old_image is not None else "-",
+    )
+    if output.read_bytes() != expected:
+        raise AssertionError(f"source-backed extraction mismatch for {partition}")
+    if b"payload_reads=" not in result.stdout or b"payload_bytes_read=" not in result.stdout:
+        raise AssertionError("source-backed extraction omitted I/O accounting")
+
+
 def varint(value: int) -> bytes:
     output = bytearray()
     while value >= 0x80:
@@ -82,6 +106,125 @@ def vfield(number: int, value: int) -> bytes:
 
 def bfield(number: int, value: bytes) -> bytes:
     return varint((number << 3) | 2) + varint(len(value)) + value
+
+
+def fixed32_field(number: int, value: int) -> bytes:
+    return varint((number << 3) | 5) + struct.pack("<I", value)
+
+
+def signature_proto(signature: bytes, padded_size: int) -> bytes:
+    if not signature or len(signature) > padded_size:
+        raise AssertionError("invalid signature size")
+    inner = bfield(2, signature + bytes(padded_size - len(signature)))
+    inner += fixed32_field(3, len(signature))
+    return bfield(1, inner)
+
+
+def sign_payload(
+    openssl: Path,
+    temp: Path,
+    unsigned: bytes,
+    name: str,
+    algorithm: str,
+) -> tuple[bytes, Path, bytes]:
+    private_key = temp / f"{name}.private.pem"
+    public_key = temp / f"{name}.public.pem"
+    if algorithm == "rsa":
+        run(
+            openssl,
+            "genpkey",
+            "-algorithm",
+            "RSA",
+            "-pkeyopt",
+            "rsa_keygen_bits:2048",
+            "-out",
+            private_key,
+        )
+        padded_size = 256
+    elif algorithm == "ec":
+        run(
+            openssl,
+            "genpkey",
+            "-algorithm",
+            "EC",
+            "-pkeyopt",
+            "ec_paramgen_curve:P-256",
+            "-out",
+            private_key,
+        )
+        padded_size = 72
+    else:
+        raise AssertionError(f"unsupported signing algorithm {algorithm}")
+    run(openssl, "pkey", "-in", private_key, "-pubout", "-out", public_key)
+    major, manifest_size, signature_size = struct.unpack_from(">QQI", unsigned, 4)
+    if major != 2 or signature_size != 0:
+        raise AssertionError("expected unsigned major-v2 payload")
+    old_manifest = unsigned[HEADER_SIZE : HEADER_SIZE + manifest_size]
+    blobs = unsigned[HEADER_SIZE + manifest_size :]
+    placeholder = signature_proto(bytes(padded_size), padded_size)
+    manifest = old_manifest + vfield(4, len(blobs)) + vfield(5, len(placeholder))
+    header = MAGIC + struct.pack(">QQI", 2, len(manifest), len(placeholder))
+    metadata = header + manifest
+    payload_signed_bytes = metadata + blobs
+    metadata_input = temp / f"{name}.metadata.bin"
+    payload_input = temp / f"{name}.payload-signed.bin"
+    metadata_signature_path = temp / f"{name}.metadata.sig"
+    payload_signature_path = temp / f"{name}.payload.sig"
+    metadata_input.write_bytes(metadata)
+    payload_input.write_bytes(payload_signed_bytes)
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-sign",
+        private_key,
+        "-out",
+        metadata_signature_path,
+        metadata_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-sign",
+        private_key,
+        "-out",
+        payload_signature_path,
+        payload_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-verify",
+        public_key,
+        "-signature",
+        metadata_signature_path,
+        metadata_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-verify",
+        public_key,
+        "-signature",
+        payload_signature_path,
+        payload_input,
+    )
+    metadata_signature = signature_proto(
+        metadata_signature_path.read_bytes(),
+        padded_size,
+    )
+    raw_payload_signature = payload_signature_path.read_bytes()
+    payload_signature = signature_proto(raw_payload_signature, padded_size)
+    if len(metadata_signature) != len(placeholder) or len(payload_signature) != len(placeholder):
+        raise AssertionError("signature protobuf size changed after signing")
+    return (
+        metadata + metadata_signature + blobs + payload_signature,
+        public_key,
+        raw_payload_signature,
+    )
 
 
 def parse_varint(data: bytes, offset: int) -> tuple[int, int]:
@@ -485,6 +628,540 @@ def zucchini_payload() -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_aarch64_elf(target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = b"\2\1\1"
+    struct.pack_into("<HHI", image, 16, 2, 183, 1)
+    struct.pack_into("<Q", image, 40, BLOCK_SIZE - 0x80)
+    struct.pack_into("<HHHHH", image, 52, 64, 56, 0, 64, 2)
+    section = BLOCK_SIZE - 0x40
+    struct.pack_into("<IIQQQQIIQQ", image, section, 0, 1, 6, 0x10000, 0x100, 0x20, 0, 0, 4, 0)
+    displacement = target_offset - 0x100
+    struct.pack_into("<I", image, 0x100, 0x14000000 | ((displacement >> 2) & 0x03FFFFFF))
+    image[0x104:0x120] = b"\x1f" * 0x1C
+    return bytes(image)
+
+
+def zucchini_aarch64_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_aarch64_elf(0x108)
+    target = test_aarch64_elf(0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack("<IIII4sH", 0, len(source), 0, len(target), b"EA64", 1)
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 0)
+    patch += struct.pack("<I", 1) + b"\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-aarch64"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
+def test_aarch32_elf(target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = b"\1\1\1"
+    struct.pack_into("<HHI", image, 16, 2, 40, 1)
+    section_offset = BLOCK_SIZE - 4 * 40
+    struct.pack_into("<I", image, 32, section_offset)
+    struct.pack_into("<HHHHH", image, 40, 52, 32, 0, 40, 4)
+
+    def section(
+        index: int,
+        kind: int,
+        flags: int,
+        address: int,
+        offset: int,
+        size: int,
+        entry_size: int,
+    ) -> None:
+        base = section_offset + index * 40
+        struct.pack_into(
+            "<IIIIIIIIII",
+            image,
+            base,
+            0,
+            kind,
+            flags,
+            address,
+            offset,
+            size,
+            0,
+            0,
+            1,
+            entry_size,
+        )
+
+    section(1, 1, 6, 0x10000, 0x100, 0x20, 0)
+    section(2, 1, 3, 0x20000, 0x140, 0x08, 0)
+    section(3, 9, 2, 0x30000, 0x160, 0x08, 8)
+    for offset in range(0x100, 0x120, 4):
+        struct.pack_into("<I", image, offset, 0xE1A00000)
+    displacement = target_offset - 0x108
+    struct.pack_into("<I", image, 0x100, 0xEA000000 | ((displacement >> 2) & 0xFFFFFF))
+    struct.pack_into("<I", image, 0x140, 0x10008)
+    struct.pack_into("<II", image, 0x160, 0x20000, 23)
+    return bytes(image)
+
+
+def zucchini_aarch32_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_aarch32_elf(0x108)
+    target = test_aarch32_elf(0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"EA32",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-aarch32"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
+def test_intel_elf(is_64: bool, target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = bytes((2 if is_64 else 1, 1, 1))
+    struct.pack_into("<HHI", image, 16, 2, 62 if is_64 else 3, 1)
+    section_offset = BLOCK_SIZE - (4 * (64 if is_64 else 40))
+    if is_64:
+        struct.pack_into("<Q", image, 40, section_offset)
+        struct.pack_into("<HHHHH", image, 52, 64, 56, 0, 64, 4)
+    else:
+        struct.pack_into("<I", image, 32, section_offset)
+        struct.pack_into("<HHHHH", image, 40, 52, 32, 0, 40, 4)
+
+    def section(
+        index: int,
+        kind: int,
+        flags: int,
+        address: int,
+        offset: int,
+        size: int,
+        entry_size: int,
+    ) -> None:
+        base = section_offset + index * (64 if is_64 else 40)
+        if is_64:
+            struct.pack_into(
+                "<IIQQQQIIQQ",
+                image,
+                base,
+                0,
+                kind,
+                flags,
+                address,
+                offset,
+                size,
+                0,
+                0,
+                1,
+                entry_size,
+            )
+        else:
+            struct.pack_into(
+                "<IIIIIIIIII",
+                image,
+                base,
+                0,
+                kind,
+                flags,
+                address,
+                offset,
+                size,
+                0,
+                0,
+                1,
+                entry_size,
+            )
+
+    section(1, 1, 6, 0x10000, 0x100, 0x20, 0)
+    section(2, 1, 3, 0x20000, 0x140, 0x10 if is_64 else 0x08, 0)
+    section(3, 9, 2, 0x30000, 0x160, 0x10 if is_64 else 0x08, 16 if is_64 else 8)
+    image[0x100] = 0xE8
+    struct.pack_into("<I", image, 0x101, target_offset - 0x105)
+    if is_64:
+        struct.pack_into("<QQ", image, 0x140, 0x10008, 0)
+        struct.pack_into("<QQ", image, 0x160, 0x20000, 8)
+    else:
+        struct.pack_into("<II", image, 0x140, 0x10008, 0)
+        struct.pack_into("<II", image, 0x160, 0x20000, 8)
+    return bytes(image)
+
+
+def zucchini_intel_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_intel_elf(is_64, 0x108)
+    target = test_intel_elf(is_64, 0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"Ex64" if is_64 else b"Ex86",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition_name = b"zucchini-x64" if is_64 else b"zucchini-x86"
+    partition = bytearray(bfield(1, partition_name))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
+def test_pe(is_64: bool, target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:2] = b"MZ"
+    struct.pack_into("<I", image, 0x3C, 0x80)
+    image[0x80:0x84] = b"PE\0\0"
+    optional_length = 0xF0 if is_64 else 0xE0
+    struct.pack_into("<HH", image, 0x84, 0x8664 if is_64 else 0x14C, 2)
+    struct.pack_into("<H", image, 0x94, optional_length)
+    optional = 0x98
+    struct.pack_into("<H", image, optional, 0x20B if is_64 else 0x10B)
+    image_base = 0x140000000 if is_64 else 0x400000
+    if is_64:
+        struct.pack_into("<Q", image, optional + 0x18, image_base)
+    else:
+        struct.pack_into("<I", image, optional + 0x1C, image_base)
+    struct.pack_into("<I", image, optional + 0x38, 0x4000)
+    struct.pack_into("<I", image, optional + (0x6C if is_64 else 0x5C), 16)
+    directory = optional + (0x70 if is_64 else 0x60) + 5 * 8
+    struct.pack_into("<II", image, directory, 0x2020, 12)
+
+    def section(
+        index: int,
+        virtual_size: int,
+        virtual_address: int,
+        raw_size: int,
+        raw_offset: int,
+        characteristics: int,
+    ) -> None:
+        base = optional + optional_length + index * 40
+        struct.pack_into(
+            "<IIII",
+            image,
+            base + 8,
+            virtual_size,
+            virtual_address,
+            raw_size,
+            raw_offset,
+        )
+        struct.pack_into("<I", image, base + 36, characteristics)
+
+    section(0, 0x40, 0x1000, 0x40, 0x200, 0x60000000)
+    section(1, BLOCK_SIZE - 0x300, 0x2000, BLOCK_SIZE - 0x300, 0x300, 0x40000000)
+    image[0x200] = 0xE8
+    struct.pack_into("<I", image, 0x201, target_offset - 0x205)
+    if is_64:
+        struct.pack_into("<Q", image, 0x300, image_base + 0x1008)
+    else:
+        struct.pack_into("<I", image, 0x300, image_base + 0x1008)
+    struct.pack_into("<IIH", image, 0x320, 0x2000, 12, 0xA000 if is_64 else 0x3000)
+    return bytes(image)
+
+
+def zucchini_pe_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_pe(is_64, 0x208)
+    target = test_pe(is_64, 0x20C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"Px64" if is_64 else b"Px86",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\x04"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition_name = b"zucchini-pe-x64" if is_64 else b"zucchini-pe-x86"
+    partition = bytearray(bfield(1, partition_name))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
+def test_dex(string_index: int) -> bytes:
+    image = bytearray(0xDC)
+    image[:8] = b"dex\n039\0"
+    struct.pack_into("<III", image, 32, len(image), 0x70, 0x12345678)
+    struct.pack_into("<I", image, 52, 0x70)
+    struct.pack_into("<II", image, 56, 2, 0xB0)
+    struct.pack_into("<II", image, 64, 1, 0xB8)
+    struct.pack_into("<II", image, 104, len(image) - 0xBC, 0xBC)
+    struct.pack_into("<I", image, 0x70, 5)
+
+    def map_item(index: int, kind: int, count: int, offset: int) -> None:
+        struct.pack_into("<HHII", image, 0x74 + index * 12, kind, 0, count, offset)
+
+    map_item(0, 0x0000, 1, 0)
+    map_item(1, 0x0001, 2, 0xB0)
+    map_item(2, 0x0002, 1, 0xB8)
+    map_item(3, 0x2001, 1, 0xBC)
+    map_item(4, 0x2002, 2, 0xD6)
+    struct.pack_into("<II", image, 0xB0, 0xD6, 0xD9)
+    struct.pack_into("<I", image, 0xB8, 0)
+    struct.pack_into("<I", image, 0xC8, 5)
+    image[0xCC] = 0x1A
+    struct.pack_into("<H", image, 0xCE, string_index)
+    image[0xD0] = 0x29
+    struct.pack_into("<h", image, 0xD2, 2)
+    image[0xD4] = 0x0E
+    image[0xD6:0xDC] = b"\1A\0\1B\0"
+    image[12:32] = hashlib.sha1(image[32:]).digest()
+    struct.pack_into("<I", image, 8, zlib.adler32(image[12:]) & 0xFFFFFFFF)
+    return bytes(image)
+
+
+def zucchini_dex_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source_dex = test_dex(0)
+    target_dex = test_dex(1)
+    source = source_dex + bytes(BLOCK_SIZE - len(source_dex))
+    target = target_dex + bytes(BLOCK_SIZE - len(target_dex))
+    raw_skips = bytearray()
+    raw_diffs = bytearray()
+    compensation = 0
+    for index, (old_byte, new_byte) in enumerate(zip(source_dex, target_dex)):
+        if old_byte == new_byte or 0xCE <= index < 0xD0:
+            continue
+        raw_skips += varint(index - compensation)
+        raw_diffs.append((new_byte - old_byte) & 0xFF)
+        compensation = index + 1
+
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 2)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source_dex),
+        0,
+        len(target_dex),
+        b"DEX ",
+        1,
+    )
+    for stream in (
+        b"\0",
+        b"\0",
+        varint(len(source_dex)),
+        b"",
+        bytes(raw_skips),
+        bytes(raw_diffs),
+        b"\0\2\0\0\0",
+    ):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 1) + b"\0" + struct.pack("<I", 2) + b"\xb4\1"
+    padding = BLOCK_SIZE - len(source_dex)
+    patch += struct.pack(
+        "<IIII4sH",
+        len(source_dex),
+        padding,
+        len(target_dex),
+        padding,
+        b"NoOp",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(padding), b"", b"", b"", b""):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 0)
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-dex"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
+def zucchini_ztf_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source_ztf = b"ZTxt\nTargetABC\nRef <2,1>\ntxTZ\n"
+    target_ztf = b"ZTxt\nTargetABC\nRef <2,2>\ntxTZ\n"
+    source = source_ztf + bytes(BLOCK_SIZE - len(source_ztf))
+    target = target_ztf + bytes(BLOCK_SIZE - len(target_ztf))
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 2)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source_ztf),
+        0,
+        len(target_ztf),
+        b"ZTF ",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(len(source_ztf)), b"", b"", b"", b"\2"):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 1) + b"\0" + struct.pack("<I", 1) + b"\6"
+    padding = BLOCK_SIZE - len(source_ztf)
+    patch += struct.pack(
+        "<IIII4sH",
+        len(source_ztf),
+        padding,
+        len(target_ztf),
+        padding,
+        b"NoOp",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(padding), b"", b"", b"", b""):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 0)
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-ztf"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -663,6 +1340,7 @@ def main() -> None:
     parser.add_argument("--bspatch", type=Path)
     parser.add_argument("--puffin", type=Path)
     parser.add_argument("--puff-codec-oracle", type=Path)
+    parser.add_argument("--openssl", type=Path)
     args = parser.parse_args()
     oracle = args.payload_dumper or (
         Path(found) if (found := shutil.which("payload_dumper")) else None
@@ -674,6 +1352,9 @@ def main() -> None:
         Path(found) if (found := shutil.which("puffin")) else None
     )
     puff_codec_oracle = args.puff_codec_oracle
+    openssl = args.openssl or (
+        Path(found) if (found := shutil.which("openssl")) else None
+    )
 
     source_bytes = writer_payload()
     writer_cases = 0
@@ -688,6 +1369,13 @@ def main() -> None:
     puff_codec_cases = 0
     lz4diff_cases = 0
     zucchini_cases = 0
+    source_reader_cases = 0
+    source_inspect_cases = 0
+    source_aosp_cases = 0
+    source_writer_cases = 0
+    source_writer_oracle = 0
+    signature_cases = 0
+    signature_openssl_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -706,6 +1394,32 @@ def main() -> None:
                 2 * BLOCK_SIZE,
             )
             payload = payload_path.read_bytes()
+            source_payload_path = temp / f"vort-source-writer-{compression}.bin"
+            source_writer_summary = run(
+                args.cli,
+                "encode-android-ota-source",
+                source,
+                source_payload_path,
+                "system",
+                compression,
+                BLOCK_SIZE,
+                2 * BLOCK_SIZE,
+                3,
+                5,
+            ).stdout
+            if source_payload_path.read_bytes() != payload:
+                raise AssertionError(
+                    f"source writer wire mismatch for {compression}"
+                )
+            if (
+                b"format=android-ota-source-writer" not in source_writer_summary
+                or b"input_reads=" not in source_writer_summary
+                or b"output_writes=" not in source_writer_summary
+            ):
+                raise AssertionError(
+                    f"source writer accounting mismatch for {compression}"
+                )
+            source_writer_cases += 1
             decoded = decode_reference(payload)
             if decoded != {"system": source_bytes}:
                 raise AssertionError(f"reference decode mismatch for {compression}")
@@ -724,6 +1438,23 @@ def main() -> None:
             summary = run(args.cli, "inspect-android-ota", payload_path).stdout
             if b"format=android-ota" not in summary or b"name=system" not in summary:
                 raise AssertionError(f"inspect mismatch for {compression}")
+            source_summary = run(
+                args.cli,
+                "inspect-android-ota-source",
+                payload_path,
+            ).stdout
+            if b"format=android-ota-source" not in source_summary or b"reads=" not in source_summary:
+                raise AssertionError(f"source inspect mismatch for {compression}")
+            source_inspect_cases += 1
+            source_output = temp / f"source-{compression}.img"
+            source_extract(
+                args.cli,
+                payload_path,
+                "system",
+                source_output,
+                source_bytes,
+            )
+            source_reader_cases += 1
             writer_cases += 1
             if oracle is not None:
                 output_dir = temp / f"oracle-{compression}"
@@ -740,6 +1471,98 @@ def main() -> None:
                 if (output_dir / "system.img").read_bytes() != source_bytes:
                     raise AssertionError(f"payload_dumper mismatch for {compression}")
                 oracle_decode += 1
+                source_output_dir = temp / f"oracle-source-writer-{compression}"
+                run(
+                    oracle,
+                    source_payload_path,
+                    "-o",
+                    source_output_dir,
+                    "-i",
+                    "system",
+                    "-P",
+                    "-q",
+                )
+                if (source_output_dir / "system.img").read_bytes() != source_bytes:
+                    raise AssertionError(
+                        f"payload_dumper source writer mismatch for {compression}"
+                    )
+                source_writer_oracle += 1
+
+        if raw_payload is None:
+            raise AssertionError("missing raw payload")
+        if openssl is not None:
+            signed_payloads: list[tuple[str, Path, bytes, Path, bytes]] = []
+            for algorithm in ("rsa", "ec"):
+                signed, public_key, raw_payload_signature = sign_payload(
+                    openssl,
+                    temp,
+                    raw_payload,
+                    f"signed-{algorithm}",
+                    algorithm,
+                )
+                path = temp / f"signed-{algorithm}.bin"
+                path.write_bytes(signed)
+                signed_payloads.append(
+                    (algorithm, path, signed, public_key, raw_payload_signature)
+                )
+                signature_openssl_cases += 2
+            for index, (algorithm, path, signed, public_key, raw_payload_signature) in enumerate(
+                signed_payloads
+            ):
+                wrong_key = signed_payloads[1 - index][3]
+                for command in (
+                    "verify-android-ota-signatures",
+                    "verify-android-ota-source-signatures",
+                ):
+                    verified = run(
+                        args.cli,
+                        command,
+                        path,
+                        wrong_key,
+                        public_key,
+                    ).stdout
+                    if (
+                        b"android_ota_signatures=verified" not in verified
+                        or b"metadata_key=1" not in verified
+                        or b"payload_key=1" not in verified
+                    ):
+                        raise AssertionError(
+                            f"{algorithm} signature verification mismatch: {verified!r}"
+                        )
+                    signature_cases += 1
+                expect_failure(
+                    args.cli,
+                    "verify-android-ota-signatures",
+                    path,
+                    wrong_key,
+                    error_name="AndroidOtaSignatureMismatch",
+                )
+                signature_cases += 1
+                corrupt = bytearray(signed)
+                signature_at = signed.rfind(raw_payload_signature)
+                if signature_at < 0:
+                    raise AssertionError("payload signature bytes were not found")
+                corrupt[signature_at] ^= 1
+                corrupt_path = temp / f"signed-{algorithm}-corrupt.bin"
+                corrupt_path.write_bytes(corrupt)
+                expect_failure(
+                    args.cli,
+                    "verify-android-ota-signatures",
+                    corrupt_path,
+                    public_key,
+                    error_name="AndroidOtaSignatureMismatch",
+                )
+                signature_cases += 1
+            unsigned_path = temp / "unsigned-signature-check.bin"
+            unsigned_path.write_bytes(raw_payload)
+            expect_failure(
+                args.cli,
+                "verify-android-ota-signatures",
+                unsigned_path,
+                signed_payloads[0][3],
+                error_name="AndroidOtaSignatureMissing",
+            )
+            signature_cases += 1
 
         reference_data = mixed_payload_data()
         reference_payload = reference_mixed_payload(reference_data)
@@ -757,6 +1580,14 @@ def main() -> None:
         if decoded.read_bytes() != reference_data:
             raise AssertionError("Vort decode mismatch for Python payload")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            reference,
+            "system",
+            temp / "reference-source-decoded.img",
+            reference_data,
+        )
+        source_reader_cases += 1
         for index, (offset, length) in enumerate(
             (
                 (0, 137),
@@ -801,6 +1632,15 @@ def main() -> None:
         if source_copy_output.read_bytes() != source_copy_expected:
             raise AssertionError("SOURCE_COPY decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            source_copy_path,
+            "vendor",
+            temp / "source-copy-source.img",
+            source_copy_expected,
+            old_image,
+        )
+        source_reader_cases += 1
         source_copy_range = temp / "source-copy-range.img"
         run(
             args.cli,
@@ -837,6 +1677,15 @@ def main() -> None:
         if bsdiff_output.read_bytes() != source_bsdiff_expected:
             raise AssertionError("SOURCE_BSDIFF decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            source_bsdiff_path,
+            "product",
+            temp / "source-bsdiff-source.img",
+            source_bsdiff_expected,
+            bsdiff_old,
+        )
+        source_reader_cases += 1
         bsdiff_range = temp / "source-bsdiff-range.img"
         run(
             args.cli,
@@ -878,6 +1727,15 @@ def main() -> None:
         if puff_output.read_bytes() != puff_expected:
             raise AssertionError("PUFFDIFF OTA decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            puff_payload_path,
+            "puffin",
+            temp / "puffin-source-new.img",
+            puff_expected,
+            puff_source_path,
+        )
+        source_reader_cases += 1
         puff_range = temp / "puffin-range.img"
         run(
             args.cli,
@@ -1006,6 +1864,15 @@ def main() -> None:
                 )
                 if lz4_output.read_bytes() != lz4_expected:
                     raise AssertionError(f"LZ4DIFF {name} decode mismatch")
+                source_extract(
+                    args.cli,
+                    lz4_payload_path,
+                    "lz4diff",
+                    temp / f"lz4diff-{name}-source-new.img",
+                    lz4_expected,
+                    lz4_source_path,
+                )
+                source_reader_cases += 1
                 lz4_range = temp / f"lz4diff-{name}-range.img"
                 run(
                     args.cli,
@@ -1023,42 +1890,69 @@ def main() -> None:
                 ranges += 1
 
         if python_brotli is not None:
-            zucchini_data, zucchini_source, zucchini_expected = zucchini_payload()
-            zucchini_payload_path = temp / "zucchini.bin"
-            zucchini_payload_path.write_bytes(zucchini_data)
-            zucchini_source_path = temp / "zucchini-old.img"
-            zucchini_source_path.write_bytes(zucchini_source)
-            zucchini_output = temp / "zucchini-new.img"
-            run(
-                args.cli,
-                "extract-android-ota",
-                zucchini_payload_path,
-                "zucchini",
-                zucchini_output,
-                len(zucchini_expected),
-                zucchini_source_path,
-            )
-            if zucchini_output.read_bytes() != zucchini_expected:
-                raise AssertionError("ZUCCHINI NoOp decode mismatch")
-            zucchini_range = temp / "zucchini-range.img"
-            run(
-                args.cli,
-                "extract-android-ota-range",
-                zucchini_payload_path,
-                "zucchini",
-                zucchini_range,
-                197,
-                907,
-                zucchini_source_path,
-            )
-            if zucchini_range.read_bytes() != zucchini_expected[197:1104]:
-                raise AssertionError("ZUCCHINI NoOp range mismatch")
-            zucchini_cases += 1
-            ranges += 1
+            for name, partition_name, fixture in (
+                ("noop", "zucchini", zucchini_payload),
+                ("aarch64", "zucchini-aarch64", zucchini_aarch64_payload),
+                ("aarch32", "zucchini-aarch32", zucchini_aarch32_payload),
+                ("x86", "zucchini-x86", lambda: zucchini_intel_payload(False)),
+                ("x64", "zucchini-x64", lambda: zucchini_intel_payload(True)),
+                ("pe-x86", "zucchini-pe-x86", lambda: zucchini_pe_payload(False)),
+                ("pe-x64", "zucchini-pe-x64", lambda: zucchini_pe_payload(True)),
+                ("dex", "zucchini-dex", zucchini_dex_payload),
+                ("ztf", "zucchini-ztf", zucchini_ztf_payload),
+            ):
+                zucchini_data, zucchini_source, zucchini_expected = fixture()
+                zucchini_payload_path = temp / f"zucchini-{name}.bin"
+                zucchini_payload_path.write_bytes(zucchini_data)
+                zucchini_source_path = temp / f"zucchini-{name}-old.img"
+                zucchini_source_path.write_bytes(zucchini_source)
+                zucchini_output = temp / f"zucchini-{name}-new.img"
+                run(
+                    args.cli,
+                    "extract-android-ota",
+                    zucchini_payload_path,
+                    partition_name,
+                    zucchini_output,
+                    len(zucchini_expected),
+                    zucchini_source_path,
+                )
+                if zucchini_output.read_bytes() != zucchini_expected:
+                    raise AssertionError(f"ZUCCHINI {name} decode mismatch")
+                source_extract(
+                    args.cli,
+                    zucchini_payload_path,
+                    partition_name,
+                    temp / f"zucchini-{name}-source-new.img",
+                    zucchini_expected,
+                    zucchini_source_path,
+                )
+                source_reader_cases += 1
+                zucchini_range = temp / f"zucchini-{name}-range.img"
+                run(
+                    args.cli,
+                    "extract-android-ota-range",
+                    zucchini_payload_path,
+                    partition_name,
+                    zucchini_range,
+                    197,
+                    907,
+                    zucchini_source_path,
+                )
+                if zucchini_range.read_bytes() != zucchini_expected[197:1104]:
+                    raise AssertionError(f"ZUCCHINI {name} range mismatch")
+                zucchini_cases += 1
+                ranges += 1
 
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "inspect-android-ota-source",
+            short,
+            error_name="TruncatedFrame",
+        )
         malformed += 1
         corrupt = bytearray(reference_payload)
         corrupt[0] ^= 1
@@ -1080,6 +1974,13 @@ def main() -> None:
         bad_hash.write_bytes(corrupt)
         expect_failure(
             args.cli, "inspect-android-ota", bad_hash, error_name="ChecksumMismatch"
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "inspect-android-ota-source",
+            bad_hash,
+            error_name="ChecksumMismatch",
         )
         malformed += 1
         expect_failure(
@@ -1143,6 +2044,16 @@ def main() -> None:
                 if output.read_bytes() != expected:
                     raise AssertionError(f"AOSP full {partition} mismatch")
                 aosp_full += 1
+                source_extract(
+                    args.cli,
+                    full_payload,
+                    partition,
+                    temp / f"aosp-full-source-{partition}.img",
+                    expected,
+                    chunk_size=1024 * 1024,
+                )
+                source_reader_cases += 1
+                source_aosp_cases += 1
             expected_root = (aosp_images / "disk_sqfs_default.img").read_bytes()
             output_root = temp / "aosp-delta-root.img"
             run(
@@ -1157,6 +2068,17 @@ def main() -> None:
             if output_root.read_bytes() != expected_root:
                 raise AssertionError("AOSP delta root mismatch")
             aosp_delta += 1
+            source_extract(
+                args.cli,
+                delta_payload,
+                "root",
+                temp / "aosp-delta-source-root.img",
+                expected_root,
+                aosp_images / "disk_sqfs_empty.img",
+                chunk_size=1024 * 1024,
+            )
+            source_reader_cases += 1
+            source_aosp_cases += 1
             expected_kernel = (aosp_images / "disk_ext2_4k.img").read_bytes()
             output_kernel = temp / "aosp-delta-kernel.img"
             run(
@@ -1171,6 +2093,17 @@ def main() -> None:
             if output_kernel.read_bytes() != expected_kernel:
                 raise AssertionError("AOSP BROTLI_BSDIFF kernel mismatch")
             aosp_delta += 1
+            source_extract(
+                args.cli,
+                delta_payload,
+                "kernel",
+                temp / "aosp-delta-source-kernel.img",
+                expected_kernel,
+                aosp_images / "disk_ext2_4k_empty.img",
+                chunk_size=1024 * 1024,
+            )
+            source_reader_cases += 1
+            source_aosp_cases += 1
             kernel_range = temp / "aosp-delta-kernel-range.img"
             run(
                 args.cli,
@@ -1197,7 +2130,12 @@ def main() -> None:
         f"lz4={lz4_oracle is not None} lz4diff_cases={lz4diff_cases} "
         f"python_brotli={python_brotli is not None} zucchini_cases={zucchini_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
-        f"aosp_delta={aosp_delta}"
+        f"aosp_delta={aosp_delta} source_reader={source_reader_cases} "
+        f"source_inspect={source_inspect_cases} source_aosp={source_aosp_cases} "
+        f"source_writer={source_writer_cases} "
+        f"source_writer_oracle={source_writer_oracle} "
+        f"openssl={openssl is not None} signature_cases={signature_cases} "
+        f"signature_openssl={signature_openssl_cases}"
     )
 
 

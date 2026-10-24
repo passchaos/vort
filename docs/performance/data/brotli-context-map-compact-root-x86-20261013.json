@@ -1,0 +1,112 @@
+{
+  "date": "2026-10-13",
+  "decision": "rejected_and_fully_removed",
+  "baseline_commit": "c4920a3d73a3887a842abddf0f12e7fa197b3c23",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "Intel Core i7-10700K",
+    "pinned_cpu": 2,
+    "zig": "0.16.0",
+    "mode": "ReleaseFast",
+    "libbrotli_version": "0x1000009"
+  },
+  "candidate": {
+    "description": "Replace the temporary generic 272-symbol context-map Huffman table with a final five-bit root plus canonical-indexed long-code tail.",
+    "read_context_map_text_bytes": {
+      "baseline": 9118,
+      "candidate": 7054
+    },
+    "elf_text_bytes": {
+      "baseline": 632505,
+      "candidate": 631545
+    },
+    "reference_bench_sha256": {
+      "baseline": "8de85638075c9132dccc7f8e2795dd3157b1403e359ffe67dbf6dc8c1fa85eab",
+      "candidate": "8dae4e8b6776c51f473a93c42dd28926542330a671b5c6587d7789f65ad65677"
+    },
+    "stage_profile_sha256": {
+      "baseline": "8093fa9591bbcf5d0e5e0335d35dc53007d804ff530b6573af7207afc02eb594",
+      "candidate": "a2ecca0b36af53d9957d14f9aaa0636694fb784a95382f95e55631905b3a2f4a"
+    }
+  },
+  "commands": {
+    "stage": "taskset -c 2 BINARY --iterations 2000 --csv OUTPUT",
+    "target_pairs": "taskset -c 2 BINARY --case clustered_q8 --iterations 20000 --vort-only --csv OUTPUT",
+    "matrix_pairs": "taskset -c 2 BINARY --iterations 1000 --vort-only --csv OUTPUT",
+    "long_controls": "taskset -c 2 BINARY --case CASE --iterations 100000 --vort-only --csv OUTPUT"
+  },
+  "stage_profile": {
+    "iterations": 2000,
+    "encoded_bytes": 52623,
+    "checksum": 2939536000,
+    "baseline": {
+      "header_ns": 150352627,
+      "lookup_ns": 54025292,
+      "payload_ns": 975279585,
+      "total_ns": 1180069589
+    },
+    "candidate": {
+      "header_ns": 144903106,
+      "lookup_ns": 54805795,
+      "payload_ns": 985897001,
+      "total_ns": 1185978697
+    },
+    "header_speedup": 1.037608034434,
+    "total_speedup": 0.995017526019
+  },
+  "clustered_q8_long_pairs": {
+    "pairs": 15,
+    "effective_decodes_per_observation": 2000,
+    "baseline_ns": [1143084695, 1149791667, 1147428548, 1149952005, 1143364605, 1147604860, 1141976564, 1142772365, 1142353626, 1148656677, 1145536628, 1146648391, 1144752849, 1143538192, 1142915011],
+    "candidate_ns": [1139900552, 1142610927, 1143099289, 1137461689, 1141496142, 1137006427, 1141512518, 1139093244, 1137584091, 1139381878, 1138718294, 1137636079, 1138400359, 1140332912, 1145846978],
+    "speedup_median": 1.004192687853,
+    "speedup_geometric_mean": 1.004695090489,
+    "wins": 14,
+    "baseline_median_mib_s": 1747.10,
+    "candidate_median_mib_s": 1755.34
+  },
+  "seven_pair_matrix": {
+    "tiny": { "median": 1.000113804484, "geometric_mean": 1.088478912, "wins": 4 },
+    "text": { "median": 1.000162836188, "geometric_mean": 1.000297180, "wins": 4 },
+    "structured": { "median": 0.997335245151, "geometric_mean": 0.998526388, "wins": 3 },
+    "repetitive": { "median": 0.995538893598, "geometric_mean": 0.994956969, "wins": 0 },
+    "random4k": { "median": 1.000020027237, "geometric_mean": 1.039505231, "wins": 4 },
+    "text_q3": { "median": 1.001759915605, "geometric_mean": 1.002808079, "wins": 5 },
+    "structured_q3": { "median": 1.002574895401, "geometric_mean": 1.001067222, "wins": 5 },
+    "repetitive_q3": { "median": 0.999024796938, "geometric_mean": 0.997798228, "wins": 2 },
+    "structured_q4": { "median": 0.992572674548, "geometric_mean": 0.992188658, "wins": 1 },
+    "text_q11": { "median": 1.006738678409, "geometric_mean": 1.006370376, "wins": 7 },
+    "structured_q11": { "median": 1.005520325730, "geometric_mean": 1.006181817, "wins": 6 },
+    "repetitive_q11": { "median": 1.001130947401, "geometric_mean": 1.000756565, "wins": 4 },
+    "clustered_q8": { "median": 1.003091296466, "geometric_mean": 1.002829730, "wins": 6 }
+  },
+  "six_bit_root_long_controls": {
+    "reference_bench_sha256": "c5a8a90a6910307850bab675793c58208a232d37805f544ac3b9ef561e4dc1a3",
+    "structured_q4": {
+      "pairs": 15,
+      "baseline_ns": [346951425, 348000516, 345018449, 346631935, 346023754, 348298941, 346233969, 346758427, 345331847, 347446166, 346784786, 346840069, 346703390, 346401835, 346400501],
+      "candidate_ns": [349594607, 347979782, 347447613, 346351295, 346325549, 348129946, 350915819, 348549099, 347715260, 349984036, 349289598, 348254244, 347672290, 348639739, 346362126],
+      "speedup_median": 0.994862497120,
+      "speedup_geometric_mean": 0.995526952,
+      "wins": 4
+    },
+    "repetitive": {
+      "pairs": 15,
+      "baseline_ns": [624304479, 626246230, 625486525, 629997014, 622777220, 624275116, 623634376, 625196427, 625434448, 625542333, 624565421, 622827866, 623264478, 629304270, 626000436],
+      "candidate_ns": [628698638, 630611617, 627400027, 628468341, 625932274, 628800957, 626109848, 627277221, 625843506, 629120737, 625477763, 627120970, 624705884, 627695991, 627727905],
+      "speedup_median": 0.996682815938,
+      "speedup_geometric_mean": 0.996583152,
+      "wins": 2
+    }
+  },
+  "other_root_widths": {
+    "four_bit": {
+      "reference_bench_sha256": "43fdba13562f6d322728642a024ba66324a5730aaf0a33927e7df4b5f6d6ea5e",
+      "decision": "rejected after the seven-pair matrix regressed most ordinary rows; structured and repetitive_q3 medians were 0.9898x and 0.9876x"
+    },
+    "six_bit": {
+      "decision": "rejected after long controls reproduced ordinary-row regressions"
+    }
+  },
+  "conclusion": "The direct final representation reduced isolated header work and improved clustered_q8, but stable ordinary-row regressions violate the matrix retention rule. All production changes were removed. Do not repeat compact canonical roots without a mechanism that preserves ordinary decode behavior."
+}

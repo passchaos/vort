@@ -1,4 +1,7 @@
 const std = @import("std");
+const checksum = @import("../checksum.zig");
+const types = @import("types.zig");
+const wire = @import("wire.zig");
 
 pub const Error = error{
     InvalidZipArchive,
@@ -13,14 +16,246 @@ const zip64_end_of_central_min_len: usize = 56;
 const zip64_locator_len: usize = 20;
 const max_comment_len: usize = std.math.maxInt(u16);
 const zip64_extra_id: u16 = 0x0001;
+const pkware_strong_extra_id: u16 = 0x0017;
+const winzip_aes_extra_id: u16 = 0x9901;
+
+pub const ParsedWinZipAes = struct {
+    info: types.WinZipAesInfo,
+    actual_method: types.CompressionMethod,
+};
+
+pub fn parseWinZipAesExtra(extra: []const u8) Error!?ParsedWinZipAes {
+    const payload = (try findExtra(extra, winzip_aes_extra_id)) orelse return null;
+    if (payload.len != 7 or !std.mem.eql(u8, payload[2..4], "AE"))
+        return error.InvalidZipArchive;
+    const version: types.WinZipAesVendorVersion = switch (std.mem.readInt(u16, payload[0..2], .little)) {
+        1 => .ae1,
+        2 => .ae2,
+        else => return error.UnsupportedZipFeature,
+    };
+    const strength: types.WinZipAesStrength = switch (payload[4]) {
+        1 => .aes128,
+        2 => .aes192,
+        3 => .aes256,
+        else => return error.UnsupportedZipFeature,
+    };
+    const actual_method: types.CompressionMethod = @enumFromInt(
+        std.mem.readInt(u16, payload[5..7], .little),
+    );
+    if (actual_method == .aes) return error.InvalidZipArchive;
+    return .{
+        .info = .{ .version = version, .strength = strength },
+        .actual_method = actual_method,
+    };
+}
+
+pub fn parsePkwareStrongEncryptionExtra(
+    extra: []const u8,
+) Error!?types.PkwareStrongEncryptionInfo {
+    const payload = (try findExtra(extra, pkware_strong_extra_id)) orelse return null;
+    if (payload.len != 8) return error.InvalidZipArchive;
+    if (std.mem.readInt(u16, payload[0..2], .little) != 2)
+        return error.InvalidZipArchive;
+    const strength: types.PkwareStrongEncryptionStrength = switch (std.mem.readInt(u16, payload[2..4], .little)) {
+        0x660e => .aes128,
+        0x660f => .aes192,
+        0x6610 => .aes256,
+        else => return error.UnsupportedZipFeature,
+    };
+    if (std.mem.readInt(u16, payload[4..6], .little) != strength.keyLen() * 8)
+        return error.InvalidZipArchive;
+    const flags = std.mem.readInt(u16, payload[6..8], .little);
+    if (flags != 0x0001) return error.UnsupportedZipFeature;
+    return .{ .strength = strength };
+}
+
+pub const ExtraLocation = enum { local, central };
+
+pub fn parseExtendedTimestampExtra(
+    extra: []const u8,
+    location: ExtraLocation,
+) Error!?types.ExtendedTimestamp {
+    const payload = (try findExtra(extra, wire.extended_timestamp_extra_id)) orelse
+        return null;
+    if (payload.len == 0) return error.InvalidZipArchive;
+    const flags = payload[0];
+    if (flags & 0xf8 != 0 or flags & 0x07 == 0)
+        return error.InvalidZipArchive;
+    if (location == .central and flags & (1 << 0) == 0)
+        return error.InvalidZipArchive;
+    var cursor: usize = 1;
+    const result: types.ExtendedTimestamp = .{
+        .modified = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 0) != 0,
+            location,
+        ),
+        .accessed = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 1) != 0,
+            location,
+        ),
+        .created = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 2) != 0,
+            location,
+        ),
+    };
+    if (cursor != payload.len) return error.InvalidZipArchive;
+    return result;
+}
+
+fn readExtendedTimestampValue(
+    payload: []const u8,
+    cursor: *usize,
+    present: bool,
+    location: ExtraLocation,
+) Error!?i64 {
+    if (!present) return null;
+    if (payload.len - cursor.* < 4) {
+        if (location == .central) return null;
+        return error.InvalidZipArchive;
+    }
+    const raw = std.mem.readInt(u32, payload[cursor.*..][0..4], .little);
+    cursor.* += 4;
+    return @as(i32, @bitCast(raw));
+}
+
+pub fn parseNtfsTimestampExtra(extra: []const u8) Error!?types.NtfsTimestamp {
+    const payload = (try findExtra(extra, wire.ntfs_timestamp_extra_id)) orelse
+        return null;
+    if (payload.len < 4) return error.InvalidZipArchive;
+    var cursor: usize = 4;
+    var result: ?types.NtfsTimestamp = null;
+    while (cursor < payload.len) {
+        const header_end = try checkedEnd(cursor, 4, payload.len);
+        const tag = std.mem.readInt(u16, payload[cursor..][0..2], .little);
+        const size: usize = std.mem.readInt(u16, payload[cursor + 2 ..][0..2], .little);
+        const attribute_end = try checkedEnd(header_end, size, payload.len);
+        if (tag == 0x0001) {
+            if (result != null or size != 24) return error.InvalidZipArchive;
+            result = .{
+                .modified = std.mem.readInt(u64, payload[header_end..][0..8], .little),
+                .accessed = std.mem.readInt(u64, payload[header_end + 8 ..][0..8], .little),
+                .created = std.mem.readInt(u64, payload[header_end + 16 ..][0..8], .little),
+            };
+        }
+        cursor = attribute_end;
+    }
+    return result;
+}
+
+pub fn parseUnicodePathExtra(
+    extra: []const u8,
+    raw_name: []const u8,
+) Error!?[]const u8 {
+    return parseUnicodeExtra(
+        extra,
+        wire.unicode_path_extra_id,
+        raw_name,
+        false,
+    );
+}
+
+pub fn parseUnicodeCommentExtra(
+    extra: []const u8,
+    raw_comment: []const u8,
+) Error!?[]const u8 {
+    return parseUnicodeExtra(
+        extra,
+        wire.unicode_comment_extra_id,
+        raw_comment,
+        false,
+    );
+}
+
+fn parseUnicodeExtra(
+    extra: []const u8,
+    field_id: u16,
+    raw_text: []const u8,
+    allow_empty: bool,
+) Error!?[]const u8 {
+    const payload = (try findExtra(extra, field_id)) orelse return null;
+    if (payload.len < 5) return error.InvalidZipArchive;
+    if (payload[0] != 1) return null;
+    const expected_crc = std.mem.readInt(u32, payload[1..5], .little);
+    if (expected_crc != checksum.crc32Best(raw_text)) return null;
+    const unicode_text = payload[5..];
+    if ((!allow_empty and unicode_text.len == 0) or
+        !std.unicode.utf8ValidateSlice(unicode_text))
+    {
+        return error.InvalidZipArchive;
+    }
+    return unicode_text;
+}
+
+pub fn mergeUnicodeText(
+    local: ?[]const u8,
+    central: ?[]const u8,
+) Error!?[]const u8 {
+    if (local == null) return central;
+    if (central == null) return local;
+    if (!std.mem.eql(u8, local.?, central.?)) return error.InvalidZipArchive;
+    return local;
+}
+
+pub fn mergeExtendedTimestamps(
+    local: ?types.ExtendedTimestamp,
+    central: ?types.ExtendedTimestamp,
+) error{InvalidZipArchive}!?types.ExtendedTimestamp {
+    if (local == null) return central;
+    if (central == null) return local;
+    const local_value = local.?;
+    const central_value = central.?;
+    inline for (.{ "modified", "accessed", "created" }) |field_name| {
+        const central_field = @field(central_value, field_name);
+        if (central_field != null and @field(local_value, field_name) != central_field)
+            return error.InvalidZipArchive;
+    }
+    return local_value;
+}
+
+pub fn mergeNtfsTimestamps(
+    local: ?types.NtfsTimestamp,
+    central: ?types.NtfsTimestamp,
+) error{InvalidZipArchive}!?types.NtfsTimestamp {
+    if (local == null) return central;
+    if (central == null) return local;
+    if (!std.meta.eql(local.?, central.?)) return error.InvalidZipArchive;
+    return local;
+}
 
 pub const Directory = struct {
     entry_count: usize,
     central_directory_offset: usize,
+    central_entries_offset: usize,
     central_directory_size: usize,
+    archive_extra_data: []const u8,
     comment: []const u8,
     zip64: bool,
 };
+
+pub fn archiveExtraDataEncodedLen(prefix: *const [wire.archive_extra_data_header_len]u8) Error!usize {
+    if (std.mem.readInt(u32, prefix[0..4], .little) != wire.archive_extra_data_signature)
+        return error.InvalidZipArchive;
+    return checkedAdd(
+        wire.archive_extra_data_header_len,
+        std.mem.readInt(u32, prefix[4..8], .little),
+    );
+}
+
+pub fn parseArchiveExtraData(bytes: []const u8) Error![]const u8 {
+    if (bytes.len < wire.archive_extra_data_header_len)
+        return error.InvalidZipArchive;
+    const prefix: *const [wire.archive_extra_data_header_len]u8 =
+        bytes[0..wire.archive_extra_data_header_len];
+    if (try archiveExtraDataEncodedLen(prefix) != bytes.len)
+        return error.InvalidZipArchive;
+    return bytes[wire.archive_extra_data_header_len..];
+}
 
 pub fn parseDirectory(bytes: []const u8) Error!Directory {
     const eocd_offset = findEndOfCentralDirectory(bytes) orelse return error.InvalidZipArchive;
@@ -114,10 +349,35 @@ fn finishDirectory(
 ) Error!Directory {
     const central_end = try checkedEnd(central_offset, central_size, bytes.len);
     if (central_end > directory_limit) return error.InvalidZipArchive;
+    var central_entries_offset = central_offset;
+    var archive_extra_data: []const u8 = &.{};
+    if (central_size >= 4 and
+        std.mem.readInt(u32, bytes[central_offset..][0..4], .little) ==
+            wire.archive_extra_data_signature)
+    {
+        _ = try checkedEnd(
+            central_offset,
+            wire.archive_extra_data_header_len,
+            central_end,
+        );
+        const prefix: *const [wire.archive_extra_data_header_len]u8 =
+            bytes[central_offset..][0..wire.archive_extra_data_header_len];
+        const record_len = try archiveExtraDataEncodedLen(prefix);
+        central_entries_offset = try checkedEnd(
+            central_offset,
+            record_len,
+            central_end,
+        );
+        archive_extra_data = try parseArchiveExtraData(
+            bytes[central_offset..central_entries_offset],
+        );
+    }
     return .{
         .entry_count = entry_count,
         .central_directory_offset = central_offset,
+        .central_entries_offset = central_entries_offset,
         .central_directory_size = central_size,
+        .archive_extra_data = archive_extra_data,
         .comment = comment,
         .zip64 = zip64,
     };
@@ -219,6 +479,10 @@ pub fn resolveLocalSizes(extra: []const u8, compressed_size: u32, uncompressed_s
 }
 
 fn findZip64Extra(extra: []const u8) Error!?[]const u8 {
+    return findExtra(extra, zip64_extra_id);
+}
+
+pub fn findExtra(extra: []const u8, wanted_id: u16) Error!?[]const u8 {
     var offset: usize = 0;
     var result: ?[]const u8 = null;
     while (offset < extra.len) {
@@ -226,7 +490,7 @@ fn findZip64Extra(extra: []const u8) Error!?[]const u8 {
         const id = std.mem.readInt(u16, extra[offset..][0..2], .little);
         const size: usize = std.mem.readInt(u16, extra[offset + 2 ..][0..2], .little);
         const payload_end = try checkedEnd(header_end, size, extra.len);
-        if (id == zip64_extra_id) {
+        if (id == wanted_id) {
             if (result != null) return error.InvalidZipArchive;
             result = extra[header_end..payload_end];
         }

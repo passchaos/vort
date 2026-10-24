@@ -1,0 +1,52 @@
+{
+  "time_before_utc": "2026-10-24T11:24:47.278072+00:00",
+  "phase": "final-test-source-compile-rebind-no-extra-matrix",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "build-br-hq-tools",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "tested_binary_sha256": "55d13417008767ef42e0f80db61a54152bf7e346fe17747a7ad3a8087630b198",
+  "final_test_source_sha256": "7fc2a57741e5da60f7a7e6fb01d8f7df0bdf673a45747f22caa9aaee2b4c36ff",
+  "new_matrix_permitted": false,
+  "status": "final-compile-verified-with-test-only-change-no-third-matrix",
+  "time_after_utc": "2026-10-24T11:25:30.524289+00:00",
+  "source_window_equal": true,
+  "actual_input_count": 1910,
+  "input_mismatches": [],
+  "uncovered": [],
+  "cache_output_key": "697c39e66ea41fe69f0d00e5f5bb5d47",
+  "cache_key_method": "Zig Cache hasher(initial manifest key bytes, then each recorded file digest in order)",
+  "binary": {
+    "cache_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/697c39e66ea41fe69f0d00e5f5bb5d47/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-complete-final-20261024-qy09p5f8/cli/final-compilation/vort-br-hq-cli-probe",
+    "sha256": "c34164054c913b857517fc05c4a27c3f659b333a76b7e5003656b306d09093e8"
+  },
+  "same_binary_as_successful_current_validation": false,
+  "production_and_cli_sources_unchanged_since_validation": true,
+  "source_changes_since_validation": [
+    "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig"
+  ],
+  "matrix_rerun": false,
+  "strict_final_compilation_binding": true,
+  "evidence_sha256": {
+    "source-before.json": "e9edfb9c68fc92d7636e28e75eb666b5d46387bbf8b76e3d8d046b5935da0f3c",
+    "source-after.json": "e9edfb9c68fc92d7636e28e75eb666b5d46387bbf8b76e3d8d046b5935da0f3c",
+    "source-before.zip": "d6b6904ee1ad675664f2a4d878d002ae295bfc88d8dc9e5c41eb5d15144f5f5e",
+    "compile-inputs.txt": "1fee0757fe9edf252094a9fcba86f3a120757a99e4091886ad39b017cceed43f",
+    "compile-input-digest-check.tsv": "c5bf2db3dd9b216d4a5cbd66d4c8622c2f938ef18c169a3302fc5a51524734ab",
+    "compiled-inputs-all.json": "8280a578384f08e3a39d2d93f9270c7426270f9cec58278cd865869c5528e5c8",
+    "compiled-input-bytes.zip": "3ecd7d22d991a43636235562b0b35e8b45eb35aa96ec21a602f993ec39fdcfbf",
+    "computed-cache-output-key.txt": "926dab092a7ce016b6d69e92572d111d22333f96fc55e7a0d09d86bee17785ce",
+    "cache-output-key-verifier.zig": "1d2d94f65cef50ad7ef78d759bd1c683718b7497fdeb65aa5d0ae736b46234be",
+    "content-digest-verifier.zig": "93772e231f8144c8e6ecfba32786f22c515aaeb1fa730e34066cf27ee5928a50",
+    "build.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build.stderr": "0965cac923db41ba52b4807c1b1ceb9cbd54669e6c5cdf15848cb04de294baef",
+    "vort-br-hq-cli-probe": "c34164054c913b857517fc05c4a27c3f659b333a76b7e5003656b306d09093e8"
+  },
+  "finalized_utc": "2026-10-24T11:26:03.527509+00:00"
+}

@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "utc": "2026-10-24T11:54:09.747732+00:00",
+  "formal_summary_path": "/tmp/vort-lz4-fast-wasm-final-20261024-q1e0eyca/formal-summary.json",
+  "unified_archive_path": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/wasm",
+  "actual_public_smoke_runs": 3,
+  "actual_profile_snapshots": 5,
+  "source_before_after_equal": true
+}

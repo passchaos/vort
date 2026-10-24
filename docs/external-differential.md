@@ -3,6 +3,15 @@
 Vort has black-box differential smoke coverage against Python `zlib` and the
 system `gzip` CLI, plus library-level interoperability probes against other
 system codecs including libsnappy, liblz4, libbrotli, and libzstd.
+The native LZ4 library probe additionally compares public Vort LZ4HC blocks
+byte-for-byte with `LZ4_compress_HC_destSize` at levels 1, 3, 5, 9, 10, 11,
+12, and an above-maximum level. It compares independent and 300 KiB linked HC
+frames with `LZ4F_compressFrame` for upstream HC levels 3 and above, plus
+independent/linked preset-dictionary frames at levels 3, 9, and 12 through
+`LZ4F_compressFrame_usingCDict`. Dictionary frames are also decoded in both
+directions through Vort and `LZ4F_decompress_usingDict`; Vort's incremental HC
+encoder must reproduce the same linked/CDict frame bytes under tiny output
+backpressure.
 The required libbrotli probe also generates Large Window streams for every
 25...30-bit window. It requires strict Vort entrypoints to reject the reserved
 header and verifies explicit opt-in one-shot, split-input, buffered-incremental,
@@ -32,10 +41,65 @@ zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
 
+The EROFS differential generates plain, compact/full LZ4, compact/full raw
+Deflate, and compact Zstandard images with current `mkfs.erofs`. Repeated
+`user.*` values exceed the default inline tolerance and therefore exercise real
+shared-xattr IDs as well as unique inline entries. An additional plain image
+uses `--xattr-prefix=user.vort.` so shared and inline entries both reconstruct
+through the incompatible long-prefix table. Vort must list every name and
+byte-exact value. LZ4 ordinary/all-fragment, Deflate-fragment, and
+Zstandard-fragment cases require byte-exact extraction through whole and
+partial references, compressed/plain/interlaced packed inodes, and bounded
+range reads. Separate LZ4/Deflate/Zstandard cases exercise compressed inline
+tail packing. In the other direction, deterministic stored/LZ4/MicroLZMA/Deflate/Zstd
+Vort images carry root, regular-file, inline-tail, and directory attributes
+through a caller-selected plain prefix table. Four additional Vort writers
+combine those codecs with whole and last-block fragments; their packed inode
+must remain hidden while `fsck.erofs --xattrs` validates, extracts, and restores
+all files and attributes through the host API. Four more writers enable
+compressed inline tails for the same codecs and require the same byte-exact
+extraction. Local chunk block-map, forced local chunk-index, and external
+blob-device images additionally verify merged chunks, device tables, borrowed
+device extraction, and the missing-device error. Vort also writes deterministic
+local maps and owning external metadata/blob pairs; both must preserve xattrs,
+deduplicate repeated chunks, encode holes, and extract byte-exactly through
+`fsck.erofs`. Six forced-48bit reference images cover stored, LZ4, Deflate,
+Zstandard, local chunk, and external chunk layouts; six matching Vort writer
+modes plus MicroLZMA must also pass fsck and byte-exact extraction. Two LZ4 metabox references
+separately place inode metadata and inode+directory
+metadata in the hidden stream; Vort must list/extract all files and reconstruct
+source shared/long xattrs, while fsck independently validates and extracts file
+bytes. Five Vort MZi writers use stored, LZ4, MicroLZMA, raw Deflate, and Zstandard hidden
+metadata inodes, must remain deterministic, and are self-decoded byte-exactly;
+fsck validates every image and independently extracts physical/compressed file
+extents. The stored-MZi check excludes flat-inline regular-file tails because
+erofs-utils 1.9.4's extractor zero-fills that layout even for its own MZi
+images, although its `dump --cat` path and Vort both read it correctly. All 108
+Vort writer modes also move one repeated long-prefix name/value pair to the
+primary shared-xattr region while retaining distinct inline attributes.
+Vort must reconstruct both sources in every mode; the 87 non-metabox cases
+additionally require host-restored xattrs from `fsck.erofs --xattrs`. Three
+erofs-utils `--zD` references and four Vort directory writers cover
+LZ4, MicroLZMA, raw Deflate, and Zstandard whole-directory fragments, including the shared
+packed-inode path used by ordinary file fragments. Four forced-extended
+erofs-utils references and five Vort stored/LZ4/MicroLZMA/Deflate/Zstandard writers cover
+64-byte inode layout and fsck validation. Supply explicit tools with
+`-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
+`xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
+`fragment_writer`, `ztailpacking_reader`, `ztailpacking_writer`, `chunk_reader`,
+`external_chunk_reader`, `chunk_writer`, `external_chunk_writer`,
+`address48_reader`, `address48_writer`, `metabox_reader`, `metabox_writer`, and
+`shared_xattr_writer`, `directory_reader`, `directory_writer`,
+`extended_inode_reader`, `extended_inode_writer`, and `lzma_writer` separately.
+
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
-uncompressed, raw-DEFLATE, and Zstandard clusters. When `qemu-img` is available,
-it checks both directions and adds sparse/zero clusters, extended L2
-subclusters, raw backing files, and external data files. When `7zz` or `7z` is
+uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing
+overlays. Overlay fixtures distinguish inherited, modified, and explicit-zero
+clusters and require the `raw` backing-format extension. A two-output v3 writer
+fixture separately requires QEMU's raw external-data feature, `DATA` extension,
+and byte-exact conversion. When `qemu-img` is available, it checks both
+directions and adds sparse/zero clusters, extended L2 subclusters, raw backing
+files, and external data files. When `7zz` or `7z` is
 available, it independently extracts Vort's v2/v3 uncompressed and
 raw-DEFLATE images. Explicit tool paths can be supplied with
 `-- --qemu-img <path> --seven-zip <path>`; the summary reports unavailable
@@ -181,6 +245,25 @@ headers, a canonical NoOp element, equivalence streams, and raw byte deltas;
 it then applies the required Brotli OTA envelope and requires byte-identical
 whole-partition and range output. A patch-reader fixture copied from AOSP's
 Zucchini tests separately pins the little-endian v1 wire layout.
+The independent generator also builds a synthetic but structurally valid
+AArch64 ELF and an `EA64` patch whose target pool and reference delta retarget
+a `B` immediate. AOSP-derived fixed vectors cover all three AArch64 branch
+immediate encodings, while focused tests cover relocation and 64-bit absolute
+reference groups. Separate ELF32 and ELF64 generators emit `Ex86` and `Ex64`
+patches that jointly exercise relative relocations, absolute pointers, and
+Intel rel32 correction. Independent PE32 and PE32+ generators exercise the
+same three reference pools through `Px86` and `Px64` base-relocation tables,
+image-base-adjusted pointers, and executable sections. All six Zucchini
+fixtures plus an `EA32` ELF generator must match through complete,
+source-backed, and bounded-range OTA extraction. The AArch32 fixture covers
+`R_ARM_RELATIVE`, absolute pointers, ARM-mode detection, and A24 branch
+correction; AOSP-derived fixed vectors separately pin all five ARM/Thumb-2
+branch encodings. A valid DEX 039 generator carries correct SHA-1 and Adler-32,
+splits block-tail padding into a NoOp element, applies raw integrity deltas, and
+retargets a Dalvik `const-string` through the DEX string-ID pool. All eight
+fixtures plus an independently generated ZTF reference patch exercise complete,
+source-backed, and bounded-range extraction. Byte-pinned AOSP `old.ztf` and
+`new.ztf` fixtures separately validate the full textual parser and writers.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,
@@ -341,3 +424,78 @@ best-preset plans so parser experiments can target the exact extra-bit buckets
 that differ. The dynamic-plan CSV additionally records length-symbol and
 distance-symbol histograms for exact RFC-code distribution analysis, and the
 Markdown summary calls out the largest best-minus-default symbol-count deltas.
+
+The MicroLZMA driver also encodes with Vort's literal-only, greedy, and lazy
+modes and requires XZ Utils to consume every compressed byte and reproduce the
+exact original payload. Seven cases cover empty, tiny, repeated, delta,
+mixed, source, and a repeated suffix more than 80 KiB away, with independent
+lc/lp/pb and dictionary settings. XZ Utils 5.8.4 (source commit 3b1efb0) passes
+all 21 Vort-writer comparisons; a deterministic fixture brings native writer
+coverage to 22 cases (`external=7`, `writer=22`, `external_writer=21`).
+Run `zig build run-microlzma-diff -- --xz-source /path/to/xz
+--xz-build /path/to/build` to build the probe against that checkout.
+
+The EROFS writer matrix additionally covers seven MicroLZMA modes: ordinary
+clusters, fragments, compressed inline tails, 48-bit features, metabox,
+compressed directories, and extended inodes. They carry the standard 32 KiB
+MicroLZMA configuration and pass erofs-utils 1.9.4-g5fcb2f76 fsck and exact
+extraction, bringing the matrix to 36 writer modes (`lzma_writer=7`,
+`external_writer=36`).
+
+The MicroLZMA capacity differential uses a fresh XZ Utils probe with an
+`encode-limit` mode. Capacities from the six-byte minimum through complete
+input cover all seven payload classes and Vort's three parser modes. XZ Utils
+independently consumes and decodes 186 Vort prefixes; Vort likewise decodes
+62 XZ Utils prefixes. Both directions require exact source-prefix bytes,
+compressed-input consumption, destination bounds, and declared progress;
+Vort additionally requires nondecreasing consumed prefixes across capacities.
+The driver reports `limited_writer=186`, `limited_reference=62`, and
+`malformed=5`, preserving separate complete-stream counters. These checks
+establish interoperable prefix behavior rather than identical parser choices
+or encoded bytes between implementations.
+
+Eight additional EROFS references end with a physical cluster spanning more
+than one 4 KiB block. A deterministic 8 KiB xorshift32 prefix repeated twice
+is built with a 64 KiB physical-cluster limit in LZ4, MicroLZMA, raw Deflate,
+and Zstandard, under both full and compact index modes. fsck and Vort must
+list and extract the exact 16 KiB payload (`final_big_pcluster_reader=8`).
+This exercises explicit CBLKCNT handling at EOF, independently of the distance
+to a following HEAD. Existing fragment and inline-tail references remain in
+the same matrix to pin their legitimate zero-physical-block markers.
+
+Thirty-two additional Vort modes use 64 KiB decoded groups in all four
+EROFS codecs, including ordinary data, fragments, inline tails, 48-bit
+features, metabox, directories, extended inodes, and directory + extended +
+metabox combinations. Every mode includes a 16 KiB mixed file (8 KiB random
+prefix repeated twice) that requires a multi-block physical pcluster when
+compression is selected. Vort's deterministic output, extraction, and xattrs
+are checked for all 68 writer modes; fsck independently extracts every mode
+(`grouped_writer=32`, `external_writer=68`, `xattr_writer=55`,
+`directory_writer=12`, `extended_inode_writer=13`). The stored-MZi host
+extractor exception continues to apply only to affected inline tails.
+
+MicroLZMA aligned-prefix verification adds 315 XZ Utils decode checks over
+seven payload classes, three parser modes, and 16/512/4096-byte alignment.
+Capacities include six bytes, partial prefixes, and complete streams. Every
+partial consumed length must align; only complete input may end unaligned.
+Zero-consumption results must decode as valid empty streams, and increasing
+capacity must preserve monotonic progress (`aligned_writer=315`). Existing
+complete and unaligned capacity counters remain separate.
+
+The EROFS matrix adds 40 bounded writers. Every codec uses a 4 KiB physical
+limit with ordinary, fragments, inline, 48-bit, metabox, directories, extended,
+and combined directory/extended/metabox layouts; ordinary modes also exercise
+8 KiB and non-power-of-two 12 KiB limits. Self-decode, deterministic reruns,
+xattrs, and independent fsck extraction cover all 108 modes
+(`bounded_writer=40`, `external_writer=108`, `xattr_writer=87`). This gate
+retains the eight final-big-pcluster references and earlier unbounded modes.
+
+The EROFS source matrix duplicates all 108 memory writer modes with borrowed
+slice sources and 4 KiB callback request bounds. Each source image/device must
+match the corresponding memory image/device byte-for-byte, remain deterministic,
+extract exactly through Vort, and pass fsck. Thirteen CLI cases independently
+use actual regular files through positional FileByteSource adapters. Current
+coverage reports `writer=216`, `source_writer=108`, `file_source_writer=13`,
+`external_writer=216`, and `xattr_writer=174`. Stored-MZi exclusions remain
+limited to host extractor behavior on affected inline tails. Generic byte-source
+and file-adapter tests run with `zig build test-byte-source`.

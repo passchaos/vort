@@ -1,6 +1,34 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
 
+pub const cover = @import("dictionary/cover.zig");
+pub const cover_optimize = @import("dictionary/cover_optimize.zig");
+pub const fast_cover = @import("dictionary/fast_cover.zig");
+pub const fast_cover_optimize = @import("dictionary/fast_cover_optimize.zig");
+pub const FastCoverTrainOptions = fast_cover.TrainOptions;
+pub const FastCoverTrainProfile = fast_cover.Profile;
+pub const PreparedFastCover = fast_cover.Prepared;
+pub const OwnedFastCoverDictionary = fast_cover.OwnedResult;
+pub const FastCoverOptimizeOptions = fast_cover_optimize.OptimizeOptions;
+pub const FastCoverOptimizeProfile = fast_cover_optimize.Profile;
+pub const FastCoverOptimizeScore = fast_cover_optimize.Score;
+pub const FastCoverSplitPoint = fast_cover_optimize.SplitPoint;
+pub const OwnedOptimizedFastCoverDictionary = fast_cover_optimize.OwnedResult;
+pub const splitFastCoverSamples = fast_cover_optimize.splitSamples;
+pub const CoverTrainOptions = cover.TrainOptions;
+pub const CoverOptimizeOptions = cover_optimize.OptimizeOptions;
+pub const CoverOptimizeScore = cover_optimize.Score;
+pub const OwnedOptimizedCoverDictionary = cover_optimize.OwnedResult;
+
+test {
+    _ = cover;
+    _ = cover_optimize;
+    _ = fast_cover;
+    _ = fast_cover_optimize;
+    _ = @import("dictionary/fast_cover_tests.zig");
+    _ = @import("dictionary/fast_cover_resource_tests.zig");
+}
+
 const patch_magic = [_]u8{ 'V', 'D', 'C', 'T' };
 const patch_version: u8 = 0;
 const patch_header_len: usize = 17;
@@ -217,6 +245,134 @@ pub const TrainOptions = struct {
     max_phrases: usize = 256,
 };
 
+/// Train caller-owned history with the deterministic, sample-boundary-safe
+/// COVER-class selector. This exposes the COVER selection model without
+/// claiming byte-identical output with libzstd's COVER or FastCover trainers.
+pub fn trainCoverAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: CoverTrainOptions,
+) ![]u8 {
+    return cover.trainAlloc(allocator, samples, options);
+}
+
+/// Accelerated, sample-boundary-safe FastCover history selection.
+pub fn trainFastCoverAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: FastCoverTrainOptions,
+) ![]u8 {
+    return fast_cover.trainAlloc(allocator, samples, options);
+}
+
+/// Return the same history plus actual preparation and selection work.
+pub fn trainFastCoverProfiledAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: FastCoverTrainOptions,
+) !OwnedFastCoverDictionary {
+    return fast_cover.trainAllocProfiled(allocator, samples, options);
+}
+
+const FastCoverValidationScorer = struct {
+    scorer: CoverValidationScorer,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        _: void,
+        _: []const []const u8,
+        _: []const []const u8,
+        _: FastCoverOptimizeOptions,
+    ) !FastCoverValidationScorer {
+        return .{ .scorer = .{ .allocator = allocator } };
+    }
+
+    pub fn score(
+        self: *FastCoverValidationScorer,
+        content: []const u8,
+        samples: []const []const u8,
+        minimum: usize,
+        _: FastCoverTrainOptions,
+    ) !FastCoverOptimizeScore {
+        const value = try self.scorer.score(content, samples, minimum);
+        return .{
+            .estimated_bits = value.estimated_bits,
+            .covered_bytes = value.covered_bytes,
+            .matches = value.matches,
+            .distance_bits = value.distance_bits,
+            .dictionary_bytes = content.len,
+        };
+    }
+
+    pub fn deinit(self: *FastCoverValidationScorer) void {
+        self.scorer.deinit();
+    }
+};
+
+/// Select FastCover parameters with independent scorer state and a charged
+/// dictionary/match cost. Parallel candidates retain deterministic selection.
+pub fn trainOptimizedFastCoverAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: FastCoverOptimizeOptions,
+) !OwnedOptimizedFastCoverDictionary {
+    return fast_cover_optimize.trainAllocWithScorerFactory(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        {},
+        FastCoverValidationScorer,
+    );
+}
+
+pub fn trainOptimizedFastCoverSplitAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    split: FastCoverSplitPoint,
+    options: FastCoverOptimizeOptions,
+) !OwnedOptimizedFastCoverDictionary {
+    const partitions = try splitFastCoverSamples(samples, split);
+    return trainOptimizedFastCoverAlloc(allocator, partitions.training, partitions.validation, options);
+}
+
+/// Select `(d, k, hash_log)` on held-out samples using the shared greedy
+/// dictionary match-cost model. Equal scores preserve caller enumeration order.
+pub fn trainOptimizedCoverAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: CoverOptimizeOptions,
+) !OwnedOptimizedCoverDictionary {
+    const ScoreAdapter = struct {
+        fn score(
+            scorer: *CoverValidationScorer,
+            dictionary: []const u8,
+            samples: []const []const u8,
+            min_match_len: usize,
+        ) !cover_optimize.Score {
+            const value = try scorer.score(dictionary, samples, min_match_len);
+            return .{
+                .estimated_bits = value.estimated_bits,
+                .covered_bytes = value.covered_bytes,
+                .matches = value.matches,
+                .distance_bits = value.distance_bits,
+            };
+        }
+    };
+    var scorer: CoverValidationScorer = .{ .allocator = allocator };
+    defer scorer.deinit();
+    return cover_optimize.trainAllocWithScorerContext(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        &scorer,
+        ScoreAdapter.score,
+    );
+}
+
 const Phrase = struct {
     bytes: []const u8,
     score: usize,
@@ -225,6 +381,7 @@ const Phrase = struct {
 };
 
 const phrase_hash_threshold = 128;
+const cover_indexed_validation_min_dictionary_len: usize = 256;
 const phrase_index_load_numerator = 3;
 const phrase_index_load_denominator = 4;
 
@@ -509,6 +666,27 @@ const DictionaryMatchIndexScratch = struct {
             .positions = self.positions.items,
             .min_match_len = min_match_len,
         };
+    }
+};
+
+const CoverValidationScorer = struct {
+    allocator: std.mem.Allocator,
+    scratch: DictionaryMatchIndexScratch = .{},
+
+    fn deinit(self: *CoverValidationScorer) void {
+        self.scratch.deinit(self.allocator);
+    }
+
+    fn score(
+        self: *CoverValidationScorer,
+        dictionary: []const u8,
+        samples: []const []const u8,
+        min_match_len: usize,
+    ) !ValidationScore {
+        if (dictionary.len < cover_indexed_validation_min_dictionary_len)
+            return validationScore(dictionary, samples, min_match_len);
+        const index = try self.scratch.build(self.allocator, dictionary, min_match_len);
+        return validationScoreIndexed(dictionary, samples, index);
     }
 };
 
@@ -881,6 +1059,28 @@ pub fn validationScore(
     var score: ValidationScore = .{ .estimated_bits = std.math.mul(usize, dict.len, 8) catch return error.InvalidDictionaryTraining };
     for (samples) |sample| {
         const summary = try summarizeMatches(dict, sample, min_match_len);
+        score.covered_bytes = std.math.add(usize, score.covered_bytes, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        score.matches = std.math.add(usize, score.matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        score.distance_bits = std.math.add(usize, score.distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const literal_bits = std.math.mul(usize, sample.len - summary.covered_bytes, 8) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, literal_bits) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const match_overhead = std.math.mul(usize, summary.matches, 4) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, match_overhead) catch return error.InvalidDictionaryTraining;
+    }
+    return score;
+}
+
+fn validationScoreIndexed(
+    dict: []const u8,
+    samples: []const []const u8,
+    index: DictionaryMatchIndex,
+) !ValidationScore {
+    var score: ValidationScore = .{
+        .estimated_bits = std.math.mul(usize, dict.len, 8) catch return error.InvalidDictionaryTraining,
+    };
+    for (samples) |sample| {
+        const summary = try summarizeMatchesIndexed(dict, sample, index);
         score.covered_bytes = std.math.add(usize, score.covered_bytes, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
         score.matches = std.math.add(usize, score.matches, summary.matches) catch return error.InvalidDictionaryTraining;
         score.distance_bits = std.math.add(usize, score.distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
@@ -1478,6 +1678,50 @@ test "validated dictionary trainer preserves or improves held-out coverage" {
     try std.testing.expectEqualSlices(u8, selected, again);
 }
 
+test "COVER-class optimizer selects the best enumerated held-out score" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+        "service=vort region=south status=retry message=delta delta",
+        "service=vort region=central status=ok message=alpha beta gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=west status=retry message=alpha gamma",
+        "service=vort region=south status=ok message=delta beta",
+    };
+    const options: CoverOptimizeOptions = .{
+        .target_size = 48,
+        .segment_sizes = &.{ 12, 24 },
+        .dmer_sizes = &.{ 6, 8 },
+        .hash_logs = &.{ 8, 10 },
+    };
+    var optimized = try trainOptimizedCoverAlloc(std.testing.allocator, &training, &validation, options);
+    defer optimized.deinit(std.testing.allocator);
+    var again = try trainOptimizedCoverAlloc(std.testing.allocator, &training, &validation, options);
+    defer again.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 8), optimized.candidates_evaluated);
+    try std.testing.expectEqual(optimized.selected_options, again.selected_options);
+    try std.testing.expectEqual(optimized.validation_score, again.validation_score);
+    try std.testing.expectEqualSlices(u8, optimized.bytes, again.bytes);
+
+    for (options.dmer_sizes) |dmer_size| {
+        for (options.segment_sizes) |segment_size| {
+            for (options.hash_logs) |hash_log| {
+                const candidate = try trainCoverAlloc(std.testing.allocator, &training, .{
+                    .target_size = options.target_size,
+                    .segment_size = segment_size,
+                    .dmer_size = dmer_size,
+                    .hash_log = hash_log,
+                });
+                defer std.testing.allocator.free(candidate);
+                const score = try validationScore(candidate, &validation, options.min_match_len);
+                try std.testing.expect(optimized.validation_score.estimated_bits <= score.estimated_bits);
+            }
+        }
+    }
+}
+
 test "validated dictionary trainer reuses collection without changing selection" {
     var storage: [8][192]u8 = undefined;
     var samples: [8][]const u8 = undefined;
@@ -1660,6 +1904,60 @@ test "streaming dictionary match summary equals materialized oracle" {
         try std.testing.expectEqual(expected, try summarizeMatches(&dictionary, &sample, min_match_len));
     }
     try std.testing.expectError(error.InvalidDictionaryTraining, summarizeMatches(&dictionary, &sample, 0));
+}
+
+test "indexed dictionary validation score matches linear oracle" {
+    var dictionary: [257]u8 = undefined;
+    var samples_storage: [4][389]u8 = undefined;
+    var samples: [4][]const u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&dictionary) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for (&samples_storage, &samples, 0..) |*sample, *view, sample_index| {
+        for (sample, 0..) |*byte, offset| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (offset % 31 < 24)
+                dictionary[(offset * 7 + sample_index * 19) % (dictionary.len - 32)]
+            else
+                @truncate(state >> 24);
+        }
+        view.* = sample;
+    }
+    var scorer: CoverValidationScorer = .{ .allocator = std.testing.allocator };
+    defer scorer.deinit();
+    for ([_]usize{ 4, 5, 8, 16 }) |min_match_len| {
+        try std.testing.expectEqual(
+            try validationScore(&dictionary, &samples, min_match_len),
+            try scorer.score(&dictionary, &samples, min_match_len),
+        );
+    }
+}
+
+test "indexed dictionary validation scorer recovers after allocation failure" {
+    const dictionary = "indexed-dictionary-history-" ** 12;
+    const samples = [_][]const u8{"indexed dictionary history indexed dictionary history"};
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var scorer: CoverValidationScorer = .{ .allocator = failing.allocator() };
+    defer scorer.deinit();
+    try std.testing.expectError(error.OutOfMemory, scorer.score(dictionary, &samples, 4));
+    failing.fail_index = std.math.maxInt(usize);
+    try std.testing.expectEqual(
+        try validationScore(dictionary, &samples, 4),
+        try scorer.score(dictionary, &samples, 4),
+    );
+}
+
+test "short COVER validation scoring remains allocation free" {
+    const dictionary = "short dictionary history";
+    const samples = [_][]const u8{"short dictionary history sample"};
+    var scorer: CoverValidationScorer = .{ .allocator = std.testing.failing_allocator };
+    defer scorer.deinit();
+    try std.testing.expectEqual(
+        try validationScore(dictionary, &samples, 4),
+        try scorer.score(dictionary, &samples, 4),
+    );
 }
 
 test "dictionary prefix index matches linear scan and preserves earliest ties" {

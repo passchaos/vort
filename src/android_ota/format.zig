@@ -18,6 +18,9 @@ pub const Error = core.Error || error{
     UnsupportedLz4diffCompression,
     InvalidZucchiniPatch,
     UnsupportedZucchiniPatch,
+    InvalidAndroidOtaSignature,
+    AndroidOtaSignatureMissing,
+    AndroidOtaSignatureMismatch,
 };
 
 pub const magic = "CrAU";
@@ -51,7 +54,7 @@ pub const Header = struct {
     metadata_signature_size: usize,
     metadata_size: usize,
     data_offset: usize,
-    physical_size: usize,
+    physical_size: u64,
 };
 
 pub const Manifest = struct {

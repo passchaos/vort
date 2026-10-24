@@ -1,0 +1,9 @@
+{
+  "/home/passchaos/project-z/vort-stream-contracts/src/tests/lz4_fast_controls_wasm.zig": "b7dbcd9d88c4730bd4708c6a9af694831fe01b6360b6a2d6ae6fbf4fb3992719",
+  "/home/passchaos/project-z/vort-stream-contracts/tools/lz4/wasm_fast_controls_gate.js": "e13e61de17903d884089131372fa4fffc16f2c0b85080add9980fcdc128ceb52",
+  "/home/passchaos/project-z/vort-stream-contracts/src/root.zig": "eaa9fd2cc03a797f9d0845995db225229185dc6ad31785760d9c3e1f44e54fa7",
+  "/home/passchaos/project-z/vort-stream-contracts/src/lz4.zig": "47cd87824384d873cc906628b14d850208acb230f892814f6d24896920f958a3",
+  "/home/passchaos/project-z/vort-stream-contracts/src/lz4/fast_options.zig": "a3160f57af2efd38d54c49ec8790c528e49be42e806169248e548411515d83cb",
+  "/home/passchaos/project-z/vort-stream-contracts/src/lz4/fast_parser.zig": "fdbd1ba25373ca40c1eb9febc8c600ead3695ff16b6907249d7318fee7c39cbf",
+  "/home/passchaos/project-z/vort-stream-contracts/build.zig": "6eafc45916f6010e1ef28d66c6c0c6d7c23b87c17f7febd2ebd41c7fe0b636e4"
+}

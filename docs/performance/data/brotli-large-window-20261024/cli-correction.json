@@ -1,0 +1,15 @@
+{
+  "time_utc": "2026-10-24T10:04:45.897433+00:00",
+  "changed_file": "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py",
+  "before_sha256": "c9f1d8ff5badd1324be50bd955921b3f329bfecadf17f1e9b2274c1f5483e1e4",
+  "after_sha256": "66117d4b4f1d858d77ddfeca7d71a968e6a73143cc10c02b39aab363cc57e890",
+  "old_assertion": "assert metadata[\"effective\"] and metadata[\"passes\"] > 0 and metadata[\"tree_nodes\"] > 0, metadata",
+  "new_assertion": "assert metadata[\"effective\"] and metadata[\"passes\"] > 0 and metadata[\"states\"] > 0 and metadata[\"price_evaluations\"] > 0, metadata",
+  "reason": "The 62-byte input with 32-byte blocks can match using auxiliary 2/3-byte indexes without visiting binary-tree nodes. tree_nodes=0 is valid; nonzero passes/states/price evaluations prove HQ work for these samples. Cases, samples, format checks and decoder assertions are unchanged.",
+  "authorized_by": "Parent agent explicit follow-up",
+  "original_failure_manifest": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli/manifest.json",
+  "production_files_changed": [],
+  "old_hq_and_total_gates_changed": false,
+  "changed_file_mtime_ns": 1792836285896101490,
+  "changed_file_mtime_utc": "2026-10-24T10:04:45.896101+00:00"
+}

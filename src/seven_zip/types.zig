@@ -7,12 +7,17 @@ pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8 = "",
     kind: Kind = .file,
+    /// Anti-items record deletions in differential/update archives and never
+    /// carry a packed stream.
+    is_anti: bool = false,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     creation_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     access_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     modification_time: ?u64 = null,
+    /// Optional application-defined start position (`kStartPos` / `kpidPosition`).
+    start_position: ?u64 = null,
     /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
     attributes: ?u32 = null,
 };
@@ -45,12 +50,17 @@ pub const Entry = struct {
     crc32: ?u32,
     folder_index: ?usize,
     offset_in_folder: u64,
+    /// True for a 7z Anti property bit. Such entries describe deletions and
+    /// cannot be extracted as ordinary empty files.
+    is_anti: bool = false,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     creation_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     access_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     modification_time: ?u64 = null,
+    /// Optional application-defined start position (`kStartPos` / `kpidPosition`).
+    start_position: ?u64 = null,
     /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
     attributes: ?u32 = null,
 };

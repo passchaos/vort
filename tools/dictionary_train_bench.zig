@@ -3,8 +3,20 @@ const vort = @import("vort");
 
 const Options = struct { iterations: usize = 20, rounds: usize = 3, csv_path: ?[]const u8 = null };
 const Case = struct { name: []const u8, samples: []const []const u8 };
-const Mode = enum { basic, validated, validated_separate, validated_targets, zstd_validated };
+const Mode = enum {
+    basic,
+    validated,
+    validated_separate,
+    validated_targets,
+    cover_optimized_separate,
+    cover_optimized_linear,
+    cover_optimized,
+    zstd_validated,
+};
 const validated_targets = [_]usize{ 512, 384, 320, 256, 128 };
+const cover_segment_sizes = [_]usize{ 64, 128, 256 };
+const cover_dmer_sizes = [_]u8{ 6, 8 };
+const cover_hash_logs = [_]u8{ 12, 16 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -40,6 +52,9 @@ pub fn main(init: std.process.Init) !void {
         try benchmarkCase(init, &csv.writer, case, .validated, options);
         try benchmarkCase(init, &csv.writer, case, .validated_separate, options);
         try benchmarkCase(init, &csv.writer, case, .validated_targets, options);
+        try benchmarkCase(init, &csv.writer, case, .cover_optimized_separate, options);
+        try benchmarkCase(init, &csv.writer, case, .cover_optimized_linear, options);
+        try benchmarkCase(init, &csv.writer, case, .cover_optimized, options);
         try benchmarkCase(init, &csv.writer, case, .zstd_validated, options);
     }
     if (options.csv_path) |path| {
@@ -113,6 +128,22 @@ fn trainMode(allocator: std.mem.Allocator, training: []const []const u8, validat
             for (trained.dictionaries) |candidate| try combined.appendSlice(allocator, candidate.?);
             break :blk try combined.toOwnedSlice(allocator);
         },
+        .cover_optimized_separate => try trainCoverOptimizedSeparateAlloc(allocator, training, validation),
+        .cover_optimized_linear => try trainCoverOptimizedLinearAlloc(allocator, training, validation),
+        .cover_optimized => blk: {
+            const trained = try vort.dictionary.trainOptimizedCoverAlloc(
+                allocator,
+                training,
+                validation,
+                .{
+                    .target_size = 512,
+                    .segment_sizes = &cover_segment_sizes,
+                    .dmer_sizes = &cover_dmer_sizes,
+                    .hash_logs = &cover_hash_logs,
+                },
+            );
+            break :blk trained.bytes;
+        },
         .zstd_validated => blk: {
             const trained = try vort.zstdTrainValidatedStandardDictionaryAlloc(
                 allocator,
@@ -125,6 +156,79 @@ fn trainMode(allocator: std.mem.Allocator, training: []const []const u8, validat
             break :blk try allocator.dupe(u8, trained.bytes);
         },
     };
+}
+
+fn trainCoverOptimizedLinearAlloc(
+    allocator: std.mem.Allocator,
+    training: []const []const u8,
+    validation: []const []const u8,
+) ![]u8 {
+    const trained = try vort.dictionary.cover_optimize.trainAllocWithScorer(
+        allocator,
+        training,
+        validation,
+        .{
+            .target_size = 512,
+            .segment_sizes = &cover_segment_sizes,
+            .dmer_sizes = &cover_dmer_sizes,
+            .hash_logs = &cover_hash_logs,
+        },
+        coverLinearScore,
+    );
+    return trained.bytes;
+}
+
+fn coverLinearScore(
+    dictionary: []const u8,
+    samples: []const []const u8,
+    min_match_len: usize,
+) !vort.dictionary.CoverOptimizeScore {
+    const score = try vort.dictionary.validationScore(dictionary, samples, min_match_len);
+    return .{
+        .estimated_bits = score.estimated_bits,
+        .covered_bytes = score.covered_bytes,
+        .matches = score.matches,
+        .distance_bits = score.distance_bits,
+    };
+}
+
+fn trainCoverOptimizedSeparateAlloc(
+    allocator: std.mem.Allocator,
+    training: []const []const u8,
+    validation: []const []const u8,
+) ![]u8 {
+    var best: ?[]u8 = null;
+    errdefer if (best) |bytes| allocator.free(bytes);
+    var best_score: vort.dictionary.ValidationScore = .{};
+    for (cover_dmer_sizes) |dmer_size| {
+        for (cover_segment_sizes) |segment_size| {
+            for (cover_hash_logs) |hash_log| {
+                const candidate = try vort.dictionary.trainCoverAlloc(allocator, training, .{
+                    .target_size = 512,
+                    .segment_size = segment_size,
+                    .dmer_size = dmer_size,
+                    .hash_log = hash_log,
+                });
+                const score = vort.dictionary.validationScore(candidate, validation, 4) catch |err| {
+                    allocator.free(candidate);
+                    return err;
+                };
+                if (best == null or coverScoreBetter(score, best_score)) {
+                    if (best) |bytes| allocator.free(bytes);
+                    best = candidate;
+                    best_score = score;
+                } else allocator.free(candidate);
+            }
+        }
+    }
+    return best.?;
+}
+
+fn coverScoreBetter(candidate: vort.dictionary.ValidationScore, best: vort.dictionary.ValidationScore) bool {
+    return candidate.estimated_bits < best.estimated_bits or
+        (candidate.estimated_bits == best.estimated_bits and candidate.covered_bytes > best.covered_bytes) or
+        (candidate.estimated_bits == best.estimated_bits and candidate.covered_bytes == best.covered_bytes and candidate.matches < best.matches) or
+        (candidate.estimated_bits == best.estimated_bits and candidate.covered_bytes == best.covered_bytes and candidate.matches == best.matches and candidate.distance_bits < best.distance_bits);
 }
 
 const CorpusKind = enum { text, json, binary };

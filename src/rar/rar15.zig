@@ -1,7 +1,14 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const legacy_common = @import("legacy_common.zig");
 
-pub const Error = core.Error || error{InvalidRar15Stream};
+pub const Error = core.Error || error{
+    InvalidRar15Stream,
+    MissingRar15SolidState,
+    Rar15DecoderPoisoned,
+};
+
+const max_history_size: usize = 64 * 1024;
 
 const dec_l1 = [_]u16{ 0x8000, 0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf200, 0xffff };
 const pos_l1 = [_]u16{ 0, 0, 0, 2, 3, 5, 7, 11, 16, 20, 24, 32, 32 };
@@ -425,6 +432,122 @@ const Decoder = struct {
 pub fn decodeInto(input: []const u8, output: []u8) Error!void {
     var decoder = Decoder.init(input, output);
     try decoder.decode();
+}
+
+pub const Session = struct {
+    allocator: std.mem.Allocator,
+    decoder: Decoder,
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator) Session {
+        return .{
+            .allocator = allocator,
+            .decoder = Decoder.init("", undefined),
+        };
+    }
+
+    pub fn deinit(self: *Session) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Session) void {
+        self.decoder = Decoder.init("", undefined);
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Session) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn synchronizeSolid(
+        self: *Session,
+        history: []const u8,
+        common: legacy_common.CommonState,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (self.poisoned) return error.Rar15DecoderPoisoned;
+        errdefer self.poisoned = true;
+        self.history.clearRetainingCapacity();
+        const keep = @min(history.len, max_history_size);
+        try self.history.appendSlice(self.allocator, history[history.len - keep ..]);
+        self.decoder.old_dist_index = 0;
+        for (common.recent_distances, 0..) |distance, index|
+            self.decoder.old_dist[(3 - index) & 3] = distanceToU32(distance);
+        self.decoder.last_dist = distanceToU32(common.last_distance);
+        self.decoder.last_length = distanceToU32(common.last_length);
+        self.initialized = true;
+        self.poisoned = false;
+    }
+
+    pub fn commonState(self: *const Session) legacy_common.CommonState {
+        var common = legacy_common.CommonState{
+            .last_distance = self.decoder.last_dist,
+            .last_length = self.decoder.last_length,
+        };
+        for (&common.recent_distances, 0..) |*distance, index|
+            distance.* = self.decoder.old_dist[(self.decoder.old_dist_index -% index -% 1) & 3];
+        return common;
+    }
+
+    pub fn decodeMemberInto(
+        self: *Session,
+        input: []const u8,
+        output: []u8,
+        solid: bool,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar15DecoderPoisoned;
+            if (!self.initialized) return error.MissingRar15SolidState;
+        }
+        errdefer self.poisoned = true;
+        self.trimHistory();
+        const combined_len = std.math.add(usize, self.history.items.len, output.len) catch
+            return error.IntegerOverflow;
+        const combined = try self.allocator.alloc(u8, combined_len);
+        defer self.allocator.free(combined);
+        @memcpy(combined[0..self.history.items.len], self.history.items);
+        const member_start = self.history.items.len;
+
+        self.decoder.bits = .{ .input = input };
+        self.decoder.output = combined;
+        self.decoder.output_offset = member_start;
+        self.decoder.flag_buf = 0;
+        self.decoder.flags_count = -2;
+        self.decoder.st_mode = false;
+        self.decoder.l_count = 0;
+        defer {
+            self.decoder.bits = .{ .input = "" };
+            self.decoder.output = undefined;
+            self.decoder.output_offset = 0;
+        }
+        try self.decoder.decode();
+        if (self.decoder.output_offset != combined.len) return error.SizeMismatch;
+        @memcpy(output, combined[member_start..]);
+        try self.history.appendSlice(self.allocator, output);
+        self.trimHistory();
+        if (input.len != 0) self.initialized = true;
+        self.poisoned = false;
+    }
+
+    fn trimHistory(self: *Session) void {
+        if (self.history.items.len <= max_history_size) return;
+        const discard = self.history.items.len - max_history_size;
+        @memmove(
+            self.history.items[0..max_history_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = max_history_size;
+    }
+};
+
+fn distanceToU32(value: usize) u32 {
+    return std.math.cast(u32, value) orelse std.math.maxInt(u32);
 }
 
 pub fn decodeAlloc(

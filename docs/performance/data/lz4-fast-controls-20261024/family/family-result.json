@@ -1,0 +1,20 @@
+{
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-lz4-full",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 46.11044156504795,
+  "utc": "2026-10-24T11:53:56.669735+00:00",
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/lz4/fast_controls_cli_gate.py"
+  ],
+  "source_sha256": "2d84e187694f15112325e3cae63f4974b6aa3780d2d9eaebfc4b0acff2be0f26",
+  "log": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/family/family-rf.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

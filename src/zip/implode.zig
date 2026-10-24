@@ -1,17 +1,13 @@
 const std = @import("std");
+const incremental = @import("implode/incremental_decoder.zig");
 
-pub const Error = std.mem.Allocator.Error || error{
-    InvalidImplodeStream,
-    TruncatedImplodeInput,
-    ImplodeSizeMismatch,
-    ImplodeTrailingData,
+pub const Error = incremental.Error || std.mem.Allocator.Error || error{
     InvalidImplodeOptions,
 };
 
-pub const Dictionary = enum {
-    small_4k,
-    large_8k,
-};
+pub const Dictionary = incremental.Dictionary;
+pub const IncrementalDecoder = incremental.Decoder;
+pub const IncrementalWorkspace = incremental.Workspace;
 
 pub const Options = struct {
     dictionary: Dictionary = .large_8k,

@@ -1,4 +1,7 @@
+pub const mode_lsb6: u2 = 0;
+pub const mode_msb6: u2 = 1;
 pub const mode_utf8: u2 = 2;
+pub const mode_signed: u2 = 3;
 
 pub fn value(mode: u2, previous: u8, second_previous: u8) usize {
     return switch (mode) {
@@ -32,15 +35,17 @@ pub inline fn valueUtf8Clustered(previous: u8, second_previous: u8) usize {
 /// Grouping all four consonant contexts with vowels keeps the map compact while
 /// separating text continuation bytes from punctuation/binary contexts.
 pub fn utf8TextTree(context: usize) u1 {
-    return utf8SuffixTree(context, 56);
+    return suffixTree(context, 56);
 }
 
-/// Map a contiguous suffix of RFC UTF-8 contexts to the second literal tree.
+/// Map a contiguous suffix of RFC literal contexts to the second literal tree.
 /// A contiguous split has a compact run-length-coded context map, making it a
 /// useful bounded candidate for exact whole-wire ratio arbitration.
-pub fn utf8SuffixTree(context: usize, cutoff: u6) u1 {
+pub fn suffixTree(context: usize, cutoff: u6) u1 {
     return @intFromBool(context >= cutoff);
 }
+
+pub const utf8SuffixTree = suffixTree;
 
 fn utf8(previous: u8, second_previous: u8) usize {
     return utf8LastByte(previous) | utf8SecondLastByte(second_previous);

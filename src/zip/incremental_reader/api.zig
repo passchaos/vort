@@ -1,0 +1,145 @@
+const std = @import("std");
+const core = @import("../../core.zig");
+const types = @import("../types.zig");
+const zstd = @import("../../zstd.zig");
+
+pub const CompressionMethod = types.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
+pub const WinZipAesInfo = types.WinZipAesInfo;
+pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
+
+pub const Options = struct {
+    /// Absolute file offset represented by the first byte passed to `step`.
+    /// Use this when the caller has already skipped an SFX prefix.
+    initial_offset: usize = 0,
+    max_entries: usize = std.math.maxInt(usize),
+    /// Retained local names, central entry comments, and archive comment.
+    max_metadata_size: usize = 64 * 1024 * 1024,
+    /// Encoded central-directory bytes processed before the archive ending.
+    max_central_directory_size: usize = std.math.maxInt(usize),
+    max_archive_extra_data_size: usize = 64 * 1024 * 1024,
+    max_control_record_size: usize = 256 * 1024,
+    max_entry_output_len: usize = std.math.maxInt(usize),
+    max_total_output_len: usize = std.math.maxInt(usize),
+    max_bzip2_compressed_block_len: usize = 4 * 1024 * 1024,
+    max_bzip2_decoded_block_len: usize = 64 * 1024 * 1024,
+    max_zstd_compressed_buffer_len: usize = 1024 * 1024,
+    /// Borrowed preset history for Zstandard methods 20 and 93. The descriptor
+    /// and bytes must remain stable until the reader is reset or deinitialized.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
+    max_lzma_dictionary_size: usize = 64 * 1024 * 1024,
+    max_lzma_compressed_buffer_len: usize = 1024 * 1024,
+    max_xz_dictionary_size: usize = 64 * 1024 * 1024,
+    max_xz_compressed_block_len: usize = 64 * 1024 * 1024,
+    max_xz_decoded_block_len: usize = 64 * 1024 * 1024,
+    max_xz_index_footer_len: usize = 16 * 1024 * 1024,
+    max_xz_block_count: usize = 1024 * 1024,
+    max_ppmd_memory_size: usize = 64 * 1024 * 1024,
+    max_ppmd_compressed_buffer_len: usize = 1024 * 1024,
+    password: ?[]const u8 = null,
+    allow_trailing_data: bool = false,
+};
+
+pub const Phase = enum {
+    record_signature,
+    local_fixed,
+    local_variable,
+    entry_data,
+    entry_authentication,
+    entry_descriptor,
+    central_fixed,
+    central_variable,
+    archive_extra_fixed,
+    archive_extra,
+    zip64_end_prefix,
+    zip64_end,
+    zip64_locator,
+    digital_signature_fixed,
+    digital_signature,
+    end_fixed,
+    end_comment,
+    done,
+    failed,
+};
+
+pub const StepResult = struct {
+    progress: core.Progress = .{},
+    status: Status,
+
+    pub const Status = enum {
+        need_input,
+        need_output,
+        entry_header,
+        entry_done,
+        done,
+    };
+};
+
+/// The name borrows reader-owned metadata and remains valid until `reset` or
+/// `deinit`. Descriptor-derived values become non-null at `.entry_done`.
+pub const EntryInfo = struct {
+    name: []const u8,
+    unicode_name: ?[]const u8 = null,
+    /// Central-directory comment; null until its matching central record has
+    /// been validated.
+    comment: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
+    method: CompressionMethod,
+    flags: u16,
+    local_header_offset: usize,
+    uses_descriptor: bool,
+    zip64_local: bool,
+    modified: DosTimestamp,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
+    version_made_by: ?u16 = null,
+    internal_attributes: ?u16 = null,
+    external_attributes: ?u32 = null,
+    winzip_aes: ?types.WinZipAesInfo = null,
+    pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
+    crc32: ?u32,
+    compressed_size: ?usize,
+    uncompressed_size: ?usize,
+
+    pub fn creatorSystem(self: EntryInfo) ?CreatorSystem {
+        const made_by = self.version_made_by orelse return null;
+        return @enumFromInt(@as(u8, @truncate(made_by >> 8)));
+    }
+
+    pub fn unixMode(self: EntryInfo) ?u16 {
+        const creator = self.creatorSystem() orelse return null;
+        if (creator != .unix) return null;
+        const attributes = self.external_attributes orelse return null;
+        return @truncate(attributes >> 16);
+    }
+
+    pub fn isSymbolicLink(self: EntryInfo) bool {
+        return if (self.unixMode()) |mode| mode & 0o170000 == 0o120000 else false;
+    }
+
+    pub fn isDirectory(self: EntryInfo) bool {
+        const name = self.preferredName();
+        if (name.len != 0 and name[name.len - 1] == '/') return true;
+        return if (self.unixMode()) |mode| mode & 0o170000 == 0o040000 else false;
+    }
+
+    pub fn preferredName(self: EntryInfo) []const u8 {
+        if (self.flags & (1 << 11) != 0) return self.name;
+        return self.unicode_name orelse self.name;
+    }
+
+    pub fn preferredComment(self: EntryInfo) ?[]const u8 {
+        const comment_value = self.comment orelse return null;
+        if (self.flags & (1 << 11) != 0) return comment_value;
+        return self.unicode_comment orelse comment_value;
+    }
+
+    pub fn modifiedUnixSeconds(self: EntryInfo) ?i64 {
+        if (self.ntfs_timestamp) |timestamp|
+            return types.fileTimeToUnixSeconds(timestamp.modified) catch null;
+        return if (self.extended_timestamp) |timestamp| timestamp.modified else null;
+    }
+};

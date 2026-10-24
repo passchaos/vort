@@ -1,13 +1,18 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const sparse = @import("sparse.zig");
 
-pub const Error = core.Error || error{
+pub const Error = core.Error || sparse.Error || error{
     InvalidTarArchive,
     InvalidTarHeader,
     InvalidTarChecksum,
     UnsupportedTarEntryType,
     TarEntryNotFound,
 };
+
+pub const SparseFormat = sparse.Format;
+pub const SparseExtent = sparse.Extent;
+pub const SparseInfo = sparse.Info;
 
 const block_size: usize = 512;
 
@@ -100,6 +105,7 @@ pub const Entry = struct {
     header_offset: usize,
     data_offset: usize,
     data: []const u8,
+    sparse: ?SparseInfo = null,
 };
 
 pub const Archive = struct {
@@ -143,9 +149,11 @@ pub const Archive = struct {
             .directory => if (entry.size != 0) return error.InvalidTarArchive,
             else => return error.UnsupportedTarEntryType,
         }
-        if (output.len < entry.data.len) return error.OutputTooSmall;
-        @memcpy(output[0..entry.data.len], entry.data);
-        return entry.data.len;
+        if (entry.sparse) |sparse_info| return sparse_info.extractInto(output);
+        if (output.len < entry.size) return error.OutputTooSmall;
+        if (entry.data.len != entry.size) return error.InvalidTarArchive;
+        @memcpy(output[0..entry.size], entry.data);
+        return entry.size;
     }
 
     pub fn extractAlloc(self: Archive, allocator: std.mem.Allocator, entry: Entry) ![]u8 {
@@ -181,10 +189,17 @@ pub const Archive = struct {
     }
 };
 
-const Attributes = struct {
+pub const Attributes = struct {
     path: ?[]const u8 = null,
     link_path: ?[]const u8 = null,
     size: ?u64 = null,
+    sparse_major: ?u64 = null,
+    sparse_minor: ?u64 = null,
+    sparse_name: ?[]const u8 = null,
+    sparse_size: ?u64 = null,
+    sparse_numblocks: ?u64 = null,
+    sparse_map: ?[]const u8 = null,
+    sparse_pax_00: ?[]const u8 = null,
 };
 
 pub const Iterator = struct {
@@ -213,11 +228,26 @@ pub const Iterator = struct {
             try validateChecksum(header);
 
             const header_size = try parseNumber(header[124..136]);
-            const data_start = header_end;
+            const type_flag = header[156];
+            var data_start = header_end;
+            if (type_flag == 'S') {
+                if (hasSparse(self.pending)) return error.InvalidTarHeader;
+                var extended = header[482];
+                if (extended > 1) return error.InvalidTarHeader;
+                while (extended != 0) {
+                    const extension_end = try checkedEnd(
+                        data_start,
+                        block_size,
+                        self.archive.bytes.len,
+                    );
+                    extended = self.archive.bytes[data_start + 504];
+                    if (extended > 1) return error.InvalidTarHeader;
+                    data_start = extension_end;
+                }
+            }
             const header_data_size = try u64ToUsize(header_size);
             const header_data_end = try checkedEnd(data_start, header_data_size, self.archive.bytes.len);
             const next_offset = try paddedEnd(header_data_end, self.archive.bytes.len);
-            const type_flag = header[156];
             switch (type_flag) {
                 'x' => {
                     try parsePax(self.archive.bytes[data_start..header_data_end], &self.pending);
@@ -226,6 +256,7 @@ pub const Iterator = struct {
                 },
                 'g' => {
                     try parsePax(self.archive.bytes[data_start..header_data_end], &self.global);
+                    if (hasSparse(self.global)) return error.InvalidTarHeader;
                     self.offset = next_offset;
                     continue;
                 },
@@ -239,22 +270,39 @@ pub const Iterator = struct {
                     self.offset = next_offset;
                     continue;
                 },
-                'S' => return error.UnsupportedTarEntryType,
                 else => {},
             }
 
-            const actual_size_u64 = self.pending.size orelse self.global.size orelse header_size;
+            const stored_payload = self.archive.bytes[data_start..header_data_end];
+            const sparse_info = if (type_flag == 'S') old: {
+                const logical_size = try u64ToUsize(try parseNumber(header[483..495]));
+                break :old try sparse.parseOldGnu(
+                    self.archive.bytes[self.offset + 386 .. data_start],
+                    logical_size,
+                    stored_payload,
+                );
+            } else try parseSparseInfo(self.pending, stored_payload);
+            const actual_size_u64 = if (sparse_info) |info|
+                info.logical_size
+            else
+                self.pending.size orelse self.global.size orelse header_size;
             const actual_size = try u64ToUsize(actual_size_u64);
-            const data_end = try checkedEnd(data_start, actual_size, self.archive.bytes.len);
+            const data_end = if (sparse_info == null)
+                try checkedEnd(data_start, actual_size, self.archive.bytes.len)
+            else
+                header_data_end;
             self.offset = try paddedEnd(data_end, self.archive.bytes.len);
             const header_path = pathFromHeader(header);
-            const path = if (self.pending.path orelse self.global.path) |name|
+            const path = if (self.pending.sparse_name orelse self.pending.path orelse self.global.path) |name|
                 Path{ .name = name }
             else
                 header_path;
             const link_name = self.pending.link_path orelse self.global.link_path orelse headerString(header[157..257]);
             const mode_u64 = try parseNumber(header[100..108]);
             if (mode_u64 > std.math.maxInt(u32)) return error.InvalidTarHeader;
+            if (sparse_info != null and kindFromType(type_flag) != .file)
+                return error.InvalidTarHeader;
+            const entry_data = if (sparse_info) |info| info.data else self.archive.bytes[data_start..data_end];
             const entry = Entry{
                 .path = path,
                 .link_name = link_name,
@@ -264,8 +312,9 @@ pub const Iterator = struct {
                 .mtime = try parseNumber(header[136..148]),
                 .size = actual_size,
                 .header_offset = data_start - block_size,
-                .data_offset = data_start,
-                .data = self.archive.bytes[data_start..data_end],
+                .data_offset = data_start + (stored_payload.len - entry_data.len),
+                .data = entry_data,
+                .sparse = sparse_info,
             };
             self.pending = .{};
             return entry;
@@ -303,7 +352,7 @@ pub fn extractByNameAllocLimited(
     return (try parse(bytes)).extractByNameAllocLimited(allocator, name, max_output_len);
 }
 
-fn pathFromHeader(header: []const u8) Path {
+pub fn pathFromHeader(header: []const u8) Path {
     const name = headerString(header[0..100]);
     const magic = header[257..263];
     const prefix = if (std.mem.eql(u8, magic[0..5], "ustar") and
@@ -314,9 +363,9 @@ fn pathFromHeader(header: []const u8) Path {
     return .{ .prefix = prefix, .name = name };
 }
 
-fn kindFromType(type_flag: u8) Kind {
+pub fn kindFromType(type_flag: u8) Kind {
     return switch (type_flag) {
-        0, '0', '7' => .file,
+        0, '0', '7', 'S' => .file,
         '1' => .hard_link,
         '2' => .symbolic_link,
         '5' => .directory,
@@ -324,7 +373,7 @@ fn kindFromType(type_flag: u8) Kind {
     };
 }
 
-fn parsePax(payload: []const u8, attributes: *Attributes) Error!void {
+pub fn parsePax(payload: []const u8, attributes: *Attributes) Error!void {
     var offset: usize = 0;
     while (offset < payload.len) {
         const space = std.mem.findScalarPos(u8, payload, offset, ' ') orelse return error.InvalidTarHeader;
@@ -344,25 +393,84 @@ fn parsePax(payload: []const u8, attributes: *Attributes) Error!void {
             attributes.link_path = value;
         } else if (std.mem.eql(u8, key, "size")) {
             attributes.size = std.fmt.parseInt(u64, value, 10) catch return error.InvalidTarHeader;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.major")) {
+            attributes.sparse_major = std.fmt.parseInt(u64, value, 10) catch return error.InvalidTarHeader;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.minor")) {
+            attributes.sparse_minor = std.fmt.parseInt(u64, value, 10) catch return error.InvalidTarHeader;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.name")) {
+            if (value.len == 0 or std.mem.indexOfScalar(u8, value, 0) != null)
+                return error.InvalidTarHeader;
+            attributes.sparse_name = value;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.size") or
+            std.mem.eql(u8, key, "GNU.sparse.realsize"))
+        {
+            attributes.sparse_size = std.fmt.parseInt(u64, value, 10) catch return error.InvalidTarHeader;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.numblocks")) {
+            attributes.sparse_numblocks = std.fmt.parseInt(u64, value, 10) catch return error.InvalidTarHeader;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.map")) {
+            if (value.len == 0) return error.InvalidTarHeader;
+            attributes.sparse_map = value;
+        } else if (std.mem.eql(u8, key, "GNU.sparse.offset") or
+            std.mem.eql(u8, key, "GNU.sparse.numbytes"))
+        {
+            attributes.sparse_pax_00 = payload;
         }
         offset = end;
     }
 }
 
-fn hasPending(attributes: Attributes) bool {
-    return attributes.path != null or attributes.link_path != null or attributes.size != null;
+pub fn hasPending(attributes: Attributes) bool {
+    return attributes.path != null or attributes.link_path != null or attributes.size != null or
+        hasSparse(attributes);
 }
 
-fn trimExtensionString(value: []const u8) []const u8 {
+pub fn hasSparse(attributes: Attributes) bool {
+    return attributes.sparse_major != null or attributes.sparse_minor != null or
+        attributes.sparse_name != null or attributes.sparse_size != null or
+        attributes.sparse_numblocks != null or attributes.sparse_map != null or
+        attributes.sparse_pax_00 != null;
+}
+
+fn parseSparseInfo(attributes: Attributes, payload: []const u8) Error!?SparseInfo {
+    if (!hasSparse(attributes)) return null;
+    if (attributes.size != null) return error.InvalidTarHeader;
+    const logical_size = try u64ToUsize(attributes.sparse_size orelse
+        return error.InvalidTarHeader);
+    if (attributes.sparse_major) |major| {
+        if (major != 1 or attributes.sparse_minor != 0 or
+            attributes.sparse_name == null or attributes.sparse_map != null or
+            attributes.sparse_numblocks != null or attributes.sparse_pax_00 != null)
+            return error.UnsupportedTarEntryType;
+        return try sparse.parsePax10(payload, logical_size);
+    }
+    if (attributes.sparse_minor != null) return error.InvalidTarHeader;
+    const declared_count = if (attributes.sparse_numblocks) |count|
+        try u64ToUsize(count)
+    else
+        null;
+    if (attributes.sparse_pax_00) |pax_payload| {
+        if (attributes.sparse_map != null) return error.InvalidTarHeader;
+        return try sparse.parsePax00(
+            pax_payload,
+            declared_count,
+            logical_size,
+            payload,
+        );
+    }
+    const map = attributes.sparse_map orelse return error.InvalidTarHeader;
+    return try sparse.parsePax01(map, declared_count, logical_size, payload);
+}
+
+pub fn trimExtensionString(value: []const u8) []const u8 {
     const nul = std.mem.indexOfScalar(u8, value, 0) orelse value.len;
     return std.mem.trimEnd(u8, value[0..nul], "\n");
 }
 
-fn headerString(field: []const u8) []const u8 {
+pub fn headerString(field: []const u8) []const u8 {
     return field[0 .. std.mem.indexOfScalar(u8, field, 0) orelse field.len];
 }
 
-fn parseNumber(field: []const u8) Error!u64 {
+pub fn parseNumber(field: []const u8) Error!u64 {
     if (field.len == 0) return error.InvalidTarHeader;
     if (field[0] & 0x80 != 0) {
         if (field[0] & 0x40 != 0) return error.UnsupportedTarEntryType;
@@ -378,7 +486,7 @@ fn parseNumber(field: []const u8) Error!u64 {
     return std.fmt.parseInt(u64, trimmed, 8) catch return error.IntegerOverflow;
 }
 
-fn validateChecksum(header: []const u8) Error!void {
+pub fn validateChecksum(header: []const u8) Error!void {
     const expected = try parseNumber(header[148..156]);
     var actual: u64 = 0;
     for (header, 0..) |byte, index|
@@ -386,12 +494,12 @@ fn validateChecksum(header: []const u8) Error!void {
     if (actual != expected) return error.InvalidTarChecksum;
 }
 
-fn allZero(bytes: []const u8) bool {
+pub fn allZero(bytes: []const u8) bool {
     for (bytes) |byte| if (byte != 0) return false;
     return true;
 }
 
-fn u64ToUsize(value: u64) Error!usize {
+pub fn u64ToUsize(value: u64) Error!usize {
     return std.math.cast(usize, value) orelse error.UnsupportedTarEntryType;
 }
 

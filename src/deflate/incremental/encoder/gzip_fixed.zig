@@ -24,6 +24,8 @@ pub fn Encoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const ParamsError = Codec.ParamsError;
+        pub const supports_runtime_params = Codec.RawEncoder.supports_runtime_params;
         pub const Options = struct { raw: Codec.RawOptions = .{}, header: Codec.HeaderOptions = .{} };
         pub const Snapshot = struct {
             input_read: usize,
@@ -31,6 +33,13 @@ pub fn Encoder(comptime Codec: type) type {
             member_input: usize,
             member_output: usize,
             pending_output: usize,
+            pending_bits: u3,
+            active_params: ?Codec.Params,
+            requested_params: ?Codec.Params,
+            params_boundary_pending: bool,
+            params_change_count: usize,
+            stored_only: bool,
+            flushing: bool,
             member_count: usize,
             member_index: usize,
             finishing: bool,
@@ -59,6 +68,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
         fn resetMember(self: *Self) void {
             self.raw.reset();
+            self.options.raw.compression = self.raw.options.compression;
             self.resetMemberWrapper();
         }
         fn resetMemberWrapper(self: *Self) void {
@@ -86,8 +96,8 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberWithOptions(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options = options;
-            self.raw.options = options.raw;
-            self.resetMember();
+            self.raw.resetWithOptions(options.raw);
+            self.resetMemberWrapper();
         }
         /// Start a member with a new pledged uncompressed size. This is the
         /// multi-member counterpart of `initExactSize`.
@@ -100,24 +110,54 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: usize) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options = options;
-            self.raw.options = options.raw;
+            self.raw.resetWithOptions(options.raw);
             self.resetMemberExactSize(expected_input_len);
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const raw_snapshot = self.raw.snapshot();
             return .{
                 .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .member_input = self.total_input,
                 .member_output = self.total_output,
-                .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_output = std.math.add(usize, self.pending.items.len - self.pending_offset, raw_snapshot.pending_output) catch std.math.maxInt(usize),
+                .pending_bits = raw_snapshot.pending_bits,
+                .active_params = raw_snapshot.active_params,
+                .requested_params = raw_snapshot.requested_params,
+                .params_boundary_pending = raw_snapshot.params_boundary_pending,
+                .params_change_count = raw_snapshot.params_change_count,
+                .stored_only = raw_snapshot.stored_only,
+                .flushing = raw_snapshot.flushing,
                 .member_count = self.member_count,
                 .member_index = if (self.done and self.member_count != 0) self.member_count - 1 else self.member_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
+        /// Request zlib-compatible compression parameters for subsequent raw
+        /// DEFLATE blocks without resetting the member checksum or history.
+        pub fn requestParams(self: *Self, params: Codec.Params) ParamsError!void {
+            try self.raw.requestParams(params);
+        }
+        /// End and publish the accepted input as a non-final DEFLATE block
+        /// without byte alignment. CRC-32, ISIZE, and match history remain
+        /// active for subsequent input.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.blockFlush();
+        }
+        /// Publish accepted input with zlib Z_PARTIAL_FLUSH wire semantics.
+        /// CRC-32, ISIZE, and match history remain continuous.
+        pub fn partialFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.partialFlush();
+        }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
+        }
+        /// Publish all accepted input at a byte boundary and reset the raw
+        /// DEFLATE match history without ending the gzip member. CRC-32 and
+        /// ISIZE continue across the boundary.
+        pub fn fullFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.fullFlush();
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -129,7 +169,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if (self.finishing and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.raw.snapshot().flushing) and input.len != 0) return error.TrailingData;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -147,6 +187,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
+                    try Codec.RawEncoder.validateOptions(self.raw.options);
                     try Codec.writeHeader(self.allocator, &self.pending, self.options.header);
                     self.header_written = true;
                     continue;
@@ -186,6 +227,7 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn resetMemberExactSize(self: *Self, expected_input_len: usize) void {
             self.raw.resetExactSize(expected_input_len);
+            self.options.raw.compression = self.raw.options.compression;
             self.resetMemberWrapper();
         }
     };

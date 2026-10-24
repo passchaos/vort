@@ -160,6 +160,8 @@ pub const TransformMetadata = struct {
     prefix_len: u3,
     suffix_len: u4,
     suffix_bytes: u64,
+    omit_first: u4,
+    omit_last: u4,
     keeps_whole_word: bool,
     case_kind: TransformCaseKind,
 };
@@ -171,6 +173,8 @@ const transform_metadata = blk: {
             .prefix_len = @intCast(cStringLength(spec.prefix)),
             .suffix_len = @intCast(cStringLength(spec.suffix)),
             .suffix_bytes = cStringBits(spec.suffix),
+            .omit_first = if (spec.kind >= 12) @intCast(spec.kind - 11) else 0,
+            .omit_last = if (spec.kind <= 9) @intCast(spec.kind) else 0,
             .keeps_whole_word = spec.kind == 0 or spec.kind == 10 or spec.kind == 11,
             .case_kind = switch (spec.kind) {
                 10 => .first,
@@ -284,7 +288,10 @@ pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
 /// encoder search uses this form to avoid decoding the address and locating the
 /// same base word again for every transform candidate in a bucket.
 pub fn transformWord(transform_index: usize, word: []const u8, out: []u8) ?[]const u8 {
-    if (transform_index >= transforms.len or word.len < 4 or word.len > 24 or out.len < 64) return null;
+    // Serialized shared dictionaries may pair the RFC transform table with a
+    // custom 25...31-byte word list. The transform semantics are independent
+    // of the built-in dictionary's historical 24-byte maximum.
+    if (transform_index >= transforms.len or word.len < 4 or word.len > 31 or out.len < 64) return null;
     const spec = transforms[transform_index];
     var written: usize = 0;
     written += copyCString(out[written..], spec.prefix);
@@ -444,6 +451,32 @@ test "static dictionary reference matcher returns copy length and address" {
     // the shorter identity-prefix match when another input byte is available.
     try std.testing.expectEqual(@as(usize, 13), match.output_len);
     try std.testing.expectEqualSlices(u8, " information ", transformed);
+}
+
+test "static dictionary reference matcher covers every transform family" {
+    var transformed_storage: [64]u8 = undefined;
+    for (0..transform_count) |transform_index| {
+        var covered = false;
+        find_case: for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) << sizeBits(copy_len).?;
+            for (0..word_count) |word_index| {
+                const word = baseWord(copy_len, word_index).?;
+                const transformed = transformWord(
+                    transform_index,
+                    word,
+                    &transformed_storage,
+                ).?;
+                if (transformed.len < 5) continue;
+                const match = findLongestMatch(transformed) orelse
+                    return error.TestUnexpectedResult;
+                if (match.output_len < transformed.len)
+                    return error.TestUnexpectedResult;
+                covered = true;
+                break :find_case;
+            }
+        }
+        try std.testing.expect(covered);
+    }
 }
 
 test "static dictionary transform metadata agrees with materialization" {

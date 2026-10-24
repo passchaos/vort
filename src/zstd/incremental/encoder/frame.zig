@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const history_mod = @import("history.zig");
+const final_transaction = @import("final_transaction.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
 /// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
@@ -237,9 +238,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     if (self.expected_input_len) |expected| {
                         if (self.total_input != expected) return error.SizeMismatch;
                     }
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
+                    try final_transaction.append(Codec, BlockEmitter, self.allocator, &self.pending, self.block.items, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len, &self.hasher);
                     self.block.clearRetainingCapacity();
-                    try Codec.writeChecksum(self.allocator, &self.pending, self.options, &self.hasher);
                     self.final_written = true;
                     continue;
                 }

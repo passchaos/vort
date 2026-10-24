@@ -1,0 +1,38 @@
+{
+  "round_trips": 38,
+  "extension_prefix_checks": 30,
+  "strict_decoder_rejections": 30,
+  "profile_wire_checks": 12,
+  "exact_cap_checks": 4,
+  "one_below_checks": 4,
+  "rejected_output_preserved": 22,
+  "same_path_checks": 4,
+  "standard_profile_wire_checks": 4,
+  "measurements": [
+    {
+      "command": "encode-br-file",
+      "quality": 10,
+      "width": 25,
+      "peak_requested_bytes": 8801881
+    },
+    {
+      "command": "encode-br-file",
+      "quality": 11,
+      "width": 25,
+      "peak_requested_bytes": 8943103
+    },
+    {
+      "command": "encode-br-stream-file",
+      "quality": 10,
+      "width": 25,
+      "peak_requested_bytes": 8801698
+    },
+    {
+      "command": "encode-br-stream-file",
+      "quality": 11,
+      "width": 25,
+      "peak_requested_bytes": 8942873
+    }
+  ],
+  "reference_brotli_version": 16777225
+}

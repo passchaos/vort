@@ -1,0 +1,79 @@
+{
+  "artifact_dir": "/tmp/vort-deflate-profile-runtime-760utz1n",
+  "baseline_cached_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/bc90467cbcd9da4164ad11c38e9509d6/vort-deflate-dynamic-decode-profile",
+  "baseline_binary_sha256": "84bd33446f1b425571f0be23ffab42dbb283c7aaf0729c072cddc0f3477165b0",
+  "baseline_source_sha256": "68ef5b04a9cda01990bf294aa47613a36cdcb9fa6aaa2317149f4dbc2424dae8",
+  "corpus_sha256": {
+    "README.md": "de2378bf7615d2fb1f17449b909b5af2ab99350bf6a4c1a987436ac5699b3aeb",
+    "docs/roadmap.md": "38627dcd7b39ab2e107f902812f853cac5fbef4b51aaf506fd0407724ddac99a"
+  },
+  "old_compile_observation": {
+    "status": "historical observation supplied by parent; no new old-source compile",
+    "approx_elapsed_minutes": 6,
+    "approx_max_rss_mib": 765
+  },
+  "baseline_argv": [
+    "--builtins-plus-files",
+    "README.md",
+    "docs/roadmap.md",
+    "--csv",
+    "/tmp/vort-deflate-profile-runtime-760utz1n/baseline.csv"
+  ],
+  "current_source_sha256_before_compile": "83525da0e7b366f5e73a2ecf9f7c4ffa694d871df9bfd34c9fc3c0bfa8ef35cb",
+  "root_sha256_before_compile": "584b5a54ca6e3f76972df8f0adb8ff0c13870ee60fbd4b2d096566fc8c3993a7",
+  "deflate_sha256_before_compile": "188f4c07dfeec6a46dc1e9bfa9d1b14fef9279cf5d0adbfa1101ca3b4a57cd91",
+  "compile_cache": "fresh independent local cache; existing global toolchain cache and linked objects retained",
+  "csv_comparison": {
+    "identical_column_order": true,
+    "identical_row_order": true,
+    "rows": 9,
+    "columns": 77,
+    "excluded_fields": [
+      "payload_ns"
+    ],
+    "deterministic_field_differences": 0,
+    "baseline_csv_sha256": "207ffa4c6145a821d62c3369064fe428ba58b8445c4b90a7af776ddd7f1d6a9d",
+    "current_csv_sha256": "079eb67c4ce40fb72fdf817df29256440cb4dbf348a956af9c7bde577e0020c8"
+  },
+  "current_source_sha256_after_compile": "83525da0e7b366f5e73a2ecf9f7c4ffa694d871df9bfd34c9fc3c0bfa8ef35cb",
+  "root_sha256_after_compile": "584b5a54ca6e3f76972df8f0adb8ff0c13870ee60fbd4b2d096566fc8c3993a7",
+  "deflate_sha256_after_compile": "188f4c07dfeec6a46dc1e9bfa9d1b14fef9279cf5d0adbfa1101ca3b4a57cd91",
+  "current_binary_sha256": "e82e587fb9a1991c1eb4ea193e6b25c38129c47041754194d652dffab531af06",
+  "new_compile_observed": {
+    "command_file": "/tmp/vort-deflate-profile-runtime-760utz1n/cold-command.json",
+    "fresh_local_cache": true,
+    "elapsed_seconds": 2.08,
+    "max_rss_kib": 333068,
+    "user_seconds": 3.31,
+    "system_seconds": 0.36,
+    "status": 0,
+    "time_log": "/tmp/vort-deflate-profile-runtime-760utz1n/cold-time.txt"
+  },
+  "files_only_comparison": {
+    "rows": 1,
+    "identical_non_timing_fields": true
+  },
+  "frozen_builtin_bytes": {
+    "binary": {
+      "bytes": 65536,
+      "sha256": "a131a416bcc0b7eb66e9152182a767c39913d354cdd3b6ade1de12f4099c9969",
+      "verified_legacy_binary_offset": 9527840
+    },
+    "chunked-window-match": {
+      "bytes": 393472,
+      "sha256": "99294b39fccc10a01e2cf5784cec5f27df09f0eefd019ecca6794fc532af8c6c",
+      "verified_legacy_binary_offset": 9615232
+    }
+  },
+  "compile_workdir": "/home/passchaos/project-z/vort-stream-contracts",
+  "current_source_copy": "/tmp/vort-deflate-profile-runtime-760utz1n/current-source.zig",
+  "baseline_current_run_workdir": "/tmp/vort-deflate-profile-runtime-760utz1n/corpus",
+  "baseline_gate": "pass rows=9 required=3",
+  "current_gate": "pass rows=9 required=3",
+  "reproduce_cold_script": "/tmp/vort-deflate-profile-runtime-760utz1n/reproduce_cold.py",
+  "integration": {
+    "profile_change_revision": "40bc702b",
+    "previous_source_revision": "2cd7e82c",
+    "claim": "Compile-time input generation removed; CSV deterministic fields preserved. Historical old compile observation is not a controlled A/B."
+  }
+}

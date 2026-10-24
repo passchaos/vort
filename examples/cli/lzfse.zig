@@ -10,25 +10,49 @@ pub fn encode(
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
-    const block_size = if (args.next()) |text|
-        try std.fmt.parseInt(usize, text, 10)
-    else
-        64 * 1024;
-    const use_lzvn = if (args.next()) |mode|
-        if (std.mem.eql(u8, mode, "lzvn")) true else if (std.mem.eql(u8, mode, "stored")) false else return error.InvalidBlockPlan
-    else
-        true;
+    var options = vort.LzfseOptions{};
+    var positional: usize = 0;
+    while (args.next()) |arg| {
+        const hash = "--hash-log=";
+        const distance = "--max-distance=";
+        const memory = "--working-memory-limit=";
+        const limit = "--output-limit=";
+        const version = "--fse-version=";
+        if (std.mem.startsWith(u8, arg, hash)) {
+            options.hash_log = try std.fmt.parseInt(u8, arg[hash.len..], 10);
+        } else if (std.mem.startsWith(u8, arg, distance)) {
+            options.max_match_distance = try std.fmt.parseInt(usize, arg[distance.len..], 10);
+        } else if (std.mem.startsWith(u8, arg, memory)) {
+            options.max_working_memory = try std.fmt.parseInt(usize, arg[memory.len..], 10);
+        } else if (std.mem.startsWith(u8, arg, limit)) {
+            options.max_output_len = try std.fmt.parseInt(usize, arg[limit.len..], 10);
+        } else if (std.mem.startsWith(u8, arg, version)) {
+            const value = arg[version.len..];
+            options.fse_version = if (std.mem.eql(u8, value, "v1")) .v1 else if (std.mem.eql(u8, value, "v2")) .v2 else return error.InvalidBlockPlan;
+        } else if (std.mem.startsWith(u8, arg, "--")) {
+            return error.InvalidBlockPlan;
+        } else {
+            switch (positional) {
+                0 => options.block_size = try std.fmt.parseInt(usize, arg, 10),
+                1 => options.strategy = if (std.mem.eql(u8, arg, "auto")) .auto else if (std.mem.eql(u8, arg, "fse")) .fse else if (std.mem.eql(u8, arg, "lzvn")) .lzvn else if (std.mem.eql(u8, arg, "stored")) .stored else return error.InvalidBlockPlan,
+                else => return error.InvalidBlockPlan,
+            }
+            positional += 1;
+        }
+    }
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const encoded = try vort.encodeLzfseAlloc(init.gpa, input, .{
-        .block_size = block_size,
-        .use_lzvn = use_lzvn,
-    });
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    var encoded = try vort.encodeLzfseWithSummaryAlloc(init.gpa, input, options);
+    defer encoded.deinit(init.gpa);
+    var output = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
+    defer output.deinit(init.io);
+    var sink = vort.FileByteSink.init(init.io, output.file);
+    try sink.sink().writeExact(0, encoded.bytes);
+    try sink.sink().finish(encoded.bytes.len);
+    try output.replace(init.io);
     try stdout.print(
-        "lzfse_input_bytes={d} compressed_bytes={d} block_size={d} mode={s} path={s}\n",
-        .{ input.len, encoded.len, block_size, if (use_lzvn) "lzvn" else "stored", output_path },
+        "lzfse_input_bytes={d} compressed_bytes={d} block_size={d} mode={s} v1={d} v2={d} peak_working_bytes={d} path={s}\n",
+        .{ input.len, encoded.bytes.len, options.block_size, @tagName(options.effectiveStrategy()), encoded.summary.fse_v1_blocks, encoded.summary.fse_v2_blocks, encoded.peak_working_bytes, output_path },
     );
 }
 

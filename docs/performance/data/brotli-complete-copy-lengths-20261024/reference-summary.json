@@ -1,0 +1,388 @@
+{
+  "status": "ok",
+  "scope": "unique final 28 small functional campaign, actual compiled snapshot fully preserved; no throughput or match-quality ranking claim",
+  "exit_code": 0,
+  "representative_cases": 28,
+  "baseline_regressions": 6,
+  "budget_and_invalid_cases": 6,
+  "logical_cases": 40,
+  "probe_calls": 144,
+  "probe_successes": 140,
+  "expected_errors": {
+    "SearchLimitExceeded": 3,
+    "InvalidBlockPlan": 1
+  },
+  "all_error_outputs_preserved": true,
+  "all28_complete_wire_not_larger_than_sampled": true,
+  "matching_q11_not_larger_than_q10_pairs": 14,
+  "nonempty_actual_complete_pass_cases": 26,
+  "profile_disabled_same_wire_and_resolved_cases": 28,
+  "bidirectional_reference_results": 54,
+  "known_skips": [
+    {
+      "name": "raw-q10",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    },
+    {
+      "name": "raw-q11",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "per_plan_budget": {
+    "limit": 69162,
+    "max_plan_price_evaluations": 69162,
+    "aggregate_price_evaluations": 2476840,
+    "failures": [
+      {
+        "limit": 69161,
+        "max_plan_price_evaluations": 69161
+      },
+      {
+        "limit": 1,
+        "max_plan_price_evaluations": 1
+      },
+      {
+        "limit": 0,
+        "max_plan_price_evaluations": 0
+      }
+    ],
+    "scope": "each parser plan independently admits edge choices; accumulated work across guard/candidate plans may exceed this cap"
+  },
+  "profile_rows": [
+    {
+      "name": "one_shot-bounded-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 205862
+    },
+    {
+      "name": "one_shot-bounded-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 619210
+    },
+    {
+      "name": "one_shot-bounded-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 205862
+    },
+    {
+      "name": "one_shot-bounded-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 619210
+    },
+    {
+      "name": "one_shot-whole_block-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 4,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 823448
+    },
+    {
+      "name": "one_shot-whole_block-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 12,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 2476840
+    },
+    {
+      "name": "one_shot-whole_block-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 4,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 823448
+    },
+    {
+      "name": "one_shot-whole_block-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 12,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 2476840
+    },
+    {
+      "name": "chunks-bounded-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 205862
+    },
+    {
+      "name": "chunks-bounded-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 619210
+    },
+    {
+      "name": "chunks-bounded-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 205862
+    },
+    {
+      "name": "chunks-bounded-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 619210
+    },
+    {
+      "name": "chunks-whole_block-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 4,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 823448
+    },
+    {
+      "name": "chunks-whole_block-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 12,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 2476840
+    },
+    {
+      "name": "chunks-whole_block-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 4,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 823448
+    },
+    {
+      "name": "chunks-whole_block-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 12,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 2476840
+    },
+    {
+      "name": "incremental-bounded-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 137512
+    },
+    {
+      "name": "incremental-bounded-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 2,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 275836
+    },
+    {
+      "name": "incremental-bounded-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 1,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 137512
+    },
+    {
+      "name": "incremental-bounded-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 2,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 275836
+    },
+    {
+      "name": "incremental-whole_block-standard-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 412536
+    },
+    {
+      "name": "incremental-whole_block-standard-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 12,
+      "complete_wire_bytes": 12,
+      "complete_length_passes": 6,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 827508
+    },
+    {
+      "name": "incremental-whole_block-large-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 3,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 412536
+    },
+    {
+      "name": "incremental-whole_block-large-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 14,
+      "complete_wire_bytes": 14,
+      "complete_length_passes": 6,
+      "max_copy_length_considered": 45,
+      "max_plan_price_evaluations": 69162,
+      "aggregate_price_evaluations": 827508
+    },
+    {
+      "name": "raw-q10",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 10,
+      "complete_wire_bytes": 10,
+      "complete_length_passes": 4,
+      "max_copy_length_considered": 48,
+      "max_plan_price_evaluations": 14845,
+      "aggregate_price_evaluations": 174308
+    },
+    {
+      "name": "empty-q10",
+      "input_bytes": 0,
+      "sampled_wire_bytes": 1,
+      "complete_wire_bytes": 1,
+      "complete_length_passes": 0,
+      "max_copy_length_considered": 0,
+      "max_plan_price_evaluations": 0,
+      "aggregate_price_evaluations": 0
+    },
+    {
+      "name": "raw-q11",
+      "input_bytes": 48,
+      "sampled_wire_bytes": 10,
+      "complete_wire_bytes": 10,
+      "complete_length_passes": 12,
+      "max_copy_length_considered": 48,
+      "max_plan_price_evaluations": 14845,
+      "aggregate_price_evaluations": 526756
+    },
+    {
+      "name": "empty-q11",
+      "input_bytes": 0,
+      "sampled_wire_bytes": 1,
+      "complete_wire_bytes": 1,
+      "complete_length_passes": 0,
+      "max_copy_length_considered": 0,
+      "max_plan_price_evaluations": 0,
+      "aggregate_price_evaluations": 0
+    }
+  ],
+  "baseline_manifest_sha256": "ca01ce8fd411eb4b290cb117f98fef9cdfb88167f07bcb3174b127bc2b1bf9dc",
+  "report_sha256": "fec70495a4f0f9bdbcf52f9d3ccbbbff499d7ef22fc482ebd072d7346631728f",
+  "rows_canonical_sha256": "1258fedace279f511bdd9afe3ec17cce9f7606ef748f59f40fe3548c5aa25799",
+  "driver_source_before_after_equal": true,
+  "all_file_wrapper_before_after_equal": false,
+  "source_file_count": 1738,
+  "source_window_changes": [
+    {
+      "path": "src/br/encoder/hq_parser/complete_length_tests.zig",
+      "before_sha256": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
+      "after_sha256": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2",
+      "included_in_actual_compiler_inputs": true,
+      "driver_before_sha256": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2",
+      "driver_after_sha256": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2"
+    },
+    {
+      "path": "tools/br/wasm_public_gate.js",
+      "before_sha256": "0d7c7c242a54f4bc857945d7d12c0049c4b38f219165704ec3c6c977201454fd",
+      "after_sha256": "b03409a241a43fdb140cdb8bdc45aa4e2a6e023cbe55338e5246353f28e53192",
+      "included_in_actual_compiler_inputs": false,
+      "driver_before_sha256": null,
+      "driver_after_sha256": null
+    }
+  ],
+  "source_before_zip_sha256": "e5c8514baed8ee8b44962cd197e17c4e12c7b6d20fe428a6fb4a6e71ad2f9ca4",
+  "source_after_zip_sha256": "27aae7ed0ac0eae0db75a935ea5f1062c4729d15610306c92ffe8c7ed209b576",
+  "probe_sha256": "f2808486a6bcbc77263f1c7340bcb5ee91e606688d6f9236ead7c7f1f59274c6",
+  "compiler_manifest_sha256": "39987e61e08c6deca125f5f3963d8695462f6f45f14d6594fbd20e7bf6e00bd6",
+  "calculated_artifact_digest": "a428c84e8c20e1a7ecf68ad0db28774d",
+  "all_actual_compiler_input_contents_verified": true,
+  "all_current_files_equal_compiled_inputs": false,
+  "compiler_input_records": 1908,
+  "compiler_input_groups": {
+    "project": 1078,
+    "vail": 16,
+    "linked_objects": 2,
+    "zig_library": 812
+  },
+  "recovered_compiled_inputs": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/hq_parser/complete_length_tests.zig",
+      "relative_path": "src/br/encoder/hq_parser/complete_length_tests.zig",
+      "compiled_sha256": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
+      "current_sha256": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2",
+      "recorded_siphash128": "b7e4af009f536f26c02fa0433e545730",
+      "recovery_source": "source-before.zip"
+    }
+  ],
+  "compiler_inputs_zip_sha256": "d7743ca3e2b9bdc186ec4c7405a4b9b9607427aff38d384dae39b99226a3ccdd",
+  "binding_report_sha256": "93953a2783a3ad07dbea32d0044539141321fefa254e8cd4fe97a03fa38f1d4e",
+  "performance_claim": null
+}

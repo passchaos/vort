@@ -1,0 +1,168 @@
+{
+  "header_bits": 14,
+  "window_bits": 30,
+  "is_last": true,
+  "is_empty": false,
+  "npostfix": 0,
+  "ndirect_high": 0,
+  "literal_single_symbol": 0,
+  "command_single_symbol": 198,
+  "distance_single_symbol": 64,
+  "distance_extra_bits": 25,
+  "distance_extra_value": 60,
+  "decoded_physical_distance": 67108921,
+  "wire_distance_alphabet_size": 140,
+  "simple_distance_symbol_bits": 8,
+  "meta_output_bytes": 48,
+  "command_insert_bytes": 0,
+  "command_copy_bytes": 48,
+  "consumed_nonpadding_bits": 114,
+  "final_padding_bits": 6,
+  "bit_fields": {
+    "large_prefix_flag": {
+      "bit_offset": 0,
+      "bits": 1,
+      "value": 1
+    },
+    "large_prefix_upper": {
+      "bit_offset": 1,
+      "bits": 3,
+      "value": 0
+    },
+    "large_prefix_lower": {
+      "bit_offset": 4,
+      "bits": 3,
+      "value": 1
+    },
+    "large_reserved": {
+      "bit_offset": 7,
+      "bits": 1,
+      "value": 0
+    },
+    "window_bits": {
+      "bit_offset": 8,
+      "bits": 6,
+      "value": 30
+    },
+    "is_last": {
+      "bit_offset": 14,
+      "bits": 1,
+      "value": 1
+    },
+    "is_empty": {
+      "bit_offset": 15,
+      "bits": 1,
+      "value": 0
+    },
+    "meta_nibbles": {
+      "bit_offset": 16,
+      "bits": 2,
+      "value": 0
+    },
+    "meta_length_minus_one": {
+      "bit_offset": 18,
+      "bits": 16,
+      "value": 47
+    },
+    "literal_block_type_count_code": {
+      "bit_offset": 34,
+      "bits": 1,
+      "value": 0
+    },
+    "command_block_type_count_code": {
+      "bit_offset": 35,
+      "bits": 1,
+      "value": 0
+    },
+    "distance_block_type_count_code": {
+      "bit_offset": 36,
+      "bits": 1,
+      "value": 0
+    },
+    "npostfix": {
+      "bit_offset": 37,
+      "bits": 2,
+      "value": 0
+    },
+    "ndirect_high": {
+      "bit_offset": 39,
+      "bits": 4,
+      "value": 0
+    },
+    "literal_context_mode": {
+      "bit_offset": 43,
+      "bits": 2,
+      "value": 0
+    },
+    "literal_context_tree_count_code": {
+      "bit_offset": 45,
+      "bits": 1,
+      "value": 0
+    },
+    "distance_context_tree_count_code": {
+      "bit_offset": 46,
+      "bits": 1,
+      "value": 0
+    },
+    "literal_prefix_kind": {
+      "bit_offset": 47,
+      "bits": 2,
+      "value": 1
+    },
+    "literal_prefix_nsym_minus_one": {
+      "bit_offset": 49,
+      "bits": 2,
+      "value": 0
+    },
+    "literal_single_symbol": {
+      "bit_offset": 51,
+      "bits": 8,
+      "value": 0
+    },
+    "command_prefix_kind": {
+      "bit_offset": 59,
+      "bits": 2,
+      "value": 1
+    },
+    "command_prefix_nsym_minus_one": {
+      "bit_offset": 61,
+      "bits": 2,
+      "value": 0
+    },
+    "command_single_symbol": {
+      "bit_offset": 63,
+      "bits": 10,
+      "value": 198
+    },
+    "distance_prefix_kind": {
+      "bit_offset": 73,
+      "bits": 2,
+      "value": 1
+    },
+    "distance_prefix_nsym_minus_one": {
+      "bit_offset": 75,
+      "bits": 2,
+      "value": 0
+    },
+    "distance_single_symbol": {
+      "bit_offset": 77,
+      "bits": 8,
+      "value": 64
+    },
+    "copy_length_extra": {
+      "bit_offset": 85,
+      "bits": 4,
+      "value": 10
+    },
+    "distance_extra": {
+      "bit_offset": 89,
+      "bits": 25,
+      "value": 60
+    },
+    "final_padding": {
+      "bit_offset": 114,
+      "bits": 6,
+      "value": 0
+    }
+  }
+}

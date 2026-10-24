@@ -1,0 +1,37 @@
+{
+  "complete_lengths_actual_passes_checked": true,
+  "complete_lengths_cases": [
+    {
+      "format": "standard",
+      "input_bytes": 48,
+      "parse_mode": "bounded",
+      "quality": 10
+    },
+    {
+      "format": "large_window",
+      "input_bytes": 64,
+      "parse_mode": "whole_block",
+      "quality": 11
+    }
+  ],
+  "complete_lengths_exact_plan_budget_wire_checked": true,
+  "complete_lengths_memory_live_zero_checked": true,
+  "complete_lengths_sampled_wire_guard_checked": true,
+  "complete_lengths_zero_and_below_search_limits_checked": true,
+  "imports": [],
+  "input_bytes": 4097,
+  "node_version": "v26.10.0",
+  "round_trips": 2,
+  "total_memory_exact_and_below_checked": true,
+  "total_memory_qualities": [
+    0,
+    11
+  ],
+  "wasi_host": null,
+  "wasm_sha256": "6920c86e3e51e98cf38cb151d10393a4f1ecf7953b7c6705fed5cfb50daeea90",
+  "whole_block_max_positions": 4098,
+  "whole_block_modes": [
+    "standard",
+    "large_window"
+  ]
+}

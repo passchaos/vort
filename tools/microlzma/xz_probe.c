@@ -44,7 +44,8 @@ static int write_file(const char *path, const void *data, size_t size)
 }
 
 static int encode(const char *input_path, const char *output_path,
-		  uint32_t dictionary_size, uint32_t lc, uint32_t lp, uint32_t pb)
+		  uint32_t dictionary_size, uint32_t lc, uint32_t lp, uint32_t pb,
+		  size_t capacity_limit)
 {
 	uint8_t *input = NULL, *output = NULL;
 	size_t input_size, capacity;
@@ -54,7 +55,9 @@ static int encode(const char *input_path, const char *output_path,
 
 	if (read_file(input_path, &input, &input_size))
 		goto out;
-	capacity = input_size * 2 + 64;
+	capacity = capacity_limit ? capacity_limit : input_size * 2 + 64;
+	if (capacity < 6)
+		goto out;
 	output = malloc(capacity);
 	if (!output || lzma_lzma_preset(&options, LZMA_PRESET_DEFAULT))
 		goto out;
@@ -69,10 +72,13 @@ static int encode(const char *input_path, const char *output_path,
 	stream.next_out = output;
 	stream.avail_out = capacity;
 	if (lzma_code(&stream, LZMA_FINISH) != LZMA_STREAM_END ||
-	    stream.total_in != input_size)
+	    (!capacity_limit && stream.total_in != input_size))
 		goto out;
 	if (write_file(output_path, output, stream.total_out))
 		goto out;
+	printf("consumed=%llu written=%llu\n",
+	       (unsigned long long)stream.total_in,
+	       (unsigned long long)stream.total_out);
 	result = 0;
 out:
 	lzma_end(&stream);
@@ -118,11 +124,17 @@ int main(int argc, char **argv)
 		return encode(argv[2], argv[3], strtoul(argv[4], NULL, 10),
 			      strtoul(argv[5], NULL, 10),
 			      strtoul(argv[6], NULL, 10),
-			      strtoul(argv[7], NULL, 10));
+			      strtoul(argv[7], NULL, 10), 0);
+	if (argc == 9 && strcmp(argv[1], "encode-limit") == 0)
+		return encode(argv[2], argv[3], strtoul(argv[4], NULL, 10),
+			      strtoul(argv[5], NULL, 10),
+			      strtoul(argv[6], NULL, 10),
+			      strtoul(argv[7], NULL, 10),
+			      strtoull(argv[8], NULL, 10));
 	if (argc == 6 && strcmp(argv[1], "decode") == 0)
 		return decode(argv[2], argv[3], strtoull(argv[4], NULL, 10),
 			      strtoul(argv[5], NULL, 10));
-	fprintf(stderr, "usage: %s encode IN OUT DICT LC LP PB | decode IN OUT SIZE DICT\n",
+	fprintf(stderr, "usage: %s encode IN OUT DICT LC LP PB | encode-limit IN OUT DICT LC LP PB CAPACITY | decode IN OUT SIZE DICT\n",
 		argv[0]);
 	return 2;
 }

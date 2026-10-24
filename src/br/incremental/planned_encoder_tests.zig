@@ -90,13 +90,141 @@ test "incremental planned encoder matches across block history" {
     const encoded = try encodeIncremental(&encoder, &input, 257, 11);
     defer std.testing.allocator.free(encoded);
 
-    const independent_chunks = [_][]const u8{ &first, &first };
-    const independent = try br.encodePlannedStreamChunksAlloc(std.testing.allocator, &independent_chunks);
-    defer std.testing.allocator.free(independent);
-    try std.testing.expect(encoded.len * 2 < independent.len + 64);
+    const chunks = [_][]const u8{ &first, &first };
+    const chunked = try br.encodePlannedStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(chunked);
+    // The reusable chunked path now shares the same history-aware block core,
+    // so identical block boundaries must produce the same cross-block wire.
+    try std.testing.expectEqualSlices(u8, encoded, chunked);
     const decoded = try br.decodeStreamAllocExactSize(std.testing.allocator, encoded, input.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
+}
+
+test "quality wide windows match beyond 64 KiB across every planned surface" {
+    const block_len = 64 * 1024;
+    const repeated_len = 8 * 1024;
+    const input = try std.testing.allocator.alloc(u8, block_len + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x17b1_7b1d;
+    for (input[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..repeated_len]);
+
+    const narrow_one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 8, .window_bits = 16 },
+    );
+    defer std.testing.allocator.free(narrow_one_shot);
+    const wide_one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 8, .window_bits = 17 },
+    );
+    defer std.testing.allocator.free(wide_one_shot);
+    try std.testing.expect(wide_one_shot.len + repeated_len / 2 < narrow_one_shot.len);
+
+    const chunks = [_][]const u8{
+        input[0..block_len],
+        input[block_len..],
+    };
+    const narrow_chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 16 },
+    );
+    defer std.testing.allocator.free(narrow_chunked);
+    const wide_chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 17 },
+    );
+    defer std.testing.allocator.free(wide_chunked);
+    try std.testing.expect(wide_chunked.len + repeated_len / 2 < narrow_chunked.len);
+
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{ .quality = 8, .window_bits = 17 },
+            .block_len = block_len,
+        },
+    );
+    defer encoder.deinit();
+    const incremental = try encodeIncremental(&encoder, input, 997, 17);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, wide_chunked, incremental);
+
+    for ([_][]const u8{ wide_one_shot, wide_chunked, incremental }) |wire| {
+        const summary = try br.summarizeStream(wire);
+        try std.testing.expectEqual(@as(u5, 17), summary.window_bits);
+        try std.testing.expectEqual(block_len, summary.max_lz77_distance);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            wire,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "quality streams use the complete standard 16-bit history" {
+    const block_len = 48 * 1024;
+    const repeated_len = 8 * 1024;
+    const input = try std.testing.allocator.alloc(u8, block_len + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x16b1_7b1d;
+    for (input[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..repeated_len]);
+    const chunks = [_][]const u8{
+        input[0..block_len],
+        input[block_len..],
+    };
+    const narrow = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 15, .block_len = block_len },
+    );
+    defer std.testing.allocator.free(narrow);
+    const complete = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 16, .block_len = block_len },
+    );
+    defer std.testing.allocator.free(complete);
+    try std.testing.expect(complete.len + repeated_len / 2 < narrow.len);
+
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{
+                .quality = 8,
+                .window_bits = 16,
+                .block_len = block_len,
+            },
+            .block_len = block_len,
+        },
+    );
+    defer encoder.deinit();
+    const incremental = try encodeIncremental(&encoder, input, 509, 19);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, complete, incremental);
+
+    const summary = try br.summarizeStream(complete);
+    try std.testing.expectEqual(block_len, summary.max_lz77_distance);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        complete,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "incremental planned encoder bounds history to the advertised window" {
@@ -128,7 +256,1551 @@ test "incremental planned encoder bounds history to the advertised window" {
     try std.testing.expect(encoded.len > block_len);
 }
 
-fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
+test "chunked and incremental planned encoders honor quality policies" {
+    const block_len = 8 * 1024;
+    const input = try std.testing.allocator.alloc(u8, block_len * 2);
+    defer std.testing.allocator.free(input);
+    const phrase = "quality-aware multi-meta-block Brotli source payload 0123456789\n";
+    var random_state: u32 = 0x6d2b_79f5;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 97 < 79)
+            phrase[(index + index / block_len * 11) % phrase.len]
+        else
+            @truncate(random_state >> 24);
+    }
+    const chunks = [_][]const u8{ input[0..block_len], input[block_len..] };
+
+    const q0 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 0, .mode = .text },
+    );
+    defer std.testing.allocator.free(q0);
+    const q8 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .mode = .text },
+    );
+    defer std.testing.allocator.free(q8);
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const q10 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 10, .mode = .font },
+    );
+    defer std.testing.allocator.free(q10);
+    try std.testing.expect(br.IncrementalTestSupport.streamHqCommandAttempts() != 0);
+    const q11 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 11, .mode = .font },
+    );
+    defer std.testing.allocator.free(q11);
+
+    try std.testing.expect(!std.mem.eql(u8, q0, q8));
+    try std.testing.expect(q11.len <= q10.len);
+    for ([_][]const u8{ q0, q8, q10, q11 }) |encoded| {
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{ .quality = 8, .mode = .text },
+            .block_len = block_len,
+        },
+    );
+    defer incremental.deinit();
+    const incremental_q8 = try encodeIncremental(&incremental, input, 257, 13);
+    defer std.testing.allocator.free(incremental_q8);
+    try std.testing.expectEqualSlices(u8, q8, incremental_q8);
+
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    var incremental_q10 = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{ .quality = 10, .mode = .font },
+            .block_len = block_len,
+        },
+    );
+    defer incremental_q10.deinit();
+    const incremental_q10_bytes = try encodeIncremental(
+        &incremental_q10,
+        input,
+        257,
+        13,
+    );
+    defer std.testing.allocator.free(incremental_q10_bytes);
+    try std.testing.expectEqualSlices(u8, q10, incremental_q10_bytes);
+    try std.testing.expect(br.IncrementalTestSupport.streamHqCommandAttempts() != 0);
+}
+
+test "command-state work override propagates across chunked and next stream" {
+    const payload = "streaming command-state override payload 0123456789abcdef\n" ** 224;
+    try std.testing.expect(payload.len > 8 * 1024 and payload.len < 32 * 1024);
+    const chunks = [_][]const u8{payload};
+
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const baseline = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 10, .block_len = payload.len },
+    );
+    defer std.testing.allocator.free(baseline);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+
+    const stream_options: br.PlannedStreamChunksOptions = .{
+        .quality = 10,
+        .block_len = payload.len,
+        .command_state_max_input_kib = @intCast(
+            std.math.divCeil(usize, payload.len, 1024) catch unreachable,
+        ),
+    };
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const extended = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        stream_options,
+    );
+    defer std.testing.allocator.free(extended);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+    try std.testing.expect(extended.len <= baseline.len);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = stream_options,
+            .block_len = payload.len,
+        },
+    );
+    defer incremental.deinit();
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const incremental_extended = try encodeIncremental(
+        &incremental,
+        payload,
+        257,
+        13,
+    );
+    defer std.testing.allocator.free(incremental_extended);
+    try std.testing.expectEqualSlices(u8, extended, incremental_extended);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+
+    try incremental.nextStream(.{
+        .stream = .{ .quality = 10, .block_len = payload.len },
+        .block_len = payload.len,
+    });
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const incremental_default = try encodeIncremental(
+        &incremental,
+        payload,
+        509,
+        17,
+    );
+    defer std.testing.allocator.free(incremental_default);
+    try std.testing.expectEqualSlices(u8, baseline, incremental_default);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+}
+
+test "q0 and q1 fragment surfaces share one deterministic block core" {
+    const phrase = "fast fragment surfaces keep exact caller progress 0123456789\n";
+    const payload = phrase ** 1024;
+    const metadata = "q0-q1-fragment-core";
+
+    inline for (.{ @as(u4, 0), @as(u4, 1) }) |quality| {
+        const one_shot_options: br.PlannedEncodeOptions = .{
+            .quality = quality,
+            .mode = .text,
+            .window_bits = 12,
+            .metadata = metadata,
+        };
+        const stream_options: br.PlannedStreamChunksOptions = .{
+            .quality = quality,
+            .mode = .text,
+            .window_bits = 12,
+            .metadata = metadata,
+        };
+        const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+            std.testing.allocator,
+            payload,
+            one_shot_options,
+        );
+        defer std.testing.allocator.free(one_shot);
+
+        const chunks = [_][]const u8{payload};
+        const chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            stream_options,
+        );
+        defer std.testing.allocator.free(chunked);
+        try std.testing.expectEqualSlices(u8, one_shot, chunked);
+
+        var reusable = br.PlannedStreamEncoder.init(std.testing.allocator);
+        defer reusable.deinit();
+        const retained = try reusable.encodeScratchWithOptions(payload, one_shot_options);
+        try std.testing.expectEqualSlices(u8, one_shot, retained);
+
+        const bound = try br.encodedPlannedStreamBoundWithOptions(
+            payload.len,
+            one_shot_options,
+        );
+        const caller_output = try std.testing.allocator.alloc(u8, bound);
+        defer std.testing.allocator.free(caller_output);
+        const caller_len = try br.encodePlannedStreamWithOptionsInto(
+            payload,
+            caller_output,
+            one_shot_options,
+        );
+        try std.testing.expectEqualSlices(u8, one_shot, caller_output[0..caller_len]);
+
+        var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+            std.testing.allocator,
+            .{ .stream = stream_options },
+        );
+        defer incremental.deinit();
+        const progressive = try encodeIncremental(&incremental, payload, 113, 7);
+        defer std.testing.allocator.free(progressive);
+        try std.testing.expectEqualSlices(u8, one_shot, progressive);
+
+        const summary = try br.summarizeStream(one_shot);
+        const block_len: usize = if (quality == 0) 16 * 1024 else 32 * 1024;
+        try std.testing.expectEqual(
+            std.math.divCeil(usize, payload.len, block_len) catch unreachable,
+            summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+        );
+        try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+        try std.testing.expectEqual(@as(u5, 12), summary.window_bits);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            one_shot,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "q0 and q1 fragment parsers do not borrow prior block history" {
+    const block_len = 4 * 1024;
+    var input: [block_len * 2]u8 = undefined;
+    var random_state: u32 = 0x91e1_0da5;
+    for (input[0..block_len]) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..block_len]);
+    const chunks = [_][]const u8{ input[0..block_len], input[block_len..] };
+
+    const history_aware = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .block_len = block_len },
+    );
+    defer std.testing.allocator.free(history_aware);
+    const history_summary = try br.summarizeStream(history_aware);
+    try std.testing.expectEqual(@as(usize, 1), history_summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), history_summary.uncompressed_meta_block_count);
+
+    inline for (.{ @as(u4, 0), @as(u4, 1) }) |quality| {
+        const fragmented = try br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = quality, .block_len = block_len },
+        );
+        defer std.testing.allocator.free(fragmented);
+        const summary = try br.summarizeStream(fragmented);
+        try std.testing.expectEqual(@as(usize, 0), summary.compressed_meta_block_count);
+        try std.testing.expectEqual(@as(usize, 2), summary.uncompressed_meta_block_count);
+        try std.testing.expect(fragmented.len > history_aware.len + block_len / 2);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            fragmented,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &input, decoded);
+    }
+}
+
+test "q0 and q1 one-shot bounds cover incompressible multi-fragment output" {
+    var input: [96 * 1024]u8 = undefined;
+    var random_state: u32 = 0xa511_e9b3;
+    for (&input) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+
+    inline for (.{ @as(u4, 0), @as(u4, 1) }) |quality| {
+        const options: br.PlannedEncodeOptions = .{ .quality = quality };
+        const bound = try br.encodedPlannedStreamBoundWithOptions(input.len, options);
+        const output = try std.testing.allocator.alloc(u8, bound);
+        defer std.testing.allocator.free(output);
+        const written = try br.encodePlannedStreamWithOptionsInto(&input, output, options);
+        try std.testing.expect(written <= bound);
+        const summary = try br.summarizeStream(output[0..written]);
+        const block_len: usize = if (quality == 0) 16 * 1024 else 32 * 1024;
+        try std.testing.expectEqual(
+            std.math.divCeil(usize, input.len, block_len) catch unreachable,
+            summary.uncompressed_meta_block_count,
+        );
+        try std.testing.expectEqual(@as(usize, 0), summary.compressed_meta_block_count);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            output[0..written],
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &input, decoded);
+    }
+}
+
+test "q0 and q1 fragment one-shot paths release every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, quality: u4) !void {
+            const payload = "allocation-safe fast Brotli fragment 0123456789\n" ** 96;
+            const encoded = try br.encodePlannedStreamWithOptionsAlloc(
+                allocator,
+                payload,
+                .{ .quality = quality },
+            );
+            defer allocator.free(encoded);
+            const decoded = try br.decodeStreamAllocExactSize(
+                allocator,
+                encoded,
+                payload.len,
+            );
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{@as(u4, 0)},
+    );
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{@as(u4, 1)},
+    );
+}
+
+test "planned stream quality options reject invalid chunked combinations before output" {
+    const chunks = [_][]const u8{"invalid options must not publish a prefix"};
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodedPlannedStreamChunksBoundWithOptions(&chunks, .{ .quality = 12 }),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .mode = .text },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .level = .ratio, .quality = 8 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = 4, .window_bits = 24 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .command_state_max_input_kib = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = 9, .command_state_max_input_kib = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = 10, .command_state_max_input_kib = 65 },
+        ),
+    );
+}
+
+test "quality-aware planned blocks consider static dictionary without LZ77 matches" {
+    const payload = "information";
+    const chunks = [_][]const u8{payload};
+    const encoded = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expect(summary.static_dictionary_copy_count > 0);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "planned stream policies select quality-specific block sizes" {
+    const input_len = 96 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    const phrase = "quality-specific Brotli block sizing amortizes headers while preserving latency\n";
+    for (input, 0..) |*byte, index|
+        byte.* = phrase[(index + index / (16 * 1024) * 5) % phrase.len];
+
+    const Case = struct {
+        options: br.PlannedStreamChunksOptions,
+        expected_blocks: usize,
+    };
+    const cases = [_]Case{
+        .{ .options = .{ .level = .fast }, .expected_blocks = 3 },
+        .{ .options = .{ .level = .balanced }, .expected_blocks = 2 },
+        .{ .options = .{ .level = .ratio }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 0 }, .expected_blocks = 6 },
+        .{ .options = .{ .quality = 1 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 2 }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 6 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 10 }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 11 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 8, .block_len = 24 * 1024 }, .expected_blocks = 4 },
+    };
+    const chunks = [_][]const u8{input};
+    for (cases) |case| {
+        const encoded = try br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            case.options,
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try br.summarizeStream(encoded);
+        try std.testing.expectEqual(
+            case.expected_blocks,
+            summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+        );
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodedPlannedStreamChunksBoundWithOptions(
+            &chunks,
+            .{ .block_len = 64 * 1024 + 1 },
+        ),
+    );
+}
+
+test "incremental auto block sizing matches chunked quality wire" {
+    const input_len = 96 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    const phrase = "incremental and chunked auto block sizing share one policy core 0123456789\n";
+    for (input, 0..) |*byte, index| byte.* = phrase[index % phrase.len];
+    const chunks = [_][]const u8{input};
+    const chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .mode = .text },
+    );
+    defer std.testing.allocator.free(chunked);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2, .mode = .text } },
+    );
+    defer incremental.deinit();
+    const encoded = try encodeIncremental(&incremental, input, 509, 17);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, chunked, encoded);
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(
+        @as(usize, 2),
+        summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+    );
+}
+
+test "entropy-aware planned stream segmentation follows midpoint changes" {
+    const input_len = 128 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x9e37_79b9;
+    for (input[0 .. 64 * 1024], 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < 32 * 1024) nibble else 240 + nibble;
+    }
+    @memset(input[64 * 1024 ..], 'm');
+    const chunks = [_][]const u8{input};
+
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    const forced = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .level = .balanced, .adaptive_blocks = true },
+    );
+    defer std.testing.allocator.free(forced);
+    const ordinary_q2 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .level = .balanced, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(ordinary_q2);
+
+    try expectDataBlockCount(adaptive, 3);
+    try expectDataBlockCount(fixed, 2);
+    try expectDataBlockCount(forced, 3);
+    try expectDataBlockCount(ordinary_q2, 2);
+    try std.testing.expect(adaptive.len <= fixed.len);
+    for ([_][]const u8{ adaptive, fixed, forced, ordinary_q2 }) |encoded| {
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2 } },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(&incremental, input, 509, 17);
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodedPlannedStreamChunksBoundWithOptions(
+            &chunks,
+            .{ .quality = 8, .block_len = 32 * 1024, .adaptive_blocks = true },
+        ),
+    );
+}
+
+test "entropy-aware planned stream segmentation follows quarter changes" {
+    const input_len = 64 * 1024;
+    const quarter_len = input_len / 4;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x4a11_7e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if ((index / quarter_len) & 1 == 0)
+            nibble
+        else
+            240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 4);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        509,
+        17,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+
+    const bound = try br.encodedPlannedStreamChunksBoundWithOptions(
+        &chunks,
+        options,
+    );
+    try std.testing.expect(bound >= adaptive.len);
+    const output = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(output);
+    const written = try br.encodePlannedStreamChunksWithOptionsInto(
+        &chunks,
+        output,
+        options,
+    );
+    try std.testing.expectEqualSlices(u8, adaptive, output[0..written]);
+
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "entropy-aware planned stream segmentation follows a non-quarter grid change" {
+    const input_len = 64 * 1024;
+    const boundary = 24 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x8a11_7e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < boundary) nibble else 240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 2);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        701,
+        23,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+
+    const bound = try br.encodedPlannedStreamChunksBoundWithOptions(
+        &chunks,
+        options,
+    );
+    try std.testing.expect(bound >= adaptive.len);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "entropy-aware planned stream segmentation follows a 4 KiB grid change" {
+    const input_len = 64 * 1024;
+    const boundary = 20 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x4f1e_7e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < boundary) nibble else 240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 2);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        619,
+        31,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "entropy-aware planned stream segmentation arbitrates the proxy frontier" {
+    const input_len = 64 * 1024;
+    const first_boundary = 16 * 1024;
+    const second_boundary = 40 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x70f0_1e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < first_boundary)
+            nibble
+        else if (index < second_boundary)
+            96 + nibble
+        else
+            240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 3);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        883,
+        29,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+    const bound = try br.encodedPlannedStreamChunksBoundWithOptions(
+        &chunks,
+        options,
+    );
+    try std.testing.expect(bound >= adaptive.len);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "entropy-aware planned stream segmentation retains the two-half winner" {
+    const input_len = 64 * 1024;
+    const quarter_len = input_len / 4;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    for (0..4) |quarter_index| {
+        const quarter = input[quarter_index * quarter_len ..][0..quarter_len];
+        const base: u8 = if (quarter_index < 2) 0 else 240;
+        for (quarter, 0..) |*byte, index|
+            byte.* = base + @as(u8, @intCast(index & 15));
+        var random_state: u32 = 0x51ed_270b ^ @as(u32, @intCast(quarter_index * 0x1021));
+        var remaining = quarter.len;
+        while (remaining > 1) {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const swap_index: usize = @intCast(
+                random_state % @as(u32, @intCast(remaining)),
+            );
+            remaining -= 1;
+            std.mem.swap(u8, &quarter[remaining], &quarter[swap_index]);
+        }
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 4 };
+    const chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(chunked);
+    try expectDataBlockCount(chunked, 2);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        997,
+        19,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, chunked, incremental_wire);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        chunked,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "warmed entropy-aware incremental segmentation reuses retained scratch" {
+    const input_len = 64 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0xa341_316c;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if ((index / (input.len / 4)) & 1 == 0)
+            nibble
+        else
+            240 + nibble;
+    }
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2 } },
+    );
+    defer encoder.deinit();
+    const first = try encodeIncremental(&encoder, input, input.len, input.len);
+    defer std.testing.allocator.free(first);
+    const retained = encoder.retainedCapacity();
+
+    try encoder.nextStream(.{ .stream = .{ .quality = 2 } });
+    const output = try std.testing.allocator.alloc(u8, input.len + 1024);
+    defer std.testing.allocator.free(output);
+    var failing = std.testing.FailingAllocator.init(
+        std.testing.allocator,
+        .{ .fail_index = 0 },
+    );
+    encoder.allocator = failing.allocator();
+    const written = encodeIncrementalInto(&encoder, input, output) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, first, output[0..written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+fn expectDataBlockCount(encoded: []const u8, expected: usize) !void {
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(
+        expected,
+        summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+    );
+}
+
+test "oversized planned input applies quality policy to every meta block" {
+    const input_len = br.max_uncompressed_meta_block_len + 17;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    const phrase = "large quality-aware Brotli stream crosses the meta-block limit 0123456789\n";
+    for (input, 0..) |*byte, index|
+        byte.* = phrase[(index + index / (32 * 1024) * 7) % phrase.len];
+
+    const q0 = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 0, .mode = .text },
+    );
+    defer std.testing.allocator.free(q0);
+    const q2 = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2, .mode = .text },
+    );
+    defer std.testing.allocator.free(q2);
+
+    try std.testing.expect(!std.mem.eql(u8, q0, q2));
+    try std.testing.expect(q0.len < input.len / 100);
+    try std.testing.expect(q2.len < input.len / 100);
+    try std.testing.expect(q0.len <= try br.encodedPlannedStreamBoundWithOptions(
+        input.len,
+        .{ .quality = 0, .mode = .text },
+    ));
+    try std.testing.expect(q2.len <= try br.encodedPlannedStreamBoundWithOptions(
+        input.len,
+        .{ .quality = 2, .mode = .text },
+    ));
+    for ([_][]const u8{ q0, q2 }) |encoded| {
+        const summary = try br.summarizeStream(encoded);
+        try std.testing.expect(summary.compressed_meta_block_count > 1);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "incremental static dictionary encoder matches one-shot across fragments" {
+    const payload = "quot;";
+    const expected = try br.encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(expected);
+
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+        std.testing.allocator,
+    );
+    defer encoder.deinit();
+    const fragmented = try encodeIncremental(&encoder, payload, 1, 1);
+    defer std.testing.allocator.free(fragmented);
+    try std.testing.expectEqualSlices(u8, expected, fragmented);
+    const summary = try br.summarizeStream(fragmented);
+    try std.testing.expectEqual(@as(usize, 1), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const retained = encoder.retainedCapacity();
+    const snapshot = encoder.snapshot();
+    try std.testing.expect(snapshot.done);
+    try std.testing.expectEqual(payload.len, snapshot.stream_input);
+    try std.testing.expectEqual(fragmented.len, snapshot.stream_output);
+
+    try encoder.nextStream(.{});
+    const second = try encodeIncremental(&encoder, payload, 2, 3);
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualSlices(u8, expected, second);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+test "incremental static dictionary encoder preserves addresses across blocks" {
+    const payload = "quot;" ** 3;
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .block_len = 5 },
+    );
+    defer encoder.deinit();
+    const encoded = try encodeIncremental(&encoder, payload, 2, 1);
+    defer std.testing.allocator.free(encoded);
+
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "incremental static dictionary encoder resumes after metadata" {
+    const payload = "quot;quot;";
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+        std.testing.allocator,
+    );
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var scratch: [1]u8 = undefined;
+
+    try feed(&encoder, &encoded, payload[0..5], &scratch);
+    try encoder.writeMetadata("complete dictionary metadata");
+    try drainFlush(&encoder, &encoded, &scratch);
+    try feed(&encoder, &encoded, payload[5..], &scratch);
+    try encoder.finish();
+    try drainFinish(&encoder, &encoded, &scratch);
+
+    const summary = try br.summarizeStream(encoded.items);
+    try std.testing.expectEqual(@as(usize, 2), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.static_dictionary_copy_count);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded.items,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "static dictionary convenience APIs preserve wire and chunk boundaries" {
+    const payload = "quot;";
+    const one_shot = try br.encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(one_shot);
+    const single_chunks = [_][]const u8{payload};
+    const single_chunk = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &single_chunks,
+    );
+    defer std.testing.allocator.free(single_chunk);
+    try std.testing.expectEqualSlices(u8, one_shot, single_chunk);
+
+    var strict_append: std.ArrayList(u8) = .empty;
+    defer strict_append.deinit(std.testing.allocator);
+    try strict_append.appendSlice(std.testing.allocator, "prefix:");
+    try br.encodePlannedStreamStaticDictionaryAppend(
+        std.testing.allocator,
+        &strict_append,
+        payload,
+    );
+    try std.testing.expectEqualSlices(u8, one_shot, strict_append.items[7..]);
+    var strict_into: [64]u8 = undefined;
+    const strict_written = try br.encodePlannedStreamStaticDictionaryInto(
+        payload,
+        &strict_into,
+    );
+    try std.testing.expectEqualSlices(u8, one_shot, strict_into[0..strict_written]);
+    var strict_too_small: [64]u8 = @splat(0xaa);
+    try std.testing.expect(one_shot.len > 1 and one_shot.len <= strict_too_small.len);
+    try std.testing.expectError(
+        error.OutOfMemory,
+        br.encodePlannedStreamStaticDictionaryInto(
+            payload,
+            strict_too_small[0 .. one_shot.len - 1],
+        ),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &([_]u8{0xaa} ** strict_too_small.len),
+        &strict_too_small,
+    );
+
+    const chunks = [_][]const u8{ "", payload, payload, "", payload };
+    const encoded = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &chunks,
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.static_dictionary_copy_count);
+    const expected = payload ** 3;
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        expected.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try br.encodePlannedStreamStaticDictionaryChunksAppend(
+        std.testing.allocator,
+        &appended,
+        &chunks,
+    );
+    try std.testing.expectEqualSlices(u8, encoded, appended.items[7..]);
+    var into: [256]u8 = undefined;
+    const written = try br.encodePlannedStreamStaticDictionaryChunksInto(
+        &chunks,
+        &into,
+    );
+    try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+
+    const options: br.StaticDictionaryStreamOptions = .{
+        .stream = .{ .window_bits = 18, .metadata = "chunk options" },
+        .block_len = 5,
+        .max_input_len = expected.len,
+    };
+    const with_options = try br.encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(with_options);
+    const options_summary = try br.summarizeStream(with_options);
+    try std.testing.expectEqual(@as(u5, 18), options_summary.window_bits);
+    try std.testing.expectEqual(@as(usize, 1), options_summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), options_summary.compressed_meta_block_count);
+    var options_append: std.ArrayList(u8) = .empty;
+    defer options_append.deinit(std.testing.allocator);
+    try br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+        std.testing.allocator,
+        &options_append,
+        &chunks,
+        options,
+    );
+    try std.testing.expectEqualSlices(u8, with_options, options_append.items);
+    var options_into: [256]u8 = undefined;
+    const options_written = try br.encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+        &chunks,
+        &options_into,
+        options,
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        with_options,
+        options_into[0..options_written],
+    );
+
+    var too_small: [256]u8 = @splat(0xaa);
+    try std.testing.expect(encoded.len > 1 and encoded.len <= too_small.len);
+    try std.testing.expectError(
+        error.OutOfMemory,
+        br.encodePlannedStreamStaticDictionaryChunksInto(
+            &chunks,
+            too_small[0 .. encoded.len - 1],
+        ),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &([_]u8{0xaa} ** too_small.len),
+        &too_small,
+    );
+}
+
+test "static dictionary chunk conveniences preflight and roll back" {
+    const chunks = [_][]const u8{ "quo", "t;" };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    try out.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+            std.testing.allocator,
+            &out,
+            &chunks,
+            .{ .max_input_len = 4 },
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+            std.testing.allocator,
+            &out,
+            &chunks,
+            .{ .block_len = 0 },
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+
+    const empty_chunks = [_][]const u8{ "", "" };
+    const empty = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &empty_chunks,
+    );
+    defer std.testing.allocator.free(empty);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        empty,
+        0,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 0), decoded.len);
+}
+
+test "static dictionary chunk append releases every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const chunks = [_][]const u8{ "quot;", "quot;" };
+            var out: std.ArrayList(u8) = .empty;
+            defer out.deinit(allocator);
+            try out.appendSlice(allocator, "prefix:");
+            br.encodePlannedStreamStaticDictionaryChunksAppend(
+                allocator,
+                &out,
+                &chunks,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+                return err;
+            };
+            var decoded: [10]u8 = undefined;
+            try std.testing.expectEqual(
+                decoded.len,
+                try br.decodeStreamIntoExactSize(
+                    out.items[7..],
+                    &decoded,
+                    decoded.len,
+                ),
+            );
+            try std.testing.expectEqualSlices(u8, "quot;quot;", &decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
+}
+
+test "reusable static dictionary stream encoder needs no warmed allocations" {
+    const chunks = [_][]const u8{ "quot;", "quot;", " information follows" };
+    const expected = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &chunks,
+    );
+    defer std.testing.allocator.free(expected);
+    var encoder = br.StaticDictionaryStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const first = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected, first);
+    const configured = try encoder.encodeChunksScratchWithOptions(&chunks, .{
+        .stream = .{ .window_bits = 18, .metadata = "reconfigured" },
+        .block_len = 5,
+    });
+    const configured_summary = try br.summarizeStream(configured);
+    try std.testing.expectEqual(@as(u5, 18), configured_summary.window_bits);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        configured_summary.metadata_meta_block_count,
+    );
+    const rewarmed = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected, rewarmed);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encoder.encodeChunksAppend(&encoder.output, &chunks),
+    );
+    const owned = try encoder.encodeChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected, owned);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try encoder.encodeChunksAppend(&appended, &chunks);
+    try std.testing.expectEqualSlices(u8, expected, appended.items[7..]);
+    const retained = encoder.retainedCapacity();
+    try std.testing.expect(retained > expected.len);
+    var output: [256]u8 = undefined;
+    const written = try encoder.encodeChunksInto(&chunks, &output);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+
+    var too_small: [256]u8 = @splat(0xaa);
+    try std.testing.expect(expected.len > 1 and expected.len <= too_small.len);
+    try std.testing.expectError(
+        error.OutOfMemory,
+        encoder.encodeChunksInto(&chunks, too_small[0 .. expected.len - 1]),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &([_]u8{0xaa} ** too_small.len),
+        &too_small,
+    );
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+
+    var failing = std.testing.FailingAllocator.init(
+        std.testing.allocator,
+        .{ .fail_index = 0 },
+    );
+    encoder.allocator = failing.allocator();
+    encoder.incremental.allocator = failing.allocator();
+    const warmed_written = encoder.encodeChunksInto(&chunks, &output) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        encoder.incremental.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    encoder.incremental.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, expected, output[0..warmed_written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+test "static dictionary stream wire ignores randomized input output fragmentation" {
+    const phrase = "quot; information follows the dictionary compression ";
+    var random_state: u32 = 0x8f6a_2c19;
+    for (0..32) |case_index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const payload_len: usize = @intCast(64 + random_state % 449);
+        var payload_storage: [512]u8 = undefined;
+        for (payload_storage[0..payload_len], 0..) |*byte, index|
+            byte.* = phrase[(index + case_index * 7) % phrase.len];
+        const payload = payload_storage[0..payload_len];
+
+        var segment_lengths: [128]usize = undefined;
+        var segment_count: usize = 0;
+        var remaining = payload.len;
+        while (remaining != 0) {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const len = @min(remaining, @as(usize, @intCast(4 + random_state % 29)));
+            segment_lengths[segment_count] = len;
+            segment_count += 1;
+            remaining -= len;
+        }
+        const segments = segment_lengths[0..segment_count];
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const window_bits = ([_]u5{ 10, 16, 24 })[@as(usize, @intCast(random_state % 3))];
+        const options: br.StaticDictionaryStreamOptions = .{
+            .stream = .{ .window_bits = window_bits },
+            .block_len = @intCast(5 + random_state % 60),
+            .max_input_len = payload.len,
+        };
+        var baseline_encoder = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+            std.testing.allocator,
+            options,
+        );
+        defer baseline_encoder.deinit();
+        const baseline = try encodeStaticDictionarySchedule(
+            &baseline_encoder,
+            payload,
+            segments,
+            payload.len,
+            4096,
+        );
+        defer std.testing.allocator.free(baseline);
+
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const input_chunk_len: usize = @intCast(1 + random_state % 17);
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const output_chunk_len: usize = @intCast(1 + random_state % 13);
+        var fragmented_encoder = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+            std.testing.allocator,
+            options,
+        );
+        defer fragmented_encoder.deinit();
+        const fragmented = try encodeStaticDictionarySchedule(
+            &fragmented_encoder,
+            payload,
+            segments,
+            input_chunk_len,
+            output_chunk_len,
+        );
+        defer std.testing.allocator.free(fragmented);
+        try std.testing.expectEqualSlices(u8, baseline, fragmented);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            fragmented,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+        const summary = try br.summarizeStream(fragmented);
+        var expected_metadata: usize = 0;
+        for (0..segments.len - 1) |segment_index|
+            expected_metadata += @intFromBool(segment_index % 3 == 0);
+        try std.testing.expectEqual(
+            expected_metadata,
+            summary.metadata_meta_block_count,
+        );
+    }
+}
+
+test "incremental static dictionary encoder covers tiny streams and preflight errors" {
+    const cases = [_][]const u8{ "", "a", "ab", "abc", "abcd" };
+    for (cases) |payload| {
+        var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+            std.testing.allocator,
+        );
+        defer encoder.deinit();
+        const encoded = try encodeIncremental(&encoder, payload, 1, 1);
+        defer std.testing.allocator.free(encoded);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    var invalid_window = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .window_bits = 9 } },
+    );
+    defer invalid_window.deinit();
+    var output: [16]u8 = @splat(0xaa);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        invalid_window.step("quot;", &output),
+    );
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** output.len), &output);
+    try std.testing.expectEqual(@as(usize, 0), invalid_window.snapshot().input_read);
+
+    var limited = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .max_input_len = 4 },
+    );
+    defer limited.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        limited.step("quot;", &output),
+    );
+    try std.testing.expectEqual(@as(usize, 0), limited.snapshot().input_read);
+}
+
+test "incremental static dictionary encoder releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "quot;";
+            var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(allocator);
+            defer encoder.deinit();
+            var wire: [64]u8 = undefined;
+            const written = try encodeIncrementalInto(&encoder, payload, &wire);
+            var decoded: [payload.len]u8 = undefined;
+            try std.testing.expectEqual(
+                payload.len,
+                try br.decodeStreamIntoExactSize(
+                    wire[0..written],
+                    &decoded,
+                    payload.len,
+                ),
+            );
+            try std.testing.expectEqualSlices(u8, payload, &decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
+}
+
+fn encodeStaticDictionarySchedule(
+    encoder: anytype,
+    input: []const u8,
+    segment_lengths: []const usize,
+    input_chunk_len: usize,
+    output_chunk_len: usize,
+) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    const scratch = try std.testing.allocator.alloc(u8, output_chunk_len);
+    defer std.testing.allocator.free(scratch);
+    var input_offset: usize = 0;
+    for (segment_lengths, 0..) |segment_len, segment_index| {
+        const segment_end = input_offset + segment_len;
+        var offered_end = input_offset;
+        while (input_offset < segment_end) {
+            if (input_offset == offered_end)
+                offered_end = @min(segment_end, input_offset + input_chunk_len);
+            const result = try encoder.step(input[input_offset..offered_end], scratch);
+            if (result.progress.input_read == 0 and result.progress.output_written == 0)
+                return error.TestUnexpectedResult;
+            input_offset += result.progress.input_read;
+            try encoded.appendSlice(
+                std.testing.allocator,
+                scratch[0..result.progress.output_written],
+            );
+        }
+        if (segment_index + 1 != segment_lengths.len) {
+            if (segment_index % 3 == 0)
+                try encoder.writeMetadata("schedule metadata")
+            else
+                encoder.flush();
+            try drainFlush(encoder, &encoded, scratch);
+        }
+    }
+    try std.testing.expectEqual(input.len, input_offset);
+    try encoder.finish();
+    try drainFinish(encoder, &encoded, scratch);
+    return encoded.toOwnedSlice(std.testing.allocator);
+}
+
+fn encodeIncremental(encoder: anytype, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);
     const scratch = try std.testing.allocator.alloc(u8, output_chunk_len);
@@ -145,7 +1817,7 @@ fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []cons
     return encoded.toOwnedSlice(std.testing.allocator);
 }
 
-fn feed(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), input: []const u8, scratch: []u8) !void {
+fn feed(encoder: anytype, encoded: *std.ArrayList(u8), input: []const u8, scratch: []u8) !void {
     var offset: usize = 0;
     while (offset < input.len) {
         const result = try encoder.step(input[offset..], scratch);
@@ -154,7 +1826,7 @@ fn feed(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8
     }
 }
 
-fn drainFlush(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), scratch: []u8) !void {
+fn drainFlush(encoder: anytype, encoded: *std.ArrayList(u8), scratch: []u8) !void {
     while (true) {
         const result = try encoder.step("", scratch);
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
@@ -163,7 +1835,7 @@ fn drainFlush(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayL
     }
 }
 
-fn drainFinish(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), scratch: []u8) !void {
+fn drainFinish(encoder: anytype, encoded: *std.ArrayList(u8), scratch: []u8) !void {
     while (true) {
         const result = try encoder.step("", scratch);
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
@@ -172,7 +1844,7 @@ fn drainFinish(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.Array
     }
 }
 
-fn encodeIncrementalInto(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {
+fn encodeIncrementalInto(encoder: anytype, input: []const u8, output: []u8) !usize {
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (input_offset < input.len) {

@@ -1,0 +1,737 @@
+const std = @import("std");
+const core = @import("../core.zig");
+const lz77 = @import("../lz77.zig");
+const settings = @import("encode_options.zig");
+
+pub const max_window_len: usize = settings.max_dictionary_size;
+pub const max_match_len: usize = 273;
+const min_match_len: usize = 3;
+const hash_table_size: usize = 1 << 16;
+const static_price_min_distance: usize = 4096;
+const static_price_min_distance_ratio: usize = 9;
+
+pub const Token = union(enum) {
+    literal: u8,
+    match: Match,
+
+    pub const Match = struct {
+        length: u16,
+        distance: u32,
+    };
+};
+
+pub const Plan = struct {
+    tokens: []Token,
+    stats: lz77.PlanStats,
+
+    pub fn deinit(self: *Plan, allocator: std.mem.Allocator) void {
+        allocator.free(self.tokens);
+        self.* = undefined;
+    }
+};
+
+pub const Options = struct {
+    window_len: usize,
+    max_chain: usize = 64,
+    nice_len: usize = 64,
+    lazy: bool = false,
+    max_working_memory: usize = std.math.maxInt(usize),
+};
+
+pub const StreamPlan = struct {
+    tokens: []const Token,
+    stats: lz77.PlanStats,
+};
+
+/// Reusable hash-chain planner for consecutive chunks from one LZMA2 block.
+/// History is indexed once as the block advances, including chunks that the
+/// outer writer later chooses to store verbatim.
+pub const StreamPlanner = struct {
+    allocator: std.mem.Allocator,
+    window_len: usize,
+    input_len: usize,
+    max_working_memory: usize = std.math.maxInt(usize),
+    head: std.ArrayList(i64) = .empty,
+    previous: std.ArrayList(i64) = .empty,
+    tokens: std.ArrayList(Token) = .empty,
+    next_position: usize = 0,
+    indexed_positions: usize = 0,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        window_len: usize,
+        input_len: usize,
+    ) !StreamPlanner {
+        return initWithLimit(allocator, window_len, input_len, std.math.maxInt(usize));
+    }
+
+    /// Bound requested heap use before allocation. The ring follows the actual
+    /// block length rather than allocating the full requested dictionary.
+    pub fn initWithLimit(
+        allocator: std.mem.Allocator,
+        window_len: usize,
+        input_len: usize,
+        max_working_memory: usize,
+    ) !StreamPlanner {
+        if (try requiredWorkingMemory(window_len, input_len) > max_working_memory)
+            return error.WorkingMemoryLimitExceeded;
+        var self = StreamPlanner{
+            .allocator = allocator,
+            .window_len = window_len,
+            .input_len = input_len,
+            .max_working_memory = max_working_memory,
+        };
+        errdefer self.deinit();
+        try self.head.ensureTotalCapacityPrecise(allocator, hash_table_size);
+        try self.head.resize(allocator, hash_table_size);
+        @memset(self.head.items, -1);
+        const previous_len = try streamRingLength(window_len, input_len);
+        try self.previous.ensureTotalCapacityPrecise(allocator, previous_len);
+        try self.previous.resize(allocator, previous_len);
+        @memset(self.previous.items, -1);
+        try self.tokens.ensureTotalCapacityPrecise(allocator, @min(input_len, 65_536));
+        return self;
+    }
+
+    /// Initial requested heap bytes. A later larger chunk may grow the token
+    /// buffer; reserveTokens checks the simultaneous old/new allocation peak.
+    pub fn requiredWorkingMemory(window_len: usize, input_len: usize) !usize {
+        if (window_len <= std.math.maxInt(u16) or window_len > max_window_len or
+            std.math.cast(i64, input_len) == null) return error.InvalidBlockPlan;
+        const ring_len = try streamRingLength(window_len, input_len);
+        const index_bytes = try memoryMultiply(try memoryAdd(hash_table_size, ring_len), @sizeOf(i64));
+        return memoryAdd(index_bytes, try memoryMultiply(@min(input_len, 65_536), @sizeOf(Token)));
+    }
+
+    pub fn workingBytes(self: *const StreamPlanner) usize {
+        return (self.head.capacity + self.previous.capacity) * @sizeOf(i64) + self.tokens.capacity * @sizeOf(Token);
+    }
+
+    fn reserveTokens(self: *StreamPlanner, chunk_len: usize) !void {
+        if (chunk_len <= self.tokens.capacity) return;
+        const peak = try memoryAdd(self.workingBytes(), try memoryMultiply(chunk_len, @sizeOf(Token)));
+        if (peak > self.max_working_memory) return error.WorkingMemoryLimitExceeded;
+        try self.tokens.ensureTotalCapacityPrecise(self.allocator, chunk_len);
+    }
+
+    fn validateChunk(self: *const StreamPlanner, input: []const u8, start: usize, end: usize) !void {
+        if (input.len > self.input_len or start != self.next_position or
+            end < start or end > input.len or end - start > settings.max_lzma2_chunk_plain)
+            return error.InvalidBlockPlan;
+    }
+
+    pub fn deinit(self: *StreamPlanner) void {
+        self.head.deinit(self.allocator);
+        self.previous.deinit(self.allocator);
+        self.tokens.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn planChunk(
+        self: *StreamPlanner,
+        input: []const u8,
+        start: usize,
+        end: usize,
+    ) !StreamPlan {
+        try self.validateChunk(input, start, end);
+        try self.reserveTokens(end - start);
+        self.tokens.clearRetainingCapacity();
+        var stats: lz77.PlanStats = .{};
+        var position = start;
+        const options = Options{ .window_len = self.window_len };
+        while (position < end) {
+            const best = findBestStream(self, input, position, end, options);
+            if (accept(best)) {
+                self.tokens.appendAssumeCapacity(.{ .match = .{
+                    .length = @intCast(best.length),
+                    .distance = @intCast(best.distance),
+                } });
+                stats.matches += 1;
+                stats.matched_bytes += best.length;
+                const match_end = position + best.length;
+                while (position < match_end) : (position += 1)
+                    insertStream(self, input, position);
+                continue;
+            }
+            self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
+            stats.literals += 1;
+            insertStream(self, input, position);
+            position += 1;
+        }
+        self.next_position = end;
+        return .{ .tokens = self.tokens.items, .stats = stats };
+    }
+
+    /// One-byte lazy variant for ratio-oriented LZMA2 chunks. The current
+    /// position is inserted before probing the next position, matching the
+    /// established narrow dictionary planner's candidate visibility.
+    pub fn planChunkLazy(
+        self: *StreamPlanner,
+        input: []const u8,
+        start: usize,
+        end: usize,
+    ) !StreamPlan {
+        try self.validateChunk(input, start, end);
+        try self.reserveTokens(end - start);
+        self.tokens.clearRetainingCapacity();
+        var stats: lz77.PlanStats = .{};
+        var position = start;
+        const options = Options{ .window_len = self.window_len };
+        while (position < end) {
+            const best = findBestStream(self, input, position, end, options);
+            if (!accept(best)) {
+                self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
+                stats.literals += 1;
+                insertStream(self, input, position);
+                position += 1;
+                continue;
+            }
+
+            insertStream(self, input, position);
+            if (position + 1 < end) {
+                const next = findBestStream(self, input, position + 1, end, options);
+                if (accept(next) and preferLazy(best, next)) {
+                    self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
+                    stats.literals += 1;
+                    position += 1;
+                    continue;
+                }
+            }
+
+            self.tokens.appendAssumeCapacity(.{ .match = .{
+                .length = @intCast(best.length),
+                .distance = @intCast(best.distance),
+            } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const match_end = position + best.length;
+            position += 1;
+            while (position < match_end) : (position += 1)
+                insertStream(self, input, position);
+        }
+        self.next_position = end;
+        return .{ .tokens = self.tokens.items, .stats = stats };
+    }
+};
+
+const Candidate = struct {
+    length: usize = 0,
+    distance: usize = 0,
+};
+
+/// Greedy dictionary planner for LZMA distances wider than the repository's
+/// shared u16 LZ77 token. The complete `dictionary ++ input` index is bounded
+/// by the caller-selected window and the signed 32-bit legacy position index.
+pub fn planAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    options: Options,
+) !Plan {
+    if (try requiredPlanWorkingMemory(input.len, dictionary.len, options) > options.max_working_memory)
+        return error.WorkingMemoryLimitExceeded;
+
+    const head = try allocator.alloc(i32, hash_table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const total_len = std.math.add(usize, dictionary.len, input.len) catch return error.InvalidBlockPlan;
+    const previous = try allocator.alloc(i32, total_len);
+    defer allocator.free(previous);
+    @memset(previous, -1);
+
+    var position: usize = 0;
+    while (position < dictionary.len) : (position += 1)
+        insert(dictionary, input, position, head, previous);
+
+    var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
+    try tokens.ensureTotalCapacityPrecise(allocator, input.len);
+    var stats: lz77.PlanStats = .{};
+    var input_position: usize = 0;
+    while (input_position < input.len) {
+        const current = dictionary.len + input_position;
+        const best = findBest(
+            dictionary,
+            input,
+            current,
+            options,
+            head,
+            previous,
+        );
+        if (accept(best)) {
+            if (options.lazy) {
+                insert(dictionary, input, current, head, previous);
+                if (input_position + 1 < input.len) {
+                    const next = findBest(dictionary, input, current + 1, options, head, previous);
+                    if (accept(next) and preferLazy(best, next)) {
+                        tokens.appendAssumeCapacity(.{ .literal = input[input_position] });
+                        stats.literals += 1;
+                        input_position += 1;
+                        continue;
+                    }
+                }
+            }
+            tokens.appendAssumeCapacity(.{ .match = .{
+                .length = @intCast(best.length),
+                .distance = @intCast(best.distance),
+            } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = input_position + best.length;
+            if (options.lazy) input_position += 1;
+            while (input_position < end) : (input_position += 1)
+                insert(dictionary, input, dictionary.len + input_position, head, previous);
+            continue;
+        }
+        tokens.appendAssumeCapacity(.{ .literal = input[input_position] });
+        stats.literals += 1;
+        insert(dictionary, input, current, head, previous);
+        input_position += 1;
+    }
+    return .{
+        .tokens = try tokens.toOwnedSlice(allocator),
+        .stats = stats,
+    };
+}
+
+/// Conservative peak includes the final owned-slice copy when an allocator
+/// cannot shrink the token buffer in place. No sample bytes are read.
+pub fn requiredPlanWorkingMemory(input_len: usize, dictionary_len: usize, options: Options) !usize {
+    if (options.window_len <= std.math.maxInt(u16) or
+        options.window_len > max_window_len or dictionary_len > options.window_len or
+        dictionary_len > std.math.maxInt(i32) or
+        input_len > std.math.maxInt(i32) - dictionary_len) return error.InvalidBlockPlan;
+    const total = std.math.add(usize, dictionary_len, input_len) catch return error.InvalidBlockPlan;
+    const index_bytes = try memoryMultiply(try memoryAdd(hash_table_size, total), @sizeOf(i32));
+    const token_bytes = try memoryMultiply(input_len, @sizeOf(Token));
+    return memoryAdd(index_bytes, try memoryMultiply(token_bytes, 2));
+}
+
+fn streamRingLength(window_len: usize, input_len: usize) !usize {
+    const active_window = @max(1, @min(window_len, input_len));
+    var ring_len: usize = 1;
+    while (ring_len < active_window) ring_len = try memoryMultiply(ring_len, 2);
+    return ring_len;
+}
+
+fn memoryAdd(a: usize, b: usize) !usize {
+    return std.math.add(usize, a, b) catch error.WorkingMemoryLimitExceeded;
+}
+
+fn memoryMultiply(a: usize, b: usize) !usize {
+    return std.math.mul(usize, a, b) catch error.WorkingMemoryLimitExceeded;
+}
+
+fn findBest(
+    dictionary: []const u8,
+    input: []const u8,
+    current: usize,
+    options: Options,
+    head: []const i32,
+    previous: []const i32,
+) Candidate {
+    const input_position = current - dictionary.len;
+    if (input.len - input_position < min_match_len) return .{};
+    const maximum = @min(max_match_len, input.len - input_position);
+    const bucket = hashAt(dictionary, input, current) orelse return .{};
+    const earliest = current -| options.window_len;
+    var candidate_i = head[bucket];
+    var checked: usize = 0;
+    var best: Candidate = .{};
+    while (candidate_i >= 0 and checked < options.max_chain) {
+        if (best.length == maximum) break;
+        const candidate: usize = @intCast(candidate_i);
+        if (candidate < earliest or candidate >= current) break;
+        const required_prefix = @max(best.length, min_match_len - 1);
+        if (byteAt(dictionary, input, candidate + required_prefix) !=
+            input[input_position + required_prefix])
+        {
+            candidate_i = previous[candidate];
+            continue;
+        }
+        checked += 1;
+        const length = matchLength(dictionary, input, candidate, current, maximum);
+        if (length >= min_match_len and length > best.length) {
+            best = .{ .length = length, .distance = current - candidate };
+            if (length >= options.nice_len) break;
+        }
+        candidate_i = previous[candidate];
+    }
+    return best;
+}
+
+fn accept(candidate: Candidate) bool {
+    if (candidate.length < min_match_len or candidate.distance == 0) return false;
+    // A three-byte match at a wide distance can cost more than its literals in
+    // LZMA's direct-distance tail. Keep those marginal cases literal while
+    // admitting all four-byte-or-longer wide matches.
+    return candidate.length >= 4 or candidate.distance <= 4096;
+}
+
+// These prices approximate a freshly initialized LZMA model. They deliberately
+// exclude adaptive probabilities and repeat-distance state: the match planner
+// does not own either, and using their static wire shape still distinguishes
+// the major length-tree and distance-tail costs that a length-only rule misses.
+fn literalPriceBits() usize {
+    return 9; // is_match plus eight literal-tree bits
+}
+
+fn lengthPriceBits(length: usize) usize {
+    std.debug.assert(length >= 2 and length <= max_match_len);
+    const symbol = length - 2;
+    if (symbol < 8) return 4; // choice plus low[3]
+    if (symbol < 16) return 5; // choice, choice2, and mid[3]
+    return 10; // choice, choice2, and high[8]
+}
+
+fn distancePriceBits(distance: usize) usize {
+    std.debug.assert(distance > 0);
+    const distance_minus_one = distance - 1;
+    const slot = staticDistanceSlot(distance_minus_one);
+    if (slot < 4) return 6;
+    const direct_bits = (slot >> 1) - 1;
+    return 6 + direct_bits;
+}
+
+fn staticDistanceSlot(distance_minus_one: usize) usize {
+    if (distance_minus_one < 4) return distance_minus_one;
+    const highest_bit = @bitSizeOf(usize) - 1 - @clz(distance_minus_one);
+    return (highest_bit << 1) |
+        (distance_minus_one >> @intCast(highest_bit - 1) & 1);
+}
+
+fn matchPriceBits(candidate: Candidate) usize {
+    std.debug.assert(accept(candidate));
+    return 2 + lengthPriceBits(candidate.length) +
+        distancePriceBits(candidate.distance); // is_match plus is_rep
+}
+
+fn preferLazyByStaticPrice(current: Candidate, next: Candidate) bool {
+    std.debug.assert(accept(current) and accept(next));
+    const current_coverage = current.length;
+    const lazy_coverage = next.length + 1;
+    const horizon = @max(current_coverage, lazy_coverage);
+    const current_price = matchPriceBits(current) +
+        (horizon - current_coverage) * literalPriceBits();
+    const lazy_price = literalPriceBits() + matchPriceBits(next) +
+        (horizon - lazy_coverage) * literalPriceBits();
+    return lazy_price < current_price;
+}
+
+fn preferLazy(current: Candidate, next: Candidate) bool {
+    std.debug.assert(accept(current) and accept(next));
+    if (next.length >= current.length + 1) return true;
+    if (current.distance <= static_price_min_distance or
+        current.distance / static_price_min_distance_ratio < next.distance)
+        return false;
+    return preferLazyByStaticPrice(current, next);
+}
+
+fn findBestStream(
+    planner: *const StreamPlanner,
+    input: []const u8,
+    current: usize,
+    chunk_end: usize,
+    options: Options,
+) Candidate {
+    if (chunk_end - current < min_match_len) return .{};
+    const maximum = @min(max_match_len, chunk_end - current);
+    const bucket = hashContiguous(input, current) orelse return .{};
+    const earliest = current -| options.window_len;
+    var candidate_i = planner.head.items[bucket];
+    var checked: usize = 0;
+    var best: Candidate = .{};
+    const previous_mask = planner.previous.items.len - 1;
+    while (candidate_i >= 0 and checked < options.max_chain) {
+        if (best.length == maximum) break;
+        const candidate: usize = @intCast(candidate_i);
+        if (candidate < earliest or candidate >= current) break;
+        const required_prefix = @max(best.length, min_match_len - 1);
+        if (input[candidate + required_prefix] != input[current + required_prefix]) {
+            candidate_i = planner.previous.items[candidate & previous_mask];
+            continue;
+        }
+        checked += 1;
+        const length = contiguousMatchLength(input, candidate, current, maximum);
+        if (length >= min_match_len and length > best.length) {
+            best = .{ .length = length, .distance = current - candidate };
+            if (length >= options.nice_len) break;
+        }
+        candidate_i = planner.previous.items[candidate & previous_mask];
+    }
+    return best;
+}
+
+fn insertStream(planner: *StreamPlanner, input: []const u8, position: usize) void {
+    const bucket = hashContiguous(input, position) orelse return;
+    const previous_index = position & (planner.previous.items.len - 1);
+    planner.previous.items[previous_index] = planner.head.items[bucket];
+    planner.head.items[bucket] = @intCast(position);
+    planner.indexed_positions += 1;
+}
+
+fn hashContiguous(input: []const u8, position: usize) ?usize {
+    if (input.len - position < min_match_len) return null;
+    const value = (@as(usize, input[position]) << 16) |
+        (@as(usize, input[position + 1]) << 8) |
+        input[position + 2];
+    return (value *% 2654435761) >> 16 & (hash_table_size - 1);
+}
+
+fn contiguousMatchLength(
+    input: []const u8,
+    candidate: usize,
+    current: usize,
+    maximum: usize,
+) usize {
+    var length: usize = 0;
+    while (length < maximum and input[candidate + length] == input[current + length])
+        length += 1;
+    return length;
+}
+
+fn insert(
+    dictionary: []const u8,
+    input: []const u8,
+    position: usize,
+    head: []i32,
+    previous: []i32,
+) void {
+    const bucket = hashAt(dictionary, input, position) orelse return;
+    previous[position] = head[bucket];
+    head[bucket] = @intCast(position);
+}
+
+fn hashAt(dictionary: []const u8, input: []const u8, position: usize) ?usize {
+    if (dictionary.len + input.len - position < min_match_len) return null;
+    const value = (@as(usize, byteAt(dictionary, input, position)) << 16) |
+        (@as(usize, byteAt(dictionary, input, position + 1)) << 8) |
+        byteAt(dictionary, input, position + 2);
+    return (value *% 2654435761) >> 16 & (hash_table_size - 1);
+}
+
+fn matchLength(
+    dictionary: []const u8,
+    input: []const u8,
+    candidate: usize,
+    current: usize,
+    maximum: usize,
+) usize {
+    var length: usize = 0;
+    while (length < maximum and
+        byteAt(dictionary, input, candidate + length) == input[current - dictionary.len + length])
+        length += 1;
+    return length;
+}
+
+fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {
+    return if (position < dictionary.len)
+        dictionary[position]
+    else
+        input[position - dictionary.len];
+}
+
+test "LZMA static lazy prices follow length and distance wire shapes" {
+    try std.testing.expectEqual(@as(usize, 9), literalPriceBits());
+    try std.testing.expectEqual(@as(usize, 4), lengthPriceBits(9));
+    try std.testing.expectEqual(@as(usize, 5), lengthPriceBits(10));
+    try std.testing.expectEqual(@as(usize, 5), lengthPriceBits(17));
+    try std.testing.expectEqual(@as(usize, 10), lengthPriceBits(18));
+    try std.testing.expectEqual(@as(usize, 10), lengthPriceBits(max_match_len));
+
+    try std.testing.expectEqual(@as(usize, 6), distancePriceBits(1));
+    try std.testing.expectEqual(@as(usize, 6), distancePriceBits(4));
+    try std.testing.expectEqual(@as(usize, 7), distancePriceBits(5));
+    try std.testing.expectEqual(@as(usize, 16), distancePriceBits(4096));
+    try std.testing.expectEqual(@as(usize, 21), distancePriceBits(65_537));
+}
+
+test "LZMA static price chooses lazy by total covered cost" {
+    // An equally long near match can beat a wide current match.
+    try std.testing.expect(preferLazyByStaticPrice(
+        .{ .length = 10, .distance = 1024 * 1024 },
+        .{ .length = 10, .distance = 1 },
+    ));
+    // One extra byte is insufficient when the next match has a costly tail.
+    try std.testing.expect(!preferLazyByStaticPrice(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 5, .distance = 1024 * 1024 },
+    ));
+    // Equal static prices preserve the current match deterministically.
+    try std.testing.expect(!preferLazyByStaticPrice(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 4, .distance = 1 },
+    ));
+}
+
+test "LZMA lazy decision preserves length gains and gates static prices" {
+    try std.testing.expect(preferLazy(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 5, .distance = 1024 * 1024 },
+    ));
+    try std.testing.expect(preferLazy(
+        .{ .length = 10, .distance = 90 * 1024 },
+        .{ .length = 10, .distance = 10 * 1024 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = 8 * 1024 },
+        .{ .length = 10, .distance = 1024 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = static_price_min_distance },
+        .{ .length = 10, .distance = 1 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = 90 * 1024 - 1 },
+        .{ .length = 10, .distance = 10 * 1024 },
+    ));
+}
+
+test "LZMA wide dictionary planner emits and replays u32 distances" {
+    const dictionary_len = 128 * 1024;
+    const dictionary = try std.testing.allocator.alloc(u8, dictionary_len);
+    defer std.testing.allocator.free(dictionary);
+    var state: u32 = 0x243f_6a88;
+    for (dictionary) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    const input = dictionary[0..8192];
+    var plan = try planAlloc(std.testing.allocator, input, dictionary, .{
+        .window_len = dictionary_len,
+    });
+    defer plan.deinit(std.testing.allocator);
+
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    var saw_wide = false;
+    for (plan.tokens) |token| switch (token) {
+        .literal => |byte| try output.append(std.testing.allocator, byte),
+        .match => |match| {
+            saw_wide = saw_wide or match.distance > std.math.maxInt(u16);
+            for (0..match.length) |_| {
+                const logical = dictionary.len + output.items.len;
+                const source = logical - match.distance;
+                const byte = if (source < dictionary.len)
+                    dictionary[source]
+                else
+                    output.items[source - dictionary.len];
+                try output.append(std.testing.allocator, byte);
+            }
+        },
+    };
+    try std.testing.expect(saw_wide);
+    try std.testing.expectEqualSlices(u8, input, output.items);
+    try std.testing.expectEqual(input.len, plan.stats.matched_bytes + plan.stats.literals);
+    try std.testing.expect(plan.stats.matched_bytes >= input.len - 2);
+}
+
+test "LZMA wide dictionary planner releases every allocation failure" {
+    const dictionary = try std.testing.allocator.alloc(u8, 128 * 1024);
+    defer std.testing.allocator.free(dictionary);
+    for (dictionary, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 11);
+    const input = dictionary[0..1024];
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, history: []const u8, plain: []const u8) !void {
+            var plan = try planAlloc(allocator, plain, history, .{ .window_len = history.len });
+            defer plan.deinit(allocator);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ dictionary, input },
+    );
+}
+
+test "LZMA streaming wide planner indexes one block once across chunks" {
+    const chunk_len = 65_536;
+    const input = try std.testing.allocator.alloc(u8, chunk_len * 2 + 8192);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0xa409_3822;
+    for (input[0 .. chunk_len * 2]) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    @memcpy(input[chunk_len * 2 ..], input[0..8192]);
+
+    var planner = try StreamPlanner.init(std.testing.allocator, 128 * 1024, input.len);
+    defer planner.deinit();
+    _ = try planner.planChunk(input, 0, chunk_len);
+    _ = try planner.planChunk(input, chunk_len, chunk_len * 2);
+    const third = try planner.planChunk(input, chunk_len * 2, input.len);
+    var saw_wide = false;
+    for (third.tokens) |token| switch (token) {
+        .literal => {},
+        .match => |match| saw_wide = saw_wide or match.distance > std.math.maxInt(u16),
+    };
+    try std.testing.expect(saw_wide);
+    try std.testing.expectEqual(input.len - 2, planner.indexed_positions);
+    try std.testing.expectEqual(input.len, planner.next_position);
+    const rebuilt_positions = (chunk_len - 2) + (chunk_len * 2 - 2) + (128 * 1024 + 8192 - 2);
+    try std.testing.expectEqual(@as(usize, 335_866), rebuilt_positions);
+    try std.testing.expect(rebuilt_positions > planner.indexed_positions * 2);
+}
+
+test "LZMA streaming wide lazy planner replays chunk history" {
+    const chunk_len = 65_536;
+    const input = try std.testing.allocator.alloc(u8, chunk_len * 2 + 8192);
+    defer std.testing.allocator.free(input);
+    for (input[0 .. chunk_len * 2], 0..) |*byte, index|
+        byte.* = @truncate(index * 37 + index / 17);
+    @memcpy(input[chunk_len * 2 ..], input[0..8192]);
+
+    var greedy = try StreamPlanner.init(std.testing.allocator, 128 * 1024, input.len);
+    defer greedy.deinit();
+    _ = try greedy.planChunk(input, 0, chunk_len);
+    _ = try greedy.planChunk(input, chunk_len, chunk_len * 2);
+    const greedy_third = try greedy.planChunk(input, chunk_len * 2, input.len);
+    const greedy_count = greedy_third.stats.tokenCount();
+
+    var lazy = try StreamPlanner.init(std.testing.allocator, 128 * 1024, input.len);
+    defer lazy.deinit();
+    _ = try lazy.planChunkLazy(input, 0, chunk_len);
+    _ = try lazy.planChunkLazy(input, chunk_len, chunk_len * 2);
+    const lazy_third = try lazy.planChunkLazy(input, chunk_len * 2, input.len);
+    try std.testing.expect(lazy_third.stats.tokenCount() <= greedy_count + 1);
+
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    try output.appendSlice(std.testing.allocator, input[0 .. chunk_len * 2]);
+    for (lazy_third.tokens) |token| switch (token) {
+        .literal => |byte| try output.append(std.testing.allocator, byte),
+        .match => |match| for (0..match.length) |_| {
+            try output.append(
+                std.testing.allocator,
+                output.items[output.items.len - @as(usize, match.distance)],
+            );
+        },
+    };
+    try std.testing.expectEqualSlices(u8, input, output.items);
+}
+
+test "LZMA streaming wide planner releases every allocation failure" {
+    const chunk_len = 65_536;
+    const input = try std.testing.allocator.alloc(u8, chunk_len * 2 + 1024);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 19);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, plain: []const u8) !void {
+            const block = 65_536;
+            var planner = try StreamPlanner.init(allocator, 128 * 1024, plain.len);
+            defer planner.deinit();
+            _ = try planner.planChunk(plain, 0, block);
+            _ = try planner.planChunk(plain, block, block * 2);
+            _ = try planner.planChunk(plain, block * 2, plain.len);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{input},
+    );
+}

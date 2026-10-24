@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
-COLUMNS = ["case", "reference_version", "quality", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
+COLUMNS = ["case", "reference_version", "quality", "planned_quality", "planned_mode", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
 CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "records_q8", "source32k"}
 DICTIONARY_CASES = {"dictionary", "mixed", "uppercase"}
 MAX_LAZY_BYTES = {"json": 62, "source": 84, "log": 82}
@@ -19,6 +19,8 @@ def main():
     validate_provenance(rows, executable=a.executable, codec_thread_policy="single")
     by_case = {row["case"]: row for row in rows}
     for row in rows:
+        assert row["planned_quality"] == "", row
+        assert row["planned_mode"] == "generic", row
         for key in ("input_bytes","vort_bytes","lazy_bytes","ratio_bytes","reference_bytes","iterations","vort_ns","lazy_ns","ratio_ns","reference_ns","checksum"):
             assert int(row[key]) > 0, row
         for key in ("ratio_dictionary_copies", "ratio_dictionary_bytes"):

@@ -8,20 +8,30 @@ const deflate64 = @import("../deflate64.zig");
 const implode = @import("implode.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const ppmd8 = @import("../ppmd8.zig");
+const pkware_strong = @import("pkware_strong.zig");
 const reduce = @import("reduce.zig");
 const shrink = @import("shrink.zig");
 const types = @import("types.zig");
+const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
+const winzip_aes = @import("vail_archive_crypto").winzip_aes;
+const wire = @import("wire.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || pkware_strong.Error || reduce.Error || shrink.Error || traditional_encryption.Error || winzip_aes.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
+    InvalidZipTimestamp,
     UnsupportedZipCompressionMethod,
     Zip32LimitExceeded,
+    ConflictingZipEncryption,
 };
 
 pub const CompressionMethod = types.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
 
 pub const Zip64Mode = enum {
     auto,
@@ -29,15 +39,38 @@ pub const Zip64Mode = enum {
     never,
 };
 
+pub const WinZipAesOptions = struct {
+    password: []const u8,
+    strength: types.WinZipAesStrength = .aes256,
+    salt: []const u8,
+    version: types.WinZipAesVendorVersion = .ae2,
+};
+
+pub const PkwareStrongEncryptionOptions = pkware_strong.Options;
+
 pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8,
     method: CompressionMethod = .deflate,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
+    /// Validated MS-DOS modification time; defaults preserve deterministic wire.
+    modified: DosTimestamp = .deterministic,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
+    creator_system: CreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    /// Null derives only the conventional DOS directory bit from a trailing `/`.
+    external_attributes: ?u32 = null,
+    traditional_encryption: ?traditional_encryption.Options = null,
+    winzip_aes: ?WinZipAesOptions = null,
+    pkware_strong_encryption: ?PkwareStrongEncryptionOptions = null,
 };
 
 pub const EncodeOptions = struct {
     archive_comment: []const u8 = "",
+    archive_extra_data: []const u8 = "",
     data_descriptor: bool = false,
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
@@ -52,32 +85,8 @@ pub const EncodeOptions = struct {
     xz_options: xz.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
-};
-
-const local_file_signature: u32 = 0x0403_4b50;
-const central_file_signature: u32 = 0x0201_4b50;
-const data_descriptor_signature: u32 = 0x0807_4b50;
-const end_of_central_signature: u32 = 0x0605_4b50;
-const zip64_end_of_central_signature: u32 = 0x0606_4b50;
-const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
-const zip64_extra_id: u16 = 0x0001;
-const version_20: u16 = 20;
-const version_21: u16 = 21;
-const version_45: u16 = 45;
-const deterministic_dos_time: u16 = 0;
-const deterministic_dos_date: u16 = 0x0021;
-const descriptor_flag: u16 = 1 << 3;
-const lzma_end_marker_flag: u16 = 1 << 1;
-const utf8_flag: u16 = 1 << 11;
-
-const EncodedEntry = struct {
-    source: EncodeEntry,
-    flags: u16,
-    crc32: u32,
-    compressed_size: u64,
-    uncompressed_size: u64,
-    local_header_offset: u64,
-    zip64: bool,
+    /// Borrowed preset history for every Zstandard entry in this archive.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
 };
 
 /// Encode a deterministic single-disk ZIP archive.
@@ -104,26 +113,29 @@ pub fn encodeAppend(
 ) !usize {
     try validateInputs(entries, options);
     const archive_base = out.items.len;
-    if (options.zip64 == .never) _ = try zip32Value(archive_base);
+    if (options.zip64 == .never) _ = try wire.zip32Value(archive_base);
 
-    const encoded_entries = try allocator.alloc(EncodedEntry, entries.len);
+    const encoded_entries = try allocator.alloc(wire.EncodedEntry, entries.len);
     defer allocator.free(encoded_entries);
 
     var archive: std.ArrayList(u8) = .empty;
     defer archive.deinit(allocator);
 
     for (entries, encoded_entries) |entry, *encoded| {
-        const local_offset = try absoluteOffset(archive_base, archive.items.len);
+        const local_offset = try wire.absoluteOffset(archive_base, archive.items.len);
         const crc = checksum.crc32Best(entry.data);
-        const uncompressed_size = try usizeToU64(entry.data.len);
-        const flags: u16 = (if (entry.method == .lzma) lzma_end_marker_flag else 0) |
+        const uncompressed_size = try wire.usizeToU64(entry.data.len);
+        const flags: u16 = (if (entry.method == .lzma) wire.lzma_end_marker_flag else 0) |
             (if (entry.method == .implode) options.implode_options.flags() else 0) |
-            (if (options.data_descriptor) descriptor_flag else 0) |
-            (if (options.utf8) utf8_flag else 0);
+            (if (entry.traditional_encryption != null or entry.winzip_aes != null or
+                entry.pkware_strong_encryption != null) wire.encrypted_flag else 0) |
+            (if (entry.pkware_strong_encryption != null) wire.strong_encryption_flag else 0) |
+            (if (options.data_descriptor) wire.descriptor_flag else 0) |
+            (if (options.utf8) wire.utf8_flag else 0);
 
         var owned_compressed: ?[]u8 = null;
         defer if (owned_compressed) |bytes| allocator.free(bytes);
-        const compressed = switch (entry.method) {
+        const codec_payload = switch (entry.method) {
             .stored => entry.data,
             .shrink => blk: {
                 const bytes = try shrink.encodeAlloc(allocator, entry.data);
@@ -181,72 +193,122 @@ pub fn encodeAppend(
                 break :blk bytes;
             },
             .zstandard_legacy, .zstandard => blk: {
-                const bytes = try zstd.encodeFrameWithLevelAndOptionsAlloc(
-                    allocator,
-                    entry.data,
-                    options.zstd_level,
-                    options.zstd_options,
-                );
+                const bytes = if (options.zstd_dictionary) |dictionary|
+                    try zstd.encodeFrameWithLevelAndOptionsAndDictionaryAlloc(
+                        allocator,
+                        entry.data,
+                        options.zstd_level,
+                        options.zstd_options,
+                        dictionary,
+                    )
+                else
+                    try zstd.encodeFrameWithLevelAndOptionsAlloc(
+                        allocator,
+                        entry.data,
+                        options.zstd_level,
+                        options.zstd_options,
+                    );
                 owned_compressed = bytes;
                 break :blk bytes;
             },
             else => return error.UnsupportedZipCompressionMethod,
         };
-        const compressed_size = try usizeToU64(compressed.len);
-        const entry_zip64 = options.zip64 == .always or
-            compressed_size >= std.math.maxInt(u32) or
-            uncompressed_size >= std.math.maxInt(u32) or
-            local_offset >= std.math.maxInt(u32);
-        if (entry_zip64 and options.zip64 == .never) return error.Zip32LimitExceeded;
-
-        try appendLocalHeader(
-            allocator,
-            &archive,
-            entry,
-            flags,
-            crc,
+        var owned_encrypted: ?[]u8 = null;
+        defer if (owned_encrypted) |bytes| {
+            std.crypto.secureZero(u8, bytes);
+            allocator.free(bytes);
+        };
+        const compressed = if (entry.traditional_encryption) |encryption| encrypted: {
+            const check_byte: u8 = if (options.data_descriptor)
+                @truncate(entry.modified.time >> 8)
+            else
+                @truncate(crc >> 24);
+            const bytes = try traditional_encryption.encryptAlloc(
+                allocator,
+                codec_payload,
+                encryption,
+                check_byte,
+            );
+            owned_encrypted = bytes;
+            break :encrypted bytes;
+        } else if (entry.winzip_aes) |encryption| encrypted: {
+            const bytes = try winzip_aes.encryptAlloc(allocator, codec_payload, .{
+                .password = encryption.password,
+                .strength = encryption.strength,
+                .salt = encryption.salt,
+            });
+            owned_encrypted = bytes;
+            break :encrypted bytes;
+        } else if (entry.pkware_strong_encryption) |encryption| encrypted: {
+            const bytes = try pkware_strong.encryptAlloc(allocator, codec_payload, encryption);
+            owned_encrypted = bytes;
+            break :encrypted bytes;
+        } else codec_payload;
+        const compressed_size = try wire.usizeToU64(compressed.len);
+        const entry_zip64 = wire.selectEntryZip64(
+            options.zip64 == .always,
             compressed_size,
             uncompressed_size,
-            entry_zip64,
+            local_offset,
         );
-        try archive.appendSlice(allocator, compressed);
-        if (options.data_descriptor) {
-            try appendU32(allocator, &archive, data_descriptor_signature);
-            try appendU32(allocator, &archive, crc);
-            if (entry_zip64) {
-                try appendU64(allocator, &archive, compressed_size);
-                try appendU64(allocator, &archive, uncompressed_size);
-            } else {
-                try appendU32(allocator, &archive, @intCast(compressed_size));
-                try appendU32(allocator, &archive, @intCast(uncompressed_size));
-            }
-        }
+        if (entry_zip64 and options.zip64 == .never) return error.Zip32LimitExceeded;
 
         encoded.* = .{
-            .source = entry,
+            .name = entry.name,
+            .comment = entry.comment,
+            .unicode_name = entry.unicode_name,
+            .unicode_comment = entry.unicode_comment,
+            .method = entry.method,
             .flags = flags,
-            .crc32 = crc,
+            .crc32 = if (entry.winzip_aes) |aes|
+                if (aes.version == .ae2) 0 else crc
+            else
+                crc,
             .compressed_size = compressed_size,
             .uncompressed_size = uncompressed_size,
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
+            .modified = entry.modified,
+            .extended_timestamp = entry.extended_timestamp,
+            .ntfs_timestamp = entry.ntfs_timestamp,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
+            .winzip_aes = if (entry.winzip_aes) |aes| .{
+                .version = aes.version,
+                .strength = aes.strength,
+            } else null,
+            .pkware_strong_encryption = if (entry.pkware_strong_encryption) |strong| .{
+                .strength = strong.strength,
+            } else null,
         };
+        if (wire.localExtraLen(encoded.*) > std.math.maxInt(u16) or
+            wire.centralExtraLen(encoded.*) > std.math.maxInt(u16))
+        {
+            return error.Zip32LimitExceeded;
+        }
+        try wire.appendLocalHeader(allocator, &archive, encoded.*, .{});
+        try archive.appendSlice(allocator, compressed);
+        if (options.data_descriptor) try wire.appendDataDescriptor(allocator, &archive, encoded.*);
     }
 
-    const central_offset = try absoluteOffset(archive_base, archive.items.len);
+    const central_offset = try wire.absoluteOffset(archive_base, archive.items.len);
     const central_start = archive.items.len;
-    for (encoded_entries) |entry| try appendCentralHeader(allocator, &archive, entry);
-    const central_size = try usizeToU64(archive.items.len - central_start);
-    const entry_count = try usizeToU64(entries.len);
-    const archive_zip64 = options.zip64 == .always or
-        anyZip64Entry(encoded_entries) or
-        entry_count >= std.math.maxInt(u16) or
-        central_size >= std.math.maxInt(u32) or
-        central_offset >= std.math.maxInt(u32);
+    try wire.appendArchiveExtraData(allocator, &archive, options.archive_extra_data);
+    for (encoded_entries) |entry| try wire.appendCentralHeader(allocator, &archive, entry);
+    const central_size = try wire.usizeToU64(archive.items.len - central_start);
+    const entry_count = try wire.usizeToU64(entries.len);
+    const archive_zip64 = wire.selectArchiveZip64(
+        options.zip64 == .always,
+        encoded_entries,
+        entry_count,
+        central_size,
+        central_offset,
+    );
     if (archive_zip64 and options.zip64 == .never) return error.Zip32LimitExceeded;
 
     if (archive_zip64) {
-        try appendZip64End(
+        try wire.appendZip64End(
             allocator,
             &archive,
             archive_base,
@@ -256,7 +318,7 @@ pub fn encodeAppend(
             options.archive_comment,
         );
     } else {
-        try appendLegacyEnd(
+        try wire.appendLegacyEnd(
             allocator,
             &archive,
             @intCast(entry_count),
@@ -275,10 +337,33 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
     if (options.zip64 == .never and entries.len >= std.math.maxInt(u16))
         return error.Zip32LimitExceeded;
     if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
+    if (options.archive_extra_data.len > std.math.maxInt(u32))
+        return error.Zip32LimitExceeded;
     for (entries) |entry| {
+        if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
+        if (entry.extended_timestamp) |timestamp|
+            if (!timestamp.isValid()) return error.InvalidZipTimestamp;
+        if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
+            (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
+            (entry.winzip_aes != null and entry.pkware_strong_encryption != null))
+            return error.ConflictingZipEncryption;
+        if (entry.winzip_aes) |aes|
+            if (aes.salt.len != aes.strength.saltLen()) return error.InvalidSaltLength;
+        if (entry.pkware_strong_encryption) |strong|
+            try pkware_strong.validateOptions(strong);
         if (entry.name.len == 0) return error.InvalidZipEntryName;
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
+        inline for (.{ entry.unicode_name, entry.unicode_comment }) |unicode_text| {
+            if (unicode_text) |text| {
+                if (options.utf8 or text.len == 0 or
+                    text.len > std.math.maxInt(u16) - 5 or
+                    !std.unicode.utf8ValidateSlice(text))
+                {
+                    return error.InvalidZipTextEncoding;
+                }
+            }
+        }
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {
@@ -299,141 +384,6 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
     }
 }
 
-fn appendLocalHeader(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    entry: EncodeEntry,
-    flags: u16,
-    crc: u32,
-    compressed_size: u64,
-    uncompressed_size: u64,
-    zip64: bool,
-) !void {
-    const descriptor = flags & descriptor_flag != 0;
-    try appendU32(allocator, out, local_file_signature);
-    try appendU16(allocator, out, requiredVersion(entry.method, zip64));
-    try appendU16(allocator, out, flags);
-    try appendU16(allocator, out, @intFromEnum(entry.method));
-    try appendU16(allocator, out, deterministic_dos_time);
-    try appendU16(allocator, out, deterministic_dos_date);
-    try appendU32(allocator, out, if (descriptor) 0 else crc);
-    try appendU32(allocator, out, if (zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(compressed_size));
-    try appendU32(allocator, out, if (zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(uncompressed_size));
-    try appendU16(allocator, out, @intCast(entry.name.len));
-    try appendU16(allocator, out, if (zip64) 20 else 0);
-    try out.appendSlice(allocator, entry.name);
-    if (zip64) {
-        try appendU16(allocator, out, zip64_extra_id);
-        try appendU16(allocator, out, 16);
-        try appendU64(allocator, out, uncompressed_size);
-        try appendU64(allocator, out, compressed_size);
-    }
-}
-
-fn appendCentralHeader(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    entry: EncodedEntry,
-) !void {
-    try appendU32(allocator, out, central_file_signature);
-    try appendU16(allocator, out, requiredVersion(entry.source.method, entry.zip64));
-    try appendU16(allocator, out, requiredVersion(entry.source.method, entry.zip64));
-    try appendU16(allocator, out, entry.flags);
-    try appendU16(allocator, out, @intFromEnum(entry.source.method));
-    try appendU16(allocator, out, deterministic_dos_time);
-    try appendU16(allocator, out, deterministic_dos_date);
-    try appendU32(allocator, out, entry.crc32);
-    try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.compressed_size));
-    try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.uncompressed_size));
-    try appendU16(allocator, out, @intCast(entry.source.name.len));
-    try appendU16(allocator, out, if (entry.zip64) 28 else 0);
-    try appendU16(allocator, out, @intCast(entry.source.comment.len));
-    try appendU16(allocator, out, 0);
-    try appendU16(allocator, out, 0);
-    const external_attributes: u32 = if (std.mem.endsWith(u8, entry.source.name, "/")) 0x10 else 0;
-    try appendU32(allocator, out, external_attributes);
-    try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.local_header_offset));
-    try out.appendSlice(allocator, entry.source.name);
-    if (entry.zip64) {
-        try appendU16(allocator, out, zip64_extra_id);
-        try appendU16(allocator, out, 24);
-        try appendU64(allocator, out, entry.uncompressed_size);
-        try appendU64(allocator, out, entry.compressed_size);
-        try appendU64(allocator, out, entry.local_header_offset);
-    }
-    try out.appendSlice(allocator, entry.source.comment);
-}
-
-fn appendZip64End(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    archive_base: usize,
-    entry_count: u64,
-    central_size: u64,
-    central_offset: u64,
-    comment: []const u8,
-) !void {
-    const record_offset = try absoluteOffset(archive_base, out.items.len);
-    try appendU32(allocator, out, zip64_end_of_central_signature);
-    try appendU64(allocator, out, 44);
-    try appendU16(allocator, out, version_45);
-    try appendU16(allocator, out, version_45);
-    try appendU32(allocator, out, 0);
-    try appendU32(allocator, out, 0);
-    try appendU64(allocator, out, entry_count);
-    try appendU64(allocator, out, entry_count);
-    try appendU64(allocator, out, central_size);
-    try appendU64(allocator, out, central_offset);
-
-    try appendU32(allocator, out, zip64_end_of_central_locator_signature);
-    try appendU32(allocator, out, 0);
-    try appendU64(allocator, out, record_offset);
-    try appendU32(allocator, out, 1);
-    try appendLegacyEnd(
-        allocator,
-        out,
-        std.math.maxInt(u16),
-        std.math.maxInt(u32),
-        std.math.maxInt(u32),
-        comment,
-    );
-}
-
-fn appendLegacyEnd(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    entry_count: u16,
-    central_size: u32,
-    central_offset: u32,
-    comment: []const u8,
-) !void {
-    try appendU32(allocator, out, end_of_central_signature);
-    try appendU16(allocator, out, 0);
-    try appendU16(allocator, out, 0);
-    try appendU16(allocator, out, entry_count);
-    try appendU16(allocator, out, entry_count);
-    try appendU32(allocator, out, central_size);
-    try appendU32(allocator, out, central_offset);
-    try appendU16(allocator, out, @intCast(comment.len));
-    try out.appendSlice(allocator, comment);
-}
-
-fn anyZip64Entry(entries: []const EncodedEntry) bool {
-    for (entries) |entry| if (entry.zip64) return true;
-    return false;
-}
-
-fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
-    if (method == .deflate64) return if (zip64) version_45 else version_21;
-    if (method == .bzip2) return 46;
-    if (method == .lzma or method == .xz or method == .ppmd or isZstandardMethod(method)) return 63;
-    return if (zip64) version_45 else version_20;
-}
-
-fn isZstandardMethod(method: CompressionMethod) bool {
-    return method == .zstandard_legacy or method == .zstandard;
-}
-
 fn reduceFactor(method: CompressionMethod) ?reduce.Factor {
     return switch (method) {
         .reduce_1 => .factor_1,
@@ -442,38 +392,6 @@ fn reduceFactor(method: CompressionMethod) ?reduce.Factor {
         .reduce_4 => .factor_4,
         else => null,
     };
-}
-
-fn absoluteOffset(base: usize, relative: usize) Error!u64 {
-    const value = std.math.add(usize, base, relative) catch return error.IntegerOverflow;
-    return usizeToU64(value);
-}
-
-fn zip32Value(value: usize) Error!u32 {
-    if (value >= std.math.maxInt(u32)) return error.Zip32LimitExceeded;
-    return @intCast(value);
-}
-
-fn usizeToU64(value: usize) Error!u64 {
-    return std.math.cast(u64, value) orelse error.IntegerOverflow;
-}
-
-fn appendU16(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u16) !void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .little);
-    try out.appendSlice(allocator, &bytes);
-}
-
-fn appendU32(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u32) !void {
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value, .little);
-    try out.appendSlice(allocator, &bytes);
-}
-
-fn appendU64(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: u64) !void {
-    var bytes: [8]u8 = undefined;
-    std.mem.writeInt(u64, &bytes, value, .little);
-    try out.appendSlice(allocator, &bytes);
 }
 
 test "ZIP writer rejects ZIP32 sentinel counts and overlong comments" {

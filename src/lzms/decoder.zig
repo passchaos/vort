@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const adaptive = @import("adaptive_huffman.zig");
+const probability = @import("probability.zig");
 const tables = @import("tables.zig");
 const x86 = @import("x86.zig");
 
@@ -8,34 +9,7 @@ pub const Error = core.Error || adaptive.Error || std.mem.Allocator.Error || err
     InvalidLzms,
 };
 
-const probability_bits = 6;
-const probability_denominator = 1 << probability_bits;
-const initial_probability = 48;
-const initial_recent_bits: u64 = 0x0000_0000_5555_5555;
-
-const ProbabilityEntry = struct {
-    zero_count: u32 = initial_probability,
-    recent_bits: u64 = initial_recent_bits,
-
-    fn probability(self: ProbabilityEntry) u32 {
-        return if (self.zero_count == 0)
-            1
-        else if (self.zero_count == probability_denominator)
-            probability_denominator - 1
-        else
-            self.zero_count;
-    }
-
-    fn update(self: *ProbabilityEntry, bit: u1) void {
-        const oldest: u1 = @truncate(self.recent_bits >> 63);
-        if (oldest > bit) {
-            self.zero_count += 1;
-        } else if (oldest < bit) {
-            self.zero_count -= 1;
-        }
-        self.recent_bits = (self.recent_bits << 1) | bit;
-    }
-};
+const ProbabilityEntry = probability.Entry;
 
 const Probabilities = struct {
     main: [16]ProbabilityEntry,
@@ -86,7 +60,7 @@ const RangeDecoder = struct {
                 self.next += 2;
             }
         }
-        const bound = (self.range >> probability_bits) * entry.probability();
+        const bound = (self.range >> probability.bits) * entry.probability();
         if (self.code < bound) {
             self.range = bound;
             entry.update(0);

@@ -85,7 +85,7 @@ out:
 }
 
 static int decode(const char *algorithm, const char *input_path,
-		  const char *output_path, size_t output_size)
+		  const char *output_path, size_t output_size, size_t max_block_size)
 {
 	struct wimlib_decompressor *decompressor = NULL;
 	uint8_t *input = NULL, *output = NULL;
@@ -97,7 +97,8 @@ static int decode(const char *algorithm, const char *input_path,
 	    read_file(input_path, &input, &input_size))
 		goto out;
 	output = malloc(output_size ? output_size : 1);
-	if (!output || wimlib_create_decompressor(ctype, output_size, &decompressor))
+	if (!output || max_block_size < output_size ||
+	    wimlib_create_decompressor(ctype, max_block_size, &decompressor))
 		goto out;
 	if (wimlib_decompress(input, input_size, output, output_size, decompressor))
 		goto out;
@@ -115,10 +116,15 @@ int main(int argc, char **argv)
 {
 	if (argc == 5 && strcmp(argv[1], "encode") == 0)
 		return encode(argv[2], argv[3], argv[4]);
-	if (argc == 6 && strcmp(argv[1], "decode") == 0)
+	if ((argc == 6 || argc == 7) && strcmp(argv[1], "decode") == 0)
 		return decode(argv[2], argv[3], argv[4],
-			      strtoull(argv[5], NULL, 10));
-	fprintf(stderr, "usage: %s encode ALG IN OUT | decode ALG IN OUT SIZE\n",
+			      strtoull(argv[5], NULL, 10),
+			      strtoull(argv[argc == 7 ? 6 : 5], NULL, 10));
+	if (argc == 2 && strcmp(argv[1], "version") == 0) {
+		puts(wimlib_get_version_string());
+		return 0;
+	}
+	fprintf(stderr, "usage: %s encode ALG IN OUT | decode ALG IN OUT SIZE [MAX_BLOCK_SIZE]\n",
 		argv[0]);
 	return 2;
 }

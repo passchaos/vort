@@ -104,6 +104,172 @@ test "QCOW2 unallocated clusters read from an explicit backing image" {
     for (decoded[backing.len..]) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
 }
 
+test "QCOW2 writer emits v3 backing chains with inherited and zero clusters" {
+    const cluster_size = 4096;
+    const parent = try allocator.alloc(u8, 3 * cluster_size);
+    defer allocator.free(parent);
+    for (parent, 0..) |*byte, index| byte.* = @truncate(index * 29 + 7);
+    const child = try allocator.dupe(u8, parent);
+    defer allocator.free(child);
+    for (child[cluster_size .. 2 * cluster_size], 0..) |*byte, index|
+        byte.* ^= @truncate(index * 13 + 0x51);
+    @memset(child[2 * cluster_size ..], 0);
+
+    const encoded = try qcow2.encodeAlloc(allocator, child, .{
+        .version = 3,
+        .cluster_bits = 12,
+        .compression = .zlib,
+        .backing_file = parent,
+        .backing_file_name = "parent.raw",
+    });
+    defer allocator.free(encoded);
+    const header = try qcow2.parseHeader(encoded);
+    try std.testing.expectEqualStrings("parent.raw", header.backing_file_name);
+    try std.testing.expectEqual(@as(u32, 0xe279_2aca), std.mem.readInt(
+        u32,
+        encoded[112..116],
+        .big,
+    ));
+    try std.testing.expectEqualStrings("raw", encoded[120..123]);
+    const l2_offset = 4 * cluster_size;
+    try std.testing.expectEqual(@as(u64, 0), std.mem.readInt(
+        u64,
+        encoded[l2_offset..][0..8],
+        .big,
+    ));
+    try std.testing.expect(std.mem.readInt(
+        u64,
+        encoded[l2_offset + 8 ..][0..8],
+        .big,
+    ) != 0);
+    try std.testing.expectEqual(@as(u64, 1), std.mem.readInt(
+        u64,
+        encoded[l2_offset + 16 ..][0..8],
+        .big,
+    ));
+    const missing = try qcow2.parse(encoded, .{});
+    try std.testing.expectError(
+        error.MissingQcow2BackingFile,
+        missing.decodeAllocLimited(allocator, child.len),
+    );
+    const archive = try qcow2.parse(encoded, .{ .backing_file = parent });
+    const decoded = try archive.decodeAllocLimited(allocator, child.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, child, decoded);
+}
+
+test "QCOW2 v2 backing writer allocates explicit zero overrides" {
+    const parent = [_]u8{0xa5} ** 4096;
+    const child = [_]u8{0} ** 4096;
+    const encoded = try qcow2.encodeAlloc(allocator, &child, .{
+        .version = 2,
+        .cluster_bits = 12,
+        .compression = .none,
+        .backing_file = &parent,
+        .backing_file_name = "parent.raw",
+    });
+    defer allocator.free(encoded);
+    const header = try qcow2.parseHeader(encoded);
+    try std.testing.expectEqualStrings("parent.raw", header.backing_file_name);
+    try std.testing.expectEqual(@as(u32, 0xe279_2aca), std.mem.readInt(
+        u32,
+        encoded[72..76],
+        .big,
+    ));
+    const l2_entry = std.mem.readInt(u64, encoded[4 * 4096 ..][0..8], .big);
+    try std.testing.expect(l2_entry & (@as(u64, 1) << 63) != 0);
+    const archive = try qcow2.parse(encoded, .{ .backing_file = &parent });
+    const decoded = try archive.decodeAllocLimited(allocator, child.len);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &child, decoded);
+}
+
+test "QCOW2 backing writer inherits partial final sectors with zero extension" {
+    const parent = ("partial-backing-sector\n" ** 32)[0..600];
+    const encoded = try qcow2.encodeAlloc(allocator, parent, .{
+        .version = 3,
+        .cluster_bits = 12,
+        .compression = .none,
+        .backing_file = parent,
+        .backing_file_name = "parent.raw",
+    });
+    defer allocator.free(encoded);
+    const archive = try qcow2.parse(encoded, .{ .backing_file = parent });
+    try std.testing.expectEqual(@as(u64, 1024), archive.header.virtual_size);
+    try std.testing.expectEqual(@as(u64, 0), std.mem.readInt(
+        u64,
+        encoded[4 * 4096 ..][0..8],
+        .big,
+    ));
+    const decoded = try archive.decodeAllocLimited(allocator, 1024);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, parent, decoded[0..parent.len]);
+    for (decoded[parent.len..]) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
+}
+
+test "QCOW2 backing writer validates paired metadata and header capacity" {
+    const data = [_]u8{0} ** 512;
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeAlloc(allocator, &data, .{ .backing_file = &data }),
+    );
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeAlloc(allocator, &data, .{ .backing_file_name = "base.raw" }),
+    );
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeAlloc(allocator, &data, .{
+            .backing_file = &data,
+            .backing_file_name = "bad\x00name",
+        }),
+    );
+    const long_name = [_]u8{'a'} ** 417;
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeAlloc(allocator, &data, .{
+            .version = 2,
+            .cluster_bits = 9,
+            .backing_file = &data,
+            .backing_file_name = &long_name,
+        }),
+    );
+}
+
+test "QCOW2 backing writer releases every allocation failure" {
+    const parent = ("parent-cluster-pattern\n" ** 512)[0 .. 2 * 4096];
+    var child: [2 * 4096]u8 = parent.*;
+    @memset(child[4096..], 0);
+    const Test = struct {
+        fn run(
+            failing_allocator: std.mem.Allocator,
+            source: []const u8,
+            backing: []const u8,
+        ) !void {
+            const encoded = try qcow2.encodeAlloc(failing_allocator, source, .{
+                .version = 3,
+                .cluster_bits = 12,
+                .compression = .zlib,
+                .backing_file = backing,
+                .backing_file_name = "parent.raw",
+            });
+            defer failing_allocator.free(encoded);
+            const archive = try qcow2.parse(encoded, .{ .backing_file = backing });
+            const decoded = try archive.decodeAllocLimited(
+                failing_allocator,
+                source.len,
+            );
+            defer failing_allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, source, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        Test.run,
+        .{ &child, parent },
+    );
+}
+
 test "QCOW2 external raw data file maps guest cluster zero" {
     const input = try makeInput(allocator, 2 * 4096);
     defer allocator.free(input);
@@ -134,6 +300,134 @@ test "QCOW2 external raw data file maps guest cluster zero" {
     const decoded = try archive.decodeAllocLimited(allocator, input.len);
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "QCOW2 external-data writer emits raw guest mappings" {
+    const input = try makeInput(allocator, 2 * 4096 + 137);
+    defer allocator.free(input);
+    var encoded = try qcow2.encodeExternalDataAlloc(allocator, input, .{
+        .cluster_bits = 12,
+        .data_file_name = "payload.raw",
+    });
+    defer encoded.deinit(allocator);
+    const virtual_size = std.mem.alignForward(usize, input.len, 512);
+    try std.testing.expectEqual(virtual_size, encoded.data_file.len);
+    try std.testing.expectEqualSlices(u8, input, encoded.data_file[0..input.len]);
+    for (encoded.data_file[input.len..]) |byte|
+        try std.testing.expectEqual(@as(u8, 0), byte);
+    const header = try qcow2.parseHeader(encoded.image);
+    try std.testing.expect(header.hasRawExternalDataFile());
+    try std.testing.expectEqualStrings("payload.raw", header.data_file_name);
+    try std.testing.expectEqual(@as(u32, 0x4441_5441), std.mem.readInt(
+        u32,
+        encoded.image[112..116],
+        .big,
+    ));
+    const l2_offset = 4 * 4096;
+    inline for (0..3) |cluster_index| {
+        const expected = (@as(u64, 1) << 63) | cluster_index * 4096;
+        try std.testing.expectEqual(expected, std.mem.readInt(
+            u64,
+            encoded.image[l2_offset + cluster_index * 8 ..][0..8],
+            .big,
+        ));
+    }
+    const missing = try qcow2.parse(encoded.image, .{});
+    try std.testing.expectError(
+        error.MissingQcow2DataFile,
+        missing.decodeAllocLimited(allocator, virtual_size),
+    );
+    const archive = try qcow2.parse(encoded.image, .{
+        .external_data_file = encoded.data_file,
+    });
+    const decoded = try archive.decodeAllocLimited(allocator, virtual_size);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, encoded.data_file, decoded);
+    const range = try archive.readRangeAllocLimited(
+        allocator,
+        4096 - 31,
+        4096 + 89,
+        4096 + 89,
+    );
+    defer allocator.free(range);
+    try std.testing.expectEqualSlices(
+        u8,
+        encoded.data_file[4096 - 31 ..][0 .. 4096 + 89],
+        range,
+    );
+}
+
+test "QCOW2 external-data writer handles empty images and validates names" {
+    var empty = try qcow2.encodeExternalDataAlloc(allocator, "", .{
+        .cluster_bits = 12,
+        .data_file_name = "empty.raw",
+    });
+    defer empty.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 0), empty.data_file.len);
+    const archive = try qcow2.parse(empty.image, .{
+        .external_data_file = empty.data_file,
+    });
+    try std.testing.expectEqual(@as(u64, 0), archive.header.virtual_size);
+    try std.testing.expectEqualStrings("empty.raw", archive.header.data_file_name);
+
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .data_file_name = "",
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .data_file_name = "bad\x00name",
+        }),
+    );
+    const long_name = [_]u8{'x'} ** 385;
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .cluster_bits = 9,
+            .data_file_name = &long_name,
+        }),
+    );
+}
+
+test "QCOW2 external-data writer rejects malformed extension bounds" {
+    var encoded = try qcow2.encodeExternalDataAlloc(allocator, "data", .{
+        .cluster_bits = 12,
+        .data_file_name = "payload.raw",
+    });
+    defer encoded.deinit(allocator);
+    std.mem.writeInt(u32, encoded.image[116..120], 0xffff_ffff, .big);
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.parseHeader(encoded.image),
+    );
+}
+
+test "QCOW2 external-data writer releases every allocation failure" {
+    const input = try makeInput(allocator, 2 * 4096 + 137);
+    defer allocator.free(input);
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator, source: []const u8) !void {
+            var encoded = try qcow2.encodeExternalDataAlloc(
+                failing_allocator,
+                source,
+                .{ .cluster_bits = 12, .data_file_name = "payload.raw" },
+            );
+            defer encoded.deinit(failing_allocator);
+            const archive = try qcow2.parse(encoded.image, .{
+                .external_data_file = encoded.data_file,
+            });
+            const decoded = try archive.decodeAllocLimited(
+                failing_allocator,
+                encoded.data_file.len,
+            );
+            defer failing_allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, encoded.data_file, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{input});
 }
 
 test "QCOW2 writer supports L1 tables spanning multiple clusters" {

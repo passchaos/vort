@@ -34,6 +34,21 @@ const CompressStreamFn = *const fn (
 ) callconv(.c) c_int;
 const EncoderHasMoreOutputFn = *const fn (*EncoderState) callconv(.c) c_int;
 const EncoderIsFinishedFn = *const fn (*EncoderState) callconv(.c) c_int;
+const PreparedDictionary = opaque {};
+const PrepareDictionaryFn = *const fn (
+    c_int,
+    usize,
+    [*]const u8,
+    c_int,
+    ?AllocFn,
+    ?FreeFn,
+    ?*anyopaque,
+) callconv(.c) ?*PreparedDictionary;
+const DestroyPreparedDictionaryFn = *const fn (*PreparedDictionary) callconv(.c) void;
+const AttachPreparedDictionaryFn = *const fn (
+    *EncoderState,
+    *const PreparedDictionary,
+) callconv(.c) c_int;
 const DecoderState = opaque {};
 const CreateDecoderFn = *const fn (?AllocFn, ?FreeFn, ?*anyopaque) callconv(.c) ?*DecoderState;
 const DestroyDecoderFn = *const fn (*DecoderState) callconv(.c) void;
@@ -45,6 +60,12 @@ const DecompressStreamFn = *const fn (
     *usize,
     *[*]u8,
     ?*usize,
+) callconv(.c) c_int;
+const DecoderAttachDictionaryFn = *const fn (
+    *DecoderState,
+    c_int,
+    usize,
+    [*]const u8,
 ) callconv(.c) c_int;
 const Dictionary = extern struct {
     size_bits_by_length: [32]u8,
@@ -69,6 +90,10 @@ const StreamingOperationCode = enum(c_int) {
     metadata = 3,
 };
 
+const max_raw_dictionaries = 15;
+const raw_shared_dictionary_type = 0;
+const serialized_shared_dictionary_type = 1;
+
 pub const Runtime = struct {
     encoder: std.DynLib,
     decoder: std.DynLib,
@@ -84,10 +109,14 @@ pub const Runtime = struct {
     compress_stream: CompressStreamFn,
     encoder_has_more_output: EncoderHasMoreOutputFn,
     encoder_is_finished: EncoderIsFinishedFn,
+    prepare_dictionary: ?PrepareDictionaryFn,
+    destroy_prepared_dictionary: ?DestroyPreparedDictionaryFn,
+    attach_prepared_dictionary: ?AttachPreparedDictionaryFn,
     create_decoder: CreateDecoderFn,
     destroy_decoder: DestroyDecoderFn,
     set_decoder_parameter: SetDecoderParameterFn,
     decompress_stream: DecompressStreamFn,
+    decoder_attach_dictionary: ?DecoderAttachDictionaryFn,
     get_dictionary: GetDictionaryFn,
     get_transforms: GetTransformsFn,
     transform_dictionary_word: TransformDictionaryWordFn,
@@ -129,10 +158,14 @@ pub const Runtime = struct {
             .compress_stream = encoder.lookup(CompressStreamFn, "BrotliEncoderCompressStream") orelse return error.ReferenceUnavailable,
             .encoder_has_more_output = encoder.lookup(EncoderHasMoreOutputFn, "BrotliEncoderHasMoreOutput") orelse return error.ReferenceUnavailable,
             .encoder_is_finished = encoder.lookup(EncoderIsFinishedFn, "BrotliEncoderIsFinished") orelse return error.ReferenceUnavailable,
+            .prepare_dictionary = encoder.lookup(PrepareDictionaryFn, "BrotliEncoderPrepareDictionary"),
+            .destroy_prepared_dictionary = encoder.lookup(DestroyPreparedDictionaryFn, "BrotliEncoderDestroyPreparedDictionary"),
+            .attach_prepared_dictionary = encoder.lookup(AttachPreparedDictionaryFn, "BrotliEncoderAttachPreparedDictionary"),
             .create_decoder = decoder.lookup(CreateDecoderFn, "BrotliDecoderCreateInstance") orelse return error.ReferenceUnavailable,
             .destroy_decoder = decoder.lookup(DestroyDecoderFn, "BrotliDecoderDestroyInstance") orelse return error.ReferenceUnavailable,
             .set_decoder_parameter = decoder.lookup(SetDecoderParameterFn, "BrotliDecoderSetParameter") orelse return error.ReferenceUnavailable,
             .decompress_stream = decoder.lookup(DecompressStreamFn, "BrotliDecoderDecompressStream") orelse return error.ReferenceUnavailable,
+            .decoder_attach_dictionary = decoder.lookup(DecoderAttachDictionaryFn, "BrotliDecoderAttachDictionary"),
             .get_dictionary = common.lookup(GetDictionaryFn, "BrotliGetDictionary") orelse return error.ReferenceUnavailable,
             .get_transforms = common.lookup(GetTransformsFn, "BrotliGetTransforms") orelse return error.ReferenceUnavailable,
             .transform_dictionary_word = common.lookup(TransformDictionaryWordFn, "BrotliTransformDictionaryWord") orelse return error.ReferenceUnavailable,
@@ -150,6 +183,37 @@ pub const Runtime = struct {
         const encoder = self.encoder_version();
         std.debug.assert(encoder == self.decoder_version());
         return encoder;
+    }
+
+    /// Whether the loaded encoder and decoder both expose the shared
+    /// dictionary APIs. These symbols are optional so libbrotli 1.0.x can
+    /// still be used for every operation that does not need a dictionary.
+    pub fn supportsSharedDictionary(self: Runtime) bool {
+        return self.prepare_dictionary != null and
+            self.destroy_prepared_dictionary != null and
+            self.attach_prepared_dictionary != null and
+            self.decoder_attach_dictionary != null;
+    }
+
+    pub fn supportsSerializedDictionary(
+        self: Runtime,
+        encoded_dictionary: []const u8,
+        quality: c_int,
+    ) bool {
+        const prepare_dictionary = self.prepare_dictionary orelse return false;
+        const destroy_prepared_dictionary = self.destroy_prepared_dictionary orelse
+            return false;
+        const prepared = prepare_dictionary(
+            serialized_shared_dictionary_type,
+            encoded_dictionary.len,
+            encoded_dictionary.ptr,
+            quality,
+            null,
+            null,
+            null,
+        ) orelse return false;
+        destroy_prepared_dictionary(prepared);
+        return true;
     }
 
     pub fn encodeAlloc(
@@ -278,6 +342,106 @@ pub const Runtime = struct {
         return output.toOwnedSlice(allocator);
     }
 
+    /// Encode after attaching the ordered RAW shared-prefix chunks. Empty
+    /// chunks are deliberately prepared and attached too: attachment order
+    /// and the upstream fifteen-slot limit are part of the API contract.
+    pub fn encodeWithRawDictionariesAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        raw_dictionaries: []const []const u8,
+        options: StreamingOptions,
+    ) ![]u8 {
+        const prepare_dictionary = self.prepare_dictionary orelse return error.ReferenceUnavailable;
+        const destroy_prepared_dictionary = self.destroy_prepared_dictionary orelse return error.ReferenceUnavailable;
+        const attach_prepared_dictionary = self.attach_prepared_dictionary orelse return error.ReferenceUnavailable;
+        if (raw_dictionaries.len > max_raw_dictionaries) return error.ReferenceEncodeFailed;
+
+        var prepared: [max_raw_dictionaries]*PreparedDictionary = undefined;
+        var prepared_count: usize = 0;
+        defer {
+            while (prepared_count != 0) {
+                prepared_count -= 1;
+                destroy_prepared_dictionary(prepared[prepared_count]);
+            }
+        }
+
+        const state = try self.createConfiguredEncoder(options);
+        defer self.destroy_encoder(state);
+
+        for (raw_dictionaries) |dictionary| {
+            const item = prepare_dictionary(
+                raw_shared_dictionary_type,
+                dictionary.len,
+                dictionary.ptr,
+                @intCast(options.quality),
+                null,
+                null,
+                null,
+            ) orelse return error.ReferenceEncodeFailed;
+            prepared[prepared_count] = item;
+            prepared_count += 1;
+            if (attach_prepared_dictionary(state, item) == 0)
+                return error.ReferenceEncodeFailed;
+        }
+
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(allocator);
+        try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.process), input, &output);
+        try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
+        if (self.encoder_is_finished(state) == 0) return error.ReferenceEncodeFailed;
+        return output.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeWithSerializedDictionaryAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        encoded_dictionary: []const u8,
+        options: StreamingOptions,
+    ) ![]u8 {
+        const prepare_dictionary = self.prepare_dictionary orelse
+            return error.ReferenceUnavailable;
+        const destroy_prepared_dictionary = self.destroy_prepared_dictionary orelse
+            return error.ReferenceUnavailable;
+        const attach_prepared_dictionary = self.attach_prepared_dictionary orelse
+            return error.ReferenceUnavailable;
+        const prepared = prepare_dictionary(
+            serialized_shared_dictionary_type,
+            encoded_dictionary.len,
+            encoded_dictionary.ptr,
+            @intCast(options.quality),
+            null,
+            null,
+            null,
+        ) orelse return error.ReferenceEncodeFailed;
+        defer destroy_prepared_dictionary(prepared);
+
+        const state = try self.createConfiguredEncoder(options);
+        defer self.destroy_encoder(state);
+        if (attach_prepared_dictionary(state, prepared) == 0)
+            return error.ReferenceEncodeFailed;
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(allocator);
+        try self.pushOperation(
+            allocator,
+            state,
+            @intFromEnum(StreamingOperationCode.process),
+            input,
+            &output,
+        );
+        try self.pushOperation(
+            allocator,
+            state,
+            @intFromEnum(StreamingOperationCode.finish),
+            &.{},
+            &output,
+        );
+        if (self.encoder_is_finished(state) == 0)
+            return error.ReferenceEncodeFailed;
+        return output.toOwnedSlice(allocator);
+    }
+
     fn createConfiguredEncoder(self: Runtime, options: StreamingOptions) !*EncoderState {
         const state = self.create_encoder(null, null, null) orelse return error.ReferenceEncodeFailed;
         errdefer self.destroy_encoder(state);
@@ -347,6 +511,78 @@ pub const Runtime = struct {
         );
         if (result != 1) return error.ReferenceDecodeFailed;
         if (available_in != 0 or available_out != 0) return error.SizeMismatch;
+    }
+
+    /// Decode after attaching the ordered RAW shared-prefix chunks. All
+    /// attachments happen before the first decoder process call.
+    pub fn decodeWithRawDictionaries(
+        self: Runtime,
+        encoded: []const u8,
+        output: []u8,
+        raw_dictionaries: []const []const u8,
+    ) !void {
+        const attach_dictionary = self.decoder_attach_dictionary orelse return error.ReferenceUnavailable;
+        if (raw_dictionaries.len > max_raw_dictionaries) return error.ReferenceDecodeFailed;
+
+        const state = self.create_decoder(null, null, null) orelse return error.ReferenceDecodeFailed;
+        defer self.destroy_decoder(state);
+        for (raw_dictionaries) |dictionary| {
+            if (attach_dictionary(
+                state,
+                raw_shared_dictionary_type,
+                dictionary.len,
+                dictionary.ptr,
+            ) == 0) return error.ReferenceDecodeFailed;
+        }
+
+        var available_in = encoded.len;
+        var next_in: [*]const u8 = encoded.ptr;
+        var available_out = output.len;
+        var next_out: [*]u8 = output.ptr;
+        const result = self.decompress_stream(
+            state,
+            &available_in,
+            &next_in,
+            &available_out,
+            &next_out,
+            null,
+        );
+        if (result != 1 or available_in != 0 or available_out != 0)
+            return error.ReferenceDecodeFailed;
+    }
+
+    pub fn decodeWithSerializedDictionary(
+        self: Runtime,
+        encoded: []const u8,
+        output: []u8,
+        encoded_dictionary: []const u8,
+    ) !void {
+        const attach_dictionary = self.decoder_attach_dictionary orelse
+            return error.ReferenceUnavailable;
+        const state = self.create_decoder(null, null, null) orelse
+            return error.ReferenceDecodeFailed;
+        defer self.destroy_decoder(state);
+        if (attach_dictionary(
+            state,
+            serialized_shared_dictionary_type,
+            encoded_dictionary.len,
+            encoded_dictionary.ptr,
+        ) == 0) return error.ReferenceDecodeFailed;
+
+        var available_in = encoded.len;
+        var next_in: [*]const u8 = encoded.ptr;
+        var available_out = output.len;
+        var next_out: [*]u8 = output.ptr;
+        const result = self.decompress_stream(
+            state,
+            &available_in,
+            &next_in,
+            &available_out,
+            &next_out,
+            null,
+        );
+        if (result != 1 or available_in != 0 or available_out != 0)
+            return error.ReferenceDecodeFailed;
     }
 
     pub fn transformDictionary(

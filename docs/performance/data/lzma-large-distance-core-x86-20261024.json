@@ -1,0 +1,65 @@
+{
+  "schema": "vort-lzma-large-distance-core-v1",
+  "source_manifest": {
+    "src/lzma/encode_options.zig": "aa2947fffc04a32ace3a4689d5dec60d64b19ab542fa0811f3176db3f8bf5d8c",
+    "src/lzma/encoder.zig": "c1ba5993d3f73a1000ff7b6ada8ca5e6d8e8546d4f330fe0b76a09858e1a76dd",
+    "src/lzma/wide_match.zig": "b1a9c5a1b4bcab70a09f2133dc99ac90a444af324e19c140678eebbbf78f4be0",
+    "src/lzma/match_finder.zig": "2c6a4428e50f287bb6d140e13eda343a7f34e9807c34fbe448facda54d7482c0",
+    "src/lzma/match_finder/source.zig": "dab97d6b46460a4aa6ab22e8ae6f7a1c409bf91e2e8c4a0dd7fdac6ad2374173",
+    "src/lzma/range_encoder.zig": "5a6f6ca227e8533837f9f2e8561e2bcc52432ab9cc1a1038928c940073466aee",
+    "src/lzma/parse/integration.zig": "b90b3fad376c93e4e7de1b0639e7cd05ecf8d5e61fc222244533ab8cd57c23c0",
+    "src/lzma/large_dictionary_core_tests.zig": "d6e574dd16045ed6ba610125735b542d90622fbc6334b6118d09d8d8b045f651",
+    "_test_label_change": {
+      "old_label": "LZMA large dictionary core actual distance exceeds sixty four MiB ReleaseFast fixture",
+      "new_label": "Large dictionary actual distance exceeds sixty four MiB ReleaseFast fixture",
+      "release_fast_executed_source_sha256": "9a43a9fe16cf6b085c13efc58a0967c99a5faff2cad5b60e58ac31046efc2cb2",
+      "renamed_source_sha256": "b1e6194fc31f209381cc975606439561ae279062407aae412826e726fcc50358",
+      "delta": "Only the heavy test label changed. Its body and all other source bytes are identical.",
+      "execution_evidence": "actual-distance.log records the pre-rename source executing successfully, 6/6 passed.",
+      "renamed_source_execution": "Not re-executed. Dedicated ReleaseFast compile check passed with -fno-emit-bin, exit code 0.",
+      "compile_check_command": "zig test /tmp/vort-lzma-large-core-d6w56ml3/src/large-core-root.zig --test-filter 'Large dictionary actual distance exceeds sixty four MiB ReleaseFast fixture' -OReleaseFast -fno-emit-bin"
+    },
+    "_bounded_prefix_tail_fix": {
+      "integration_before_sha256": "14357b8a5a3cec31745685f16cbd5d510038532455fda316df9521c3f719ec4b",
+      "integration_after_sha256": "b90b3fad376c93e4e7de1b0639e7cd05ecf8d5e61fc222244533ab8cd57c23c0",
+      "tests_before_sha256": "b1e6194fc31f209381cc975606439561ae279062407aae412826e726fcc50358",
+      "tests_after_sha256": "d6e574dd16045ed6ba610125735b542d90622fbc6334b6118d09d8d8b045f651",
+      "change": "Check shadow finishedSize against remaining byte_limit before committing a nonempty advanced prefix; add a single short-repeat/empty/nonfinal boundary test.",
+      "heavy_body_sha256": "b869132871c5adeee816a7b55defe04706911965aa60ac284734989cce899099",
+      "heavy_body_unchanged_from_executed_source": true,
+      "heavy_execution": "Original actual-distance.log retained, compiled tests SHA 9a43a9fe16cf6b085c13efc58a0967c99a5faff2cad5b60e58ac31046efc2cb2. No new heavy execution after this fix.",
+      "targeted_validation": "The new single named tail test passes Debug, ReleaseSafe and ReleaseFast; each run reports 6/6 including 5 anonymous imports. Logs: short-rep-tail-debug.log, short-rep-tail-release-safe.log, short-rep-tail-release-fast.log. No other nine-case matrix or heavy fixture rerun."
+    }
+  },
+  "debug_log": "1/15 large-core-root.test_0...OK\n2/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core authority preserves presets and clips actual allocations...OK\n3/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core source bounds and overflow reject before sample access...OK\n4/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core budgets and signed index limits precede allocations...OK\n5/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core two MiB streaming plans replay greedy and lazy...OK\n6/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core streaming growth budget preserves planner on failure...OK\n7/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core payload limit retains exact flush and old bytes...OK\n8/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core advanced payload cap covers consecutive prefix transactions...OK\n9/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core bounded prefix retains range model stats and allocation cap...OK\n10/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core payload cap stops actual attempts and preserves OOM errors...OK\n11/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core actual distance exceeds sixty four MiB ReleaseFast fixture...SKIP\n12/15 lzma.encoder.test_0...OK\n13/15 lz77.test_0...OK\n14/15 lzma.match_finder.test_0...OK\n15/15 lzma.parse.fast.test_0...OK\n14 passed; 1 skipped; 0 failed.\n",
+  "release_safe_log": "1/15 large-core-root.test_0...OK\n2/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core authority preserves presets and clips actual allocations...OK\n3/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core source bounds and overflow reject before sample access...OK\n4/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core budgets and signed index limits precede allocations...OK\n5/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core two MiB streaming plans replay greedy and lazy...OK\n6/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core streaming growth budget preserves planner on failure...OK\n7/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core payload limit retains exact flush and old bytes...OK\n8/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core advanced payload cap covers consecutive prefix transactions...OK\n9/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core bounded prefix retains range model stats and allocation cap...OK\n10/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core payload cap stops actual attempts and preserves OOM errors...OK\n11/15 lzma.large_dictionary_core_tests.test.LZMA large dictionary core actual distance exceeds sixty four MiB ReleaseFast fixture...SKIP\n12/15 lzma.encoder.test_0...OK\n13/15 lz77.test_0...OK\n14/15 lzma.match_finder.test_0...OK\n15/15 lzma.parse.fast.test_0...OK\n14 passed; 1 skipped; 0 failed.\n",
+  "actual_distance_log": "1/6 large-core-root.test_0...OK\n2/6 lzma.large_dictionary_core_tests.test.LZMA large dictionary core actual distance exceeds sixty four MiB ReleaseFast fixture...large-distance finder=hc3 window=67108865 distance=67108865 length=64 matcher_heap=1074790432 dictionary_heap=67108865 seeded=67108865\nlarge-distance finder=bt4 window=67108865 distance=67108865 length=64 matcher_heap=1612185648 dictionary_heap=67108865 seeded=67108865\nlarge-distance legacy_and_advanced distance=67108865 consumed=64 legacy_peak_bound=268699396 payload_bytes=10 model_rep0=67108864\nOK\n3/6 lzma.match_finder.test_0...OK\n4/6 lz77.test_0...OK\n5/6 lzma.encoder.test_0...OK\n6/6 lzma.parse.fast.test_0...OK\nAll 6 tests passed.\n",
+  "bounded_tail_logs": {
+    "short-rep-tail-debug.log": "1/6 large-core-root.test_0...OK\n2/6 lzma.large_dictionary_core_tests.test.LZMA bounded payload short repeat checks unnormalized flush tail before prefix commit...OK\n3/6 lzma.encoder.test_0...OK\n4/6 lz77.test_0...OK\n5/6 lzma.match_finder.test_0...OK\n6/6 lzma.parse.fast.test_0...OK\nAll 6 tests passed.\n",
+    "short-rep-tail-release-safe.log": "1/6 large-core-root.test_0...OK\n2/6 lzma.large_dictionary_core_tests.test.LZMA bounded payload short repeat checks unnormalized flush tail before prefix commit...OK\n3/6 lzma.encoder.test_0...OK\n4/6 lz77.test_0...OK\n5/6 lzma.match_finder.test_0...OK\n6/6 lzma.parse.fast.test_0...OK\nAll 6 tests passed.\n",
+    "short-rep-tail-release-fast.log": "1/6 large-core-root.test_0...OK\n2/6 lzma.large_dictionary_core_tests.test.LZMA bounded payload short repeat checks unnormalized flush tail before prefix commit...OK\n3/6 lzma.encoder.test_0...OK\n4/6 lz77.test_0...OK\n5/6 lzma.match_finder.test_0...OK\n6/6 lzma.parse.fast.test_0...OK\nAll 6 tests passed.\n"
+  },
+  "claims": {
+    "dictionary_and_distance": 67108865,
+    "match_length": 64,
+    "hc3_matcher_requested_bytes": 1074790432,
+    "bt4_matcher_requested_bytes": 1612185648,
+    "dictionary_requested_bytes": 67108865,
+    "encoded_payload_bytes": 10,
+    "rss_measured": false
+  },
+  "integration_revision": "b6b7bd7049da6491cc48c2b15533de4f6f96fdc9",
+  "provenance": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig_version": "0.16.0",
+    "zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+    "purpose": "functional and resource validation; no competitor throughput or RSS ranking"
+  },
+  "integration": {
+    "build_graph_delta": {
+      "change": "Add run-lzma2-large-blocks-diff wrapper around the already-validated public probe and reference driver.",
+      "validated_by": "zig build -l, exit0; codec/source behavior unchanged."
+    }
+  }
+}

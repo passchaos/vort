@@ -1,12 +1,49 @@
 # Performance evidence
 
-Vort does not yet claim compression performance wins. This document records the
-benchmark protocol and the current bootstrap benchmark surface so future claims
-can be tied to reproducible evidence.
+[Zstd HQ functionality](performance/zstd-hq-functional-baseline.md) records the
+new binary-tree and integer/fractional-cost strategy paths, conditional two-pass
+training, exact offset emission, dictionaries and transactional streaming. Its
+78-test and versioned-reference evidence is functional validation; ratio,
+throughput and RSS leadership still require current-source corpus comparisons.
+
+Vort does not yet claim broad compression performance leadership. This document
+records scoped measurements and the benchmark protocol so each claim can be
+tied to reproducible evidence.
+
+[Brotli complete copy lengths](formats/brotli-complete-copy-lengths.md) documents
+the opt-in length enumeration, per-plan command-price work limit and independent
+sampled wire guards. Small cost witnesses and compatibility/resource checks
+establish those contracts; throughput, ratio and RSS comparisons remain separate.
+
+[LZMA/XZ encoder controls](performance/lzma-xz-encode-controls-functional-baseline.md)
+records the implemented standard/extreme preset table, real HC/BT and parse
+modes, bounded state/resource contracts, final 100-test gates and independent
+CLI evidence. It preserves the distinction between these functional milestones
+and competitor encoder throughput, ratio and RSS measurements.
+[Large dictionaries and LZMA2 chunks](performance/lzma2-large-blocks-functional-baseline.md)
+records the subsequent 1.5 GiB/2 MiB functionality, bounded range payloads,
+actual distances beyond 64 MiB, stream retry, versioned interoperability and
+explicit memory-proof scope.
 
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,
 and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
+[Zstd COVER trainer context reuse](performance/zstd-cover-trainer-context-reuse-x86.md)
+records byte-exact `(d, hash_log)` corpus-state reuse across `k` candidates,
+allocation reductions, and the permanent shared-versus-separate ReleaseFast
+training gate on Intel Comet Lake.
+[Zstd COVER held-out index](performance/zstd-cover-validation-index-x86.md)
+records the adaptive reusable dictionary-position index, neutral short-history
+controls, and the binary-history training gain on the same host.
+[Zstd COVER/FastCover trainer comparison](performance/zstd-cover-trainer-compare-x86.md)
+records four held-out corpus families, three compression levels, dictionary
+sizes, training latency, and bidirectional interoperability against the local
+zstd 1.4.8 CLI.
+[The implemented FastCover baseline](performance/fast-cover-training-x86.md)
+records the subsequent Zig-native selector, optimizer, standard-dictionary and
+CLI contracts, independent 402-group campaign, and separate quiet measurements
+against libzstd 1.4.8. It preserves all seven matched-capacity output losses,
+two fixed-budget wins and substantial full-training latency gaps.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.
@@ -128,6 +165,8 @@ zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --libzstd /path/to/l
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file --name corpus_case --level 1
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file --encoded-input path/to/file.zst --name corpus_case --iterations 300
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
+zig build run-cover-dictionary-train-bench-gate
+zig build run-zstd-cover-trainer-compare
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --level 1 --limit 131072 --path README.md --path src/zstd.zig
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
@@ -295,9 +334,11 @@ validated instead of inferred from the aggregation machine. Real-corpus
 coverage becomes true only when usable standard-corpus comparisons were loaded;
 peak-memory comparison remains false until a common cross-library memory harness
 exists.
-The current generated core report has complete, mutually consistent provenance
-for all eight loaded sources, and all 274 normalized metrics retain per-input
-hashes. Deflate encode/decode use provenance v2 because their Python drivers
+The previously generated core report had complete, mutually consistent
+provenance for eight loaded sources, and its 274 normalized metrics retained
+per-input hashes. That archived count is not a current-source benchmark rerun;
+the report's metric count depends on the inputs actually loaded. Deflate
+encode/decode use provenance v2 because their Python drivers
 coordinate more than one executable. Their canonical percent-encoded artifact
 manifest records and hashes the Python driver/interpreter/shared modules, the
 ReleaseFast Vort helper, generated Rust runner source and release executable,

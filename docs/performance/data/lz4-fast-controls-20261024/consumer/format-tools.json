@@ -1,0 +1,57 @@
+{
+  "utc": "2026-10-24T11:55:25.606132+00:00",
+  "changed_zig_files": 19,
+  "reports": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "fmt",
+        "--check",
+        "build.zig",
+        "examples/cli.zig",
+        "examples/cli/lz4_controls.zig",
+        "examples/cli/lz4_controls_tests.zig",
+        "examples/lz4_cli_probe.zig",
+        "src/lz4.zig",
+        "src/lz4/fast_input.zig",
+        "src/lz4/fast_options.zig",
+        "src/lz4/fast_options_tests.zig",
+        "src/lz4/fast_parser.zig",
+        "src/lz4/fast_parser_tests.zig",
+        "src/root.zig",
+        "src/tests/lz4_fast_controls_aliases.zig",
+        "src/tests/lz4_fast_controls_contracts.zig",
+        "src/tests/lz4_fast_controls_helpers.zig",
+        "src/tests/lz4_fast_controls_resources.zig",
+        "src/tests/lz4_fast_controls_transactions.zig",
+        "src/tests/lz4_fast_controls_wasm.zig",
+        "tools/lz4/fast_controls_probe.zig"
+      ],
+      "exit_code": 0,
+      "source_before_after_equal": true,
+      "log": "verification-0.log"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "py_compile",
+        "tools/lz4/fast_controls_diff.py",
+        "tools/lz4/fast_controls_cli_gate.py"
+      ],
+      "exit_code": 0,
+      "source_before_after_equal": true,
+      "log": "verification-1.log"
+    },
+    {
+      "command": [
+        "node",
+        "--check",
+        "tools/lz4/wasm_fast_controls_gate.js"
+      ],
+      "exit_code": 0,
+      "source_before_after_equal": true,
+      "log": "verification-2.log"
+    }
+  ]
+}

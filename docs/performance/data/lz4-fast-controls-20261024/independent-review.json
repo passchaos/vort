@@ -1,0 +1,25 @@
+{
+  "core_owner": "/root/lz4_default_stream",
+  "fixed_repro": {
+    "frame_oom": "currentlen6 restored; spare capacity is not claimed untouched",
+    "into_own_scratch_short_destination": "OutputTooSmall before0x8f after0x8f unchanged",
+    "invalid_scratch": "InvalidBlockPlan previouslen18 currentlen18",
+    "numeric_bound": "IntegerOverflow error returned",
+    "raw_input_alias": "roundtriptrue prefixpreserved"
+  },
+  "known_counter_boundary_65_66": "excluded from review, parent owns fix",
+  "observed_source_sha256": {
+    "src/lz4.zig": "47cd87824384d873cc906628b14d850208acb230f892814f6d24896920f958a3",
+    "src/lz4/fast_input.zig": "e0b0d2568d53e470d12a4af64cf8755aa846799ac914ce89b9639b26ee40ff3b",
+    "src/lz4/fast_options.zig": "a3160f57af2efd38d54c49ec8790c528e49be42e806169248e548411515d83cb",
+    "src/lz4/fast_parser.zig": "fdbd1ba25373ca40c1eb9febc8c600ead3695ff16b6907249d7318fee7c39cbf"
+  },
+  "original_repro": {
+    "frame_oom": "existing prefix length6 became21 after OOM",
+    "invalid_scratch": "invalid chain17 cleared previous scratch18 to0",
+    "numeric_bound": "maxIntusize frame-bound call trapped integer overflow",
+    "raw_input_alias": "returned success with decoded poison 0xe7 instead of original 0x61 after moving reserve"
+  },
+  "ring_review": "distance guard before chain-slot read preserves initialized slot for each candidate <=65535 in the 65536-position ring; no concrete counterexample found",
+  "scope": "read-only source review and bounded temporary public repros; no repository edits"
+}

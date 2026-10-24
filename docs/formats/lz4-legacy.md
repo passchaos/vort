@@ -17,6 +17,20 @@ zero-allocation block iterator. Encoders split input into caller-selected
 independent blocks up to 8 MiB. Decoders provide exact caller-owned output and
 bounded allocating APIs.
 
+`Lz4LegacyIncrementalDecoder` parses arbitrary input splits, retains at most
+one explicitly limited compressed block and one decoded block, and drains it
+under caller output backpressure. Because the wire has no end marker, callers
+must call `finish()` at EOF; partial length fields and payloads then fail as
+`TruncatedFrame`. Total-output, compressed-block, decoded-block and optional
+exact-output limits are checked before a block is exposed.
+
+`Lz4LegacyIncrementalEncoder` retains one configurable block up to 8 MiB and
+reuses the native LZ4 block encoder's hash/chain scratch across blocks. It emits
+the magic immediately, commits only complete blocks, and treats physical EOF as
+the stream terminator. One-byte and coalesced schedules are byte-identical to
+`encodeLz4LegacyAlloc`. `TarLz4LegacyIncrementalWriter` is the bounded TAR
+composition surface.
+
 ```sh
 zig build run -- encode-lz4-legacy-file input.bin output.lz4 8388608
 zig build run -- inspect-lz4-legacy-file output.lz4 536870912
@@ -27,3 +41,5 @@ zig build run-lz4-legacy-diff
 Automatic TAR and CPIO compression detection accepts both modern and legacy
 LZ4 frame magic. Writers continue to emit the modern checksummed LZ4 frame by
 default because the legacy format cannot verify content integrity.
+`TarLz4LegacyIncrementalReader` is the explicit bounded TAR composition path;
+`TarLz4IncrementalReader` continues to mean the modern LZ4 frame format.

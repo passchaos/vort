@@ -1,0 +1,266 @@
+{
+  "status": "ok",
+  "scope": "final frozen-source small whole-block functional campaign; no custom-model cost or performance comparison",
+  "exit_code": 0,
+  "representative_cases": 20,
+  "baseline_regressions": 6,
+  "budget_and_invalid_cases": 5,
+  "logical_cases": 31,
+  "probe_calls": 103,
+  "probe_successes": 100,
+  "expected_errors": {
+    "WorkingMemoryLimitExceeded": 2,
+    "InvalidBlockPlan": 1
+  },
+  "all_error_outputs_preserved": true,
+  "all20_whole_wire_not_larger_than_bounded": true,
+  "matching_q11_not_larger_than_q10_pairs": 10,
+  "nonempty_actual_whole_pass_cases": 18,
+  "profile_disabled_same_wire_and_resolved_cases": 20,
+  "whole_parse_tail_positions": [
+    4100,
+    4100
+  ],
+  "bidirectional_versioned_reference_results": 38,
+  "known_skips": [
+    {
+      "name": "one_shot-q10-raw",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    },
+    {
+      "name": "one_shot-q11-raw",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "total_budget_exact_bytes": 9230924,
+  "total_budget_below_bytes": 9230923,
+  "mode_profile_rows": [
+    {
+      "name": "one_shot-q10-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q10-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "chunks-q10-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "chunks-q10-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "chunks-q11-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "chunks-q11-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "incremental-q10-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 2,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "incremental-q10-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 2,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "incremental-q11-standard",
+      "input_bytes": 64,
+      "whole_wire_bytes": 32,
+      "bounded_wire_bytes": 32,
+      "bounded_passes": 4,
+      "whole_block_passes": 2,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "incremental-q11-large",
+      "input_bytes": 64,
+      "whole_wire_bytes": 34,
+      "bounded_wire_bytes": 34,
+      "bounded_passes": 4,
+      "whole_block_passes": 2,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q10-binary",
+      "input_bytes": 64,
+      "whole_wire_bytes": 68,
+      "bounded_wire_bytes": 68,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q10-raw",
+      "input_bytes": 49,
+      "whole_wire_bytes": 12,
+      "bounded_wire_bytes": 12,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 49,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q10-empty",
+      "input_bytes": 0,
+      "whole_wire_bytes": 1,
+      "bounded_wire_bytes": 1,
+      "bounded_passes": 0,
+      "whole_block_passes": 0,
+      "max_parse_positions": 0,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q10-tail4100",
+      "input_bytes": 4100,
+      "whole_wire_bytes": 41,
+      "bounded_wire_bytes": 41,
+      "bounded_passes": 3,
+      "whole_block_passes": 1,
+      "max_parse_positions": 4100,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-binary",
+      "input_bytes": 64,
+      "whole_wire_bytes": 68,
+      "bounded_wire_bytes": 68,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 64,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-raw",
+      "input_bytes": 49,
+      "whole_wire_bytes": 12,
+      "bounded_wire_bytes": 12,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 49,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-empty",
+      "input_bytes": 0,
+      "whole_wire_bytes": 1,
+      "bounded_wire_bytes": 1,
+      "bounded_passes": 0,
+      "whole_block_passes": 0,
+      "max_parse_positions": 0,
+      "actual_resolved_parse_mode": "whole_block"
+    },
+    {
+      "name": "one_shot-q11-tail4100",
+      "input_bytes": 4100,
+      "whole_wire_bytes": 41,
+      "bounded_wire_bytes": 41,
+      "bounded_passes": 9,
+      "whole_block_passes": 3,
+      "max_parse_positions": 4100,
+      "actual_resolved_parse_mode": "whole_block"
+    }
+  ],
+  "baseline_manifest_sha256": "42550a1283517275991bcc289a7ac926b5956bb6cd677675de5ae71905e3a20e",
+  "report_sha256": "e31a45d62c756eea0db46b45ec5267f7df4425952ff054343fe3591b6fb054d9",
+  "rows_canonical_sha256": "4038061a99e1349f134fc67b7065fa801af2074c6fdbe6d5575cbf72914e274e",
+  "source_before_after_equal": true,
+  "source_file_count": 1727,
+  "test_source_files": 20,
+  "embedded_nonzig_src_files": 143,
+  "source_zip_sha256": "bb5a52d0485a84451e1019743f351c6a748c19d5c1822cdb8bba27d64001810e",
+  "probe_sha256": "7a156960de8ae405b4eaced07bb07f0e469c31c07edb62b27222bbc972b3ba47",
+  "compiler_manifest_sha256": "1d626ffc7eed4a59a6f557473cddc71bfa0782c4ab42674ad455ce624c9398dc",
+  "calculated_artifact_digest": "fa11cdfceab9584871769143649e22e4",
+  "all_compiler_input_contents_verified": true,
+  "compiler_input_records": 1900,
+  "compiler_input_groups": {
+    "project": 1070,
+    "vail": 16,
+    "linked_objects": 2,
+    "zig_library": 812
+  },
+  "unique_compiler_inputs": 1898,
+  "compiler_inputs_zip_sha256": "6196be88e2e892f4bbe0af4e45eac433529602f77133f9ef2188e56251e1dbb0",
+  "binding_report_sha256": "b2f6b962c1b4c1a325816b930ed0589ead3e7befedb29170caf81e6919a94f9a",
+  "performance_claim": null
+}

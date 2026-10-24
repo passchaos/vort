@@ -3,6 +3,12 @@ const lz77 = @import("../../lz77.zig");
 const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
 const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
+const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
+const literal_context = @import("literal_context.zig");
+const serialized_dictionary = @import("../serialized_dictionary.zig");
+const serialized_dictionary_matcher = @import("serialized_dictionary_matcher.zig");
+const scoped_static_dictionary = @import("scoped_static_dictionary.zig");
+const hq_types = @import("hq_types.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -10,16 +16,54 @@ const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 /// may contain only inserts; its copy fields are then intentionally ignored by
 /// the Brotli decoder after those inserts reach the meta-block boundary.
 pub const Command = struct {
+    pub const Source = enum {
+        lz77,
+        compound,
+        static,
+    };
+
     insert_start: usize,
     insert_len: usize,
     copy_len: usize = 2,
     distance: usize = 0,
     has_copy: bool = false,
+    source: @This().Source = .lz77,
     /// RFC 7932 dictionary commands encode the untransformed word length in
-    /// the command and advance by the transformed output length.
+    /// the command and advance by the transformed output length. Compound
+    /// dictionary commands instead keep their output length in `copy_len`,
+    /// their logical address in `dictionary_address`, and leave this zero.
     dictionary_output_len: usize = 0,
     dictionary_address: usize = 0,
+    hq_encoding: ?hq_types.ExactEncoding = null,
+
+    pub fn outputLen(self: Command) usize {
+        if (!self.has_copy) return 0;
+        return switch (self.source) {
+            .lz77, .compound => self.copy_len,
+            .static => self.dictionary_output_len,
+        };
+    }
+
+    pub fn updatesRecentDistance(self: Command) bool {
+        if (self.hq_encoding) |encoding|
+            if (encoding.distance_code == 0) return false;
+        return self.has_copy and !self.isStatic();
+    }
+
+    pub fn isLz77(self: Command) bool {
+        return self.source == .lz77;
+    }
+
+    pub fn isStatic(self: Command) bool {
+        return self.source == .static;
+    }
+
+    pub fn isCompound(self: Command) bool {
+        return self.source == .compound;
+    }
 };
+
+pub const Source = Command.Source;
 
 pub const Plan = struct {
     commands: []Command,
@@ -75,6 +119,25 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
         len: usize = 0,
 
         pub fn codeLengths(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
+            return self.codeLengthsInternal(false, frequencies, {}, {});
+        }
+
+        pub fn codeLengthsProfiled(
+            self: *const Self,
+            frequencies: *const [capacity]u32,
+            io: std.Io,
+            profile: *small_huffman.BuildProfile,
+        ) ![capacity]u4 {
+            return self.codeLengthsInternal(true, frequencies, io, profile);
+        }
+
+        fn codeLengthsInternal(
+            self: *const Self,
+            comptime profiled: bool,
+            frequencies: *const [capacity]u32,
+            io: if (profiled) std.Io else void,
+            profile: if (profiled) *small_huffman.BuildProfile else void,
+        ) ![capacity]u4 {
             if (self.len == 0) return error.InvalidBlockPlan;
             var lengths: [capacity]u4 = @splat(0);
             switch (self.len) {
@@ -95,15 +158,37 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                         var compact_lengths: [64]u4 = undefined;
                         var compact_frequencies: [64]u32 = undefined;
                         for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
-                        if (small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths)) {
+                        const built = if (profiled)
+                            small_huffman.buildProfiled(64, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                        else
+                            small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths);
+                        if (built) {
                             for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
                         } else {
+                            if (profiled) profile.package_merge_calls += 1;
                             self.fillTreeLengths(frequencies, 64, &lengths);
                         }
-                    } else if (self.len <= 256)
-                        self.fillTreeLengths(frequencies, 256, &lengths)
-                    else
+                    } else if (self.len <= 128) {
+                        var compact_lengths: [128]u4 = undefined;
+                        var compact_frequencies: [128]u32 = undefined;
+                        for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
+                        const built = if (profiled)
+                            small_huffman.buildProfiled(128, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                        else
+                            small_huffman.build(128, compact_frequencies[0..self.len], &compact_lengths);
+                        if (built) {
+                            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+                        } else {
+                            if (profiled) profile.package_merge_calls += 1;
+                            self.fillTreeLengths(frequencies, 256, &lengths);
+                        }
+                    } else if (self.len <= 256) {
+                        if (profiled) profile.package_merge_calls += 1;
+                        self.fillTreeLengths(frequencies, 256, &lengths);
+                    } else {
+                        if (profiled) profile.package_merge_calls += 1;
                         self.fillTreeLengths(frequencies, max_prefix_symbols, &lengths);
+                    }
                 },
                 else => unreachable,
             }
@@ -299,24 +384,97 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
 }
 
 /// Dictionary planner that prefers the longest transformed word at each
-/// position and emits remaining bytes as literal inserts. The immutable
-/// process-wide index is reused across calls; candidate transforms still pass
-/// through the independent RFC transform implementation before selection.
+/// position and emits remaining bytes as literal inserts. Total-tracked calls
+/// own their legacy indexes; untracked calls reuse process-wide indexes.
+/// Candidate transforms still pass through the RFC implementation before use.
 pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
     return buildStaticDictionaryWithCacheAlloc(allocator, input, null);
 }
 
 pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*StaticDictionaryMatchCache) !Plan {
-    const matcher = try static_dictionary_matcher.Index.sharedIndex();
+    return buildStaticDictionaryInternal(allocator, input, cache, .compact);
+}
+
+/// Complete RFC 7932 planner. A lazy supplemental index covers omit-first and
+/// short-core-plus-suffix transforms that the compact index cannot reach.
+pub fn buildStaticDictionaryCompleteAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, null, .complete);
+}
+
+/// Slow oracle retained for differential benchmarks and matcher validation.
+/// Production encoder surfaces use either the compact or supplemental index.
+pub fn buildStaticDictionaryReferenceAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, null, .reference);
+}
+
+const StaticDictionarySearch = enum { compact, complete, reference };
+
+fn buildStaticDictionaryInternal(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    cache: ?*StaticDictionaryMatchCache,
+    search: StaticDictionarySearch,
+) !Plan {
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
+    const match_count = try buildStaticDictionaryReuseInternal(
+        &commands,
+        allocator,
+        input,
+        cache,
+        search,
+    );
+    return .{
+        .commands = try commands.toOwnedSlice(allocator),
+        .match_count = match_count,
+    };
+}
+
+/// Rebuild a complete RFC 7932 dictionary plan in caller-owned storage.
+/// Capacity is retained across blocks and streams; errors leave the list empty.
+pub fn buildStaticDictionaryCompleteReuse(
+    commands: *std.ArrayList(Command),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+) !usize {
+    return buildStaticDictionaryReuseInternal(
+        commands,
+        allocator,
+        input,
+        null,
+        .complete,
+    );
+}
+
+fn buildStaticDictionaryReuseInternal(
+    commands: *std.ArrayList(Command),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    cache: ?*StaticDictionaryMatchCache,
+    search: StaticDictionarySearch,
+) !usize {
+    commands.clearRetainingCapacity();
+    errdefer commands.clearRetainingCapacity();
+    // The exhaustive reference needs no index. Each indexed plan acquires its
+    // compact/supplemental owners once, before probing any input position.
+    var indexes = if (search == .reference) scoped_static_dictionary.Indexes{} else try scoped_static_dictionary.Indexes.init(allocator, search == .complete);
+    defer indexes.deinit();
+    const matcher = if (search == .reference) null else indexes.compact();
+    const complete_matcher = if (search == .complete) indexes.complete() else null;
     var position: usize = 0;
     var insert_start: usize = 0;
     var insert_len: usize = 0;
     var match_count: usize = 0;
 
     while (position < input.len) {
-        const match = if (cache) |active| active.findLongest(matcher, input, position) else matcher.findLongest(input[position..]);
+        const match = switch (search) {
+            .complete => complete_matcher.?.findLongest(matcher.?, input[position..]),
+            .reference => static_dictionary.findLongestMatch(input[position..]),
+            .compact => if (cache) |active|
+                active.findLongest(matcher.?, input, position)
+            else
+                matcher.?.findLongest(input[position..]),
+        };
         const selected = match orelse {
             position += 1;
             insert_len += 1;
@@ -327,6 +485,7 @@ pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: 
             .insert_len = insert_len,
             .copy_len = selected.copy_len,
             .has_copy = true,
+            .source = .static,
             .dictionary_output_len = selected.output_len,
             .dictionary_address = selected.address,
         });
@@ -340,7 +499,7 @@ pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: 
         .insert_start = insert_start,
         .insert_len = insert_len,
     });
-    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+    return match_count;
 }
 
 /// Replace portions of an existing plan's literal inserts with static-
@@ -359,7 +518,9 @@ pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []
 /// Replace dictionary matches in at most `probe_limit` literal positions. This
 /// lets high-ratio callers bound dictionary search independently of input size.
 pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command, cache: ?*StaticDictionaryMatchCache, probe_limit: usize) !Plan {
-    const matcher = try static_dictionary_matcher.Index.sharedIndex();
+    var indexes = try scoped_static_dictionary.Indexes.init(allocator, false);
+    defer indexes.deinit();
+    const matcher = indexes.compact();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var cursor: usize = 0;
@@ -397,6 +558,7 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
                 .insert_len = pending_len,
                 .copy_len = match.?.copy_len,
                 .has_copy = true,
+                .source = .static,
                 .dictionary_output_len = match.?.output_len,
                 .dictionary_address = match.?.address,
             });
@@ -407,7 +569,7 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
         }
         cursor = literal_end;
         if (!command.has_copy) continue;
-        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        const copy_output_len = command.outputLen();
         if (copy_output_len == 0 or copy_output_len > input.len - cursor) return error.InvalidBlockPlan;
         var copied = command;
         copied.insert_start = pending_start;
@@ -420,6 +582,188 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
     if (cursor != input.len) return error.InvalidBlockPlan;
     if (pending_len != 0) try commands.append(allocator, .{ .insert_start = pending_start, .insert_len = pending_len });
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
+/// Replace literal runs with RAW compound-dictionary copies without changing
+/// any already-selected LZ77/static/compound copy. Logical dictionary
+/// addresses remain independent of the current Brotli output position; the
+/// wire writer resolves them against its active history window.
+pub fn mixCompoundDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    matcher: *const compound_dictionary_matcher.Matcher,
+    probe_limit: usize,
+) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var cursor: usize = 0;
+    var pending_start: usize = 0;
+    var pending_len: usize = 0;
+    var match_count: usize = 0;
+
+    for (baseline) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        const literal_end = cursor + command.insert_len;
+        var position = cursor;
+        while (position < literal_end) {
+            const remaining = literal_end - position;
+            const match = matcher.findLongest(input, position, remaining, probe_limit);
+            if (match == null) {
+                position += 1;
+                pending_len += 1;
+                continue;
+            }
+            try commands.append(allocator, .{
+                .insert_start = pending_start,
+                .insert_len = pending_len,
+                .copy_len = match.?.length,
+                .has_copy = true,
+                .source = .compound,
+                .dictionary_address = match.?.address,
+            });
+            position += match.?.length;
+            pending_start = position;
+            pending_len = 0;
+            match_count += 1;
+        }
+        cursor = literal_end;
+        if (!command.has_copy) continue;
+        const output_len = command.outputLen();
+        if (output_len == 0 or output_len > input.len - cursor) return error.InvalidBlockPlan;
+        var copied = command;
+        copied.insert_start = pending_start;
+        copied.insert_len = pending_len;
+        try commands.append(allocator, copied);
+        cursor += output_len;
+        pending_start = cursor;
+        pending_len = 0;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (pending_len != 0) try commands.append(allocator, .{
+        .insert_start = pending_start,
+        .insert_len = pending_len,
+    });
+    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
+/// Replace literal runs with contextual serialized static-dictionary copies.
+///
+/// `context_mode` must be exactly the mode emitted by the eventual Brotli
+/// meta-block header. `initial_previous` is `{ second_previous, previous }` at
+/// the start of `input`, allowing the same routine to operate on later stream
+/// blocks without flattening prior history.
+pub fn mixSerializedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    dictionary: *const serialized_dictionary.Dictionary,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) !Plan {
+    return mixSerializedDictionaryWithMatcherAlloc(
+        allocator,
+        input,
+        baseline,
+        dictionary,
+        null,
+        context_mode,
+        initial_previous,
+    );
+}
+
+pub fn mixSerializedDictionaryWithMatcherAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    dictionary: *const serialized_dictionary.Dictionary,
+    matcher: ?*const serialized_dictionary_matcher.Matcher,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var transformed_scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    var cursor: usize = 0;
+    var pending_start: usize = 0;
+    var pending_len: usize = 0;
+    var match_count: usize = 0;
+
+    for (baseline) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        const literal_end = cursor + command.insert_len;
+        var position = cursor;
+        while (position < literal_end) {
+            const previous = if (position >= 1)
+                input[position - 1]
+            else
+                initial_previous[1];
+            const second_previous = if (position >= 2)
+                input[position - 2]
+            else if (position == 1)
+                initial_previous[1]
+            else
+                initial_previous[0];
+            const context = literal_context.value(
+                context_mode,
+                previous,
+                second_previous,
+            );
+            const match = if (matcher) |indexed|
+                try indexed.findLongest(
+                    context,
+                    input[position..literal_end],
+                    &transformed_scratch,
+                )
+            else
+                try dictionary.findLongest(
+                    context,
+                    input[position..literal_end],
+                    &transformed_scratch,
+                );
+            if (match == null) {
+                position += 1;
+                pending_len += 1;
+                continue;
+            }
+            try commands.append(allocator, .{
+                .insert_start = pending_start,
+                .insert_len = pending_len,
+                .copy_len = match.?.copy_len,
+                .has_copy = true,
+                .source = .static,
+                .dictionary_output_len = match.?.output_len,
+                .dictionary_address = match.?.address,
+            });
+            position += match.?.output_len;
+            pending_start = position;
+            pending_len = 0;
+            match_count += 1;
+        }
+        cursor = literal_end;
+        if (!command.has_copy) continue;
+        const output_len = command.outputLen();
+        if (output_len == 0 or output_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        var copied = command;
+        copied.insert_start = pending_start;
+        copied.insert_len = pending_len;
+        try commands.append(allocator, copied);
+        cursor += output_len;
+        pending_start = cursor;
+        pending_len = 0;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (pending_len != 0) try commands.append(allocator, .{
+        .insert_start = pending_start,
+        .insert_len = pending_len,
+    });
+    return .{
+        .commands = try commands.toOwnedSlice(allocator),
+        .match_count = match_count,
+    };
 }
 
 pub fn staticDictionaryIndexBytes() usize {
@@ -512,7 +856,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
     if (drops.len == 0) return error.InvalidBlockPlan;
     var previous_drop: ?usize = null;
     for (drops) |drop| {
-        if (drop >= commands.len or !commands[drop].has_copy or (previous_drop != null and drop <= previous_drop.?)) return error.InvalidBlockPlan;
+        if (drop >= commands.len or !commands[drop].has_copy or !commands[drop].isLz77() or (previous_drop != null and drop <= previous_drop.?)) return error.InvalidBlockPlan;
         previous_drop = drop;
     }
     if (output.len < commands.len) return error.OutOfMemory;
@@ -525,7 +869,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
         cursor += command.insert_len;
         insert_len += command.insert_len;
         if (!command.has_copy) continue;
-        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        const copy_output_len = command.outputLen();
         if (std.mem.indexOfScalar(usize, drops, i) != null) {
             cursor += copy_output_len;
             insert_len += copy_output_len;
@@ -537,6 +881,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
             .copy_len = command.copy_len,
             .distance = command.distance,
             .has_copy = true,
+            .source = command.source,
             .dictionary_output_len = command.dictionary_output_len,
             .dictionary_address = command.dictionary_address,
         };
@@ -563,7 +908,7 @@ fn appendCopyCommand(
 ) !void {
     if (insert_len == 0 and commands.items.len != 0) {
         const previous = &commands.items[commands.items.len - 1];
-        if (previous.has_copy and previous.dictionary_output_len == 0 and previous.distance == distance) {
+        if (previous.has_copy and previous.isLz77() and previous.distance == distance) {
             previous.copy_len = std.math.add(usize, previous.copy_len, copy_len) catch return error.IntegerOverflow;
             return;
         }
@@ -575,6 +920,143 @@ fn appendCopyCommand(
         .distance = distance,
         .has_copy = true,
     });
+}
+
+test "command sources centralize copy semantics" {
+    const lz77_command = Command{
+        .insert_start = 0,
+        .insert_len = 2,
+        .copy_len = 7,
+        .distance = 4,
+        .has_copy = true,
+    };
+    const compound_command = Command{
+        .insert_start = 9,
+        .insert_len = 0,
+        .copy_len = 11,
+        .has_copy = true,
+        .source = .compound,
+        .dictionary_address = 1234,
+    };
+    const static_command = Command{
+        .insert_start = 20,
+        .insert_len = 0,
+        .copy_len = 6,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = 9,
+        .dictionary_address = 5678,
+    };
+
+    try std.testing.expect(lz77_command.isLz77());
+    try std.testing.expect(!lz77_command.isCompound());
+    try std.testing.expect(!lz77_command.isStatic());
+    try std.testing.expectEqual(@as(usize, 7), lz77_command.outputLen());
+    try std.testing.expect(lz77_command.updatesRecentDistance());
+
+    try std.testing.expect(compound_command.isCompound());
+    try std.testing.expect(!compound_command.isLz77());
+    try std.testing.expect(!compound_command.isStatic());
+    try std.testing.expectEqual(@as(usize, 11), compound_command.outputLen());
+    try std.testing.expect(compound_command.updatesRecentDistance());
+    try std.testing.expectEqual(@as(usize, 0), compound_command.dictionary_output_len);
+
+    try std.testing.expect(static_command.isStatic());
+    try std.testing.expect(!static_command.isLz77());
+    try std.testing.expect(!static_command.isCompound());
+    try std.testing.expectEqual(@as(usize, 9), static_command.outputLen());
+    try std.testing.expect(!static_command.updatesRecentDistance());
+
+    const literal_only = Command{ .insert_start = 31, .insert_len = 3 };
+    try std.testing.expect(literal_only.isLz77());
+    try std.testing.expectEqual(@as(usize, 0), literal_only.outputLen());
+    try std.testing.expect(!literal_only.updatesRecentDistance());
+    try std.testing.expectEqual(Source.lz77, literal_only.source);
+}
+
+test "compound dictionary mixer replaces literal runs and preserves LZ77 copies" {
+    var matcher = compound_dictionary_matcher.Matcher.init(std.testing.allocator);
+    defer matcher.deinit();
+    try matcher.prepare(.{ .raw_prefixes = &.{"hello-world"} });
+    const input = "xxworldyyABCDABCD";
+    const baseline = [_]Command{
+        .{ .insert_start = 0, .insert_len = 9, .copy_len = 4, .distance = 4, .has_copy = true },
+        .{ .insert_start = 13, .insert_len = 4 },
+    };
+    const mixed = try mixCompoundDictionaryAlloc(
+        std.testing.allocator,
+        input,
+        &baseline,
+        &matcher,
+        compound_dictionary_matcher.bucket_ways,
+    );
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), mixed.match_count);
+    try std.testing.expectEqual(@as(usize, 3), mixed.commands.len);
+    try std.testing.expectEqual(Source.compound, mixed.commands[0].source);
+    try std.testing.expectEqual(@as(usize, 2), mixed.commands[0].insert_len);
+    try std.testing.expectEqual(@as(usize, 5), mixed.commands[0].copy_len);
+    try std.testing.expectEqual(@as(usize, 6), mixed.commands[0].dictionary_address);
+    try std.testing.expectEqual(Source.lz77, mixed.commands[1].source);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[1].distance);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[2].insert_len);
+}
+
+test "serialized dictionary mixer uses the emitted literal context mode" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try encoded.appendSlice(std.testing.allocator, &.{ 0x91, 0x00, 0, 2 });
+    var bits: [28]u8 = @splat(0);
+    bits[0] = 1;
+    try encoded.appendSlice(std.testing.allocator, &bits);
+    try encoded.appendSlice(std.testing.allocator, "red!xxxx");
+    try encoded.appendSlice(std.testing.allocator, &bits);
+    try encoded.appendSlice(std.testing.allocator, "bluezzzz");
+    try encoded.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        2, 0, 0, 1, 0, // two dictionary choices
+        1, // contextual
+    });
+    var context_map: [64]u8 = @splat(0);
+    context_map['a' & 0x3f] = 1;
+    try encoded.appendSlice(std.testing.allocator, &context_map);
+    const dictionary = try serialized_dictionary.parse(encoded.items);
+    const input = "ablue red!";
+    const baseline = [_]Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const mixed = try mixSerializedDictionaryAlloc(
+        std.testing.allocator,
+        input,
+        &baseline,
+        &dictionary,
+        literal_context.mode_lsb6,
+        .{ 0, 0 },
+    );
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), mixed.match_count);
+    try std.testing.expectEqual(@as(usize, 2), mixed.commands.len);
+    try std.testing.expectEqual(@as(usize, 1), mixed.commands[0].insert_len);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[0].dictionary_output_len);
+    try std.testing.expectEqual(@as(usize, 1), mixed.commands[1].insert_len);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[1].dictionary_output_len);
+}
+
+test "legacy command initializers default to LZ77" {
+    const legacy = Command{
+        .insert_start = 0,
+        .insert_len = 4,
+        .copy_len = 8,
+        .distance = 4,
+        .has_copy = true,
+    };
+    const explicit = Command{
+        .insert_start = 0,
+        .insert_len = 4,
+        .copy_len = 8,
+        .distance = 4,
+        .has_copy = true,
+        .source = .lz77,
+    };
+    try std.testing.expectEqual(explicit, legacy);
 }
 
 test "coalesces literals around LZ77 matches" {
@@ -671,6 +1153,27 @@ test "rejects invalid short-copy replacement requests" {
     var storage: [1]Command = undefined;
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 0));
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 1));
+
+    const compound = [_]Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = 4,
+        .has_copy = true,
+        .source = .compound,
+        .dictionary_address = 7,
+    }};
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &compound, 0));
+
+    const static = [_]Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = 4,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = 6,
+        .dictionary_address = 9,
+    }};
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 6, &static, 0));
 }
 
 test "replaces multiple short copies using original indexes" {
@@ -693,8 +1196,10 @@ test "static dictionary plan preserves transformed and copy lengths" {
     try std.testing.expect(plan.match_count > 0);
     const command = plan.commands[0];
     try std.testing.expect(command.has_copy);
+    try std.testing.expect(command.isStatic());
     try std.testing.expect(command.dictionary_output_len > 0);
     try std.testing.expect(command.copy_len != command.dictionary_output_len);
+    try std.testing.expectEqual(command.dictionary_output_len, command.outputLen());
 }
 
 test "static dictionary mixes only inside literal runs" {
@@ -707,6 +1212,7 @@ test "static dictionary mixes only inside literal runs" {
     defer mixed.deinit(std.testing.allocator);
     try std.testing.expect(mixed.match_count > 0);
     try std.testing.expect(mixed.commands.len >= baseline.len);
+    try std.testing.expect(mixed.commands[0].isStatic());
     try std.testing.expect(mixed.commands[0].dictionary_output_len > 0);
     try std.testing.expectEqual(@as(usize, 11), mixed.commands[mixed.commands.len - 1].distance);
 }
@@ -729,6 +1235,7 @@ test "static dictionary mixed planner honors literal probe limit" {
     defer reaches_match.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), reaches_match.match_count);
     try std.testing.expectEqual(@as(usize, 2), reaches_match.commands[0].insert_len);
+    try std.testing.expect(reaches_match.commands[0].isStatic());
     try std.testing.expect(reaches_match.commands[0].dictionary_output_len >= "information".len);
 }
 
@@ -768,6 +1275,56 @@ test "static dictionary cache preserves mixed and dictionary-only plans" {
     const actual_boundary = try mixStaticDictionaryWithCacheAlloc(std.testing.allocator, boundary_input, &boundary_baseline, &boundary_cache);
     defer actual_boundary.deinit(std.testing.allocator);
     try std.testing.expectEqualSlices(Command, expected_boundary.commands, actual_boundary.commands);
+}
+
+test "complete static dictionary planner reaches omit-first transforms" {
+    const transform_index: usize = 3;
+    var transformed_storage: [64]u8 = undefined;
+    const compact = try static_dictionary_matcher.Index.sharedIndex();
+    var chosen_storage: [64]u8 = undefined;
+    var chosen_len: usize = 0;
+    search: for (6..25) |copy_len| {
+        const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+        for (0..word_count) |word_index| {
+            const word = static_dictionary.baseWord(copy_len, word_index).?;
+            const transformed = static_dictionary.transformWord(
+                transform_index,
+                word,
+                &transformed_storage,
+            ).?;
+            if (transformed.len < 5) continue;
+            const compact_match = compact.findLongest(transformed);
+            if (compact_match != null and compact_match.?.output_len >= transformed.len)
+                continue;
+            @memcpy(chosen_storage[0..transformed.len], transformed);
+            chosen_len = transformed.len;
+            break :search;
+        }
+    }
+    try std.testing.expect(chosen_len != 0);
+    const transformed = chosen_storage[0..chosen_len];
+    const compact_match = compact.findLongest(transformed);
+    const reference_match = static_dictionary.findLongestMatch(transformed).?;
+    try std.testing.expect(compact_match == null or
+        compact_match.?.output_len < reference_match.output_len);
+    try std.testing.expectEqual(transformed.len, reference_match.output_len);
+
+    const plan = try buildStaticDictionaryCompleteAlloc(
+        std.testing.allocator,
+        transformed,
+    );
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), plan.match_count);
+    try std.testing.expectEqual(@as(usize, 1), plan.commands.len);
+    try std.testing.expect(plan.commands[0].isStatic());
+    try std.testing.expectEqual(transformed.len, plan.commands[0].outputLen());
+    var decoded_storage: [64]u8 = undefined;
+    const decoded = static_dictionary.transform(
+        plan.commands[0].dictionary_address,
+        plan.commands[0].copy_len,
+        &decoded_storage,
+    ).?;
+    try std.testing.expectEqualSlices(u8, transformed, decoded);
 }
 
 test "simple alphabet orders hot symbols first" {

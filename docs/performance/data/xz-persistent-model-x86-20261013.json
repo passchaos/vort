@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-13",
+  "decision": "retained",
+  "baseline_commit": "b6e6b797",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "Intel Core i7-10700K",
+    "pinned_cpu": 2,
+    "zig": "0.16.0",
+    "mode": "ReleaseFast",
+    "liblzma_version": "5.2.5",
+    "reference_preset": 1
+  },
+  "executables": {
+    "baseline_sha256": "939eb24b150b4d40e07ac511d8b69e197c9a1c0b9be973e3f347d2e07f2b898b",
+    "candidate_sha256": "e3fb87666148dd6df4ca6bc8fcbd58f8a9fa56a0f2d64f841fca24ff45251f69"
+  },
+  "command": "taskset -c 2 BINARY --case CASE --iterations 5 --rounds 3 --csv OUTPUT",
+  "paired_results": {
+    "text256k": {
+      "baseline_bytes": 456,
+      "candidate_bytes": 268,
+      "speedup_median": 1.054957147163,
+      "speedup_geometric_mean": 1.053518530,
+      "speedup_minimum": 1.030227043074,
+      "speedup_maximum": 1.058541365178,
+      "wins": 15,
+      "baseline_ns": [7439742, 7409202, 7410283, 7454205, 7459617, 7455129, 7449816, 7443984, 7447001, 7418224, 7414117, 7406480, 7405110, 7416584, 7404197],
+      "candidate_ns": [7047504, 7054799, 7037084, 7045352, 7049073, 7042832, 7063342, 7049921, 7068993, 7200572, 7029342, 7027303, 7014595, 7030223, 7013465]
+    },
+    "json256k": {
+      "baseline_bytes": 3404,
+      "candidate_bytes": 2948,
+      "speedup_median": 1.055246252191,
+      "speedup_geometric_mean": 1.058891984,
+      "speedup_minimum": 1.051827504721,
+      "speedup_maximum": 1.088820209712,
+      "wins": 15,
+      "baseline_ns": [9307177, 9302678, 9310610, 9317608, 9322430, 9313729, 9320882, 9330305, 9304824, 9314474, 9326892, 9603477, 9334086, 9303407, 9529880],
+      "candidate_ns": [8811481, 8844300, 8825960, 8824965, 8818674, 8830403, 8848885, 8860636, 8819915, 8826825, 8825292, 8820076, 8832372, 8823658, 8823715]
+    },
+    "binary256k": {
+      "baseline_bytes": 71048,
+      "candidate_bytes": 70764,
+      "speedup_median": 1.035506020152,
+      "speedup_geometric_mean": 1.036649467,
+      "speedup_minimum": 1.033932531391,
+      "speedup_maximum": 1.049979184154,
+      "wins": 15,
+      "baseline_ns": [82397284, 82295210, 82334198, 82409811, 82387586, 82281310, 82457194, 82383096, 82362472, 82497384, 82323615, 82297172, 82338188, 83490506, 82759058],
+      "candidate_ns": [79571999, 79533256, 79554993, 79561457, 79472399, 79494201, 79560410, 79559340, 79481958, 79616938, 79572048, 79507633, 79635939, 79516344, 79634657]
+    },
+    "wide128k": {
+      "baseline_bytes": 131188,
+      "candidate_bytes": 131188,
+      "speedup_median": 0.996633015804,
+      "speedup_geometric_mean": 0.996371936,
+      "speedup_minimum": 0.991479327544,
+      "speedup_maximum": 0.998027504789,
+      "wins": 0,
+      "baseline_ns": [56059383, 56033839, 56001007, 56088523, 56033876, 56024098, 56012992, 56027487, 55968203, 56158592, 56057749, 56076027, 56028410, 56044857, 56472044],
+      "candidate_ns": [56218463, 56220403, 56217720, 56199376, 56213579, 56216417, 56202224, 56219102, 56206973, 56301415, 56227056, 56245336, 56261303, 56245693, 56957359]
+    }
+  },
+  "final_reference_snapshot": {
+    "text256k": { "vort_bytes": 268, "reference_bytes": 240, "size_over_reference": 1.116667, "vort_mib_s": 178.344, "reference_mib_s": 162.205, "vort_over_reference": 1.099501 },
+    "json256k": { "vort_bytes": 2948, "reference_bytes": 1420, "size_over_reference": 2.076056, "vort_mib_s": 141.822, "reference_mib_s": 101.279, "vort_over_reference": 1.400310 },
+    "binary256k": { "vort_bytes": 70764, "reference_bytes": 68996, "size_over_reference": 1.025625, "vort_mib_s": 15.059, "reference_mib_s": 26.956, "vort_over_reference": 0.558645 },
+    "wide128k": { "vort_bytes": 131188, "reference_bytes": 131356, "size_over_reference": 0.998721, "vort_mib_s": 11.812, "reference_mib_s": 9.455, "vort_over_reference": 1.249283 },
+    "wide1m": { "vort_bytes": 1048732, "reference_bytes": 1049064, "size_over_reference": 0.999684, "vort_mib_s": 5.822, "reference_mib_s": 8.409, "vort_over_reference": 0.692349 }
+  },
+  "rejected_precursor": {
+    "description": "Copy the complete probability model before every candidate and commit only compressed chunks.",
+    "text_speedup_geometric_mean": 0.978088574,
+    "json_speedup_geometric_mean": 0.977853070,
+    "reason": "Stored fallback already invalidates LZMA state, so rollback is unnecessary. Direct mutation preserved identical bytes and recovered the copy cost."
+  },
+  "rejected_large_head_followup": {
+    "description": "Scale the wide streaming hash head from 65,536 to 1,048,576 slots for a 1 MiB dictionary.",
+    "screen_only": true,
+    "wide1m_speedup": 1.6472,
+    "text256k_speedup": 0.9226,
+    "json256k_speedup": 0.9375,
+    "binary256k_speedup": 0.9846,
+    "wide128k_speedup": 0.9801,
+    "noinline_result": "ordinary controls regressed further",
+    "decision": "fully removed before long pairs because ordinary controls failed"
+  },
+  "rejected_candidate_reserve_followup": {
+    "description": "Pre-reserve 128 KiB for the first raw-LZMA candidate in payloads of at least 64 KiB.",
+    "text256k": { "speedup_median": 1.001082916838, "speedup_geometric_mean": 1.001347794, "wins": 12 },
+    "binary256k": { "speedup_median": 1.008740937757, "speedup_geometric_mean": 1.008493172, "wins": 15 },
+    "wide1m": { "speedup_median": 0.997790979332, "speedup_geometric_mean": 0.997704361, "wins": 4 },
+    "bounded_64k_to_512k_screen": "all five rows ranged from 0.945x to 0.995x",
+    "decision": "fully removed because the binary gain did not justify the wide1m regression and the bounded policy was layout-negative"
+  },
+  "validation": {
+    "lzma_tests": "103/103",
+    "xz_tests": "114/114",
+    "xz_diff": "passed",
+    "benchmark_gate": "5/5 cases, liblzma 5.2.5",
+    "full_repository_test": "not run"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-br-total-memory",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 136.8929862640798,
+  "utc": "2026-10-24T09:18:42.498158+00:00",
+  "changed_sources": [],
+  "source_sha256": "0c0628aa12a9820a93ba07d884c4f4bdb51500ee06d87a4abd8eaeafe22674e1",
+  "log": "/tmp/vort-br-total-final-20261024-n_7jpt2j/total-rf.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

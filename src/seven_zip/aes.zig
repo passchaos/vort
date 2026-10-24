@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const crypto = @import("vail_archive_crypto").seven_zip;
 
 pub const Error = core.Error || error{
     Invalid7zAesProperties,
@@ -7,12 +8,13 @@ pub const Error = core.Error || error{
     Invalid7zPassword,
     PasswordRequired,
 };
+pub const IncrementalError = Error || std.mem.Allocator.Error;
 
-pub const max_salt_len: usize = 16;
-pub const block_len: usize = 16;
-pub const key_len: usize = 32;
-pub const max_cycles_power: u6 = 24;
-pub const direct_key_power: u6 = 0x3f;
+pub const max_salt_len = crypto.max_salt_len;
+pub const block_len = crypto.block_len;
+pub const key_len = crypto.key_len;
+pub const max_cycles_power = crypto.hard_max_cycles_power;
+pub const direct_key_power = crypto.direct_key_power;
 
 pub const Properties = struct {
     num_cycles_power: u6,
@@ -73,7 +75,8 @@ pub fn propertiesForStream(options: Options, stream_index: u64) Error!Properties
     var iv = options.iv;
     var carry = stream_index;
     for (iv[0..8]) |*byte| {
-        const sum = @as(u16, byte.*) + @as(u16, @truncate(carry));
+        const low: u8 = @truncate(carry);
+        const sum = @as(u16, byte.*) + low;
         byte.* = @truncate(sum);
         carry = (carry >> 8) + (sum >> 8);
     }
@@ -124,22 +127,130 @@ pub fn encryptAppend(
 
     var key = try deriveKey(allocator, options.password, properties, max_cycles_power);
     defer std.crypto.secureZero(u8, &key);
-    var context = std.crypto.core.aes.Aes256.initEnc(key);
-    defer std.crypto.secureZero(@TypeOf(context), (&context)[0..1]);
-    var previous = properties.iv;
+    var context = crypto.Encryptor.init(key, properties.iv);
+    defer context.deinit();
     var offset: usize = 0;
     while (offset < padded_len) : (offset += block_len) {
         var plain: [block_len]u8 = @splat(0);
         const available = @min(block_len, input.len -| offset);
         if (available != 0) @memcpy(plain[0..available], input[offset..][0..available]);
-        for (&plain, previous) |*byte, prior| byte.* ^= prior;
         var encrypted: [block_len]u8 = undefined;
-        context.encrypt(&encrypted, &plain);
+        context.encryptBlocks(&plain, &encrypted) catch
+            return error.Invalid7zEncryptionOptions;
         output.appendSliceAssumeCapacity(&encrypted);
         std.crypto.secureZero(u8, &plain);
-        previous = encrypted;
     }
     return padded_len;
+}
+
+/// Bounded 7z AES-CBC stream adapter. Vail owns key derivation and AES-CBC;
+/// this archive-layer wrapper only retains a partial block and applies 7z's
+/// zero padding at the terminal boundary.
+pub const IncrementalEncryptor = struct {
+    context: crypto.Encryptor,
+    plain: [block_len]u8 = @splat(0),
+    plain_len: usize = 0,
+    encrypted: [block_len]u8 = undefined,
+    encrypted_offset: usize = 0,
+    encrypted_len: usize = 0,
+    finishing: bool = false,
+    done: bool = false,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        options: Options,
+        stream_index: u64,
+    ) IncrementalError!IncrementalEncryptor {
+        const properties = try propertiesForStream(options, stream_index);
+        var key = try deriveKey(allocator, options.password, properties, max_cycles_power);
+        defer std.crypto.secureZero(u8, &key);
+        return .{ .context = crypto.Encryptor.init(key, properties.iv) };
+    }
+
+    pub fn deinit(self: *IncrementalEncryptor) void {
+        self.context.deinit();
+        std.crypto.secureZero(u8, &self.plain);
+        std.crypto.secureZero(u8, &self.encrypted);
+        self.* = undefined;
+    }
+
+    pub fn finish(self: *IncrementalEncryptor) void {
+        if (!self.done) self.finishing = true;
+    }
+
+    pub fn step(
+        self: *IncrementalEncryptor,
+        input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
+        if (self.done) {
+            if (input.len != 0) return error.TrailingData;
+            return .{ .status = .done };
+        }
+        if (self.finishing and input.len != 0) return error.TrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) {
+            if (self.encrypted_offset != self.encrypted_len) {
+                const remaining = self.encrypted[self.encrypted_offset..self.encrypted_len];
+                const take = @min(remaining.len, output.len - output_written);
+                @memcpy(output[output_written..][0..take], remaining[0..take]);
+                self.encrypted_offset += take;
+                output_written += take;
+                if (self.encrypted_offset != self.encrypted_len)
+                    return aesStepResult(input_read, output_written, .need_output);
+                self.encrypted_offset = 0;
+                self.encrypted_len = 0;
+                if (output_written == output.len and output.len != 0)
+                    return aesStepResult(input_read, output_written, .need_output);
+            }
+
+            if (input_read < input.len) {
+                const take = @min(block_len - self.plain_len, input.len - input_read);
+                @memcpy(self.plain[self.plain_len..][0..take], input[input_read..][0..take]);
+                self.plain_len += take;
+                input_read += take;
+                if (self.plain_len == block_len) {
+                    self.encryptPlainBlock() catch return error.Invalid7zEncryptionOptions;
+                    continue;
+                }
+                continue;
+            }
+
+            if (self.finishing) {
+                if (self.plain_len != 0) {
+                    @memset(self.plain[self.plain_len..], 0);
+                    self.plain_len = block_len;
+                    self.encryptPlainBlock() catch return error.Invalid7zEncryptionOptions;
+                    continue;
+                }
+                self.done = true;
+                return aesStepResult(input_read, output_written, .done);
+            }
+            return aesStepResult(input_read, output_written, .need_input);
+        }
+    }
+
+    fn encryptPlainBlock(self: *IncrementalEncryptor) crypto.Error!void {
+        std.debug.assert(self.plain_len == block_len);
+        try self.context.encryptBlocks(&self.plain, &self.encrypted);
+        std.crypto.secureZero(u8, &self.plain);
+        self.plain_len = 0;
+        self.encrypted_offset = 0;
+        self.encrypted_len = block_len;
+    }
+};
+
+fn aesStepResult(
+    input_read: usize,
+    output_written: usize,
+    status: core.StepResult.Status,
+) core.StepResult {
+    return .{
+        .progress = .{ .input_read = input_read, .output_written = output_written },
+        .status = status,
+    };
 }
 
 pub fn decryptAlloc(
@@ -165,23 +276,21 @@ pub fn decryptAlloc(
         allowed_cycles_power,
     );
     defer std.crypto.secureZero(u8, &key);
-    var context = std.crypto.core.aes.Aes256.initDec(key);
-    defer std.crypto.secureZero(@TypeOf(context), (&context)[0..1]);
-    var previous = properties.iv;
+    var context = crypto.Decryptor.init(key, properties.iv);
+    defer context.deinit();
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (input_offset < input.len) : (input_offset += block_len) {
         const encrypted: *const [block_len]u8 = input[input_offset..][0..block_len];
         var plain: [block_len]u8 = undefined;
-        context.decrypt(&plain, encrypted);
-        for (&plain, previous) |*byte, prior| byte.* ^= prior;
+        context.decryptBlocks(encrypted, &plain) catch
+            return error.Invalid7zAesProperties;
         const count = @min(block_len, expected_len - output_offset);
         if (count != 0) {
             @memcpy(output[output_offset..][0..count], plain[0..count]);
             output_offset += count;
         }
         std.crypto.secureZero(u8, &plain);
-        previous = encrypted.*;
     }
     return output;
 }
@@ -192,44 +301,18 @@ pub fn deriveKey(
     properties: Properties,
     allowed_cycles_power: u6,
 ) ![key_len]u8 {
-    if (properties.num_cycles_power > max_cycles_power and
-        properties.num_cycles_power != direct_key_power)
-        return error.Invalid7zAesProperties;
-    if (properties.num_cycles_power != direct_key_power and
-        properties.num_cycles_power > allowed_cycles_power)
-        return error.OutputLimitExceeded;
-    const utf16 = std.unicode.utf8ToUtf16LeAlloc(allocator, password) catch |err| switch (err) {
+    return crypto.deriveKey(
+        allocator,
+        password,
+        properties.saltBytes(),
+        properties.num_cycles_power,
+        .{ .max_cycles_power = allowed_cycles_power },
+    ) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
-        error.InvalidUtf8 => return error.Invalid7zPassword,
+        error.InvalidPassword => return error.Invalid7zPassword,
+        error.KdfWorkLimitExceeded => return error.OutputLimitExceeded,
+        error.InvalidBlockLength, error.InvalidKdfCycles => return error.Invalid7zAesProperties,
     };
-    defer {
-        std.crypto.secureZero(u16, utf16);
-        allocator.free(utf16);
-    }
-    const password_bytes = std.mem.sliceAsBytes(utf16);
-    var key: [key_len]u8 = @splat(0);
-    if (properties.num_cycles_power == direct_key_power) {
-        var offset: usize = 0;
-        const salt_count = @min(properties.salt_len, key.len);
-        @memcpy(key[0..salt_count], properties.salt[0..salt_count]);
-        offset += salt_count;
-        const password_count = @min(password_bytes.len, key.len - offset);
-        @memcpy(key[offset..][0..password_count], password_bytes[0..password_count]);
-        return key;
-    }
-
-    var hash = std.crypto.hash.sha2.Sha256.init(.{});
-    var counter_bytes: [8]u8 = undefined;
-    const rounds = @as(u64, 1) << properties.num_cycles_power;
-    for (0..rounds) |counter| {
-        hash.update(properties.saltBytes());
-        hash.update(password_bytes);
-        std.mem.writeInt(u64, &counter_bytes, counter, .little);
-        hash.update(&counter_bytes);
-    }
-    hash.final(&key);
-    std.crypto.secureZero(u8, &counter_bytes);
-    return key;
 }
 
 fn validateOptions(options: Options) Error!void {

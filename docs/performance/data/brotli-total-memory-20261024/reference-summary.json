@@ -1,0 +1,173 @@
+{
+  "status": "ok",
+  "scope": "final frozen-source ReleaseFast functional verification, separate from prior stages",
+  "exit_code": 0,
+  "representative_cases": 15,
+  "api_cases": {
+    "one_shot": 5,
+    "chunks": 5,
+    "incremental": 5
+  },
+  "profiles": [
+    "q0",
+    "q11",
+    "hq11",
+    "empty",
+    "raw"
+  ],
+  "probe_calls": 104,
+  "successful_probe_calls": 73,
+  "expected_error_calls": 31,
+  "all_total_exact_below_zero_cases": 15,
+  "all_after_operation_live_bytes_zero": true,
+  "null_same_997_wire_cases": 15,
+  "total_profile_on_same_wire_cases": 15,
+  "bidirectional_reference_results": 27,
+  "known_reference_skips": [
+    {
+      "name": "one_shot-raw",
+      "reference": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    },
+    {
+      "name": "chunks-raw",
+      "reference": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    },
+    {
+      "name": "incremental-raw",
+      "reference": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "all_expected_error_outputs_preserved": true,
+  "independent_caps": {
+    "total_peak_requested_bytes": 8987731,
+    "workspace_peak": 8987113,
+    "workspace_failure_total_profile": {
+      "available": true,
+      "peak_requested_bytes": 8969715,
+      "live_requested_bytes": 0,
+      "limit": 8987731
+    },
+    "scope": "workspace failure with independently sufficient total budget; error name does not identify its cap source"
+  },
+  "budget_rows": [
+    {
+      "name": "one_shot-q0",
+      "total_peak_requested_bytes": 4072,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "one_shot-q11",
+      "total_peak_requested_bytes": 689390,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "one_shot-hq11",
+      "total_peak_requested_bytes": 8987731,
+      "hq_workspace_peak": 8987113,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "one_shot-empty",
+      "total_peak_requested_bytes": 210,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "one_shot-raw",
+      "total_peak_requested_bytes": 9979239,
+      "hq_workspace_peak": 9978793,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "chunks-q0",
+      "total_peak_requested_bytes": 4539,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "chunks-q11",
+      "total_peak_requested_bytes": 887660,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "chunks-hq11",
+      "total_peak_requested_bytes": 8987678,
+      "hq_workspace_peak": 8987113,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "chunks-empty",
+      "total_peak_requested_bytes": 210,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "chunks-raw",
+      "total_peak_requested_bytes": 9979239,
+      "hq_workspace_peak": 9978793,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "incremental-q0",
+      "total_peak_requested_bytes": 4672,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "incremental-q11",
+      "total_peak_requested_bytes": 690037,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "incremental-hq11",
+      "total_peak_requested_bytes": 8987640,
+      "hq_workspace_peak": 8987113,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "incremental-empty",
+      "total_peak_requested_bytes": 209,
+      "hq_workspace_peak": 0,
+      "live_bytes_at_end": 0
+    },
+    {
+      "name": "incremental-raw",
+      "total_peak_requested_bytes": 9979227,
+      "hq_workspace_peak": 9978793,
+      "live_bytes_at_end": 0
+    }
+  ],
+  "baseline_manifest_sha256": "c6544053cb9a39ede6c8b86763471bebfe40bb70f9bb8d2e4bbb9d92b30d5095",
+  "report_sha256": "1272558f3bd8bf49ae62ee36548fb441469e80ae990454b29876dba95cad8fa7",
+  "rows_canonical_sha256": "3af92c395f85196e97424b517cc75cf42e38de37c7700b6878303d1ccca5445e",
+  "source_before_after_equal": true,
+  "full_source_file_count": 1693,
+  "src_tests_files": 9,
+  "non_zig_src_files": 143,
+  "source_zip_sha256": "a0bbb6c9c8e9ef912814b2b58eed3bbb5842606fc00141ddb4aab3de47e71c4f",
+  "probe_sha256": "1d55a206f7f97be5c9ee6dcfbb08a5659ad2e0ec73292adec329c6f74229dc0c",
+  "manifest_sha256": "7550555a467910f07ff4af02fbdcedae920f25fd32f4bc3cda7dc33e3652f84a",
+  "calculated_artifact_digest": "b4500be2f44adc8f47c736d94582fcd9",
+  "all_compiler_input_contents_verified": true,
+  "compiler_input_records": 1880,
+  "compiler_input_groups": {
+    "project": 1050,
+    "vail": 16,
+    "linked_objects": 2,
+    "zig_library": 812
+  },
+  "unique_archived_compiler_inputs": 1878,
+  "compiler_inputs_zip_sha256": "7f6d803e0b024484d815956facd74409623f730101d80236271358093af7ba5c",
+  "artifact_binding_sha256": "f2d68f50044d81a5dbabe2d44251cc7066cd8c3b043675e9f5fcd11fce80d861",
+  "performance_claim": null
+}

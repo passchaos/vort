@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "verified_at_utc": "2026-10-23T21:32:12.887794+00:00",
+  "workspace": "/home/passchaos/project-z/vort-stream-contracts",
+  "source_sha256": {
+    "examples/cli.zig": "250c27e88e5784f94f6056bc1f880ce0aa64bbdb400d97b9d749426a5464e22b",
+    "examples/cli/zstd_controls.zig": "58e2352b3257c6ceeaf04b788016d561103e9372a3d3e46e2fcd33e1b75c2c70",
+    "tools/zstd/encode_bench.zig": "eac4855ed2c6aac6e23bd68c668513e73834008fa7e37fee1a76e8ab21828d42",
+    "src/root.zig": "fad917177b260146db129be77b32f25dc79bbb3255df5aa78eea8ac7af129732",
+    "src/zstd.zig": "49351ce756f7b7687d6fbd521f5de4934623cf423f49c807ca56c3663b715a73",
+    "src/zstd/encode/controls.zig": "194e55b3ba5f1257627f118138bb683182a15d363e8b6e1c24961f3e7f42206e",
+    "src/zstd/encode/controlled_frame.zig": "a52d427eab1a7ae4117e1e55eabce4d4c8d5271cb636ef646bc2cfe1a661fd79",
+    "src/zstd/match/controlled_source.zig": "2823769da8b906b5c2f4f5f6cf76c5186b837ccea4b11b911553d83310532a92",
+    "src/zstd/match/controlled_fast.zig": "eb9813384c70f7d00923714fd86dfa5f12aea26fd9a246c79d1a4474e16cb751",
+    "src/zstd/match/controlled_search.zig": "4964aa5177c4bf68b280e717aedfd3862fbb72be6ec3730ca0ecf5af577f224c",
+    "src/zstd/match/double_fast.zig": "b442c9bbe106bf91bff086784524b9dbca457dca682b7afd7a33d9d38c82a45f",
+    "src/zstd/match/double_fast/sequence_plan.zig": "dcdeafe18d6f4562a6901856584c981e21292ea3ed51401964e50bc289d91936",
+    "src/zstd/sequence/large/record_values.zig": "19d97019cc93b27c577c60e1b2bde502bcdf94f77fdec0841d138b6c827e20c8"
+  },
+  "drivers_sha256": {
+    "/tmp/vort-zstd-controls-cli/check.py": "374698700539adbc713a07be023431acefeb0e44b0d4a744f2d2d18260d0fbba",
+    "/tmp/vort-zstd-controls-cli/boundaries.py": "928ff6532650404a2a317ec87fca0de6478b87199386233de3fb49efe7598aba",
+    "/tmp/vort-zstd-controls-cli/old-golden.json": "b7a9ccd41cc3448834af228c06b0ad7c26d7a6dac7257601e34ccb4f32038d9c"
+  },
+  "build_log": "/tmp/vort-zstd-controls-final-cli-build.log",
+  "build_log_sha256": "25986bbaa447646b126e556c20d84cd659241928645f0a2f114a1b2a3a257a8e",
+  "reference_version": "1.4.8",
+  "old_binary": "/tmp/vort-zstd-controls-old-cli",
+  "old_binary_sha256": "510384a6da5a68d8c4e294faa1d9bd6857d7d6323eba4c21c17954a71f76009a",
+  "final_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/69bb7b7ef3a0a4091a720ff57aab2880/vort",
+  "final_binary_sha256": "88ee284a96b72b6fa891b34d66bbd91eccba1a43c1e5f866a53822fbb25307d7",
+  "payload_sha256": "d83b6fefd04d393a4cbd26ce0269cd9f462b1f93e04caeba41fbda2eead164db",
+  "payload_bytes": 2688,
+  "checks": {
+    "old_golden_cases": 20,
+    "new_interop_cases": 48,
+    "invalid_output_preservation_cases": 44,
+    "negative_wire_changed": true,
+    "negative_wire_lengths": [
+      65,
+      362
+    ]
+  },
+  "boundaries": {
+    "empty_implicit_text_and_binary_cases": 5,
+    "all_reference_decode_ok": true
+  },
+  "integration": {
+    "source_and_tools_revision": "4f6d5b97aa73cafb56486089ccacf4ba5bba58b9",
+    "checked_utc": "2026-10-23T21:37:06.749267+00:00",
+    "matched_source_hashes": 13,
+    "artifact_hashes_matched": true
+  }
+}
