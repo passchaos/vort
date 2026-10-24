@@ -1,0 +1,94 @@
+{
+  "round_trips": 146,
+  "profile_wire_checks": 60,
+  "rejected_output_preserved": 50,
+  "same_path_checks": 4,
+  "null_hq_mapping_wire_checks": 10,
+  "hq_work": {
+    "encode-br-file:10:generic": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12932499,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-file:10:text": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12932452,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-file:10:font": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12917933,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-file:11:generic": {
+      "tree_nodes": 27570,
+      "price_evaluations": 78554711,
+      "passes": 212,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    },
+    "encode-br-file:11:text": {
+      "tree_nodes": 27570,
+      "price_evaluations": 78554356,
+      "passes": 212,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    },
+    "encode-br-file:11:font": {
+      "tree_nodes": 27570,
+      "price_evaluations": 78415732,
+      "passes": 212,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:10:generic": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12932499,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:10:text": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12932452,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:10:font": {
+      "tree_nodes": 8254,
+      "price_evaluations": 12917933,
+      "passes": 53,
+      "refinement_passes": 0,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:11:generic": {
+      "tree_nodes": 19316,
+      "price_evaluations": 65622212,
+      "passes": 159,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:11:text": {
+      "tree_nodes": 19316,
+      "price_evaluations": 65621904,
+      "passes": 159,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    },
+    "encode-br-stream-file:11:font": {
+      "tree_nodes": 19316,
+      "price_evaluations": 65497799,
+      "passes": 159,
+      "refinement_passes": 53,
+      "emitted_metablocks": 53
+    }
+  },
+  "reference_brotli_version": 16777225
+}

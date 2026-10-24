@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-br-public-wasm",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 52.75444507901557,
+  "utc": "2026-10-24T07:08:40.892041+00:00",
+  "changed_sources": [],
+  "source_sha256": "91672f9191b97ae25f142c38055649c21c607f07563537c7c1a92074b0f0638b",
+  "log": "/tmp/vort-br-hq-final-20261024-dtre4swk/public-wasm.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

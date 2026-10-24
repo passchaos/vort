@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-br-hq",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 114.41676180809736,
+  "utc": "2026-10-24T07:10:44.369932+00:00",
+  "changed_sources": [],
+  "source_sha256": "e25cc7edf5aef49da5cdc39100a01f589a01cc677ef2b9ae2a57f7e27b9fd78d",
+  "log": "/tmp/vort-br-hq-final-20261024-dtre4swk/post-platform-hq-rf.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

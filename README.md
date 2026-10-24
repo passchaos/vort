@@ -2163,6 +2163,31 @@ The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
 
+### Brotli HQ encoding
+
+Quality 10 and 11 can opt into standard-window HQ command parsing. Null `hq`
+keeps the established quality policy. The HQ parser preserves its exact command
+and distance choices, handles static/compound dictionaries and retained history,
+and uses caller-owned work profiles.
+
+```zig
+var profile: vort.BrotliHqProfile = .{};
+const options: vort.BrotliPlannedEncodeOptions = .{
+    .quality = 10,
+    .window_bits = 22,
+    .hq = .{ .profile = &profile },
+};
+const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options);
+defer allocator.free(encoded);
+```
+
+The same `hq` field is available on chunked and incremental stream options.
+The default HQ meta-block target is 256 KiB, through a maximum of 16 MiB.
+The work cap/profile covers HQ-managed allocation rather than total encoder
+memory or process RSS. See the [HQ contract](docs/formats/brotli-hq-command-parser.md)
+for block precedence, exact encodings, ownership and the remaining native search
+limitations. Quality numbers do not establish reference ratio or speed parity.
+
 ### Brotli RAW shared-prefix dictionaries
 
 `BrotliSharedDictionary` describes zero through fifteen ordered RAW prefix

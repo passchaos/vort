@@ -81,8 +81,18 @@ Zstd/consumer gates pass 1300, CLI checks pass 898/728/85/168, reference gates
 pass 52 groups plus 56 old wires, and all 142 build checks pass. The versioned
 canonical query remains separate from legacy auto and level-zero behavior.
 
-Remaining priorities include fuller Brotli HQ and optimal-model parity, then standard dictionary finalization
-performance and current-source real-corpus speed/ratio/memory leadership
+The [standard-window Brotli HQ milestone](performance/brotli-hq-functional-baseline.md)
+adds opt-in q10/q11 parsing with a persistent wide-window binary tree, complete
+704-command and distance-cache pricing, full dictionary candidate tuples,
+atomic cross-horizon commands and exact output choices across public APIs.
+The complete q10 stream remains a q11 safeguard. Independent format, ownership
+and resource gates preserve the older null/default wires. This closes the
+previous u16/two-state HQ implementation gap without establishing reference
+algorithm, ratio or throughput parity.
+
+Remaining priorities include Brotli Large Window HQ encoding, global quality
+planning and an encoder-wide allocation quota, standard dictionary finalization
+performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 
 ### Earlier detailed completion audit (started 2026-09-11)
