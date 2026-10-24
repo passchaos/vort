@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const br = vort.br;
 const Profile = if (@hasDecl(br, "HqProfile")) br.HqProfile else struct {};
+const MemoryProfile = if (@hasDecl(br, "EncodeMemoryProfile")) br.EncodeMemoryProfile else struct {};
 
 const Config = struct {
     operation: []const u8 = "encode",
@@ -17,9 +18,11 @@ const Config = struct {
     iterations: ?u8 = null,
     block_len: ?usize = null,
     max_working_memory: ?usize = null,
+    max_total_working_memory: ?usize = null,
     npostfix: ?u8 = null,
     ndirect_high: ?u8 = null,
     profile_enabled: bool = true,
+    total_profile_enabled: bool = true,
     raw_dictionary_paths: []const []const u8 = &.{},
     serialized_dictionary_path: ?[]const u8 = null,
     input_chunk: usize = 4096,
@@ -38,6 +41,7 @@ const Resolved = struct {
     iterations: ?u8 = null,
     block_len: ?usize = null,
     max_working_memory: ?usize = null,
+    max_total_working_memory: ?usize = null,
     npostfix: ?u8 = null,
     ndirect_high: ?u8 = null,
 };
@@ -57,9 +61,10 @@ pub fn main(init: std.process.Init) !void {
     const parsed = try std.json.parseFromSlice(Config, init.gpa, json, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
     var profile: Profile = .{};
+    var total_profile: MemoryProfile = .{};
     var resolved: ?Resolved = null;
     var failure: ?[]const u8 = null;
-    const output: ?[]u8 = operation(init, input, parsed.value, &profile, &resolved) catch |err| blk: {
+    const output: ?[]u8 = operation(init, input, parsed.value, &profile, if (parsed.value.total_profile_enabled) &total_profile else null, &resolved) catch |err| blk: {
         failure = @errorName(err);
         break :blk null;
     };
@@ -76,6 +81,7 @@ pub fn main(init: std.process.Init) !void {
         .output_bytes = if (failure == null) if (output) |bytes| bytes.len else 0 else 0,
         .resolved = resolved,
         .profile = profile,
+        .total_profile = total_profile,
         .work_memory = .{ .hq_requested_peak = if (@hasField(Profile, "peak_working_memory")) profile.peak_working_memory else @as(?usize, null) },
         .output_preserved_on_error = failure != null,
         .build_mode = @tagName(@import("builtin").mode),
@@ -87,12 +93,16 @@ pub fn main(init: std.process.Init) !void {
     try stdout.interface.flush();
 }
 
-fn configure(options: anytype, config: Config, profile: ?*Profile, resolved: *?Resolved) !void {
+fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile: ?*MemoryProfile, resolved: *?Resolved) !void {
     options.level = std.meta.stringToEnum(br.PlannedCompressionLevel, config.level) orelse return error.InvalidBlockPlan;
     options.mode = std.meta.stringToEnum(br.PlannedMode, config.mode) orelse return error.InvalidBlockPlan;
     if (config.quality) |quality| options.quality = std.math.cast(u4, quality) orelse return error.InvalidBlockPlan;
     if (config.window_bits) |bits| options.window_bits = std.math.cast(u5, bits) orelse return error.InvalidBlockPlan;
-    resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits };
+    if (@hasField(@TypeOf(options.*), "max_total_working_memory")) {
+        options.max_total_working_memory = config.max_total_working_memory;
+        options.memory_profile = total_profile;
+    } else if (config.max_total_working_memory != null or total_profile != null) return error.UnsupportedTotalMemoryControls;
+    resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits, .max_total_working_memory = config.max_total_working_memory };
     if (!config.hq) {
         if (config.search_depth != null or config.nice_len != null or config.beam_width != null or config.iterations != null or
             config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null) return error.InvalidBlockPlan;
@@ -126,7 +136,7 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, resolved: *?R
         options.hq = hq;
     } else return error.UnsupportedHqControls;
 }
-fn operation(init: std.process.Init, input: []const u8, config: Config, profile: *Profile, resolved: *?Resolved) ![]u8 {
+fn operation(init: std.process.Init, input: []const u8, config: Config, profile: *Profile, total_profile: ?*MemoryProfile, resolved: *?Resolved) ![]u8 {
     var prefixes: std.ArrayList([]const u8) = .empty;
     defer {
         for (prefixes.items) |bytes| init.gpa.free(bytes);
@@ -145,11 +155,11 @@ fn operation(init: std.process.Init, input: []const u8, config: Config, profile:
     if (!std.mem.eql(u8, config.operation, "encode")) return error.UnsupportedOperation;
     if (std.mem.eql(u8, config.api, "one_shot")) {
         var options = br.PlannedEncodeOptions{ .shared_dictionary = dictionary };
-        try configure(&options, config, if (config.profile_enabled) profile else null, resolved);
+        try configure(&options, config, if (config.profile_enabled) profile else null, total_profile, resolved);
         return br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, options);
     }
     var options = br.PlannedStreamChunksOptions{ .shared_dictionary = dictionary, .block_len = config.block_len orelse 0 };
-    try configure(&options, config, if (config.profile_enabled) profile else null, resolved);
+    try configure(&options, config, if (config.profile_enabled) profile else null, total_profile, resolved);
     if (std.mem.eql(u8, config.api, "incremental")) {
         var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(init.gpa, .{ .stream = options, .block_len = options.block_len, .max_input_len = input.len });
         defer encoder.deinit();

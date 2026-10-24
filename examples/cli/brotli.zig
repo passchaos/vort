@@ -7,10 +7,12 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const parsed = try controls.parse(args);
     var profile: vort.BrotliHqProfile = .{};
+    var memory_profile: vort.BrotliEncodeMemoryProfile = .{};
     const caller_profile = if (parsed.profile) &profile else null;
+    const caller_memory_profile = if (parsed.memory_profile) &memory_profile else null;
     // Public bounds validate scalar settings before reading or touching files.
-    const one_shot = try parsed.resolve(vort.br.PlannedEncodeOptions, caller_profile);
-    const stream = try parsed.resolve(vort.br.PlannedStreamChunksOptions, caller_profile);
+    const one_shot = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, caller_profile, caller_memory_profile);
+    const stream = try parsed.resolveWithMemoryProfile(vort.br.PlannedStreamChunksOptions, caller_profile, caller_memory_profile);
     if (streaming) _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream) else _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one_shot);
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(input);
@@ -19,6 +21,7 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     try writeAtomic(init, output_path, encoded);
     try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, input.len, output_path });
     if (parsed.profile) try controls.printProfile(stdout, profile);
+    if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 
 pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
@@ -27,13 +30,15 @@ pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdou
     const input = if (starts_with_option) "" else first orelse "";
     const parsed = try controls.parseWithFirst(args, if (starts_with_option) first else null);
     var profile: vort.BrotliHqProfile = .{};
-    const options = try parsed.resolve(vort.br.PlannedEncodeOptions, if (parsed.profile) &profile else null);
+    var memory_profile: vort.BrotliEncodeMemoryProfile = .{};
+    const options = try parsed.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, options);
     const encoded = try vort.br.encodePlannedStreamWithOptionsAlloc(init.gpa, input, options);
     defer init.gpa.free(encoded);
     for (encoded) |byte| try stdout.print("{x:0>2}", .{byte});
     try stdout.writeByte('\n');
     if (parsed.profile) try controls.printProfile(stdout, profile);
+    if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 
 fn encodeStream(allocator: std.mem.Allocator, input: []const u8, options: vort.br.PlannedStreamChunksOptions) ![]u8 {

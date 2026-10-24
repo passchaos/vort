@@ -33,6 +33,37 @@ export fn brWasmHqSmoke() callconv(.c) u32 {
     return roundtrip(11, &input);
 }
 
+export fn brWasmTotalMemorySmoke() callconv(.c) u32 {
+    const allocator = std.heap.page_allocator;
+    const input = "Brotli total memory wasm public roundtrip\n" ** 3;
+    inline for (.{ @as(u4, 0), @as(u4, 11) }) |quality| {
+        var memory: vort.BrotliEncodeMemoryProfile = .{};
+        var options: vort.BrotliPlannedEncodeOptions = .{
+            .quality = quality,
+            .window_bits = 16,
+            .memory_profile = &memory,
+        };
+        const measured = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options) catch return 4;
+        defer allocator.free(measured);
+        if (!memory.available or memory.peak_requested_bytes == 0 or memory.live_requested_bytes != 0) return 5;
+        const peak = memory.peak_requested_bytes;
+        options.max_total_working_memory = peak;
+        memory.reset();
+        const exact = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options) catch return 6;
+        defer allocator.free(exact);
+        if (!std.mem.eql(u8, measured, exact) or memory.live_requested_bytes != 0 or memory.peak_requested_bytes != peak) return 7;
+        const decoded = vort.brDecodeStreamAllocExactSize(allocator, exact, input.len) catch return 8;
+        defer allocator.free(decoded);
+        if (!std.mem.eql(u8, input, decoded)) return 9;
+        options.max_total_working_memory = peak - 1;
+        if (vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options)) |unexpected| {
+            allocator.free(unexpected);
+            return 10;
+        } else |err| if (err != error.WorkingMemoryLimitExceeded) return 11;
+    }
+    return 0;
+}
+
 test "Brotli wasm public consumer instantiates both HQ qualities and decode" {
     try std.testing.expectEqual(@as(u32, 0), brWasmHqSmoke());
 }

@@ -84,3 +84,40 @@ test "Brotli CLI HQ parser rejects duplicate unknown and extra arguments" {
     try std.testing.expectError(error.InvalidBrotliMode, parse(&.{"--mode=unknown"}));
     try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "10", "--quality=10" }));
 }
+
+test "Brotli CLI total memory controls preserve defaults without selecting HQ" {
+    const empty = try parse(&.{});
+    const defaults = try empty.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, null, null);
+    try std.testing.expectEqualDeep(vort.br.PlannedEncodeOptions{}, defaults);
+    const capped = try parse(&.{"--max-total-memory=0"});
+    try std.testing.expect(!capped.hqSelected());
+    const options = try capped.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, null, null);
+    try std.testing.expectEqual(@as(?usize, 0), options.max_total_working_memory);
+    try std.testing.expect(options.hq == null and options.memory_profile == null);
+    var profile: vort.BrotliEncodeMemoryProfile = .{};
+    const tracked = try parse(&.{"--memory-profile"});
+    try std.testing.expect(!tracked.hqSelected());
+    inline for (.{ vort.br.PlannedEncodeOptions, vort.br.PlannedStreamChunksOptions }) |Options| {
+        const mapped = try tracked.resolveWithMemoryProfile(Options, null, &profile);
+        try std.testing.expect(mapped.memory_profile == &profile);
+        try std.testing.expect(mapped.hq == null and mapped.max_total_working_memory == null);
+    }
+    try std.testing.expectEqualDeep(vort.BrotliEncodeMemoryProfile{}, profile);
+}
+
+test "Brotli CLI total memory flags are independent and reject invalid arguments" {
+    const a = try parse(&.{ "--quality=11", "--hq", "--hq-memory=8192", "--profile", "--max-total-memory=65536", "--memory-profile" });
+    const b = try parse(&.{ "--memory-profile", "--max-total-memory", "65536", "--profile", "--hq-memory", "8192", "--hq", "--quality", "11" });
+    try std.testing.expectEqualDeep(a, b);
+    var hq_profile: vort.BrotliHqProfile = .{};
+    var memory_profile: vort.BrotliEncodeMemoryProfile = .{};
+    const options = try a.resolveWithMemoryProfile(vort.br.PlannedEncodeOptions, &hq_profile, &memory_profile);
+    try std.testing.expectEqual(@as(?usize, 65536), options.max_total_working_memory);
+    try std.testing.expectEqual(@as(usize, 8192), options.hq.?.max_working_memory);
+    try std.testing.expect(options.hq.?.profile == &hq_profile and options.memory_profile == &memory_profile);
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--max-total-memory=1", "--max-total-memory=2" }));
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--memory-profile", "--memory-profile" }));
+    try std.testing.expectError(error.MissingBrotliOptionValue, parse(&.{"--max-total-memory"}));
+    try std.testing.expectError(error.InvalidCharacter, parse(&.{"--max-total-memory="}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--max-total-memory=-1"}));
+}

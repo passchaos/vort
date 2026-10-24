@@ -2818,6 +2818,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\    --hq-depth=1..65536 --hq-nice-len=2..16777216 --hq-beam-width=0..32
         \\    --hq-iterations=0..8 --hq-block-len=1..16777216 --hq-memory=bytes
         \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
+        \\    --max-total-memory=bytes --memory-profile (all planned qualities)
+        \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
         \\                              Zero beam/iterations selects the public quality defaults
         \\                              HQ controls describe Vort native effort, not upstream speed parity
         \\  encode-br-stored-hex [text] [window_bits] [metadata]

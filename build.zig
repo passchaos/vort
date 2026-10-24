@@ -256,6 +256,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_hq_test_step = b.step("test-br-hq", "Run Brotli HQ matching, exact commands and resource contracts");
     br_hq_test_step.dependOn(&b.addRunArtifact(br_hq_tests).step);
+    const br_total_memory_tests = b.addTest(.{
+        .name = "vort-br-total-memory-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli total memory", "Brotli total budget" },
+    });
+    const br_total_memory_test_step = b.step("test-br-total-memory", "Run Brotli whole-encoder allocation and transaction contracts");
+    br_total_memory_test_step.dependOn(&b.addRunArtifact(br_total_memory_tests).step);
     const zstd_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/zstd.zig"),
         .target = target,
@@ -1762,6 +1769,17 @@ pub fn build(b: *std.Build) void {
         }),
     });
     br_hq_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_total_memory_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/total_memory_cli_gate.py", "--cli" });
+    br_total_memory_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_total_memory_cli_gate.addArgs(args);
+    const br_total_memory_cli_step = b.step("test-br-total-memory-cli", "Validate Brotli total-memory controls and atomic CLI output");
+    br_total_memory_cli_step.dependOn(&br_total_memory_cli_gate.step);
+    br_total_memory_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_total_memory_diff = b.addSystemCommand(&.{ "python3", "tools/br/total_memory_diff.py", "--probe" });
+    br_total_memory_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_total_memory_diff.addArgs(args);
+    const br_total_memory_diff_step = b.step("run-br-total-memory-diff", "Validate whole-encoder memory caps and Brotli interoperability");
+    br_total_memory_diff_step.dependOn(&br_total_memory_diff.step);
     const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
     br_hq_tools_step.dependOn(&br_hq_probe.step);
     br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
