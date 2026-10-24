@@ -6007,6 +6007,48 @@
     ],
     "source_directory": "/tmp/vort-zstd-hq-parser-default"
   },
+  "post-rebase": {
+    "bundle": "post-rebase.tar.gz",
+    "bundle_sha256": "44540e83c29e5efdb620c9308c7441e9e26202a8a6852158c4adac07b9f5c106",
+    "files": [
+      {
+        "bytes": 53322,
+        "path": "check.log",
+        "sha256": "8401d1d6ff5581354b01bf2c3086f1dbd61c635daa2a5d8c2ef681d4641f84d2"
+      },
+      {
+        "bytes": 42182,
+        "path": "help.log",
+        "sha256": "77271833cd71bacf4f2d53d8158ff0d9057502f2c02ed7a149c003dc9744f16b"
+      },
+      {
+        "bytes": 4443,
+        "path": "native-wasm.log",
+        "sha256": "75cda23ec1910bca49fb3308abae78c2dcc2a22d7f5cb9bf4a05ba8eb97694b8"
+      },
+      {
+        "bytes": 1182,
+        "path": "result.json",
+        "sha256": "5ad820e34f7c9b1139005040648cc1b928b27212b2cd5b7d00d1a865544f714a"
+      },
+      {
+        "bytes": 135395,
+        "path": "source-after.json",
+        "sha256": "ee1ce717f06aa531d958b7d4381be61852609ee3f33c904e4d82f8caf023cbdf"
+      },
+      {
+        "bytes": 135395,
+        "path": "source-before.json",
+        "sha256": "ee1ce717f06aa531d958b7d4381be61852609ee3f33c904e4d82f8caf023cbdf"
+      },
+      {
+        "bytes": 447,
+        "path": "x86.log",
+        "sha256": "5c9c4ff9316c389a1ff740a5f0da3371fe2eff3ca50fbff4b1292e8b7ad7d501"
+      }
+    ],
+    "source_directory": "/tmp/vort-zstd-hq-search-final-20261025/post-rebase"
+  },
   "prepared-reference": {
     "bundle": "prepared-reference.tar.gz",
     "bundle_sha256": "3f9035fbc524fd53b4414366ec7915028e6f6320f2ca89eddb4343c65827cad8",

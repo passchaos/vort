@@ -65,6 +65,13 @@ wire，释放后live=0。配置、实际工作、requested heap与Wasm linear me
 
 ## 证据与后续目标
 
+交付前`git pull --rebase origin main`确认基线仍为`97c4ad99`，无需冲突处理。
+相关三路复验全部通过：全局Debug162/162步骤，native/实际Wasm12/12步骤
+且66/66测试，x86专项5/5步骤且66/66测试；完整CLI help再次实际运行通过。
+扩大过滤后的66项包含原64项未命中的两项增量HQ搜索测试。复验期间源码
+前后完全相同。[post-rebase结果](data/zstd-hq-search-20261025/post-rebase.json)
+保留命令、运行日志和源码投影；正式64项与最后66项是两个明确阶段。
+
 [证据索引](data/zstd-hq-search-20261025/index.json)保留命令、日志、实际测试
 协议、源码与编译输入哈希、产物和参考版本；各阶段源码投影分别绑定。旧
 native正式probe与后来新增Wasm接线的32位阶段保持独立，未重跑成功campaign。

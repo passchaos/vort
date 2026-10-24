@@ -1,0 +1,53 @@
+{
+  "head": "06bd765c555bed5bca7c77353459fcd36310caa2",
+  "help_exit_code": 0,
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "check",
+        "-Doptimize=Debug",
+        "-j8",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "check",
+      "seconds": 0.3907336147967726
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-zstd-hq-search",
+        "test-zstd-hq-search-wasm",
+        "-Doptimize=ReleaseFast",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "native-wasm",
+      "seconds": 47.796639326028526
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-zstd-hq-search",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "x86",
+      "seconds": 42.92511354503222
+    }
+  ],
+  "utc": "2026-10-24T16:54:03.603634+00:00"
+}
