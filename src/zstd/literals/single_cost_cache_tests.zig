@@ -71,6 +71,19 @@ pub fn errors(comptime Codec: type) !void {
     try std.testing.expectEqual(try Codec.referenceCost(block[0..1024], 16, 8, 64, 80), try cache.payloadLen(16, 8, 64, 80));
     var empty = try Cache.init("");
     try std.testing.expectEqual(try Codec.referenceCost("", 0, 1, 3, 0), try empty.payloadLen(0, 1, 3, 0));
+
+    // A complete flat high-byte alphabet has no profitable serialized weight
+    // tree. Cache this real codec's successful null, rather than only a mock.
+    var flat: [1024]u8 = undefined;
+    for (&flat, 0..) |*byte, i| byte.* = @truncate(i);
+    const frequencies: [256]u32 = @splat(4);
+    const plan = Codec.CostCodec.planFromFrequencies(&frequencies) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(?usize, null), try Codec.CostCodec.treeLen(&plan));
+    var flat_cache = try Cache.init(&flat);
+    try std.testing.expectEqual(try Codec.referenceCost(&flat, 0, 1, 3, 0), try flat_cache.payloadLen(0, 1, 3, 0));
+    try std.testing.expectEqual(try Codec.referenceCost(&flat, 0, 8, 3, 0), try flat_cache.payloadLen(0, 8, 3, 0));
+    try std.testing.expectEqual(@as(u64, 1), flat_cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), flat_cache.work.tree_cache_hits);
 }
 
 pub fn legacyPrefix(comptime Codec: type) !void {
@@ -103,6 +116,19 @@ pub fn deltaWork(comptime Codec: type) !void {
     try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
     try std.testing.expect(cache.work.stream_symbol_products != 0);
     try std.testing.expect(cache.work.stream_symbol_products <= 129 * 4 * 256);
+
+    // Frequency counts and cuts may change independently of the dense tree
+    // key. A stable three-symbol tree must serialize once while stream prices
+    // continue to use the current four frequency vectors on every query.
+    for (&block, 0..) |*byte, i| byte.* = if (i % 4 < 2) 'a' else if (i % 4 == 2) 'b' else 'c';
+    var stable = try Cache.init(&block);
+    for (0..129) |step| _ = try stable.payloadLen(16384 + step, 8, 16384, 32768);
+    try std.testing.expectEqual(@as(u64, 1), stable.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 128), stable.work.tree_cache_hits);
+    try std.testing.expectEqual(@as(u64, 129), stable.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 129), stable.work.reference_checks);
+    try std.testing.expectEqual(@as(u64, 0), stable.work.reference_mismatches);
+    try std.testing.expectEqual(@as(u64, 129 * 4 * 3), stable.work.stream_symbol_products);
 }
 
 pub fn finders(comptime Codec: type) !void {

@@ -6,9 +6,34 @@ const CutHistogram = @import("cut_histogram.zig").CutHistogram;
 pub const Work = struct {
     cost_queries: u64 = 0,
     huffman_plans: u64 = 0,
+    tree_serializations: u64 = 0,
+    tree_cache_hits: u64 = 0,
     stream_symbol_products: u64 = 0,
     reference_checks: u64 = 0,
     reference_mismatches: u64 = 0,
+};
+
+/// Complete conservative input to the codec's read-only tree-length estimator.
+/// Ordered byte-symbol bit counts determine the dense FSE weight sequence.
+/// Frequencies, literal cuts, sorted symbols, and codewords are not tree inputs.
+const TreeKey = struct {
+    max_symbol: u8,
+    max_bit_count: u8,
+    bit_counts: [256]u8,
+
+    fn fromPlan(plan: anytype) TreeKey {
+        return .{ .max_symbol = plan.max_symbol, .max_bit_count = plan.max_bit_count, .bit_counts = plan.bit_counts };
+    }
+
+    fn matches(self: *const TreeKey, other: *const TreeKey) bool {
+        return self.max_symbol == other.max_symbol and self.max_bit_count == other.max_bit_count and
+            std.mem.eql(u8, &self.bit_counts, &other.bit_counts);
+    }
+};
+
+const TreeEntry = struct {
+    key: TreeKey,
+    serialized_len: ?usize,
 };
 
 /// Codec delegates the existing Huffman tree, header, and sequence-table rules.
@@ -19,6 +44,7 @@ pub fn Cache(comptime Codec: type) type {
         histogram: CutHistogram,
         block: []const u8,
         work: Work = .{},
+        tree_entry: ?TreeEntry = null,
 
         const Self = @This();
 
@@ -73,7 +99,7 @@ pub fn Cache(comptime Codec: type) type {
 
             self.work.huffman_plans +|= 1;
             const plan = Codec.planFromFrequencies(&frequencies) orelse return best;
-            const tree_len = try Codec.treeLen(&plan) orelse return best;
+            const tree_len = try self.cachedTreeLen(&plan) orelse return best;
             const streams_len = try self.streamsLen(&plan.bit_counts) orelse return best;
             const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
             const header_len = Codec.huffmanHeaderLen(regenerated, compressed_size) catch |err| switch (err) {
@@ -83,6 +109,22 @@ pub fn Cache(comptime Codec: type) type {
             const compressed = std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
             if (compressed < best) best = compressed;
             return best;
+        }
+
+        /// One finalized plan at a time, scoped to this fixed compiled codec.
+        /// Publish successful null as a value; retain the prior entry on error.
+        fn cachedTreeLen(self: *Self, plan: anytype) Codec.Error!?usize {
+            const key = TreeKey.fromPlan(plan);
+            if (self.tree_entry) |*entry| {
+                if (entry.key.matches(&key)) {
+                    self.work.tree_cache_hits +|= 1;
+                    return entry.serialized_len;
+                }
+            }
+            self.work.tree_serializations +|= 1;
+            const serialized_len = try Codec.treeLen(plan);
+            self.tree_entry = .{ .key = key, .serialized_len = serialized_len };
+            return serialized_len;
         }
 
         /// The histogram already divides the regenerated prefix/tail view into
@@ -106,4 +148,73 @@ pub fn Cache(comptime Codec: type) type {
             return total;
         }
     };
+}
+
+const TreeProbePlan = struct {
+    max_symbol: u8 = 2,
+    max_bit_count: u8 = 2,
+    bit_counts: [256]u8 = .{ 0, 1, 2 } ++ @as([253]u8, @splat(0)),
+    irrelevant_frequency: u32 = 1,
+    null_result: bool = false,
+    fail: bool = false,
+};
+const TreeProbeCodec = struct {
+    pub const Error = error{ CorruptFrame, IntegerOverflow };
+    pub fn treeLen(plan: *const TreeProbePlan) Error!?usize {
+        if (plan.fail) return error.CorruptFrame;
+        if (plan.null_result) return null;
+        return @as(usize, plan.max_symbol) * 300 + @as(usize, plan.max_bit_count) * 10 +
+            @as(usize, plan.bit_counts[1]) * 3 + plan.bit_counts[2];
+    }
+};
+
+test "zstd single literal cost tree key compares ordered bits and both metadata fields" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    var plan: TreeProbePlan = .{};
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.irrelevant_frequency = 9_999;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    std.mem.swap(u8, &plan.bit_counts[1], &plan.bit_counts[2]);
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.bit_counts[2] = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.max_symbol = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.max_bit_count = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(@as(u64, 5), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 2), cache.work.tree_cache_hits);
+    try std.testing.expect(@sizeOf(@TypeOf(cache)) < 8 * 1024);
+}
+
+test "zstd single literal cost tree cache retains successful null" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    const plan: TreeProbePlan = .{ .null_result = true };
+    try std.testing.expectEqual(@as(?usize, null), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(@as(?usize, null), try cache.cachedTreeLen(&plan));
+    try std.testing.expect(cache.tree_entry != null);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_cache_hits);
+}
+
+test "zstd single literal cost tree errors do not publish and retain the prior entry" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    var new_plan: TreeProbePlan = .{ .fail = true };
+    try std.testing.expectError(error.CorruptFrame, cache.cachedTreeLen(&new_plan));
+    try std.testing.expect(cache.tree_entry == null);
+    new_plan.fail = false;
+    const previous = try cache.cachedTreeLen(&new_plan);
+    const previous_key = cache.tree_entry.?.key;
+    new_plan.max_symbol += 1;
+    new_plan.fail = true;
+    try std.testing.expectError(error.CorruptFrame, cache.cachedTreeLen(&new_plan));
+    try std.testing.expect(cache.tree_entry.?.key.matches(&previous_key));
+    try std.testing.expectEqual(previous, cache.tree_entry.?.serialized_len);
+    var old_plan: TreeProbePlan = .{};
+    try std.testing.expectEqual(previous, try cache.cachedTreeLen(&old_plan));
+    new_plan.fail = false;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&new_plan), try cache.cachedTreeLen(&new_plan));
+    try std.testing.expectEqual(@as(u64, 4), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_cache_hits);
 }
