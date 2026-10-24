@@ -120,6 +120,12 @@ whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 
+Concrete remaining format/API increments include explicit Brotli Large Window
+encoding outside HQ q10/q11 and caller-budgeted Zstd history beyond the fixed
+64 MiB native cap. The advertised frame window remains separate from actual
+match history. Default wires, bounded ownership and explicit failures must
+survive the larger ranges before making quality or performance claims.
+
 The [LZ4 fast-control increment](performance/lz4-fast-controls-functional-baseline.md)
 adds signed acceleration, miss-stride scheduling, independent chain depth and
 actual parser-work profiles across raw/prefix/reusable/native/incremental

@@ -59,17 +59,24 @@ dictionary 与 LZ4F API，而不是猜测 C preferences 布局。
 
 | 验证 | 已确认结果 | 实际范围 |
 | --- | --- | --- |
-| 专项 Debug / ReleaseFast / x86-linux-musl | 各 26/26 | 实际过滤执行，具名集合另由产物提取 |
+| 专项 Debug / ReleaseFast / x86-linux-musl | 各 26/26 | 实际产物各 23 个具名测试、3 个匿名入口 |
 | 完整 LZ4 家族 | 242/242 | 无大小写过滤，含旧 native 与 imported kernels |
 | 版本化参考 | 37 rows、153 次实际调用 | 150 成功与 3 个预期错误，全部输出 guard 正确 |
 | liblz4 1.9.3 / 1.9.4 | 72 项双向结果 | raw-empty 的 2 项规范空块反向结果单列，零字节参考拒绝如实保留 |
 | CLI 最终小矩阵 | 60 往返、6 个解析/映射测试 | profile 字节比较 22、默认比较 9、输出保护 21、同路径 6 |
 | 公共 Wasm | 3 个 smoke、5 个真实 profile 快照 | wasm32，imports=[]，完整实际 Node 执行 |
 | 格式与消费 | 通过 | 19 个 changed/new Zig、两个 Python driver、Node 语法与完整 CLI help |
+| 完整构建检查 | 152/152 | 退出码零；包括新增公共 probe、CLI 和 Wasm 编译 |
+| rebase 后复验 | 26/26 | 新 seed 实际执行；codec 源码未改变 |
 
 完整家族实际 ELF 为 238 个命名测试与 4 个匿名检查，本轮分组为独立 QA18
 与 fast core5。其唯一非输入源码变化为 CLI gate；实际编译文件、运行 ELF
 和依赖对象保持相同，原宽窗口差异与编译输入投影分别记录。
+
+专项三个产物逐项核对同一个 23-name 集合和测试顺序；每组 1776 个源码/依赖
+前后与字节归档一致，实际编译/运行 argv、缓存内容和 ELF 分别绑定。
+构建检查的宽快照仅包含 CLI gate 的必要变化，不能称整个仓库窗口不变；
+152 项实际编译成功，native 专项与最终 CLI 各自保持其实际输入不变。
 
 参考活动的原 8 个独立旧 wire 与 2 个空输入补充没有重生成或覆盖。
 37 个 profile-off 变体保持 wire 和 resolved 设置。System 1.9.3 使用匹配的

@@ -149,5 +149,12 @@ adds real miss-scan controls across raw/prefix/reusable/frame/incremental
 encoding, independent candidate depth, attempted-work profiles and safe
 overlapping input/output ownership. It passes 26 contracts in each of Debug,
 ReleaseFast and 32-bit x86, the complete 242-test family, 37 versioned reference
-rows, final CLI and real WebAssembly gates. Native fast algorithms and
+rows, final CLI and real WebAssembly gates, and all 152 build checks. Native fast algorithms and
 all-corpus/platform performance leadership remain unproven.
+
+The next concrete Brotli/Zstd functional gaps are broader explicit Large Window
+encoding outside Brotli's HQ q10/q11 path, and Zstd's fixed 64 MiB native
+encoding-history ceiling. Zstd's advertised header window range is not its
+actual match-history capacity. Extending either must preserve default wires,
+actual resource budgets and reference interoperability; larger numbers alone
+do not demonstrate higher compression quality or speed.

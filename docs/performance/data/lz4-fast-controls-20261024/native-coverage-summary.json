@@ -1,0 +1,61 @@
+{
+  "scope": "formal final functional validation with exact ELF TestFn and compile/run cache bindings; no benchmarks",
+  "generated_utc": "2026-10-24T12:00:42.687495+00:00",
+  "all_three_exit_zero": true,
+  "expected_named_count": 23,
+  "all_named_sets_exactly_match": true,
+  "all_ordered_test_names_equal": true,
+  "all_sourcebytes_archives_verified": true,
+  "all_global_before_after_equal": true,
+  "all_compiled_input_projections_unchanged": true,
+  "modes": {
+    "lz4-debug": {
+      "metadata_count": 26,
+      "named_count": 23,
+      "anonymous_count": 3,
+      "group_counts": {
+        "anonymous_import_roots": 3,
+        "core_options": 3,
+        "core_parser": 2,
+        "independent_qa": 18
+      },
+      "binary_sha256": "b46d21f6d7cb6e7352761b26d9443759273e3b313750f9a61c8d112539ef40d8",
+      "elf_class": 2,
+      "elf_machine": 62,
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/fdc7c4d2d3fe0be9c317334bdb4e46ab/vort-lz4-fast-controls-tests",
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/818f0994019a23edec71143781051af7.txt"
+    },
+    "lz4-rf": {
+      "metadata_count": 26,
+      "named_count": 23,
+      "anonymous_count": 3,
+      "group_counts": {
+        "anonymous_import_roots": 3,
+        "core_options": 3,
+        "core_parser": 2,
+        "independent_qa": 18
+      },
+      "binary_sha256": "a1e4355219ec92b2bd25c96e056903f50007ca157763ed4cba1a80b95c7ac3af",
+      "elf_class": 2,
+      "elf_machine": 62,
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/53a48ea7e47f26cebd9da37787f0f154/vort-lz4-fast-controls-tests",
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/de5ba41ffb3a520952adfb347e47ff26.txt"
+    },
+    "lz4-x86": {
+      "metadata_count": 26,
+      "named_count": 23,
+      "anonymous_count": 3,
+      "group_counts": {
+        "anonymous_import_roots": 3,
+        "core_options": 3,
+        "core_parser": 2,
+        "independent_qa": 18
+      },
+      "binary_sha256": "cfa8c48f37f3e588824efb38e6832040a5b4ef649a87e6735c1bad6fd827907f",
+      "elf_class": 1,
+      "elf_machine": 3,
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/2beefcbe6c529c07e9bc025554723381/vort-lz4-fast-controls-tests",
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/1c13f3b7b72e4ac28244677c240b1447.txt"
+    }
+  }
+}

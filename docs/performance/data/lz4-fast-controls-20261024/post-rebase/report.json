@@ -1,0 +1,26 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-lz4-fast-controls",
+    "-Doptimize=ReleaseFast",
+    "--seed",
+    "0x20261024",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "started_utc": "2026-10-24T12:00:59.799108+00:00",
+  "finished_utc": "2026-10-24T12:00:59.974459+00:00",
+  "head": "dce068cabd8ce50f5de2e1f468e3ae707ad5b617",
+  "rebase": "git pull --rebase origin main, up to date without conflicts",
+  "source_before_after_equal": true,
+  "initial_snapshot_tool_correction": {
+    "tools/lz4/fast_controls_cli_gate.py": {
+      "initial": "cb4fe245a1c98e7497bb560d28e734cc19de8b4bdf6827053ce4d80f63264990",
+      "current": "c2b0e65b921a8c3a34e5c34684480832bf62c365dac8c0db75bab7413c33051d"
+    }
+  },
+  "log_sha256": "09f09b1ec1288264d5f053ec5b259e0c64ba76b3272e5a3c5b737e6159827bd8",
+  "scope": "post-rebase actual run with a new seed; codec source unchanged"
+}
