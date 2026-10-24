@@ -1,0 +1,42 @@
+{
+  "actual_failure_names": [],
+  "actual_test_count": 1274,
+  "binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/d1eca50845d667d992d4e4630feeade2/vort-br-tests",
+  "binary_sha256": "df85a0290e583a7b20a6bbe0e7c646f453ad0e10e6d02dc1f1094de09526e1cd",
+  "br_sha256": "00dabc0ba34ece208bee3a39ec40d512bf6593a9929de3bb23638e10f3b41ef2",
+  "broad_snapshot_scope": "all src/** files, build.zig, build.zig.zon",
+  "changes_from_prior_failed_family": [
+    "src/tests/br_large_window_resources.zig"
+  ],
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all",
+    "--verbose"
+  ],
+  "compiled_input_changes_during_run": {},
+  "compiled_repo_input_count": 203,
+  "cwd": "/home/passchaos/project-z/vort-stream-contracts",
+  "elapsed_seconds": 445.647978492,
+  "elf_class": 64,
+  "end_utc": "2026-10-24T13:19:49.472818+00:00",
+  "exit_code": 0,
+  "failed": 0,
+  "full_family_runs_in_this_stage": 1,
+  "head_at_start": "125bdbf00b46afc5d8f427cfd4c5f76852a5790d",
+  "metadata_query_executed_tests": false,
+  "non_input_source_changes": [
+    "src/zstd.zig"
+  ],
+  "passed": 1273,
+  "prior_failed_report_preserved": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/brotli-family/result.json",
+  "production_or_test_source_modified_by_this_agent": false,
+  "skip_name": "tests.br_general_large_window_resources.test.Brotli general large window encoded bounds detect host integer overflow",
+  "skipped": 1,
+  "start_utc": "2026-10-24T13:12:23.824840+00:00",
+  "status": "passed"
+}

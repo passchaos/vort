@@ -46,8 +46,10 @@ The library is under active development. Its current capabilities include:
   `window_log` selection on both `FrameOptions` and `NativeFrameOptions` with
   `null` preserving the established wire, strict block/history/dictionary
   reach bounded by the selected window, an unchanged 8 MiB default history,
-  and a 16 MiB default / caller-budgeted 64 MiB maximum sparse long-distance
-  history for explicit windows of at least 24 bits, a
+  and a 16 MiB default / caller-selected history ceiling of 4,294,836,222 bytes
+  for explicit windows, with shared whole-encoder requested-heap quotas and
+  observed allocation profiles (actual matching beyond 64 MiB is independently
+  verified; the declared window does not promise exhaustive search), a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
@@ -2203,11 +2205,12 @@ candidate and obeys the caller's workspace and total-heap limits. See the
 [whole-block search contract](docs/formats/brotli-whole-block-search.md) for
 actual pass statistics, memory costs and remaining finite-search limitations.
 
-HQ q10/q11 can also explicitly set `large_window = true` for window bits
-10...30. This writes the Large Window extension even at smaller windows;
-decoding requires opt-in. Ordinary defaults remain standard Brotli. The
-[Large Window contract](docs/formats/brotli-large-window-hq.md) explains wire
-alphabets, safe distances, cross-block history and dedicated large-data checks.
+Every planned quality q0...q11, legacy level and stored frontend can explicitly
+set `large_window = true` for window bits 10...30. This writes the Large Window
+extension even at smaller windows; decoding requires opt-in. Ordinary defaults
+remain standard Brotli. The [general Large Window contract](docs/formats/brotli-general-large-window.md)
+explains the format, ownership and actual bounded matching policies. HQ keeps
+its separate [large-history contract](docs/formats/brotli-large-window-hq.md).
 
 All planned encoding levels and qualities also accept
 `max_total_working_memory` and a caller-owned `BrotliEncodeMemoryProfile`.
@@ -2721,7 +2724,8 @@ selected descriptor without a content size.
 | LZ4 native | `Lz4NativeDictionarySet` / `Lz4NativeDictionarySet.initFromMetadata` / `lz4NativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Lets decoders resolve each frame without caller-side splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 | Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
 | Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
-| Zstd native | `window_log` / `max_match_history_len` on `ZstdFrameOptions` and `ZstdNativeFrameOptions` | `null`; explicit window `10...41`; optional history `1 KiB...64 MiB` | You need a standards-compatible advertised window and an explicit encode-memory/ratio budget. | Null window is byte-identical to the prior writer and retains 8 MiB. Explicit windows default to `zstdNativeExplicitWindowMatchLenDefault` (16 MiB); logs 24+ use a separate 1/256-sampled long-distance index, and callers may raise history through `zstdNativeExplicitWindowMatchLenMax` (64 MiB). Effective history is capped by the advertised window, and a history override without `window_log` is rejected. |
+| Zstd native | `window_log` / `max_match_history_len` on `ZstdFrameOptions` and `ZstdNativeFrameOptions` | `null`; explicit window `10...41`; optional history `1 KiB...4,294,836,222 B` | You need a standards-compatible advertised window and an explicit encode-memory/ratio budget. | Null window is byte-identical to the prior writer and retains 8 MiB. Explicit windows default to `zstdNativeExplicitWindowMatchLenDefault` (16 MiB); logs 24+ use a separate 1/256-sampled long-distance index, and callers may raise history through the checked `zstdNativeExplicitWindowMatchLenMax` (4,294,836,222 B). Actual history grows on demand; shared total-heap quotas account for retained and temporary encoder allocations. Effective history is capped by the advertised window, and a history override without `window_log` is rejected. |
+| Zstd native | `max_total_working_memory` / `memory_profile` on both frame option types | `null`; caller-owned `ZstdEncodeMemoryProfile` | You need a whole-encoder requested-heap cap and observed peak/live allocation bytes. | Shared admission includes retained history, buffers, dictionary preparation, matcher/candidate work and caller-allocator worker requests. HQ workspace limits remain separate. This measures requested heap, excluding borrowed inputs, caller output and allocator/OS overhead; see the [resource contract](docs/formats/zstd-large-history-memory.md). |
 | Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |

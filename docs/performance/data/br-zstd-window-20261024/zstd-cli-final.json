@@ -1,0 +1,209 @@
+{
+  "phase": "final-zstd-cli-explicit-window-reference-limits",
+  "time_before_utc": "2026-10-24T13:53:59.136534+00:00",
+  "git_head": "70d984b9484317962ef3c6a9a9652919486d4d1d",
+  "source_count": 1771,
+  "source_sha256": "5854f986b926b4109ce59825616049de8a5df9b77f907fa7c06ec2ad669f477e",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-zstd-window-memory-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "reference_round_trips": 36,
+    "memory_profile_wire_checks": 15,
+    "window_descriptor_checks": 3,
+    "exact_total_cap_checks": 3,
+    "below_total_cap_checks": 3,
+    "rejected_output_preserved": 33,
+    "same_path_checks": 6,
+    "known_content_single_segment_checks": 3,
+    "wide_header_checks": 3,
+    "wide_memory_profile_checks": 3,
+    "reference_window_limit_rejections": 3
+  },
+  "status": "passed-final-scoped-reference-contract",
+  "time_after_utc": "2026-10-24T13:58:06.557032+00:00",
+  "source_equal": true,
+  "source_delta": {},
+  "gate_report": {
+    "reference_round_trips": 36,
+    "memory_profile_wire_checks": 15,
+    "window_descriptor_checks": 3,
+    "exact_total_cap_checks": 3,
+    "below_total_cap_checks": 3,
+    "rejected_output_preserved": 33,
+    "same_path_checks": 6,
+    "known_content_single_segment_checks": 3,
+    "wide_header_checks": 3,
+    "wide_memory_profile_checks": 3,
+    "reference_window_limit_rejections": 3,
+    "rows": [
+      {
+        "command": "encode-zstd-native-file",
+        "options": [],
+        "peak_requested_bytes": 200297
+      },
+      {
+        "command": "encode-zstd-native-file",
+        "options": [
+          "--window-log=10",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 200297
+      },
+      {
+        "command": "encode-zstd-native-file",
+        "options": [
+          "auto",
+          "true",
+          "false",
+          "--window-log=25",
+          "--max-match-history-len=67108865"
+        ],
+        "peak_requested_bytes": 200297
+      },
+      {
+        "command": "encode-zstd-native-file",
+        "options": [
+          "--window-log=41",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 200297
+      },
+      {
+        "command": "encode-zstd-native-file",
+        "options": [
+          "--strategy=fast",
+          "--window-log=20",
+          "--max-match-history-len=65536"
+        ],
+        "peak_requested_bytes": 1325
+      },
+      {
+        "command": "encode-zstd-level-file",
+        "options": [],
+        "peak_requested_bytes": 3651
+      },
+      {
+        "command": "encode-zstd-level-file",
+        "options": [
+          "--window-log=10",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 3651
+      },
+      {
+        "command": "encode-zstd-level-file",
+        "options": [
+          "auto",
+          "true",
+          "false",
+          "--window-log=25",
+          "--max-match-history-len=67108865"
+        ],
+        "peak_requested_bytes": 3651
+      },
+      {
+        "command": "encode-zstd-level-file",
+        "options": [
+          "--window-log=41",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 3651
+      },
+      {
+        "command": "encode-zstd-level-file",
+        "options": [
+          "--strategy=fast",
+          "--window-log=20",
+          "--max-match-history-len=65536"
+        ],
+        "peak_requested_bytes": 1325
+      },
+      {
+        "command": "encode-zstd-native-stream-file",
+        "options": [],
+        "peak_requested_bytes": 200246
+      },
+      {
+        "command": "encode-zstd-native-stream-file",
+        "options": [
+          "--window-log=10",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 200246
+      },
+      {
+        "command": "encode-zstd-native-stream-file",
+        "options": [
+          "auto",
+          "true",
+          "false",
+          "--window-log=25",
+          "--max-match-history-len=67108865"
+        ],
+        "peak_requested_bytes": 200246
+      },
+      {
+        "command": "encode-zstd-native-stream-file",
+        "options": [
+          "--window-log=41",
+          "--max-match-history-len=1024"
+        ],
+        "peak_requested_bytes": 200246
+      },
+      {
+        "command": "encode-zstd-native-stream-file",
+        "options": [
+          "--strategy=fast",
+          "--window-log=20",
+          "--max-match-history-len=65536"
+        ],
+        "peak_requested_bytes": 1472
+      }
+    ],
+    "reference_zstd": "1.4.8"
+  },
+  "gate_expected_matches": true,
+  "build_exit_code": 0,
+  "parser_tests_passed": 12,
+  "binary": {
+    "cache_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/8f6fbfc7e078d21029920ac39d0ea243/vort-zstd-hq-cli-probe",
+    "sha256": "419fb9eed7a7a47cabfda2303bfc1ee2f46330cb9a0c4505e5957d7f896037bf",
+    "output_key": "8f6fbfc7e078d21029920ac39d0ea243"
+  },
+  "initial_manifest_key": "6275fdae2f5ca5dd0dd62d8ca7addcb5",
+  "cache_resolution": "Initial cache key bytes then all actual manifest file binary digests, hashed using Zig Cache algorithm. Debug dependency objects identify this target, rather than the separate ReleaseFast-dependency variant.",
+  "input_binding": {
+    "records": 1944,
+    "unique_inputs": 1942,
+    "prefix_counts": {
+      "0": 1127,
+      "1": 813,
+      "2": 2
+    },
+    "mismatches": [],
+    "uncovered": []
+  },
+  "strict_binding": true,
+  "evidence_sha256": {
+    "source-before.json": "5854f986b926b4109ce59825616049de8a5df9b77f907fa7c06ec2ad669f477e",
+    "source-after.json": "5854f986b926b4109ce59825616049de8a5df9b77f907fa7c06ec2ad669f477e",
+    "source-before.zip": "09a6a45c21ae2800f015774e635b1043e1d2a81c5ad4719b872221b8dfbeb754",
+    "source-after.zip": "09a6a45c21ae2800f015774e635b1043e1d2a81c5ad4719b872221b8dfbeb754",
+    "source-delta.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "compile-inputs.txt": "6cd93ce65acb0c9815ce7f1187f5ad106afc9457df87ef1d67f7e5d3330a791f",
+    "compile-input-digest-check.tsv": "efaaf8b7e38a117510cd2f953ea052bb83010de710fb72533143fd23f9aaafa0",
+    "compiled-inputs-all.json": "4fd0b21ea122e9489a28793a5e6d01f99ddbc65c5ade7292ae60d8892fb3718c",
+    "compiled-input-bytes.zip": "7695216b739ada27e6d133bce79f43f11d6280072dad049819b3a46effb6a815",
+    "gate-report.json": "8261dcf1da75909cbe5f158f3b471054d8b7370b6d6e7dafa400d30b5b5d8beb",
+    "gate-correction.json": "795443adc366fc92e5b003a6f1dd5d3c4d04069a2c55f01667666a39612f7755",
+    "build.stdout": "5423979075051e2a9cbcf7d01e3ef915b03114b6e1a1d3a73074fdad83789d43",
+    "build.stderr": "75d2227a1424532e47d251d4b58104e50c572457910393dab6602fdb48e68830"
+  }
+}

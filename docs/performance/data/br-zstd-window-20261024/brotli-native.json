@@ -1,0 +1,82 @@
+{
+  "baseline_golden_rows": 41,
+  "baseline_report": "/tmp/vort-br-general-baseline/baseline-report.json",
+  "br_source_sha256": "00dabc0ba34ece208bee3a39ec40d512bf6593a9929de3bb23638e10f3b41ef2",
+  "groups": {
+    "debug": {
+      "binary_sha256": "14ab1abc000fad4781af49139466be12141044a9c40f26f766b3d40f0140e033",
+      "compiled_source_changes": [],
+      "compiler_manifest": {
+        "computed_artifact_key": "74f51e78f56bb37f5d10e6593f951aa4",
+        "current_content_siphash_mismatches": 0,
+        "matches_actual_binary_directory": true,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/20292d566482381071d42eef78b00860.txt",
+        "records": 1017,
+        "sha256": "c90598531d45341bbed7f766974b989c9d7b1eb81f9144a3145f54cec08dd510"
+      },
+      "module_entries": 17,
+      "named_count": 21,
+      "passed": 37,
+      "skipped": 1,
+      "skipped_names": [
+        "tests.br_general_large_window_resources.test.Brotli general large window encoded bounds detect host integer overflow"
+      ],
+      "status": "passed",
+      "test_count": 38
+    },
+    "releasefast": {
+      "binary_sha256": "f29fb3920d7e31fb8e10ea42e3b79caab6be4ef1568d247b60926414927d80be",
+      "compiled_source_changes": [],
+      "compiler_manifest": {
+        "computed_artifact_key": "5d6e44a738c0a976db87e65f5f8842a6",
+        "current_content_siphash_mismatches": 0,
+        "matches_actual_binary_directory": true,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/ca0a66b85290ff5aa9b6a7719e01146b.txt",
+        "records": 1016,
+        "sha256": "2ced3de08192e637a5647751e39bae44d53bd48dd9ad5e52fc945cccf062befa"
+      },
+      "module_entries": 17,
+      "named_count": 21,
+      "passed": 37,
+      "skipped": 1,
+      "skipped_names": [
+        "tests.br_general_large_window_resources.test.Brotli general large window encoded bounds detect host integer overflow"
+      ],
+      "status": "passed",
+      "test_count": 38
+    },
+    "x86-releasefast": {
+      "binary_sha256": "3de6225fd8bc243d337faa37d41c4efb2a6e2b21e52c81e7dc4831221562bd9a",
+      "compiled_source_changes": [],
+      "compiler_manifest": {
+        "computed_artifact_key": "192125f8bab6fd078b83eea03b4eb6f6",
+        "current_content_siphash_mismatches": 0,
+        "matches_actual_binary_directory": true,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/197eb5a191e569f2d336cefdd55875b1.txt",
+        "records": 1016,
+        "sha256": "8b9f29c4fcb690e5ce69a8981f53684af59023ce0a11002baf9d3529a145b2bd"
+      },
+      "module_entries": 17,
+      "named_count": 21,
+      "passed": 38,
+      "skipped": 0,
+      "skipped_names": [],
+      "status": "passed",
+      "test_count": 38
+    }
+  },
+  "qa_fixed_names": 15,
+  "scope": "frozen Brotli compiled-input projection stayed unchanged despite unrelated Zstd edits; no automatic Brotli rerun",
+  "status": "passed",
+  "timestamp_utc": "2026-10-24T12:47:47.315461+00:00",
+  "wide_source_changes": {
+    "src/zstd.zig": {
+      "after": "0f46eb11cb6cf6a9bc7057061126994388242ccf6c4785c6adb018e18b94de3b",
+      "before": "8ad000a5b4997650dcc0dba2a6999295b9373157a1ac37c584d095f279d069e7"
+    },
+    "src/zstd/encode/frame_publication.zig": {
+      "after": "ebfbabbe4039923ab44a031d1b33d04a1b3bcc7f14d2f395d67aca919fcafc06",
+      "before": null
+    }
+  }
+}

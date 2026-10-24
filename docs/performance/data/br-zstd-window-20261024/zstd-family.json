@@ -1,0 +1,19 @@
+{
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-zstd",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all",
+    "--verbose"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 211.1253463749308,
+  "utc": "2026-10-24T13:50:07.258188+00:00",
+  "changed_sources": [],
+  "source_sha256": "3a9b5255743990100aa8e64bcd6c134062b76eff068774b51f181d8f2a9bcf75",
+  "log": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/zstd-family/final/family-rf.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

@@ -1,0 +1,26 @@
+{
+  "status": "completed-related-cli-validation",
+  "brotli_original_35_report": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/brotli-cli/gate-report.json",
+  "brotli_original_scope": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/brotli-cli/manifest.json",
+  "brotli_current_narrow_report": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/current-probes/brotli-current-narrow.json",
+  "current_brotli_input_binding": true,
+  "zstd_final_report": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/zstd-cli-final/gate-report.json",
+  "zstd_final_scope": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/zstd-cli-final/manifest.json",
+  "preserved_zstd_gate_failures": [
+    "zstd-cli",
+    "zstd-cli-corrected"
+  ],
+  "reference_window_limit_scope": "Known44B WindowLog41 uses valid single-segment frames and decoded in36ordinarycases. Explicit unknown-size WindowLog25 descriptors decoded by libzstd1.4.8. Unknown-size WindowLog41 headers and memory profiles validated independently; the exact reference memory-limit error was required and not counted as a round trip.",
+  "help_parser_manifest": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/current-probes/manifest.json",
+  "repository_changes_for_closeout": "Only authorized window_memory_cli_gate.py fixture/reference-limit correction; no production, root/build or Git changes.",
+  "full_brotli_35_matrix_repeated": false,
+  "closed_utc": "2026-10-24T14:00:25.603882+00:00",
+  "final_tool_sha256": "bc9c1f4372476013112dc37439a10d20dae8b4c9a8a233ad5e151e687a4fde44",
+  "evidence_manifests_sha256": {
+    "brotli-cli/manifest.json": "782a4110b62e44b833a94fa1cc35d11b4b5338d9e6924e9e5e569cd3f69bfb44",
+    "zstd-cli/manifest.json": "8072b44215816e47a05a8c27b096213473ac8c447548d27811985df215b0aa62",
+    "zstd-cli-corrected/manifest.json": "7ee77a404ef65764a6e93e7fd7bc0231cbc7434b779c6b4b2631c14dcf8569a1",
+    "zstd-cli-final/manifest.json": "f211f87aef9cf2b84c5caf22e730babadac855c1fc476a218b0087c43b0f2e2d",
+    "current-probes/manifest.json": "2d83417d103d514de770a752771f3b077aefa96081da75ba8478ba0fa5d51416"
+  }
+}
