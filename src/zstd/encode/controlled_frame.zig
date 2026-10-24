@@ -59,7 +59,7 @@ pub fn Encoder(comptime Codec: type) type {
                 return;
             }
             const window = try Codec.matchWindow(options, frame_offset, block.len, last);
-            const source = source_mod.Source.init(if (dictionary) |dict| dict.content else &.{}, history, block, window);
+            const source = try source_mod.Source.initChecked(if (dictionary) |dict| dict.content else &.{}, history, block, window);
             const parameters: source_mod.Parameters = .{ .strategy = selected, .acceleration = acceleration, .search_budget = options.match_search_budget, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .profile = profile };
             switch (selected) {
                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),

@@ -4,7 +4,7 @@ pub const invalid = std.math.maxInt(u32);
 pub const hash_size: usize = 1 << 16;
 
 /// Absolute positions, including generation stamps, are compacted only after
-/// the source's checked 64MiB prefix/128KiB block bounds prove they fit u32.
+/// the source's checked prefix plus 128KiB block bounds prove they fit u32.
 pub const Node = struct {
     position: u32 = invalid,
     left: u32 = invalid,

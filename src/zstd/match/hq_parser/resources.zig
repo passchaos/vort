@@ -7,10 +7,7 @@ pub const WorkingAllocator = @import("../../../io/working_allocator.zig").Workin
 pub fn validate(source: source_mod.Source, parameters: state.Parameters) !void {
     try parameters.hq_options.validate();
     try parameters.entropy.validate();
-    _ = try source.checkedTotalLen();
-    if (source.window_len == 0 or source.window_len > std.math.maxInt(u32) - 3 or
-        source.block.len > 128 * 1024 or try source.checkedPrefixLen() > source.window_len)
-        return error.InvalidBlockPlan;
+    try source.validate();
     for (parameters.initial_repeated_offsets) |offset|
         if (offset == 0 or offset > std.math.maxInt(u32) - 3) return error.InvalidBlockPlan;
 }

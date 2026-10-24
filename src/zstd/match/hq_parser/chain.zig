@@ -29,8 +29,7 @@ pub const Matcher = struct {
     pub fn requiredWorkingMemory(source: source_mod.Source, options: controls.HqOptions) !usize {
         try options.validate();
         const total = try source.checkedTotalLen();
-        if (source.window_len == 0 or source.window_len > std.math.maxInt(u32) - 3 or try source.checkedPrefixLen() > source.window_len)
-            return error.InvalidBlockPlan;
+        try source.validate();
         const ring = @max(1, @min(total, try resources.add(source.window_len, 1)));
         const index = try resources.add(try resources.multiply(hash_size, @sizeOf(usize)), try resources.multiply(ring, @sizeOf(Node)));
         return resources.add(index, try resources.multiply(candidateCapacity(source, options), @sizeOf(Match)));

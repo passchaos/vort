@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const core = @import("core.zig");
+const total_budget = @import("zstd/encode/total_budget.zig");
 const lz77 = @import("lz77.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
@@ -396,7 +397,9 @@ pub const native_max_match_search_budget: usize = mixed_match_path_search_budget
 pub const native_max_direct_huffman_symbol: u8 = max_direct_huffman_symbol;
 pub const native_dictionary_window_len: usize = std.compress.zstd.default_window_len;
 pub const native_explicit_window_match_len_default: usize = 16 * 1024 * 1024;
-pub const native_explicit_window_match_len_max: usize = 64 * 1024 * 1024;
+/// Compact local coordinates reserve u32.max and a complete 128KiB block.
+/// This encoder bound is distinct from the format's advertised Window_Log.
+pub const native_explicit_window_match_len_max: usize = @import("zstd/match/history_limit.zig").max_history_len;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -486,8 +489,12 @@ pub const FrameOptions = struct {
     /// historical header and encoder policy.
     window_log: ?u6 = null,
     /// Optional encode-side history budget in bytes. Requires `window_log` and
-    /// accepts 1 KiB...64 MiB; null selects the explicit-window 16 MiB default.
+    /// accepts 1 KiB...native_explicit_window_match_len_max; null selects the
+    /// explicit-window 16 MiB default. Allocation grows with actual history.
     max_match_history_len: ?usize = null,
+    /// Operation-wide requested-heap cap, shared by I/O and all candidates.
+    max_total_working_memory: ?usize = null,
+    memory_profile: ?*@import("zstd/encode/total_budget.zig").EncodeMemoryProfile = null,
     /// Explicit parser selection; auto/null preserves the legacy level policy.
     strategy: Strategy = .auto,
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
@@ -514,8 +521,12 @@ pub const NativeFrameOptions = struct {
     /// preserves the historical 8 MiB encoder wire and policy.
     window_log: ?u6 = null,
     /// Optional encode-side history budget in bytes. Requires `window_log` and
-    /// accepts 1 KiB...64 MiB; null selects the explicit-window 16 MiB default.
+    /// accepts 1 KiB...native_explicit_window_match_len_max; null selects the
+    /// explicit-window 16 MiB default. Allocation grows with actual history.
     max_match_history_len: ?usize = null,
+    /// Operation-wide requested-heap cap; the HQ workspace cap stays separate.
+    max_total_working_memory: ?usize = null,
+    memory_profile: ?*@import("zstd/encode/total_budget.zig").EncodeMemoryProfile = null,
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
     dictionary_id: u32 = 0,
@@ -542,11 +553,14 @@ pub const NativeFrameOptions = struct {
     pub fn validate(self: NativeFrameOptions) Error!void {
         _ = try nativeBlockSizeMax(self);
         _ = try nativeMatchSearchBudget(self);
+        if (self.control_profile) |profile|
+            profile.recordWindowPolicy(try nativeExplicitWindowSize(self), try nativeEncoderWindowLen(self));
     }
 };
 
 pub const FrameSelection = NativeFrameSelection;
 pub const AdvancedFrameOptions = NativeFrameOptions;
+pub const EncodeMemoryProfile = @import("zstd/encode/total_budget.zig").EncodeMemoryProfile;
 
 const IncrementalEncoderCodec = struct {
     pub const Error = zstd.Error;
@@ -559,15 +573,22 @@ const IncrementalEncoderCodec = struct {
     pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
         if (options.dictionary_id != (dictionary_id orelse 0)) return error.InvalidBlockPlan;
-        _ = try nativeBlockSizeMax(options);
-        _ = try nativeMatchSearchBudget(options);
+        try options.validate();
     }
     pub fn blockLen(options: Options) usize {
         return nativeBlockSizeMax(options) catch unreachable;
     }
     pub fn historyLen(options: Options) usize {
+        if (options.selection == .raw_or_rle) return 0;
         return nativeEncoderWindowLen(options) catch unreachable;
     }
+    pub fn extractMemoryConfig(options: Options) @import("zstd/incremental/encoder/allocator_adapter.zig").Config {
+        return .{ .limit = options.max_total_working_memory, .profile = options.memory_profile };
+    }
+    pub fn requiredTotalRetainedBytes(_: *const State) zstd.Error!usize {
+        return 0;
+    }
+    pub fn rebindStateAllocator(_: *State, _: std.mem.Allocator) void {}
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         const original_len = out.items.len;
         errdefer out.items.len = original_len;
@@ -589,6 +610,8 @@ const IncrementalEncoderCodec = struct {
         try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, options.match_search_budget, false, null, null, null, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last));
     }
     pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize) zstd.Error!void {
+        if (try nativeLargeLegacyFastOptions(options)) |controlled|
+            return writeControlled(allocator, out, block, last, controlled, state, dictionary, frame_history, frame_offset);
         if (encode_controls.active(options)) return writeControlled(allocator, out, block, last, options, state, dictionary, frame_history, frame_offset);
         var block_scratch: NativeBlockEncodeScratch = .{};
         defer block_scratch.deinit(allocator);
@@ -911,6 +934,9 @@ test "Zstd HQ incremental header allocation failure retains no partial magic bef
 
 test {
     _ = double_fast_match;
+    _ = @import("tests/zstd_large_history_contracts.zig");
+    _ = @import("tests/zstd_large_history_resources.zig");
+    _ = @import("tests/zstd_large_history_transactions.zig");
     _ = double_fast_sequence_plan;
     _ = optimal_four_match;
     _ = incremental_tests;
@@ -3316,6 +3342,29 @@ fn nativeEncoderWindowLen(options: NativeFrameOptions) Error!usize {
         budget > native_explicit_window_match_len_max)
         return error.InvalidBlockPlan;
     return @intCast(@min(advertised, budget));
+}
+
+/// Configured window size; null preserves the legacy automatic header policy.
+/// A known small single-segment frame may advertise a tighter actual window.
+pub fn configuredWindowSize(options: NativeFrameOptions) Error!?u64 {
+    return nativeExplicitWindowSize(options);
+}
+
+/// Maximum retained matching prefix allowed by window, caller cap and compact
+/// coordinates. Buffers and matcher nodes grow only for actual source bytes.
+pub fn effectiveMatchHistoryLen(options: NativeFrameOptions) Error!usize {
+    return nativeEncoderWindowLen(options);
+}
+
+fn nativeLargeLegacyFastOptions(options: NativeFrameOptions) Error!?NativeFrameOptions {
+    if (options.selection != .fast_compressed or encode_controls.active(options)) return null;
+    const requested = options.max_match_history_len orelse return null;
+    if (requested <= 64 * 1024 * 1024) return null;
+    _ = try nativeEncoderWindowLen(options);
+    var controlled = options;
+    controlled.strategy = if (options.match_search_budget == encode_controls.legacy_search_budget) .fast else .greedy;
+    controlled.rep_beam_search = false;
+    return controlled;
 }
 
 fn nativeMatchWindowLen(options: NativeFrameOptions) Error!?usize {
@@ -7476,6 +7525,7 @@ pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const 
 /// the exact one-shot policy and copy its selected frame into reusable storage.
 pub const LevelFrameEncoder = struct {
     allocator: std.mem.Allocator,
+    memory: ?total_budget.Reusable = null,
     primary: NativeFrameEncoder,
     output_scratch: std.ArrayList(u8) = .empty,
 
@@ -7483,10 +7533,36 @@ pub const LevelFrameEncoder = struct {
         return .{ .allocator = allocator, .primary = NativeFrameEncoder.init(allocator) };
     }
 
+    pub fn retainedRequestedBytes(self: *const LevelFrameEncoder) error{IntegerOverflow}!usize {
+        return std.math.add(usize, try ownedArrayListBytes(&self.output_scratch), try self.primary.retainedRequestedBytes()) catch error.IntegerOverflow;
+    }
+
     pub fn deinit(self: *LevelFrameEncoder) void {
         self.output_scratch.deinit(self.allocator);
         self.primary.deinit();
+        if (self.memory) |*owner| owner.deinit();
         self.* = undefined;
+    }
+
+    pub fn memorySnapshot(self: *const LevelFrameEncoder) total_budget.Snapshot {
+        return if (self.memory) |*owner| owner.snapshot() else .{};
+    }
+
+    fn beginMemory(self: *LevelFrameEncoder, level: c_int, options: FrameOptions) Error!FrameOptions {
+        _ = try nativeFrameOptionsForLevel(level, options);
+        if (self.memory == null) self.memory = try total_budget.Reusable.init(self.allocator);
+        self.allocator = try self.memory.?.begin(options, self, retainedRequestedBytes);
+        self.primary.rebindSharedAllocator(self.allocator);
+        return total_budget.forward(options);
+    }
+
+    fn endMemory(self: *LevelFrameEncoder) void {
+        if (self.memory) |*owner| owner.end();
+    }
+
+    fn mapMemoryError(self: *const LevelFrameEncoder, err: Error) Error {
+        const mapped: Error = if (self.memory) |*owner| @errorCast(owner.mapError(err)) else err;
+        return mapScopedAllocationError(self.allocator, mapped);
     }
 
     pub fn encodeScratch(self: *LevelFrameEncoder, input: []const u8, level: c_int) Error![]const u8 {
@@ -7494,6 +7570,12 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeScratchWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
+        const inner = try self.beginMemory(level, options);
+        defer self.endMemory();
+        return self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+    }
+
+    fn encodeScratchUnbudgeted(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
         const primary_options = try nativeFrameOptionsForLevel(level, options);
         if (encode_controls.active(primary_options)) return (try self.primary.encodeScratch(input, primary_options)).frame;
         if (level <= 0 or input.len <= 8 * 1024)
@@ -7532,7 +7614,10 @@ pub const LevelFrameEncoder = struct {
     pub fn encodeWithOptionsAlloc(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]u8 {
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
-        return try self.allocator.dupe(u8, try self.encodeScratchWithOptions(input, level, options));
+        const inner = try self.beginMemory(level, options);
+        defer self.endMemory();
+        const frame = self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+        return self.memory.?.duplicateOwned(self.memory.?.base, frame) catch |err| return self.mapMemoryError(err);
     }
 
     pub fn encodeInto(self: *LevelFrameEncoder, input: []const u8, level: c_int, output: []u8) Error!usize {
@@ -7555,8 +7640,13 @@ pub const LevelFrameEncoder = struct {
     pub fn encodeAppendWithOptions(self: *LevelFrameEncoder, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
-        const frame = try self.encodeScratchWithOptions(input, level, options);
-        try out.appendSlice(self.allocator, frame);
+        const inner = try self.beginMemory(level, options);
+        defer self.endMemory();
+        const frame = self.encodeScratchUnbudgeted(input, level, inner) catch |err| return self.mapMemoryError(err);
+        if (self.memory.?.lease) |lease| {
+            const view: total_budget.Entry = .{ .caller = self.memory.?.base, .lease = lease };
+            @import("zstd/encode/frame_publication.zig").appendFrame(&view, out, frame) catch |err| return self.mapMemoryError(err);
+        } else out.appendSlice(self.allocator, frame) catch |err| return self.mapMemoryError(err);
         return frame.len;
     }
 };
@@ -7600,6 +7690,22 @@ const LockedAllocator = struct {
     const vtable: std.mem.Allocator.VTable = .{ .alloc = alloc, .resize = resize, .remap = remap, .free = free };
 };
 
+fn scopedTotalLease(allocator: std.mem.Allocator) Error!?@import("zstd/encode/total_budget.zig").Lease {
+    var current = allocator;
+    while (current.vtable == &LockedAllocator.vtable) {
+        const locked: *LockedAllocator = @ptrCast(@alignCast(current.ptr));
+        current = locked.child;
+    }
+    return @import("zstd/encode/total_budget.zig").Lease.fromAllocator(current);
+}
+
+fn mapScopedAllocationError(allocator: std.mem.Allocator, err: Error) Error {
+    if (err != error.OutOfMemory) return err;
+    var lease = (scopedTotalLease(allocator) catch return err) orelse return err;
+    defer lease.deinit();
+    return if (lease.snapshot().hit_limit) error.WorkingMemoryLimitExceeded else err;
+}
+
 const LevelFrameCandidate = struct {
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -7626,6 +7732,7 @@ inline fn shouldOverlapPrimaryOnCoordinator(input_len: usize, primary_block_size
 // and copy only its completed block back after join, so callers may continue to
 // provide single-threaded allocators such as `std.testing.allocator`.
 const MixedBlockCandidate = struct {
+    allocator: std.mem.Allocator,
     block: []const u8,
     last: bool,
     match_search_budget: usize,
@@ -7635,9 +7742,9 @@ const MixedBlockCandidate = struct {
 
     fn run(self: *MixedBlockCandidate) void {
         var candidate: std.ArrayList(u8) = .empty;
-        defer candidate.deinit(std.heap.smp_allocator);
+        defer candidate.deinit(self.allocator);
         const ok = emitMixedDuplicateRepeatedMatchCompressedBlock(
-            std.heap.smp_allocator,
+            self.allocator,
             &candidate,
             self.block,
             self.last,
@@ -7651,7 +7758,7 @@ const MixedBlockCandidate = struct {
         // Cancellation means the caller has accepted a deterministic decisive
         // non-mixed winner. Never publish a timing-dependent partial search.
         if (!ok or self.cancelled.load(.acquire)) return;
-        self.frame = candidate.toOwnedSlice(std.heap.smp_allocator) catch |err| {
+        self.frame = candidate.toOwnedSlice(self.allocator) catch |err| {
             self.err = err;
             return;
         };
@@ -7659,6 +7766,21 @@ const MixedBlockCandidate = struct {
 };
 
 pub fn encodeFrameWithLevelAndOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    level: c_int,
+    options: FrameOptions,
+) Error![]u8 {
+    _ = try resolveFrameOptionsForLevel(level, options);
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    const frame = encodeFrameWithLevelAndOptionsAllocUnbudgeted(entry.allocator(), input, level, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(frame);
+    try entry.releaseOwned(frame.len);
+    return frame;
+}
+
+fn encodeFrameWithLevelAndOptionsAllocUnbudgeted(
     allocator: std.mem.Allocator,
     input: []const u8,
     level: c_int,
@@ -7746,10 +7868,10 @@ fn encodeFrameWithLevelAndOptionsAllocImpl(
             var threads: [3]std.Thread = undefined;
             var spawned: usize = 0;
             for (candidates[0..candidate_count], 0..) |*candidate, i| {
-                threads[i] = std.Thread.spawn(.{}, LevelFrameCandidate.run, .{candidate}) catch {
+                threads[i] = std.Thread.spawn(.{ .allocator = parallel_allocator }, LevelFrameCandidate.run, .{candidate}) catch |err| {
                     for (threads[0..spawned]) |thread| thread.join();
                     for (candidates[0..spawned]) |completed| if (completed.result) |result| parallel_allocator.free(result.frame);
-                    return error.InvalidBlockPlan;
+                    return if (err == error.OutOfMemory) mapScopedAllocationError(parallel_allocator, error.OutOfMemory) else error.InvalidBlockPlan;
                 };
                 spawned += 1;
             }
@@ -8146,13 +8268,37 @@ pub fn encodeRawOrRleFrameWithOptionsAlloc(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error![]u8 {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
     var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeRawOrRleFrameAppend(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    errdefer out.deinit(entry.allocator());
+    encodeRawOrRleFrameAppendUnbudgeted(entry.allocator(), &out, input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    const frame = out.toOwnedSlice(entry.allocator()) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(frame);
+    try entry.releaseOwned(frame.len);
+    return frame;
 }
 
 pub fn encodeRawOrRleFrameAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!void {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    if (!entry.snapshot().available) return encodeRawOrRleFrameAppendUnbudgeted(entry.allocator(), out, input, entry.forward(options));
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(entry.allocator());
+    encodeRawOrRleFrameAppendUnbudgeted(entry.allocator(), &frame, input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    @import("zstd/encode/frame_publication.zig").appendFrame(&entry, out, frame.items) catch |err| return @errorCast(entry.mapError(err));
+}
+
+fn encodeRawOrRleFrameAppendUnbudgeted(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     input: []const u8,
@@ -8298,9 +8444,7 @@ pub fn encodeRawOrRleFrameIntoSlice(
     options: NativeFrameOptions,
     output: []u8,
 ) Error!usize {
-    var encoder = NativeFrameEncoder.init(allocator);
-    defer encoder.deinit();
-    const result = try encoder.encodeIntoSlice(input, forceNativeSelection(options, .raw_or_rle), output);
+    const result = try encodeNativeFrameIntoSlice(allocator, input, forceNativeSelection(options, .raw_or_rle), output);
     return result.written;
 }
 
@@ -8313,13 +8457,37 @@ pub fn encodeLiteralOnlyFrameWithOptionsAlloc(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error![]u8 {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
     var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeLiteralOnlyFrameAppend(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    errdefer out.deinit(entry.allocator());
+    encodeLiteralOnlyFrameAppendUnbudgeted(entry.allocator(), &out, input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    const frame = out.toOwnedSlice(entry.allocator()) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(frame);
+    try entry.releaseOwned(frame.len);
+    return frame;
 }
 
 pub fn encodeLiteralOnlyFrameAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!void {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    if (!entry.snapshot().available) return encodeLiteralOnlyFrameAppendUnbudgeted(entry.allocator(), out, input, entry.forward(options));
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(entry.allocator());
+    encodeLiteralOnlyFrameAppendUnbudgeted(entry.allocator(), &frame, input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    @import("zstd/encode/frame_publication.zig").appendFrame(&entry, out, frame.items) catch |err| return @errorCast(entry.mapError(err));
+}
+
+fn encodeLiteralOnlyFrameAppendUnbudgeted(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     input: []const u8,
@@ -8406,9 +8574,7 @@ pub fn encodeLiteralOnlyFrameIntoSlice(
     options: NativeFrameOptions,
     output: []u8,
 ) Error!usize {
-    var encoder = NativeFrameEncoder.init(allocator);
-    defer encoder.deinit();
-    const result = try encoder.encodeIntoSlice(input, forceNativeSelection(options, .literal_only), output);
+    const result = try encodeNativeFrameIntoSlice(allocator, input, forceNativeSelection(options, .literal_only), output);
     return result.written;
 }
 
@@ -8454,9 +8620,15 @@ pub fn encodeNativeFrameWithOptionsAlloc(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!NativeFrameEncodeResult {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeWithOptionsAlloc(input, options);
+    const result = encoder.encodeWithOptionsAlloc(input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(result.frame);
+    try entry.releaseOwned(result.frame.len);
+    return result;
 }
 
 pub fn encodeNativeFrameWithDictionaryAlloc(
@@ -8465,9 +8637,15 @@ pub fn encodeNativeFrameWithDictionaryAlloc(
     options: NativeFrameOptions,
     dictionary: NativeDictionary,
 ) Error!NativeFrameEncodeResult {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try optionsWithNativeDictionary(options, dictionary).validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeWithDictionaryAlloc(input, options, dictionary);
+    const result = encoder.encodeWithDictionaryAlloc(input, entry.forward(options), dictionary) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(result.frame);
+    try entry.releaseOwned(result.frame.len);
+    return result;
 }
 
 pub fn encodeNativeFrameAppend(
@@ -8476,9 +8654,21 @@ pub fn encodeNativeFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!NativeFrameMode {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeAppend(out, input, options);
+    if (!entry.snapshot().available)
+        return encoder.encodeAppend(out, input, entry.forward(options));
+    const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+    errdefer emission.rollback();
+    const result = encoder.encodeWithOptionsAlloc(input, entry.forward(options)) catch |err| return @errorCast(entry.mapError(err));
+    defer entry.allocator().free(result.frame);
+    @import("zstd/encode/frame_publication.zig").appendFrame(&entry, out, result.frame) catch |err| {
+        return @errorCast(entry.mapError(err));
+    };
+    return result.mode;
 }
 
 pub fn encodeNativeFrameAppendWithDictionary(
@@ -8488,9 +8678,19 @@ pub fn encodeNativeFrameAppendWithDictionary(
     options: NativeFrameOptions,
     dictionary: NativeDictionary,
 ) Error!NativeFrameMode {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try optionsWithNativeDictionary(options, dictionary).validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeAppendWithDictionary(out, input, options, dictionary);
+    if (!entry.snapshot().available)
+        return encoder.encodeAppendWithDictionary(out, input, entry.forward(options), dictionary);
+    const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+    errdefer emission.rollback();
+    const result = encoder.encodeWithDictionaryAlloc(input, entry.forward(options), dictionary) catch |err| return @errorCast(entry.mapError(err));
+    defer entry.allocator().free(result.frame);
+    @import("zstd/encode/frame_publication.zig").appendFrame(&entry, out, result.frame) catch |err| return @errorCast(entry.mapError(err));
+    return result.mode;
 }
 
 pub fn encodeNativeFrameIntoSlice(
@@ -8499,9 +8699,12 @@ pub fn encodeNativeFrameIntoSlice(
     options: NativeFrameOptions,
     output: []u8,
 ) Error!NativeFrameEncodeIntoResult {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try options.validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeIntoSlice(input, options, output);
+    return encoder.encodeIntoSlice(input, entry.forward(options), output) catch |err| return @errorCast(entry.mapError(err));
 }
 
 pub fn encodeNativeFrameIntoSliceWithDictionary(
@@ -8511,9 +8714,12 @@ pub fn encodeNativeFrameIntoSliceWithDictionary(
     dictionary: NativeDictionary,
     output: []u8,
 ) Error!NativeFrameEncodeIntoResult {
-    var encoder = NativeFrameEncoder.init(allocator);
+    try optionsWithNativeDictionary(options, dictionary).validate();
+    var entry = try total_budget.Entry.init(allocator, options);
+    defer entry.deinit();
+    var encoder = NativeFrameEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return try encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
+    return encoder.encodeIntoSliceWithDictionary(input, entry.forward(options), dictionary, output) catch |err| return @errorCast(entry.mapError(err));
 }
 
 pub fn encodeNativeFrameWithDictionarySetAlloc(
@@ -8558,6 +8764,7 @@ fn dictionaryFromSet(dictionary_set: NativeDictionarySet, dictionary_id: u32) Er
 
 pub const NativeFrameEncoder = struct {
     allocator: std.mem.Allocator,
+    memory: ?total_budget.Reusable = null,
     raw_scratch: std.ArrayList(u8) = .empty,
     literal_scratch: std.ArrayList(u8) = .empty,
     output_scratch: std.ArrayList(u8) = .empty,
@@ -8570,6 +8777,15 @@ pub const NativeFrameEncoder = struct {
         return .{ .allocator = allocator };
     }
 
+    /// Requested capacities owned by this reusable encoder, excluding borrowed
+    /// dictionaries/input and any shared ledger control allocation.
+    pub fn retainedRequestedBytes(self: *const NativeFrameEncoder) error{IntegerOverflow}!usize {
+        var bytes: usize = 0;
+        inline for (.{ "raw_scratch", "literal_scratch", "output_scratch", "rep_beam_scratch", "large_sequence_scratch", "block_scratch", "controlled_records" }) |field|
+            bytes = std.math.add(usize, bytes, try ownedArrayListBytes(&@field(self.*, field))) catch return error.IntegerOverflow;
+        return bytes;
+    }
+
     pub fn deinit(self: *NativeFrameEncoder) void {
         self.controlled_records.deinit(self.allocator);
         self.block_scratch.deinit(self.allocator);
@@ -8578,7 +8794,41 @@ pub const NativeFrameEncoder = struct {
         self.output_scratch.deinit(self.allocator);
         self.literal_scratch.deinit(self.allocator);
         self.raw_scratch.deinit(self.allocator);
+        if (self.memory) |*owner| owner.deinit();
         self.* = undefined;
+    }
+
+    pub fn memorySnapshot(self: *const NativeFrameEncoder) total_budget.Snapshot {
+        return if (self.memory) |*owner| owner.snapshot() else .{};
+    }
+
+    fn beginMemory(self: *NativeFrameEncoder, options: NativeFrameOptions) Error!NativeFrameOptions {
+        try options.validate();
+        if (self.memory == null) self.memory = try total_budget.Reusable.init(self.allocator);
+        self.allocator = try self.memory.?.begin(options, self, retainedRequestedBytes);
+        return total_budget.forward(options);
+    }
+
+    fn rebindSharedAllocator(self: *NativeFrameEncoder, allocator: std.mem.Allocator) void {
+        self.allocator = allocator;
+        if (self.memory) |*owner| {
+            if (!owner.snapshot().available) self.memory = null;
+        }
+    }
+
+    fn endMemory(self: *NativeFrameEncoder) void {
+        if (self.memory) |*owner| owner.end();
+    }
+
+    fn mapMemoryError(self: *const NativeFrameEncoder, err: Error) Error {
+        const mapped: Error = if (self.memory) |*owner| @errorCast(owner.mapError(err)) else err;
+        return mapScopedAllocationError(self.allocator, mapped);
+    }
+
+    fn memoryActive(self: *const NativeFrameEncoder) bool {
+        var inherited = (scopedTotalLease(self.allocator) catch return false) orelse return false;
+        defer inherited.deinit();
+        return true;
     }
 
     pub fn encodeAlloc(self: *NativeFrameEncoder, input: []const u8) Error![]u8 {
@@ -8593,11 +8843,16 @@ pub const NativeFrameEncoder = struct {
     ) Error!NativeFrameEncodeResult {
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        const mode = try self.encodeAppend(&out, input, options);
+        const mode = self.encodeAppendUnbudgeted(&out, input, inner, null) catch |err| return self.mapMemoryError(err);
+        const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(frame);
+        try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
         return .{
-            .frame = try out.toOwnedSlice(self.allocator),
+            .frame = frame,
             .mode = mode,
         };
     }
@@ -8610,11 +8865,16 @@ pub const NativeFrameEncoder = struct {
     ) Error!NativeFrameEncodeResult {
         const emission = encode_controls.EmissionTransaction.init(options.control_profile);
         errdefer emission.rollback();
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        const mode = try self.encodeAppendWithDictionary(&out, input, options, dictionary);
+        const mode = self.encodeAppendUnbudgeted(&out, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(frame);
+        try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
         return .{
-            .frame = try out.toOwnedSlice(self.allocator),
+            .frame = frame,
             .mode = mode,
         };
     }
@@ -8629,8 +8889,11 @@ pub const NativeFrameEncoder = struct {
         input: []const u8,
         options: NativeFrameOptions,
     ) Error!NativeFrameEncodeScratchResult {
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        if (self.memoryActive()) return self.encodeScratchTransactional(input, inner, null);
         self.output_scratch.clearRetainingCapacity();
-        const mode = self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, null) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -8646,8 +8909,11 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: NativeDictionary,
     ) Error!NativeFrameEncodeScratchResult {
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        defer self.endMemory();
+        if (self.memoryActive()) return self.encodeScratchTransactional(input, inner, dictionary);
         self.output_scratch.clearRetainingCapacity();
-        const mode = self.encodeAppendWithDictionary(&self.output_scratch, input, options, dictionary) catch |err| {
+        const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -8740,16 +9006,64 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: ?NativeDictionary,
     ) Error!NativeFrameMode {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
+        const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
+        defer self.endMemory();
+        if (!self.memoryActive()) return self.encodeAppendUnbudgeted(out, input, inner, dictionary);
+        var frame: std.ArrayList(u8) = .empty;
+        defer frame.deinit(self.allocator);
+        const mode = self.encodeAppendUnbudgeted(&frame, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        try self.appendTrackedFrame(out, frame.items);
+        return mode;
+    }
+
+    fn encodeScratchTransactional(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary: ?NativeDictionary) Error!NativeFrameEncodeScratchResult {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
+        var frame: std.ArrayList(u8) = .empty;
+        defer frame.deinit(self.allocator);
+        const mode = self.encodeAppendUnbudgeted(&frame, input, options, dictionary) catch |err| return self.mapMemoryError(err);
+        self.output_scratch.ensureTotalCapacity(self.allocator, frame.items.len) catch |err| return self.mapMemoryError(err);
+        self.output_scratch.clearRetainingCapacity();
+        self.output_scratch.appendSliceAssumeCapacity(frame.items);
+        return .{ .frame = self.output_scratch.items, .mode = mode };
+    }
+
+    fn appendTrackedFrame(self: *NativeFrameEncoder, out: *std.ArrayList(u8), frame: []const u8) Error!void {
+        if (frame.len <= out.capacity - out.items.len) {
+            out.appendSliceAssumeCapacity(frame);
+            return;
+        }
+        const owned = ownedListDescriptor(self, out);
+        const len = std.math.add(usize, out.items.len, frame.len) catch return error.IntegerOverflow;
+        const replacement = self.allocator.alloc(u8, len) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(replacement);
+        @memcpy(replacement[0..out.items.len], out.items);
+        @memcpy(replacement[out.items.len..], frame);
+        if (!owned) try self.memory.?.releaseOwned(self.memory.?.base, replacement.len);
+        out.deinit(if (owned) self.allocator else self.memory.?.base);
+        out.* = .{ .items = replacement, .capacity = replacement.len };
+    }
+
+    fn encodeAppendUnbudgeted(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: ?NativeDictionary,
+    ) Error!NativeFrameMode {
         const frame_options = optionsWithNativeDictionary(options, dictionary);
         try frame_options.validate();
-        if (encode_controls.active(frame_options)) {
+        const controlled_options = (try nativeLargeLegacyFastOptions(frame_options)) orelse frame_options;
+        if (encode_controls.active(controlled_options)) {
             if (dictionary == null and frame_options.dictionary_id != 0) return error.NeedDictionary;
             const alias = @import("zstd/encode/controlled_alias.zig");
             const preserved_dictionary = try alias.preserveDictionary(NativeDictionary, self.allocator, dictionary, out);
             defer preserved_dictionary.deinit(self.allocator);
             const source = try alias.preserve(self.allocator, input, out);
             defer source.deinit(self.allocator);
-            try ControlledFrameEncoder.append(self.allocator, out, source.bytes, frame_options, preserved_dictionary.dictionary, &self.controlled_records, &self.large_sequence_scratch, &self.block_scratch);
+            try ControlledFrameEncoder.append(self.allocator, out, source.bytes, controlled_options, preserved_dictionary.dictionary, &self.controlled_records, &self.large_sequence_scratch, &self.block_scratch);
             return .fast_compressed;
         }
         switch (options.selection) {
@@ -8822,6 +9136,35 @@ pub const NativeFrameEncoder = struct {
 };
 
 pub const FrameEncoder = NativeFrameEncoder;
+
+/// These scratch owners contain nested structs and ArrayLists; every dynamic
+/// member is released by their deinit methods. Fixed arrays and scalar metadata
+/// are caller-owned state and do not add requested heap bytes.
+fn ownedArrayListBytes(value: anytype) error{IntegerOverflow}!usize {
+    const T = @typeInfo(@TypeOf(value)).pointer.child;
+    if (@typeInfo(T) != .@"struct") return 0;
+    if (@hasField(T, "items") and @hasField(T, "capacity")) {
+        const Element = @typeInfo(@TypeOf(value.items)).pointer.child;
+        return std.math.mul(usize, value.capacity, @sizeOf(Element)) catch error.IntegerOverflow;
+    }
+    var bytes: usize = 0;
+    inline for (std.meta.fields(T)) |field| {
+        if (@typeInfo(field.type) == .@"struct")
+            bytes = std.math.add(usize, bytes, try ownedArrayListBytes(&@field(value.*, field.name))) catch return error.IntegerOverflow;
+    }
+    return bytes;
+}
+
+fn ownedListDescriptor(value: anytype, out: *std.ArrayList(u8)) bool {
+    const T = @typeInfo(@TypeOf(value)).pointer.child;
+    if (@typeInfo(T) != .@"struct") return false;
+    if (@hasField(T, "items") and @hasField(T, "capacity"))
+        return @intFromPtr(value) == @intFromPtr(out);
+    inline for (std.meta.fields(T)) |field| {
+        if (@typeInfo(field.type) == .@"struct" and ownedListDescriptor(&@field(value.*, field.name), out)) return true;
+    }
+    return false;
+}
 
 fn forceNativeSelection(options: NativeFrameOptions, selection: NativeFrameSelection) NativeFrameOptions {
     var forced = options;
@@ -9971,10 +10314,29 @@ fn copyHuffmanLiteralsFromSection(
     if (end == section.regenerated_size) try cursor.expectEnd();
 }
 
-noinline fn decodeLargeFourStreamHuffman(
+const decodeLargeFourStreamHuffman = if (builtin.target.ofmt == .wasm)
+    decodeLargeFourStreamHuffmanPortable
+else
+    decodeLargeFourStreamHuffmanNative;
+
+noinline fn decodeLargeFourStreamHuffmanNative(
     section: LiteralOnlySection,
     dest: []u8,
 ) align(64) linksection(huffman_only_decode_text_section) Error!bool {
+    return decodeLargeFourStreamHuffmanImpl(section, dest);
+}
+
+noinline fn decodeLargeFourStreamHuffmanPortable(
+    section: LiteralOnlySection,
+    dest: []u8,
+) Error!bool {
+    return decodeLargeFourStreamHuffmanImpl(section, dest);
+}
+
+inline fn decodeLargeFourStreamHuffmanImpl(
+    section: LiteralOnlySection,
+    dest: []u8,
+) Error!bool {
     const huffman_tree = section.huffman_tree orelse return false;
     const streams = switch (section.huffman_streams) {
         .four => |four| four,
@@ -10091,7 +10453,12 @@ noinline fn decodeLargeFourStreamHuffman(
     return true;
 }
 
-noinline fn decodeFourStreamHuffmanReservoir(
+const decodeFourStreamHuffmanReservoir = if (builtin.target.ofmt == .wasm)
+    decodeFourStreamHuffmanReservoirPortable
+else
+    decodeFourStreamHuffmanReservoirNative;
+
+noinline fn decodeFourStreamHuffmanReservoirNative(
     readers: *[4]ReverseBitReader,
     positions: *[4]usize,
     ends: [4]usize,
@@ -10099,6 +10466,28 @@ noinline fn decodeFourStreamHuffmanReservoir(
     lookup: *const CompleteHuffmanLiteralLookup,
     dest: []u8,
 ) align(64) linksection(huffman_only_decode_text_section) void {
+    return decodeFourStreamHuffmanReservoirImpl(readers, positions, ends, width, lookup, dest);
+}
+
+noinline fn decodeFourStreamHuffmanReservoirPortable(
+    readers: *[4]ReverseBitReader,
+    positions: *[4]usize,
+    ends: [4]usize,
+    width: u4,
+    lookup: *const CompleteHuffmanLiteralLookup,
+    dest: []u8,
+) void {
+    return decodeFourStreamHuffmanReservoirImpl(readers, positions, ends, width, lookup, dest);
+}
+
+inline fn decodeFourStreamHuffmanReservoirImpl(
+    readers: *[4]ReverseBitReader,
+    positions: *[4]usize,
+    ends: [4]usize,
+    width: u4,
+    lookup: *const CompleteHuffmanLiteralLookup,
+    dest: []u8,
+) void {
     var output_positions = positions.*;
     var reservoirs = [4]huffman_reservoir.Reservoir{
         huffman_reservoir.Reservoir.init(readers[0]) orelse unreachable,
@@ -12810,7 +13199,12 @@ noinline fn decodeAllFseRawSequences(
     }
 }
 
-noinline fn decodeAllFseHuffmanSequences(
+const decodeAllFseHuffmanSequences = if (builtin.target.ofmt == .wasm)
+    decodeAllFseHuffmanSequencesPortable
+else
+    decodeAllFseHuffmanSequencesNative;
+
+noinline fn decodeAllFseHuffmanSequencesNative(
     section: LiteralOnlySection,
     spec: *const SequenceModeSpec,
     output: []u8,
@@ -12823,6 +13217,38 @@ noinline fn decodeAllFseHuffmanSequences(
     comptime use_match_wildcopy: bool,
     initial_huffman: HuffmanLiteralDecodeState,
 ) align(256) Error!void {
+    return decodeAllFseHuffmanSequencesImpl(section, spec, output, written, frame_output_start, frame_state, continuation, state, allow_wildcopy, use_match_wildcopy, initial_huffman);
+}
+
+noinline fn decodeAllFseHuffmanSequencesPortable(
+    section: LiteralOnlySection,
+    spec: *const SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    comptime allow_wildcopy: bool,
+    comptime use_match_wildcopy: bool,
+    initial_huffman: HuffmanLiteralDecodeState,
+) Error!void {
+    return decodeAllFseHuffmanSequencesImpl(section, spec, output, written, frame_output_start, frame_state, continuation, state, allow_wildcopy, use_match_wildcopy, initial_huffman);
+}
+
+inline fn decodeAllFseHuffmanSequencesImpl(
+    section: LiteralOnlySection,
+    spec: *const SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    comptime allow_wildcopy: bool,
+    comptime use_match_wildcopy: bool,
+    initial_huffman: HuffmanLiteralDecodeState,
+) Error!void {
     var huffman_state = initial_huffman;
     var literal_offset: usize = 0;
     while (state.remaining != 0) {
@@ -12916,7 +13342,12 @@ noinline fn decodeAllFseHuffmanSequences(
 /// Decode the small-literal medium-density blocks selected by
 /// `preferHuffmanMatchWildcopy` without inheriting the large split executor's
 /// synthetic-corpus pair and fixed-length branches.
-noinline fn tryDecodeMediumSplitHuffmanSequences(
+const tryDecodeMediumSplitHuffmanSequences = if (builtin.target.ofmt == .wasm)
+    tryDecodeMediumSplitHuffmanSequencesPortable
+else
+    tryDecodeMediumSplitHuffmanSequencesNative;
+
+noinline fn tryDecodeMediumSplitHuffmanSequencesNative(
     section: LiteralOnlySection,
     output: []u8,
     written: *usize,
@@ -12925,6 +13356,30 @@ noinline fn tryDecodeMediumSplitHuffmanSequences(
     continuation: sequence_continuation.Context,
     state: *SequenceDecodeState,
 ) align(256) linksection(medium_split_literal_decode_text_section) Error!bool {
+    return tryDecodeMediumSplitHuffmanSequencesImpl(section, output, written, frame_output_start, frame_state, continuation, state);
+}
+
+noinline fn tryDecodeMediumSplitHuffmanSequencesPortable(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) Error!bool {
+    return tryDecodeMediumSplitHuffmanSequencesImpl(section, output, written, frame_output_start, frame_state, continuation, state);
+}
+
+inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) Error!bool {
     if (section.regenerated_size > sequence_decode_policy.medium_split_literal_max or
         section.huffman_streams != .four)
         return false;
@@ -13089,7 +13544,12 @@ noinline fn tryDecodeAllFseSplitHuffmanSequences(
     );
 }
 
-noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
+const tryDecodeAllFseSplitDenseHuffmanSequences = if (builtin.target.ofmt == .wasm)
+    tryDecodeAllFseSplitDenseHuffmanSequencesPortable
+else
+    tryDecodeAllFseSplitDenseHuffmanSequencesNative;
+
+noinline fn tryDecodeAllFseSplitDenseHuffmanSequencesNative(
     section: LiteralOnlySection,
     output: []u8,
     written: *usize,
@@ -13099,6 +13559,32 @@ noinline fn tryDecodeAllFseSplitDenseHuffmanSequences(
     state: *SequenceDecodeState,
     comptime allow_wildcopy: bool,
 ) align(64) linksection(split_dense_literal_decode_text_section) Error!bool {
+    return tryDecodeAllFseSplitDenseHuffmanSequencesImpl(section, output, written, frame_output_start, frame_state, continuation, state, allow_wildcopy);
+}
+
+noinline fn tryDecodeAllFseSplitDenseHuffmanSequencesPortable(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    comptime allow_wildcopy: bool,
+) Error!bool {
+    return tryDecodeAllFseSplitDenseHuffmanSequencesImpl(section, output, written, frame_output_start, frame_state, continuation, state, allow_wildcopy);
+}
+
+inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    comptime allow_wildcopy: bool,
+) Error!bool {
     if (section.regenerated_size > split_huffman_literal_capacity or
         section.huffman_streams != .four)
         return false;
@@ -15341,10 +15827,10 @@ fn parseRawOrRleFrameHeaderWithOptions(frame: []const u8, offset: *usize, allow_
     } else null;
 
     const effective_window = if (single_segment) content_size.? else window_size.?;
-    const block_size_max = @min(
-        std.compress.zstd.block_size_max,
-        try checkedU64ToUsize(effective_window),
-    );
+    const block_size_max = try checkedU64ToUsize(@min(
+        @as(u64, std.compress.zstd.block_size_max),
+        effective_window,
+    ));
 
     return .{
         .content_size = content_size,
@@ -16304,39 +16790,78 @@ fn encodedNativeSeekableStreamBoundInternal(input_len: usize, options: NativeSee
 /// XXH64 as required by the seekable-format specification and are independent
 /// of each frame's optional content checksum setting.
 pub fn encodeNativeSeekableStreamAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
-    defer encoder.deinit();
-    return encoder.encodeAlloc(input, options);
+    return encodeNativeSeekableScopedAlloc(allocator, input, options, null);
 }
 
 pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
-    defer encoder.deinit();
-    return encoder.encodeAppend(out, input, options);
+    return encodeNativeSeekableScopedAppend(allocator, out, input, options, null);
 }
 
 pub fn encodeNativeSeekableStreamIntoSlice(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, output: []u8) Error!usize {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
-    defer encoder.deinit();
-    return encoder.encodeIntoSlice(input, options, output);
+    return encodeNativeSeekableScopedInto(allocator, input, options, null, output);
 }
 
 pub fn encodeNativeSeekableStreamWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
-    defer encoder.deinit();
-    return encoder.encodeWithDictionaryAlloc(input, options, dictionary);
+    return encodeNativeSeekableScopedAlloc(allocator, input, options, dictionary);
 }
 
 pub fn encodeNativeSeekableStreamAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error!void {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
-    defer encoder.deinit();
-    return encoder.encodeAppendWithDictionary(out, input, options, dictionary);
+    return encodeNativeSeekableScopedAppend(allocator, out, input, options, dictionary);
 }
 
 pub fn encodeNativeSeekableStreamIntoSliceWithDictionary(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
-    var encoder = NativeSeekableStreamEncoder.init(allocator);
+    return encodeNativeSeekableScopedInto(allocator, input, options, dictionary, output);
+}
+
+fn forwardSeekableMemory(options: NativeSeekableOptions) NativeSeekableOptions {
+    var inner = options;
+    inner.frame_options = total_budget.forward(options.frame_options);
+    return inner;
+}
+
+fn encodeNativeSeekableScopedAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]u8 {
+    try validateNativeSeekableOptions(options);
+    var entry = try total_budget.Entry.init(allocator, options.frame_options);
+    defer entry.deinit();
+    var encoder = NativeSeekableStreamEncoder.init(entry.allocator());
     defer encoder.deinit();
-    return encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
+    const inner = forwardSeekableMemory(options);
+    const frame = (if (dictionary) |dict| encoder.encodeWithDictionaryAlloc(input, inner, dict) else encoder.encodeAlloc(input, inner)) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(frame);
+    try entry.releaseOwned(frame.len);
+    return frame;
+}
+
+fn encodeNativeSeekableScopedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+    try validateNativeSeekableOptions(options);
+    var entry = try total_budget.Entry.init(allocator, options.frame_options);
+    defer entry.deinit();
+    var encoder = NativeSeekableStreamEncoder.init(entry.allocator());
+    defer encoder.deinit();
+    const inner = forwardSeekableMemory(options);
+    if (!entry.snapshot().available) return encoder.encodeAppendInternal(out, input, inner, dictionary);
+    const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+    errdefer emission.rollback();
+    const frame = (if (dictionary) |dict| encoder.encodeWithDictionaryAlloc(input, inner, dict) else encoder.encodeAlloc(input, inner)) catch |err| return @errorCast(entry.mapError(err));
+    defer entry.allocator().free(frame);
+    @import("zstd/encode/frame_publication.zig").appendFrame(&entry, out, frame) catch |err| return @errorCast(entry.mapError(err));
+}
+
+fn encodeNativeSeekableScopedInto(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+    try validateNativeSeekableOptions(options);
+    var entry = try total_budget.Entry.init(allocator, options.frame_options);
+    defer entry.deinit();
+    var encoder = NativeSeekableStreamEncoder.init(entry.allocator());
+    defer encoder.deinit();
+    const inner = forwardSeekableMemory(options);
+    if (!entry.snapshot().available) return encoder.encodeIntoSliceInternal(input, inner, dictionary, output);
+    const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+    errdefer emission.rollback();
+    const frame = (if (dictionary) |dict| encoder.encodeWithDictionaryAlloc(input, inner, dict) else encoder.encodeAlloc(input, inner)) catch |err| return @errorCast(entry.mapError(err));
+    defer entry.allocator().free(frame);
+    if (output.len < frame.len) return error.OutputTooSmall;
+    @memcpy(output[0..frame.len], frame);
+    return frame.len;
 }
 
 pub fn encodeNativeSeekableStreamWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
@@ -16459,6 +16984,23 @@ fn encodeNativeSeekableStreamParallelInternal(
     dictionary: ?NativeDictionary,
     worker_count: usize,
 ) Error![]u8 {
+    try validateNativeSeekableOptions(options);
+    if (worker_count == 0 or worker_count > native_seekable_parallel_workers_max) return error.InvalidBlockPlan;
+    var entry = try total_budget.Entry.init(allocator, options.frame_options);
+    defer entry.deinit();
+    const stream = encodeNativeSeekableStreamParallelUnbudgeted(entry.allocator(), input, forwardSeekableMemory(options), dictionary, worker_count) catch |err| return @errorCast(entry.mapError(err));
+    errdefer entry.allocator().free(stream);
+    try entry.releaseOwned(stream.len);
+    return stream;
+}
+
+fn encodeNativeSeekableStreamParallelUnbudgeted(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeSeekableOptions,
+    dictionary: ?NativeDictionary,
+    worker_count: usize,
+) Error![]u8 {
     if (worker_count == 0 or worker_count > native_seekable_parallel_workers_max) return error.InvalidBlockPlan;
     const frame_count = try nativeSeekableFrameCount(input.len, options.frame_size);
     if (worker_count == 1 or frame_count == 1 or comptime builtin.single_threaded) {
@@ -16494,11 +17036,16 @@ fn encodeNativeSeekableStreamParallelInternal(
     defer allocator.free(threads);
     var queue: ParallelNativeSeekableQueue = .{ .results = results };
     var spawned: usize = 0;
+    var spawn_failure: ?Error = null;
     while (spawned < threads.len) : (spawned += 1) {
-        threads[spawned] = std.Thread.spawn(.{}, ParallelNativeSeekableQueue.run, .{&queue}) catch break;
+        threads[spawned] = std.Thread.spawn(.{ .allocator = parallel_allocator }, ParallelNativeSeekableQueue.run, .{&queue}) catch |err| {
+            if (err == error.OutOfMemory) spawn_failure = mapScopedAllocationError(parallel_allocator, error.OutOfMemory);
+            break;
+        };
     }
-    queue.run();
+    if (spawn_failure == null) queue.run();
     for (threads[0..spawned]) |thread| thread.join();
+    if (spawn_failure) |err| return err;
 
     if (options.frame_options.control_profile) |profile| {
         for (results) |result| profile.mergeWork(result.profile);
@@ -16530,6 +17077,7 @@ fn encodeNativeSeekableStreamParallelInternal(
 /// Caller-owned destinations remain available through the append/into methods.
 pub const NativeSeekableStreamEncoder = struct {
     allocator: std.mem.Allocator,
+    memory: ?total_budget.Reusable = null,
     frame_encoder: NativeFrameEncoder,
     entries: std.ArrayList(NativeSeekTableFrameSize) = .empty,
     output_scratch: std.ArrayList(u8) = .empty,
@@ -16538,29 +17086,67 @@ pub const NativeSeekableStreamEncoder = struct {
         return .{ .allocator = allocator, .frame_encoder = NativeFrameEncoder.init(allocator) };
     }
 
+    pub fn retainedRequestedBytes(self: *const NativeSeekableStreamEncoder) error{IntegerOverflow}!usize {
+        var bytes = try self.frame_encoder.retainedRequestedBytes();
+        bytes = std.math.add(usize, bytes, try ownedArrayListBytes(&self.entries)) catch return error.IntegerOverflow;
+        return std.math.add(usize, bytes, self.output_scratch.capacity) catch error.IntegerOverflow;
+    }
+
+    pub fn memorySnapshot(self: *const NativeSeekableStreamEncoder) total_budget.Snapshot {
+        return if (self.memory) |*owner| owner.snapshot() else .{};
+    }
+
+    fn beginMemory(self: *NativeSeekableStreamEncoder, options: NativeSeekableOptions) Error!NativeSeekableOptions {
+        try validateNativeSeekableOptions(options);
+        if (self.memory == null) self.memory = try total_budget.Reusable.init(self.allocator);
+        self.allocator = try self.memory.?.begin(options.frame_options, self, retainedRequestedBytes);
+        self.frame_encoder.rebindSharedAllocator(self.allocator);
+        return forwardSeekableMemory(options);
+    }
+
+    fn endMemory(self: *NativeSeekableStreamEncoder) void {
+        if (self.memory) |*owner| owner.end();
+    }
+
+    fn mapMemoryError(self: *const NativeSeekableStreamEncoder, err: Error) Error {
+        const mapped: Error = if (self.memory) |*owner| @errorCast(owner.mapError(err)) else err;
+        return mapScopedAllocationError(self.allocator, mapped);
+    }
+
     pub fn deinit(self: *NativeSeekableStreamEncoder) void {
         self.output_scratch.deinit(self.allocator);
         self.entries.deinit(self.allocator);
         self.frame_encoder.deinit();
+        if (self.memory) |*owner| owner.deinit();
         self.* = undefined;
     }
 
     pub fn encodeAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        try self.encodeAppend(&out, input, options);
-        return out.toOwnedSlice(self.allocator);
+        self.encodeAppendUnbudgeted(&out, input, inner, null) catch |err| return self.mapMemoryError(err);
+        const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(frame);
+        try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
+        return frame;
     }
 
     pub fn encodeWithDictionaryAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        try self.encodeAppendWithDictionary(&out, input, options, dictionary);
-        return out.toOwnedSlice(self.allocator);
+        self.encodeAppendUnbudgeted(&out, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        const frame = out.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(frame);
+        try self.memory.?.releaseOwned(self.memory.?.base, frame.len);
+        return frame;
     }
 
     pub fn encodeWithDictionarySetAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
@@ -16620,8 +17206,21 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeScratchInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]const u8 {
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        if (self.memory.?.snapshot().available) {
+            const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+            errdefer emission.rollback();
+            var frame: std.ArrayList(u8) = .empty;
+            defer frame.deinit(self.allocator);
+            self.encodeAppendUnbudgeted(&frame, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+            self.output_scratch.ensureTotalCapacity(self.allocator, frame.items.len) catch |err| return self.mapMemoryError(err);
+            self.output_scratch.clearRetainingCapacity();
+            self.output_scratch.appendSliceAssumeCapacity(frame.items);
+            return self.output_scratch.items;
+        }
         self.output_scratch.clearRetainingCapacity();
-        self.encodeAppendInternal(&self.output_scratch, input, options, dictionary) catch |err| {
+        self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -16629,6 +17228,19 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeAppendInternal(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        if (!self.memory.?.snapshot().available) return self.encodeAppendUnbudgeted(out, input, inner, dictionary);
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
+        var frame: std.ArrayList(u8) = .empty;
+        defer frame.deinit(self.allocator);
+        self.encodeAppendUnbudgeted(&frame, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        const view: total_budget.Entry = .{ .caller = self.memory.?.base, .lease = self.memory.?.lease.? };
+        @import("zstd/encode/frame_publication.zig").appendFrame(&view, out, frame.items) catch |err| return self.mapMemoryError(err);
+    }
+
+    fn encodeAppendUnbudgeted(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
         const entries = try self.prepareEntries(input.len, options.frame_size);
@@ -16649,6 +17261,22 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeIntoSliceInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        if (self.memory.?.snapshot().available) {
+            const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+            errdefer emission.rollback();
+            var frame: std.ArrayList(u8) = .empty;
+            defer frame.deinit(self.allocator);
+            self.encodeAppendUnbudgeted(&frame, input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+            if (output.len < frame.items.len) return error.OutputTooSmall;
+            @memcpy(output[0..frame.items.len], frame.items);
+            return frame.items.len;
+        }
+        return self.encodeIntoSliceUnbudgeted(input, inner, dictionary, output);
+    }
+
+    fn encodeIntoSliceUnbudgeted(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
         const entries = try self.prepareEntries(input.len, options.frame_size);
@@ -17682,8 +18310,14 @@ fn emitNativeMatchCompressedBlockImpl(
             return out.items.len != 0;
         }
 
+        if (comptime builtin.single_threaded)
+            return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
+
         var cancel_mixed: std.atomic.Value(bool) = .init(false);
+        var mixed_allocator = LockedAllocator{ .child = allocator };
+        const shared_allocator = mixed_allocator.allocator();
         var mixed_candidate: MixedBlockCandidate = .{
+            .allocator = shared_allocator,
             .block = block,
             .last = last,
             .match_search_budget = match_search_budget,
@@ -17692,13 +18326,13 @@ fn emitNativeMatchCompressedBlockImpl(
         // Wide-alphabet data is less likely to prove the mixed candidate
         // dominated. Preserve parallel arbitration there so the classifier
         // cannot serialize two expensive searches.
-        if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
+        if (std.Thread.spawn(.{ .allocator = shared_allocator }, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
             const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
-            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch) catch |err| {
+            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, true, shared_allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch) catch |err| {
                 cancel_mixed.store(true, .release);
                 thread.join();
-                if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
+                if (mixed_candidate.frame) |frame| shared_allocator.free(frame);
                 return err;
             };
             if (mixed_dominated) cancel_mixed.store(true, .release);
@@ -17706,14 +18340,16 @@ fn emitNativeMatchCompressedBlockImpl(
             const mixed_cancelled = cancel_mixed.load(.acquire);
             if (mixed_candidate.err) |err| return err;
             if (mixed_candidate.frame) |mixed| {
-                defer std.heap.smp_allocator.free(mixed);
+                defer shared_allocator.free(mixed);
                 if (!mixed_cancelled and (!non_mixed_ok or mixed.len <= out.items.len)) {
                     out.clearRetainingCapacity();
-                    try out.appendSlice(allocator, mixed);
+                    try out.appendSlice(shared_allocator, mixed);
                 }
             }
             return out.items.len != 0;
-        } else |_| {}
+        } else |err| {
+            if (err == error.OutOfMemory) return mapScopedAllocationError(shared_allocator, error.OutOfMemory);
+        }
         // Thread creation is an optimization only. If the platform refuses a
         // worker, fall through to the byte-identical serial selector below.
     }
@@ -27903,15 +28539,35 @@ const FseCompressionTable = struct {
 };
 
 const ReverseBitstreamWriter = struct {
-    accumulator: usize = 0,
-    bit_count: u6 = 0,
+    accumulator: u64 = 0,
+    bit_count: u8 = 0,
 
     fn addBits(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usize, bits: u8) Error!void {
         if (bits == 0) return;
         if (bits > @bitSizeOf(usize)) return error.CorruptFrame;
-        const mask = (@as(usize, 1) << @intCast(bits)) - 1;
-        self.accumulator |= (value & mask) << self.bit_count;
-        self.bit_count += @intCast(bits);
+        // The ordinary <=31-bit Zstd fields plus at most seven buffered bits
+        // fit one u64 on every target. Full-word fields use the same byte order
+        // but split when a preceding field already occupies the accumulator.
+        if (bits <= 56) {
+            const mask = (@as(u64, 1) << @intCast(bits)) - 1;
+            self.accumulator |= (@as(u64, value) & mask) << @intCast(self.bit_count);
+            self.bit_count += bits;
+            return self.flushBytes(allocator, out);
+        }
+        var remaining = bits;
+        var wide: u64 = value;
+        while (remaining != 0) {
+            const chunk = @min(remaining, 64 - self.bit_count);
+            const mask = if (chunk == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(chunk)) - 1;
+            self.accumulator |= (wide & mask) << @intCast(self.bit_count);
+            self.bit_count += chunk;
+            remaining -= chunk;
+            if (chunk == 64) wide = 0 else wide >>= @intCast(chunk);
+            try self.flushBytes(allocator, out);
+        }
+    }
+
+    fn flushBytes(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {
         while (self.bit_count >= 8) {
             try out.append(allocator, @truncate(self.accumulator));
             self.accumulator >>= 8;
@@ -27920,7 +28576,7 @@ const ReverseBitstreamWriter = struct {
     }
 
     fn finish(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {
-        self.accumulator |= @as(usize, 1) << self.bit_count;
+        self.accumulator |= @as(u64, 1) << @intCast(self.bit_count);
         self.bit_count += 1;
         while (self.bit_count > 0) {
             try out.append(allocator, @truncate(self.accumulator));
@@ -27942,7 +28598,7 @@ fn addCheckedReverseBits(
     if (bits > @bitSizeOf(usize)) return error.CorruptFrame;
     if (bits == 0) {
         if (value != 0) return error.CorruptFrame;
-    } else if (value >= (@as(usize, 1) << @intCast(bits))) return error.CorruptFrame;
+    } else if (bits < @bitSizeOf(usize) and value >= (@as(usize, 1) << @intCast(bits))) return error.CorruptFrame;
     try writer.addBits(allocator, out, value, bits);
 }
 
@@ -30835,10 +31491,7 @@ fn emitReverseBitstreamFromReadOrder(allocator: std.mem.Allocator, out: *std.Arr
     while (i > 0) {
         i -= 1;
         const field = read_fields[i];
-        if (field.bits > @bitSizeOf(usize) or
-            (field.bits == 0 and field.value != 0) or
-            (field.bits != 0 and field.value >= (@as(usize, 1) << @intCast(field.bits)))) return error.CorruptFrame;
-        try writer.addBits(allocator, out, field.value, field.bits);
+        try addCheckedReverseBits(&writer, allocator, out, field.value, field.bits);
     }
     try writer.finish(allocator, out);
 }
@@ -30873,6 +31526,24 @@ test "zstd reverse bitstream direct reverse traversal matches copied reference" 
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
 
+    for ([_]u8{ 31, 32, @bitSizeOf(usize) }) |bits| {
+        for (0..8) |prefix_bits| {
+            const wide_value = @as(usize, std.math.maxInt(usize)) >> @intCast(@as(u8, @bitSizeOf(usize)) - bits);
+            const prefix_value = if (prefix_bits == 0) 0 else (@as(usize, 1) << @intCast(prefix_bits)) - 1;
+            const read_fields = [_]BitField{ .{ .value = wide_value, .bits = bits }, .{ .value = prefix_value, .bits = @intCast(prefix_bits) } };
+            var oracle: std.ArrayList(u8) = .empty;
+            defer oracle.deinit(std.testing.allocator);
+            try reverseBitstreamByteOracle(std.testing.allocator, &oracle, &read_fields);
+            var actual: std.ArrayList(u8) = .empty;
+            defer actual.deinit(std.testing.allocator);
+            try emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, &read_fields);
+            try std.testing.expectEqualSlices(u8, oracle.items, actual.items);
+            actual.clearRetainingCapacity();
+            try emitReverseBitstreamFromReadOrderReference(std.testing.allocator, &actual, &read_fields);
+            try std.testing.expectEqualSlices(u8, oracle.items, actual.items);
+        }
+    }
+
     var invalid = [_]BitField{.{ .value = 1, .bits = 0 }};
     var expected: std.ArrayList(u8) = .empty;
     defer expected.deinit(std.testing.allocator);
@@ -30891,27 +31562,35 @@ test "zstd reverse bitstream direct reverse traversal matches copied reference" 
     try std.testing.expectError(error.CorruptFrame, emitReverseBitstreamFromReadOrder(std.testing.allocator, &actual, &invalid));
 }
 
-fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), fields: []const BitField) Error!void {
-    var accumulator: usize = 0;
-    var bit_count: u6 = 0;
-    for (fields) |field| {
-        if (field.bits > @bitSizeOf(usize) or field.value >= (@as(usize, 1) << @intCast(field.bits))) return error.CorruptFrame;
-        accumulator |= field.value << bit_count;
-        bit_count += @intCast(field.bits);
-        while (bit_count >= 8) {
-            try out.append(allocator, @truncate(accumulator));
-            accumulator >>= 8;
-            bit_count -= 8;
+/// Test oracle writes one bit at a time and never uses a word accumulator.
+fn reverseBitstreamByteOracle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), read_fields: []const BitField) Error!void {
+    var byte: u8 = 0;
+    var used: u4 = 0;
+    var index = read_fields.len;
+    while (index != 0) {
+        index -= 1;
+        const field = read_fields[index];
+        for (0..field.bits) |bit| {
+            const value: u8 = @intCast((field.value >> @intCast(bit)) & 1);
+            byte |= value << @intCast(used);
+            used += 1;
+            if (used == 8) {
+                try out.append(allocator, byte);
+                byte = 0;
+                used = 0;
+            }
         }
     }
-    accumulator |= @as(usize, 1) << bit_count;
-    bit_count += 1;
-    while (bit_count > 0) {
-        try out.append(allocator, @truncate(accumulator));
-        if (bit_count <= 8) break;
-        accumulator >>= 8;
-        bit_count -= 8;
+    byte |= @as(u8, 1) << @intCast(used);
+    try out.append(allocator, byte);
+}
+
+fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), fields: []const BitField) Error!void {
+    var writer: ReverseBitstreamWriter = .{};
+    for (fields) |field| {
+        try addCheckedReverseBits(&writer, allocator, out, field.value, field.bits);
     }
+    try writer.finish(allocator, out);
 }
 
 fn findRepeatedPatternSegment(block: []const u8) ?RepeatedPatternSegment {
@@ -31002,7 +31681,7 @@ fn literalLengthCode(value: usize) Error!u8 {
     if (value < 48) return @intCast(22 + (value - 32) / 8);
     if (value < 64) return 24;
     const log = std.math.log2_int(usize, value);
-    const code: usize = 19 + log;
+    const code: usize = @as(usize, 19) + log;
     if (code >= ll_base.len or value < ll_base[code] or value - ll_base[code] >= (@as(usize, 1) << @intCast(ll_bits[code]))) return error.CorruptFrame;
     return @intCast(code);
 }
@@ -31016,7 +31695,7 @@ fn matchLengthCode(value: usize) Error!u8 {
     if (value < 99) return @intCast(40 + (value - 67) / 16);
     if (value < 131) return 42;
     const log = std.math.log2_int(usize, value - 3);
-    const code: usize = 36 + log;
+    const code: usize = @as(usize, 36) + log;
     if (code >= ml_base.len or value < ml_base[code] or value - ml_base[code] >= (@as(usize, 1) << @intCast(ml_bits[code]))) return error.CorruptFrame;
     return @intCast(code);
 }
@@ -31405,10 +32084,14 @@ test "zstd explicit window uses non-single FCS widths and validates logs" {
     try std.testing.expectEqual(
         native_explicit_window_match_len_max,
         try nativeEncoderWindowLen(.{
-            .window_log = 26,
+            .window_log = 32,
             .max_match_history_len = native_explicit_window_match_len_max,
         }),
     );
+    try std.testing.expectEqual(@as(usize, 1) << 26, try nativeEncoderWindowLen(.{
+        .window_log = 26,
+        .max_match_history_len = native_explicit_window_match_len_max,
+    }));
     try std.testing.expectError(
         error.InvalidBlockPlan,
         nativeEncoderWindowLen(.{ .max_match_history_len = 1024 }),
@@ -44155,10 +44838,23 @@ test "zstd native decoder accepts simple facade-generated predefined frame" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
 }
 
-noinline fn tryDecodeSmallPredefinedOffsetFseFrame(
+const tryDecodeSmallPredefinedOffsetFseFrame = if (builtin.target.ofmt == .wasm)
+    tryDecodeSmallPredefinedOffsetFseFramePortable
+else
+    tryDecodeSmallPredefinedOffsetFseFrameNative;
+
+noinline fn tryDecodeSmallPredefinedOffsetFseFrameNative(
     frame: []const u8,
     output: []u8,
 ) align(64) linksection(small_frame_decode_text_section) Error!?usize {
+    return tryDecodeSmallPredefinedOffsetFseFrameImpl(frame, output);
+}
+
+noinline fn tryDecodeSmallPredefinedOffsetFseFramePortable(frame: []const u8, output: []u8) Error!?usize {
+    return tryDecodeSmallPredefinedOffsetFseFrameImpl(frame, output);
+}
+
+inline fn tryDecodeSmallPredefinedOffsetFseFrameImpl(frame: []const u8, output: []u8) Error!?usize {
     if (frame.len > 4096 or frame.len < 9) return null;
     if (std.mem.readInt(u32, frame[0..4], .little) != frame_magic_u32) return null;
 
@@ -44426,7 +45122,12 @@ noinline fn decodeSmallHuffmanBlockWithSequenceWorkspace(
     return decodePredefinedOffsetFsePredefinedHuffmanPrepared(block, section, spec.bitstream_offset, &spec.offset_fse, output, written, frame_output_start, repeated_offsets, null, prepared_lookup, true);
 }
 
-noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
+const decodePredefinedOffsetFsePredefinedHuffmanPrepared = if (builtin.target.ofmt == .wasm)
+    decodePredefinedOffsetFsePredefinedHuffmanPreparedPortable
+else
+    decodePredefinedOffsetFsePredefinedHuffmanPreparedNative;
+
+noinline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedNative(
     block: []const u8,
     section: anytype,
     bitstream_offset: usize,
@@ -44439,6 +45140,38 @@ noinline fn decodePredefinedOffsetFsePredefinedHuffmanPrepared(
     prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
     comptime localize_output_cursor: bool,
 ) align(256) linksection(small_sequence_decode_text_section) Error!void {
+    return decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(block, section, bitstream_offset, offset_fse, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup, localize_output_cursor);
+}
+
+noinline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedPortable(
+    block: []const u8,
+    section: anytype,
+    bitstream_offset: usize,
+    offset_fse: anytype,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    prepared_tree: ?*const StdZstdHuffmanTree,
+    prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
+    comptime localize_output_cursor: bool,
+) Error!void {
+    return decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(block, section, bitstream_offset, offset_fse, output, written, frame_output_start, repeated_offsets, prepared_tree, prepared_lookup, localize_output_cursor);
+}
+
+inline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(
+    block: []const u8,
+    section: anytype,
+    bitstream_offset: usize,
+    offset_fse: anytype,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    repeated_offsets: [3]usize,
+    prepared_tree: ?*const StdZstdHuffmanTree,
+    prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
+    comptime localize_output_cursor: bool,
+) Error!void {
     const has_owned_tree = comptime @hasField(@TypeOf(section.*), "huffman_tree");
     if (frame_output_start > written.*) return error.CorruptFrame;
     var reader = try ReverseBitReader.init(block[bitstream_offset..]);
