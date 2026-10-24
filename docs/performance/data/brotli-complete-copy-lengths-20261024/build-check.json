@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "check",
+    "-Doptimize=Debug",
+    "-j4",
+    "--summary",
+    "all"
+  ],
+  "started_utc": "2026-10-24T11:18:35.697954+00:00",
+  "finished_utc": "2026-10-24T11:29:06.013850+00:00",
+  "exit_code": 0,
+  "source_before_after_equal": false,
+  "changed_sources": [
+    "src/br/encoder/hq_parser/complete_length_tests.zig",
+    "tools/br/wasm_public_gate.js"
+  ],
+  "log_sha256": "e07b33e21da2461d443b102dead42a5cacc44e92f4e6145ecf119f6c99df4ffd"
+}

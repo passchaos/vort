@@ -1,0 +1,18 @@
+{
+  "command": [
+    "env",
+    "PYTHONPYCACHEPREFIX=/tmp/vort-br-complete-final-20261024-qy09p5f8/consumer/pycache",
+    "python3",
+    "-m",
+    "py_compile",
+    "tools/br/complete_lengths_cli_gate.py",
+    "tools/br/complete_lengths_diff.py"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.18124766694381833,
+  "utc": "2026-10-24T11:20:22.115435+00:00",
+  "changed_sources": [],
+  "source_sha256": "0fd93df621ffce1e214f0771784eebc99f3fe74fc1bc49b57ad3762daa7ad509",
+  "log": "/tmp/vort-br-complete-final-20261024-qy09p5f8/consumer/py-compile-new-drivers.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

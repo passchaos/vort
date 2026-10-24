@@ -1,0 +1,30 @@
+{
+  "after_manifest_sha256": "b828369dd025a8c41df571510f4d1593969359d6cf7cf8f2943f15edf449a603",
+  "before_manifest_sha256": "b828369dd025a8c41df571510f4d1593969359d6cf7cf8f2943f15edf449a603",
+  "build_steps": "7/7",
+  "command": "zig build test-br-public-wasm -Doptimize=ReleaseFast --summary all",
+  "compiler_cache_manifests": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/cf71c63cd89c4e5f4d9a55ae31e4406a.txt",
+      "sha256": "a87f90be6b2960b96e748dff83093adfe3a3ff6ff6c6ad38e8722ad1eaee54bd"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/fd27cecae79262e2d941d00fd5bdf537.txt",
+      "sha256": "63f7cd0351413f180f989135b357e1363629fe87ff00f3969eaeccc6513906ba"
+    }
+  ],
+  "complete_exact_plan_budget_success_cases": 2,
+  "complete_roundtrips": 2,
+  "complete_search_limit_rejections": 4,
+  "new_complete_cases": 2,
+  "node_exports_checked": 6,
+  "node_smoke_calls": 4,
+  "node_version": "v26.10.0",
+  "note": "node_result flags come from exported complete smoke checks; per-plan price edge budget is not a total CPU cap; initial Debug imports failure and canceled obsolete whole-stage retained separately",
+  "owned_js_sha256": "b03409a241a43fdb140cdb8bdc45aa4e2a6e023cbe55338e5246353f28e53192",
+  "owned_zig_sha256": "0721dbdeaa27aea352cfd30029d0e34350878af75879ff49571f42db9e9614f2",
+  "source_changes": [],
+  "status": "passed",
+  "wasm_cache_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/e36b66b739b080ab6f01d66ceb087f20/vort-br-public-wasm.wasm",
+  "wasm_sha256": "6920c86e3e51e98cf38cb151d10393a4f1ecf7953b7c6705fed5cfb50daeea90"
+}

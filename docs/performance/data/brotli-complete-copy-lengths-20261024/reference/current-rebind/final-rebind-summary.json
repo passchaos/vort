@@ -1,0 +1,39 @@
+{
+  "status": "identical_binary_rebind_verified",
+  "new_probe_sha256": "f2808486a6bcbc77263f1c7340bcb5ee91e606688d6f9236ead7c7f1f59274c6",
+  "original_probe_sha256": "f2808486a6bcbc77263f1c7340bcb5ee91e606688d6f9236ead7c7f1f59274c6",
+  "binary_byte_identical": true,
+  "compilation_exit_code": 0,
+  "compile_window_stable": true,
+  "original_runtime_reused": {
+    "report": "/tmp/vort-br-complete-final-20261024-qy09p5f8/reference/complete-lengths-report.json",
+    "sha256": "fec70495a4f0f9bdbcf52f9d3ccbbbff499d7ef22fc482ebd072d7346631728f",
+    "representative_cases": 28,
+    "logical_cases": 40,
+    "probe_calls": 144,
+    "new_runtime_execution": false
+  },
+  "original_cache_binding": {
+    "artifact_digest": "a428c84e8c20e1a7ecf68ad0db28774d",
+    "manifest_sha256": "39987e61e08c6deca125f5f3963d8695462f6f45f14d6594fbd20e7bf6e00bd6",
+    "proof_path": "/tmp/vort-br-complete-final-20261024-qy09p5f8/reference/artifact-digest-binding.json",
+    "scope": "exact original formal cache-emitted artifact, all recorded contents verified including recovered original test"
+  },
+  "current_inputs": {
+    "proof": "current-input-proof.json",
+    "proof_sha256": "3e83f0d305a6b922a167f65c3c8a4b1756539116011c48bc2ddfb4624bb00d55",
+    "input_records": 1908,
+    "unique_inputs": 1906,
+    "changed_files": 1,
+    "changed_file": "src/br/encoder/hq_parser/complete_length_tests.zig",
+    "final_test_sha256": "7fc2a57741e5da60f7a7e6fb01d8f7df0bdf673a45747f22caa9aaee2b4c36ff",
+    "no_import_graph_change_in_modified_test": true,
+    "zip": "current-inputs.zip",
+    "zip_sha256": "9fe98d5678529a412e28b5bd18aa9d0ac0e71994577641473d93b18fbb322210"
+  },
+  "new_h_manifest_scope": "Explicit-output CLI compilation did not write a new matching .h; final binding uses the successful recorded compile command, stable complete original dependency content window, verified sole test delta, and bit-identical ELF. A fresh cache-directory mapping is not claimed.",
+  "source_or_git_modified": false,
+  "cli_recompiled": false,
+  "runtime_repeated": false,
+  "binary_equality_method": "direct byte-for-byte equality with both original cache-emitted ELF and archived original ELF, plus SHA256 equality"
+}

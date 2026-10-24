@@ -1,0 +1,156 @@
+{
+  "generated_utc": "2026-10-24T11:16:36.890310+00:00",
+  "base_revision": "34dbe96ae7b57f4eb9d36b0821be1ff700d26508",
+  "owned_named_count": 15,
+  "named_tests": [
+    "Brotli complete lengths default sampled controls preserve the independently frozen small wires",
+    "Brotli complete lengths interior fifty sixty nine and eighty three beat sampled edges with actual wire selectors",
+    "Brotli complete lengths tiny finite cache paths agree with independent exhaustive command pricing",
+    "Brotli complete lengths compound interior fifty is enumerated while static transforms stay atomic",
+    "Brotli complete lengths all sixteen aliases retain exact semantic selectors and code zero cache state",
+    "Brotli complete lengths public APIs preserve format sampled wire guard and q11 ordering in both parse modes",
+    "Brotli complete lengths independent three admitted command choices enforce per plan zero exact and one below",
+    "Brotli complete lengths dynamic command heap exact and one below remain independent of search quota",
+    "Brotli complete lengths public search limit restores emitted counters and caller output before retry",
+    "Brotli complete lengths incremental search denial preserves buffered input and repeats deterministically",
+    "Brotli complete lengths allocation failures keep search errors separate and release command ownership",
+    "Brotli complete lengths independent tracker observes in place growth shrink and overlapping live requests",
+    "Brotli complete lengths independent tracker charges old and new buffers during moving fallback growth",
+    "Brotli complete lengths independent failed allocation resize and remap preserve live bytes and old content",
+    "Brotli complete lengths independent tracker excludes one borrowed identity but counts its moving replacement"
+  ],
+  "owned_source_sha256": {
+    "src/tests/br_complete_lengths_contracts.zig": "867a0afbc0feeaba51d27581b8ee3ba3122e8fef1f293f6c62df451eb2ef9b36",
+    "src/tests/br_complete_lengths_resources.zig": "d237148cb600d1b0d02a2e485065eff42dd743ee65a20b562d41ef1c1bb0dce4",
+    "src/tests/br_complete_lengths_transactions.zig": "3d543f30f67bd6a444ab046dc0d20eba9b4944abb22326eb005676d903f02411",
+    "src/tests/br_complete_lengths_helpers.zig": "68edbdff4cae83d795bc7513b83626c94a7c3c95eb0e16a004d7919b91c86017"
+  },
+  "baseline_wire_count": 23,
+  "baseline_plain_len": 40,
+  "baseline_provenance_path": "/tmp/vort-br-complete-lengths-baseline-34dbe96a/provenance.json",
+  "baseline_provenance_sha256": "efe804dfbf747f743fc46ca660e9b5087b03f6dcd0207a2d12d7b1712dc30a8b",
+  "baseline_binary_sha256": "e6afb268d76159deea8bae98ba0c19dbc44e31f9e07fcf9a385b6140e49353b1",
+  "baseline_wire_manifest_sha256": "2407605f36d676eb166d9de4092719c94c703fb08354fa4b1f85a1004e2312e6",
+  "narrow_evidence": [
+    {
+      "directory": "/tmp/vort-br-complete-lengths-qa-isurdfq_",
+      "result": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/br.zig",
+          "/tmp/vort-br-complete-lengths-baseline-34dbe96a/record-optimal.o",
+          "-O",
+          "ReleaseSafe",
+          "-femit-bin=/tmp/vort-br-complete-lengths-qa-isurdfq_/tests",
+          "--test-filter",
+          "Brotli complete lengths interior",
+          "--test-filter",
+          "Brotli complete lengths tiny finite",
+          "--test-filter",
+          "Brotli complete lengths independent three"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T11:12:50.451719+00:00",
+        "finished_utc": "2026-10-24T11:13:22.593767+00:00",
+        "changed_sources": [],
+        "source_consistent": true,
+        "record_object_sha256": "41ede64cf7b5efd78128c3995e6a1b333d0bea7d36358ef0c09905c96e028bd5",
+        "scope": "narrow functional validation only; production still being edited"
+      },
+      "binary_sha256": "899a4ac20bdab367a22373ce0a565b4d697b26c955ef1a62135b52e1924fbefb",
+      "log_sha256": "7d926ca64f5104a05042837b27422725e735016800526cac008ec536e7d9dbeb"
+    },
+    {
+      "directory": "/tmp/vort-br-complete-lengths-qa-0aorcezi",
+      "result": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/br.zig",
+          "/tmp/vort-br-complete-lengths-baseline-34dbe96a/record-optimal.o",
+          "-O",
+          "ReleaseSafe",
+          "-femit-bin=/tmp/vort-br-complete-lengths-qa-0aorcezi/tests",
+          "--test-filter",
+          "Brotli complete lengths compound interior",
+          "--test-filter",
+          "Brotli complete lengths all sixteen",
+          "--test-filter",
+          "Brotli complete lengths dynamic command",
+          "--test-filter",
+          "Brotli complete lengths public search",
+          "--test-filter",
+          "Brotli complete lengths incremental search",
+          "--test-filter",
+          "Brotli complete lengths allocation failures"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T11:14:25.562171+00:00",
+        "finished_utc": "2026-10-24T11:15:12.278363+00:00",
+        "changed_sources": [
+          "src/tests/br_complete_lengths_contracts.zig",
+          "src/tests/br_complete_lengths_helpers.zig"
+        ],
+        "source_consistent": false,
+        "record_object_sha256": "41ede64cf7b5efd78128c3995e6a1b333d0bea7d36358ef0c09905c96e028bd5",
+        "scope": "narrow functional validation only; production still being edited"
+      },
+      "binary_sha256": "918236ac5735ca6dcff290b97123af2456d81a7fccdb4687b9fc998c53783927",
+      "log_sha256": "ed4ec8a6b2154b873a342ddb54a697069312b174963a58b5c4c27a40f68347b4"
+    },
+    {
+      "directory": "/tmp/vort-br-complete-lengths-qa-4xogpig0",
+      "result": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/br.zig",
+          "/tmp/vort-br-complete-lengths-baseline-34dbe96a/record-optimal.o",
+          "-O",
+          "ReleaseSafe",
+          "-femit-bin=/tmp/vort-br-complete-lengths-qa-4xogpig0/tests",
+          "--test-filter",
+          "Brotli complete lengths public APIs",
+          "--test-filter",
+          "Brotli complete lengths default sampled"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T11:15:17.614810+00:00",
+        "finished_utc": "2026-10-24T11:16:14.641630+00:00",
+        "changed_sources": [],
+        "source_consistent": true,
+        "record_object_sha256": "41ede64cf7b5efd78128c3995e6a1b333d0bea7d36358ef0c09905c96e028bd5",
+        "scope": "narrow functional validation only; production still being edited"
+      },
+      "binary_sha256": "f01b01322237cdb9306c8dd98074a99fb513ecc1e9d2f02d0e7733eda9679c93",
+      "log_sha256": "94631559d3355dac502dd2079846a1800bc0e1c00f5c6aa7188a3d6a88a85ef3"
+    }
+  ],
+  "helper_release_safe_named_passed": 4,
+  "fmt_check_passed": true,
+  "independent_witnesses": [
+    {
+      "quality": 10,
+      "copy_length": 50,
+      "cost_bits": 18
+    },
+    {
+      "quality": 10,
+      "copy_length": 69,
+      "cost_bits": 18
+    },
+    {
+      "quality": 11,
+      "copy_length": 83,
+      "cost_bits": 19
+    },
+    {
+      "source": "compound",
+      "copy_length": 50,
+      "cost_bits": 13
+    }
+  ],
+  "independent_per_plan_admission_witness": 3,
+  "scope": "Independent finite copy-length/semantic/wire/heap/quota/public QA only; complete enumeration does not imply unbounded matcher frontier or global finite-beam cache optimality. Final cross-target gates belong to parent."
+}

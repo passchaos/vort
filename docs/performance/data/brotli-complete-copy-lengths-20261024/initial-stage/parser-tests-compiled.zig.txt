@@ -1,0 +1,50 @@
+const std = @import("std");
+const parser = @import("../hq_parser.zig");
+const options = @import("../hq_options.zig");
+const distance = @import("../distance.zig");
+const PriceBudget = @import("price_budget.zig").PriceBudget;
+
+test "BrHQ complete lengths metadata remains unpriced before zero edge admission" {
+    var model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    // Invalid price values make any accidental arithmetic visible, while
+    // metadata enumeration itself remains legal and never reads these arrays.
+    model.command_prices = @splat(std.math.maxInt(u32));
+    model.distance_prices = @splat(std.math.maxInt(u32));
+    const encodings = try model.commandEncodings(0, 2, 0);
+    try std.testing.expectEqual(@as(usize, 2), encodings.len);
+    var budget: PriceBudget = .{ .limit = 0 };
+    try std.testing.expectError(error.SearchLimitExceeded, budget.admit());
+    try std.testing.expectEqual(@as(u64, 0), budget.admitted);
+    budget.limit = 1;
+    try budget.admit();
+    try std.testing.expectError(error.SearchLimitExceeded, budget.admit());
+    try std.testing.expectEqual(@as(u64, 1), budget.admitted);
+}
+
+test "BrHQ complete lengths per plan cap is exact and independent of accumulated profile" {
+    const source = try parser.Source.init("aaaa", "aaaa", 24, 4);
+    const model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    var profile: options.HqProfile = .{ .price_evaluations = 1000 };
+    var parameters: parser.Parameters = .{ .profile = &profile };
+    parameters.resolved.copy_lengths = .complete;
+    const baseline = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer baseline.deinit(std.testing.allocator);
+    const admitted = profile.price_evaluations - 1000;
+    try std.testing.expect(admitted > 1);
+    try std.testing.expectEqual(admitted, profile.max_plan_price_evaluations);
+    for ([_]u64{ 0, 1, admitted - 1 }) |cap| {
+        profile = .{ .price_evaluations = 7000 };
+        parameters.resolved.max_price_evaluations = cap;
+        try std.testing.expectError(error.SearchLimitExceeded, parser.planAlloc(std.testing.allocator, source, parameters, &model, null));
+        try std.testing.expectEqual(7000 + cap, profile.price_evaluations);
+        try std.testing.expectEqual(cap, profile.max_plan_price_evaluations);
+        try std.testing.expectEqual(cap, profile.transitions);
+    }
+    profile = .{ .price_evaluations = 9000 };
+    parameters.resolved.max_price_evaluations = admitted;
+    const exact = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer exact.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(@import("../command_plan.zig").Command, baseline.commands, exact.commands);
+    try std.testing.expectEqual(admitted, profile.max_plan_price_evaluations);
+    try std.testing.expectEqual(9000 + admitted, profile.price_evaluations);
+}

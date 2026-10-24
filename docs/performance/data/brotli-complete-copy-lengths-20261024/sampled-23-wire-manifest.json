@@ -1,0 +1,140 @@
+[
+  {
+    "api": "one_shot",
+    "setting": "fast",
+    "size": 36,
+    "hex": "e204003c006c0efb4a72b5593d0fc4a2e9082c0ed505b36d13970bc4a2e691e0c251f57f"
+  },
+  {
+    "api": "one_shot",
+    "setting": "balanced",
+    "size": 36,
+    "hex": "e204003c006c0efb4a72b5593d0fc4a2e9082c0ed505b36d13970bc4a2e691e0c251f57f"
+  },
+  {
+    "api": "one_shot",
+    "setting": "ratio",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q0",
+    "size": 44,
+    "hex": "7002106c656e677468732061626364656667686162636465666768586162636465666768207461696c210a03"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q1",
+    "size": 44,
+    "hex": "7002106c656e677468732061626364656667686162636465666768586162636465666768207461696c210a03"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q2",
+    "size": 35,
+    "hex": "7002003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659660"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q3",
+    "size": 35,
+    "hex": "7002003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659660"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q4",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q5",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q6",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q7",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q8",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q9",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q10",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "q11",
+    "size": 35,
+    "hex": "e204003c009c0cbb92a84d75dea6d18438028b41f28221b1e750d43cb29a5cf1659600"
+  },
+  {
+    "api": "one_shot",
+    "setting": "hq10",
+    "size": 38,
+    "hex": "e2040000000e0e3da1a596f6e783891ce841e1d802c5ba702cd4eb10b27af69e1a802bf1dc00"
+  },
+  {
+    "api": "one_shot",
+    "setting": "hq11",
+    "size": 38,
+    "hex": "e2040000000e0e3da1a596f6e783891ce841e1d802c5ba702cd4eb10b27af69e1a802bf1dc00"
+  },
+  {
+    "api": "reusable",
+    "setting": "fast",
+    "size": 36,
+    "hex": "e204003c006c0efb4a72b5593d0fc4a2e9082c0ed505b36d13970bc4a2e691e0c251f57f"
+  },
+  {
+    "api": "chunks",
+    "setting": "fast",
+    "size": 44,
+    "hex": "0001106c656e67746873206162636465666768616800001e02ab0a61a42e1f0e04806768207461696c210a03"
+  },
+  {
+    "api": "incremental",
+    "setting": "fast",
+    "size": 37,
+    "hex": "7002003c006c0efb4a72b5593d0fc4a2e9082c0ed505b36d13970bc4a2e691e0c251f57f03"
+  },
+  {
+    "api": "reusable",
+    "setting": "hq11",
+    "size": 38,
+    "hex": "e2040000000e0e3da1a596f6e783891ce841e1d802c5ba702cd4eb10b27af69e1a802bf1dc00"
+  },
+  {
+    "api": "chunks",
+    "setting": "hq11",
+    "size": 38,
+    "hex": "e2040000000e0e3da1a596f6e783891ce841e1d802c5ba702cd4eb10b27af69e1a802bf1dc00"
+  },
+  {
+    "api": "incremental",
+    "setting": "hq11",
+    "size": 38,
+    "hex": "e2040000000e0e3da1a596f6e783891ce841e1d802c5ba702cd4eb10b27af69e1a802bf1dc00"
+  }
+]

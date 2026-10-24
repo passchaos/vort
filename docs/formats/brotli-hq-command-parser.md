@@ -21,6 +21,9 @@ does not establish equal output, compression ratio, throughput or memory use.
 | `block_len` | 262144 | 1...16777216 |
 | `max_working_memory` | `maxInt(usize)` | Caller-selected allocation budget |
 | `distance_parameters` | Mode-selected | `npostfix` 0...3, `ndirect_high` 0...15 |
+| `parse_mode` | `bounded` | `bounded` or `whole_block` |
+| `copy_lengths` | `sampled` | `sampled` or `complete` |
+| `max_price_evaluations` | null | Optional `u64` copy-command pricing allowance per plan; zero is legal |
 | `profile` | null | Borrowed caller-owned profile |
 
 `nice_len` is a search convergence threshold, not a maximum copy length.
@@ -108,7 +111,10 @@ encoded-byte or throughput measurement.
 
 The subsequent [whole-block option](brotli-whole-block-search.md) removes that
 artificial position boundary and reaches 32792 bits on the same witness.
-Bounded remains the default. Finite beam and copy-length alternatives still
+Bounded remains the default. The independent
+[complete-copy-length option](brotli-complete-copy-lengths.md) removes length
+sampling within each ordinary/compound candidate and exposes a per-plan price
+allowance. Finite beam, matcher candidates and future entropy models still
 limit global optimality, and whole mode can require a larger workspace.
 
 ## Profiles and evidence

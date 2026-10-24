@@ -639,6 +639,11 @@ performance. The [current industry gap audit](docs/performance/industry-gap-audi
 records the remaining API/encoder capabilities, dated competitor evidence and
 next functionality-first priorities.
 
+Brotli HQ also exposes independent
+[complete copy lengths and per-plan pricing limits](docs/formats/brotli-complete-copy-lengths.md).
+The default remains sampled. Complete search retains exact command selectors
+and sampled wire safeguards while preserving finite beam/matcher limitations.
+
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
 `ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`

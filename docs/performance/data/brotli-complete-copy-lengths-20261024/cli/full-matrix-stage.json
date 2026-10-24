@@ -1,0 +1,271 @@
+{
+  "round_trips": 60,
+  "default_sampled_wire_checks": 8,
+  "complete_profile_wire_checks": 16,
+  "complete_not_larger_checks": 16,
+  "complete_work_checks": 16,
+  "exact_work_cap_checks": 4,
+  "one_below_work_cap_checks": 4,
+  "zero_work_cap_rejections": 16,
+  "rejected_output_preserved": 36,
+  "same_path_checks": 2,
+  "observations": [
+    {
+      "quality": 10,
+      "large_window": false,
+      "parse_mode": "bounded",
+      "sample": "tiny64",
+      "command": "encode-br-file",
+      "sampled_bytes": 38,
+      "complete_bytes": 38,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 2,
+        "complete_length_passes": 1,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": false,
+      "parse_mode": "bounded",
+      "sample": "repeated_history",
+      "command": "encode-br-file",
+      "sampled_bytes": 47,
+      "complete_bytes": 47,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 4,
+        "complete_length_passes": 2,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": false,
+      "parse_mode": "whole_block",
+      "sample": "tiny64",
+      "command": "encode-br-file",
+      "sampled_bytes": 38,
+      "complete_bytes": 38,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 8,
+        "complete_length_passes": 4,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": false,
+      "parse_mode": "whole_block",
+      "sample": "repeated_history",
+      "command": "encode-br-file",
+      "sampled_bytes": 47,
+      "complete_bytes": 47,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 16,
+        "complete_length_passes": 8,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "parse_mode": "bounded",
+      "sample": "tiny64",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 40,
+      "complete_bytes": 40,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 1,
+        "complete_length_passes": 1,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "parse_mode": "bounded",
+      "sample": "repeated_history",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 50,
+      "complete_bytes": 50,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 2,
+        "complete_length_passes": 2,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "parse_mode": "whole_block",
+      "sample": "tiny64",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 40,
+      "complete_bytes": 40,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 3,
+        "complete_length_passes": 3,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 10,
+      "large_window": true,
+      "parse_mode": "whole_block",
+      "sample": "repeated_history",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 50,
+      "complete_bytes": 50,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 6,
+        "complete_length_passes": 6,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "parse_mode": "bounded",
+      "sample": "tiny64",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 38,
+      "complete_bytes": 38,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 2,
+        "complete_length_passes": 2,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "parse_mode": "bounded",
+      "sample": "repeated_history",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 47,
+      "complete_bytes": 47,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 4,
+        "complete_length_passes": 4,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "parse_mode": "whole_block",
+      "sample": "tiny64",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 38,
+      "complete_bytes": 38,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 6,
+        "complete_length_passes": 6,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": false,
+      "parse_mode": "whole_block",
+      "sample": "repeated_history",
+      "command": "encode-br-stream-file",
+      "sampled_bytes": 47,
+      "complete_bytes": 47,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 12,
+        "complete_length_passes": 12,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "parse_mode": "bounded",
+      "sample": "tiny64",
+      "command": "encode-br-file",
+      "sampled_bytes": 40,
+      "complete_bytes": 40,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 6,
+        "complete_length_passes": 3,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "parse_mode": "bounded",
+      "sample": "repeated_history",
+      "command": "encode-br-file",
+      "sampled_bytes": 50,
+      "complete_bytes": 50,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 12,
+        "complete_length_passes": 6,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "parse_mode": "whole_block",
+      "sample": "tiny64",
+      "command": "encode-br-file",
+      "sampled_bytes": 40,
+      "complete_bytes": 40,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 24,
+        "complete_length_passes": 12,
+        "max_copy_length_considered": 31,
+        "max_plan_price_evaluations": 39498
+      }
+    },
+    {
+      "quality": 11,
+      "large_window": true,
+      "parse_mode": "whole_block",
+      "sample": "repeated_history",
+      "command": "encode-br-file",
+      "sampled_bytes": 50,
+      "complete_bytes": 50,
+      "profile": {
+        "copy_lengths": "complete",
+        "sampled_length_passes": 48,
+        "complete_length_passes": 24,
+        "max_copy_length_considered": 64,
+        "max_plan_price_evaluations": 45463
+      }
+    }
+  ],
+  "reference_brotli_version": 16777225
+}

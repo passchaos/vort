@@ -106,7 +106,14 @@ adds an explicit complete-meta-block position search while preserving the
 bounded default and complete baseline wire. Growable command storage eliminates
 input-sized worst-case command allocation; its locked far-history fixture keeps
 identical bytes while reducing total requested-heap peak by 51.55%. The finite
-beam and length alternatives remain native heuristics.
+beam and default sampled length alternatives remain native heuristics.
+
+The [complete-copy-length control](formats/brotli-complete-copy-lengths.md)
+adds opt-in enumeration of every ordinary/compound match prefix and a separate
+per-plan copy-command pricing allowance. Sampled remains the default; finite
+beam and matcher candidates still bound the search. Independent full-wire
+sampled safeguards preserve the corresponding complete-frame result, and
+search denial remains a hard error rather than skipping requested work.
 
 Remaining priorities include broader global Brotli quality planning, lower-peak
 whole-stream comparison, standard dictionary finalization

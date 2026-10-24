@@ -18,10 +18,12 @@ end. It preserves atomic dictionary transforms and exact command/distance
 choices. Its predecessor indices cover the complete accepted 16 MiB block.
 
 The search still uses the configured finite beam and match finder. Copy lengths
-use the existing bounded alternatives and code boundaries. Whole-block scope
-does not promise an exhaustive search of every legal length, cache state or
-future entropy model. It removes the artificial 4096-position decision boundary
-without claiming globally optimal compression.
+default to the existing sampled alternatives and code boundaries; the separate
+[`copy_lengths = .complete`](brotli-complete-copy-lengths.md) control enumerates
+every ordinary/compound candidate prefix. Whole-block scope does not promise an
+exhaustive search of every cache state or future entropy model. It removes the
+artificial 4096-position decision boundary without claiming globally optimal
+compression.
 
 An independent 4098-byte cost model has a 32792-bit legal parse that begins its
 final two-byte copy at position 4096. The default bounded search costs 32793 bits

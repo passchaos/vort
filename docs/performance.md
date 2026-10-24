@@ -6,9 +6,14 @@ training, exact offset emission, dictionaries and transactional streaming. Its
 78-test and versioned-reference evidence is functional validation; ratio,
 throughput and RSS leadership still require current-source corpus comparisons.
 
-Vort does not yet claim compression performance wins. This document records the
-benchmark protocol and the current bootstrap benchmark surface so future claims
-can be tied to reproducible evidence.
+Vort does not yet claim broad compression performance leadership. This document
+records scoped measurements and the benchmark protocol so each claim can be
+tied to reproducible evidence.
+
+[Brotli complete copy lengths](formats/brotli-complete-copy-lengths.md) documents
+the opt-in length enumeration, per-plan command-price work limit and independent
+sampled wire guards. Small cost witnesses and compatibility/resource checks
+establish those contracts; throughput, ratio and RSS comparisons remain separate.
 
 [LZMA/XZ encoder controls](performance/lzma-xz-encode-controls-functional-baseline.md)
 records the implemented standard/extreme preset table, real HC/BT and parse
@@ -329,9 +334,11 @@ validated instead of inferred from the aggregation machine. Real-corpus
 coverage becomes true only when usable standard-corpus comparisons were loaded;
 peak-memory comparison remains false until a common cross-library memory harness
 exists.
-The current generated core report has complete, mutually consistent provenance
-for all eight loaded sources, and all 274 normalized metrics retain per-input
-hashes. Deflate encode/decode use provenance v2 because their Python drivers
+The previously generated core report had complete, mutually consistent
+provenance for eight loaded sources, and its 274 normalized metrics retained
+per-input hashes. That archived count is not a current-source benchmark rerun;
+the report's metric count depends on the inputs actually loaded. Deflate
+encode/decode use provenance v2 because their Python drivers
 coordinate more than one executable. Their canonical percent-encoded artifact
 manifest records and hashes the Python driver/interpreter/shared modules, the
 ReleaseFast Vort helper, generated Rust runner source and release executable,

@@ -1,6 +1,8 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. Source and tools revision: `c526c1f0`.
+Date: 2026-10-24. Main baseline: `34dbe96a`; subsequent complete-copy-length
+contracts are described in the [functional baseline](brotli-complete-copy-lengths-functional-baseline.md). Performance rows
+retain their own dated source and competitor provenance.
 
 Vort has broad Zig-native format coverage and some measured performance wins.
 The objective of exceeding the best competing libraries in both functionality
@@ -15,7 +17,7 @@ encoder quality and throughput are separate claims.
 | Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Internal history stops at 64 MiB. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | No equivalent public fast-acceleration knob. Full corpus/platform performance leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
-| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window HQ through window30, incremental I/O, q0...q11 presets, persistent BT/exact commands, optional whole-meta-block search, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. Finite beam and sampled lengths can miss globally lower model costs even with full-position search; lowering complete-stream comparison peaks remains work. Current ratio/speed/memory leadership is unproven. |
+| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window HQ through window30, incremental I/O, q0...q11 presets, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks remains work. Current ratio/speed/memory leadership is unproven. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
 | XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups, and broad encoder speed/ratio/memory parity remains unproven. |
 
@@ -60,6 +62,12 @@ has locked incremental source/JSON wins against a local zlib-ng level-6
 comparison, but those fixtures do not establish all-level, all-corpus parity
 against zlib, zlib-ng and zlib-rs. Bzip2 has current compatibility/resource
 evidence without a current cross-library throughput claim.
+
+The benchmark aggregation's earlier eight-source/274-metric count is an
+archived report observation, not a rerun of this revision. Current row counts
+must come from a newly generated report. A common cross-library RSS/requested-
+memory comparison harness remains missing; existing work-budget proofs and
+internal memory improvements do not fill that gap.
 
 The latest Bzip2 replay probe decodes 40 MiB of RLE plaintext with a 4,112,120-byte
 requested work peak and no complete plaintext staging. This is within its
