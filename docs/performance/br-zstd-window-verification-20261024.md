@@ -22,6 +22,7 @@
 | Zstd最终CLI | 36参考往返、15profile wire比较、3窗口描述符、exact/B−1各3、33输出保护、6同路径；12 parser通过 |
 | 巨大窗口参考限制 | 3个API的41/noFCS头与profile独立通过，系统libzstd1.4.8明确拒绝窗口过大，3次拒绝单列 |
 | 实际WebAssembly | 7/7构建步骤，4个公共往返；原对齐失败与portable修复阶段保留 |
+| 全局检查与完整CLI | Debug `zig build check` 156/156步骤通过；完整CLI `zig build run -- --help`实际运行通过，源码前后相同 |
 
 ZstdCLI原门禁误把已知44B内容的合法single-segment头当作缺少描述符；必要
 修复先显式关闭内容大小，随后记录系统参考库对约2TiB广告窗口的拒绝。
@@ -45,7 +46,11 @@ golden来适配新输出。
 
 ## 收尾与后续
 
-全局build check、CLI help与rebase后相关复验在integration结果中补齐。
+全局Debug检查和完整CLI help已通过。先前额外选择的全库ReleaseFast检查在
+全库测试模块优化上耗时很长；标准Debug检查通过后结束该额外构建，原日志、
+SIGTERM和取消理由保留，不计作ReleaseFast全局通过。ReleaseFast行为验证由
+两库完整家族、native/x86专项及实际WebAssembly提供。
+rebase后相关复验在integration结果中补齐。
 下一独立功能片优先统一32位平台的累计字节、pledge和诊断offset到u64；
 local buffer长度和实际距离仍按平台资源边界检查。随后扩展Zstd HQ显式
 whole-block/complete-length及价格预算控制，并统一Brotli stored资源API。

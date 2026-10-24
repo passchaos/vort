@@ -1,0 +1,34 @@
+{
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "check",
+        "-Doptimize=Debug",
+        "-j8",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "check",
+      "seconds": 75.54589230008423
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run",
+        "-Doptimize=Debug",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "name": "help",
+      "seconds": 0.07385344011709094
+    }
+  ],
+  "utc": "2026-10-24T14:29:26.813633+00:00"
+}

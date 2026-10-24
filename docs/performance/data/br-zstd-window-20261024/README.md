@@ -24,6 +24,11 @@
 | window-wasm | 原对齐失败及portable wrapper修复后的真实公共API执行 |
 | integration | 全局构建/CLI help、源码快照和rebase后相关复验 |
 
+全局156/156通过来自标准Debug检查；原额外全库ReleaseFast构建结束时的
+SIGTERM和取消上下文保留，不能算作通过。两库完整ReleaseFast行为家族和
+跨平台专项使用各自的实际产物与记录。早期宽快照中的CLI gate修复及生成
+Python bytecode变化不属于Zig编译输入，标准Debug收尾源码快照无变化。
+
 广告窗口、配置历史上限、实际保留字节和requested heap是不同指标。
 这里的请求堆排除借用输入、caller output、allocator bookkeeping及不可观察
 OS开销；功能执行耗时不是吞吐benchmark，本文档不提供行业最佳结论。

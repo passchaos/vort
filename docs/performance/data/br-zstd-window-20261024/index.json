@@ -2639,6 +2639,78 @@
     ],
     "source_directory": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/current-probes"
   },
+  "integration": {
+    "bundle": "integration.tar.gz",
+    "bundle_sha256": "2f7091715a3fdcdf2df3bcb0147ff177c4d81b3d8ead7839c8162e3b50aeb66d",
+    "files": [
+      {
+        "bytes": 2491,
+        "path": "archive-helper.py",
+        "sha256": "a6447a0620b383720785b88675d2dfcc086c80b3b80e1ecd8560f44be84e52dd"
+      },
+      {
+        "bytes": 777,
+        "path": "check.log",
+        "sha256": "357a7036b06d06e0a5cef66278391b93521bfdddae557181732a08c971b14823"
+      },
+      {
+        "bytes": 1249,
+        "path": "extra-releasefast-stop-context.json",
+        "sha256": "c47a7ded7379ac248513315405328c8850daad9e3f461b802cec6369b554d8c2"
+      },
+      {
+        "bytes": 2691,
+        "path": "format-result.json",
+        "sha256": "18c6ed03dfed1fbed5a599e58beaa9c155a171fb6bbee924dbdf657fd3257b0f"
+      },
+      {
+        "bytes": 2160,
+        "path": "rebase-verify.py",
+        "sha256": "2fd6f236fd20411d22ec9bc387045829869947f3d0a24f870ac6d9850afb1b97"
+      },
+      {
+        "bytes": 714,
+        "path": "result.json",
+        "sha256": "f1a5b99dc9264be5f02a1de8dbb205b896cc3d421a5dd44bcd3a690f43763114"
+      },
+      {
+        "bytes": 189769,
+        "path": "source-after.json",
+        "sha256": "6f2b3f5d98511dc247fe2d5339ccf2c04ff394c3e5d8f46cfada99304cf663ee"
+      },
+      {
+        "bytes": 189769,
+        "path": "source-before.json",
+        "sha256": "38221ea7e2a8c2a0279ff2350692c0d63157787d430fdd97edf01d1ca5436520"
+      },
+      {
+        "bytes": 50965,
+        "path": "standard-debug/check.log",
+        "sha256": "da0c38514898aa5d972abed2ba2aa63aace7f5259ad4298b5660e47cff821386"
+      },
+      {
+        "bytes": 41301,
+        "path": "standard-debug/help.log",
+        "sha256": "a96604c1a05f5dec4e0e99bdc5665a32a1f86a71741c593ec8f1d5ed030c7789"
+      },
+      {
+        "bytes": 675,
+        "path": "standard-debug/result.json",
+        "sha256": "0c1d176de2715df79d3112fb60929ee83778bf3a3af49d17a446717dedfd50b8"
+      },
+      {
+        "bytes": 189769,
+        "path": "standard-debug/source-after.json",
+        "sha256": "6f2b3f5d98511dc247fe2d5339ccf2c04ff394c3e5d8f46cfada99304cf663ee"
+      },
+      {
+        "bytes": 189769,
+        "path": "standard-debug/source-before.json",
+        "sha256": "6f2b3f5d98511dc247fe2d5339ccf2c04ff394c3e5d8f46cfada99304cf663ee"
+      }
+    ],
+    "source_directory": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/integration"
+  },
   "window-wasm": {
     "bundle": "window-wasm.tar.gz",
     "bundle_sha256": "e114b4f3adf7a8915b9bdee0caefb978f3428431d13d1b94dafc9a2d9636e2f2",
