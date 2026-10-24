@@ -449,6 +449,19 @@ pub fn build(b: *std.Build) void {
     const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
     const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
     xz_test_step.dependOn(&b.addRunArtifact(xz_tests).step);
+    const lzma_encode_controls_tests = b.addTest(.{
+        .name = "vort-lzma-encode-controls-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{ "LZMA encode controls", "LZMA advanced", "LZMA matcher", "LZMA preset validation", "LZMA wrapper presets", "LZMA fast parser", "Streaming hash journal" },
+    });
+    const xz_encode_controls_tests = b.addTest(.{
+        .name = "vort-xz-encode-controls-tests",
+        .root_module = xz_tests_mod,
+        .filters = &.{ "XZ encode controls", "LZMA2 encode controls" },
+    });
+    const encode_controls_test_step = b.step("test-lzma-xz-encode-controls", "Run LZMA/XZ preset, match-finder, parser, streaming and resource contracts");
+    encode_controls_test_step.dependOn(&b.addRunArtifact(lzma_encode_controls_tests).step);
+    encode_controls_test_step.dependOn(&b.addRunArtifact(xz_encode_controls_tests).step);
     const lzma_one_shot_tests = b.addTest(.{ .name = "vort-lzma-one-shot-tests", .root_module = lzma_contracts_mod, .filters = &.{ "LZMA one shot", "LZMA one-shot" } });
     const xz_one_shot_tests = b.addTest(.{ .name = "vort-xz-one-shot-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ one shot", "XZ one-shot" } });
     const one_shot_contract_step = b.step("test-lzma-xz-one-shot-contracts", "Run bounded atomic LZMA and XZ caller-buffer and size-query contracts");
@@ -1651,6 +1664,35 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| fast_cover_diff.addArgs(args);
     const fast_cover_diff_step = b.step("run-fast-cover-diff", "Validate FastCover trained dictionaries and workflows against libzstd");
     fast_cover_diff_step.dependOn(&fast_cover_diff.step);
+
+    const lzma_encode_controls_probe = b.addExecutable(.{
+        .name = "vort-lzma-encode-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lzma/encode_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lzma_encode_controls_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/encode_controls_diff.py", "--probe" });
+    lzma_encode_controls_diff.addArtifactArg(lzma_encode_controls_probe);
+    if (b.args) |args| lzma_encode_controls_diff.addArgs(args);
+    const lzma_encode_controls_diff_step = b.step("run-lzma-xz-encode-controls-diff", "Validate LZMA/XZ presets and encoder controls against liblzma");
+    lzma_encode_controls_diff_step.dependOn(&lzma_encode_controls_diff.step);
+    const lzma_controls_cli_probe = b.addExecutable(.{
+        .name = "vort-lzma-controls-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/lzma_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lzma_controls_cli_gate = b.addSystemCommand(&.{ "python3", "tools/lzma/cli_controls_gate.py", "--cli" });
+    lzma_controls_cli_gate.addArtifactArg(lzma_controls_cli_probe);
+    if (b.args) |args| lzma_controls_cli_gate.addArgs(args);
+    const lzma_controls_cli_step = b.step("test-lzma-xz-cli-controls", "Validate public LZMA/XZ CLI encoder settings and failed-output preservation");
+    lzma_controls_cli_step.dependOn(&lzma_controls_cli_gate.step);
 
     const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
     const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
@@ -6267,6 +6309,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_controls_probe.step);
     check_step.dependOn(&fast_cover_probe.step);
+    check_step.dependOn(&lzma_encode_controls_probe.step);
+    check_step.dependOn(&lzma_controls_cli_probe.step);
     check_step.dependOn(&lz4_dictionary_resume_probe.step);
     check_step.dependOn(&lzma_contract_probe.step);
     check_step.dependOn(&lzma_one_shot_probe.step);
