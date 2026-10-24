@@ -2935,11 +2935,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
         \\  LZMA options (after positionals): --preset=0...9 [--extreme]
         \\    --match-finder=hc3|hc4|bt2|bt3|bt4 --nice-len=2...273 --depth=u32
-        \\    --dict-size=4096...67108864 --mode=fast|normal|greedy|lazy|literal-only
+        \\    --dict-size=4096...1610612736 --mode=fast|normal|greedy|lazy|literal-only
         \\    --lc=0...4 --lp=0...4 --pb=0...4 --match-memory=bytes --profile
         \\                              lc+lp must be <=4; --extreme requires --preset
         \\                              Explicit options override the preset regardless of flag order
         \\                              --profile requires a preset, matcher option, or fast/normal mode
+        \\  XZ-only option: --chunk-size=1...2097152 (default 65536)
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
         \\  decode-xz-concat-file <in> <out> [max_output]

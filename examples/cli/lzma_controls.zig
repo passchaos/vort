@@ -10,6 +10,7 @@ pub const Controls = struct {
     nice_len: ?u16 = null,
     depth: ?u32 = null,
     dictionary_size: ?u32 = null,
+    chunk_size: ?usize = null,
     mode: ?Mode = null,
     lc: ?u4 = null,
     lp: ?u3 = null,
@@ -24,6 +25,11 @@ pub const Controls = struct {
     /// Apply explicit flags after the preset and legacy positional arguments.
     /// Profile storage is owned by the command and survives the encoder call.
     pub fn apply(self: Controls, options: anytype, comptime mode_field: []const u8, profile: ?*vort.LzmaEncodeWorkProfile) !void {
+        if (self.chunk_size) |value| {
+            if (@hasField(@TypeOf(options.*), "chunk_size")) {
+                options.chunk_size = @intCast(value);
+            } else return error.UnsupportedLzmaChunkSize;
+        }
         if (self.dictionary_size) |value| options.dictionary_size = @intCast(value);
         if (self.mode) |value| @field(options.*, mode_field) = try convertMode(@TypeOf(@field(options.*, mode_field)), value);
         if (self.lc) |value| options.properties.lc = value;
@@ -73,6 +79,8 @@ pub const Controls = struct {
             try assign(self, "depth", try std.fmt.parseInt(u32, value, 10));
         } else if (std.mem.eql(u8, name, "--dict-size")) {
             try assign(self, "dictionary_size", try std.fmt.parseInt(u32, value, 10));
+        } else if (std.mem.eql(u8, name, "--chunk-size")) {
+            try assign(self, "chunk_size", try std.fmt.parseInt(usize, value, 10));
         } else if (std.mem.eql(u8, name, "--mode")) {
             try assign(self, "mode", try parseMode(value));
         } else if (std.mem.eql(u8, name, "--lc")) {

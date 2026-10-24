@@ -66,7 +66,7 @@ test "LZMA CLI controls flags override preset independently of their order" {
 }
 
 test "LZMA CLI controls reject duplicates unknown values and misplaced positionals" {
-    inline for (.{ "--preset=2", "--match-finder=hc3", "--nice-len=64", "--depth=0", "--dict-size=4096", "--mode=normal", "--lc=3", "--lp=0", "--pb=2", "--match-memory=100", "--profile" }) |flag| {
+    inline for (.{ "--preset=2", "--match-finder=hc3", "--nice-len=64", "--depth=0", "--dict-size=4096", "--chunk-size=65536", "--mode=normal", "--lc=3", "--lp=0", "--pb=2", "--match-memory=100", "--profile" }) |flag| {
         try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ flag, flag }, 0));
     }
     try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ "--preset=1", "--extreme", "--extreme" }, 0));
@@ -137,4 +137,49 @@ test "LZMA CLI mode-only controls use public fast and normal match defaults" {
     var explicit = try overridden.controls.baseOptions(Options);
     try overridden.controls.apply(&explicit, "mode", null);
     try std.testing.expectEqual(.hc4, explicit.match_options.?.finder);
+}
+
+test "LZMA CLI chunk size is XZ-only and uses public scalar validation" {
+    inline for (.{ vort.LzmaEncodeOptions, vort.MicroLzmaEncodeOptions }) |Target| {
+        const parsed = try parse(&.{"--chunk-size=65536"}, 0);
+        var options = try parsed.controls.baseOptions(Target);
+        try std.testing.expectError(error.UnsupportedLzmaChunkSize, parsed.controls.apply(&options, "mode", null));
+    }
+    const unchanged = try parse(&.{}, 0);
+    var defaults = try unchanged.controls.baseOptions(vort.XzEncodeOptions);
+    try unchanged.controls.apply(&defaults, "parser", null);
+    try std.testing.expectEqual(@as(usize, 65536), defaults.chunk_size);
+    inline for (.{ "1", "65536", "2097152" }) |size| {
+        const parsed = try parse(&.{"--chunk-size=" ++ size}, 0);
+        var options = try parsed.controls.baseOptions(vort.XzEncodeOptions);
+        try parsed.controls.apply(&options, "parser", null);
+        try options.validate();
+        try std.testing.expectEqual(try std.fmt.parseInt(usize, size, 10), options.chunk_size);
+    }
+    inline for (.{ "0", "2097153" }) |size| {
+        const parsed = try parse(&.{"--chunk-size=" ++ size}, 0);
+        var options = try parsed.controls.baseOptions(vort.XzEncodeOptions);
+        try parsed.controls.apply(&options, "parser", null);
+        try std.testing.expectError(error.InvalidBlockPlan, options.validate());
+    }
+    try std.testing.expectError(error.MissingLzmaOptionValue, parse(&.{"--chunk-size="}, 0));
+    try std.testing.expectError(error.Overflow, parse(&.{"--chunk-size=-1"}, 0));
+}
+
+test "LZMA CLI chunk size and large dictionary override presets independently of order" {
+    const a = try parse(&.{ "--preset=9", "--chunk-size=2097152", "--dict-size=1610612736" }, 0);
+    const b = try parse(&.{ "--dict-size=1610612736", "--chunk-size=2097152", "--preset=9" }, 0);
+    var first = try a.controls.baseOptions(vort.XzEncodeOptions);
+    var second = try b.controls.baseOptions(vort.XzEncodeOptions);
+    try a.controls.apply(&first, "parser", null);
+    try b.controls.apply(&second, "parser", null);
+    try first.validate();
+    try second.validate();
+    try std.testing.expectEqualDeep(first, second);
+    try std.testing.expectEqual(@as(usize, 1610612736), first.dictionary_size);
+    try std.testing.expectEqual(@as(usize, 2097152), first.chunk_size);
+    const too_large = try parse(&.{"--dict-size=1610612737"}, 0);
+    var rejected = try too_large.controls.baseOptions(vort.XzEncodeOptions);
+    try too_large.controls.apply(&rejected, "parser", null);
+    try std.testing.expectError(error.InvalidBlockPlan, rejected.validate());
 }
