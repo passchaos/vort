@@ -91,6 +91,25 @@ pub fn build(b: *std.Build) void {
     const wasm_lib = b.addLibrary(.{ .name = "vort-wasm-check", .root_module = wasm_mod });
     const wasm_check_step = b.step("check-wasm", "Compile the complete Vort library for wasm32-wasi");
     wasm_check_step.dependOn(&wasm_lib.step);
+    const br_public_wasm = b.addExecutable(.{
+        .name = "vort-br-public-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_wasm_public.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_public_wasm.entry = .disabled;
+    br_public_wasm.rdynamic = true;
+    br_public_wasm.stack_size = 8 * 1024 * 1024;
+    const br_public_wasm_check = b.step("check-br-public-wasm", "Compile real public Brotli HQ encode and decode consumers for wasm32-wasi");
+    br_public_wasm_check.dependOn(&br_public_wasm.step);
+    const br_public_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/wasm_public_gate.js" });
+    br_public_wasm_run.addArtifactArg(br_public_wasm);
+    const br_public_wasm_test = b.step("test-br-public-wasm", "Execute public Brotli HQ encode and decode routes in WebAssembly");
+    br_public_wasm_test.dependOn(&br_public_wasm_run.step);
     const br_record_classifier_tests = b.addTest(.{
         .name = "vort-br-record-classifier-tests",
         .root_module = b.createModule(.{
@@ -6409,6 +6428,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
     check_step.dependOn(wasm_check_step);
+    check_step.dependOn(br_public_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);

@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocator_dispatch = @import("../allocator_dispatch.zig");
 const builtin = @import("builtin");
 const static_dictionary = @import("../static_dictionary.zig");
 
@@ -144,7 +145,7 @@ pub const Index = struct {
         while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
         defer shared_lock.unlock();
         if (!shared_ready.load(.monotonic)) {
-            shared = try Index.init(std.heap.smp_allocator);
+            shared = try Index.init(allocator_dispatch.singleton);
             shared_ready.store(true, .release);
         }
         return &shared.?;
@@ -294,7 +295,7 @@ pub const CompleteIndex = struct {
         while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
         defer shared_lock.unlock();
         if (!shared_ready.load(.monotonic)) {
-            shared = try CompleteIndex.init(std.heap.smp_allocator);
+            shared = try CompleteIndex.init(allocator_dispatch.singleton);
             shared_ready.store(true, .release);
         }
         return &shared.?;

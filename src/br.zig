@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocator_dispatch = @import("br/allocator_dispatch.zig");
 const builtin = @import("builtin");
 const core = @import("core.zig");
 const lz77 = @import("lz77.zig");
@@ -5439,7 +5440,7 @@ pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) E
 pub fn encodePlannedStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
     const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
-    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeChunksWithOptionsInto(chunks, output, options);
 }
@@ -5459,7 +5460,7 @@ pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
-    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeIntoWithOptions(input, output, options);
 }
@@ -8805,10 +8806,10 @@ pub fn encodePlannedStreamStaticDictionaryInto(
     output: []u8,
 ) Error!usize {
     const encoded = try encodePlannedStreamStaticDictionaryAlloc(
-        std.heap.smp_allocator,
+        allocator_dispatch.singleton,
         input,
     );
-    defer std.heap.smp_allocator.free(encoded);
+    defer allocator_dispatch.singleton.free(encoded);
     if (output.len < encoded.len) return error.OutOfMemory;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
@@ -9364,7 +9365,7 @@ pub fn encodeRleStreamInto(input: []const u8, output: []u8) Error!usize {
     _ = try encodedRleStreamBound(input.len);
     var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeRleStreamWrite(std.heap.smp_allocator, &writer, input);
+    try encodeRleStreamWrite(allocator_dispatch.singleton, &writer, input);
     return out.items.len;
 }
 
@@ -9408,21 +9409,21 @@ pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
     if (isRleInput(input)) return encodeRleStreamInto(input, output);
     if (alternatingLength(input)) |len| {
-        const encoded = try encodeAlternatingStreamAlloc(std.heap.smp_allocator, input[0], input[1], len);
-        defer std.heap.smp_allocator.free(encoded);
+        const encoded = try encodeAlternatingStreamAlloc(allocator_dispatch.singleton, input[0], input[1], len);
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
     if (pattern.repeatedDistinctPrefixLength(input)) |period| {
-        const encoded = try encodeRepeatedPrefixStreamAlloc(std.heap.smp_allocator, input[0..period], input.len / period);
-        defer std.heap.smp_allocator.free(encoded);
+        const encoded = try encodeRepeatedPrefixStreamAlloc(allocator_dispatch.singleton, input[0..period], input.len / period);
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
     }
-    if (encodePlannedStreamAlloc(std.heap.smp_allocator, input)) |encoded| {
-        defer std.heap.smp_allocator.free(encoded);
+    if (encodePlannedStreamAlloc(allocator_dispatch.singleton, input)) |encoded| {
+        defer allocator_dispatch.singleton.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
@@ -11936,7 +11937,7 @@ pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, option
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamWithOptionsWrite(std.heap.smp_allocator, &writer, input, options);
+    try encodeStoredStreamWithOptionsWrite(allocator_dispatch.singleton, &writer, input, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -11975,7 +11976,7 @@ pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, outpu
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamChunksWithOptionsWrite(std.heap.smp_allocator, &writer, chunks, options);
+    try encodeStoredStreamChunksWithOptionsWrite(allocator_dispatch.singleton, &writer, chunks, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -15579,7 +15580,12 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 /// Counterpart for the packed literal-tree tier. Root-table hits never expand
 /// the compact tree; a rare long-code miss falls back to the existing cached
 /// expansion path so the full canonical decoder remains the correctness oracle.
-noinline fn processWideExternalLiteralLookupCompressedPayload(
+const processWideExternalLiteralLookupCompressedPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookupCompressedPayloadPortable
+else
+    processWideExternalLiteralLookupCompressedPayloadNative;
+
+noinline fn processWideExternalLiteralLookupCompressedPayloadNative(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
     reader: anytype,
@@ -15591,6 +15597,36 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
     header: *MinimalCompressedHeader,
     literal_lookups: []const ExternalLiteralLookup,
 ) align(64) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookupCompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups });
+}
+
+noinline fn processWideExternalLiteralLookupCompressedPayloadPortable(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookupCompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups });
+}
+
+inline fn processWideExternalLiteralLookupCompressedPayloadCore(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     // The parsed context map is already bounded by literal_tree_count, which
@@ -15678,7 +15714,12 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
 /// Isolated 9-bit counterpart. Keeping this complete executor in a dedicated
 /// section prevents its smaller root policy from perturbing the established
 /// 10-bit executor's ordinary-text layout.
-noinline fn processWideExternalLiteralLookup9CompressedPayload(
+const processWideExternalLiteralLookup9CompressedPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookup9CompressedPayloadPortable
+else
+    processWideExternalLiteralLookup9CompressedPayloadNative;
+
+noinline fn processWideExternalLiteralLookup9CompressedPayloadNative(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
     comptime command_lookup10: bool,
@@ -15697,6 +15738,50 @@ noinline fn processWideExternalLiteralLookup9CompressedPayload(
     command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup9_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup9CompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, command_lookup10, zero_postfix_distance, force_utf8_context, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processWideExternalLiteralLookup9CompressedPayloadPortable(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    comptime command_lookup10: bool,
+    comptime zero_postfix_distance: bool,
+    comptime force_utf8_context: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every optional lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const WideExternalLiteralLookup9,
+    command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(wide_literal_lookup9_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup9CompressedPayloadCore, .{ auxiliary_tail_lookups, fixed_nine_bit_peek, command_lookup10, zero_postfix_distance, force_utf8_context, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processWideExternalLiteralLookup9CompressedPayloadCore(
+    comptime auxiliary_tail_lookups: bool,
+    comptime fixed_nine_bit_peek: bool,
+    comptime command_lookup10: bool,
+    comptime zero_postfix_distance: bool,
+    comptime force_utf8_context: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every optional lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const WideExternalLiteralLookup9,
+    command_lookups: ?*const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: ?*const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = if (comptime force_utf8_context)
         true
@@ -15884,7 +15969,12 @@ noinline fn processWideExternalLiteralLookup10AuxiliarySetup(
     );
 }
 
-noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(
+const processWideExternalLiteralLookup10AuxiliaryPayload = if (builtin.target.cpu.arch.isWasm())
+    processWideExternalLiteralLookup10AuxiliaryPayloadPortable
+else
+    processWideExternalLiteralLookup10AuxiliaryPayloadNative;
+
+noinline fn processWideExternalLiteralLookup10AuxiliaryPayloadNative(
     reader: anytype,
     output: []u8,
     written: *usize,
@@ -15896,6 +15986,36 @@ noinline fn processWideExternalLiteralLookup10AuxiliaryPayload(
     command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(wide_literal_lookup10_auxiliary_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup10AuxiliaryPayloadCore, .{ reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processWideExternalLiteralLookup10AuxiliaryPayloadPortable(
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(wide_literal_lookup10_auxiliary_text_section) Error!void {
+    return @call(.always_inline, processWideExternalLiteralLookup10AuxiliaryPayloadCore, .{ reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processWideExternalLiteralLookup10AuxiliaryPayloadCore(
+    reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: []const ExternalLiteralLookup,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     const literal_lookup_ptr = literal_lookups.ptr;
@@ -16052,7 +16172,12 @@ noinline fn processPairedWideLiteralMetaBlock(
     return processPairedWideLiteralPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, &literal_lookups, &command_lookups, &distance_lookups);
 }
 
-noinline fn processPairedWideLiteralPayload(
+const processPairedWideLiteralPayload = if (builtin.target.cpu.arch.isWasm())
+    processPairedWideLiteralPayloadPortable
+else
+    processPairedWideLiteralPayloadNative;
+
+noinline fn processPairedWideLiteralPayloadNative(
     comptime force_utf8_context: bool,
     comptime direct_context_three: bool,
     // The wrapper owns this reservoir independently of output, header state,
@@ -16068,6 +16193,44 @@ noinline fn processPairedWideLiteralPayload(
     command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
     distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
 ) align(64) linksection(paired_literal_text_section) Error!void {
+    return @call(.always_inline, processPairedWideLiteralPayloadCore, .{ force_utf8_context, direct_context_three, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+noinline fn processPairedWideLiteralPayloadPortable(
+    comptime force_utf8_context: bool,
+    comptime direct_context_three: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every prepared lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const paired_literal_lookup.Lookups,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) linksection(paired_literal_text_section) Error!void {
+    return @call(.always_inline, processPairedWideLiteralPayloadCore, .{ force_utf8_context, direct_context_three, reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups, command_lookups, distance_lookups });
+}
+
+inline fn processPairedWideLiteralPayloadCore(
+    comptime force_utf8_context: bool,
+    comptime direct_context_three: bool,
+    // The wrapper owns this reservoir independently of output, header state,
+    // distance history, and every prepared lookup plane passed below.
+    noalias reader: anytype,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+    literal_lookups: *const paired_literal_lookup.Lookups,
+    command_lookups: *const [inline_command_tree_count]single_command_lookup.Lookup,
+    distance_lookups: *const [inline_distance_tree_count]ExternalDistanceLookup,
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = if (comptime force_utf8_context)
         true

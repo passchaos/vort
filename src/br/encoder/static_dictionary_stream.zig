@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocator_dispatch = @import("../allocator_dispatch.zig");
 
 const ChunksInfo = struct {
     input_len: usize,
@@ -83,11 +84,11 @@ pub fn encodeChunksWithOptionsInto(
     const encoded = try encodeChunksWithOptionsAlloc(
         Encoder,
         max_block_len,
-        std.heap.smp_allocator,
+        allocator_dispatch.singleton,
         chunks,
         options,
     );
-    defer std.heap.smp_allocator.free(encoded);
+    defer allocator_dispatch.singleton.free(encoded);
     if (output.len < encoded.len) return error.OutOfMemory;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
