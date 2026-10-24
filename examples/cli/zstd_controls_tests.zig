@@ -99,6 +99,90 @@ test "Zstd CLI HQ conflicts are rejected by public validation" {
     } else return error.SkipZigTest;
 }
 
+test "Zstd CLI HQ search controls preserve omitted defaults and accept either argument order" {
+    const defaults = try (try parse(&.{"--strategy=btopt"})).resolved();
+    try std.testing.expectEqual(.bounded, defaults.hq.?.parse_mode);
+    try std.testing.expectEqual(.sampled, defaults.hq.?.match_lengths);
+    try std.testing.expectEqual(@as(?u64, null), defaults.hq.?.max_price_evaluations);
+    inline for (.{ "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=0" }) |flag| {
+        const partial = try (try parse(&.{ "--strategy=btopt", flag })).resolved();
+        try std.testing.expectEqual(defaults.hq.?.search_depth, partial.hq.?.search_depth);
+        try std.testing.expectEqual(defaults.hq.?.nice_len, partial.hq.?.nice_len);
+        if (!std.mem.startsWith(u8, flag, "--hq-parse-mode=")) try std.testing.expectEqual(.bounded, partial.hq.?.parse_mode);
+        if (!std.mem.startsWith(u8, flag, "--hq-match-lengths=")) try std.testing.expectEqual(.sampled, partial.hq.?.match_lengths);
+        if (!std.mem.startsWith(u8, flag, "--hq-max-prices=")) try std.testing.expectEqual(@as(?u64, null), partial.hq.?.max_price_evaluations);
+    }
+    const a = try parse(&.{ "--strategy=btultra2", "--level=20", "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=18446744073709551615" });
+    const b = try parse(&.{ "--hq-max-prices", "18446744073709551615", "--hq-match-lengths", "complete", "--hq-parse-mode", "whole_block", "--level", "20", "--strategy", "btultra2" });
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expectEqual(@as(?u64, std.math.maxInt(u64)), a.hq_max_prices);
+    inline for (.{ "--hq-parse-mode", "--hq-parse-mode=bounded", "--hq-match-lengths", "--hq-match-lengths=complete", "--hq-max-prices", "--hq-max-prices=0" }) |flag|
+        try std.testing.expect(cli.isControlArgument(flag));
+}
+
+test "Zstd CLI HQ search controls keep level defaults and map to native and frame APIs" {
+    var profile: vort.ZstdEncoderControlProfile = .{};
+    inline for (.{ "btopt", "btultra", "btultra2" }) |strategy| {
+        const before = try (try parse(&.{ "--strategy=" ++ strategy, "--level=20" })).resolved();
+        const parsed = try parse(&.{ "--hq-max-prices=4294967313", "--strategy=" ++ strategy, "--level=20", "--hq-parse-mode=whole_block", "--hq-match-lengths=complete" });
+        var actual = try parsed.resolvedWithProfile(&profile);
+        const frame = try parsed.frameOptionsWithProfile(&profile);
+        try std.testing.expect(actual.control_profile == &profile and frame.control_profile == &profile);
+        actual.control_profile = null;
+        var expected = before;
+        expected.hq.?.parse_mode = .whole_block;
+        expected.hq.?.match_lengths = .complete;
+        expected.hq.?.max_price_evaluations = 4294967313;
+        try std.testing.expectEqualDeep(expected, actual);
+        try std.testing.expectEqualDeep(actual.hq, frame.hq);
+        const zero = try (try parse(&.{ "--strategy=" ++ strategy, "--hq-max-prices=0" })).resolved();
+        try std.testing.expectEqual(@as(?u64, 0), zero.hq.?.max_price_evaluations);
+    }
+    inline for (.{ "lazy2", "btlazy2" }) |strategy| {
+        const parsed = try parse(&.{ "--strategy=" ++ strategy, "--hq-depth=23", "--hq-parse-mode=bounded", "--hq-match-lengths=sampled" });
+        const options = try parsed.resolved();
+        try std.testing.expectEqual(@as(u32, 23), options.hq.?.search_depth);
+        try std.testing.expectEqual(.bounded, options.hq.?.parse_mode);
+        try std.testing.expectEqual(.sampled, options.hq.?.match_lengths);
+    }
+}
+
+test "Zstd CLI HQ search controls reject malformed duplicate and unsupported options" {
+    inline for (.{ "--hq-parse-mode=bounded", "--hq-match-lengths=sampled", "--hq-max-prices=0" }) |flag|
+        try std.testing.expectError(error.DuplicateZstdOption, parse(&.{ flag, flag }));
+    inline for (.{ "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices" }) |flag|
+        try std.testing.expectError(error.MissingZstdOptionValue, parse(&.{flag}));
+    try std.testing.expectError(error.InvalidZstdHqParseMode, parse(&.{"--hq-parse-mode=whole-block"}));
+    try std.testing.expectError(error.InvalidZstdHqMatchLengths, parse(&.{"--hq-match-lengths="}));
+    try std.testing.expectError(error.InvalidCharacter, parse(&.{"--hq-max-prices="}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-prices=-1"}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-prices=18446744073709551616"}));
+    inline for (.{ "auto", "fast", "double_fast", "greedy", "lazy", "optimal", "lazy2", "btlazy2" }) |strategy| {
+        inline for (.{ "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=0", "--hq-max-prices=18446744073709551615" }) |flag| {
+            const parsed = try parse(&.{ "--strategy=" ++ strategy, flag });
+            try std.testing.expectError(error.InvalidBlockPlan, parsed.resolved());
+            try std.testing.expectError(error.InvalidBlockPlan, parsed.frameOptionsWithProfile(null));
+        }
+    }
+}
+
+test "Zstd CLI HQ search profile formats optional controls without narrowing" {
+    var bytes: [4096]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&bytes);
+    try cli.printProfile(&writer, .{
+        .effective_hq_parse_mode = .whole_block,
+        .effective_hq_match_lengths = .complete,
+        .effective_hq_max_price_evaluations = std.math.maxInt(u64),
+        .max_plan_price_evaluations = 4294967313,
+    });
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_profile strategy=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_search_profile parse_mode=whole_block match_lengths=complete max_prices=18446744073709551615 ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "max_plan_price_evaluations=4294967313 ") != null);
+    writer = std.Io.Writer.fixed(&bytes);
+    try cli.printProfile(&writer, .{});
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "parse_mode=none match_lengths=none max_prices=unlimited ") != null);
+}
+
 test "Zstd CLI level helper rejects native-only selection arguments" {
     const parsed = try parse(&.{"literal_only"});
     try std.testing.expectError(error.InvalidBlockPlan, parsed.frameOptionsWithProfile(null));

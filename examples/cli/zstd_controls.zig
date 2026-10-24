@@ -13,6 +13,9 @@ pub const Controls = struct {
     hq_nice_len: ?u32 = null,
     hq_min_match: ?u8 = null,
     hq_memory: ?usize = null,
+    hq_parse_mode: ?@FieldType(vort.zstd.HqOptions, "parse_mode") = null,
+    hq_match_lengths: ?@FieldType(vort.zstd.HqOptions, "match_lengths") = null,
+    hq_max_prices: ?u64 = null,
     profile: bool = false,
     window_log: ?u6 = null,
     max_match_history_len: ?usize = null,
@@ -26,7 +29,8 @@ pub const Controls = struct {
     }
 
     pub fn hasHqOverrides(self: Controls) bool {
-        return self.hq_depth != null or self.hq_nice_len != null or self.hq_min_match != null or self.hq_memory != null;
+        return self.hq_depth != null or self.hq_nice_len != null or self.hq_min_match != null or self.hq_memory != null or
+            self.hq_parse_mode != null or self.hq_match_lengths != null or self.hq_max_prices != null;
     }
 
     pub fn resolved(self: Controls) !vort.ZstdNativeFrameOptions {
@@ -73,6 +77,9 @@ pub const Controls = struct {
                 if (self.hq_nice_len) |value| hq.nice_len = value;
                 if (self.hq_min_match) |value| hq.min_match = value;
                 if (self.hq_memory) |value| hq.max_working_memory = value;
+                if (self.hq_parse_mode) |value| hq.parse_mode = value;
+                if (self.hq_match_lengths) |value| hq.match_lengths = value;
+                if (self.hq_max_prices) |value| hq.max_price_evaluations = value;
                 options.hq = hq;
             } else return error.UnsupportedZstdHqOptions;
         }
@@ -135,6 +142,15 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
         } else if (try optionValue("--hq-memory", arg, args)) |value| {
             if (result.hq_memory != null) return error.DuplicateZstdOption;
             result.hq_memory = try std.fmt.parseInt(usize, value, 10);
+        } else if (try optionValue("--hq-parse-mode", arg, args)) |value| {
+            if (result.hq_parse_mode != null) return error.DuplicateZstdOption;
+            result.hq_parse_mode = std.meta.stringToEnum(@FieldType(vort.zstd.HqOptions, "parse_mode"), value) orelse return error.InvalidZstdHqParseMode;
+        } else if (try optionValue("--hq-match-lengths", arg, args)) |value| {
+            if (result.hq_match_lengths != null) return error.DuplicateZstdOption;
+            result.hq_match_lengths = std.meta.stringToEnum(@FieldType(vort.zstd.HqOptions, "match_lengths"), value) orelse return error.InvalidZstdHqMatchLengths;
+        } else if (try optionValue("--hq-max-prices", arg, args)) |value| {
+            if (result.hq_max_prices != null) return error.DuplicateZstdOption;
+            result.hq_max_prices = try std.fmt.parseInt(u64, value, 10);
         } else if (try optionValue("--window-log", arg, args)) |value| {
             if (result.window_log != null) return error.DuplicateZstdOption;
             result.window_log = try std.fmt.parseInt(u6, value, 10);
@@ -177,7 +193,7 @@ pub fn parseStrategy(value: []const u8) !vort.zstd.Strategy {
 }
 
 pub fn isControlArgument(arg: []const u8) bool {
-    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
+    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
         if (std.mem.eql(u8, arg, name) or std.mem.startsWith(u8, arg, name ++ "=")) return true;
     }
     return false;
@@ -304,6 +320,17 @@ pub fn printProfile(stdout: *std.Io.Writer, profile: vort.ZstdEncoderControlProf
         profile.positions_tested,            profile.tree_nodes,            profile.price_evaluations,      profile.hq_passes,
         profile.refinement_passes,           profile.peak_working_memory,   profile.raw_blocks,             profile.rle_blocks,
         profile.compressed_blocks,
+    });
+    try stdout.print("zstd_search_profile parse_mode={s} match_lengths={s} max_prices=", .{
+        if (profile.effective_hq_parse_mode) |mode| @tagName(mode) else "none",
+        if (profile.effective_hq_match_lengths) |lengths| @tagName(lengths) else "none",
+    });
+    if (profile.effective_hq_max_price_evaluations) |limit| try stdout.print("{d}", .{limit}) else try stdout.writeAll("unlimited");
+    try stdout.print(" bounded_passes={d} whole_block_passes={d} sampled_length_passes={d} complete_length_passes={d} baseline_searches={d} guarded_frames={d} price_limit_refusals={d} max_parse_positions={d} max_match_length_considered={d} max_plan_price_evaluations={d} baseline_selected_blocks={d} baseline_selected_frames={d}\n", .{
+        profile.bounded_passes,             profile.whole_block_passes,       profile.sampled_length_passes,
+        profile.complete_length_passes,     profile.baseline_searches,        profile.guarded_frames,
+        profile.price_limit_refusals,       profile.max_parse_positions,      profile.max_match_length_considered,
+        profile.max_plan_price_evaluations, profile.baseline_selected_blocks, profile.baseline_selected_frames,
     });
 }
 

@@ -2999,6 +2999,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
         \\                  HQ strategies: --hq-depth=1..65536 --hq-nice-len=3..131072
         \\                  --hq-min-match=3..7 --hq-memory=bytes
+        \\                  --hq-parse-mode=bounded|whole_block (default bounded)
+        \\                  --hq-match-lengths=sampled|complete (default sampled; independent of parse mode)
+        \\                  --hq-max-prices=N caps admitted sequence-edge prices in each actual DP plan
+        \\                  Whole-block, complete lengths and price caps require btopt/btultra/btultra2
+        \\                  0 rejects the first sequence price; an omitted cap is unlimited
         \\                  HQ flags require an HQ strategy and a positive level; nice_len >= min_match
         \\                  Native controls specify local effort, not reference compressor speed parity
         \\                  --profile shows optional encoder work counters
