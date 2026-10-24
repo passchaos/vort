@@ -7,6 +7,7 @@ const wide_match = @import("wide_match.zig");
 
 pub const Error = core.Error || encoder.Error || std.mem.Allocator.Error;
 pub const min_destination_size: usize = 6;
+pub const Options = encoder.EncodeOptions;
 
 pub const Result = struct {
     written: usize,
@@ -45,19 +46,14 @@ pub fn encodeAlignedAlloc(
     errdefer output.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &output);
     var model = try encoder.initModel(options);
+    if (options.match_options) |match| match.recordEffectiveSettings();
     var consumed: usize = 0;
     var checkpoint = Checkpoint{ .range = range };
-    var stats = encoder.EncodeStats{
-        .input_bytes = input.len,
-        .output_bytes = 0,
-        .literals = 0,
-        .matches = 0,
-        .matched_bytes = 0,
-        .repeat_matches = 0,
-        .new_distance_matches = 0,
-    };
+    var stats: EmissionStats = .{ .profile = if (options.match_options) |match| match.profile else null };
 
-    if (options.mode == .literal_only) {
+    if (options.mode != .literal_only and (options.match_options != null or options.mode == .fast or options.mode == .normal)) {
+        try appendAdvancedPrefixes(allocator, &range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, options);
+    } else if (options.mode == .literal_only) {
         for (input) |byte| {
             if (!try appendAlignedToken(&range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, wide_match.Token{ .literal = byte }))
                 break;
@@ -100,13 +96,44 @@ pub fn encodeAlignedAlloc(
     if (output.items.len > capacity or (alignment == 1 and input.len != 0 and consumed == 0))
         return error.InvalidBlockPlan;
     output.items[0] = ~try encoder.propertyByte(options.properties);
-    return .{ .bytes = try output.toOwnedSlice(allocator), .consumed = consumed };
+    const bytes = try output.toOwnedSlice(allocator);
+    return .{ .bytes = bytes, .consumed = consumed };
+}
+
+fn appendAdvancedPrefixes(
+    allocator: std.mem.Allocator,
+    range: *range_encoder.Encoder,
+    model: *encoder.Model,
+    input: []const u8,
+    consumed: *usize,
+    capacity: usize,
+    alignment: usize,
+    checkpoint: *Checkpoint,
+    stats: *EmissionStats,
+    options: encoder.EncodeOptions,
+) Error!void {
+    const lookahead: usize = encoder.advanced_input_min;
+    while (consumed.* < input.len) {
+        const start = consumed.*;
+        const end = start + @min(input.len - start, lookahead);
+        const history_begin = start - @min(start, options.dictionary_size);
+        var plan = try encoder.advancedPlanPrefix(allocator, model, input[history_begin..start], input[start..end], start, options, end == input.len);
+        defer plan.deinit(allocator);
+        try appendTokens(range, model, input, consumed, capacity, alignment, checkpoint, stats, plan.tokens);
+        if (consumed.* - start != plan.consumed) break;
+        if (plan.consumed == 0) return error.InvalidMatch;
+    }
 }
 
 const Checkpoint = struct {
     range: range_encoder.Encoder,
     output_len: usize = 0,
     consumed: usize = 0,
+};
+
+const EmissionStats = struct {
+    coding: encoder.EncodeStats = .{ .input_bytes = 0, .output_bytes = 0, .literals = 0, .matches = 0, .matched_bytes = 0, .repeat_matches = 0, .new_distance_matches = 0 },
+    profile: ?*encoder.EncodeWorkProfile = null,
 };
 
 fn appendTokens(
@@ -117,7 +144,7 @@ fn appendTokens(
     capacity: usize,
     alignment: usize,
     checkpoint: *Checkpoint,
-    stats: *encoder.EncodeStats,
+    stats: *EmissionStats,
     tokens: anytype,
 ) Error!void {
     for (tokens) |token|
@@ -133,7 +160,7 @@ fn appendAlignedToken(
     capacity: usize,
     alignment: usize,
     checkpoint: *Checkpoint,
-    stats: *encoder.EncodeStats,
+    stats: *EmissionStats,
     token: anytype,
 ) Error!bool {
     var remaining: usize = switch (token) {
@@ -145,7 +172,14 @@ fn appendAlignedToken(
         var piece = token;
         if (piece_len == 1) {
             if (consumed.* >= input.len) return error.InvalidMatch;
-            piece = .{ .literal = input[consumed.*] };
+            const short_rep = switch (piece) {
+                .literal => false,
+                .match => |match| match.length == 1 and match.distance == model.reps[0] + 1,
+            };
+            // Alignment can replace tiny pieces of a long match with literals,
+            // changing the planned rep cache. Preserve a short rep only when it
+            // is still the actual model's rep0; a literal remains lossless.
+            if (!short_rep) piece = .{ .literal = input[consumed.*] };
         } else {
             piece.match.length = @intCast(piece_len);
         }
@@ -164,7 +198,7 @@ fn appendToken(
     input: []const u8,
     consumed: *usize,
     capacity: usize,
-    stats: *encoder.EncodeStats,
+    stats: *EmissionStats,
     token: anytype,
 ) Error!bool {
     const length: usize = switch (token) {
@@ -176,14 +210,22 @@ fn appendToken(
     const previous_range = range.*;
     const previous_output_len = range.output.items.len;
     const tokens = [_]@TypeOf(token){token};
-    _ = try model.encodeTokensWithDictionary(
+    _ = try model.encodeTokensWithDictionaryProfiled(
         range,
         input[consumed.*..end],
         input[0..consumed.*],
         &tokens,
         consumed.*,
-        stats,
+        &stats.coding,
+        stats.profile,
     );
+    switch (token) {
+        .literal => stats.coding.literals += 1,
+        .match => |match| {
+            stats.coding.matches += 1;
+            stats.coding.matched_bytes += match.length;
+        },
+    }
     if (try range.finishedSize() > capacity) {
         // The probability model is discarded after this rejected symbol.
         // Only the accepted range state and byte prefix are needed to finish.

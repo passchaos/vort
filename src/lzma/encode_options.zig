@@ -99,6 +99,16 @@ pub const MatchOptions = struct {
         const nice: u32 = self.effectiveNiceLen();
         return if (self.finder.isBinaryTree()) 16 + nice / 2 else 4 + nice / 4;
     }
+
+    /// Record a validated encoder configuration even when empty input or a
+    /// stored-only operation performs no match search. Work counters stay put.
+    pub fn recordEffectiveSettings(self: MatchOptions) void {
+        if (self.profile) |profile| {
+            profile.finder = self.finder;
+            profile.effective_nice_len = self.effectiveNiceLen();
+            profile.effective_depth = self.effectiveDepth();
+        }
+    }
 };
 
 pub const Preset = struct {

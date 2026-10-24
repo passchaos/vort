@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const encoder = @import("encoder.zig");
 const limited = @import("micro_limited_writer.zig");
+const settings = @import("encode_options.zig");
 
 pub const Error = core.Error || encoder.Error || std.mem.Allocator.Error;
 pub const DestSizeResult = limited.Result;
@@ -12,6 +13,18 @@ pub const Options = struct {
     properties: encoder.Properties = .{},
     dictionary_size: u32 = 32 * 1024,
     mode: encoder.Mode = .greedy,
+    match_options: ?settings.MatchOptions = null,
+
+    pub fn validate(self: Options) Error!void {
+        _ = try validateOptions(self);
+    }
+
+    pub fn fromPreset(level: u32, extreme: bool) Error!Options {
+        const preset = try settings.resolvePreset(level, extreme);
+        const options: Options = .{ .properties = preset.properties, .dictionary_size = preset.dictionary_size, .mode = preset.mode, .match_options = preset.match_options };
+        _ = try validateOptions(options);
+        return options;
+    }
 };
 
 /// Encode a complete MicroLZMA stream. Its decoded size and dictionary size
@@ -29,6 +42,7 @@ pub fn encodeAlloc(
         .dictionary_size = options.dictionary_size,
         .mode = options.mode,
         .end_marker = false,
+        .match_options = options.match_options,
     });
     // MicroLZMA replaces the ordinary raw LZMA range prefix (zero) with
     // the complemented properties byte. It has no header or end marker.
@@ -64,6 +78,7 @@ pub fn encodeDestSizeAlloc(
         .dictionary_size = options.dictionary_size,
         .mode = options.mode,
         .end_marker = false,
+        .match_options = options.match_options,
     });
 }
 
@@ -98,6 +113,7 @@ pub fn encodeAlignedDestSizeAlloc(
         .dictionary_size = options.dictionary_size,
         .mode = options.mode,
         .end_marker = false,
+        .match_options = options.match_options,
     });
 }
 
@@ -115,11 +131,12 @@ pub fn encodeAlignedDestSizeInto(
     return .{ .written = encoded.bytes.len, .consumed = encoded.consumed };
 }
 
-fn validateOptions(options: Options) Error!u8 {
+pub fn validateOptions(options: Options) Error!u8 {
     const property = try encoder.propertyByte(options.properties);
     if (options.dictionary_size < 4096 or
         options.dictionary_size > encoder.max_dictionary_size)
         return error.InvalidLzmaOptions;
+    try encoder.validateOptions(.{ .properties = options.properties, .dictionary_size = options.dictionary_size, .mode = options.mode, .end_marker = false, .match_options = options.match_options });
     return property;
 }
 

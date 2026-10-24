@@ -9,6 +9,9 @@ pub const Error = container.Error || lzma_encoder.Error;
 pub const Check = container.Check;
 pub const Filter = filters.Filter;
 pub const Parser = lzma2_writer.Parser;
+pub const Properties = lzma2_writer.Properties;
+pub const MatchOptions = lzma2_writer.MatchOptions;
+const encode_settings = @import("../lzma/encode_options.zig");
 
 const lazy_text_section = switch (builtin.object_format) {
     .elf => ".vort_xz_lazy",
@@ -22,6 +25,23 @@ pub const EncodeOptions = struct {
     block_size: usize = 1024 * 1024,
     dictionary_size: usize = lzma2_writer.dictionary_size,
     filters: []const Filter = &.{},
+    parser: Parser = .greedy,
+    properties: Properties = .{},
+    match_options: ?MatchOptions = null,
+
+    pub fn fromPreset(level: u32, extreme: bool) Error!EncodeOptions {
+        const preset = try encode_settings.resolvePreset(level, extreme);
+        return .{ .dictionary_size = preset.dictionary_size, .parser = preset.mode, .properties = preset.properties, .match_options = preset.match_options };
+    }
+    pub fn validate(self: EncodeOptions) Error!void {
+        try validateOptions(self);
+    }
+    pub fn recordEffectiveSettings(self: EncodeOptions) void {
+        if (self.match_options) |options| options.recordEffectiveSettings();
+    }
+    pub fn lzma2Options(self: EncodeOptions) lzma2_writer.EncodeOptions {
+        return .{ .dictionary_size = self.dictionary_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
+    }
 };
 
 const stream_magic = [_]u8{ 0xfd, '7', 'z', 'X', 'Z', 0x00 };
@@ -131,6 +151,7 @@ fn encodeWithPayload(
     payload_encoding: PayloadEncoding,
 ) !usize {
     try validateOptions(options);
+    options.recordEffectiveSettings();
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
@@ -162,34 +183,15 @@ noinline fn encodeLazyWithPayload(
     input: []const u8,
     options: EncodeOptions,
 ) linksection(lazy_text_section) !usize {
-    try validateOptions(options);
-
-    var encoded: std.ArrayList(u8) = .empty;
-    defer encoded.deinit(allocator);
-    try appendStreamHeader(allocator, &encoded, options.check);
-
-    var records: std.ArrayList(BlockRecord) = .empty;
-    defer records.deinit(allocator);
-    var input_offset: usize = 0;
-    while (input_offset < input.len) {
-        const block_len = @min(options.block_size, input.len - input_offset);
-        const block = input[input_offset..][0..block_len];
-        try records.append(
-            allocator,
-            try appendBlockLazy(allocator, &encoded, block, options),
-        );
-        input_offset += block_len;
-    }
-
-    try appendStreamEnd(allocator, &encoded, options.check, records.items);
-    try out.ensureUnusedCapacity(allocator, encoded.items.len);
-    out.appendSliceAssumeCapacity(encoded.items);
-    return encoded.items.len;
+    var forced = options;
+    forced.parser = .lazy;
+    return encodeWithPayload(allocator, out, input, forced, .compressed);
 }
 
 pub fn validateOptions(options: EncodeOptions) Error!void {
     if (options.block_size == 0) return error.InvalidBlockPlan;
     _ = try lzma2_writer.dictionaryProperty(options.dictionary_size);
+    try options.lzma2Options().validate();
     try filters.validateChain(options.filters);
     _ = try checkSize(options.check);
 }
@@ -200,7 +202,8 @@ pub fn appendStreamHeader(
     check: Check,
 ) !void {
     _ = try checkSize(check);
-    try output.appendSlice(allocator, &stream_magic);
+    try output.ensureUnusedCapacity(allocator, 12);
+    output.appendSliceAssumeCapacity(&stream_magic);
     const stream_flags = [_]u8{ 0, @intFromEnum(check) };
     try output.appendSlice(allocator, &stream_flags);
     try appendU32(allocator, output, std.hash.Crc32.hash(&stream_flags));
@@ -213,6 +216,10 @@ pub fn appendBlock(
     options: EncodeOptions,
     payload_encoding: PayloadEncoding,
 ) !BlockRecord {
+    try validateOptions(options);
+    options.recordEffectiveSettings();
+    const original_len = output.items.len;
+    errdefer output.shrinkRetainingCapacity(original_len);
     if (input.len == 0 or input.len > options.block_size) return error.InvalidBlockPlan;
     try filters.validateChain(options.filters);
     const dictionary_property = try lzma2_writer.dictionaryProperty(options.dictionary_size);
@@ -236,11 +243,11 @@ pub fn appendBlock(
     };
     const packed_size = switch (payload_encoding) {
         .stored => try lzma2_writer.appendStoredPayload(allocator, output, filtered),
-        .compressed => try lzma2_writer.appendCompressedPayloadWithDictionarySize(
+        .compressed => try lzma2_writer.appendCompressedPayloadWithAdvancedOptions(
             allocator,
             output,
             filtered,
-            options.dictionary_size,
+            options.lzma2Options(),
         ),
     };
     const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
@@ -264,47 +271,9 @@ pub noinline fn appendBlockLazy(
     input: []const u8,
     options: EncodeOptions,
 ) linksection(lazy_text_section) !BlockRecord {
-    if (input.len == 0 or input.len > options.block_size) return error.InvalidBlockPlan;
-    try filters.validateChain(options.filters);
-    const dictionary_property = try lzma2_writer.dictionaryProperty(options.dictionary_size);
-    const check_size = try checkSize(options.check);
-    const block_start = output.items.len;
-    const header_size = try appendBlockHeader(
-        allocator,
-        output,
-        options.filters,
-        dictionary_property,
-    );
-    var filtered_storage: ?[]u8 = null;
-    defer if (filtered_storage) |bytes| allocator.free(bytes);
-    const filtered = if (options.filters.len == 0)
-        input
-    else blk: {
-        const bytes = try allocator.dupe(u8, input);
-        filtered_storage = bytes;
-        filters.encodeChain(bytes, options.filters);
-        break :blk bytes;
-    };
-    const packed_size = try lzma2_writer.appendCompressedPayloadWithOptions(
-        allocator,
-        output,
-        filtered,
-        options.dictionary_size,
-        .lazy,
-    );
-    const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
-    try output.appendNTimes(allocator, 0, padding_len);
-    try appendCheck(allocator, output, options.check, input);
-    const unpadded_size = std.math.add(
-        u64,
-        @as(u64, @intCast(header_size + packed_size)),
-        check_size,
-    ) catch return error.IntegerOverflow;
-    std.debug.assert(output.items.len > block_start);
-    return .{
-        .unpadded_size = unpadded_size,
-        .uncompressed_size = try usizeToVli(input.len),
-    };
+    var forced = options;
+    forced.parser = .lazy;
+    return appendBlock(allocator, output, input, forced, .compressed);
 }
 
 pub fn appendStreamEnd(
@@ -313,6 +282,8 @@ pub fn appendStreamEnd(
     check: Check,
     records: []const BlockRecord,
 ) !void {
+    const original_len = output.items.len;
+    errdefer output.shrinkRetainingCapacity(original_len);
     _ = try checkSize(check);
     const index_start = output.items.len;
     try output.append(allocator, 0);
@@ -596,4 +567,8 @@ test "XZ writer round trips ARM64 and RISC-V branch filters" {
             else => unreachable,
         }
     }
+}
+
+test {
+    _ = @import("encoder/preset_tests.zig");
 }

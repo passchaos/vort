@@ -1,13 +1,17 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
+const chunk_encoder = @import("encoder/chunk.zig");
 
 pub const max_uncompressed_chunk: usize = 65_536;
 pub const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
 pub const max_dictionary_size: usize = lzma_encoder.max_dictionary_size;
-pub const Parser = enum { greedy, lazy };
+pub const Parser = chunk_encoder.Parser;
+pub const Properties = chunk_encoder.Properties;
+pub const MatchOptions = chunk_encoder.MatchOptions;
+pub const EncodeOptions = chunk_encoder.Options;
 
 /// Return the smallest LZMA2 dictionary property whose advertised size covers
 /// `requested_size`. Requests above 65,535 bytes select the LZMA-specific wide
@@ -41,22 +45,42 @@ pub fn appendStoredPayload(
     input: []const u8,
 ) !usize {
     const encoded_size = try storedPayloadSize(input.len);
+    _ = std.math.add(usize, out.items.len, encoded_size) catch return error.IntegerOverflow;
+    // Reserve can relocate the ArrayList allocation. Snapshot only the caller's
+    // input span when it borrows that allocation, including initialized spare
+    // capacity; never read unrelated capacity bytes.
+    var owned_input: ?[]u8 = null;
+    defer if (owned_input) |bytes| allocator.free(bytes);
+    const source = if (try inputOverlapsOutputAllocation(input, out)) blk: {
+        const bytes = try allocator.dupe(u8, input);
+        owned_input = bytes;
+        break :blk bytes;
+    } else input;
     try out.ensureUnusedCapacity(allocator, encoded_size);
 
     const start = out.items.len;
     var offset: usize = 0;
-    while (offset < input.len) {
-        const chunk_len = @min(max_uncompressed_chunk, input.len - offset);
+    while (offset < source.len) {
+        const chunk_len = @min(max_uncompressed_chunk, source.len - offset);
         out.appendAssumeCapacity(if (offset == 0) 1 else 2);
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(chunk_len - 1), .big);
         out.appendSliceAssumeCapacity(&size_bytes);
-        out.appendSliceAssumeCapacity(input[offset..][0..chunk_len]);
+        out.appendSliceAssumeCapacity(source[offset..][0..chunk_len]);
         offset += chunk_len;
     }
     out.appendAssumeCapacity(0);
     std.debug.assert(out.items.len - start == encoded_size);
     return encoded_size;
+}
+
+fn inputOverlapsOutputAllocation(input: []const u8, out: *const std.ArrayList(u8)) core.Error!bool {
+    if (input.len == 0 or out.capacity == 0) return false;
+    const input_start = @intFromPtr(input.ptr);
+    const output_start = @intFromPtr(out.items.ptr);
+    const input_end = std.math.add(usize, input_start, input.len) catch return error.IntegerOverflow;
+    const output_end = std.math.add(usize, output_start, out.capacity) catch return error.IntegerOverflow;
+    return input_start < output_end and output_start < input_end;
 }
 
 /// Append a raw LZMA2 payload whose chunks retain the configured preceding
@@ -87,6 +111,8 @@ pub fn appendCompressedPayloadWithDictionarySize(
     );
 }
 
+/// Compatibility entrypoint. Null matching controls retain the established
+/// greedy/lazy wire; the advanced settings entrypoint accepts every core mode.
 pub fn appendCompressedPayloadWithOptions(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -94,115 +120,43 @@ pub fn appendCompressedPayloadWithOptions(
     requested_dictionary_size: usize,
     parser: Parser,
 ) !usize {
-    _ = try dictionaryProperty(requested_dictionary_size);
+    return appendCompressedPayloadWithAdvancedOptions(allocator, out, input, .{ .dictionary_size = requested_dictionary_size, .parser = parser });
+}
+
+pub fn appendCompressedPayloadWithAdvancedOptions(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) !usize {
+    try options.validate();
+    _ = try dictionaryProperty(options.dictionary_size);
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var candidate: std.ArrayList(u8) = .empty;
     defer candidate.deinit(allocator);
-    var wide_planner: ?lzma_encoder.WideStreamPlanner = if (requested_dictionary_size > std.math.maxInt(u16) and input.len != 0)
-        try lzma_encoder.WideStreamPlanner.init(
-            allocator,
-            requested_dictionary_size,
-            input.len,
-        )
+    var wide_planner: ?lzma_encoder.WideStreamPlanner = if (!options.advanced() and options.dictionary_size > std.math.maxInt(u16) and input.len != 0)
+        try lzma_encoder.WideStreamPlanner.init(allocator, options.dictionary_size, input.len)
     else
         null;
     defer if (wide_planner) |*planner| planner.deinit();
-    const lzma_options = lzma_encoder.EncodeOptions{
-        .dictionary_size = requested_dictionary_size,
-        .mode = switch (parser) {
-            .greedy => .greedy,
-            .lazy => .lazy,
-        },
-    };
-    var model = try lzma_encoder.initModel(lzma_options);
-    var model_valid = false;
-    var properties_initialized = false;
-
+    var state = try chunk_encoder.State.init(options);
     var offset: usize = 0;
     while (offset < input.len) {
         const chunk_len = @min(max_uncompressed_chunk, input.len - offset);
-        const chunk = input[offset..][0..chunk_len];
-        const dictionary_start = offset - @min(offset, requested_dictionary_size);
-        const dictionary = input[dictionary_start..offset];
-        candidate.clearRetainingCapacity();
-        // A stored LZMA2 chunk invalidates the probability state. Encode the
-        // candidate directly into the retained model: success keeps it, while
-        // fallback marks it invalid and the next chunk constructs a fresh one.
-        if (!model_valid) model = try lzma_encoder.initModel(lzma_options);
-        const reset: u2 = if (offset == 0)
-            3
-        else if (!properties_initialized)
-            2
-        else if (!model_valid)
-            1
-        else
-            0;
-        if (wide_planner) |*planner| {
-            const plan = switch (parser) {
-                .greedy => try planner.planChunk(input, offset, offset + chunk_len),
-                .lazy => try planner.planChunkLazy(input, offset, offset + chunk_len),
-            };
-            _ = try lzma_encoder.encodeChunkAppendWithModel(
-                allocator,
-                &candidate,
-                chunk,
-                dictionary,
-                offset,
-                lzma_options,
-                plan,
-                &model,
-            );
-        } else {
-            _ = try lzma_encoder.encodeChunkAppendWithModel(
-                allocator,
-                &candidate,
-                chunk,
-                dictionary,
-                offset,
-                lzma_options,
-                null,
-                &model,
-            );
-        }
-        const header_delta: usize = if (reset >= 2) 3 else 2;
-        if (candidate.items.len <= max_uncompressed_chunk and candidate.items.len + header_delta < chunk.len) {
-            try encoded.append(allocator, 0x80 | (@as(u8, reset) << 5));
-            try appendU16Big(allocator, &encoded, @intCast(chunk.len - 1));
-            try appendU16Big(allocator, &encoded, @intCast(candidate.items.len - 1));
-            if (reset >= 2) try encoded.append(allocator, lzma_property);
-            try encoded.appendSlice(allocator, candidate.items);
-            model_valid = true;
-            properties_initialized = true;
-        } else {
-            try appendStoredChunk(allocator, &encoded, chunk, offset == 0);
-            model_valid = false;
-        }
+        const dictionary_start = offset - @min(offset, options.dictionary_size);
+        const plan: ?lzma_encoder.WideStreamPlan = if (wide_planner) |*planner| switch (options.parser) {
+            .greedy => try planner.planChunk(input, offset, offset + chunk_len),
+            .lazy => try planner.planChunkLazy(input, offset, offset + chunk_len),
+            else => unreachable,
+        } else null;
+        _ = try state.append(allocator, &encoded, &candidate, input[offset..][0..chunk_len], input[dictionary_start..offset], offset, options, plan);
         offset += chunk_len;
     }
     try encoded.append(allocator, 0);
-
     try out.ensureUnusedCapacity(allocator, encoded.items.len);
     out.appendSliceAssumeCapacity(encoded.items);
     return encoded.items.len;
-}
-
-fn appendStoredChunk(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    input: []const u8,
-    reset_dictionary: bool,
-) !void {
-    std.debug.assert(input.len != 0 and input.len <= max_uncompressed_chunk);
-    try output.append(allocator, if (reset_dictionary) 1 else 2);
-    try appendU16Big(allocator, output, @intCast(input.len - 1));
-    try output.appendSlice(allocator, input);
-}
-
-fn appendU16Big(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u16) !void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .big);
-    try output.appendSlice(allocator, &bytes);
 }
 
 test "raw LZMA2 stored payload splits chunks and terminates" {

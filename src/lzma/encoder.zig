@@ -3,6 +3,10 @@ const builtin = @import("builtin");
 const lz77 = @import("../lz77.zig");
 const range_encoder = @import("range_encoder.zig");
 const wide_match = @import("wide_match.zig");
+const settings = @import("encode_options.zig");
+const advanced_types = @import("parse/types.zig");
+const advanced_planner = @import("parse/planner.zig");
+const advanced_integration = @import("parse/integration.zig");
 
 const lazy_text_section = switch (builtin.object_format) {
     .elf => ".vort_lzma_lazy",
@@ -11,26 +15,57 @@ const lazy_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
-pub const Error = lz77.Error || error{InvalidLzmaOptions};
-
-pub const Properties = struct {
-    lc: u4 = 3,
-    lp: u3 = 0,
-    pb: u3 = 2,
-};
-
-pub const Mode = enum {
-    literal_only,
-    greedy,
-    lazy,
-};
+pub const Error = lz77.Error || error{ InvalidLzmaOptions, WorkingMemoryLimitExceeded };
+pub const Properties = settings.Properties;
+pub const Mode = settings.Mode;
+pub const MatchOptions = settings.MatchOptions;
+pub const EncodeWorkProfile = settings.EncodeWorkProfile;
 
 pub const EncodeOptions = struct {
     properties: Properties = .{},
     dictionary_size: usize = 4096,
     mode: Mode = .greedy,
     end_marker: bool = false,
+    match_options: ?MatchOptions = null,
+
+    pub fn fromPreset(level: u32, extreme: bool) Error!EncodeOptions {
+        const preset = try settings.resolvePreset(level, extreme);
+        return .{ .properties = preset.properties, .dictionary_size = preset.dictionary_size, .mode = preset.mode, .match_options = preset.match_options };
+    }
 };
+
+pub const AdvancedToken = advanced_types.Token;
+pub const AdvancedPlan = advanced_types.Plan;
+pub const advanced_window_len = advanced_types.window_len;
+pub const advanced_guard_len = advanced_types.guard_len;
+pub const advanced_input_min = advanced_window_len + advanced_guard_len;
+
+pub fn resolvedMatchOptions(options: EncodeOptions) MatchOptions {
+    return options.match_options orelse .{ .finder = if (options.mode == .normal) .bt4 else .hc4 };
+}
+
+fn recordEffectiveSettings(options: EncodeOptions) void {
+    resolvedMatchOptions(options).recordEffectiveSettings();
+}
+
+/// Stable, owned numeric token plan shared by one-shot, streaming and bounded
+/// MicroLZMA writers. It does not change the supplied model or finish a range.
+pub fn advancedPlanPrefix(allocator: std.mem.Allocator, model: *const Model, history: []const u8, input: []const u8, stream_start: usize, options: EncodeOptions, final_input: bool) !AdvancedPlan {
+    try validateOptions(options);
+    if (options.mode == .literal_only or history.len > stream_start or model.dictionary_size != options.dictionary_size or !std.meta.eql(model.properties, options.properties)) return error.InvalidLzmaOptions;
+    recordEffectiveSettings(options);
+    return advanced_planner.plan(allocator, model, history, input, stream_start, options.dictionary_size, options.mode, resolvedMatchOptions(options), final_input);
+}
+
+test {
+    _ = @import("parse/tests.zig");
+}
+
+/// Non-final calls need advanced_input_min lookahead. Return the exact committed
+/// prefix at a complete symbol boundary, preserving model/range/output on error.
+pub fn encodeAdvancedPrefix(allocator: std.mem.Allocator, model: *Model, range: *range_encoder.Encoder, history: []const u8, input: []const u8, stream_start: usize, options: EncodeOptions, final_input: bool, stats: *EncodeStats) !usize {
+    return advanced_integration.prefix(allocator, model, range, history, input, stream_start, options, final_input, stats, advancedPlanPrefix);
+}
 
 pub const EncodeStats = struct {
     input_bytes: usize,
@@ -133,12 +168,26 @@ pub const Model = struct {
         stream_start: usize,
         stats: *EncodeStats,
     ) !usize {
+        return self.encodeTokensWithDictionaryProfiled(range, input, dictionary, tokens, stream_start, stats, null);
+    }
+
+    pub fn encodeTokensWithDictionaryProfiled(
+        self: *Model,
+        range: *range_encoder.Encoder,
+        input: []const u8,
+        dictionary: []const u8,
+        tokens: anytype,
+        stream_start: usize,
+        stats: *EncodeStats,
+        profile: ?*EncodeWorkProfile,
+    ) !usize {
         var position: usize = 0;
         for (tokens) |token| switch (token) {
             .literal => |byte| {
                 if (position >= input.len or input[position] != byte) return error.InvalidMatch;
                 const stream_position = std.math.add(usize, stream_start, position) catch
                     return error.IntegerOverflow;
+                if (profile) |p| p.literals +|= 1;
                 try self.encodeLiteral(range, dictionary, input, position, stream_position, byte);
                 position += 1;
             },
@@ -146,7 +195,7 @@ pub const Model = struct {
                 const length: usize = match.length;
                 const distance: usize = match.distance;
                 const end = std.math.add(usize, position, length) catch return error.InvalidMatch;
-                if (length < 2 or length > 273 or distance == 0 or
+                if (length == 0 or length > 273 or distance == 0 or
                     distance > dictionary.len + position or distance > self.dictionary_size or end > input.len)
                     return error.InvalidMatch;
                 for (0..length) |index|
@@ -154,7 +203,16 @@ pub const Model = struct {
                         return error.InvalidMatch;
                 const stream_position = std.math.add(usize, stream_start, position) catch
                     return error.IntegerOverflow;
-                try self.encodeMatch(range, stream_position, length, distance, stats);
+                if (length == 1 and distance != self.reps[0] + 1) return error.InvalidMatch;
+                if (profile) |p| {
+                    p.matches +|= 1;
+                    p.matched_bytes +|= @as(u64, @intCast(length));
+                    if (findRep(self.reps, distance - 1) != null) p.repeat_matches +|= 1;
+                    if (length == 1) p.short_reps +|= 1;
+                }
+                if (length == 1) {
+                    try self.encodeShortRep(range, stream_position, stats);
+                } else try self.encodeMatch(range, stream_position, length, distance, stats);
                 position = end;
             },
         };
@@ -259,6 +317,16 @@ pub const Model = struct {
         try self.length.encode(range, match_length - 2, position_state);
         self.state = if (self.state < 7) 7 else 10;
         try self.encodeDistance(range, match_length - 2, distance_minus_one);
+    }
+
+    fn encodeShortRep(self: *Model, range: *range_encoder.Encoder, position: usize, stats: *EncodeStats) !void {
+        const position_state = position & ((@as(usize, 1) << self.properties.pb) - 1);
+        try range.encodeBit(&self.is_match[(self.state << 4) + position_state], true);
+        try range.encodeBit(&self.is_rep[self.state], true);
+        try range.encodeBit(&self.is_rep_g0[self.state], false);
+        try range.encodeBit(&self.is_rep_0long[(self.state << 4) + position_state], false);
+        self.state = if (self.state < 7) 9 else 11;
+        stats.repeat_matches += 1;
     }
 
     fn encodeDistance(
@@ -393,8 +461,7 @@ pub fn encodeChunkAppendWithModel(
     wide_plan: ?WideStreamPlan,
     model: *Model,
 ) !usize {
-    if ((options.mode != .greedy and options.mode != .lazy) or
-        model.dictionary_size != options.dictionary_size or
+    if (model.dictionary_size != options.dictionary_size or
         !std.meta.eql(model.properties, options.properties))
         return error.InvalidLzmaOptions;
     return (try encodeChunkAppendWithDictionaryStatsAndPlan(
@@ -421,15 +488,16 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
 ) !EncodeStats {
     try validateOptions(options);
     if (dictionary.len > stream_start) return error.InvalidLzmaOptions;
+    recordEffectiveSettings(options);
     const active_dictionary = dictionary[dictionary.len - @min(dictionary.len, options.dictionary_size) ..];
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &encoded);
-    var local_model = Model{
+    var local_model = if (external_model) |model| model.* else Model{
         .properties = options.properties,
         .dictionary_size = options.dictionary_size,
     };
-    const model = external_model orelse &local_model;
+    const model = &local_model;
     var stats = EncodeStats{
         .input_bytes = input.len,
         .output_bytes = 0,
@@ -440,12 +508,20 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
         .new_distance_matches = 0,
     };
 
-    switch (options.mode) {
+    const advanced = options.mode == .fast or options.mode == .normal or (options.match_options != null and options.mode != .literal_only);
+    if (advanced) {
+        if (prepared_wide_plan != null) return error.InvalidLzmaOptions;
+        stats.input_bytes = 0;
+        try advanced_integration.stream(allocator, model, &range, active_dictionary, input, stream_start, options, &stats, encodeAdvancedPrefix);
+    } else switch (options.mode) {
         .literal_only => {
             var position: usize = 0;
             while (position < input.len) : (position += 1) {
                 const absolute_position = std.math.add(usize, stream_start, position) catch
                     return error.IntegerOverflow;
+                if (options.match_options) |match| if (match.profile) |profile| {
+                    profile.literals +|= 1;
+                };
                 try model.encodeLiteral(
                     &range,
                     active_dictionary,
@@ -519,6 +595,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
             options,
             prepared_wide_plan,
         ),
+        .fast, .normal => unreachable,
     }
     if (options.end_marker) {
         const end_position = std.math.add(usize, stream_start, input.len) catch
@@ -529,6 +606,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
 
     try output.ensureUnusedCapacity(allocator, encoded.items.len);
     output.appendSliceAssumeCapacity(encoded.items);
+    if (external_model) |target| target.* = local_model;
     stats.output_bytes = encoded.items.len;
     return stats;
 }
@@ -537,6 +615,7 @@ pub fn validateOptions(options: EncodeOptions) Error!void {
     _ = try propertyByte(options.properties);
     if (options.dictionary_size == 0 or options.dictionary_size > max_dictionary_size)
         return error.InvalidLzmaOptions;
+    if (options.match_options) |match| try match.validate();
 }
 
 fn encodeGreedyPlan(

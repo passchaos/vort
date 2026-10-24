@@ -31,17 +31,32 @@ pub const Encoder = struct {
         block_size: usize = 1024 * 1024,
         dictionary_size: usize = 4096,
         parser: writer.Parser = .greedy,
+        properties: writer.Properties = .{},
+        match_options: ?writer.MatchOptions = null,
         filters: []const writer.Filter = &.{},
         payload_encoding: writer.PayloadEncoding = .compressed,
         max_input_len: usize = std.math.maxInt(usize),
         max_pending_output_len: usize = 16 * 1024 * 1024,
         max_block_count: usize = 1024 * 1024,
 
-        fn writerOptions(self: Options) writer.EncodeOptions {
+        pub fn fromPreset(level: u32, extreme: bool) Error!Options {
+            const preset = try writer.EncodeOptions.fromPreset(level, extreme);
+            return .{ .dictionary_size = preset.dictionary_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
+        }
+        pub fn validate(self: Options) Error!void {
+            try validateOptions(self);
+        }
+        pub fn recordEffectiveSettings(self: Options) void {
+            if (self.match_options) |options| options.recordEffectiveSettings();
+        }
+        pub fn writerOptions(self: Options) writer.EncodeOptions {
             return .{
                 .check = self.check,
                 .block_size = self.block_size,
                 .dictionary_size = self.dictionary_size,
+                .parser = self.parser,
+                .properties = self.properties,
+                .match_options = self.match_options,
                 .filters = self.filters,
             };
         }
@@ -71,6 +86,7 @@ pub const Encoder = struct {
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Error!Encoder {
         try validateOptions(options);
+        options.recordEffectiveSettings();
         return .{ .allocator = allocator, .options = options };
     }
 
@@ -119,6 +135,7 @@ pub const Encoder = struct {
 
     fn resetStream(self: *Encoder, options: Options, expected_input_len: ?usize) void {
         self.options = options;
+        options.recordEffectiveSettings();
         self.plain.clearRetainingCapacity();
         self.pending.clearRetainingCapacity();
         self.pending_offset = 0;
@@ -168,10 +185,12 @@ pub const Encoder = struct {
     pub fn step(self: *Encoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.done) {
             if (input.len != 0) return error.TrailingData;
+            self.options.recordEffectiveSettings();
             return .{ .status = .done };
         }
         if ((self.flush_requested or self.finishing) and input.len != 0)
             return error.TrailingData;
+        self.options.recordEffectiveSettings();
 
         var input_read: usize = 0;
         var output_written: usize = 0;
@@ -193,6 +212,8 @@ pub const Encoder = struct {
             }
 
             if (!self.header_written) {
+                const original_len = self.pending.items.len;
+                errdefer self.pending.shrinkRetainingCapacity(original_len);
                 try writer.appendStreamHeader(self.allocator, &self.pending, self.options.check);
                 try self.checkPendingLimit();
                 self.header_written = true;
@@ -233,6 +254,8 @@ pub const Encoder = struct {
                     return result(input_read, output_written, .need_input);
                 }
                 if (!self.footer_written) {
+                    const original_len = self.pending.items.len;
+                    errdefer self.pending.shrinkRetainingCapacity(original_len);
                     try writer.appendStreamEnd(
                         self.allocator,
                         &self.pending,
@@ -257,27 +280,21 @@ pub const Encoder = struct {
         if (self.plain.items.len == 0) return error.InvalidBlockPlan;
         if (self.records.items.len >= self.options.max_block_count)
             return error.OutputLimitExceeded;
-        const record = if (self.options.payload_encoding == .compressed and
-            self.options.parser == .lazy)
-            try writer.appendBlockLazy(
-                self.allocator,
-                &self.pending,
-                self.plain.items,
-                self.options.writerOptions(),
-            )
-        else
-            try writer.appendBlock(
-                self.allocator,
-                &self.pending,
-                self.plain.items,
-                self.options.writerOptions(),
-                self.options.payload_encoding,
-            );
+        const next_block_count = std.math.add(usize, self.block_count, 1) catch return error.IntegerOverflow;
+        try self.records.ensureUnusedCapacity(self.allocator, 1);
+        const original_len = self.pending.items.len;
+        errdefer self.pending.shrinkRetainingCapacity(original_len);
+        const record = try writer.appendBlock(
+            self.allocator,
+            &self.pending,
+            self.plain.items,
+            self.options.writerOptions(),
+            self.options.payload_encoding,
+        );
         try self.checkPendingLimit();
-        try self.records.append(self.allocator, record);
+        self.records.appendAssumeCapacity(record);
         self.plain.clearRetainingCapacity();
-        self.block_count = std.math.add(usize, self.block_count, 1) catch
-            return error.IntegerOverflow;
+        self.block_count = next_block_count;
     }
 
     fn checkPendingLimit(self: *const Encoder) Error!void {

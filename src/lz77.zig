@@ -162,6 +162,9 @@ pub const DictionaryGreedyScratch = struct {
     }
 };
 
+/// Caller-owned transaction log for StreamingHashGreedy's indexed writes.
+pub const StreamingHashGreedyJournal = @import("lz77/streaming_hash_journal.zig").Journal;
+
 /// Persistent hash-chain state for callers that commit an input stream in
 /// order while retaining at least `max_match_len` bytes of lookahead. Absolute
 /// positions preserve the same insertion/search order as `hashGreedyPlanAlloc`;
@@ -209,6 +212,36 @@ pub const StreamingHashGreedy = struct {
         stream_start: usize,
         options: GreedyOptions,
     ) Error!Result {
+        return self.nextImpl(false, dictionary, input, position, stream_start, options, {});
+    }
+
+    /// Transactional variant with the exact legacy search/insertion rules.
+    /// Reserve at least input.len entries before begin; each consumed byte can
+    /// cause at most one logged insertion. A caller rolls back the whole batch
+    /// after any parser, range coder, output or history allocation failure.
+    pub fn nextWithJournal(
+        self: *StreamingHashGreedy,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+        journal: *StreamingHashGreedyJournal,
+    ) Error!Result {
+        if (!journal.isActive()) return error.InvalidBlockPlan;
+        return self.nextImpl(true, dictionary, input, position, stream_start, options, journal);
+    }
+
+    fn nextImpl(
+        self: *StreamingHashGreedy,
+        comptime journaled: bool,
+        dictionary: []const u8,
+        input: []const u8,
+        position: usize,
+        stream_start: usize,
+        options: GreedyOptions,
+        journal: if (journaled) *StreamingHashGreedyJournal else void,
+    ) Error!Result {
         if (options.window_len != self.window_len or position >= input.len)
             return error.InvalidBlockPlan;
         const absolute = std.math.add(usize, stream_start, position) catch
@@ -254,11 +287,11 @@ pub const StreamingHashGreedy = struct {
         const accepted = acceptMatch(input, position, best.length, best.distance, options);
         if (accepted) {
             const end = position + best.length;
-            try self.insert(input, position, stream_start);
+            try self.insert(journaled, input, position, stream_start, journal);
             const tail_start = if (end > position + 4) end - 4 else position + 1;
             var seed = @max(position + 1, tail_start);
             while (seed < end) : (seed += 1)
-                try self.insert(input, seed, stream_start);
+                try self.insert(journaled, input, seed, stream_start, journal);
             return .{
                 .token = .{ .match = .{
                     .length = @intCast(best.length),
@@ -267,25 +300,33 @@ pub const StreamingHashGreedy = struct {
                 .consumed = best.length,
             };
         }
-        try self.insert(input, position, stream_start);
+        try self.insert(journaled, input, position, stream_start, journal);
         return .{ .token = .{ .literal = input[position] }, .consumed = 1 };
     }
 
     fn insert(
         self: *StreamingHashGreedy,
+        comptime journaled: bool,
         input: []const u8,
         position: usize,
         stream_start: usize,
+        journal: if (journaled) *StreamingHashGreedyJournal else void,
     ) Error!void {
         const bucket = streamingHash(input, position) orelse return;
         const absolute = std.math.add(usize, stream_start, position) catch
             return error.IntegerOverflow;
         const stored_position = std.math.cast(i64, absolute) orelse
             return error.IntegerOverflow;
-        self.prev.items[absolute % self.prev.items.len] = self.head.items[bucket];
+        const slot = absolute % self.prev.items.len;
+        if (comptime journaled) try journal.record(bucket, slot, self.head.items[bucket], self.prev.items[slot]);
+        self.prev.items[slot] = self.head.items[bucket];
         self.head.items[bucket] = stored_position;
     }
 };
+
+test {
+    _ = @import("lz77/streaming_hash_journal_tests.zig");
+}
 
 fn streamingHash(input: []const u8, position: usize) ?usize {
     if (input.len - position < min_match_len) return null;

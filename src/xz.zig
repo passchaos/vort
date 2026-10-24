@@ -12,6 +12,7 @@ const lzma2_incremental_encoder = @import("xz/lzma2_incremental_encoder.zig");
 const lzma2_writer = @import("xz/lzma2_writer.zig");
 const writer = @import("xz/writer.zig");
 const one_shot = @import("xz/one_shot/workspace.zig");
+const encode_options = @import("lzma/encode_options.zig");
 
 pub const Error = container.Error || writer.Error || incremental_decoder.Decoder.Error ||
     incremental_encoder.Encoder.Error || lzma2_incremental_decoder.Decoder.Error ||
@@ -27,10 +28,19 @@ pub const RawLzma2IncrementalEncoder = lzma2_incremental_encoder.Encoder;
 pub const IncrementalFilterDecoder = incremental_filters.Decoder;
 pub const IncrementalFilterEncoder = incremental_filters.Encoder;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const Properties = encode_options.Properties;
+pub const CompressionPreset = encode_options.Preset;
+pub const MatchFinder = encode_options.MatchFinder;
+pub const MatchOptions = encode_options.MatchOptions;
+pub const EncodeWorkProfile = encode_options.EncodeWorkProfile;
+pub const resolvePreset = encode_options.resolvePreset;
+pub const validateEncodeOptions = writer.validateOptions;
+pub const RawLzma2EncodeOptions = lzma2_writer.EncodeOptions;
 pub const Parser = writer.Parser;
 pub const Filter = writer.Filter;
 pub const max_encode_dictionary_size = lzma2_writer.max_dictionary_size;
 pub const encodeRawLzma2Append = lzma2_writer.appendCompressedPayload;
+pub const encodeRawLzma2AppendWithOptions = lzma2_writer.appendCompressedPayloadWithAdvancedOptions;
 pub const encodeRawLzma2StoredAppend = lzma2_writer.appendStoredPayload;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeLazyAlloc = writer.encodeLazyAlloc;
@@ -55,6 +65,7 @@ pub const decodedSizeConcatenated = container.decodedSizeConcatenated;
 pub const decodedSizeConcatenatedLimited = container.decodedSizeConcatenatedLimited;
 
 test {
+    _ = @import("xz/encode_controls_tests.zig");
     _ = @import("xz/one_shot/contracts_tests.zig");
     _ = @import("xz/one_shot/resources_tests.zig");
     _ = container;

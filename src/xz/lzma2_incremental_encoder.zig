@@ -4,11 +4,12 @@ const std = @import("std");
 const core = @import("../core.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
 const writer = @import("lzma2_writer.zig");
+const chunk_encoder = @import("encoder/chunk.zig");
 
 pub const Encoder = struct {
     allocator: std.mem.Allocator,
     options: Options,
-    model: lzma_encoder.Model,
+    chunk_state: chunk_encoder.State,
     input: std.ArrayList(u8) = .empty,
     history: std.ArrayList(u8) = .empty,
     candidate: std.ArrayList(u8) = .empty,
@@ -18,8 +19,6 @@ pub const Encoder = struct {
     total_input: usize = 0,
     encoded_input: usize = 0,
     total_output: usize = 0,
-    model_valid: bool = false,
-    properties_initialized: bool = false,
     finishing: bool = false,
     terminator_written: bool = false,
     done: bool = false,
@@ -33,8 +32,23 @@ pub const Encoder = struct {
 
     pub const Options = struct {
         mode: Mode = .compressed,
+        dictionary_size: usize = writer.dictionary_size,
+        parser: writer.Parser = .greedy,
+        properties: writer.Properties = .{},
+        match_options: ?writer.MatchOptions = null,
         max_input_len: usize = std.math.maxInt(usize),
         max_pending_output_len: usize = writer.max_uncompressed_chunk + 16,
+
+        pub fn fromPreset(level: u32, extreme: bool) Error!Options {
+            const preset = try writer.EncodeOptions.fromPreset(level, extreme);
+            return .{ .dictionary_size = preset.dictionary_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
+        }
+        pub fn validate(self: Options) Error!void {
+            try validateOptions(self);
+        }
+        pub fn chunkOptions(self: Options) chunk_encoder.Options {
+            return .{ .dictionary_size = self.dictionary_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
+        }
     };
 
     pub fn init(allocator: std.mem.Allocator, options: Options) Error!Encoder {
@@ -42,7 +56,7 @@ pub const Encoder = struct {
         return .{
             .allocator = allocator,
             .options = options,
-            .model = try lzma_encoder.initModel(lzmaOptions()),
+            .chunk_state = try chunk_encoder.State.init(options.chunkOptions()),
         };
     }
 
@@ -65,6 +79,24 @@ pub const Encoder = struct {
         self.* = undefined;
     }
 
+    /// Start another raw payload with the same validated settings and retained
+    /// buffer capacity. Work profiles accumulate independently of stream state.
+    pub fn reset(self: *Encoder) Error!void {
+        try validateOptions(self.options);
+        try self.chunk_state.reset(self.options.chunkOptions());
+        self.input.clearRetainingCapacity();
+        self.history.clearRetainingCapacity();
+        self.candidate.clearRetainingCapacity();
+        self.pending.clearRetainingCapacity();
+        self.pending_offset = 0;
+        self.total_input = 0;
+        self.encoded_input = 0;
+        self.total_output = 0;
+        self.finishing = false;
+        self.terminator_written = false;
+        self.done = false;
+    }
+
     pub fn finish(self: *Encoder) void {
         if (!self.done) self.finishing = true;
     }
@@ -72,9 +104,11 @@ pub const Encoder = struct {
     pub fn step(self: *Encoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.done) {
             if (input.len != 0) return error.TrailingData;
+            self.options.chunkOptions().recordEffectiveSettings();
             return .{ .status = .done };
         }
         if (self.finishing and input.len != 0) return error.TrailingData;
+        self.options.chunkOptions().recordEffectiveSettings();
 
         var input_read: usize = 0;
         var output_written: usize = 0;
@@ -134,79 +168,21 @@ pub const Encoder = struct {
 
     fn emitChunk(self: *Encoder) Error!void {
         std.debug.assert(self.input.items.len != 0);
+        const next_encoded_input = std.math.add(usize, self.encoded_input, self.input.items.len) catch return error.IntegerOverflow;
+        const history_len = @min(self.options.dictionary_size, self.history.items.len + self.input.items.len);
+        try self.history.ensureTotalCapacity(self.allocator, history_len);
         switch (self.options.mode) {
-            .compressed => try self.emitCompressedChunk(),
-            .stored => try self.emitStoredChunk(),
+            .compressed => _ = try self.chunk_state.append(self.allocator, &self.pending, &self.candidate, self.input.items, self.history.items, self.encoded_input, self.options.chunkOptions(), null),
+            .stored => _ = try self.chunk_state.appendUncompressed(self.allocator, &self.pending, self.input.items, self.encoded_input == 0),
         }
         try self.retainHistory(self.input.items);
-        self.encoded_input = std.math.add(usize, self.encoded_input, self.input.items.len) catch
-            return error.IntegerOverflow;
+        self.encoded_input = next_encoded_input;
         try self.checkPendingLimit();
         self.input.clearRetainingCapacity();
     }
 
-    fn emitCompressedChunk(self: *Encoder) Error!void {
-        const options = lzmaOptions();
-        if (!self.model_valid) self.model = try lzma_encoder.initModel(options);
-        const reset: u2 = if (self.encoded_input == 0)
-            3
-        else if (!self.properties_initialized)
-            2
-        else if (!self.model_valid)
-            1
-        else
-            0;
-        self.candidate.clearRetainingCapacity();
-        _ = try lzma_encoder.encodeChunkAppendWithModel(
-            self.allocator,
-            &self.candidate,
-            self.input.items,
-            self.history.items,
-            self.encoded_input,
-            options,
-            null,
-            &self.model,
-        );
-        const header_delta: usize = if (reset >= 2) 3 else 2;
-        if (self.candidate.items.len <= writer.max_uncompressed_chunk and
-            self.candidate.items.len + header_delta < self.input.items.len)
-        {
-            try self.pending.append(self.allocator, 0x80 | (@as(u8, reset) << 5));
-            try appendU16Big(
-                self.allocator,
-                &self.pending,
-                @intCast(self.input.items.len - 1),
-            );
-            try appendU16Big(
-                self.allocator,
-                &self.pending,
-                @intCast(self.candidate.items.len - 1),
-            );
-            if (reset >= 2) try self.pending.append(self.allocator, writer.lzma_property);
-            try self.pending.appendSlice(self.allocator, self.candidate.items);
-            self.model_valid = true;
-            self.properties_initialized = true;
-            return;
-        }
-        try self.emitStoredChunk();
-        self.model_valid = false;
-    }
-
-    fn emitStoredChunk(self: *Encoder) Error!void {
-        try self.pending.append(
-            self.allocator,
-            if (self.encoded_input == 0) 1 else 2,
-        );
-        try appendU16Big(
-            self.allocator,
-            &self.pending,
-            @intCast(self.input.items.len - 1),
-        );
-        try self.pending.appendSlice(self.allocator, self.input.items);
-    }
-
     fn retainHistory(self: *Encoder, chunk: []const u8) Error!void {
-        const dictionary_size = writer.dictionary_size;
+        const dictionary_size = self.options.dictionary_size;
         if (chunk.len >= dictionary_size) {
             self.history.clearRetainingCapacity();
             try self.history.appendSlice(
@@ -232,24 +208,9 @@ pub const Encoder = struct {
     }
 };
 
-fn lzmaOptions() lzma_encoder.EncodeOptions {
-    return .{
-        .dictionary_size = writer.dictionary_size,
-        .mode = .greedy,
-    };
-}
-
-fn appendU16Big(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    value: u16,
-) !void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .big);
-    try output.appendSlice(allocator, &bytes);
-}
-
 fn validateOptions(options: Encoder.Options) Encoder.Error!void {
+    try options.chunkOptions().validate();
+    _ = try writer.dictionaryProperty(options.dictionary_size);
     if (options.max_pending_output_len < writer.max_uncompressed_chunk + 3)
         return error.InvalidBlockPlan;
 }
