@@ -378,6 +378,18 @@
     ],
     "source_directory": "/tmp/vort-wide-bit-final-20261025/aggregate-binding"
   },
+  "checks": {
+    "bundle": "checks.tar.gz",
+    "bundle_sha256": "2d35491fc48dc845ee63d78e4e3345debbde78b2fa42ce88293a26597c00efe1",
+    "files": [
+      {
+        "bytes": 1261,
+        "path": "format.json",
+        "sha256": "e889b5256d27fba97662f542db7705a62ca8a7d2d9cf24e1ddb13932a15e3c6e"
+      }
+    ],
+    "source_directory": "/tmp/vort-wide-bit-final-20261025/checks"
+  },
   "cli": {
     "bundle": "cli.tar.gz",
     "bundle_sha256": "1e19315442030bf78f2548fd84fb98a5e6dd4150eb9295de252374493e4e0f8a",
@@ -2311,6 +2323,53 @@
       }
     ],
     "source_directory": "/tmp/vort-wide-bit-final-20261025/portability"
+  },
+  "post-rebase": {
+    "bundle": "post-rebase.tar.gz",
+    "bundle_sha256": "280274cbf57dfc27a1c07cc4750c5fb5cdfcc4d409b9a1df94e0d2610bedb861",
+    "files": [
+      {
+        "bytes": 55077,
+        "path": "check.log",
+        "sha256": "34ee420b4885989bcb48b2450ec50d79e06cb2d4e1e7b7e88518853c5199efe6"
+      },
+      {
+        "bytes": 2498,
+        "path": "cli.log",
+        "sha256": "d08487ec80e66fd684f784ef57255f31d631e413329f34b4998b44c535363844"
+      },
+      {
+        "bytes": 42500,
+        "path": "help.log",
+        "sha256": "f297ad3851283475b2e6545ac5c6736b6d7df3e02257d9221f993adfdb068289"
+      },
+      {
+        "bytes": 4315,
+        "path": "native-wasm.log",
+        "sha256": "70d18d7a1f1a65bf4c7498dc0d3f53c51f76a19482cadfb6332a742a949a9e7a"
+      },
+      {
+        "bytes": 1566,
+        "path": "result.json",
+        "sha256": "a156d416104be416eb0b559d8cb118aec31f52ca64aca3820fb642ea69b88ad7"
+      },
+      {
+        "bytes": 132949,
+        "path": "source-after.json",
+        "sha256": "e635f45e69b63d82ece88cb91095dbfff0af6b85f09272975f73e6f96ee94384"
+      },
+      {
+        "bytes": 132949,
+        "path": "source-before.json",
+        "sha256": "e635f45e69b63d82ece88cb91095dbfff0af6b85f09272975f73e6f96ee94384"
+      },
+      {
+        "bytes": 646,
+        "path": "x86.log",
+        "sha256": "e9d8bf780a7159281dcdf99815d7e55c5073164eef5242107a142a843df8bff2"
+      }
+    ],
+    "source_directory": "/tmp/vort-wide-bit-final-20261025/post-rebase"
   },
   "prepared": {
     "bundle": "prepared.tar.gz",
