@@ -15,7 +15,7 @@ pub fn multiply(a: usize, b: usize) !usize {
 }
 pub fn validate(source: types.Source, parameters: state.Parameters, model: *const prices.Model) !void {
     const resolved = parameters.resolved;
-    try (options.HqOptions{ .search_depth = resolved.search_depth, .nice_len = resolved.nice_len, .beam_width = resolved.beam_width, .iterations = resolved.iterations, .max_working_memory = resolved.max_working_memory, .block_len = resolved.block_len, .distance_parameters = resolved.distance_parameters }).validate(resolved.quality);
+    try (options.HqOptions{ .search_depth = resolved.search_depth, .nice_len = resolved.nice_len, .beam_width = resolved.beam_width, .iterations = resolved.iterations, .max_working_memory = resolved.max_working_memory, .block_len = resolved.block_len, .distance_parameters = resolved.distance_parameters, .parse_mode = resolved.parse_mode }).validate(resolved.quality);
     if (resolved.beam_width == 0 or resolved.iterations == 0 or source.input.len > resolved.block_len or source.format != resolved.format)
         return error.InvalidBlockPlan;
     try source.validate();
@@ -30,7 +30,7 @@ pub fn ownBytes(source: types.Source, parameters: state.Parameters, has_dictiona
     if (source.input.len == 0) return 0;
     const command_bytes = try multiply(commandCapacity(source, has_dictionary), @sizeOf(command_plan.Command));
     const literal_bytes = try multiply(try add(source.input.len, 1), @sizeOf(u64));
-    const nodes = try multiply(try add(@min(state.horizon, source.input.len), 1), parameters.resolved.beam_width);
+    const nodes = try multiply(try add(state.horizonFor(source.input.len, parameters.resolved.parse_mode), 1), parameters.resolved.beam_width);
     const memo = try multiply(16 * @as(usize, parameters.resolved.beam_width), @sizeOf(state.MatchMemo));
     return add(try add(try add(command_bytes, literal_bytes), try multiply(nodes, @sizeOf(state.Node))), try add(@sizeOf(state.Spill), memo));
 }

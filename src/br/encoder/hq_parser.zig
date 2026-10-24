@@ -32,9 +32,10 @@ pub fn requiredWorkingMemory(source: Source, parameters: Parameters, model: *con
 /// One actual command parse. Iterations belong to the format bridge, which
 /// starts each pass from the same Source/cache/previous state, trains with the
 /// first plan's statistics and selects candidates by complete serialized size.
-/// The native 4096-position beam and literal-continuation spill comparison are
-/// bounded heuristics. They can miss a cheaper match starting after a window
-/// boundary and do not promise globally optimal command segmentation.
+/// Default bounded mode uses 4096-position windows and literal-continuation
+/// spill comparisons. Whole-block mode evaluates every input position in one
+/// finite beam and prices the terminal command only at the meta-block end.
+/// Finite beams do not promise globally optimal cache-state segmentation.
 pub fn planAlloc(allocator: std.mem.Allocator, source: Source, parameters: Parameters, model: *const Model, provider: ?*const dictionary.Provider) !Plan {
     const required = try requiredWorkingMemory(source, parameters, model, provider);
     if (parameters.profile) |profile| profile.recordEffective(parameters.resolved);

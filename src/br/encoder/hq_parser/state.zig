@@ -6,6 +6,9 @@ const tree = @import("../hq_tree.zig");
 const prices = @import("prices.zig");
 pub const Budget = @import("../../../io/working_allocator.zig").WorkingAllocator;
 pub const horizon: usize = 4096;
+pub fn horizonFor(input_len: usize, parse_mode: anytype) usize {
+    return if (parse_mode == .whole_block) input_len else @min(horizon, input_len);
+}
 
 pub const default_resolved: options.Resolved = .{ .quality = 10, .search_depth = 64, .nice_len = 128, .beam_width = 8, .iterations = 1, .max_working_memory = std.math.maxInt(usize), .block_len = 256 * 1024, .distance_parameters = @import("../distance.zig").Parameters.init(0, 0) };
 pub const Parameters = struct {
@@ -31,7 +34,7 @@ pub const Node = struct {
     cost: u64 = std.math.maxInt(u64),
     recent: [4]usize = types.initial_recent,
     pending_insert: usize = 0,
-    previous_position: u16 = 0,
+    previous_position: u32 = 0,
     previous_slot: u8 = 0,
     copy_len: usize = 0,
     output_len: usize = 0,

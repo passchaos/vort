@@ -26,9 +26,11 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
     for (source.input, 0..) |_, position|
         literal_prefix[position + 1] = std.math.add(u64, literal_prefix[position], model.literalPrice(source, position, parameters.previous)) catch return error.IntegerOverflow;
     const width: usize = parameters.resolved.beam_width;
-    const node_count = (@min(source.input.len, state.horizon) + 1) * width;
+    const window = state.horizonFor(source.input.len, parameters.resolved.parse_mode);
+    const node_count = try resources.multiply(try resources.add(window, 1), width);
     const nodes = try allocator.alloc(state.Node, node_count);
     defer allocator.free(nodes);
+    if (parameters.profile) |profile| profile.recordParseMode(parameters.resolved.parse_mode, window);
     const spill = try allocator.create(state.Spill);
     defer allocator.destroy(spill);
     const memos = try allocator.alloc(state.MatchMemo, width * 16);
@@ -48,7 +50,7 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
     var pending: usize = 0;
     var recent = parameters.initial_recent_distances orelse source.recent;
     while (base < source.input.len) {
-        const goal = @min(state.horizon, source.input.len - base);
+        const goal = @min(window, source.input.len - base);
         @memset(nodes[0 .. (goal + 1) * width], .{});
         spill.* = .{};
         nodes[0] = .{ .cost = 0, .recent = recent, .pending_insert = pending };
@@ -129,7 +131,7 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
                 final_slot = slot;
             }
         }
-        const use_spill = spill.continuation_cost < best;
+        const use_spill = parameters.resolved.parse_mode == .bounded and spill.continuation_cost < best;
         const final = if (use_spill) spill.node else nodes[goal * width + final_slot];
         if (final.cost == std.math.maxInt(u64)) return error.InvalidBlockPlan;
         const commands_start = result.commands.len;
@@ -148,7 +150,7 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
         recent = final.recent;
         pending = final.pending_insert;
         base += if (use_spill) spill.end_position else goal;
-        if (pending == 0 and result.commands.len != commands_start) {
+        if (parameters.resolved.parse_mode == .bounded and pending == 0 and result.commands.len != commands_start) {
             const last = &result.commands[result.commands.len - 1];
             const copy_start = last.insert_start + last.insert_len;
             var full = last.outputLen();

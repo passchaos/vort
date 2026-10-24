@@ -6,7 +6,7 @@ const serialized = @import("../../serialized_dictionary.zig");
 const shared = @import("../../shared_dictionary.zig");
 const distance = @import("../distance.zig");
 
-fn makeDictionary(allocator: std.mem.Allocator, raw: []const u8, kind: u8, suffix: bool) ![]u8 {
+pub fn makeDictionary(allocator: std.mem.Allocator, raw: []const u8, kind: u8, suffix: bool) ![]u8 {
     var bits: [32]u8 = @splat(0);
     bits[4] = 1;
     return builder.serializeAlloc(allocator, .{

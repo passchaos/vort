@@ -19,7 +19,7 @@ fn terminal(model: *const parser.Model, insert: usize) u64 {
     }
     return best;
 }
-fn path(source: parser.Source, model: *const parser.Model, position: usize, pending: usize, recent: [4]usize) !u64 {
+pub fn path(source: parser.Source, model: *const parser.Model, position: usize, pending: usize, recent: [4]usize) !u64 {
     if (position == source.input.len) return if (pending == 0) 0 else terminal(model, pending);
     var best = @as(u64, model.literalPrice(source, position, .{ 0, 0 })) + try path(source, model, position + 1, pending + 1, recent);
     const current = source.history.len + position;
