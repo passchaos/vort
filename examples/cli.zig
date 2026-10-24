@@ -51,6 +51,7 @@ const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
 const zstd_controls_cli = @import("cli/zstd_controls.zig");
+const fast_cover_cli = @import("cli/fast_cover.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -1595,6 +1596,10 @@ pub fn main(init: std.process.Init) !void {
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-hex")) {
         try zstd_controls_cli.encodeTextHex(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "train-zstd-fastcover-dictionary")) {
+        try fast_cover_cli.train(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "optimize-zstd-fastcover-dictionary")) {
+        try fast_cover_cli.optimize(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) {
         try zstd_controls_cli.encodeBytesHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file-hex")) {
@@ -2991,6 +2996,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
         \\    Negative level -N selects fast acceleration N. New controls default to level 1.
+        \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
+        \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
+        \\    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.
+        \\    fastcover_options: --dmer=6|8 --segment=N --hash-log=1..31 --accel=1..10
+        \\                       --max-corpus=BYTES --max-working=BYTES --max-dictionary=BYTES --json --profile
+        \\    optimize_options: --steps=N --threads=N --shrink[=true|false] --split-num=N --split-den=N
+        \\    Split defaults to 3/4; 1/1 uses every sample for both partitions. Use -- before option-like sample names.
         \\                              Encode file bytes as dependency-free native-subset Zstandard file
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
