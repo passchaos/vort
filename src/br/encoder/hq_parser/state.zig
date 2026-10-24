@@ -52,6 +52,8 @@ pub const MatchMemo = struct { distance: usize, length: usize };
 
 pub const Plan = struct {
     commands: []command_plan.Command,
+    /// Exact allocation returned by the builder at successful finalization.
+    /// Before transfer, commands is only a view and this owner remains empty.
     command_storage: []command_plan.Command,
     distance_parameters: @import("../distance.zig").Parameters,
     format: @import("../distance.zig").Format = .standard,

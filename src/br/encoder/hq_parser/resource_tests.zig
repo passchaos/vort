@@ -2,20 +2,35 @@ const std = @import("std");
 const parser = @import("../hq_parser.zig");
 const distance = @import("../distance.zig");
 const options = @import("../hq_options.zig");
+const Ledger = @import("test_allocator_ledger.zig").Ledger;
 
 test "BrHQ core exact below budget and all OOM sites release without model or source mutation" {
     const source = try parser.Source.init("abcd", "abcdabcd", 24, 4);
     const model = parser.Model.init(distance.Parameters.init(0, 0), 0);
     var parameters: parser.Parameters = .{};
     const required = try parser.requiredWorkingMemory(source, parameters, &model, null);
-    parameters.resolved.max_working_memory = required;
-    const plan = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
-    defer plan.deinit(std.testing.allocator);
-    try std.testing.expectEqual(required, plan.peak_working_memory);
+    var baseline_ledger: Ledger = .{ .backing = std.testing.allocator, .forbid_remap = true };
+    const baseline = try parser.planAlloc(baseline_ledger.allocator(), source, parameters, &model, null);
+    const measured_peak = baseline_ledger.peak;
+    try std.testing.expectEqual(measured_peak, baseline.peak_working_memory);
+    try std.testing.expect(required < measured_peak);
+    baseline.deinit(baseline_ledger.allocator());
+    try std.testing.expectEqual(@as(usize, 0), baseline_ledger.live);
+    var exact_ledger: Ledger = .{ .backing = std.testing.allocator, .forbid_remap = true };
+    parameters.resolved.max_working_memory = measured_peak;
+    const plan = try parser.planAlloc(exact_ledger.allocator(), source, parameters, &model, null);
+    try std.testing.expectEqual(measured_peak, exact_ledger.peak);
+    try std.testing.expectEqual(plan.commands.len, plan.command_storage.len);
+    plan.deinit(exact_ledger.allocator());
+    try std.testing.expectEqual(@as(usize, 0), exact_ledger.live);
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
-    parameters.resolved.max_working_memory -= 1;
+    parameters.resolved.max_working_memory = required - 1;
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, parser.planAlloc(failing.allocator(), source, parameters, &model, null));
     try std.testing.expectEqual(@as(usize, 0), failing.alloc_index);
+    var below_ledger: Ledger = .{ .backing = std.testing.allocator, .forbid_remap = true };
+    parameters.resolved.max_working_memory = measured_peak - 1;
+    try std.testing.expectError(error.WorkingMemoryLimitExceeded, parser.planAlloc(below_ledger.allocator(), source, parameters, &model, null));
+    try std.testing.expectEqual(@as(usize, 0), below_ledger.live);
     const Test = struct {
         fn run(allocator: std.mem.Allocator, input: parser.Source, prices: *const parser.Model) !void {
             const result = try parser.planAlloc(allocator, input, .{}, prices, null);
@@ -81,9 +96,9 @@ test "BrHQ core failed borrowed checkpoint parse preserves entering owner and sh
     defer checkpoint.deinit(a);
     const model = parser.Model.init(distance.Parameters.init(0, 0), 0);
     const live_before = budget.live;
-    // The first five allocations are fixed parser workspaces. The next one
+    // The first four allocations are fixed parser workspaces. The next one
     // grows the real dictionary frontier after the checkpoint's first probe.
-    failing.fail_index = failing.alloc_index + 5;
+    failing.fail_index = failing.alloc_index + 4;
     try std.testing.expectError(error.OutOfMemory, parser.planAlloc(a, source, .{ .budget = &budget, .matcher = &checkpoint }, &model, &provider));
     try std.testing.expectEqual(@as(usize, 0), entering.position());
     try std.testing.expectEqual(@as(usize, 1), checkpoint.position());

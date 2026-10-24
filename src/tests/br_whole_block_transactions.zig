@@ -130,6 +130,7 @@ const PlanAllocationGraph = struct {
     pub fn run(backing: std.mem.Allocator) !void {
         var tracked = h.TrackingAllocator.init(backing);
         tracked.force_moving_growth = true;
+        tracked.force_copy_reallocation = true;
         const input = "abcdab";
         const model: parser.Model = .{};
         const source = try parser.Source.init("abcd", input, 10, 4);

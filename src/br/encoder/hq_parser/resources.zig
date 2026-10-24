@@ -6,6 +6,7 @@ const dictionary = @import("../hq_dictionary.zig");
 const prices = @import("prices.zig");
 const rep = @import("rep.zig");
 const state = @import("state.zig");
+const storage = @import("command_storage.zig");
 
 pub fn add(a: usize, b: usize) !usize {
     return std.math.add(usize, a, b) catch error.WorkingMemoryLimitExceeded;
@@ -22,26 +23,20 @@ pub fn validate(source: types.Source, parameters: state.Parameters, model: *cons
     for (parameters.initial_recent_distances orelse source.recent) |value| if (value == 0) return error.InvalidBlockPlan;
     try model.validateWithFormat(resolved.distance_parameters, source.input.len, resolved.format);
 }
-pub fn commandCapacity(source: types.Source, has_dictionary: bool) usize {
+pub fn ownBytes(source: types.Source, parameters: state.Parameters, _: bool) !usize {
     if (source.input.len == 0) return 0;
-    return if (has_dictionary) source.input.len + 1 else source.input.len / 2 + 1;
-}
-pub fn ownBytes(source: types.Source, parameters: state.Parameters, has_dictionary: bool) !usize {
-    if (source.input.len == 0) return 0;
-    const command_bytes = try multiply(commandCapacity(source, has_dictionary), @sizeOf(command_plan.Command));
+    const command_bytes = try storage.bytesFor(storage.initial_capacity);
     const literal_bytes = try multiply(try add(source.input.len, 1), @sizeOf(u64));
     const nodes = try multiply(try add(state.horizonFor(source.input.len, parameters.resolved.parse_mode), 1), parameters.resolved.beam_width);
     const memo = try multiply(16 * @as(usize, parameters.resolved.beam_width), @sizeOf(state.MatchMemo));
     return add(try add(try add(command_bytes, literal_bytes), try multiply(nodes, @sizeOf(state.Node))), try add(@sizeOf(state.Spill), memo));
 }
-pub fn allocatePlan(allocator: std.mem.Allocator, source: types.Source, parameters: state.Parameters, has_dictionary: bool) !state.Plan {
-    const storage = try allocator.alloc(command_plan.Command, commandCapacity(source, has_dictionary));
-    return .{ .commands = storage[0..0], .command_storage = storage, .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format, .final_recent_distances = parameters.initial_recent_distances orelse source.recent, .final_previous = parameters.previous, .statistics = .{ .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format } };
+pub fn allocatePlan(_: std.mem.Allocator, source: types.Source, parameters: state.Parameters, _: bool) !state.Plan {
+    return .{ .commands = &.{}, .command_storage = &.{}, .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format, .final_recent_distances = parameters.initial_recent_distances orelse source.recent, .final_previous = parameters.previous, .statistics = .{ .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format } };
 }
-pub fn append(plan: *state.Plan, command: command_plan.Command) !void {
-    if (plan.commands.len == plan.command_storage.len) return error.InvalidBlockPlan;
-    plan.command_storage[plan.commands.len] = command;
-    plan.commands = plan.command_storage[0 .. plan.commands.len + 1];
+pub fn append(plan: *state.Plan, builder: *storage.Builder, command: command_plan.Command) !void {
+    try builder.append(command);
+    plan.commands = builder.items();
 }
 pub fn finish(plan: *state.Plan, source: types.Source, parameters: state.Parameters, model: *const prices.Model, provider: ?*const dictionary.Provider) !void {
     if (plan.format != model.format) return error.InvalidBlockPlan;

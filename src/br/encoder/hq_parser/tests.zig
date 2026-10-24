@@ -22,6 +22,7 @@ test {
     _ = @import("extension_tests.zig");
     _ = @import("large_window_tests.zig");
     _ = @import("whole_block_tests.zig");
+    _ = @import("command_storage_integration_tests.zig");
 }
 
 test "Brotli HQ complete command price covers every one of 704 encodings" {

@@ -3,6 +3,7 @@ const parser = @import("../hq_parser.zig");
 const options = @import("../hq_options.zig");
 const distance = @import("../distance.zig");
 const state = @import("state.zig");
+const Ledger = @import("test_allocator_ledger.zig").Ledger;
 
 test "BrHQ whole block known 4098 oracle reaches cheaper later copy and preserves bounded result" {
     var input: [4098]u8 = undefined;
@@ -41,14 +42,28 @@ test "BrHQ whole block dense budget exact below and large metadata refuse before
     var parameters: parser.Parameters = .{};
     parameters.resolved.parse_mode = .whole_block;
     const required = try parser.requiredWorkingMemory(source, parameters, &model, null);
-    parameters.resolved.max_working_memory = required;
-    const plan = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
-    defer plan.deinit(std.testing.allocator);
-    try std.testing.expectEqual(required, plan.peak_working_memory);
+    var meter: Ledger = .{ .backing = std.testing.allocator, .forbid_remap = true };
+    const baseline = try parser.planAlloc(meter.allocator(), source, parameters, &model, null);
+    const measured = meter.peak;
+    try std.testing.expectEqual(measured, baseline.peak_working_memory);
+    try std.testing.expect(required < measured);
+    baseline.deinit(meter.allocator());
+    try std.testing.expectEqual(@as(usize, 0), meter.live);
+    meter.peak = 0;
+    parameters.resolved.max_working_memory = measured;
+    const plan = try parser.planAlloc(meter.allocator(), source, parameters, &model, null);
+    try std.testing.expectEqual(measured, meter.peak);
+    try std.testing.expectEqual(plan.commands.len, plan.command_storage.len);
+    plan.deinit(meter.allocator());
+    try std.testing.expectEqual(@as(usize, 0), meter.live);
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     parameters.resolved.max_working_memory = required - 1;
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, parser.planAlloc(failing.allocator(), source, parameters, &model, null));
     try std.testing.expectEqual(@as(usize, 0), failing.alloc_index);
+    meter.peak = 0;
+    parameters.resolved.max_working_memory = measured - 1;
+    try std.testing.expectError(error.WorkingMemoryLimitExceeded, parser.planAlloc(meter.allocator(), source, parameters, &model, null));
+    try std.testing.expectEqual(@as(usize, 0), meter.live);
     for ([_]usize{ 8 * 1024 * 1024, 16 * 1024 * 1024 }) |length| {
         const synthetic = @as([*]const u8, @ptrFromInt(4096))[0..length];
         const large = try parser.Source.init("", synthetic, 24, 0);

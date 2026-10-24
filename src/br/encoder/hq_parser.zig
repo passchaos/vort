@@ -14,8 +14,9 @@ pub const Plan = state.Plan;
 pub const Budget = state.Budget;
 pub const Matcher = tree.Matcher;
 
-/// Fixed-workspace lower bound; dictionary tuple-frontier growth is charged
-/// dynamically by the same budget and never silently reduces candidates.
+/// Fixed-workspace lower bound, including the first small command allocation.
+/// Command/frontier growth and exact final transfer are charged dynamically by
+/// the same budget. This bound is not the operation's measured heap peak.
 pub fn requiredWorkingMemory(source: Source, parameters: Parameters, model: *const Model, provider: ?*const dictionary.Provider) !usize {
     try resources.validate(source, parameters, model);
     const shared = parameters.budget orelse if (provider) |active| active.budget else null;

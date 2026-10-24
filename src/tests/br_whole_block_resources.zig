@@ -8,12 +8,15 @@ test "Brotli whole block full span workspace exact budget and one below reject w
     const input = try h.boundaryInput(a);
     defer a.free(input);
     var tracked = h.TrackingAllocator.init(a);
+    tracked.force_moving_growth = true;
+    tracked.force_copy_reallocation = true;
     var profile: br.HqProfile = .{};
     const source = try parser.Source.init("", input, 13, 0);
     const model: parser.Model = .{};
     var parameters = try parser.Parameters.init(.{ .parse_mode = .whole_block, .beam_width = 2, .profile = &profile }, 10, br.PlannedMode.generic);
     const plan = try parser.planAlloc(tracked.allocator(), source, parameters, &model, null);
     const peak = tracked.peak;
+    const cost = plan.estimated_cost;
     try std.testing.expectEqual(peak, profile.peak_working_memory);
     try std.testing.expectEqual(input.len, profile.max_parse_positions);
     try std.testing.expectEqual(@as(u64, 1), profile.whole_block_passes);
@@ -21,14 +24,20 @@ test "Brotli whole block full span workspace exact budget and one below reject w
     try std.testing.expectEqual(@as(usize, 0), tracked.live);
     parameters.resolved.max_working_memory = peak;
     profile.reset();
+    tracked.beginMeasurement();
     const exact = try parser.planAlloc(tracked.allocator(), source, parameters, &model, null);
     try std.testing.expectEqual(input.len, exact.consumed);
+    try std.testing.expectEqual(cost, exact.estimated_cost);
+    try std.testing.expectEqual(peak, tracked.peak);
+    try std.testing.expectEqual(peak, profile.peak_working_memory);
     exact.deinit(tracked.allocator());
     parameters.resolved.max_working_memory = peak - 1;
     profile.reset();
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, parser.planAlloc(tracked.allocator(), source, parameters, &model, null));
     try std.testing.expectEqual(@as(usize, 0), tracked.live);
     try std.testing.expectEqual(@as(u64, 0), profile.bounded_passes);
+    try std.testing.expectEqual(tracked.allocated_bytes, tracked.freed_bytes);
+    std.debug.print("whole-block moving workspace peak={d} exact=pass one-below=WorkingMemoryLimitExceeded live=0\n", .{peak});
 }
 
 test "Brotli whole block predecessor trace crosses unsigned sixteen positions and replays every selected copy" {
@@ -43,15 +52,25 @@ test "Brotli whole block predecessor trace crosses unsigned sixteen positions an
     model.command_prices[128] = 0;
     model.distance_prices[0] = 0;
     var profile: br.HqProfile = .{};
+    var tracked = h.TrackingAllocator.init(a);
+    tracked.force_moving_growth = true;
+    tracked.force_copy_reallocation = true;
     const parameters = try parser.Parameters.init(.{ .parse_mode = .whole_block, .beam_width = 1, .search_depth = 1, .nice_len = 2, .block_len = input.len, .profile = &profile }, 10, br.PlannedMode.generic);
-    const plan = try parser.planAlloc(a, source, parameters, &model, null);
-    defer plan.deinit(a);
+    const plan = try parser.planAlloc(tracked.allocator(), source, parameters, &model, null);
     try std.testing.expectEqual(input.len, plan.consumed);
     try std.testing.expectEqual(@as(u64, 0), plan.estimated_cost);
     try std.testing.expectEqual(input.len / 2, plan.commands.len);
     try std.testing.expect(plan.commands[plan.commands.len - 1].insert_start > 65535);
     try std.testing.expectEqual(input.len, profile.max_parse_positions);
+    try std.testing.expectEqual(tracked.peak, profile.peak_working_memory);
+    try std.testing.expectEqual(plan.commands.len, plan.command_storage.len);
+    try std.testing.expect(plan.commands.ptr == plan.command_storage.ptr);
+    try std.testing.expectEqual(plan.commands.len * @sizeOf(br.IncrementalTestSupport.HqCommand), tracked.live);
     try h.replayWithHistory(a, "aaaa", input, .{ 4, 11, 15, 16 }, plan);
+    std.debug.print("whole-block wide trace commands={d} moving-peak={d} returned-live={d}\n", .{ plan.commands.len, tracked.peak, tracked.live });
+    plan.deinit(tracked.allocator());
+    try std.testing.expectEqual(@as(usize, 0), tracked.live);
+    try std.testing.expectEqual(tracked.allocated_bytes, tracked.freed_bytes);
 }
 
 test "Brotli whole block sixteen MiB metadata with zero budget rejects before reading or backing allocation" {

@@ -10,8 +10,11 @@ const prices = @import("prices.zig");
 const rep = @import("rep.zig");
 const resources = @import("resources.zig");
 const extension = @import("extension.zig");
+const command_storage = @import("command_storage.zig");
 
 pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.Source, parameters: state.Parameters, model: *const prices.Model, provider: ?*const dictionary.Provider) !state.Plan {
+    var builder = command_storage.Builder.init(allocator);
+    defer builder.deinit();
     var result = try resources.allocatePlan(allocator, source, parameters, provider != null);
     errdefer result.deinit(allocator);
     if (source.input.len == 0) {
@@ -137,16 +140,17 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
         const commands_start = result.commands.len;
         var position: usize = if (use_spill) final.previous_position else goal;
         var slot: usize = if (use_spill) final.previous_slot else final_slot;
-        if (use_spill) try appendNode(&result, nodes, width, base, final);
+        if (use_spill) try appendNode(&result, &builder, nodes, width, base, final);
         while (position != 0) {
             const node = nodes[position * width + slot];
             if (node.output_len != 0) {
-                try appendNode(&result, nodes, width, base, node);
+                try appendNode(&result, &builder, nodes, width, base, node);
             }
             position = node.previous_position;
             slot = node.previous_slot;
         }
-        std.mem.reverse(command_plan.Command, result.commands[commands_start..]);
+        builder.reverseSuffix(commands_start);
+        result.commands = builder.items();
         recent = final.recent;
         pending = final.pending_insert;
         base += if (use_spill) spill.end_position else goal;
@@ -174,10 +178,12 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
     }
     if (pending != 0) {
         const terminal = try model.terminal(pending);
-        try resources.append(&result, .{ .insert_start = source.input.len - pending, .insert_len = pending, .copy_len = terminal.copy_len, .hq_encoding = terminal.encoding });
+        try resources.append(&result, &builder, .{ .insert_start = source.input.len - pending, .insert_len = pending, .copy_len = terminal.copy_len, .hq_encoding = terminal.encoding });
     }
     result.final_recent_distances = recent;
     try resources.finish(&result, source, parameters, model, provider);
+    result.command_storage = try builder.finishOwned();
+    result.commands = result.command_storage;
     result.peak_working_memory = budget.peak;
     return result;
 }
@@ -193,10 +199,10 @@ const EdgeContext = struct {
     literal_prefix: []const u64,
     spill: *state.Spill,
 };
-fn appendNode(result: *state.Plan, nodes: []const state.Node, width: usize, base: usize, node: state.Node) !void {
+fn appendNode(result: *state.Plan, builder: *command_storage.Builder, nodes: []const state.Node, width: usize, base: usize, node: state.Node) !void {
     const previous = nodes[@as(usize, node.previous_position) * width + node.previous_slot];
     const copy_start = base + node.previous_position;
-    try resources.append(result, .{
+    try resources.append(result, builder, .{
         .insert_start = copy_start - previous.pending_insert,
         .insert_len = previous.pending_insert,
         .copy_len = node.copy_len,

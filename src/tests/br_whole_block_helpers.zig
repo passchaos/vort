@@ -66,6 +66,7 @@ pub const TrackingAllocator = struct {
     fail_remap_after: ?usize = null,
     forced_failures: usize = 0,
     force_moving_growth: bool = false,
+    force_copy_reallocation: bool = false,
     peak_operation: Operation = .allocate,
     peak_before: usize = 0,
     peak_request: usize = 0,
@@ -172,7 +173,9 @@ pub const TrackingAllocator = struct {
         const call = self.resize_attempts;
         self.resize_attempts += 1;
         const record = self.slot(memory);
-        if (self.failure(self.fail_resize_after, call) or (self.force_moving_growth and len > memory.len)) return false;
+        if (self.failure(self.fail_resize_after, call) or
+            (self.force_moving_growth and len > memory.len) or
+            (self.force_copy_reallocation and len != memory.len)) return false;
         if (!self.backing.rawResize(memory, alignment, len, address)) return false;
         self.successful_resizes += 1;
         if (len > memory.len) self.increase(len - memory.len, .resize, len) else self.decrease(memory.len - len);
@@ -187,7 +190,9 @@ pub const TrackingAllocator = struct {
         const call = self.remap_attempts;
         self.remap_attempts += 1;
         const record = self.slot(memory);
-        if (self.failure(self.fail_remap_after, call) or (self.force_moving_growth and len > memory.len)) return null;
+        if (self.failure(self.fail_remap_after, call) or
+            (self.force_moving_growth and len > memory.len) or
+            (self.force_copy_reallocation and len != memory.len)) return null;
         const result = self.backing.rawRemap(memory, alignment, len, address) orelse return null;
         self.successful_remaps += 1;
         if (len > memory.len) self.increase(len - memory.len, .remap, len) else self.decrease(memory.len - len);
@@ -267,6 +272,15 @@ test "Brotli whole block independent tracker charges old and new buffers during 
     try std.testing.expectEqual(@as(usize, 8), tracked.peak_before);
     try std.testing.expectEqual(@as(usize, 16), tracked.peak_request);
     try std.testing.expectEqual(TrackingAllocator.Operation.allocate, tracked.peak_operation);
+    a.free(bytes);
+    try std.testing.expectEqual(@as(usize, 0), tracked.live);
+    tracked.force_copy_reallocation = true;
+    bytes = try a.dupe(u8, "12345678");
+    tracked.beginMeasurement();
+    bytes = try a.realloc(bytes, 4);
+    try std.testing.expectEqualSlices(u8, "1234", bytes);
+    try std.testing.expectEqual(@as(usize, 12), tracked.peak);
+    try std.testing.expectEqual(@as(usize, 4), tracked.live);
     a.free(bytes);
     try std.testing.expectEqual(@as(usize, 0), tracked.live);
 }
