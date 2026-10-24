@@ -134,3 +134,12 @@ pass. These close the explicit-strategy slice while preserving the original
 auto/default output; complete optimal-model and performance leadership remain
 unproven. Fuller Brotli HQ planning and current-reference performance
 measurements remain priorities.
+
+The subsequent [Brotli complete-length increment](brotli-complete-copy-lengths-functional-baseline.md)
+passes final 41/41 contracts in Debug, ReleaseFast and 32-bit x86, the complete
+1253-test Brotli family, 28 public reference rows with six legacy wires, final
+CLI product checks, real WebAssembly execution and 149 build checks. Initial
+test/tool changes and their validation windows are retained separately.
+These close the optional length-enumeration and per-plan pricing-control slice;
+finite search states, broader quality planning and current competitor
+performance comparisons remain open.

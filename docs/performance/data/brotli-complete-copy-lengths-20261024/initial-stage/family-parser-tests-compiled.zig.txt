@@ -1,0 +1,118 @@
+const std = @import("std");
+const parser = @import("../hq_parser.zig");
+const options = @import("../hq_options.zig");
+const distance = @import("../distance.zig");
+const PriceBudget = @import("price_budget.zig").PriceBudget;
+
+test "BrHQ complete lengths metadata remains unpriced before zero edge admission" {
+    var model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    // Invalid price values make any accidental arithmetic visible, while
+    // metadata enumeration itself remains legal and never reads these arrays.
+    model.command_prices = @splat(std.math.maxInt(u32));
+    model.distance_prices = @splat(std.math.maxInt(u32));
+    const encodings = try model.commandEncodings(0, 2, 0);
+    try std.testing.expectEqual(@as(usize, 2), encodings.len);
+    var budget: PriceBudget = .{ .limit = 0 };
+    try std.testing.expectError(error.SearchLimitExceeded, budget.admit());
+    try std.testing.expectEqual(@as(u64, 0), budget.admitted);
+    budget.limit = 1;
+    try budget.admit();
+    try std.testing.expectError(error.SearchLimitExceeded, budget.admit());
+    try std.testing.expectEqual(@as(u64, 1), budget.admitted);
+}
+
+test "BrHQ complete lengths per plan cap is exact and independent of accumulated profile" {
+    const source = try parser.Source.init("aaaa", "aaaa", 24, 4);
+    const model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    var profile: options.HqProfile = .{ .price_evaluations = 1000 };
+    var parameters: parser.Parameters = .{ .profile = &profile };
+    parameters.resolved.copy_lengths = .complete;
+    const baseline = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer baseline.deinit(std.testing.allocator);
+    const admitted = profile.price_evaluations - 1000;
+    try std.testing.expect(admitted > 1);
+    try std.testing.expectEqual(admitted, profile.max_plan_price_evaluations);
+    for ([_]u64{ 0, 1, admitted - 1 }) |cap| {
+        profile = .{ .price_evaluations = 7000 };
+        parameters.resolved.max_price_evaluations = cap;
+        try std.testing.expectError(error.SearchLimitExceeded, parser.planAlloc(std.testing.allocator, source, parameters, &model, null));
+        try std.testing.expectEqual(7000 + cap, profile.price_evaluations);
+        try std.testing.expectEqual(cap, profile.max_plan_price_evaluations);
+        try std.testing.expectEqual(cap, profile.transitions);
+    }
+    profile = .{ .price_evaluations = 9000 };
+    parameters.resolved.max_price_evaluations = admitted;
+    const exact = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer exact.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(@import("../command_plan.zig").Command, baseline.commands, exact.commands);
+    try std.testing.expectEqual(admitted, profile.max_plan_price_evaluations);
+    try std.testing.expectEqual(9000 + admitted, profile.price_evaluations);
+}
+
+test "BrHQ complete lengths q10 reaches two interior fifty byte implicit commands" {
+    const input: [100]u8 = @splat('a');
+    var source = try parser.Source.init("a", &input, 24, 1);
+    source.recent[3] = 1;
+    var model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    model.command_prices = @splat(parser.prices.maximum_symbol_price);
+    model.distance_prices = @splat(parser.prices.maximum_symbol_price);
+    model.command_prices[70] = parser.prices.scale;
+    model.distance_prices[0] = 0;
+    var parameters: parser.Parameters = .{};
+    parameters.resolved.parse_mode = .whole_block;
+    const sampled = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer sampled.deinit(std.testing.allocator);
+    parameters.resolved.copy_lengths = .complete;
+    const complete = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer complete.deinit(std.testing.allocator);
+    // Independent complete-command witness: each implicit copy uses symbol70
+    // and four extra bits. Two lengths in38..53 can cover exactly100 bytes.
+    const witness = @as(u64, 2) * (1 + 4) * parser.prices.scale;
+    try std.testing.expectEqual(witness, complete.estimated_cost);
+    try std.testing.expect(sampled.estimated_cost > witness);
+    try std.testing.expectEqual(@as(usize, 2), complete.commands.len);
+    try std.testing.expectEqual(source.recent, complete.final_recent_distances);
+    for (complete.commands) |command| {
+        try std.testing.expectEqual(@as(u16, 70), command.hq_encoding.?.command_symbol);
+        try std.testing.expectEqual(@as(usize, 0), command.hq_encoding.?.distance_code);
+        try std.testing.expect(command.copy_len >= 47 and command.copy_len <= 53);
+    }
+}
+
+test "BrHQ complete lengths q11 retains seventy three byte cut before mixed suffix reference" {
+    var history: [228]u8 = undefined;
+    @memset(history[0..100], 'a');
+    history[100] = 0;
+    @memset(history[101..128], 'a');
+    @memset(history[128..], 'b');
+    var input: [200]u8 = undefined;
+    @memset(input[0..100], 'a');
+    @memset(input[100..], 'b');
+    const source = try parser.Source.init(&history, &input, 24, history.len);
+    var model = parser.Model.init(distance.Parameters.init(0, 0), 0);
+    model.command_prices = @splat(parser.prices.maximum_symbol_price);
+    model.distance_prices = @splat(parser.prices.maximum_symbol_price);
+    const first = (try model.commandCosts(0, 73, history.len + 15)).items[0];
+    const second = (try model.commandCosts(0, 127, 200 + 15)).items[0];
+    model.command_prices[first.encoding.command_symbol] = parser.prices.scale;
+    model.command_prices[second.encoding.command_symbol] = 0;
+    model.distance_prices[first.encoding.distance_encoding.?.symbol] = 0;
+    model.distance_prices[second.encoding.distance_encoding.?.symbol] = 0;
+    var parameters: parser.Parameters = .{};
+    parameters.resolved.quality = 11;
+    parameters.resolved.beam_width = 16;
+    parameters.resolved.search_depth = 4096;
+    parameters.resolved.nice_len = 256;
+    parameters.resolved.parse_mode = .whole_block;
+    const sampled = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer sampled.deinit(std.testing.allocator);
+    parameters.resolved.copy_lengths = .complete;
+    const complete = try parser.planAlloc(std.testing.allocator, source, parameters, &model, null);
+    defer complete.deinit(std.testing.allocator);
+    // A73 ordinary copy atdistance228 followed by127 atdistance200 uses two
+    // five-bit copy extras and two six-bit distance extras, plus one commandbit.
+    try std.testing.expectEqual(@as(u64, 23 * parser.prices.scale), complete.estimated_cost);
+    try std.testing.expect(sampled.estimated_cost > complete.estimated_cost);
+    try std.testing.expectEqual(@as(usize, 2), complete.commands.len);
+    try std.testing.expect(complete.commands[0].copy_len >= 73 and complete.commands[0].copy_len <= 98);
+}

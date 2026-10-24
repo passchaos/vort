@@ -1,13 +1,13 @@
 {
   "schema": "vort-br-complete-copy-lengths-functional-evidence-v1",
-  "generated_utc": "2026-10-24T11:30:40.252395+00:00",
+  "generated_utc": "2026-10-24T11:38:37.755209+00:00",
   "base_revision": "34dbe96ae7b57f4eb9d36b0821be1ff700d26508",
   "implementation_commits": [
     "72f0adac",
     "826256c9"
   ],
   "original_evidence_directory": "/tmp/vort-br-complete-final-20261024-qy09p5f8",
-  "note": "Functional and compilation evidence; dated competitor measurements live in the industry audit. Initial stage changes and the removed invalid witness are retained. Final family validation will be added separately.",
+  "note": "Final dedicated modes, complete family, CLI product, reference identical-binary rebind, WASM and post-rebase evidence complete. Initial failed fixture and source windows retained. This is functional evidence and does not establish industry-wide performance leadership.",
   "files_sha256": {
     "build-check.json": "349d77d567bb8f4b26c231af0da91d16e79a800f31de321c4f8dcecb6841bd6b",
     "build-check.log.gz": "4bcf8d7947470620d8765336ccf41c85846f88c6dafa172129834a22ca0eb8cb",
@@ -20,10 +20,8 @@
     "cli/final-current-input-check.json.gz": "91164daf72d304ee6819c38b6a6cd65684ea854cb80d7982b4fb55b2a33047c3",
     "cli/final-manifest.json.gz": "460a45afb67839127d0d1c2c137eda428f64085f75b75b7524abfc3f22a19412",
     "cli/final-narrow/report.json": "961eee3f34b497a096cfd55b196c24069c60a23f5dfd8f7b340967c4eed97d2c",
-    "cli/final-product-narrow.json": "961eee3f34b497a096cfd55b196c24069c60a23f5dfd8f7b340967c4eed97d2c",
     "cli/final-source-after.json.gz": "b4a693cb155cf9f031c8487a37f9d63f3f3b2e4e0c08d67ca74b4df0f526767d",
     "cli/final-source-before.json.gz": "9c7d6c0aad208c038102188c850ec7d4e2f90ebdb57e816c89f350bc38799b5c",
-    "cli/full-matrix-stage.json": "87c7d0ef216ff0f002c1657e1992de56c095bd466830ca2567fa6189d7189aa0",
     "cli.json": "589eb5a2af2395a79b83ea3c64bb6f0eb64704e7f6798bf399770368adabc94f",
     "complete-debug.json": "e6c42c48f04ebb558db913c06d7c33a84d612b4564485ec903301fb69697a39d",
     "complete-rf.json": "2404a2671ae8fbf2b68980a1cd85afa9991fec6aff163414030957bc66206768",
@@ -36,6 +34,18 @@
     "coverage/complete-rf.json.gz": "d1551263e73f699ac787f26e3bbb08d4e5d854563494b1e85d15ef119bbd6113",
     "coverage/complete-x86.json.gz": "9629bbaf24779e1c40df4ce49916a45dcb133ba2ae142b2774040f0e3cc5ab65",
     "coverage-summary.json": "b69ab9ec7bf8fc1de281bd6ec8355743bd37a0b635751b5fd7d3c8b47c0244c5",
+    "family-final/binding-result.json": "690485f701a8d04cf6941044f1a170e59b0affec946b07b3164b3501e219f26c",
+    "family-final/family-process-observation.json": "3a20c1c42482eec5a9cf5ec8198691946fa09b74bfd0cd5102a2138f72996901",
+    "family-final/family-rf-actual-input-binding.json.gz": "e138eb83b8367cb3058fafb362261c3e0dedb47f7e263f7f9868e1f85d196fe8",
+    "family-final/family-rf-after.json.gz": "f4bc520bfe10a9d66a9fdbbf386ff59e5a2db3b12be42f9ab6e7f79a18e50d80",
+    "family-final/family-rf-before.json.gz": "5c105fc71d1a35440fc951972484a079e364bf9924df3ad1bc25fae0b92f49e1",
+    "family-final/family-rf-compile-cache.h.txt.gz": "795e916ff385bd52beabc4044187b32ab282b6f18b8a5969e72aa0dcfd2831ef",
+    "family-final/family-rf-coverage.json.gz": "f9545291aff08df7a86fa922b30bbba303a399a5fd85462f783976188d3855af",
+    "family-final/family-rf-result.json": "b8f683e551daa414d64e7ee96f5e2548d02107412193b244102391d39e2dcf2a",
+    "family-final/family-rf-run-cache.h.txt.gz": "3e2843509b901cc8ea79cff5c21964e4c34beacb454c563b967dcb18b52e6723",
+    "family-final/family-rf-source-supplement.json.gz": "efdb5ae91c433bcc67f43f3810eab49862a26aae6b2ded46d6993ec5e21759a0",
+    "family-final/family-rf-tests.tsv.gz": "24bfcee0f52ed5f8e00839297d194647dc27a5a96338a1656d66d6fa81633cc0",
+    "family-final/family-rf.log.gz": "5e0159ccd52cbef2a47459b3e3faafa069c48777ba754e3a2fa7ddad3510478c",
     "final-source-snapshot.json.gz": "aea88487694b4c20882feaf73888fbca4cfe1038d66cd2b6c9e7ab4fe5747453",
     "formal-summary.json": "2a5efa79a55377356a3efd3d8289315e60267282fbd38bc4a36cf95cdb9a8277",
     "independent-qa.json": "27cc8f85eff48311fca4690c7b1a392cc2ea287e24572c9d01ba86857cce408a",
@@ -43,6 +53,10 @@
     "initial-stage/complete-rf.json": "687047b5aa94ea5935b9e2399428cbeeac1db86b652904d053ce219eea79fa11",
     "initial-stage/complete-x86.json": "247bf567c5a84bde52aca89c8575c0095abaaf6f772caf95d27747d7ef99bb5b",
     "initial-stage/coverage-summary.json": "637408e71275dd9d5669cb8dd27042ebb745b2630cbb05c9209980b61df35a00",
+    "initial-stage/family-actual-input-binding.json.gz": "bf56561bb9343bce6262f2e9d5f5536e9e37d90adb54865675cfb1bd3abb74e6",
+    "initial-stage/family-coverage.json.gz": "97dad6f840bb68e234fdcdeacc5e8eadd417233761447c2c3ce1e01c85376acc",
+    "initial-stage/family-parser-tests-compiled.zig.txt": "1aee90b5774df6972ef27b1817135427e2fab4fea484b682e5083481586e0eb2",
+    "initial-stage/family-tests.tsv.gz": "c12088ff25543dd90b466139b946afd3f4f62e8eb2c8c3837733384384c08db8",
     "initial-stage/family.json": "1389090336dc364e3b55196846df9e4fca6292378c44f60555c6e67236104659",
     "initial-stage/family.log.gz": "93b564ed6aa77c2e7c35db06a8e961c9f1b1e47b15e64859a9c0d399d288b81a",
     "initial-stage/parser-tests-compiled.zig.txt": "0f3fdd9abef3920a655adf6aed9c4bdc15e5573420edb2955f8e714a02d1c1bb",
@@ -50,6 +64,8 @@
     "logs/complete-debug.log.gz": "0a49736329b24f43883854043fe6dad721cbef39ac58fe72401eb9f6f30c22ab",
     "logs/complete-rf.log.gz": "f3d253d0e9ebab4067f27a1d1c8d76509c24eeb7b92a57b2b7595006c5b1a6ae",
     "logs/complete-x86.log.gz": "bcf123ecd998098d9bc13b695927c944b9207af0ca226e09f4933fd54a0a6c56",
+    "post-rebase/report.json": "d6f96fc37db979ad70c70397b2cbcd0a2ea511c5e33e2cf49d155fcbbd34b2bd",
+    "post-rebase/validation.log.gz": "64c2678b728380d855e897343bde6862b63438a1df96e9b85d9533893ab5b430",
     "reference/actual-probe-binding.json.gz": "c25a8a7a9b291cb9e4e84c522e200424db23ce281c3e7932ccc5f81667624daf",
     "reference/artifact-digest-binding.json.gz": "e48c71cf6d7ee92a389e562588cf6ec0f79db372c305c7a6c700cde22cc1c6c0",
     "reference/complete-lengths-baseline.json.gz": "cc12510962b978518f1731f46b192b988acb8e565d1faa6246be272186eee0c7",
@@ -73,5 +89,6 @@
     "wasm/debug-stage-status.json": "e3b8339abd5681366f5f53593ec4fce5b736f2b53bd43dd0cad6065c06ff291b",
     "wasm/final-node-result.json": "502d25caaf276456ec4bf67f9ce371ac1327d14f967ca86865e6b5a68627e095",
     "wasm/final-result.json": "66ee0b7fa711560bd416d29748b0888f42741f6321177325d1a3712fbd90a8f7"
-  }
+  },
+  "functional_validation_complete": true
 }

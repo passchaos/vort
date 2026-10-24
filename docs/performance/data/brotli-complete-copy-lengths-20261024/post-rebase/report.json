@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-br-complete-lengths",
+    "-Doptimize=ReleaseFast",
+    "--seed",
+    "0x20261024",
+    "--summary",
+    "all"
+  ],
+  "started_utc": "2026-10-24T11:32:43.927880+00:00",
+  "finished_utc": "2026-10-24T11:33:08.346765+00:00",
+  "exit_code": 0,
+  "head": "76eed306aefb16db16bf62f9030dba75b334e288",
+  "rebase": "git pull --rebase origin main; up to date, no conflicts",
+  "source_sha256_matches_final_manifest_before_after": true,
+  "log_sha256": "f74bf0f63e55ca7d1704839242913d347656ccd93c01cd60234ddfd0a15669b9",
+  "scope": "required post-rebase relevant verification; fixed new seed forces an actual test run"
+}
