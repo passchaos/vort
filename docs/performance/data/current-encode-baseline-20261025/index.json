@@ -1,0 +1,77 @@
+{
+  "scope": "one first-screen process per codec; 14 frozen 64KiB prefixes and 5 alternating rounds each; no all-level/platform leadership claim",
+  "bundle": "baseline.tar.gz",
+  "bundle_sha256": "f0380e052809c36bf519565ecc40eb0c19a5d19341fb7ae2fb4563df459959b4",
+  "files": [
+    {
+      "path": "preparation.json",
+      "bytes": 9925,
+      "sha256": "1924ca1c8556889b81401935c0d2e565c255e71e7b9d347afb0aff2e3149bbaa"
+    },
+    {
+      "path": "result.json",
+      "bytes": 808552,
+      "sha256": "b7baced8cf0d479d356efa411abc39479b4d93551a6306e0416aa5677efb927c"
+    },
+    {
+      "path": "brotli.json",
+      "bytes": 45079,
+      "sha256": "e094cc34cfda924b2e25d23f7f0caaf0ffa2724433a9a72911ecd39f4c661fed"
+    },
+    {
+      "path": "brotli.csv",
+      "bytes": 35971,
+      "sha256": "af8e9ced7fe3c928c1da084631e6382a75a532eb8d0906eeb2f1b3daa1c35573"
+    },
+    {
+      "path": "brotli.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "brotli.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "brotli-analysis.json",
+      "bytes": 6892,
+      "sha256": "0264af5f8ec640a6e1ef54b9a13dae23178308a022fb2a1d745c572a26e25cdf"
+    },
+    {
+      "path": "brotli-report.md",
+      "bytes": 2879,
+      "sha256": "d83d9edf5354ca04c162f43693736523f3b854470a4573f265fd27c7044f0d33"
+    },
+    {
+      "path": "zstd.json",
+      "bytes": 30052,
+      "sha256": "03c533b03b55085d41cdd94eb85d6127bb05ea74646d4e8510f1e80ca1f59375"
+    },
+    {
+      "path": "zstd.csv",
+      "bytes": 32229,
+      "sha256": "3e241c492c4ca88781b515c82dff0c310978ab3a7724851dabe4a20c93aec1f9"
+    },
+    {
+      "path": "zstd.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "zstd.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "zstd-analysis.json",
+      "bytes": 6932,
+      "sha256": "e1ce75b3ab15746a10db698ef0ca13db2acf93074e1490b578549622921b8c6c"
+    },
+    {
+      "path": "zstd-report.md",
+      "bytes": 2873,
+      "sha256": "58de20cbfe0f4af474572f0b23089fcb64e831926f802350accd63e648e178b4"
+    }
+  ]
+}
