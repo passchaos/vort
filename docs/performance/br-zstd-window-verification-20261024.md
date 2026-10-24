@@ -50,7 +50,14 @@ golden来适配新输出。
 全库测试模块优化上耗时很长；标准Debug检查通过后结束该额外构建，原日志、
 SIGTERM和取消理由保留，不计作ReleaseFast全局通过。ReleaseFast行为验证由
 两库完整家族、native/x86专项及实际WebAssembly提供。
-rebase后相关复验在integration结果中补齐。
+远端`69e1218e`新增的有界PNG增量编码已无冲突rebase，Brotli/Zstd核心文件
+SHA保持不变。rebase后三路并行复验全部通过：全局Debug检查156/156、
+native/实际WebAssembly组20/20步骤（106通过、1跳过，共107项）、
+x86组10/10步骤且93/93测试通过。当前WebAssembly产物实际完成4次公共往返，
+SHA-256为`c7aab3d0a371dea77b6a4e5216ac0440d02a5dedf1d4bbef4d4d1233d30938b6`。
+完整CLI help再次实际运行通过，本任务59个Zig文件格式检查通过；三组复验
+期间源码前后无变化。完整结果在integration包的`post-rebase/`中，顶层
+[integration.json](data/br-zstd-window-20261024/integration.json)指向该通过阶段。
 下一独立功能片优先统一32位平台的累计字节、pledge和诊断offset到u64；
 local buffer长度和实际距离仍按平台资源边界检查。随后扩展Zstd HQ显式
 whole-block/complete-length及价格预算控制，并统一Brotli stored资源API。

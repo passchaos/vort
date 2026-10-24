@@ -2641,12 +2641,12 @@
   },
   "integration": {
     "bundle": "integration.tar.gz",
-    "bundle_sha256": "2f7091715a3fdcdf2df3bcb0147ff177c4d81b3d8ead7839c8162e3b50aeb66d",
+    "bundle_sha256": "96805d1565828018498a7ba0d6d5bc0e80a7343d74a116afdc3911dd6f8a5076",
     "files": [
       {
-        "bytes": 2491,
+        "bytes": 2503,
         "path": "archive-helper.py",
-        "sha256": "a6447a0620b383720785b88675d2dfcc086c80b3b80e1ecd8560f44be84e52dd"
+        "sha256": "e3691ce37ab16c8fa85837330d12d34546a4e0ccfc8921b5ca23c59b3b41e9fb"
       },
       {
         "bytes": 777,
@@ -2662,6 +2662,51 @@
         "bytes": 2691,
         "path": "format-result.json",
         "sha256": "18c6ed03dfed1fbed5a599e58beaa9c155a171fb6bbee924dbdf657fd3257b0f"
+      },
+      {
+        "bytes": 50988,
+        "path": "post-rebase/check.log",
+        "sha256": "72e77998ae696d4d74b969219d468b6cfb54e4ea95bbf05a954c200653a05de4"
+      },
+      {
+        "bytes": 41301,
+        "path": "post-rebase/help.log",
+        "sha256": "a96604c1a05f5dec4e0e99bdc5665a32a1f86a71741c593ec8f1d5ed030c7789"
+      },
+      {
+        "bytes": 2410,
+        "path": "post-rebase/native-contracts.log",
+        "sha256": "c0bf127ba22af76f2319fc792e12ee8e28d63c5fcca106402a5cfb0cb71a2d59"
+      },
+      {
+        "bytes": 1298,
+        "path": "post-rebase/result.json",
+        "sha256": "3599fb412bfe53d3963747b07c7df061ba3b62d583e42df3debfcee876644f7a"
+      },
+      {
+        "bytes": 191523,
+        "path": "post-rebase/source-after.json",
+        "sha256": "6a1e05e0874e441664cd94f048003099e1b51e7c04b8f0fb417139f9ee743a99"
+      },
+      {
+        "bytes": 191523,
+        "path": "post-rebase/source-before.json",
+        "sha256": "6a1e05e0874e441664cd94f048003099e1b51e7c04b8f0fb417139f9ee743a99"
+      },
+      {
+        "bytes": 1458,
+        "path": "post-rebase/summary.json",
+        "sha256": "7403dea3887e2d443b0afe1fb2f42c46d6392b8a951d88f1bcefa6a12f9f0391"
+      },
+      {
+        "bytes": 878,
+        "path": "post-rebase/x86-contracts.log",
+        "sha256": "d297d8a3cea93f51c7a29e69bcc07d7ffde4ca08f2fa88070cbd539b3a65e97f"
+      },
+      {
+        "bytes": 1875,
+        "path": "rebase-result.json",
+        "sha256": "078a5a8609ec22849deb213357ff92e6f96f9ea381a57b09ef7b3f0103c83d08"
       },
       {
         "bytes": 2160,

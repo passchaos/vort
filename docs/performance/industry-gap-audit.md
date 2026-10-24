@@ -169,3 +169,7 @@ and applies a shared requested-heap quota across encoder entrypoints. Defaults
 and independent old wires are retained. These are functional and resource
 milestones; wider headers, legal configuration maxima and functional execution
 times do not establish industry-best compression quality or throughput.
+The [final verification record](br-zstd-window-verification-20261024.md) includes
+156 standard Debug build checks, actual complete CLI help and post-rebase
+native/x86/WebAssembly runtime gates. The cancelled extra whole-project
+ReleaseFast optimization attempt is preserved separately from passing checks.
