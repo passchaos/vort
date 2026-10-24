@@ -4,7 +4,8 @@ const syntax = @import("../../../../png_ultrafast.zig").incremental_syntax;
 const Adler32 = @import("../../../../checksum.zig").Adler32;
 const literals = @import("literals.zig");
 const zero_scan = @import("zero_scan.zig");
-const checksum = @import("checksum.zig");
+const reservoir = @import("reservoir.zig");
+const checksum_batch = @import("checksum_batch.zig");
 
 test {
     _ = @import("tests.zig");
@@ -107,6 +108,7 @@ pub const Encoder = struct {
         }
         var accepted: usize = 0;
         var produced: usize = 0;
+        const direct_output = disjoint(input, output);
         while (true) {
             if (self.pending_offset < self.pending_len) {
                 const n = @min(self.pending_len - self.pending_offset, output.len - produced);
@@ -142,8 +144,15 @@ pub const Encoder = struct {
                         self.word_ready = false;
                     }
                     if (self.carry_len == 0 and input.len - accepted >= 8) {
-                        const n = self.consumeBatch(input[accepted..]);
-                        accepted += n;
+                        if (direct_output and output.len - produced >= pending_capacity) {
+                            const batch = self.consumeInto(input[accepted..], output[produced..], 0);
+                            accepted += batch.input_read;
+                            produced += batch.output_written;
+                        } else {
+                            const batch = self.consumeInto(input[accepted..], &self.pending, self.pending_len);
+                            accepted += batch.input_read;
+                            self.pending_len += batch.output_written;
+                        }
                         continue;
                     }
                     if (accepted != input.len) {
@@ -231,40 +240,52 @@ pub const Encoder = struct {
     /// Consume complete stream words without copying each one into carry.
     /// Adler updates once for the accepted contiguous batch, before any caller
     /// output write can alias that accepted source. Pending storage remains 128B.
-    fn consumeBatch(self: *Encoder, input: []const u8) usize {
+    fn consumeInto(self: *Encoder, input: []const u8, output: []u8, already_used: usize) core.Progress {
         var offset: usize = 0;
-        var all_zero = true;
-        while (input.len - offset >= 8 and offset < 4096 and self.pending.len - self.pending_len >= 24) {
+        var adler = checksum_batch.Accumulator{ .a = self.adler.a, .b = self.adler.b };
+        var run = self.zero_run;
+        var writer = reservoir.Writer{ .output = output, .used = already_used, .bits = self.bits, .bit_count = self.bit_count };
+        var held_word = false;
+        while (input.len - offset >= 8 and offset < 4096 and writer.output.len - writer.used >= 24) {
             const word = std.mem.readInt(u64, input[offset..][0..8], .little);
             if (word == 0) {
                 const zeros: usize = if (input.len - offset >= 64 and offset <= 4096 - 64 and
                     zero_scan.followingWordsAreZero(input[offset..][0..64])) 64 else 8;
-                self.zero_run += zeros;
+                adler.zero(zeros);
+                run += zeros;
                 offset += zeros;
                 continue;
             }
-            all_zero = false;
-            // Large held runs drain in bounded token batches; preserve the
-            // current word in the existing carry until those tokens finish.
-            if (self.zero_run > 512) {
+            adler.word(word);
+            if (run > 512) {
                 self.carry = input[offset..][0..8].*;
                 self.carry_len = 8;
-                self.prepareWord();
+                held_word = true;
                 offset += 8;
                 break;
             }
-            const prefix: usize = if (self.zero_run != 0) @ctz(word) / 8 else 0;
+            const prefix: usize = if (run != 0) @ctz(word) / 8 else 0;
             const suffix: usize = @clz(word) / 8;
-            self.closing_run = self.zero_run + prefix;
-            self.run_literal_written = false;
-            while (self.closing_run != 0) self.runTokenBulk();
-            literals.prefix(self, word >> @intCast(prefix * 8), @intCast(8 - prefix - suffix));
-            self.zero_run = suffix;
+            writer.zeroRun(run + prefix);
+            literals.prefix(&writer, word >> @intCast(prefix * 8), @intCast(8 - prefix - suffix));
+            run = suffix;
             offset += 8;
         }
-        checksum.accepted(&self.adler, input[0..offset], all_zero);
+        self.zero_run = run;
+        self.bits = writer.bits;
+        self.bit_count = writer.bit_count;
+        if (held_word) self.prepareWord();
+        adler.commit(&self.adler);
         self.total_input += offset;
-        return offset;
+        return .{ .input_read = offset, .output_written = writer.used - already_used };
+    }
+
+    fn disjoint(input: []const u8, output: []u8) bool {
+        const input_start = @intFromPtr(input.ptr);
+        const output_start = @intFromPtr(output.ptr);
+        const input_end = std.math.add(usize, input_start, input.len) catch return false;
+        const output_end = std.math.add(usize, output_start, output.len) catch return false;
+        return input_end <= output_start or output_end <= input_start;
     }
 
     fn runBatch(self: *Encoder) void {

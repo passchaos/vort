@@ -57,3 +57,12 @@ The frozen scalar state machine and independent fdeflate framing tests compare
 all output bytes, including identical explicit flush schedules. The full real
 benchmark under `tools/png_ultrafast_performance` uses an immutable 90,083,998-byte
 15-image corpus, both adaptive and Up, and one unchanged imx consumer/harness.
+
+Core v2 uses batch-local reservoir and zero-run fields. With sufficient disjoint
+caller output, complete bytes are emitted directly; small output and overlapping
+source/output use the same bounded queue. The token scan also computes Adler
+from its already-loaded words, using eight-byte u16 weighted folds and zero-span
+recurrence within the same4096-byte/NMAX bound. A native-lane conversion preserves
+byte order on big-endian targets. No fields, owned buffers or heap allocations
+are added. Frozen published52byte/schedule/snapshot controls and independent
+fdeflate/zlib tests cover this path alongside the original scalar reference.

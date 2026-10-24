@@ -3,6 +3,66 @@ const Encoder = @import("root.zig").Encoder;
 const deflate = @import("../../../../deflate.zig");
 const reference = @import("reference_cases.zig");
 const Scalar = @import("scalar_reference.zig").Encoder;
+const BaselineV1 = @import("baseline_v1.zig").Encoder;
+
+test "incremental PNG ultrafast v2 fused Adler matches scalar recurrences for worst values and mixed zero words" {
+    const Accumulator = @import("checksum_batch.zig").Accumulator;
+    const Adler32 = @import("../../../../checksum.zig").Adler32;
+    var input: [4096]u8 = undefined;
+    var random: u32 = 0xa7284d19;
+    for ([_]u8{ 0, 1, 255 }) |initial| {
+        @memset(&input, initial);
+        for (0..512) |word| {
+            if (word % 3 == 1) {
+                for (input[word * 8 ..][0..8]) |*byte| {
+                    random = random *% 1664525 +% 1013904223;
+                    byte.* = @truncate(random >> 24);
+                }
+            }
+        }
+        var sum = Accumulator{ .a = 65520, .b = 65520 };
+        var scalar = Adler32{ .a = 65520, .b = 65520 };
+        for (0..512) |word| {
+            const bytes = input[word * 8 ..][0..8];
+            const value = std.mem.readInt(u64, bytes, .little);
+            if (value == 0) sum.zero(8) else sum.word(value);
+        }
+        sum.commit(&scalar);
+        var expected = Adler32{ .a = 65520, .b = 65520 };
+        expected.update(&input);
+        try std.testing.expectEqual(expected.digest(), scalar.digest());
+    }
+}
+
+test "incremental PNG ultrafast v2 direct and queued outputs preserve published52 bytes flush cuts resources and snapshots" {
+    try std.testing.expectEqual(@sizeOf(BaselineV1), @sizeOf(Encoder));
+    var input: [12571]u8 = @splat(0);
+    var random: u32 = 0x67ac814f;
+    for (&input, 0..) |*byte, at| {
+        random = random *% 1664525 +% 1013904223;
+        if (at % 701 < 331) byte.* = @truncate(random >> 24);
+    }
+    for ([_]?usize{ null, 1, 7, 128, 259, 4095, 4096, 8193 }) |cut| {
+        const expected = try encodeWith(BaselineV1, &input, 997, 4096, cut);
+        defer std.testing.allocator.free(expected);
+        for ([_]usize{ 1, 7, 127, 128, 129, 4096 }) |capacity| {
+            const actual = try encodeWith(Encoder, &input, 997, capacity, cut);
+            defer std.testing.allocator.free(actual);
+            try std.testing.expectEqualSlices(u8, expected, actual);
+        }
+    }
+    var encoder = Encoder.initExactSize(std.testing.failing_allocator, .{}, input.len);
+    defer encoder.deinit();
+    var guard: [258]u8 = @splat(0x5a);
+    const next = try encoder.step(&input, guard[1..257]);
+    const snapshot = encoder.snapshot();
+    try std.testing.expectEqual(next.progress.input_read, snapshot.input_read);
+    try std.testing.expectEqual(next.progress.output_written, snapshot.output_written);
+    try std.testing.expectEqual(@as(u8, 0x5a), guard[0]);
+    try std.testing.expectEqual(@as(u8, 0x5a), guard[257]);
+    const Adler32 = @import("../../../../checksum.zig").Adler32;
+    try std.testing.expectEqual(Adler32.hash(input[0..next.progress.input_read]), encoder.adler.digest());
+}
 
 test "incremental PNG ultrafast accepted zero checksum recurrence matches portable across chunk and prior state boundaries" {
     const checksum = @import("checksum.zig");
