@@ -1,0 +1,442 @@
+{
+  "scope": "post-rebase combined-source functional verification; no performance ranking",
+  "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+  "completed_utc": "2026-10-24T19:29:02.298395+00:00",
+  "core": {
+    "scope": "post-rebase related regression; broad complete family and global checks retained separately",
+    "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+    "fmt_changed_zig_files": 42,
+    "fmt_exit": 0,
+    "groups": [
+      {
+        "target": "native",
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/deflate.zig",
+          "-OReleaseFast",
+          "--test-filter",
+          "gzip allocation hint",
+          "--test-filter",
+          "zlib and gzip wrappers reject truncated non-final raw deflate streams"
+        ],
+        "exit_code": 0,
+        "start_utc": "2026-10-24T19:24:09.923211+00:00",
+        "end_utc": "2026-10-24T19:24:35.572501+00:00"
+      },
+      {
+        "target": "x86",
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/deflate.zig",
+          "-OReleaseFast",
+          "--test-filter",
+          "gzip allocation hint",
+          "--test-filter",
+          "zlib and gzip wrappers reject truncated non-final raw deflate streams",
+          "-target",
+          "x86-linux-musl"
+        ],
+        "exit_code": 0,
+        "start_utc": "2026-10-24T19:24:09.923387+00:00",
+        "end_utc": "2026-10-24T19:24:32.427695+00:00"
+      }
+    ],
+    "source_before": {
+      "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+      "src/deflate/gzip/alloc_hint.zig": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+      "src/deflate/gzip/alloc_hint_tests.zig": "1888c70e1ad90c9df98907a64044143df126a8767225f87f610cf37587afc7b8",
+      "src/deflate/incremental/tests/rolling_hash.zig": "257007d678baf11dafafad541752463cc34d0188cb930ce27cd9cd2042c9cea5"
+    },
+    "source_after": {
+      "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+      "src/deflate/gzip/alloc_hint.zig": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+      "src/deflate/gzip/alloc_hint_tests.zig": "1888c70e1ad90c9df98907a64044143df126a8767225f87f610cf37587afc7b8",
+      "src/deflate/incremental/tests/rolling_hash.zig": "257007d678baf11dafafad541752463cc34d0188cb930ce27cd9cd2042c9cea5"
+    },
+    "source_changed": []
+  },
+  "br": {
+    "artifact_sha256": {
+      "build-negative.log": "e736ecc3a64ce96b9a7d0cca63e655c908b790544464c38a7a0164011defee5e",
+      "frozen-manifest.json": "3fc96fc22f5dec294dd0ae6e0ee36ee2c70fa49df00c63de1c023ab5896631d0",
+      "gate.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gate.stdout": "0889301688281f6d164a26e2f1093792d979e9b5c4d41eb44cf6e7d469cd8e17",
+      "samples.csv": "b83b015c47077f594d35fc21c6adc1e75bcef12c6076f9da3f50aa44a16374df",
+      "samples.json": "c2dafb7f7f1a6f5c0de3224c81b35b0d2bc8b2260d61b43af9c6f499e6c112e7",
+      "synthetic-small-json-0.bin": "c015fc1dbad6e716370de90ac855dc226235e6dfe263853a93bd4d9328f551e6",
+      "tiny.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tiny.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "vort-br-planned-encode-bench": "e060ea76602c4873fe00c636f171d35796ccd9384b1f0df0e3a1e5e33030e8c8"
+    },
+    "critical_tools_core_source_delta": [],
+    "critical_tools_core_source_sha256": {
+      "build.zig": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+      "src/br.zig": "e51295358bd297b8dff778f02687bfb631f06d622b637751e5e08dbb73452401",
+      "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+      "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+      "src/io/stream_count.zig": "581217a966fe2cc067e0973a012a9d5a1361441becd46265389e404ace8cd2b8",
+      "src/root.zig": "ca311af0fcb0288a4849da29987e9d77b9503661c78059eaf0c58747ac463c97",
+      "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+      "tools/br/encode_samples.zig": "16e62d9d6e9b32718f43bc9512ffddc55d4c8e3794ddb352cbed402dd8010369",
+      "tools/br/libbrotli_runtime.zig": "7668461b9aaf6cbd7f62336ad230ae5d463e2d9d5362686e0814fcae9f500155",
+      "tools/br/planned_encode_bench.zig": "ee8aa6f5fd81dc099f1c0dfeec0a9a446149e49697e37355348eb69755657622",
+      "tools/br/q8_records_fixture.zig": "4d692a07162c37d1d9cbbaee1788c0a2d9dd3d18d92d3babdfad7401e5b94c63",
+      "tools/codec_bench/sample_gate.py": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece"
+    },
+    "gate_summary": {
+      "codec": "brotli",
+      "input_identity": "verified frozen length and SHA-256",
+      "reference_scope": "requested files only; loaded dependency identities unverified",
+      "rounds": 5,
+      "rows": 1
+    },
+    "head_at_finish": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+    "head_at_start": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+    "input": {
+      "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+      "input_bytes": 50,
+      "input_path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+      "input_sha256": "c015fc1dbad6e716370de90ac855dc226235e6dfe263853a93bd4d9328f551e6",
+      "manifest": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/manifest.json",
+      "manifest_sha256": "3fc96fc22f5dec294dd0ae6e0ee36ee2c70fa49df00c63de1c023ab5896631d0"
+    },
+    "no_source_or_git_write": true,
+    "performance_claim": false,
+    "reference_file_bytes_unchanged": true,
+    "references": [
+      {
+        "canonical_file_path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+        "dependencies_verified": false,
+        "file_bytes": 864608,
+        "file_sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e",
+        "identity_status": "requested_file_hashed_actual_object_unverified",
+        "loaded_identity": null,
+        "requested_path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+        "role": "brotli_encoder",
+        "successful_open_argument": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+        "version": 16785408
+      },
+      {
+        "canonical_file_path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+        "dependencies_verified": false,
+        "file_bytes": 60304,
+        "file_sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a",
+        "identity_status": "requested_file_hashed_actual_object_unverified",
+        "loaded_identity": null,
+        "requested_path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+        "role": "brotli_decoder",
+        "successful_open_argument": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+        "version": 16785408
+      },
+      {
+        "canonical_file_path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+        "dependencies_verified": false,
+        "file_bytes": 147920,
+        "file_sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7",
+        "identity_status": "requested_file_hashed_actual_object_unverified",
+        "loaded_identity": null,
+        "requested_path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+        "role": "brotli_common",
+        "successful_open_argument": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+        "version": null
+      }
+    ],
+    "results": {
+      "build": {
+        "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/fc8891c0231be2c8e6d609466a9844ad/vort-br-planned-encode-bench",
+        "binary_sha256": "e060ea76602c4873fe00c636f171d35796ccd9384b1f0df0e3a1e5e33030e8c8",
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "build",
+          "-fno-incremental",
+          "run-br-planned-encode-bench",
+          "-Doptimize=ReleaseFast",
+          "-Dcpu=native",
+          "-j2",
+          "--summary",
+          "all",
+          "--verbose",
+          "--",
+          "--libbrotli-encoder",
+          "/tmp/missing"
+        ],
+        "compile_command": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseFast --dep vort --dep benchmark_provenance -Mroot=/home/passchaos/project-z/vort-stream-contracts/tools/br/planned_encode_bench.zig .zig-cache/o/1ce4443d2778e0b187892cf1213a7bdd/vort-br-record-optimal-releasefast.o .zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o -OReleaseFast -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d --dep vail_archive_crypto -Mvort=/home/passchaos/project-z/vort-stream-contracts/src/root.zig -OReleaseFast -Mbenchmark_provenance=/home/passchaos/project-z/vort-stream-contracts/tools/benchmark_provenance.zig -OReleaseFast -Mvail_archive_crypto=/home/passchaos/project-z/vail/archive_crypto/src/root.zig -lc --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-planned-encode-bench --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ -fno-incremental --listen=-",
+        "compile_status": "success",
+        "exit_code": 1,
+        "expected_error": "IncompleteReferencePaths",
+        "finished_utc": "2026-10-24T19:24:59.918612+00:00",
+        "runtime_status": "expected_parameter_rejection",
+        "started_utc": "2026-10-24T19:24:08.763458+00:00",
+        "timed_encoding_started": false
+      },
+      "gate": {
+        "command": [
+          "python3",
+          "tools/codec_bench/sample_gate.py",
+          "--samples-json",
+          "/tmp/vort-wide-bit-final-20261025/final-integration/br/samples.json",
+          "--manifest",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/manifest.json",
+          "--csv",
+          "/tmp/vort-wide-bit-final-20261025/final-integration/br/samples.csv",
+          "--executable",
+          "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/fc8891c0231be2c8e6d609466a9844ad/vort-br-planned-encode-bench",
+          "--require-explicit-references"
+        ],
+        "exit_code": 0,
+        "finished_utc": "2026-10-24T19:25:14.165597+00:00",
+        "started_utc": "2026-10-24T19:25:14.075915+00:00"
+      },
+      "tiny": {
+        "command": [
+          "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/fc8891c0231be2c8e6d609466a9844ad/vort-br-planned-encode-bench",
+          "--iterations",
+          "1",
+          "--planned-quality",
+          "0",
+          "--quality",
+          "0",
+          "--path",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+          "--limit",
+          "50",
+          "--libbrotli-encoder",
+          "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+          "--libbrotli-decoder",
+          "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+          "--libbrotli-common",
+          "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+          "--samples-json",
+          "/tmp/vort-wide-bit-final-20261025/final-integration/br/samples.json",
+          "--csv",
+          "/tmp/vort-wide-bit-final-20261025/final-integration/br/samples.csv"
+        ],
+        "exit_code": 0,
+        "finished_utc": "2026-10-24T19:25:14.075801+00:00",
+        "scope": "post-rebase tiny functional export; not formal performance evidence",
+        "started_utc": "2026-10-24T19:25:14.034330+00:00"
+      }
+    },
+    "scope": "Single 50-byte functional sample export at iterations=1, Vort planned quality=0 and reference quality=0, following the current combined-source native ReleaseFast rebuild. Five raw rounds verify exporter/gate functionality; elapsed values are not formal performance evidence.",
+    "selected_settings": {
+      "auxiliary_lazy_level": "balanced",
+      "auxiliary_ratio_adaptive_command_split": false,
+      "auxiliary_ratio_adaptive_distance_split": null,
+      "auxiliary_ratio_adaptive_literal_split": false,
+      "auxiliary_ratio_distance_parameter_search": null,
+      "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+      "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+      "auxiliary_ratio_level": "ratio",
+      "planned_quality": 0,
+      "reference_case_quality": null,
+      "reference_lgwin": 22,
+      "reference_mode": 0,
+      "reference_quality": 0,
+      "reference_quality_override_requested": 0,
+      "vort_api": "one_shot_quality_preset",
+      "vort_command_state_max_input_kib": 255,
+      "vort_command_state_override_requested": null,
+      "vort_default_window_bits": 16,
+      "vort_hq_enabled": false,
+      "vort_large_window": false,
+      "vort_level": "fast",
+      "vort_max_total_working_memory": null,
+      "vort_memory_profile_enabled": false,
+      "vort_metadata_bytes": 0,
+      "vort_mode": "generic",
+      "vort_window_bits": null
+    },
+    "source_delta": [],
+    "status": "post_rebase_functional_verified",
+    "utc": "2026-10-24T19:25:33.343019+00:00",
+    "wire_identities": {
+      "reference_bytes": 54,
+      "reference_sha256": "96cf09aa8a78fa2c03dccd238bc28cab47bb7626ac69bf3c427c32b5d0a8d9aa",
+      "vort_bytes": 54,
+      "vort_sha256": "0a69194e54e7bcb329cfc2e34de4622c61ba243a8d8b0012fc86d8d031e65b3d"
+    },
+    "worktree": "/home/passchaos/project-z/vort-stream-contracts"
+  },
+  "zstd": {
+    "status": "passed",
+    "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+    "purpose": "post-rebase functional integration; concurrent builds, not formal performance evidence",
+    "source_before": {
+      "build.zig": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+      "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+      "tools/zstd/encode_bench.zig": "119e008c267e028820c71bce342e24b45ed0535fd001c3de28ec6b2da5ca9f90",
+      "tools/zstd/encode_samples.zig": "9417be1dbe20a1b86e360196c925196014f3bec1736b687f2a6d0b0e5ca8d298",
+      "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+      "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+      "tools/codec_bench/sample_gate.py": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+      "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+      "src/root.zig": "ca311af0fcb0288a4849da29987e9d77b9503661c78059eaf0c58747ac463c97",
+      "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+      "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+      "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+      "src/deflate/incremental/decoder/gzip.zig": "8ce8d9e01822596c7b3bb2ebce8e17a0f2913113c0502b4cdca89dc56be3c448"
+    },
+    "source_after": {
+      "build.zig": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+      "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+      "tools/zstd/encode_bench.zig": "119e008c267e028820c71bce342e24b45ed0535fd001c3de28ec6b2da5ca9f90",
+      "tools/zstd/encode_samples.zig": "9417be1dbe20a1b86e360196c925196014f3bec1736b687f2a6d0b0e5ca8d298",
+      "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+      "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+      "tools/codec_bench/sample_gate.py": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+      "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+      "src/root.zig": "ca311af0fcb0288a4849da29987e9d77b9503661c78059eaf0c58747ac463c97",
+      "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+      "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+      "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+      "src/deflate/incremental/decoder/gzip.zig": "8ce8d9e01822596c7b3bb2ebce8e17a0f2913113c0502b4cdca89dc56be3c448"
+    },
+    "source_stable": true,
+    "extra_gzip_helpers_stable": true,
+    "build": {
+      "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run-zstd-encode-bench",
+        "-Dcpu=native",
+        "-j2",
+        "--verbose",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "source_before": {
+        "build.zig": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+        "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+        "tools/zstd/encode_bench.zig": "119e008c267e028820c71bce342e24b45ed0535fd001c3de28ec6b2da5ca9f90",
+        "tools/zstd/encode_samples.zig": "9417be1dbe20a1b86e360196c925196014f3bec1736b687f2a6d0b0e5ca8d298",
+        "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+        "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+        "tools/codec_bench/sample_gate.py": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+        "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+        "src/root.zig": "ca311af0fcb0288a4849da29987e9d77b9503661c78059eaf0c58747ac463c97",
+        "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+        "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+        "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+        "src/deflate/incremental/decoder/gzip.zig": "8ce8d9e01822596c7b3bb2ebce8e17a0f2913113c0502b4cdca89dc56be3c448"
+      },
+      "source_after": {
+        "build.zig": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+        "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+        "tools/zstd/encode_bench.zig": "119e008c267e028820c71bce342e24b45ed0535fd001c3de28ec6b2da5ca9f90",
+        "tools/zstd/encode_samples.zig": "9417be1dbe20a1b86e360196c925196014f3bec1736b687f2a6d0b0e5ca8d298",
+        "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+        "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+        "tools/codec_bench/sample_gate.py": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+        "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+        "src/root.zig": "ca311af0fcb0288a4849da29987e9d77b9503661c78059eaf0c58747ac463c97",
+        "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+        "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+        "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+        "src/deflate/incremental/decoder/gzip.zig": "8ce8d9e01822596c7b3bb2ebce8e17a0f2913113c0502b4cdca89dc56be3c448"
+      },
+      "source_stable": true,
+      "stdout": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/build-stdout.log",
+      "stderr": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/build-stderr.log",
+      "purpose": "post-rebase functional integration; no formal performance claim"
+    },
+    "artifact": {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f385deaae20197b8c9a23aff9c96870c/vort-zstd-encode-bench",
+      "sha256": "43a40786463b18ac05b8e09e8afb53208d72e20e0f7fe02a20b710488df27244",
+      "bytes": 10103760,
+      "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+      "purpose": "post-rebase functional verification, concurrent builds; not performance evidence"
+    },
+    "tiny": {
+      "command": [
+        "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f385deaae20197b8c9a23aff9c96870c/vort-zstd-encode-bench",
+        "--path",
+        "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+        "--limit",
+        "50",
+        "--level",
+        "3",
+        "--iterations",
+        "1",
+        "--rounds",
+        "4",
+        "--libzstd",
+        "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+        "--csv",
+        "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/samples.csv",
+        "--samples-json",
+        "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/samples.json"
+      ],
+      "exit_code": 0,
+      "input_bytes": 50,
+      "input_sha256": "c015fc1dbad6e716370de90ac855dc226235e6dfe263853a93bd4d9328f551e6",
+      "reference_path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+      "reference_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+      "artifact": {
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f385deaae20197b8c9a23aff9c96870c/vort-zstd-encode-bench",
+        "sha256": "43a40786463b18ac05b8e09e8afb53208d72e20e0f7fe02a20b710488df27244",
+        "bytes": 10103760,
+        "head": "75fd740fd86a7e6352864884ea86c0547457cd8c",
+        "purpose": "post-rebase functional verification, concurrent builds; not performance evidence"
+      },
+      "stdout": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/tiny-stdout.log",
+      "stderr": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/tiny-stderr.log",
+      "purpose": "tiny post-rebase functional smoke; no formal performance claim"
+    },
+    "gate": {
+      "command": [
+        "python3",
+        "tools/codec_bench/sample_gate.py",
+        "--samples-json",
+        "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/samples.json",
+        "--manifest",
+        "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/manifest.json",
+        "--csv",
+        "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/samples.csv",
+        "--executable",
+        "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/f385deaae20197b8c9a23aff9c96870c/vort-zstd-encode-bench",
+        "--require-explicit-references"
+      ],
+      "exit_code": 0,
+      "stdout": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/gate-stdout.log",
+      "stderr": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/gate-stderr.log",
+      "gate_sha256": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+      "manifest_sha256": "3fc96fc22f5dec294dd0ae6e0ee36ee2c70fa49df00c63de1c023ab5896631d0",
+      "csv_sha256": "c5d766060044a88085c02b08572a70a35bc7cc5665dc0de35c7856bdec6f961b",
+      "json_sha256": "cf77f20cc021a433d4ea7ac9db8c61c514309d51ac08b898fedf1ba4a459aea3"
+    },
+    "git_worktree_clean": true
+  },
+  "br_default": {
+    "scope": "legacy default Runtime.open smoke after rebase, not performance",
+    "command": [
+      "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/fc8891c0231be2c8e6d609466a9844ad/vort-br-planned-encode-bench",
+      "--path",
+      "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+      "--limit",
+      "65536",
+      "--planned-quality",
+      "0",
+      "--quality",
+      "0",
+      "--iterations",
+      "1",
+      "--samples-json",
+      "/tmp/vort-wide-bit-final-20261025/final-integration/br-default/samples.json",
+      "--csv",
+      "/tmp/vort-wide-bit-final-20261025/final-integration/br-default/samples.csv"
+    ],
+    "exit_code": 0,
+    "gate": {
+      "codec": "brotli",
+      "rows": 1,
+      "rounds": 5,
+      "input_identity": "verified frozen length and SHA-256",
+      "reference_scope": "requested files only; loaded dependency identities unverified"
+    },
+    "samples_sha256": "c8ba090b9fda0fce5823a3ecdddcc37e8c7ee9095fc5cb71cfbaec6669ee2812"
+  }
+}

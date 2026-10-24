@@ -81,3 +81,10 @@ Brotli 的 2,011 条、Zstd 的 2,009 条缓存输入记录，以及两份共用
 crypto 源码已归档，精确对应 `30611d7e`；标准库内容核对后未重复打包。
 这是缓存所用源码和实际产物的绑定，不推断原始运行期间存在完整目录的
 连续快照，也不验证动态加载器的依赖闭包。
+
+整合 gzip 修复与工具提交后，`git pull --rebase origin main`确认无需冲突
+处理。[最终整合记录](data/codec-encode-samples-20261025/final-integration.json)
+保留该源码epoch的新工具构建、两种codec的显式参考库tiny JSON/CSV门禁、
+Brotli默认库加载门禁和native/x86各11/11 gzip回归。42个改动Zig文件格式
+检查通过。旧`30611d7e`产物与源码绑定保留为原阶段证据，新整合记录另列，
+不把旧artifact冒称为合并后可执行文件，也不把tiny耗时作为性能排名。
