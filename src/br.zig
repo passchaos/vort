@@ -33267,8 +33267,11 @@ test "br full wide auxiliary executor matches prior transitions and boundaries" 
         try prepareWideExternalLiteralLookups(max_literal_context_trees, header, &literal_lookups);
         try std.testing.expect(prepareAuxiliaryTailLookups(header));
         const payload_start = reader.bitPosition();
-        const truncation_cases = encoded.len * 8 - payload_start + 1;
-        for (0..truncation_cases + block.decoded_len) |case_index| {
+        // This loop enumerates a physical fixture; retain the wide stream
+        // position until its bounded case count is checked for a local index.
+        const truncation_cases = try bit_count_math.toLocal(bit_count_math.fromBytesAssumeBounded(encoded.len) - payload_start + 1);
+        const case_count = try std.math.add(usize, truncation_cases, block.decoded_len);
+        for (0..case_count) |case_index| {
             var source = reader;
             const output_end = if (case_index < truncation_cases) block.decoded_len else case_index - truncation_cases;
             if (case_index < truncation_cases) source.bit_len = payload_start + case_index;
