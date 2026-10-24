@@ -6,6 +6,7 @@ pub const Controls = struct {
     quality: ?u4 = null,
     mode: ?br.PlannedMode = null,
     window_bits: ?u5 = null,
+    large_window: bool = false,
     hq: bool = false,
     search_depth: ?u32 = null,
     nice_len: ?u32 = null,
@@ -30,6 +31,7 @@ pub const Controls = struct {
 
     pub fn resolveWithMemoryProfile(self: Controls, comptime Options: type, hq_profile: ?*vort.BrotliHqProfile, memory_profile: ?*vort.BrotliEncodeMemoryProfile) !Options {
         var options: Options = .{};
+        options.large_window = self.large_window;
         options.max_total_working_memory = self.max_total_memory;
         if (self.memory_profile) options.memory_profile = memory_profile;
         if (self.quality) |value| options.quality = value;
@@ -76,6 +78,9 @@ pub fn parseWithFirst(args: anytype, first: ?[]const u8) !Controls {
         if (try optionValue("--quality", arg, args)) |value| try set(&result, "quality", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--mode", arg, args)) |value| try set(&result, "mode", try parseMode(value)) else if (try optionValue("--window-bits", arg, args)) |value| try set(&result, "window_bits", try std.fmt.parseInt(u5, value, 10)) else if (try optionValue("--hq-depth", arg, args)) |value| try set(&result, "search_depth", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-nice-len", arg, args)) |value| try set(&result, "nice_len", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-beam-width", arg, args)) |value| try set(&result, "beam_width", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-iterations", arg, args)) |value| try set(&result, "iterations", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-block-len", arg, args)) |value| try set(&result, "block_len", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-memory", arg, args)) |value| try set(&result, "memory", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-npostfix", arg, args)) |value| try set(&result, "npostfix", try std.fmt.parseInt(u2, value, 10)) else if (try optionValue("--hq-ndirect-high", arg, args)) |value| try set(&result, "ndirect_high", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--max-total-memory", arg, args)) |value| try set(&result, "max_total_memory", try std.fmt.parseInt(usize, value, 10)) else if (std.mem.eql(u8, arg, "--memory-profile")) {
             if (result.memory_profile) return error.DuplicateBrotliOption;
             result.memory_profile = true;
+        } else if (std.mem.eql(u8, arg, "--large-window")) {
+            if (result.large_window) return error.DuplicateBrotliOption;
+            result.large_window = true;
         } else if (std.mem.eql(u8, arg, "--hq")) {
             if (result.hq) return error.DuplicateBrotliOption;
             result.hq = true;
@@ -119,6 +124,12 @@ pub fn printProfile(stdout: *std.Io.Writer, profile: vort.BrotliHqProfile) !void
         profile.price_evaluations,              profile.passes,                             profile.refinement_passes,    profile.peak_working_memory, profile.emitted_metablocks, profile.emitted_commands,
         profile.emitted_copy_bytes,
     });
+}
+
+pub fn printFormatProfile(stdout: *std.Io.Writer, profile: vort.BrotliHqProfile) !void {
+    if (profile.effective) |resolved| {
+        if (resolved.format == .large_window) try stdout.print("br_format_profile format={s}\n", .{@tagName(resolved.format)});
+    }
 }
 
 pub fn printMemoryProfile(stdout: *std.Io.Writer, profile: vort.BrotliEncodeMemoryProfile) !void {

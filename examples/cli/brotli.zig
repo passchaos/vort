@@ -20,7 +20,10 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     defer init.gpa.free(encoded);
     try writeAtomic(init, output_path, encoded);
     try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, input.len, output_path });
-    if (parsed.profile) try controls.printProfile(stdout, profile);
+    if (parsed.profile) {
+        try controls.printProfile(stdout, profile);
+        try controls.printFormatProfile(stdout, profile);
+    }
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 
@@ -37,7 +40,10 @@ pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdou
     defer init.gpa.free(encoded);
     for (encoded) |byte| try stdout.print("{x:0>2}", .{byte});
     try stdout.writeByte('\n');
-    if (parsed.profile) try controls.printProfile(stdout, profile);
+    if (parsed.profile) {
+        try controls.printProfile(stdout, profile);
+        try controls.printFormatProfile(stdout, profile);
+    }
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
 

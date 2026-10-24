@@ -12,6 +12,7 @@ const Config = struct {
     level: []const u8 = "fast",
     mode: []const u8 = "generic",
     window_bits: ?u8 = null,
+    large_window: bool = false,
     search_depth: ?u32 = null,
     nice_len: ?u32 = null,
     beam_width: ?u8 = null,
@@ -35,6 +36,11 @@ const Resolved = struct {
     level: []const u8,
     mode: []const u8,
     window_bits: ?u8 = null,
+    large_window: bool = false,
+    format: []const u8 = "standard",
+    wire_alphabet_size: ?usize = null,
+    active_alphabet_size: ?usize = null,
+    shape_max_distance: ?usize = null,
     search_depth: ?u32 = null,
     nice_len: ?u32 = null,
     beam_width: ?u8 = null,
@@ -71,7 +77,11 @@ pub fn main(init: std.process.Init) !void {
     defer if (output) |bytes| init.gpa.free(bytes);
     if (output) |bytes| {
         if (resolved != null) {
-            if (wireWindow(bytes)) |bits| resolved.?.window_bits = bits else |err| failure = @errorName(err);
+            if (wireWindow(bytes)) |header| {
+                resolved.?.window_bits = header.bits;
+                resolved.?.large_window = header.large;
+                resolved.?.format = if (header.large) "large_window" else "standard";
+            } else |err| failure = @errorName(err);
         }
         if (failure == null) try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });
     }
@@ -98,11 +108,14 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
     options.mode = std.meta.stringToEnum(br.PlannedMode, config.mode) orelse return error.InvalidBlockPlan;
     if (config.quality) |quality| options.quality = std.math.cast(u4, quality) orelse return error.InvalidBlockPlan;
     if (config.window_bits) |bits| options.window_bits = std.math.cast(u5, bits) orelse return error.InvalidBlockPlan;
+    if (@hasField(@TypeOf(options.*), "large_window")) {
+        options.large_window = config.large_window;
+    } else if (config.large_window) return error.UnsupportedLargeWindowControls;
     if (@hasField(@TypeOf(options.*), "max_total_working_memory")) {
         options.max_total_working_memory = config.max_total_working_memory;
         options.memory_profile = total_profile;
     } else if (config.max_total_working_memory != null or total_profile != null) return error.UnsupportedTotalMemoryControls;
-    resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits, .max_total_working_memory = config.max_total_working_memory };
+    resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits, .large_window = config.large_window, .format = if (config.large_window) "large_window" else "standard", .max_total_working_memory = config.max_total_working_memory };
     if (!config.hq) {
         if (config.search_depth != null or config.nice_len != null or config.beam_width != null or config.iterations != null or
             config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null) return error.InvalidBlockPlan;
@@ -123,7 +136,10 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
             );
         }
         hq.profile = profile;
-        const effective = try hq.resolve(config.quality orelse return error.InvalidBlockPlan, options.mode);
+        const effective = if (@hasDecl(br.HqOptions, "resolveForFormat"))
+            try hq.resolveForFormat(config.quality orelse return error.InvalidBlockPlan, options.mode, if (config.large_window) .large_window else .standard)
+        else
+            try hq.resolve(config.quality orelse return error.InvalidBlockPlan, options.mode);
         const selected = &resolved.*.?;
         selected.search_depth = effective.search_depth;
         selected.nice_len = effective.nice_len;
@@ -133,6 +149,11 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
         selected.max_working_memory = effective.max_working_memory;
         selected.npostfix = effective.distance_parameters.npostfix;
         selected.ndirect_high = effective.distance_parameters.ndirect_high;
+        if (@hasDecl(br.HqDistanceParameters, "wireAlphabetSize")) {
+            selected.wire_alphabet_size = effective.distance_parameters.wireAlphabetSize(effective.format);
+            selected.active_alphabet_size = effective.distance_parameters.activeAlphabetSize(effective.format);
+            selected.shape_max_distance = effective.distance_parameters.maximumDistanceForFormat(effective.format);
+        }
         options.hq = hq;
     } else return error.UnsupportedHqControls;
 }
@@ -151,7 +172,7 @@ fn operation(init: std.process.Init, input: []const u8, config: Config, profile:
     defer init.gpa.free(serialized_bytes);
     var serialized: ?br.SerializedSharedDictionary = if (config.serialized_dictionary_path != null) try br.parseSerializedSharedDictionary(serialized_bytes) else null;
     const dictionary: br.SharedDictionary = .{ .raw_prefixes = prefixes.items, .serialized = if (serialized) |*value| value else null };
-    if (std.mem.eql(u8, config.operation, "decode")) return br.decodeStreamAllocLimitedWithOptions(init.gpa, input, config.max_output_size, .{ .shared_dictionary = dictionary });
+    if (std.mem.eql(u8, config.operation, "decode")) return br.decodeStreamAllocLimitedWithOptions(init.gpa, input, config.max_output_size, .{ .shared_dictionary = dictionary, .allow_large_window = config.large_window });
     if (!std.mem.eql(u8, config.operation, "encode")) return error.UnsupportedOperation;
     if (std.mem.eql(u8, config.api, "one_shot")) {
         var options = br.PlannedEncodeOptions{ .shared_dictionary = dictionary };
@@ -205,15 +226,20 @@ fn pump(init: std.process.Init, input: []const u8, config: Config, encoder: anyt
     }
     return error.IncrementalDidNotFinish;
 }
-fn wireWindow(input: []const u8) !u8 {
+fn wireWindow(input: []const u8) !struct { bits: u8, large: bool = false } {
     if (input.len == 0) return error.TruncatedInput;
     const first = input[0];
-    if (first & 1 == 0) return 16;
+    if (first & 1 == 0) return .{ .bits = 16 };
     const high = (first >> 1) & 7;
-    if (high != 0) return 17 + high;
+    if (high != 0) return .{ .bits = 17 + high };
     const low = (first >> 4) & 7;
-    if (low == 1) return error.UnsupportedBrotliFeature;
-    return if (low == 0) 17 else 8 + low;
+    if (low == 1) {
+        if (input.len < 2) return error.TruncatedInput;
+        const bits = input[1] & 63;
+        if (first & 128 != 0 or bits < 10 or bits > 30) return error.CorruptFrame;
+        return .{ .bits = bits, .large = true };
+    }
+    return .{ .bits = if (low == 0) 17 else 8 + low };
 }
 fn read(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(limit));

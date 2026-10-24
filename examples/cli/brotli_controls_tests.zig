@@ -121,3 +121,45 @@ test "Brotli CLI total memory flags are independent and reject invalid arguments
     try std.testing.expectError(error.InvalidCharacter, parse(&.{"--max-total-memory="}));
     try std.testing.expectError(error.Overflow, parse(&.{"--max-total-memory=-1"}));
 }
+
+test "Brotli CLI Large Window explicitly maps both public options without selecting HQ" {
+    const a = try parse(&.{ "--large-window", "--quality=11", "--hq", "--window-bits=30" });
+    const b = try parse(&.{ "--window-bits=30", "--hq", "--quality=11", "--large-window" });
+    try std.testing.expectEqualDeep(a, b);
+    inline for (.{ vort.br.PlannedEncodeOptions, vort.br.PlannedStreamChunksOptions }) |Options| {
+        const options = try a.resolve(Options, null);
+        try std.testing.expect(options.large_window and options.hq != null);
+        if (Options == vort.br.PlannedEncodeOptions) try std.testing.expectEqual(@as(?u5, 30), options.window_bits) else try std.testing.expectEqual(@as(u5, 30), options.window_bits);
+    }
+    const selected_only = try parse(&.{"--large-window"});
+    try std.testing.expect(!selected_only.hqSelected());
+    try std.testing.expect((try selected_only.resolve(vort.br.PlannedEncodeOptions, null)).hq == null);
+    const defaults = try (try parse(&.{})).resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expect(!defaults.large_window);
+    try std.testing.expectEqualDeep(vort.br.PlannedEncodeOptions{}, defaults);
+}
+
+test "Brotli CLI Large Window public bounds require HQ and enforce each format range" {
+    inline for (.{ "16", "25", "30" }) |width| {
+        const controls = try parse(&.{ "--large-window", "--quality=10", "--hq", "--window-bits=" ++ width });
+        const one = try controls.resolve(vort.br.PlannedEncodeOptions, null);
+        const stream = try controls.resolve(vort.br.PlannedStreamChunksOptions, null);
+        _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one);
+        _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
+    }
+    inline for (.{
+        &.{"--large-window"},
+        &.{ "--large-window", "--quality=10" },
+        &.{ "--quality=11", "--hq", "--window-bits=25" },
+        &.{ "--large-window", "--quality=11", "--hq", "--window-bits=31" },
+        &.{ "--large-window", "--quality=11", "--hq", "--window-bits=9" },
+    }) |args| {
+        const controls = try parse(args);
+        const one = try controls.resolve(vort.br.PlannedEncodeOptions, null);
+        const stream = try controls.resolve(vort.br.PlannedStreamChunksOptions, null);
+        try std.testing.expectError(error.InvalidBlockPlan, vort.br.encodedPlannedStreamBoundWithOptions(0, one));
+        try std.testing.expectError(error.InvalidBlockPlan, vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream));
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--large-window", "--quality=9", "--hq" })).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--large-window", "--large-window" }));
+}

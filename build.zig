@@ -110,6 +110,25 @@ pub fn build(b: *std.Build) void {
     br_public_wasm_run.addArtifactArg(br_public_wasm);
     const br_public_wasm_test = b.step("test-br-public-wasm", "Execute public Brotli HQ encode and decode routes in WebAssembly");
     br_public_wasm_test.dependOn(&br_public_wasm_run.step);
+    const br_large_wasm = b.addExecutable(.{
+        .name = "vort-br-large-window-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_large_wasm.entry = .disabled;
+    br_large_wasm.rdynamic = true;
+    br_large_wasm.stack_size = 8 * 1024 * 1024;
+    const br_large_wasm_check = b.step("check-br-large-window-wasm", "Compile real Brotli Large Window encode and decode consumers");
+    br_large_wasm_check.dependOn(&br_large_wasm.step);
+    const br_large_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/large_window_wasm_gate.js" });
+    br_large_wasm_run.addArtifactArg(br_large_wasm);
+    const br_large_wasm_test = b.step("test-br-large-window-wasm", "Execute public Brotli Large Window HQ round-trips in WebAssembly");
+    br_large_wasm_test.dependOn(&br_large_wasm_run.step);
     const br_record_classifier_tests = b.addTest(.{
         .name = "vort-br-record-classifier-tests",
         .root_module = b.createModule(.{
@@ -263,6 +282,41 @@ pub fn build(b: *std.Build) void {
     });
     const br_total_memory_test_step = b.step("test-br-total-memory", "Run Brotli whole-encoder allocation and transaction contracts");
     br_total_memory_test_step.dependOn(&b.addRunArtifact(br_total_memory_tests).step);
+    const br_large_window_tests = b.addTest(.{
+        .name = "vort-br-large-window-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli large window", "Brotli large distance", "Brotli HQ Large Window", "BrHQ LargeWindow" },
+    });
+    const br_large_window_test_step = b.step("test-br-large-window", "Run Brotli Large Window format, parser and resource contracts");
+    br_large_window_test_step.dependOn(&b.addRunArtifact(br_large_window_tests).step);
+    const br_large_tree_tests = b.addTest(.{
+        .name = "vort-br-large-tree-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br_large_window_tree_tests.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+        .filters = &.{"Brotli LargeWindow tree"},
+    });
+    const br_large_tree_test_step = b.step("test-br-large-window-tree", "Run the explicit large-history Brotli tree and fork oracle");
+    br_large_tree_test_step.dependOn(&b.addRunArtifact(br_large_tree_tests).step);
+    const br_large_tree_build_step = b.step("build-br-large-window-tree", "Compile the explicit Brotli large-history tree oracle");
+    br_large_tree_build_step.dependOn(&br_large_tree_tests.step);
+    const br_large_far = b.addExecutable(.{
+        .name = "vort-br-large-window-far",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_far.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const br_large_far_run = b.addRunArtifact(br_large_far);
+    if (b.args) |args| br_large_far_run.addArgs(args);
+    const br_large_far_test = b.step("test-br-large-window-far", "Run the explicit public Brotli large-history campaign in ReleaseFast");
+    br_large_far_test.dependOn(&br_large_far_run.step);
+    const br_large_far_build = b.step("build-br-large-window-far", "Compile the explicit public Brotli large-history campaign");
+    br_large_far_build.dependOn(&br_large_far.step);
     const zstd_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/zstd.zig"),
         .target = target,
@@ -1780,6 +1834,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| br_total_memory_diff.addArgs(args);
     const br_total_memory_diff_step = b.step("run-br-total-memory-diff", "Validate whole-encoder memory caps and Brotli interoperability");
     br_total_memory_diff_step.dependOn(&br_total_memory_diff.step);
+    const br_large_window_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/large_window_cli_gate.py", "--cli" });
+    br_large_window_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_large_window_cli_gate.addArgs(args);
+    const br_large_window_cli_step = b.step("test-br-large-window-cli", "Validate explicit Brotli Large Window CLI format and resource controls");
+    br_large_window_cli_step.dependOn(&br_large_window_cli_gate.step);
+    br_large_window_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_large_window_diff = b.addSystemCommand(&.{ "python3", "tools/br/large_window_diff.py", "--probe" });
+    br_large_window_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_large_window_diff.addArgs(args);
+    const br_large_window_diff_step = b.step("run-br-large-window-diff", "Validate Brotli Large Window HQ against opt-in reference decoders");
+    br_large_window_diff_step.dependOn(&br_large_window_diff.step);
     const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
     br_hq_tools_step.dependOn(&br_hq_probe.step);
     br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
@@ -6447,6 +6512,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_target_exe.step);
     check_step.dependOn(wasm_check_step);
     check_step.dependOn(br_public_wasm_check);
+    check_step.dependOn(br_large_wasm_check);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
