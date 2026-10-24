@@ -1,0 +1,55 @@
+{
+  "scope": "isolated unused-source SHA change; compile cache reuse, not encoding throughput or cold build speed",
+  "source": "/home/passchaos/project-z/vort-scoped-bench/src/deflate/gzip/alloc_hint.zig",
+  "before_sha256": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+  "temporary_sha256": "a30511a639c3d30cccd49d4f7872eca98d73ab8d15ae768af054e5a15eec44d1",
+  "restored_sha256": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+  "restored_exactly": true,
+  "runs": [
+    {
+      "name": "br",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run-br-planned-encode-bench",
+        "-Dcpu=native",
+        "-j2",
+        "--summary",
+        "all",
+        "--",
+        "--libbrotli-encoder",
+        "/tmp/missing"
+      ],
+      "exit_code": 1,
+      "expected_exit": 1,
+      "start_utc": "2026-10-24T20:00:49.101494+00:00",
+      "end_utc": "2026-10-24T20:00:49.153547+00:00",
+      "compile_lines": [
+        "Build Summary: 3/5 steps succeeded (1 failed)",
+        "   +- compile exe vort-br-planned-encode-bench ReleaseFast native cached 11ms MaxRSS:41M"
+      ]
+    },
+    {
+      "name": "zstd",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run-zstd-encode-bench",
+        "-Dcpu=native",
+        "-j2",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "start_utc": "2026-10-24T20:00:49.153564+00:00",
+      "end_utc": "2026-10-24T20:00:49.204669+00:00",
+      "compile_lines": [
+        "Build Summary: 5/5 steps succeeded",
+        "   +- compile exe vort-zstd-encode-bench ReleaseFast native cached 10ms MaxRSS:41M"
+      ]
+    }
+  ]
+}

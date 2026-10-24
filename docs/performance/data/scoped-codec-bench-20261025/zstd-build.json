@@ -1,0 +1,353 @@
+{
+  "status": "passed",
+  "head": "d42974835f3949139a356cc2f0b14e55709ea244",
+  "purpose": "private benchmark routing and tiny functional verification; not formal performance evidence",
+  "source_before": {
+    "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+    "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb",
+    "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "src/zstd.zig": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35",
+    "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f",
+    "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+    "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+    "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2"
+  },
+  "source_after": {
+    "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+    "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb",
+    "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "src/zstd.zig": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35",
+    "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f",
+    "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+    "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+    "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2"
+  },
+  "source_stable": true,
+  "compiled_input_content_stable": true,
+  "build": {
+    "command": [
+      "taskset",
+      "-c",
+      "2-7,10-15",
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build",
+      "run-zstd-encode-bench",
+      "-Dcpu=native",
+      "-j2",
+      "--verbose",
+      "--",
+      "--help"
+    ],
+    "exit_code": 0,
+    "source_before": {
+      "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+      "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+      "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb",
+      "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+      "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+      "src/zstd.zig": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35",
+      "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f",
+      "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+      "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+      "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2"
+    },
+    "source_after": {
+      "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+      "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+      "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb",
+      "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+      "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+      "src/zstd.zig": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35",
+      "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f",
+      "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+      "src/bitstream.zig": "b5b56410bd539b45abf520a546b393dd376cd7f1573c3d8777c8960cb68c293e",
+      "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2"
+    },
+    "source_stable": true,
+    "purpose": "private module routing verification, not formal performance"
+  },
+  "artifact": {
+    "path": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+    "sha256": "0a30f46e5f32cf28fc19a3121e506daad63f60ce0642ae3d4c151573c3ee8c7e",
+    "bytes": 10083224,
+    "purpose": "scoped routing validation, not performance evidence"
+  },
+  "helper_artifacts": [
+    {
+      "label": "native",
+      "manifest": "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-helper-cache/h/c62bb3fdcf54d30c0098ee6d8fdd5c97.txt",
+      "manifest_sha256": "61363a526ff03024f77e82fc2b651539869d82eaec04bb209694469bbb57349c",
+      "input_records": 980,
+      "unique_project_sources": 163,
+      "artifact": "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-helper-cache/o/48d253ef361ff4890be6cbfcdc78022a/zstd-scoped-samples-native",
+      "artifact_sha256": "2f15b121ac9e339b4ebfeee886453ddccefcba81370ba13bafce5e485db27b56",
+      "artifact_bytes": 16885229,
+      "cache_key": "48d253ef361ff4890be6cbfcdc78022a",
+      "elf_class": 2,
+      "elf_machine": 62,
+      "tests_passed": 3,
+      "verifier_exit_code": 0
+    },
+    {
+      "label": "x86",
+      "manifest": "/tmp/vort-scoped-codec-bench-20261025/zstd-build/x86-helper-cache/h/bc595bf27595efd48194e205c52f26d0.txt",
+      "manifest_sha256": "58eb51b8e9a3a3ed33e1407a25c59131979a37edd8d15feca094d16a8f722dc5",
+      "input_records": 979,
+      "unique_project_sources": 163,
+      "artifact": "/tmp/vort-scoped-codec-bench-20261025/zstd-build/x86-helper-cache/o/3d3859932d23651fecee0652edc096c7/zstd-scoped-samples-x86",
+      "artifact_sha256": "a5cc62b7570cd68786e96eeb3ec2663a8999a5ae9624e1c7c18801a079849453",
+      "artifact_bytes": 3476728,
+      "cache_key": "3d3859932d23651fecee0652edc096c7",
+      "elf_class": 1,
+      "elf_machine": 3,
+      "tests_passed": 3,
+      "verifier_exit_code": 0
+    }
+  ],
+  "tiny_cases": {
+    "artifact": {
+      "path": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+      "sha256": "0a30f46e5f32cf28fc19a3121e506daad63f60ce0642ae3d4c151573c3ee8c7e",
+      "bytes": 10083224,
+      "purpose": "scoped routing validation, not performance evidence"
+    },
+    "cases": [
+      {
+        "name": "level-policy",
+        "command": [
+          "taskset",
+          "-c",
+          "2-7,10-15",
+          "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+          "--path",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+          "--limit",
+          "50",
+          "--level",
+          "3",
+          "--iterations",
+          "1",
+          "--rounds",
+          "4",
+          "--libzstd",
+          "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+          "--csv",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/level-policy/samples.csv",
+          "--samples-json",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/level-policy/samples.json"
+        ],
+        "gate_command": [
+          "python3",
+          "tools/codec_bench/sample_gate.py",
+          "--samples-json",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/level-policy/samples.json",
+          "--manifest",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/manifest.json",
+          "--csv",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/level-policy/samples.csv",
+          "--executable",
+          "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+          "--require-explicit-references"
+        ],
+        "exit_code": 0,
+        "gate_exit_code": 0,
+        "settings": {
+          "level": 3,
+          "api": "level_policy",
+          "requested_strategy": null,
+          "requested_fast_acceleration": null,
+          "requested_native_selection": null,
+          "resolved_primary": {
+            "content_checksum": false,
+            "include_content_size": true,
+            "window_log": null,
+            "max_match_history_len": null,
+            "max_total_working_memory": null,
+            "selection": "auto",
+            "block_size_max": 131072,
+            "dictionary_id": 0,
+            "match_search_budget": 64,
+            "rep_beam_search": true,
+            "strategy": "auto",
+            "fast_acceleration": null,
+            "hq": null,
+            "control_profile_enabled": false,
+            "memory_profile_enabled": false
+          },
+          "internal_candidate_settings": "public_auto_level_policy",
+          "wire_header": {
+            "window_size": 50,
+            "content_size": 50,
+            "content_checksum": false,
+            "dictionary_id": 0
+          },
+          "reference": {
+            "api": "ZSTD_compress",
+            "level": 3,
+            "internal_parameters": "library_default_level_preset",
+            "wire_header": {
+              "window_size": 50,
+              "content_size": 50,
+              "content_checksum": false,
+              "dictionary_id": 0
+            }
+          }
+        },
+        "wires": {
+          "vort_bytes": 59,
+          "reference_bytes": 59,
+          "vort_sha256": "85dacd76e26576600efb33315194ce1256f5f169bad5e92b2420f6c61002fe6f",
+          "reference_sha256": "85dacd76e26576600efb33315194ce1256f5f169bad5e92b2420f6c61002fe6f"
+        },
+        "input_sha256": "c015fc1dbad6e716370de90ac855dc226235e6dfe263853a93bd4d9328f551e6",
+        "samples_sha256": "4701c105ddf6490475e2adc70a10225517e324194503caeb50a2573de1a97294",
+        "csv_sha256": "2830b7c9077ce1473e894085e5e5261d3efe379fd1736324280c7d8787d86e13",
+        "purpose": "routing functionality and sample arithmetic only",
+        "old_full_root_wire_settings_equal": true,
+        "old_report": "/tmp/vort-wide-bit-final-20261025/final-integration/zstd/samples.json"
+      },
+      {
+        "name": "native-selection",
+        "command": [
+          "taskset",
+          "-c",
+          "2-7,10-15",
+          "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+          "--path",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/synthetic-small-json-0.bin",
+          "--limit",
+          "50",
+          "--level",
+          "3",
+          "--iterations",
+          "1",
+          "--rounds",
+          "4",
+          "--libzstd",
+          "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+          "--csv",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-selection/samples.csv",
+          "--samples-json",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-selection/samples.json",
+          "--native-selection",
+          "fast_compressed"
+        ],
+        "gate_command": [
+          "python3",
+          "tools/codec_bench/sample_gate.py",
+          "--samples-json",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-selection/samples.json",
+          "--manifest",
+          "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/manifest.json",
+          "--csv",
+          "/tmp/vort-scoped-codec-bench-20261025/zstd-build/native-selection/samples.csv",
+          "--executable",
+          "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+          "--require-explicit-references"
+        ],
+        "exit_code": 0,
+        "gate_exit_code": 0,
+        "settings": {
+          "level": 3,
+          "api": "native_frame",
+          "requested_strategy": null,
+          "requested_fast_acceleration": null,
+          "requested_native_selection": "fast_compressed",
+          "resolved_primary": {
+            "content_checksum": false,
+            "include_content_size": true,
+            "window_log": null,
+            "max_match_history_len": null,
+            "max_total_working_memory": null,
+            "selection": "fast_compressed",
+            "block_size_max": 131072,
+            "dictionary_id": 0,
+            "match_search_budget": 512,
+            "rep_beam_search": false,
+            "strategy": "auto",
+            "fast_acceleration": null,
+            "hq": null,
+            "control_profile_enabled": false,
+            "memory_profile_enabled": false
+          },
+          "internal_candidate_settings": "resolved_primary",
+          "wire_header": {
+            "window_size": 50,
+            "content_size": 50,
+            "content_checksum": false,
+            "dictionary_id": 0
+          },
+          "reference": {
+            "api": "ZSTD_compress",
+            "level": 3,
+            "internal_parameters": "library_default_level_preset",
+            "wire_header": {
+              "window_size": 50,
+              "content_size": 50,
+              "content_checksum": false,
+              "dictionary_id": 0
+            }
+          }
+        },
+        "wires": {
+          "vort_bytes": 59,
+          "reference_bytes": 59,
+          "vort_sha256": "85dacd76e26576600efb33315194ce1256f5f169bad5e92b2420f6c61002fe6f",
+          "reference_sha256": "85dacd76e26576600efb33315194ce1256f5f169bad5e92b2420f6c61002fe6f"
+        },
+        "input_sha256": "c015fc1dbad6e716370de90ac855dc226235e6dfe263853a93bd4d9328f551e6",
+        "samples_sha256": "f82657306feb9f453b3bead47a89004c395ababb2039f65c61374f4c779300ce",
+        "csv_sha256": "c4dbb9e68cc17f847c51c2aeded78f55e695662619621341c3d57525bcf29e9e",
+        "purpose": "routing functionality and sample arithmetic only"
+      }
+    ]
+  },
+  "compiler_input_binding": {
+    "bindings": [
+      {
+        "label": "benchmark",
+        "manifest_path": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/h/7aadeaf21171efa04e553356e8c459fe.txt",
+        "manifest_sha256": "1f0b5609edd1f2f128a0cc74686b9193db203d93b5c28db4a2e576999e149e74",
+        "input_records": 982,
+        "unique_paths": 979,
+        "unique_project_sources": 166,
+        "artifact": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/8c6318fb7d9f7e2dd532169e844b0a2e/vort-zstd-encode-bench",
+        "artifact_sha256": "0a30f46e5f32cf28fc19a3121e506daad63f60ce0642ae3d4c151573c3ee8c7e",
+        "cache_key": "8c6318fb7d9f7e2dd532169e844b0a2e",
+        "verifier_exit_code": 0,
+        "verifier_sha256": "e781e8d9e735466fbb6af3bdcd9019bed359a1b7e54757da87773a5f0f16be10",
+        "excluded_root_deflate_external_crypto_and_brotli_object": true,
+        "brotli_named_inputs": [
+          "/home/passchaos/project-z/vort-scoped-bench/src/br/fast_bit_reader.zig"
+        ],
+        "brotli_named_input_reason": "src/huffman.zig:1030 test-local import of br/fast_bit_reader.zig; manifest membership does not establish emitted/executed function bodies"
+      },
+      {
+        "label": "zstd-x2-object",
+        "manifest_path": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/h/a655d4bdff99b4652c588e84523fcac9.txt",
+        "manifest_sha256": "e60d4701a270defc59fdf20373dc09d026bd5faa1567e1d6369e685df7e2be12",
+        "input_records": 551,
+        "unique_paths": 550,
+        "unique_project_sources": 5,
+        "artifact": "/home/passchaos/project-z/vort-scoped-bench/.zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o",
+        "artifact_sha256": "26be1ede31f805d22dbd67d189d4de0abc14197173f15fdd6b21f194b1d17845",
+        "cache_key": "33e32ed78a23709c26493c240025d76d",
+        "verifier_exit_code": 0,
+        "verifier_sha256": "e781e8d9e735466fbb6af3bdcd9019bed359a1b7e54757da87773a5f0f16be10",
+        "excluded_root_deflate_external_crypto_and_brotli_object": true,
+        "brotli_named_inputs": [],
+        "brotli_named_input_reason": "src/huffman.zig:1030 test-local import of br/fast_bit_reader.zig; manifest membership does not establish emitted/executed function bodies"
+      }
+    ],
+    "archive_sha256": "cb4bb24321696ab317fb1932fa1597dab2b39dfa4bb6461742743754123b21fe",
+    "union_project_sources": 167
+  },
+  "previous_full_baseline": "/tmp/vort-current-encode-baseline-20261025/zstd.json",
+  "previous_full_baseline_sha256": "03c533b03b55085d41cdd94eb85d6127bb05ea74646d4e8510f1e80ca1f59375",
+  "slow_14_case_baseline_rerun": false,
+  "files_modified_by_this_verification": []
+}
