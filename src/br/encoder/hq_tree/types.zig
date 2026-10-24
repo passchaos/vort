@@ -3,8 +3,14 @@ pub const invalid = std.math.maxInt(u32);
 pub const hash_size: usize = 1 << 16;
 pub const store_lookahead: usize = 128;
 pub const max_input_len: usize = 1 << 24;
-pub const max_window_len: usize = max_input_len - 16;
-pub const max_source_len: usize = 2 * max_input_len;
+pub const max_standard_window_len: usize = max_input_len - 16;
+pub const max_window_len: usize = (1 << 30) - 16;
+/// Large Window history plus one format-limited meta-block still fits safely
+/// inside a u32 epoch; absolute stream positions remain u64.
+pub const max_source_len: usize = max_window_len + max_input_len;
+comptime {
+    std.debug.assert(max_source_len < (1 << 31) - 4);
+}
 
 pub const Node = struct {
     position: u32 = invalid,

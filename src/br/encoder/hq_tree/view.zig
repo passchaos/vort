@@ -9,13 +9,15 @@ pub const Metadata = struct {
     input_len: usize,
     total_len: usize,
     window_len: usize,
+    format: @import("../distance.zig").Format = .standard,
 };
 
 pub fn validate(source: Source) !Metadata {
+    try source.validate();
     const total = try source.checkedTotalLen();
     const end = try source.absolutePosition(source.input.len);
     if (source.history.len > source.frame_offset or source.history.len > source.window_len or source.window_len == 0 or source.window_len > types.max_window_len or source.input.len > types.max_input_len or total > types.max_source_len) return error.InvalidBlockPlan;
-    return .{ .begin = source.frame_offset - source.history.len, .input_begin = source.frame_offset, .end = end, .history_len = source.history.len, .input_len = source.input.len, .total_len = total, .window_len = source.window_len };
+    return .{ .begin = source.frame_offset - source.history.len, .input_begin = source.frame_offset, .end = end, .history_len = source.history.len, .input_len = source.input.len, .total_len = total, .window_len = source.window_len, .format = source.format };
 }
 pub fn spanAt(source: Source, metadata: Metadata, absolute: u64) []const u8 {
     const position: usize = @intCast(absolute - metadata.begin);

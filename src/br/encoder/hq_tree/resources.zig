@@ -6,9 +6,9 @@ pub const Need = struct { metadata: view.Metadata, heads2: usize, heads3: usize,
 
 pub fn need(source: Source, search: types.Search) !Need {
     const metadata = try view.validate(source);
-    const active = @min(metadata.total_len, metadata.window_len + 1);
+    const active = @min(metadata.total_len, try add(metadata.window_len, 1));
     var nodes: usize = if (active >= 2) 1 else 0;
-    while (nodes != 0 and nodes < active) nodes *= 2;
+    while (nodes != 0 and nodes < active) nodes = try multiply(nodes, 2);
     return .{ .metadata = metadata, .heads2 = if (metadata.total_len >= 2) types.hash_size else 0, .heads3 = if (metadata.total_len >= 3) types.hash_size else 0, .heads4 = if (metadata.total_len >= 4) types.hash_size else 0, .nodes = nodes, .candidates = if (metadata.input_len >= 2) @min(metadata.input_len - 1, @as(usize, search.search_depth) * 2 + 1) else 0 };
 }
 pub fn sizes(needed: Need) ![5]usize {

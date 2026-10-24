@@ -89,7 +89,8 @@ pub const OwnedMatcher = struct {
         self.detachSource();
         const search = try types.Search.from(options);
         var needed = try resources.need(source, search);
-        if (needed.metadata.input_begin != self.cursor or needed.metadata.window_len != self.metadata.window_len or needed.metadata.begin < self.metadata.begin) return error.InvalidBlockPlan;
+        if (needed.metadata.input_begin != self.cursor or needed.metadata.window_len != self.metadata.window_len or needed.metadata.format != self.metadata.format or needed.metadata.begin < self.metadata.begin) return error.InvalidBlockPlan;
+        const normalize_by = try normalizationAmount(self.epoch, needed.metadata);
         needed.nodes = @max(needed.nodes, self.cycle);
         const selected_profile = resolveProfile(options, profile);
         try resources.check(try resources.growth(self.allocationBytes(), try resources.sizes(needed)), search.max_working_memory);
@@ -101,7 +102,7 @@ pub const OwnedMatcher = struct {
         self.profile = selected_profile;
         self.candidate_capacity = needed.candidates;
         self.bound = true;
-        self.normalizeIfNeeded();
+        self.normalizeIfNeeded(normalize_by);
         self.stitch();
     }
 
@@ -228,10 +229,8 @@ pub const OwnedMatcher = struct {
         }
         self.cycle = next_cycle;
     }
-    fn normalizeIfNeeded(self: *OwnedMatcher) void {
-        if (self.metadata.end - self.epoch < @as(u64, types.invalid) - types.max_source_len) return;
-        const difference = self.metadata.begin - self.epoch;
-        const sub: u32 = @intCast(difference);
+    fn normalizeIfNeeded(self: *OwnedMatcher, amount: ?u32) void {
+        const sub = amount orelse return;
         for (self.heads2) |*reference| reference.* = normalized(reference.*, sub);
         for (self.heads3) |*reference| reference.* = normalized(reference.*, sub);
         for (self.heads4) |*reference| reference.* = normalized(reference.*, sub);
@@ -366,10 +365,23 @@ pub const OwnedMatcher = struct {
     }
 };
 
+/// Validate the relative checkpoint before allocating or changing the ring.
+/// Normalization leaves at most history + one meta-block inside the new epoch.
+fn normalizationAmount(epoch: u64, metadata: view.Metadata) !?u32 {
+    if (metadata.begin < epoch or metadata.end < epoch) return error.InvalidBlockPlan;
+    if (metadata.end - epoch < @as(u64, types.invalid) - types.max_source_len) return null;
+    const amount = std.math.cast(u32, metadata.begin - epoch) orelse return error.InvalidBlockPlan;
+    return amount;
+}
+
 fn normalized(reference: u32, sub: u32) u32 {
     return if (reference == types.invalid or reference < sub) types.invalid else reference - sub;
 }
 fn resolveProfile(options: anytype, profile: ?*HqProfile) ?*HqProfile {
     if (profile != null) return profile;
     return if (@hasField(@TypeOf(options), "profile")) options.profile else null;
+}
+
+test {
+    _ = @import("hq_tree/large_window_tests.zig");
 }
