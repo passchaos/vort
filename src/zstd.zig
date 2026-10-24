@@ -41251,7 +41251,7 @@ test "zstd large sequence plans select a larger FSE table" {
     for (&values, 0..) |*value, i| value.* = 1 + i % 8;
     const plan = (try planCompressedSequenceValues(&values, .literal)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(u8, 7), plan.accuracy_log);
-    const state_count = @as(usize, 1) << @as(u6, @intCast(plan.accuracy_log));
+    const state_count = @as(usize, 1) << @as(std.math.Log2Int(usize), @intCast(plan.accuracy_log));
     try std.testing.expect(plan.initial_state < state_count);
     for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < state_count);
 }
