@@ -23,6 +23,7 @@ pub fn planReuse(records: *std.ArrayList(Record), gpa: std.mem.Allocator, source
         source.block.len > 128 * 1024 or
         (parameters.strategy == .optimal and source.block.len > controls.optimal_block_limit))
         return error.InvalidBlockPlan;
+    try source.validate();
     records.clearRetainingCapacity();
     errdefer records.clearRetainingCapacity();
     if (parameters.profile) |profile| {

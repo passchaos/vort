@@ -6,7 +6,9 @@ Standard-format output remains the default.
 
 `PlannedEncodeOptions.large_window` and
 `PlannedStreamChunksOptions.large_window` explicitly select the Large Window
-extension. The option requires HQ quality 10 or 11. Standard windows remain
+extension. This document describes its HQ quality 10/11 path; the
+[general Large Window contract](brotli-general-large-window.md) covers the
+subsequent q0...q11, legacy and stored expansion. Standard windows remain
 10...24; Large Window accepts 10...30. Enabling the extension at a width below
 25 still emits the extension and uses its distance format. The container's
 existing default window does not change.

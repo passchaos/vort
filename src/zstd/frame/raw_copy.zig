@@ -23,7 +23,20 @@ pub inline fn copy(destination: []u8, source: []const u8, large_frame: bool) voi
     copyCached(destination, source);
 }
 
-noinline fn copyCached(destination: []u8, source: []const u8) align(256) void {
+const copyCached = if (builtin.target.ofmt == .wasm)
+    copyCachedPortable
+else
+    copyCachedNative;
+
+noinline fn copyCachedNative(destination: []u8, source: []const u8) align(256) void {
+    return copyCachedImpl(destination, source);
+}
+
+noinline fn copyCachedPortable(destination: []u8, source: []const u8) void {
+    return copyCachedImpl(destination, source);
+}
+
+inline fn copyCachedImpl(destination: []u8, source: []const u8) void {
     std.debug.assert(destination.len == source.len);
     // Full raw blocks are large enough for ERMSB startup to amortize, and the
     // instruction avoids compiler-rt's source-alignment prologue. Keep smaller

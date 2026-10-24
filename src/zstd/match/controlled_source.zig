@@ -1,5 +1,6 @@
 const std = @import("std");
 const controls = @import("../encode/controls.zig");
+const history_limit = @import("history_limit.zig");
 
 pub const Record = struct {
     literal_len: usize,
@@ -60,10 +61,22 @@ pub const Source = struct {
         if (position > self.block.len) return error.InvalidBlockPlan;
         return std.math.add(usize, try self.checkedPrefixLen(), position) catch error.IntegerOverflow;
     }
-    pub fn initChecked(dictionary: []const u8, history: []const u8, block: []const u8, window_len: usize) error{IntegerOverflow}!Source {
+    pub fn initChecked(dictionary: []const u8, history: []const u8, block: []const u8, window_len: usize) history_limit.Error!Source {
+        // Prove the retained geometry from lengths before forming any suffix
+        // slice. Arithmetic errors retain priority over format/window bounds.
+        const history_len = @min(history.len, window_len);
+        const dictionary_len = @min(dictionary.len, window_len - history_len);
+        const prefix = std.math.add(usize, dictionary_len, history_len) catch return error.IntegerOverflow;
+        _ = std.math.add(usize, prefix, block.len) catch return error.IntegerOverflow;
+        _ = try history_limit.validate(window_len, prefix, block.len);
         const source = init(dictionary, history, block, window_len);
-        _ = try source.checkedTotalLen();
+        try source.validate();
         return source;
+    }
+    pub fn validate(self: Source) history_limit.Error!void {
+        const prefix = try self.checkedPrefixLen();
+        _ = try self.checkedTotalLen();
+        _ = try history_limit.validate(self.window_len, prefix, self.block.len);
     }
     pub fn byteAtChecked(self: Source, position: usize) error{ IntegerOverflow, InvalidBlockPlan }!u8 {
         if (position >= try self.checkedTotalLen()) return error.InvalidBlockPlan;

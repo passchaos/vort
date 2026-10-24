@@ -1,7 +1,8 @@
 const std = @import("std");
 const Source = @import("../controlled_source.zig").Source;
+const history_limit = @import("../history_limit.zig");
 
-pub const max_prefix_len: usize = 64 * 1024 * 1024;
+pub const max_prefix_len: usize = history_limit.max_history_len;
 pub const max_block_len: usize = 128 * 1024;
 
 pub const Metadata = struct { prefix: usize, total: usize };
@@ -10,8 +11,7 @@ pub fn validate(source: Source) !Metadata {
     // Checked slice arithmetic precedes all pointer access and heap requests.
     const prefix = try source.checkedPrefixLen();
     const total = try source.checkedTotalLen();
-    if (source.window_len == 0 or source.window_len > max_prefix_len or prefix > max_prefix_len or source.block.len > max_block_len or total >= std.math.maxInt(u32))
-        return error.InvalidBlockPlan;
+    try source.validate();
     return .{ .prefix = prefix, .total = total };
 }
 

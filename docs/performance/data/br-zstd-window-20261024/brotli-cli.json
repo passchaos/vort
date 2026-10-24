@@ -1,0 +1,162 @@
+{
+  "phase": "brotli-general-window-cli-independent-validation",
+  "time_before_utc": "2026-10-24T12:46:56.678322+00:00",
+  "git_head": "125bdbf00b46afc5d8f427cfd4c5f76852a5790d",
+  "source_count": 1770,
+  "source_sha256": "4f4be7aafa6247541b54b74498befe1bc317c89b7198685365ffa50abc21db8b",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br-general-window-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "reference_round_trips": 35,
+    "extension_header_checks": 27,
+    "non_hq_policy_checks": 10,
+    "profile_wire_checks": 10,
+    "metadata_checks": 33,
+    "standard_default_wire_checks": 2,
+    "stored_positional_wire_checks": 1,
+    "exact_total_cap_checks": 2,
+    "below_total_cap_checks": 2,
+    "rejected_output_preserved": 18,
+    "same_path_checks": 4
+  },
+  "status": "passed-independent-brotli-bound-to-before-snapshot",
+  "time_after_utc": "2026-10-24T12:47:40.977038+00:00",
+  "source_equal": false,
+  "source_delta": {
+    "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig": {
+      "before": "8e5fe010e583b809a654139a9c82c1875c62254b6f1a74d4b0e991bcf599eca3",
+      "after": "0f46eb11cb6cf6a9bc7057061126994388242ccf6c4785c6adb018e18b94de3b"
+    }
+  },
+  "gate_report": {
+    "reference_round_trips": 35,
+    "extension_header_checks": 27,
+    "non_hq_policy_checks": 10,
+    "profile_wire_checks": 10,
+    "metadata_checks": 33,
+    "standard_default_wire_checks": 2,
+    "stored_positional_wire_checks": 1,
+    "exact_total_cap_checks": 2,
+    "below_total_cap_checks": 2,
+    "rejected_output_preserved": 18,
+    "same_path_checks": 4,
+    "rows": [
+      {
+        "command": "encode-br-file",
+        "quality": null,
+        "window_bits": 25,
+        "bytes": 51,
+        "peak_requested_bytes": 542
+      },
+      {
+        "command": "encode-br-file",
+        "quality": 0,
+        "window_bits": 16,
+        "bytes": 64,
+        "peak_requested_bytes": 4064
+      },
+      {
+        "command": "encode-br-file",
+        "quality": 1,
+        "window_bits": 25,
+        "bytes": 56,
+        "peak_requested_bytes": 2439
+      },
+      {
+        "command": "encode-br-file",
+        "quality": 5,
+        "window_bits": 30,
+        "bytes": 46,
+        "peak_requested_bytes": 689472
+      },
+      {
+        "command": "encode-br-file",
+        "quality": 11,
+        "window_bits": 25,
+        "bytes": 46,
+        "peak_requested_bytes": 689472
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": null,
+        "window_bits": 25,
+        "bytes": 52,
+        "peak_requested_bytes": 1971
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 0,
+        "window_bits": 16,
+        "bytes": 64,
+        "peak_requested_bytes": 4324
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 1,
+        "window_bits": 25,
+        "bytes": 56,
+        "peak_requested_bytes": 2767
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 5,
+        "window_bits": 30,
+        "bytes": 46,
+        "peak_requested_bytes": 689622
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 11,
+        "window_bits": 25,
+        "bytes": 46,
+        "peak_requested_bytes": 689622
+      }
+    ],
+    "reference_brotli_version": 16777225
+  },
+  "gate_expected_matches": true,
+  "build_exit_code": 0,
+  "parser_tests_passed": 18,
+  "initial_cache_key": "fdca596c70fbb49d05725c19120bdb50",
+  "compile_manifest": ".zig-cache/h/fdca596c70fbb49d05725c19120bdb50.txt",
+  "binary": {
+    "cache_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/6aee3e124802b7b6c4aa871f0c48475e/vort-br-hq-cli-probe",
+    "sha256": "599b6f5bd4177a4e16f3a94d9b4098228ac64fdaed6e9be810dcc488d4f271aa",
+    "output_cache_key": "6aee3e124802b7b6c4aa871f0c48475e"
+  },
+  "compile_binding": {
+    "records": 1946,
+    "unique_inputs": 1944,
+    "prefix_counts": {
+      "0": 1129,
+      "1": 813,
+      "2": 2
+    },
+    "mismatches": [
+      "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig",
+      "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig"
+    ],
+    "uncovered": []
+  },
+  "strict_binding": false,
+  "source_delta_actual_input_paths": [
+    "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig"
+  ],
+  "precompile_snapshot_binding": {
+    "verified": true,
+    "unique_inputs": 1944,
+    "issues": [],
+    "changed_input_resolved_from_original_zip": "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig",
+    "changed_input_original_native_siphash": "de79ca0f82c8ad7c51b890472079fedd",
+    "current_all_source_binding": false
+  },
+  "scope_note": "Brotli and CLI sources are unchanged. Concurrent Zstd source changes affect a compiler-observed namespace file; the executed binary is bound to its exact precompile source snapshot, not claimed identical to all current live sources. No repeat Brotli matrix or Zstd full gate was run.",
+  "finalized_utc": "2026-10-24T12:48:29.431806+00:00"
+}

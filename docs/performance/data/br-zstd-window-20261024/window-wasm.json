@@ -1,0 +1,67 @@
+{
+  "actual_public_roundtrips": 4,
+  "after_manifest_sha256": "ff5a7a46b93e8d2d50c064d6a9fdcc0f11b5e2926fc794bd6d0a9b6a82eda3de",
+  "before_manifest_sha256": "ff5a7a46b93e8d2d50c064d6a9fdcc0f11b5e2926fc794bd6d0a9b6a82eda3de",
+  "br_source_sha256": "00dabc0ba34ece208bee3a39ec40d512bf6593a9929de3bb23638e10f3b41ef2",
+  "build_steps": "7/7",
+  "command": "zig build -fno-incremental test-br-zstd-window-wasm -Doptimize=ReleaseFast --summary all --verbose",
+  "compiled_source_changes": [],
+  "compiler_manifest": {
+    "computed_artifact_key": "84401047e5e9f79172b71c41e1c9fdcf",
+    "content_siphash_mismatches": 0,
+    "matches_actual_wasm_directory": true,
+    "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/08145735997d9a8d5558d28741032f5c.txt",
+    "records": 1942,
+    "sha256": "6b81e226be1187b230730d007626cb29bd9da406fabe6e87840a4fb820835fba"
+  },
+  "exports_verified": 4,
+  "node_result": {
+    "actual_public_roundtrips": 4,
+    "brotli": [
+      {
+        "large_window": 16,
+        "peak_requested_bytes": "4133",
+        "quality": 0
+      },
+      {
+        "large_window": 30,
+        "peak_requested_bytes": "688687",
+        "quality": 4
+      }
+    ],
+    "brotli_strict_reject_and_allow_decode_checked": true,
+    "exact_total_and_below_and_zero_checked": true,
+    "imports": [],
+    "node_version": "v26.10.0",
+    "pointer_bits": 32,
+    "wasi_host": null,
+    "wasm_sha256": "05dc77a4cc2c2541030dde44c079ebd8ee3b52fcc60b0934d4fb920dea189577",
+    "zstd": {
+      "advertised_window_bytes": "2199023255552",
+      "content_size_omitted": true,
+      "effective_match_history_bytes": "134217728",
+      "final_live_requested_bytes": "0",
+      "peak_requested_bytes": "1496",
+      "window_log": 41
+    },
+    "zstd_raw_or_rle": {
+      "advertised_window_bytes": "2199023255552",
+      "final_live_requested_bytes": "0",
+      "peak_requested_bytes": "1574",
+      "retained_history_bytes": "0"
+    }
+  },
+  "node_smokes": 3,
+  "owned_sources": {
+    "src/tests/br_zstd_window_wasm.zig": "fc2d45bc2cc42dd14fd078e12b615ea1a92e871e2d45433f20914b556b71fe73",
+    "tools/window_wasm_gate.js": "b8366939ffbf847a428f7b6fc47f6453ac32cf4431aeb2753416989bb582ecaa"
+  },
+  "prior_stages": "failed-stage-1.json and failed-stage-2.json preserve genuine production compile failures; neither is counted as a pass",
+  "scope": "requested-heap metrics are actual public profile values; advertised 41-bit window is distinct from effective match history and bytes physically retained",
+  "status": "passed",
+  "timestamp_utc": "2026-10-24T13:30:54.997146+00:00",
+  "wasm_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/84401047e5e9f79172b71c41e1c9fdcf/vort-br-zstd-window-wasm.wasm",
+  "wasm_sha256": "05dc77a4cc2c2541030dde44c079ebd8ee3b52fcc60b0934d4fb920dea189577",
+  "wide_source_changes": {},
+  "zstd_source_sha256": "2c6348af5bb4853d395c70a80f6ea4814c105c610982483e31db7f09acbfbbb8"
+}

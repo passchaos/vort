@@ -1,0 +1,55 @@
+{
+  "head": "bd8b1ddbecf9c1d8945ebaa637fc7d739a964e5d",
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "check",
+        "-Doptimize=Debug",
+        "-j8",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "check",
+      "seconds": 394.70766858407296
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-general-large-window",
+        "test-zstd-large-history",
+        "test-requested-heap-budget",
+        "test-br-zstd-window-wasm",
+        "-Doptimize=ReleaseFast",
+        "-j4",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "native-contracts",
+      "seconds": 80.4393379399553
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-general-large-window",
+        "test-zstd-large-history",
+        "-Dtarget=x86-linux-musl",
+        "-Doptimize=ReleaseFast",
+        "-j4",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "x86-contracts",
+      "seconds": 82.04236271278933
+    }
+  ],
+  "utc": "2026-10-24T14:40:33.398314+00:00"
+}

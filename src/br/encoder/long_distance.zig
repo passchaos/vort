@@ -1,5 +1,6 @@
 const std = @import("std");
 const command_plan = @import("command_plan.zig");
+const encoder_distance = @import("distance.zig");
 
 pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
@@ -34,6 +35,10 @@ pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const 
     );
 }
 
+pub fn augmentAllocWithMaxDistanceForFormat(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize, format: encoder_distance.Format) !?[]command_plan.Command {
+    return augmentAllocWithHistoryAndMaxDistanceForFormat(allocator, "", input, commands, max_backward_distance, format);
+}
+
 /// Extend a block-local command plan with matches into retained bytes from the
 /// same Brotli stream. `history` must be the suffix immediately preceding
 /// `input`; bytes older than `max_backward_distance` are ignored. The returned
@@ -46,11 +51,28 @@ pub fn augmentAllocWithHistoryAndMaxDistance(
     commands: []const command_plan.Command,
     max_backward_distance: usize,
 ) !?[]command_plan.Command {
-    if (max_backward_distance < min_distance or max_backward_distance > max_configurable_distance)
+    return augmentAllocWithHistoryAndMaxDistanceForFormat(allocator, history, input, commands, max_backward_distance, .standard);
+}
+
+/// Large Window accepts the advertised safe distance, then sizes the existing
+/// sampled predecessor ring from actual reachable input/history. Standard
+/// calls retain their prior validation and sampling exactly.
+pub fn augmentAllocWithHistoryAndMaxDistanceForFormat(
+    allocator: std.mem.Allocator,
+    history: []const u8,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    max_backward_distance: usize,
+    format: encoder_distance.Format,
+) !?[]command_plan.Command {
+    const limit = if (format == .standard) max_configurable_distance else encoder_distance.safe_max_distance;
+    if (max_backward_distance < min_distance or max_backward_distance > limit)
         return error.InvalidBlockPlan;
     const active_history = history[history.len - @min(history.len, max_backward_distance) ..];
     const combined_len = std.math.add(usize, active_history.len, input.len) catch
         return error.IntegerOverflow;
+    if (format == .large_window and combined_len > std.math.maxInt(i32))
+        return error.InvalidBlockPlan;
     if (input.len < min_match or combined_len - min_match < min_distance or
         commands.len == 0)
     {

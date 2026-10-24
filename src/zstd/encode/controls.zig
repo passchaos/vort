@@ -21,6 +21,10 @@ pub const Profile = struct {
     controls_used: bool = false,
     resolved_strategy: Strategy = .auto,
     fast_acceleration: u32 = 1,
+    /// Explicit window configuration, separate from a single-segment header.
+    requested_window_size: ?u64 = null,
+    /// Policy intersection, not the number of history bytes already retained.
+    effective_match_history_len: usize = 0,
     positions_tested: u64 = 0,
     short_hash_probes: u64 = 0,
     long_hash_probes: u64 = 0,
@@ -99,9 +103,15 @@ pub const Profile = struct {
     pub fn recordPeakWorkingMemory(self: *Profile, bytes: usize) void {
         self.peak_working_memory = @max(self.peak_working_memory, bytes);
     }
+    pub fn recordWindowPolicy(self: *Profile, requested: ?u64, effective: usize) void {
+        self.requested_window_size = requested;
+        self.effective_match_history_len = effective;
+    }
     pub fn merge(self: *Profile, other: Profile) void {
         self.available = self.available or other.available;
         self.controls_used = self.controls_used or other.controls_used;
+        if (other.effective_match_history_len != 0)
+            self.recordWindowPolicy(other.requested_window_size, other.effective_match_history_len);
         if (other.controls_used) {
             self.resolved_strategy = other.resolved_strategy;
             self.fast_acceleration = other.fast_acceleration;
@@ -207,6 +217,10 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
         .fast_acceleration = options.fast_acceleration,
         .control_profile = options.control_profile,
     };
+    if (@hasField(NativeOptions, "max_total_working_memory"))
+        native.max_total_working_memory = if (@hasField(@TypeOf(options), "max_total_working_memory")) options.max_total_working_memory else null;
+    if (@hasField(NativeOptions, "memory_profile"))
+        native.memory_profile = if (@hasField(@TypeOf(options), "memory_profile")) options.memory_profile else null;
     if (@hasField(NativeOptions, "hq")) {
         native.hq = hqField(options);
     } else if (hqField(options) != null or isHq(native.strategy)) return error.InvalidBlockPlan;

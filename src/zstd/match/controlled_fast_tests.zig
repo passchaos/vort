@@ -243,7 +243,7 @@ test "Zstd controlled fast rejects invalid controls before altering retained rec
     var bad_source = source;
     bad_source.window_len = 0;
     try std.testing.expectError(error.InvalidBlockPlan, fast.planReuse(&records, a, bad_source, .{ .strategy = .fast }));
-    bad_source.window_len = 64 * 1024 * 1024 + 1;
+    bad_source.window_len = @import("history_limit.zig").max_history_len + 1;
     try std.testing.expectError(error.InvalidBlockPlan, fast.planReuse(&records, a, bad_source, .{ .strategy = .double_fast }));
     try std.testing.expectEqual(@as(usize, 1), records.items.len);
     try std.testing.expectEqual(@as(usize, 6), records.items[0].match_end);

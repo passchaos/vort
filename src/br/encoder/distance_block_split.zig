@@ -3,6 +3,7 @@ const huffman = @import("../../huffman.zig");
 const adaptive_block_split = @import("adaptive_block_split.zig");
 const block_split_plan = @import("block_split_plan.zig");
 const histogram_model = @import("histogram_model.zig");
+const distance = @import("distance.zig");
 
 const alphabet_size: usize = 79;
 const min_block_symbols: usize = 512;
@@ -98,6 +99,44 @@ pub fn chooseAdaptiveAlloc(
     options: AdaptiveOptions,
 ) !?block_split_plan.Plan {
     return AdaptiveSplitter.splitAlloc(allocator, symbols, options);
+}
+
+/// NPOSTFIX=0 / NDIRECT=15 discovery uses 79 symbols in standard streams,
+/// while Large Window permits 88 signed-safe symbols. The legacy proposal
+/// scorer remains an optional bounded search; the adaptive path can represent
+/// the whole active shape and the complete writer owns the wire alphabet.
+pub fn chooseAdaptiveAllocWithFormat(
+    allocator: std.mem.Allocator,
+    symbols: []const u16,
+    options: AdaptiveOptions,
+    format: distance.Format,
+) !?block_split_plan.Plan {
+    if (format == .standard) return chooseAdaptiveAlloc(allocator, symbols, options);
+    const capacity = comptime distance.Parameters.init(0, 15).activeAlphabetSize(.large_window);
+    const LargeSplitter = adaptive_block_split.Splitter(u16, capacity);
+    return LargeSplitter.splitAlloc(allocator, symbols, .{
+        .type_count = options.type_count,
+        .iterations = options.iterations,
+        .switch_cost_q8 = options.switch_cost_q8,
+        .min_symbols = options.min_symbols,
+        .max_symbols = options.max_symbols,
+        .scratch_budget_bytes = options.scratch_budget_bytes,
+    });
+}
+
+test "Br general large window adaptive distance discovery accepts the whole active alphabet" {
+    var symbols: [2048]u16 = undefined;
+    for (symbols[0..1024], 0..) |*symbol, index| symbol.* = @intCast(index % 2);
+    const active_size = comptime distance.Parameters.init(0, 15).activeAlphabetSize(.large_window);
+    for (symbols[1024..], 0..) |*symbol, index| symbol.* = @intCast(active_size - 2 + index % 2);
+    const options: AdaptiveOptions = .{ .type_count = 2, .iterations = 1 };
+    try std.testing.expectError(error.InvalidSymbol, chooseAdaptiveAllocWithFormat(std.testing.allocator, &symbols, options, .standard));
+    const plan = (try chooseAdaptiveAllocWithFormat(std.testing.allocator, &symbols, options, .large_window)) orelse return error.TestExpectedEqual;
+    defer plan.deinit(std.testing.allocator);
+    try plan.validate(symbols.len);
+    try std.testing.expectEqual(@as(usize, 2), plan.blockCount());
+    symbols[symbols.len - 1] = active_size;
+    try std.testing.expectError(error.InvalidSymbol, chooseAdaptiveAllocWithFormat(std.testing.allocator, &symbols, options, .large_window));
 }
 
 pub fn eligible(symbol_count: usize) bool {

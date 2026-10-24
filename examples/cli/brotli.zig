@@ -84,3 +84,26 @@ fn writeAtomic(init: std.process.Init, path: []const u8, data: []const u8) !void
     try writer.interface.flush();
     try atomic.replace(init.io);
 }
+
+pub fn encodeStoredFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const options = try (try controls.parseStored(args)).storedOptions();
+    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+    defer init.gpa.free(input);
+    const encoded = try vort.br.encodeStoredStreamWithOptionsAlloc(init.gpa, input, options);
+    defer init.gpa.free(encoded);
+    try writeAtomic(init, output_path, encoded);
+    try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, input.len, output_path });
+}
+
+pub fn encodeStoredHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const first = args.next();
+    const option_first = if (first) |value| controls.isStoredControlArgument(value) else false;
+    const input = if (option_first) "" else first orelse "";
+    const options = try (try controls.parseStoredWithFirst(args, if (option_first) first else null)).storedOptions();
+    const encoded = try vort.br.encodeStoredStreamWithOptionsAlloc(init.gpa, input, options);
+    defer init.gpa.free(encoded);
+    for (encoded) |byte| try stdout.print("{x:0>2}", .{byte});
+    try stdout.writeByte('\n');
+}

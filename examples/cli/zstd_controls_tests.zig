@@ -103,3 +103,60 @@ test "Zstd CLI level helper rejects native-only selection arguments" {
     const parsed = try parse(&.{"literal_only"});
     try std.testing.expectError(error.InvalidBlockPlan, parsed.frameOptionsWithProfile(null));
 }
+
+test "Zstd CLI window and total-memory arguments parse independently of strategies" {
+    const a = try parse(&.{ "--window-log=41", "--max-match-history-len=1024", "--max-total-memory=0", "--memory-profile" });
+    const b = try parse(&.{ "--memory-profile", "--max-total-memory", "0", "--max-match-history-len", "1024", "--window-log", "41" });
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expectEqual(@as(?u6, 41), a.window_log);
+    try std.testing.expectEqual(@as(?usize, 1024), a.max_match_history_len);
+    try std.testing.expectEqual(@as(?usize, 0), a.max_total_memory);
+    try std.testing.expect(a.memory_profile and a.strategy == null and !a.hasHqOverrides());
+    inline for (.{ "--window-log", "--max-match-history-len=1024", "--max-total-memory=0", "--memory-profile" }) |flag|
+        try std.testing.expect(cli.isControlArgument(flag));
+}
+
+test "Zstd CLI window and total-memory parsing rejects duplicate and malformed flags" {
+    inline for (.{ "--window-log=10", "--max-match-history-len=1024", "--max-total-memory=10", "--memory-profile" }) |flag|
+        try std.testing.expectError(error.DuplicateZstdOption, parse(&.{ flag, flag }));
+    try std.testing.expectError(error.MissingZstdOptionValue, parse(&.{"--window-log"}));
+    try std.testing.expectError(error.MissingZstdOptionValue, parse(&.{"--max-total-memory"}));
+    try std.testing.expectError(error.InvalidCharacter, parse(&.{"--max-total-memory="}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--max-match-history-len=-1"}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--window-log=64"}));
+}
+
+test "Zstd CLI window options map through native and level APIs without selecting controls" {
+    const requested = try parse(&.{ "--window-log=41", "--max-match-history-len=1024" });
+    const native = try requested.resolved();
+    const frame = try requested.frameOptionsWithProfile(null);
+    try std.testing.expectEqual(@as(?u6, 41), native.window_log);
+    try std.testing.expectEqual(@as(?usize, 1024), native.max_match_history_len);
+    try std.testing.expectEqual(native.window_log, frame.window_log);
+    try std.testing.expectEqual(native.max_match_history_len, frame.max_match_history_len);
+    try std.testing.expect(native.strategy == .auto and native.hq == null);
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{"--max-match-history-len=1024"})).resolved());
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--window-log=24", "--max-match-history-len=1023" })).resolved());
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{"--window-log=42"})).resolved());
+}
+
+test "Zstd CLI total budget and memory instrumentation do not select an encoding strategy" {
+    var profile: vort.zstd.EncodeMemoryProfile = .{};
+    const defaults = try (try parse(&.{})).resolvedWithProfiles(null, null);
+    try std.testing.expectEqualDeep(vort.ZstdNativeFrameOptions{}, defaults);
+    const tracked = try parse(&.{ "--max-total-memory=0", "--memory-profile" });
+    const native = try tracked.resolvedWithProfiles(null, &profile);
+    const frame = try tracked.frameOptionsWithProfiles(null, &profile);
+    try std.testing.expectEqual(@as(?usize, 0), native.max_total_working_memory);
+    try std.testing.expect(native.memory_profile == &profile and frame.memory_profile == &profile);
+    try std.testing.expect(native.strategy == .auto and native.hq == null);
+    try std.testing.expectEqualDeep(vort.zstd.EncodeMemoryProfile{}, profile);
+}
+
+test "Zstd CLI history range follows the public encoder limit" {
+    const maximum = vort.zstd.native_explicit_window_match_len_max;
+    const accepted = cli.Controls{ .window_log = 41, .max_match_history_len = maximum };
+    const native = try accepted.resolved();
+    try std.testing.expectEqual(@as(?usize, maximum), native.max_match_history_len);
+    try std.testing.expectError(error.InvalidBlockPlan, (cli.Controls{ .window_log = 41, .max_match_history_len = maximum + 1 }).resolved());
+}

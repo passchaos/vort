@@ -1,0 +1,686 @@
+{
+  "status": "ok",
+  "scope": "unique final ordinary75+serialized1 functional campaign; experimental reference only used for serialized singleton",
+  "exit_code": 0,
+  "case_rows": 76,
+  "case_groups": {
+    "quality": 48,
+    "legacy": 12,
+    "stored": 4,
+    "mode": 2,
+    "standard10": 4,
+    "raw": 1,
+    "empty": 2,
+    "metadata": 2,
+    "serialized": 1
+  },
+  "baseline_regressions": 10,
+  "probe_calls": 391,
+  "successful_probe_calls": 316,
+  "expected_errors": {
+    "CorruptFrame": 71,
+    "WorkingMemoryLimitExceeded": 2,
+    "InvalidBlockPlan": 2
+  },
+  "all_error_outputs_preserved": true,
+  "bidirectional_reference_result_rows": 150,
+  "known_skips": [
+    {
+      "case": "raw-prefix",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    },
+    {
+      "case": "serialized",
+      "layer": "modern",
+      "status": "skipped",
+      "reason": "the pinned Brotli 1.2.0 build rejected SERIALIZED in its actual AttachDictionary call; its non-experimental common library accepts RAW only, before payload parsing",
+      "attach_failure_status": 3
+    },
+    {
+      "case": "serialized",
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 lacks shared dictionary attach API"
+    }
+  ],
+  "ordinary_actual_requested_headers_verified": 75,
+  "reference_headers_differing_from_Vort_request": [
+    {
+      "name": "quality-0-window-16",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-16",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-24",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-24",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-25",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-25",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-30",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-0-window-30",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-16",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-16",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-24",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-24",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-25",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-25",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-30",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-1-window-30",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-16",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 16,
+        "large_window": false,
+        "header_bits": 1
+      }
+    },
+    {
+      "name": "quality-2-window-16",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 16,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 16,
+        "large_window": false,
+        "header_bits": 1
+      }
+    },
+    {
+      "name": "quality-2-window-24",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-24",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 24,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-25",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-25",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-30",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "quality-2-window-30",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 30,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "standard10-q0",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 10,
+        "large_window": false,
+        "header_bits": 7
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "standard10-q0",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 10,
+        "large_window": false,
+        "header_bits": 7
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "standard10-q1",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 10,
+        "large_window": false,
+        "header_bits": 7
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "standard10-q1",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 10,
+        "large_window": false,
+        "header_bits": 7
+      },
+      "reference_actual_header": {
+        "window_bits": 18,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "empty-planned",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "empty-planned",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "metadata-flush-planned",
+      "layer": "modern",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    },
+    {
+      "name": "metadata-flush-planned",
+      "layer": "system",
+      "Vort_actual_header": {
+        "window_bits": 25,
+        "large_window": true,
+        "header_bits": 14
+      },
+      "reference_actual_header": {
+        "window_bits": 24,
+        "large_window": false,
+        "header_bits": 4
+      }
+    }
+  ],
+  "header_difference_scope": "Reference q0/q1 chooses its own supported header/window; only Vort wire must match the Vort request. Differences do not indicate reverse byte decode failure.",
+  "metadata_cases": [
+    {
+      "name": "metadata-flush-planned",
+      "summary": {
+        "window_bits": 25,
+        "large_window": true,
+        "input_bytes": 155,
+        "decoded_bytes": 384,
+        "meta_block_count": 5,
+        "empty_meta_block_count": 1,
+        "metadata_meta_block_count": 2,
+        "uncompressed_meta_block_count": 0,
+        "compressed_meta_block_count": 2,
+        "metadata_bytes": 29,
+        "uses_metadata": true,
+        "uses_uncompressed_meta_blocks": false,
+        "uses_compressed_meta_blocks": true,
+        "uses_static_dictionary": false,
+        "static_dictionary_copy_count": 0,
+        "static_dictionary_bytes": 0,
+        "uses_shared_dictionary": false,
+        "shared_dictionary_copy_count": 0,
+        "shared_dictionary_bytes": 0,
+        "command_count": 10,
+        "zero_insert_command_count": 6,
+        "single_literal_insert_command_count": 0,
+        "implicit_distance_command_count": 2,
+        "implicit_distance_copy_count": 2,
+        "short_distance_copy_count": 2,
+        "direct_distance_copy_count": 0,
+        "regular_distance_copy_count": 6,
+        "copy_length_log2_histogram": [
+          0,
+          6,
+          0,
+          0,
+          0,
+          1,
+          3,
+          0,
+          0
+        ],
+        "lz77_copy_count": 10,
+        "lz77_copy_bytes": 314,
+        "max_lz77_distance": 208,
+        "non_overlapping_lz77_copy_count": 0,
+        "non_overlapping_lz77_copy_bytes": 0,
+        "short_non_overlapping_lz77_copy_count": 0,
+        "short_non_overlapping_lz77_copy_bytes": 0,
+        "literal_context_mode_bytes": [
+          70,
+          0,
+          0,
+          0
+        ],
+        "max_literal_block_types": 1,
+        "max_literal_context_trees": 1,
+        "max_command_block_types": 1,
+        "max_distance_block_types": 1,
+        "max_distance_context_trees": 1,
+        "max_distance_postfix_bits": 0,
+        "max_direct_distance_codes": 0,
+        "stored_only": false
+      }
+    },
+    {
+      "name": "metadata-flush-stored",
+      "summary": {
+        "window_bits": 25,
+        "large_window": true,
+        "input_bytes": 426,
+        "decoded_bytes": 384,
+        "meta_block_count": 5,
+        "empty_meta_block_count": 1,
+        "metadata_meta_block_count": 2,
+        "uncompressed_meta_block_count": 2,
+        "compressed_meta_block_count": 0,
+        "metadata_bytes": 29,
+        "uses_metadata": true,
+        "uses_uncompressed_meta_blocks": true,
+        "uses_compressed_meta_blocks": false,
+        "uses_static_dictionary": false,
+        "static_dictionary_copy_count": 0,
+        "static_dictionary_bytes": 0,
+        "uses_shared_dictionary": false,
+        "shared_dictionary_copy_count": 0,
+        "shared_dictionary_bytes": 0,
+        "command_count": 0,
+        "zero_insert_command_count": 0,
+        "single_literal_insert_command_count": 0,
+        "implicit_distance_command_count": 0,
+        "implicit_distance_copy_count": 0,
+        "short_distance_copy_count": 0,
+        "direct_distance_copy_count": 0,
+        "regular_distance_copy_count": 0,
+        "copy_length_log2_histogram": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "lz77_copy_count": 0,
+        "lz77_copy_bytes": 0,
+        "max_lz77_distance": 0,
+        "non_overlapping_lz77_copy_count": 0,
+        "non_overlapping_lz77_copy_bytes": 0,
+        "short_non_overlapping_lz77_copy_count": 0,
+        "short_non_overlapping_lz77_copy_bytes": 0,
+        "literal_context_mode_bytes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "max_literal_block_types": 0,
+        "max_literal_context_trees": 0,
+        "max_command_block_types": 0,
+        "max_distance_block_types": 0,
+        "max_distance_context_trees": 0,
+        "max_distance_postfix_bits": 0,
+        "max_direct_distance_codes": 0,
+        "stored_only": false
+      }
+    }
+  ],
+  "serialized": {
+    "dictionary_bytes": 70,
+    "dictionary_sha256": "3b104fc239b4894cf9430e689122624ed491fb99b2478dca35fa98d9f080d5f4",
+    "wire_bytes": 16,
+    "actual_shared_dictionary_copy_count": 2,
+    "reference_results": [
+      {
+        "layer": "modern",
+        "status": "skipped",
+        "reason": "the pinned Brotli 1.2.0 build rejected SERIALIZED in its actual AttachDictionary call; its non-experimental common library accepts RAW only, before payload parsing",
+        "attach_failure_status": 3
+      },
+      {
+        "layer": "system",
+        "status": "skipped",
+        "reason": "system Brotli 1.0.9 lacks shared dictionary attach API"
+      },
+      {
+        "layer": "experimental-1.2.0",
+        "status": "ok",
+        "direction": "bidirectional",
+        "dictionary_type": "serialized",
+        "reference_actual_header": {
+          "window_bits": 25,
+          "large_window": true,
+          "header_bits": 14
+        },
+        "reference_wire_sha256": "5ac9bde6f77b7c5a5197d5ba439c64d741b8138a2e52718ffed799a3af2041bf"
+      }
+    ],
+    "profile_off_same_wire": true
+  },
+  "total_budget_exact_bytes": 689113,
+  "total_budget_below_bytes": 689112,
+  "HQ_work_claimed": false,
+  "source_before_after_equal": true,
+  "source_file_count": 1795,
+  "source_zip_sha256": "989f6874a1c6c290190ab9f1a7bd9ff1bc488da9b7107bce964fdfd8bae95ae8",
+  "baseline_manifest_sha256": "c1e0ec54d2a877e376bef8f024dce72d83f3ce3ef97abd5b9c2566ad96fee716",
+  "report_sha256": "eae7989092512c9078284818b1da1b31f946885c758f8ab8a298ecc74d90dcf7",
+  "rows_canonical_sha256": "dad396dc0d70efaad1293297c90dec1e4a1ffb1e54dce2b42171216ba831e30e",
+  "probe_sha256": "5aa57be7fe080009ef88ae505dfb25b13c121bbef83edc9c8d09a9e05d555e1d",
+  "compiler_manifest_sha256": "3870dc661fbce8ba2344e5ecc256f23d498b164855ebab5a9fd9f7117c27f22d",
+  "calculated_cache_output_digest": "7567cbe2408a3c446d49094dfe34ec1f",
+  "all_compiler_input_contents_verified": true,
+  "compiler_input_records": 1942,
+  "compiler_input_groups": {
+    "project": 1112,
+    "vail": 16,
+    "linked_cache_objects": 2,
+    "zig_library": 812
+  },
+  "unique_archived_inputs": 1940,
+  "compiler_inputs_zip_sha256": "d399c25e691db437f0ba5b585f575fb97af4964263a7c41cea879283ebc5b184",
+  "artifact_binding_sha256": "f950c9221755836a8aa79214a27efaf59166c076e83c0f6cd4d3bfa14230c9af",
+  "performance_claim": null
+}

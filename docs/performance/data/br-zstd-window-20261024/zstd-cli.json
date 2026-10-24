@@ -1,0 +1,34 @@
+{
+  "phase": "final-zstd-window-memory-cli",
+  "time_before_utc": "2026-10-24T13:47:59.849507+00:00",
+  "git_head": "4e093e9eb25d955b56966baab5dfe9836754e668",
+  "source_count": 1771,
+  "source_sha256": "5da89a05ee94896f2d472b338aef5b08c9c6e9fa9d1bcc13e0186bc0be0291a8",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-zstd-window-memory-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "reference_round_trips": 36,
+    "memory_profile_wire_checks": 15,
+    "window_descriptor_checks": 3,
+    "exact_total_cap_checks": 3,
+    "below_total_cap_checks": 3,
+    "rejected_output_preserved": 33,
+    "same_path_checks": 6
+  },
+  "status": "failed-tool-known-content-single-segment-assumption",
+  "build_exit_code": 1,
+  "parser_tests_passed": 12,
+  "original_source_window_equal": true,
+  "source_delta_at_failure": {},
+  "failed_binary_sha256": "419fb9eed7a7a47cabfda2303bfc1ee2f46330cb9a0c4505e5957d7f896037bf",
+  "failed_compile_manifest": ".zig-cache/h/6275fdae2f5ca5dd0dd62d8ca7addcb5.txt",
+  "failed_outputkey": "8f6fbfc7e078d21029920ac39d0ea243",
+  "known_small_content_behavior": "44-byte known content validly uses single-segment FHD0x24/FCS44; WindowDescriptor omitted. Three APIs decode successfully and memory profiling is available."
+}

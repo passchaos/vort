@@ -17,12 +17,12 @@ const of_predefined = [_]u32{ 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1,
 
 pub const Symbol = struct { code: u8, extra_bits: u8, extra_value: u32 };
 pub fn literalSymbol(length: usize) Error!Symbol {
-    const code: usize = if (length < 16) length else if (length < 24) 16 + (length - 16) / 2 else if (length < 32) 20 + (length - 24) / 4 else if (length < 48) 22 + (length - 32) / 8 else if (length < 64) 24 else 19 + std.math.log2_int(usize, length);
+    const code: usize = if (length < 16) length else if (length < 24) 16 + (length - 16) / 2 else if (length < 32) 20 + (length - 24) / 4 else if (length < 48) 22 + (length - 32) / 8 else if (length < 64) 24 else @as(usize, 19) + std.math.log2_int(usize, length);
     return symbolAt(length, code, &ll_bases, &ll_bits);
 }
 pub fn matchSymbol(length: usize) Error!Symbol {
     if (length < 3) return error.InvalidBlockPlan;
-    const code: usize = if (length <= 34) length - 3 else if (length < 43) 32 + (length - 35) / 2 else if (length < 51) 36 + (length - 43) / 4 else if (length < 67) 38 + (length - 51) / 8 else if (length < 99) 40 + (length - 67) / 16 else if (length < 131) 42 else 36 + std.math.log2_int(usize, length - 3);
+    const code: usize = if (length <= 34) length - 3 else if (length < 43) 32 + (length - 35) / 2 else if (length < 51) 36 + (length - 43) / 4 else if (length < 67) 38 + (length - 51) / 8 else if (length < 99) 40 + (length - 67) / 16 else if (length < 131) 42 else @as(usize, 36) + std.math.log2_int(usize, length - 3);
     return symbolAt(length, code, &ml_bases, &ml_bits);
 }
 fn symbolAt(length: usize, code: usize, bases: []const u32, bits: []const u8) Error!Symbol {

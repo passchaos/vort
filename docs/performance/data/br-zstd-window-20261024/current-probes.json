@@ -1,0 +1,65 @@
+{
+  "current_brotli_input_binding": true,
+  "records": 1946,
+  "unique_inputs": 1944,
+  "mismatches": [],
+  "uncovered": [],
+  "current_narrow": {
+    "round_trips": 3,
+    "results": [
+      {
+        "command": "encode-br-file",
+        "flags": [
+          "--large-window",
+          "--quality=0",
+          "--window-bits=25",
+          "--metadata=current-meta"
+        ],
+        "encoded_bytes": 57
+      },
+      {
+        "command": "encode-br-stream-file",
+        "flags": [
+          "--large-window",
+          "--quality=1",
+          "--window-bits=30"
+        ],
+        "encoded_bytes": 43
+      },
+      {
+        "command": "encode-br-stored-file",
+        "flags": [
+          "25",
+          "current-meta",
+          "--large-window"
+        ],
+        "encoded_bytes": 57
+      }
+    ],
+    "binary_sha256": "ecd0e8260c069a0f5338bb01d630b160b0eac730ecae02a2cf8eb49c9077da43",
+    "actual_cache_output_key": "45644e10c876eac97285232c17daf410",
+    "reference_brotli_version": 16777225,
+    "full_35_matrix_rerun": false,
+    "manifest_selection": "Debug target manifest with the exact linked Debug object paths, verified by content digests; ReleaseFast dependency manifest is separate."
+  },
+  "help_smoke": {
+    "exit": 0,
+    "checks": {
+      "--large-window": true,
+      "--metadata=TEXT": true,
+      "--window-log=10..41": true,
+      "--max-match-history-len=1024..4294836222": true,
+      "--max-total-memory=bytes --memory-profile": true,
+      "encode-zstd-native-stream-file": true
+    },
+    "binary_sha256": "3dc7504acb5b5726b80121e25ebe20ecf342e343e8f4a70dbec1dc355e78f5e5",
+    "exact_current_help_function_sha256": "a95d6c9a9ccce3c0b8ff2e925774034d49243090163714d9b414da50241adde0",
+    "full_cli_compile": false
+  },
+  "parser_smoke": {
+    "brotli_tests_passed": 18,
+    "zstd_tests_passed": 12
+  },
+  "source_scope": "Actual current compiler input content digests and SHA match the frozen source in the final Zstd validation window. Original Brotli35 stage window is preserved separately and not claimed identical.",
+  "finished_utc": "2026-10-24T13:59:10.415210+00:00"
+}

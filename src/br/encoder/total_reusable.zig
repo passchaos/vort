@@ -98,6 +98,9 @@ fn Protected(comptime Input: type, comptime Options: type) type {
             value.metadata = self.metadata.getInput();
             return value;
         }
+        fn aliases(self: *const @This()) bool {
+            return self.data.ownedBytes() != 0 or self.metadata.ownedBytes() != 0;
+        }
     };
 }
 
@@ -126,6 +129,28 @@ fn detached(self: anytype, allocator: std.mem.Allocator, input: anytype, options
     return encode(&temporary, allocator, input, options) catch |err| return mapKnown(err);
 }
 
+/// A temporary codec may borrow a snapshot only until this operation ends.
+/// Retained matchers in the original encoder must never cache those views.
+fn detachedScratch(self: anytype, allocator: std.mem.Allocator, protected: anytype, comptime encode: anytype) Error![]const u8 {
+    const Encoder = @typeInfo(@TypeOf(self)).pointer.child;
+    var temporary = Encoder.init(allocator);
+    defer temporary.deinit();
+    const wire = encode(&temporary, protected.input(), protected.options()) catch |err| return mapKnown(err);
+    try self.output.ensureTotalCapacity(allocator, wire.len);
+    self.output.clearRetainingCapacity();
+    self.output.appendSliceAssumeCapacity(wire);
+    return self.output.items;
+}
+
+/// Protect the untracked reusable path with exactly the same snapshots as a
+/// total lease. Null means every borrow is independent of retained output.
+pub fn aliasScratch(self: anytype, input: anytype, options: anytype, comptime encode: anytype) Error!?[]const u8 {
+    var protected = try protect(self, self.allocator, input, options);
+    defer protected.deinit();
+    if (!protected.aliases()) return null;
+    return try detachedScratch(self, self.allocator, &protected, encode);
+}
+
 pub fn owned(self: anytype, caller: std.mem.Allocator, input: anytype, options: anytype, comptime encode: anytype) Error![]u8 {
     const emitted = entry.emission(options);
     errdefer emitted.rollback();
@@ -133,7 +158,10 @@ pub fn owned(self: anytype, caller: std.mem.Allocator, input: anytype, options: 
     defer scope.finish();
     var protected = protect(self, scope.lease.allocator(), input, options) catch |err| return scope.mapError(err);
     defer protected.deinit();
-    const wire = encode(self, scope.lease.allocator(), protected.input(), protected.options()) catch |err| return @errorCast(scope.mapError(err));
+    const wire = (if (options.hq == null and protected.aliases())
+        detached(self, scope.lease.allocator(), protected.input(), protected.options(), encode)
+    else
+        encode(self, scope.lease.allocator(), protected.input(), protected.options())) catch |err| return @errorCast(scope.mapError(err));
     errdefer scope.lease.allocator().free(wire);
     return transfer(scope.lease, wire, caller);
 }
@@ -145,6 +173,8 @@ pub fn scratch(self: anytype, input: anytype, options: anytype, comptime encode:
     defer scope.finish();
     var protected = protect(self, scope.lease.allocator(), input, options) catch |err| return scope.mapError(err);
     defer protected.deinit();
+    if (options.hq == null and protected.aliases())
+        return detachedScratch(self, scope.lease.allocator(), &protected, encode) catch |err| return scope.mapError(err);
     return encode(self, protected.input(), protected.options()) catch |err| return @errorCast(scope.mapError(err));
 }
 
@@ -156,7 +186,7 @@ pub fn into(self: anytype, input: anytype, output: []u8, options: anytype, compt
     const allocator = scope.lease.allocator();
     var protected = protect(self, allocator, input, options) catch |err| return scope.mapError(err);
     defer protected.deinit();
-    const wire = (if (self.isTotalOwnedRange(output))
+    const wire = (if (self.isTotalOwnedRange(output) or (options.hq == null and protected.aliases()))
         detached(self, allocator, protected.input(), protected.options(), encode)
     else
         encode(self, allocator, protected.input(), protected.options())) catch |err| return scope.mapError(err);
@@ -175,7 +205,7 @@ pub fn append(self: anytype, output: *std.ArrayList(u8), input: anytype, options
     var protected = protect(self, allocator, input, options) catch |err| return scope.mapError(err);
     defer protected.deinit();
     const owned_output = self.isTotalOwnedOutput(output);
-    const wire = (if (owned_output)
+    const wire = (if (owned_output or (options.hq == null and protected.aliases()))
         detached(self, allocator, protected.input(), protected.options(), encode)
     else
         encode(self, allocator, protected.input(), protected.options())) catch |err| return scope.mapError(err);

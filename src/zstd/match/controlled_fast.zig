@@ -1,6 +1,7 @@
 const std = @import("std");
 const controls = @import("../encode/controls.zig");
 const source_mod = @import("controlled_source.zig");
+const history_limit = @import("history_limit.zig");
 
 pub const Record = source_mod.Record;
 pub const Source = source_mod.Source;
@@ -11,7 +12,7 @@ const hash_size = 1 << hash_bits;
 const invalid = std.math.maxInt(u32);
 const minimum_match = 4;
 const max_block_len = 128 * 1024;
-const max_window_len = 64 * 1024 * 1024;
+const max_window_len = history_limit.max_history_len;
 const recent_seed_span = max_block_len;
 const seed_slots = hash_size;
 const Match = struct { position: usize = 0, length: usize = 0, distance: usize = 0 };
@@ -26,6 +27,7 @@ pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, 
         source.block.len > max_block_len or source.window_len == 0 or source.window_len > max_window_len or
         source.dictionary.len > source.window_len or source.history.len > source.window_len - source.dictionary.len)
         return error.InvalidBlockPlan;
+    try source.validate();
     records.clearRetainingCapacity();
     if (parameters.profile) |profile| {
         profile.available = true;
@@ -160,8 +162,9 @@ fn Tables(comptime dual: bool) type {
             } else {
                 const recent = prefix - recent_seed_span;
                 // A bounded scan across the older window, followed by a denser
-                // recent scan. Retained 64 MiB dictionaries still need no heap.
-                self.seedRange(source, 0, recent, ceilDiv(recent, seed_slots) * stride, parameters.profile);
+                // recent scan. The full retained dictionary still needs no heap.
+                const sparse_step = std.math.mul(usize, ceilDiv(recent, seed_slots), stride) catch recent;
+                self.seedRange(source, 0, recent, @min(recent, sparse_step), parameters.profile);
                 self.seedRange(source, recent, prefix, 2 * stride, parameters.profile);
             }
             // Preserve slice boundaries and the last short/long anchors. These

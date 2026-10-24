@@ -128,12 +128,15 @@ Current interpretation:
   Huffman-literals sections, can reuse that tree for treeless repeat-literals
   blocks, and decodes FSE-compressed sequence tables for the currently supported
   sequence execution path. Explicit encode windows now add a sparse
-  long-distance matcher with a 16 MiB default and a caller-controlled 64 MiB
-  maximum, while the null/default path retains its 8 MiB wire and memory policy.
-  The broader gap remains open until Vort extends matching beyond 64 MiB, adds
-  broader compression strategy coverage, and records corpus
-  throughput/ratio dashboards, and repeatable same-machine comparisons against
-  zstd CLI/library modes.
+  long-distance matcher with a 16 MiB default and caller-selected history up
+  to the checked 4,294,836,222-byte coordinate ceiling, while the null/default
+  path retains its 8 MiB wire and memory policy. The
+  [history/resource increment](performance/zstd-large-history-functional-baseline.md)
+  verifies an actual distance 64 MiB+8 and shared total requested-heap quotas;
+  all nine canonical strategy families are available through native engines.
+  Broader algorithm/quality parity, 32-bit cumulative stream coordinates,
+  corpus throughput/ratio/memory dashboards and repeatable current-source
+  comparisons against zstd CLI/library modes remain open.
 - The native encoder now exposes an explicit `fast_compressed` selection for
   callers that need compressed output with less arbitration latency than the
   numeric level-1 policy. It is available through one-shot/reusable/caller-

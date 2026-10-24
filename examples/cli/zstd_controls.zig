@@ -13,6 +13,10 @@ pub const Controls = struct {
     hq_min_match: ?u8 = null,
     hq_memory: ?usize = null,
     profile: bool = false,
+    window_log: ?u6 = null,
+    max_match_history_len: ?usize = null,
+    max_total_memory: ?usize = null,
+    memory_profile: bool = false,
 
     pub fn hasHqOverrides(self: Controls) bool {
         return self.hq_depth != null or self.hq_nice_len != null or self.hq_min_match != null or self.hq_memory != null;
@@ -23,12 +27,20 @@ pub const Controls = struct {
     }
 
     pub fn resolvedWithProfile(self: Controls, profile: ?*vort.ZstdEncoderControlProfile) !vort.ZstdNativeFrameOptions {
+        return self.resolvedWithProfiles(profile, null);
+    }
+
+    pub fn resolvedWithProfiles(self: Controls, profile: ?*vort.ZstdEncoderControlProfile, memory_profile: ?*vort.zstd.EncodeMemoryProfile) !vort.ZstdNativeFrameOptions {
         if (self.level == null and self.strategy == null and self.fast_acceleration == null and !self.hasHqOverrides()) {
             var native: vort.ZstdNativeFrameOptions = .{
                 .selection = self.selection,
                 .content_checksum = self.checksum,
                 .include_content_size = self.content_size,
                 .control_profile = profile,
+                .window_log = self.window_log,
+                .max_match_history_len = self.max_match_history_len,
+                .max_total_working_memory = self.max_total_memory,
+                .memory_profile = if (self.memory_profile) memory_profile else null,
             };
             try native.validate();
             return native;
@@ -41,6 +53,10 @@ pub const Controls = struct {
             .content_checksum = self.checksum,
             .include_content_size = self.content_size,
             .control_profile = profile,
+            .window_log = self.window_log,
+            .max_match_history_len = self.max_match_history_len,
+            .max_total_working_memory = self.max_total_memory,
+            .memory_profile = if (self.memory_profile) memory_profile else null,
         });
         if (self.hasHqOverrides()) {
             if (@hasField(@TypeOf(options), "hq")) {
@@ -62,14 +78,22 @@ pub const Controls = struct {
     }
 
     pub fn frameOptionsWithProfile(self: Controls, profile: ?*vort.ZstdEncoderControlProfile) !vort.zstd.FrameOptions {
+        return self.frameOptionsWithProfiles(profile, null);
+    }
+
+    pub fn frameOptionsWithProfiles(self: Controls, profile: ?*vort.ZstdEncoderControlProfile, memory_profile: ?*vort.zstd.EncodeMemoryProfile) !vort.zstd.FrameOptions {
         if (self.selection != .auto) return error.InvalidBlockPlan;
-        const native = try self.resolvedWithProfile(profile);
+        const native = try self.resolvedWithProfiles(profile, memory_profile);
         var frame: vort.zstd.FrameOptions = .{
             .strategy = self.strategy orelse .auto,
             .fast_acceleration = self.fast_acceleration,
             .content_checksum = self.checksum,
             .include_content_size = self.content_size,
             .control_profile = profile,
+            .window_log = self.window_log,
+            .max_match_history_len = self.max_match_history_len,
+            .max_total_working_memory = self.max_total_memory,
+            .memory_profile = if (self.memory_profile) memory_profile else null,
         };
         if (@hasField(@TypeOf(frame), "hq") and @hasField(@TypeOf(native), "hq")) frame.hq = native.hq;
         return frame;
@@ -104,6 +128,18 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
         } else if (try optionValue("--hq-memory", arg, args)) |value| {
             if (result.hq_memory != null) return error.DuplicateZstdOption;
             result.hq_memory = try std.fmt.parseInt(usize, value, 10);
+        } else if (try optionValue("--window-log", arg, args)) |value| {
+            if (result.window_log != null) return error.DuplicateZstdOption;
+            result.window_log = try std.fmt.parseInt(u6, value, 10);
+        } else if (try optionValue("--max-match-history-len", arg, args)) |value| {
+            if (result.max_match_history_len != null) return error.DuplicateZstdOption;
+            result.max_match_history_len = try std.fmt.parseInt(usize, value, 10);
+        } else if (try optionValue("--max-total-memory", arg, args)) |value| {
+            if (result.max_total_memory != null) return error.DuplicateZstdOption;
+            result.max_total_memory = try std.fmt.parseInt(usize, value, 10);
+        } else if (std.mem.eql(u8, arg, "--memory-profile")) {
+            if (result.memory_profile) return error.DuplicateZstdOption;
+            result.memory_profile = true;
         } else if (std.mem.eql(u8, arg, "--profile")) {
             if (result.profile) return error.DuplicateZstdOption;
             result.profile = true;
@@ -128,7 +164,7 @@ pub fn parseStrategy(value: []const u8) !vort.zstd.Strategy {
 }
 
 pub fn isControlArgument(arg: []const u8) bool {
-    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--profile" }) |name| {
+    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile" }) |name| {
         if (std.mem.eql(u8, arg, name) or std.mem.startsWith(u8, arg, name ++ "=")) return true;
     }
     return false;
@@ -160,11 +196,13 @@ pub fn encodeTextHex(init: std.process.Init, args: *std.process.Args.Iterator, s
     const payload = if (option_first) "" else first orelse "";
     const parsed = try parse(args, if (option_first) first else null);
     var profile: vort.ZstdEncoderControlProfile = .{};
-    const options = try parsed.resolvedWithProfile(if (parsed.profile) &profile else null);
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, options);
     defer init.gpa.free(result.frame);
     try printHex(stdout, result.frame);
     if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }
 
 pub fn encodeBytesHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
@@ -175,24 +213,28 @@ pub fn encodeBytesHex(init: std.process.Init, args: *std.process.Args.Iterator, 
     for (payload, 0..) |*byte, index| byte.* = try std.fmt.parseInt(u8, hex[index * 2 ..][0..2], 16);
     const parsed = try parse(args, null);
     var profile: vort.ZstdEncoderControlProfile = .{};
-    const options = try parsed.resolvedWithProfile(if (parsed.profile) &profile else null);
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, options);
     defer init.gpa.free(result.frame);
     try printHex(stdout, result.frame);
     if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }
 
 pub fn encodeFileHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const path = args.next() orelse return error.MissingCorpusPath;
     const parsed = try parse(args, null);
     var profile: vort.ZstdEncoderControlProfile = .{};
-    const options = try parsed.resolvedWithProfile(if (parsed.profile) &profile else null);
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(payload);
     const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, options);
     defer init.gpa.free(result.frame);
     try printHex(stdout, result.frame);
     if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }
 
 pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
@@ -201,14 +243,16 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     if (isControlArgument(output_path)) return error.MissingCorpusPath;
     const parsed = try parse(args, null);
     var profile: vort.ZstdEncoderControlProfile = .{};
-    const options = try parsed.resolvedWithProfile(if (parsed.profile) &profile else null);
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(payload);
     const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, options);
     defer init.gpa.free(result.frame);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = result.frame });
+    try writeAtomic(init, output_path, result.frame);
     try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ result.frame.len, payload.len, output_path });
     if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }
 
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
@@ -223,14 +267,16 @@ pub fn encodeLevelFile(init: std.process.Init, args: *std.process.Args.Iterator,
     if (isControlArgument(output_path)) return error.MissingCorpusPath;
     const parsed = try parse(args, null);
     var profile: vort.ZstdEncoderControlProfile = .{};
-    const options = try parsed.frameOptionsWithProfile(if (parsed.profile) &profile else null);
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.frameOptionsWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
     const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(payload);
     const encoded = try vort.zstd.encodeFrameWithLevelAndOptionsAlloc(init.gpa, payload, parsed.level orelse vort.zstdDefaultCompressionLevel, options);
     defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    try writeAtomic(init, output_path, encoded);
     try stdout.print("zstd_level_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, payload.len, output_path });
     if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }
 
 pub fn printProfile(stdout: *std.Io.Writer, profile: vort.ZstdEncoderControlProfile) !void {
@@ -245,4 +291,61 @@ pub fn printProfile(stdout: *std.Io.Writer, profile: vort.ZstdEncoderControlProf
 
 test {
     _ = @import("zstd_controls_tests.zig");
+}
+
+fn writeAtomic(init: std.process.Init, path: []const u8, bytes: []const u8) !void {
+    var file = try std.Io.Dir.cwd().createFileAtomic(init.io, path, .{ .replace = true });
+    defer file.deinit(init.io);
+    var buffer: [4096]u8 = undefined;
+    var writer = file.file.writerStreaming(init.io, &buffer);
+    try writer.interface.writeAll(bytes);
+    try writer.interface.flush();
+    try file.replace(init.io);
+}
+
+pub fn printMemoryProfile(stdout: *std.Io.Writer, profile: vort.zstd.EncodeMemoryProfile) !void {
+    try stdout.print("zstd_memory_profile available={any} peak_requested_bytes={d} live_requested_bytes={d} limit=", .{
+        profile.available, profile.peak_requested_bytes, profile.live_requested_bytes,
+    });
+    if (profile.limit) |limit| try stdout.print("{d}\n", .{limit}) else try stdout.writeAll("unlimited\n");
+}
+
+pub fn encodeStreamFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    if (isControlArgument(output_path)) return error.MissingCorpusPath;
+    const parsed = try parse(args, null);
+    var profile: vort.ZstdEncoderControlProfile = .{};
+    var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
+    const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
+    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+    defer init.gpa.free(input);
+    var encoder = if (options.include_content_size)
+        try vort.zstd.NativeIncrementalFrameEncoder.initExactSize(init.gpa, options, input.len)
+    else
+        try vort.zstd.NativeIncrementalFrameEncoder.init(init.gpa, options);
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(init.gpa);
+    {
+        defer encoder.deinit();
+        var output: [4096]u8 = undefined;
+        var offset: usize = 0;
+        while (offset != input.len) {
+            const step = try encoder.step(input[offset..][0..@min(97, input.len - offset)], &output);
+            offset += step.progress.input_read;
+            try encoded.appendSlice(init.gpa, output[0..step.progress.output_written]);
+            if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.InvalidBlockPlan;
+        }
+        encoder.finish();
+        while (true) {
+            const step = try encoder.step(&.{}, &output);
+            try encoded.appendSlice(init.gpa, output[0..step.progress.output_written]);
+            if (step.status == .done) break;
+            if (step.progress.output_written == 0) return error.InvalidBlockPlan;
+        }
+    }
+    try writeAtomic(init, output_path, encoded.items);
+    try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.items.len, input.len, output_path });
+    if (parsed.profile) try printProfile(stdout, profile);
+    if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
 }

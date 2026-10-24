@@ -1,0 +1,206 @@
+{
+  "schema": "vort-zstd-large-history-final-v1",
+  "status": "passed",
+  "utc": "2026-10-24T13:37:50.260298+00:00",
+  "small_result_groups": 14,
+  "ordinary_strategy_engines": 2,
+  "large_preset_dictionary_groups": 1,
+  "actual_far_related_operations": 5,
+  "actual_fast_encoder_run_count": 1,
+  "generated_input_count": 1,
+  "generated_input_path": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/zstd-reference-final/far.input",
+  "generated_input_sha256": "0c78a8d79034e3d77efe78d935dbdf5d9ca138f0469ac1ccf95019344fa87b0a",
+  "dictionary_path": "/tmp/vort-br-zstd-window-final-20261024-qnq4udcc/zstd-reference-final/far.dictionary",
+  "dictionary_sha256": "6e501dd2b589b4f13837947e4125da814b88451fbcfe51c3f9debbf114721dda",
+  "expected_physical_distance": 67108872,
+  "advertised_window": 134217728,
+  "native_zstd_source_sha256": "2c6348af5bb4853d395c70a80f6ea4814c105c610982483e31db7f09acbfbbb8",
+  "raw_copy_source_sha256": "ffe1f38dd0826923b9fc4006449dbdf39663a1859b108ae58a9046b56c5c1215",
+  "tool_source_sha256": {
+    "tools/zstd/large_history_probe.zig": "191a364e01838c0ee23ab6c3a2ea33dfc65fb7e5afdc5baa90de6d77a445cad6",
+    "tools/zstd/far_history_probe.zig": "bf3cbea9bf38d25473cbd3492932c493e53036b3af723a4dd23621bf30f5be63",
+    "tools/zstd/large_history_diff.py": "f987c8ddc95f3a5f7eba4d58692c13bae408bf73f3c30a18187608b5c2ab68a8",
+    "tools/zstd/large_history_wire.py": "e76e6ba0b069161a8fa4a6f06dc009763c13e07858ad83482e611b89e10984ed",
+    "tools/zstd/large_history_reference.c": "fb5dc3b0c2eae45ca4b446efc587f1bc1693f0b31b852be99a8b67bf837a6f0c"
+  },
+  "source_before_after_equal": true,
+  "source_snapshot_sha256": "63f3d5680dc1647aa6439eb5ddf38e641a3837141a9a6bba40f2142284a08f33",
+  "actual_probe_sha256": "3629c384eb1381df4b508ac06ef09415a8728e0c6e0c17886ae2f5641b219e01",
+  "actual_compile_binding_sha256": "edf818859677d92c28996a5e468b8364c14bfbd2e6ce64ef8f03beb917931629",
+  "all_1941_compile_inputs_and_recursive_objects_content_verified": true,
+  "actual_compile_artifact_directory_matches_siphash_digest": true,
+  "operations": [
+    {
+      "operation": "far-fast",
+      "input_bytes": 67110920,
+      "wire_bytes": 67084816,
+      "wire_sha256": "fce4a2943a5f7e923a6896244ba727478b467972ba888826296bbdbcaf1c614e",
+      "published_max_distance": 67108872,
+      "history_sequences": 1,
+      "dictionary_sequences": 0,
+      "requested_heap_peak": 97323001,
+      "requested_heap_live_final": 0,
+      "total_limit": null,
+      "history_observation": {
+        "history_before_flush_tail": 67108872,
+        "history_capacity_before_flush_tail": 92799104,
+        "history_absolute_start_before_flush_tail": 0,
+        "history_final_len": 67108872,
+        "history_final_capacity": 92799104,
+        "long_index_enabled": true,
+        "input_read": 67110920,
+        "output_written": 67084816
+      },
+      "actual_report_sha256": "0e5d2d2f921fe5597bf4c528e446827eaf93dc91c447154afcf72bbea5537ce1"
+    },
+    {
+      "operation": "far-exact",
+      "input_bytes": 67110920,
+      "wire_bytes": 67084816,
+      "wire_sha256": "fce4a2943a5f7e923a6896244ba727478b467972ba888826296bbdbcaf1c614e",
+      "published_max_distance": 67108872,
+      "history_sequences": 1,
+      "dictionary_sequences": 0,
+      "requested_heap_peak": 97323001,
+      "requested_heap_live_final": 0,
+      "total_limit": 97323001,
+      "history_observation": {
+        "history_before_flush_tail": 67108872,
+        "history_capacity_before_flush_tail": 92799104,
+        "history_absolute_start_before_flush_tail": 0,
+        "history_final_len": 67108872,
+        "history_final_capacity": 92799104,
+        "long_index_enabled": true,
+        "input_read": 67110920,
+        "output_written": 67084816
+      },
+      "actual_report_sha256": "59b275438e3c91a97c5fb254feed7e3849192c85d7402260a3b5e508df032a27"
+    },
+    {
+      "operation": "far-one-byte-history-below",
+      "input_bytes": 67110920,
+      "wire_bytes": 67086854,
+      "wire_sha256": "121c41e24e52420369cb4ca4bae34b447d95c1fd2712f82fdb835d773bfb1147",
+      "published_max_distance": 0,
+      "history_sequences": 0,
+      "dictionary_sequences": 0,
+      "requested_heap_peak": 97323001,
+      "requested_heap_live_final": 0,
+      "total_limit": null,
+      "history_observation": {
+        "history_before_flush_tail": 67108871,
+        "history_capacity_before_flush_tail": 92799104,
+        "history_absolute_start_before_flush_tail": 1,
+        "history_final_len": 67108871,
+        "history_final_capacity": 92799104,
+        "long_index_enabled": true,
+        "input_read": 67110920,
+        "output_written": 67086854
+      },
+      "actual_report_sha256": "f73bb5c642b102dbbb873a76c691b42d6b68bac8d73eed903523d7e5f514ad73"
+    },
+    {
+      "operation": "far-double_fast",
+      "input_bytes": 67110920,
+      "wire_bytes": 67084816,
+      "wire_sha256": "fce4a2943a5f7e923a6896244ba727478b467972ba888826296bbdbcaf1c614e",
+      "published_max_distance": 67108872,
+      "history_sequences": 1,
+      "dictionary_sequences": 0,
+      "requested_heap_peak": 97323001,
+      "requested_heap_live_final": 0,
+      "total_limit": null,
+      "history_observation": {
+        "history_before_flush_tail": 67108872,
+        "history_capacity_before_flush_tail": 92799104,
+        "history_absolute_start_before_flush_tail": 0,
+        "history_final_len": 67108872,
+        "history_final_capacity": 92799104,
+        "long_index_enabled": true,
+        "input_read": 67110920,
+        "output_written": 67084816
+      },
+      "actual_report_sha256": "53b5fd58f1dacf945e19cb0b425820b3a2b7a4529ca72619d67d766f38483cfe"
+    },
+    {
+      "operation": "far-dictionary",
+      "input_bytes": 2048,
+      "wire_bytes": 19,
+      "wire_sha256": "31a77d6f1ef39df510792dbebdd2d670d475f57cd6d9c883df832a99b1e9913f",
+      "published_max_distance": 67108872,
+      "history_sequences": 0,
+      "dictionary_sequences": 1,
+      "requested_heap_peak": 11015,
+      "requested_heap_live_final": 0,
+      "total_limit": null,
+      "history_observation": {
+        "history_before_flush_tail": 0,
+        "history_capacity_before_flush_tail": 0,
+        "history_absolute_start_before_flush_tail": 0,
+        "history_final_len": 0,
+        "history_final_capacity": 0,
+        "long_index_enabled": false,
+        "input_read": 0,
+        "output_written": 0
+      },
+      "actual_report_sha256": "72fea55c4f4096a684ee91ac7705ede354a89eaf3a92a2fd47cdace4b9948273"
+    }
+  ],
+  "actual_far_sequence": {
+    "literal_len": 0,
+    "match_len": 2048,
+    "distance": 67108872,
+    "offset_extra_bits": 26,
+    "offset_extra_value": 11,
+    "table_modes": [
+      0,
+      0,
+      0
+    ],
+    "initial_states": [
+      0,
+      29,
+      63
+    ]
+  },
+  "actual_prefix_block_kinds": {
+    "0": 2,
+    "2": 512
+  },
+  "prefix_scope": "511 compressed prefixes each independently parsed as literal-only with zero sequence count and complete section consumption, plus 2 raw blocks; Huffman decoded bytes verified by complete stream reference equality.",
+  "references": [
+    {
+      "header_version": 10600,
+      "runtime_version": 10600,
+      "version_string": "1.6.0",
+      "reference_checkout_revision": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+      "helper_path": "/tmp/vort-zstd-large-history-modern.so",
+      "helper_sha256": "fc9225473aabb4b2ac9a389a4d704901e5c33bb7ff5ca03a10510982fb36fdcb",
+      "runtime_path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+      "runtime_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+    },
+    {
+      "header_version": 10408,
+      "runtime_version": 10408,
+      "version_string": "1.4.8",
+      "reference_checkout_revision": null,
+      "helper_path": "/tmp/vort-zstd-large-history-system.so",
+      "helper_sha256": "b6fa2a3047c91a6ff2d7af7fe6824af26d0bbca0de083a3af957a297f9b5df40",
+      "runtime_path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+      "runtime_sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667"
+    }
+  ],
+  "reference_validation_scope": {
+    "ordinary_fast_and_double_fast": "Both versions stream decoded the whole 67110920-byte input with exact consumption, output equality and guards.",
+    "exact_quota": "Wire equals the already verified fast wire byte for byte.",
+    "one_byte_history_below": "Both versions decoded the whole same input; no prohibited far reference.",
+    "large_preset_dictionary": "Both versions loaded the actual 67108872-byte raw dictionary and stream decoded 2048 bytes exactly.",
+    "far_reference_encode_executed": false
+  },
+  "preserved_failures": [
+    "read-boundary-failure",
+    "wire-inspection-failure"
+  ],
+  "expectations_or_generated_bytes_changed_to_pass": false,
+  "scope": "Functional evidence only; requested encoder-owned heap excludes borrowed fixtures/collector and allocator-internal or OS/RSS costs."
+}

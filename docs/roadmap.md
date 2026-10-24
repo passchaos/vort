@@ -11,6 +11,25 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [general Brotli Large Window milestone](performance/brotli-general-large-window-functional-baseline.md)
+extends explicit format selection to q0...q11, legacy and stored frontends,
+including chunked, reusable and incremental operations. Default wires remain
+fixed. The final Brotli family passes 1273 tests with one 32-bit-only skip that
+is separately covered on x86; the versioned campaign passes 76 groups with
+experimental serialized-dictionary behavior recorded separately.
+
+The [Zstd history/resource milestone](performance/zstd-large-history-functional-baseline.md)
+replaces the fixed 64 MiB history ceiling with checked local coordinates and
+shared whole-encoder requested-heap admission. Independent wire inspection and
+two libzstd versions confirm an actual 64 MiB+8-byte copy, including exact
+budget, D−1, double-fast and borrowed RAW dictionary controls. Legal history
+configurations reach 4,294,836,222 bytes, while actual search retains its
+strategy limits. Huge declared windows remain distinct from actual matching.
+The next functionality-first work is consistent u64 cumulative stream counters
+and pledges on 32-bit platforms, followed by bounded Zstd HQ search-control and
+Brotli stored-resource API increments. Full competitor ratio, throughput and
+memory leadership remains unproven.
+
 The long-term objective remains incomplete. The current
 [mainstream codec and industry gap audit](performance/industry-gap-audit.md)
 separates implemented format/API behavior, remaining encoder capabilities,
@@ -120,11 +139,11 @@ whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 
-Concrete remaining format/API increments include explicit Brotli Large Window
-encoding outside HQ q10/q11 and caller-budgeted Zstd history beyond the fixed
-64 MiB native cap. The advertised frame window remains separate from actual
-match history. Default wires, bounded ownership and explicit failures must
-survive the larger ranges before making quality or performance claims.
+The latest window/resource increment closes the earlier HQ-only Brotli format
+selection and fixed 64 MiB Zstd history gaps. Advertised frame windows remain
+separate from actual match history. The counter, search-control and resource
+API priorities above retain functionality-first delivery; this increment does
+not establish broad competitor quality or performance parity.
 
 The [LZ4 fast-control increment](performance/lz4-fast-controls-functional-baseline.md)
 adds signed acceleration, miss-stride scheduling, independent chain depth and
