@@ -16,6 +16,8 @@ pub fn candidate(comptime Codec: type, source: types.Source, resolved: options.R
 }
 
 fn candidateInternal(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    if (resolved.parse_mode == .whole_block)
+        return wholeBlockCandidate(Codec, a, source, resolved, profile, previous, state, context);
     const working_model = try a.create(Model);
     defer a.destroy(working_model);
     working_model.* = (state.model orelse return error.InvalidBlockPlan).*;
@@ -34,6 +36,50 @@ fn candidateInternal(comptime Codec: type, a: std.mem.Allocator, source: types.S
         } else artifact.deinit(a);
     }
     return best orelse error.InvalidBlockPlan;
+}
+
+/// Preserve the complete bounded refinement sequence as a wire candidate.
+/// Paired passes alone would change its later entering model after a whole
+/// pass wins, so they cannot provide the original bounded-output guarantee.
+fn wholeBlockCandidate(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    var bounded = resolved;
+    bounded.parse_mode = .bounded;
+    var best = try candidateInternal(Codec, a, source, bounded, profile, previous, state, context);
+    errdefer best.deinit(a);
+    const working_model = try a.create(Model);
+    defer a.destroy(working_model);
+    working_model.* = (state.model orelse return error.InvalidBlockPlan).*;
+    working_model.literal_position_prices = null;
+    for (0..resolved.iterations) |pass| {
+        if (pass != 0) if (profile) |p| p.add("refinement_passes", 1);
+        var artifact = try pairedPass(Codec, a, source, bounded, resolved, profile, previous, working_model, state, context);
+        working_model.* = artifact.model.?.*;
+        if (artifact.bit_count < best.bit_count) {
+            best.deinit(a);
+            best = artifact;
+        } else artifact.deinit(a);
+    }
+    return best;
+}
+
+fn pairedPass(comptime Codec: type, a: std.mem.Allocator, source: types.Source, bounded: options.Resolved, whole: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, model: *const Model, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    var baseline = try plannedPass(Codec, a, source, bounded, profile, previous, model, state, context);
+    errdefer baseline.deinit(a);
+    // A bounded winner never excuses failure to execute the requested whole
+    // parse. Both plans see the same model and original matcher/cache source.
+    var full = try plannedPass(Codec, a, source, whole, profile, previous, model, state, context);
+    if (full.bit_count < baseline.bit_count) {
+        baseline.deinit(a);
+        return full;
+    }
+    full.deinit(a);
+    return baseline;
+}
+
+fn plannedPass(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, model: *const Model, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    const plan = try Codec.planAlloc(a, source, resolved, profile, previous, model, state);
+    defer plan.deinit(a);
+    return encodePass(Codec, a, source, &plan, context);
 }
 
 fn encodePass(comptime Codec: type, a: std.mem.Allocator, source: types.Source, plan: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {

@@ -919,6 +919,7 @@ pub const BrotliHqProfile = br.HqProfile;
 pub const BrotliHqResolvedOptions = br.HqResolvedOptions;
 pub const BrotliHqDistanceParameters = br.HqDistanceParameters;
 pub const BrotliHqDistanceFormat = br.HqDistanceFormat;
+pub const BrotliHqParseMode = br.HqParseMode;
 pub const BrotliEncodeMemoryProfile = br.EncodeMemoryProfile;
 pub const BrotliSharedDictionary = br.SharedDictionary;
 pub const BrotliSerializedSharedDictionary = br.SerializedSharedDictionary;
