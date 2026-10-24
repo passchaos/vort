@@ -51,3 +51,33 @@ python3 tools/codec_bench/sample_gate.py --samples-json RESULT.json \
 比较还需保留源码版本、CPU、编译模式、完整命令和安静测量记录。此报告
 未测 requested heap、RSS 或硬件冷缓存；这些指标需要独立的资源与生命周期
 测量，混合运行双方的进程 RSS 不能分别归因给某个实现。
+
+## 功能验证（2026-10-25）
+
+| 范围 | 已执行结果 |
+| --- | --- |
+| Brotli 辅助与参数测试 | native Debug、实际 x86 ReleaseFast 各 10/10 |
+| Zstd 辅助测试 | native Debug、实际 x86 ReleaseFast 各 3/3 |
+| 完整原生工具 | 两个 ReleaseFast benchmark 实际编译成功；Zstd help 列全 11 种策略 |
+| 计时前 CLI 拒绝 | Brotli 缺库组件及三种输出冲突、Zstd 六种参数／路径错误均符合预期；输出 sentinel 保持 |
+| 独立校验器 | 六项测试覆盖缺轮次、错误顺序、摘要、有效设置、身份变化和 CSV 错配；普通及 Python `-O` 模式通过 |
+| 实际 JSON／CSV | 同一 50B 完整 synthetic JSON 输入，Brotli q0 五轮、Zstd level3 四轮，均通过输入／wire／每轮 mix／摘要／CSV／可执行文件／显式参考文件身份核对 |
+
+上述小输入运行用于验证报告格式及跨库输出正确性。运行期间可能有竞争
+构建，因此不把其耗时列为当前性能证据。Brotli 保留参考解码器读取 Vort
+编码结果的原验证，Zstd 保留两种解码器检查双方 wire 的原验证。
+
+[证据索引](data/codec-encode-samples-20261025/index.json)保存命令、完整日志、
+源码前后 SHA、产物和实际小输入报告。Brotli 最初一个测试常量的 wrapping
+乘法需要显式 `usize` 类型，首次失败和修正后验证均保留。两份成功工具的
+计时算法未因该测试常量修正而变化。
+[输入 manifest](data/codec-encode-samples-20261025/manifest.json)冻结 40 份准备
+输入的实际长度和 SHA；这些输入尚未完成正式竞品计时矩阵。
+
+[实际编译输入绑定](data/codec-encode-samples-20261025/compiled-binding.json)将
+Brotli 的 2,011 条、Zstd 的 2,009 条缓存输入记录，以及两份共用链接对象
+的 549/551 条记录，逐项核对大小、SipHash 和派生产物目录。所有输入无
+缺失或不匹配，两个 ELF 的 SHA 与实跑 JSON 相同。1,200 份实际项目及
+crypto 源码已归档，精确对应 `30611d7e`；标准库内容核对后未重复打包。
+这是缓存所用源码和实际产物的绑定，不推断原始运行期间存在完整目录的
+连续快照，也不验证动态加载器的依赖闭包。

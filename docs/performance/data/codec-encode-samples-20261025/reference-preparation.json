@@ -1,0 +1,45 @@
+{
+  "utc": "2026-10-24T18:39:23.685925+00:00",
+  "scope": "read-only source and artifact identity preparation; not a compressor benchmark or rebuilt artifact provenance proof",
+  "source_checkouts": [
+    {
+      "source": "/home/passchaos/Work/brotli",
+      "commit": "558fc647cdaf391228d614ca85f711e02e4e583b",
+      "tracked_and_untracked_status": ""
+    },
+    {
+      "source": "/home/passchaos/Work/zstd",
+      "commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+      "tracked_and_untracked_status": ""
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+      "sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e",
+      "bytes": 864608
+    },
+    {
+      "path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+      "sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a",
+      "bytes": 60304
+    },
+    {
+      "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+      "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7",
+      "bytes": 147920
+    },
+    {
+      "path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+      "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+      "bytes": 896992
+    }
+  ],
+  "brotli_configuration": {
+    "build_type": "Release",
+    "c_flags": "-DBROTLI_EXPERIMENTAL",
+    "release_flags": "-O3 -DNDEBUG",
+    "cmake_cache_sha256": "34530c7872143c95caa46dbb285cdee6cee865b313630ee94fbfb85822271dda"
+  },
+  "loaded_dependency_identity": "unverified"
+}

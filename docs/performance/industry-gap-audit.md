@@ -71,6 +71,13 @@ must come from a newly generated report. A common cross-library RSS/requested-
 memory comparison harness remains missing; existing work-budget proofs and
 internal memory improvements do not fill that gap.
 
+The [encoder sample tools](codec-encode-samples.md) now retain raw alternating
+Brotli/Zstd encoding rounds, input/wire identities and requested reference-file
+hashes beside the existing minimum-based CSVs. Actual small-input reports and
+independent validation close that recording gap. They do not provide a current
+real-corpus ranking, a symmetric streaming benchmark or separate competitor
+requested-heap/RSS measurements.
+
 The latest Bzip2 replay probe decodes 40 MiB of RLE plaintext with a 4,112,120-byte
 requested work peak and no complete plaintext staging. This is within its
 5 MiB decoder-owned budget. Caller buffers, fixed state, stack and allocator
