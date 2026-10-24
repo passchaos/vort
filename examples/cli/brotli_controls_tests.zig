@@ -203,3 +203,52 @@ test "Brotli CLI whole-block validation and profiling preserve requested mode" {
     try std.testing.expectError(error.MissingBrotliOptionValue, parse(&.{"--hq-parse-mode"}));
     try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--hq-parse-mode=bounded", "--hq-parse-mode=whole_block" }));
 }
+
+test "Brotli CLI complete copy lengths independently map both public HQ option fields" {
+    const unselected = try parse(&.{});
+    const defaults = try unselected.resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expectEqualDeep(vort.br.PlannedEncodeOptions{}, defaults);
+    const implicit = try (try parse(&.{ "--quality=10", "--hq" })).resolve(vort.br.PlannedEncodeOptions, null);
+    const explicit = try (try parse(&.{ "--quality=10", "--hq-copy-lengths=sampled" })).resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expectEqualDeep(implicit, explicit);
+    try std.testing.expectEqual(.sampled, implicit.hq.?.copy_lengths);
+    try std.testing.expect(implicit.hq.?.max_price_evaluations == null);
+    const a = try parse(&.{ "--quality=11", "--hq-copy-lengths=complete", "--hq-max-price-evaluations=0" });
+    const b = try parse(&.{ "--hq-max-price-evaluations", "0", "--hq-copy-lengths", "complete", "--quality", "11" });
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expect(a.hqSelected());
+    inline for (.{ vort.br.PlannedEncodeOptions, vort.br.PlannedStreamChunksOptions }) |Options| {
+        const mapped = try a.resolve(Options, null);
+        try std.testing.expectEqual(.complete, mapped.hq.?.copy_lengths);
+        try std.testing.expectEqual(@as(?u64, 0), mapped.hq.?.max_price_evaluations);
+        try std.testing.expectEqual(.bounded, mapped.hq.?.parse_mode);
+    }
+    const independent = try (try parse(&.{ "--quality=11", "--hq-copy-lengths=complete", "--hq-parse-mode=whole_block" })).resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expectEqual(.whole_block, independent.hq.?.parse_mode);
+    try std.testing.expectEqual(.complete, independent.hq.?.copy_lengths);
+}
+
+test "Brotli CLI complete length controls keep public validation and distinct profiling" {
+    inline for (.{ "10", "11" }) |quality| {
+        var profile: vort.BrotliHqProfile = .{};
+        const control = try parse(&.{ "--quality=" ++ quality, "--hq-copy-lengths=complete", "--hq-max-price-evaluations=18446744073709551615", "--profile" });
+        const one = try control.resolve(vort.br.PlannedEncodeOptions, &profile);
+        const stream = try control.resolve(vort.br.PlannedStreamChunksOptions, &profile);
+        _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one);
+        _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
+        const resolved = try one.hq.?.resolve(one.quality.?, one.mode);
+        try std.testing.expectEqual(.complete, resolved.copy_lengths);
+        try std.testing.expectEqual(@as(?u64, std.math.maxInt(u64)), resolved.max_price_evaluations);
+        try std.testing.expect(one.hq.?.profile == &profile);
+        try std.testing.expectEqualDeep(vort.BrotliHqProfile{}, profile);
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{"--hq-copy-lengths=complete"})).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--quality=9", "--hq-copy-lengths=complete" })).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--quality=9", "--hq-max-price-evaluations=10" })).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.InvalidBrotliCopyLengths, parse(&.{"--hq-copy-lengths=literal"}));
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--hq-copy-lengths=sampled", "--hq-copy-lengths=complete" }));
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--hq-max-price-evaluations=1", "--hq-max-price-evaluations=2" }));
+    try std.testing.expectError(error.MissingBrotliOptionValue, parse(&.{"--hq-max-price-evaluations"}));
+    try std.testing.expectError(error.InvalidCharacter, parse(&.{"--hq-max-price-evaluations="}));
+    try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-price-evaluations=-1"}));
+}

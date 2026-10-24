@@ -9,6 +9,8 @@ const Config = struct {
     api: []const u8 = "one_shot",
     hq: bool = false,
     parse_mode: ?[]const u8 = null,
+    copy_lengths: ?[]const u8 = null,
+    max_price_evaluations: ?u64 = null,
     quality: ?u8 = null,
     level: []const u8 = "fast",
     mode: []const u8 = "generic",
@@ -34,6 +36,8 @@ const Config = struct {
 const Resolved = struct {
     hq: bool,
     parse_mode: ?[]const u8 = null,
+    copy_lengths: ?[]const u8 = null,
+    max_price_evaluations: ?u64 = null,
     quality: ?u8,
     level: []const u8,
     mode: []const u8,
@@ -120,7 +124,8 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
     resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits, .large_window = config.large_window, .format = if (config.large_window) "large_window" else "standard", .max_total_working_memory = config.max_total_working_memory };
     if (!config.hq) {
         if (config.search_depth != null or config.nice_len != null or config.beam_width != null or config.iterations != null or
-            config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null or config.parse_mode != null) return error.InvalidBlockPlan;
+            config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null or config.parse_mode != null or
+            config.copy_lengths != null or config.max_price_evaluations != null) return error.InvalidBlockPlan;
         return;
     }
     if (@hasField(@TypeOf(options.*), "hq")) {
@@ -129,6 +134,15 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
             if (config.parse_mode) |value| hq.parse_mode = std.meta.stringToEnum(@FieldType(br.HqOptions, "parse_mode"), value) orelse return error.InvalidBlockPlan;
         } else if (config.parse_mode) |value| {
             if (!std.mem.eql(u8, value, "bounded")) return error.UnsupportedParseMode;
+        }
+        if (@hasField(br.HqOptions, "copy_lengths")) {
+            if (config.copy_lengths) |value| hq.copy_lengths = std.meta.stringToEnum(@FieldType(br.HqOptions, "copy_lengths"), value) orelse return error.InvalidBlockPlan;
+            hq.max_price_evaluations = config.max_price_evaluations;
+        } else {
+            if (config.copy_lengths) |value| {
+                if (!std.mem.eql(u8, value, "sampled")) return error.UnsupportedCopyLengthPolicy;
+            }
+            if (config.max_price_evaluations != null) return error.UnsupportedPriceEvaluationLimit;
         }
         if (config.search_depth) |value| hq.search_depth = value;
         if (config.nice_len) |value| hq.nice_len = value;
@@ -149,6 +163,8 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
             try hq.resolve(config.quality orelse return error.InvalidBlockPlan, options.mode);
         const selected = &resolved.*.?;
         selected.parse_mode = if (@hasField(@TypeOf(effective), "parse_mode")) @tagName(effective.parse_mode) else "bounded";
+        selected.copy_lengths = if (@hasField(@TypeOf(effective), "copy_lengths")) @tagName(effective.copy_lengths) else "sampled";
+        selected.max_price_evaluations = if (@hasField(@TypeOf(effective), "max_price_evaluations")) effective.max_price_evaluations else null;
         selected.search_depth = effective.search_depth;
         selected.nice_len = effective.nice_len;
         selected.beam_width = effective.beam_width;

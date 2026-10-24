@@ -2821,6 +2821,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\    --hq-iterations=0..8 --hq-block-len=1..16777216 --hq-memory=bytes
         \\    --hq-parse-mode=bounded|whole_block (default bounded; HQ quality 10/11 only)
         \\                              Whole-block parsing spans the target meta-block within configured limits
+        \\    --hq-copy-lengths=sampled|complete (default sampled; independent of parse mode)
+        \\    --hq-max-price-evaluations=NUM limits each parser plan; 0 rejects its first price evaluation
+        \\                              Complete lengths can require more work; finite beam search is not globally optimal
         \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
         \\    --max-total-memory=bytes --memory-profile (all planned qualities)
         \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap

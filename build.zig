@@ -296,6 +296,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_whole_block_test_step = b.step("test-br-whole-block", "Run complete-meta-block Brotli search, wire and resource contracts");
     br_whole_block_test_step.dependOn(&b.addRunArtifact(br_whole_block_tests).step);
+    const br_complete_length_tests = b.addTest(.{
+        .name = "vort-br-complete-length-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli complete lengths", "Brotli copy-length", "Brotli HQ complete lengths", "BrHQ complete lengths", "BrHQ complete length policy", "BrHQ price budget" },
+    });
+    const br_complete_length_step = b.step("test-br-complete-lengths", "Run complete Brotli copy-length choice and evaluation-limit contracts");
+    br_complete_length_step.dependOn(&b.addRunArtifact(br_complete_length_tests).step);
     const br_large_tree_tests = b.addTest(.{
         .name = "vort-br-large-tree-tests",
         .root_module = b.createModule(.{
@@ -1875,6 +1882,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| br_whole_block_diff.addArgs(args);
     const br_whole_block_diff_step = b.step("run-br-whole-block-diff", "Validate complete-meta-block Brotli planning against reference decoders");
     br_whole_block_diff_step.dependOn(&br_whole_block_diff.step);
+    const br_complete_length_cli = b.addSystemCommand(&.{ "python3", "tools/br/complete_lengths_cli_gate.py", "--cli" });
+    br_complete_length_cli.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_complete_length_cli.addArgs(args);
+    const br_complete_length_cli_step = b.step("test-br-complete-lengths-cli", "Validate complete-copy-length Brotli CLI controls and search limits");
+    br_complete_length_cli_step.dependOn(&br_complete_length_cli.step);
+    br_complete_length_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_complete_length_diff = b.addSystemCommand(&.{ "python3", "tools/br/complete_lengths_diff.py", "--probe" });
+    br_complete_length_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_complete_length_diff.addArgs(args);
+    const br_complete_length_diff_step = b.step("run-br-complete-lengths-diff", "Validate complete-copy-length Brotli output and per-plan search limits");
+    br_complete_length_diff_step.dependOn(&br_complete_length_diff.step);
     const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
     br_hq_tools_step.dependOn(&br_hq_probe.step);
     br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
