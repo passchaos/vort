@@ -195,6 +195,23 @@ pub fn build(b: *std.Build) void {
     br_stored_memory_wasm_run.addArtifactArg(br_stored_memory_wasm);
     const br_stored_memory_wasm_step = b.step("test-br-stored-memory-wasm", "Execute stored Brotli memory and ownership contracts in WebAssembly");
     br_stored_memory_wasm_step.dependOn(&br_stored_memory_wasm_run.step);
+    const wide_bit_wasm = b.addExecutable(.{
+        .name = "vort-wide-bit-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/wide_bit_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    wide_bit_wasm.entry = .disabled;
+    wide_bit_wasm.rdynamic = true;
+    wide_bit_wasm.stack_size = 8 * 1024 * 1024;
+    const wide_bit_wasm_run = b.addSystemCommand(&.{ "node", "tools/bit_addressing/wasm_gate.js" });
+    wide_bit_wasm_run.addArtifactArg(wide_bit_wasm);
+    const wide_bit_wasm_step = b.step("test-wide-bit-wasm", "Execute wide bit geometry and public reader contracts in WebAssembly");
+    wide_bit_wasm_step.dependOn(&wide_bit_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -318,6 +335,13 @@ pub fn build(b: *std.Build) void {
     zip_incremental_entry_decoder_test_step.dependOn(
         &run_zip_incremental_entry_decoder_tests.step,
     );
+    const zip_zstd_stream_tests = b.addTest(.{
+        .name = "vort-zip-zstd-stream-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "ZIP incremental reader streams Zstandard preset dictionaries", "ZIP incremental reader streams Bzip2 and Zstandard known and descriptor members" },
+    });
+    const zip_zstd_stream_step = b.step("test-zip-zstd-stream", "Run ZIP Zstd length-pledge and dictionary streaming compatibility");
+    zip_zstd_stream_step.dependOn(&b.addRunArtifact(zip_zstd_stream_tests).step);
     const rar_tests = b.addTest(.{
         .name = "vort-rar-tests",
         .root_module = tests_mod,
@@ -374,6 +398,23 @@ pub fn build(b: *std.Build) void {
     });
     const br_stored_memory_step = b.step("test-br-stored-memory", "Run stored Brotli total requested heap, ownership and retry contracts");
     br_stored_memory_step.dependOn(&b.addRunArtifact(br_stored_memory_tests).step);
+    const wide_bit_tests = b.addTest(.{
+        .name = "vort-wide-bit-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Wide bit", "wide bit", "wide address", "Brotli fast bit reader" },
+    });
+    const wide_bit_step = b.step("test-wide-bit-addressing", "Run wide bit counts, reader cursors and Brotli bound contracts");
+    wide_bit_step.dependOn(&b.addRunArtifact(wide_bit_tests).step);
+    const shared_bit_tests = b.addTest(.{
+        .name = "vort-shared-bit-reader-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bitstream.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const shared_bit_step = b.step("test-shared-bit-readers", "Run scalar buffered and chunked bit reader contracts");
+    shared_bit_step.dependOn(&b.addRunArtifact(shared_bit_tests).step);
     const br_large_window_tests = b.addTest(.{
         .name = "vort-br-large-window-tests",
         .root_module = br_tests_mod,
@@ -2037,6 +2078,49 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| br_stored_memory_diff.addArgs(args);
     const br_stored_memory_diff_step = b.step("run-br-stored-memory-diff", "Validate stored Brotli budgets and public ownership against versioned references");
     br_stored_memory_diff_step.dependOn(&br_stored_memory_diff.step);
+    const wide_bit_fast_sources = b.addWriteFiles();
+    for ([_][]const u8{
+        "src/br/fast_bit_reader.zig",
+        "src/bitstream.zig",
+        "src/core.zig",
+        "src/io/bit_count.zig",
+        "src/io/stream_count.zig",
+        "src/bitstream/wide_fields.zig",
+        "src/bitstream/wide_reader_tests.zig",
+    }) |source| _ = wide_bit_fast_sources.addCopyFile(b.path(source), source);
+    const wide_bit_fast_root = wide_bit_fast_sources.add("root.zig", "pub const Reader = @import(\"src/br/fast_bit_reader.zig\").Reader;\n");
+    const wide_bit_fast_module = b.createModule(.{
+        .root_source_file = wide_bit_fast_root,
+        .target = target,
+        .optimize = optimize,
+    });
+    const wide_bit_probe = b.addExecutable(.{
+        .name = "vort-wide-bit-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/bit_addressing/probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const wide_bit_fast_probe = b.addExecutable(.{
+        .name = "vort-wide-bit-fast-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/bit_addressing/fast_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "brfast", .module = wide_bit_fast_module }},
+        }),
+    });
+    const wide_bit_diff = b.addSystemCommand(&.{ "python3", "tools/bit_addressing/driver.py", "--probe" });
+    wide_bit_diff.addArtifactArg(wide_bit_probe);
+    wide_bit_diff.addArg("--fast-probe");
+    wide_bit_diff.addArtifactArg(wide_bit_fast_probe);
+    if (b.args) |args| wide_bit_diff.addArgs(args);
+    const wide_bit_diff_step = b.step("run-wide-bit-addressing-diff", "Validate real mapped bit addresses against versioned Brotli references");
+    wide_bit_diff_step.dependOn(&wide_bit_diff.step);
     const br_stored_memory_cli = b.addSystemCommand(&.{ "python3", "tools/br/stored_memory_cli_gate.py", "--cli" });
     br_stored_memory_cli.addArtifactArg(br_hq_cli_probe);
     if (b.args) |args| br_stored_memory_cli.addArgs(args);
@@ -6911,6 +6995,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_hq_search_probe.step);
     check_step.dependOn(&zstd_hq_search_wasm.step);
     check_step.dependOn(&br_stored_memory_wasm.step);
+    check_step.dependOn(&wide_bit_wasm.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);
     check_step.dependOn(&br_general_large_probe.step);
     check_step.dependOn(&zstd_large_history_probe.step);
@@ -6921,6 +7006,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_stream_counter_probe.step);
     check_step.dependOn(&br_hq_probe.step);
     check_step.dependOn(&br_stored_memory_probe.step);
+    check_step.dependOn(&wide_bit_probe.step);
+    check_step.dependOn(&wide_bit_fast_probe.step);
     check_step.dependOn(&br_hq_cli_probe.step);
     check_step.dependOn(&br_hq_cli_tests.step);
     check_step.dependOn(&zstd_cli_controls_tests.step);
