@@ -158,8 +158,9 @@ workspaces, plans, candidate artifacts and explicitly charged alias snapshots.
 Generic plaintext/pending buffers, retained plaintext history, complete-frame
 output and the retained complete q10 comparison wire use the backing allocator
 outside this cap. Stream I/O storage follows the configured block and window
-bounds. A unified encoder quota and lower-peak complete-stream comparison remain
-unfinished.
+bounds. The subsequent [total-memory milestone](brotli-total-memory-functional-baseline.md)
+adds a separate quota covering these outer allocations and HQ workspaces.
+Lower-peak complete-stream comparison remains unfinished.
 
 Large Window HQ encoding, broader current-reference compression-ratio and
 encode/decode-throughput measurements, total-allocation/RSS evidence, and global

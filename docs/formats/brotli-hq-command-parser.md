@@ -128,6 +128,8 @@ alias snapshots. Generic incremental plaintext/pending buffers, retained
 plaintext history, complete-frame output and a retained complete q10 comparison
 wire use the supplied backing allocator outside this cap. Streaming I/O storage
 is bounded by the configured block and window sizes; allocating convenience
-APIs also retain their complete result. A single encoder-wide allocation quota
-and lower-memory whole-frame comparison remain separate work. This profile
-must not be reported as total encoder allocation or process RSS.
+APIs also retain their complete result. The independent
+[`max_total_working_memory` option](brotli-total-encode-memory.md) covers those
+outer allocations together with HQ workspaces. Lower-memory whole-frame
+comparison remains separate work. The HQ workspace profile must not be
+reported as total encoder allocation or process RSS.

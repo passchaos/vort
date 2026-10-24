@@ -2188,6 +2188,14 @@ memory or process RSS. See the [HQ contract](docs/formats/brotli-hq-command-pars
 for block precedence, exact encodings, ownership and the remaining native search
 limitations. Quality numbers do not establish reference ratio or speed parity.
 
+All planned encoding levels and qualities also accept
+`max_total_working_memory` and a caller-owned `BrotliEncodeMemoryProfile`.
+This separate total cap includes buffers, retained history, dictionary/parser
+workspaces, alias snapshots and simultaneously live q10/q11 candidate streams.
+It preserves the HQ workspace cap's existing meaning. See the
+[total encoding-memory contract](docs/formats/brotli-total-encode-memory.md)
+for retained storage, output ownership and exact requested-byte accounting.
+
 ### Brotli RAW shared-prefix dictionaries
 
 `BrotliSharedDictionary` describes zero through fifteen ordered RAW prefix

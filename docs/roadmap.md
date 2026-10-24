@@ -90,8 +90,14 @@ and resource gates preserve the older null/default wires. This closes the
 previous u16/two-state HQ implementation gap without establishing reference
 algorithm, ratio or throughput parity.
 
+The [Brotli total-memory milestone](performance/brotli-total-memory-functional-baseline.md)
+adds a separate whole-operation requested-heap cap across legacy qualities and
+HQ, including retained buffers, dictionaries, aliases and complete candidate
+streams. Independent backing ledgers validate precise limits and ownership
+transfer without changing the older null/default wires.
+
 Remaining priorities include Brotli Large Window HQ encoding, global quality
-planning and an encoder-wide allocation quota, standard dictionary finalization
+planning, lower-peak whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 

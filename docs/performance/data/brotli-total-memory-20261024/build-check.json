@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "check",
+    "-Doptimize=Debug",
+    "-j4",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 610.8893894588109,
+  "utc": "2026-10-24T09:27:06.263545+00:00",
+  "changed_sources": [],
+  "source_sha256": "0c0628aa12a9820a93ba07d884c4f4bdb51500ee06d87a4abd8eaeafe22674e1",
+  "log": "/tmp/vort-br-total-final-20261024-n_7jpt2j/build-check.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

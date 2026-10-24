@@ -1,0 +1,1146 @@
+{
+  "schema": "vort-br-total-memory-v1",
+  "status": "ok",
+  "utc": "2026-10-24T09:17:24.899507+00:00",
+  "rows": [
+    {
+      "name": "one_shot-q0",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "one_shot"
+      },
+      "input_bytes": 512,
+      "wire_bytes": 92,
+      "wire_sha256": "7a067dea5d407c39013a23f2df240d6debe52443c60e4a4d5125673cf5666a55",
+      "total_peak_requested_bytes": 4072,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 4072,
+        "live_requested_bytes": 0,
+        "limit": 4072
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 3980,
+        "live_requested_bytes": 0,
+        "limit": 4071
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "one_shot-q11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 11,
+        "window_bits": 16,
+        "api": "one_shot"
+      },
+      "input_bytes": 148,
+      "wire_bytes": 42,
+      "wire_sha256": "6b1f049fe047cfa0c0f995468148a9361965d9e5542b8db978c7da65b4bfb3ee",
+      "total_peak_requested_bytes": 689390,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 689390,
+        "live_requested_bytes": 0,
+        "limit": 689390
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 688862,
+        "live_requested_bytes": 0,
+        "limit": 689389
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "one_shot-hq11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "api": "one_shot"
+      },
+      "input_bytes": 162,
+      "wire_bytes": 38,
+      "wire_sha256": "454a01d322eac2cb9c840deb166e21604f0c1e35207d62c56937f15e5816f5ab",
+      "total_peak_requested_bytes": 8987731,
+      "hq_workspace_peak": 8987113,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8987731,
+        "live_requested_bytes": 0,
+        "limit": 8987731
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8969715,
+        "live_requested_bytes": 0,
+        "limit": 8987730
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "one_shot-empty",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "one_shot"
+      },
+      "input_bytes": 0,
+      "wire_bytes": 1,
+      "wire_sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6",
+      "total_peak_requested_bytes": 210,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 210,
+        "live_requested_bytes": 0,
+        "limit": 210
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 209,
+        "live_requested_bytes": 0,
+        "limit": 209
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "one_shot-raw",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "raw_dictionary_paths": [
+          "/tmp/vort-br-total-final-20261024-n_7jpt2j/reference/total-raw.dictionary"
+        ],
+        "api": "one_shot"
+      },
+      "input_bytes": 65,
+      "wire_bytes": 12,
+      "wire_sha256": "3261479987765b7f032448ff81ee9efc409eb1fab4e5cd98f7cd42757d1598b8",
+      "total_peak_requested_bytes": 9979239,
+      "hq_workspace_peak": 9978793,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9979239,
+        "live_requested_bytes": 0,
+        "limit": 9979239
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9961223,
+        "live_requested_bytes": 0,
+        "limit": 9979238
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": true
+        },
+        {
+          "reference": "system",
+          "status": "skipped",
+          "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+        }
+      ]
+    },
+    {
+      "name": "chunks-q0",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "chunks"
+      },
+      "input_bytes": 512,
+      "wire_bytes": 314,
+      "wire_sha256": "8baf56c13c2900c7f42116a3bbac910ab93f3bcaea9a9c3295e35957899b458c",
+      "total_peak_requested_bytes": 4539,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 4539,
+        "live_requested_bytes": 0,
+        "limit": 4539
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 4354,
+        "live_requested_bytes": 0,
+        "limit": 4538
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "chunks-q11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 11,
+        "window_bits": 16,
+        "api": "chunks"
+      },
+      "input_bytes": 148,
+      "wire_bytes": 52,
+      "wire_sha256": "3d688cebd32e36c7eb08c9f09e6eca90164e19bb61020dccd9cec0709b6cc537",
+      "total_peak_requested_bytes": 887660,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 887660,
+        "live_requested_bytes": 0,
+        "limit": 887660
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 822124,
+        "live_requested_bytes": 0,
+        "limit": 887659
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "chunks-hq11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "api": "chunks"
+      },
+      "input_bytes": 162,
+      "wire_bytes": 38,
+      "wire_sha256": "454a01d322eac2cb9c840deb166e21604f0c1e35207d62c56937f15e5816f5ab",
+      "total_peak_requested_bytes": 8987678,
+      "hq_workspace_peak": 8987113,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8987678,
+        "live_requested_bytes": 0,
+        "limit": 8987678
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8969662,
+        "live_requested_bytes": 0,
+        "limit": 8987677
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "chunks-empty",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "chunks"
+      },
+      "input_bytes": 0,
+      "wire_bytes": 1,
+      "wire_sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6",
+      "total_peak_requested_bytes": 210,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 210,
+        "live_requested_bytes": 0,
+        "limit": 210
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 209,
+        "live_requested_bytes": 0,
+        "limit": 209
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "chunks-raw",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "raw_dictionary_paths": [
+          "/tmp/vort-br-total-final-20261024-n_7jpt2j/reference/total-raw.dictionary"
+        ],
+        "api": "chunks"
+      },
+      "input_bytes": 65,
+      "wire_bytes": 12,
+      "wire_sha256": "3261479987765b7f032448ff81ee9efc409eb1fab4e5cd98f7cd42757d1598b8",
+      "total_peak_requested_bytes": 9979239,
+      "hq_workspace_peak": 9978793,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9979239,
+        "live_requested_bytes": 0,
+        "limit": 9979239
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9961223,
+        "live_requested_bytes": 0,
+        "limit": 9979238
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": true
+        },
+        {
+          "reference": "system",
+          "status": "skipped",
+          "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+        }
+      ]
+    },
+    {
+      "name": "incremental-q0",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "incremental"
+      },
+      "input_bytes": 512,
+      "wire_bytes": 164,
+      "wire_sha256": "dadf2979b9148930c97ffd72d35e15b4b03392d4d5c8eacb483ac64f786b6b5a",
+      "total_peak_requested_bytes": 4672,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 4672,
+        "live_requested_bytes": 0,
+        "limit": 4672
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 4298,
+        "live_requested_bytes": 0,
+        "limit": 4671
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "incremental-q11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 11,
+        "window_bits": 16,
+        "api": "incremental"
+      },
+      "input_bytes": 148,
+      "wire_bytes": 43,
+      "wire_sha256": "9b09f0cbaf6faabcd8c42857b4e1232795f051a69414f4c9eacd0ebce6e6e562",
+      "total_peak_requested_bytes": 690037,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 690037,
+        "live_requested_bytes": 0,
+        "limit": 690037
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 624501,
+        "live_requested_bytes": 0,
+        "limit": 690036
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "incremental-hq11",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "api": "incremental"
+      },
+      "input_bytes": 162,
+      "wire_bytes": 38,
+      "wire_sha256": "454a01d322eac2cb9c840deb166e21604f0c1e35207d62c56937f15e5816f5ab",
+      "total_peak_requested_bytes": 8987640,
+      "hq_workspace_peak": 8987113,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8987640,
+        "live_requested_bytes": 0,
+        "limit": 8987640
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 8969624,
+        "live_requested_bytes": 0,
+        "limit": 8987639
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "incremental-empty",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "quality": 0,
+        "window_bits": 16,
+        "api": "incremental"
+      },
+      "input_bytes": 0,
+      "wire_bytes": 1,
+      "wire_sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6",
+      "total_peak_requested_bytes": 209,
+      "hq_workspace_peak": 0,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 209,
+        "live_requested_bytes": 0,
+        "limit": 209
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 80,
+        "live_requested_bytes": 0,
+        "limit": 208
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        },
+        {
+          "reference": "system",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": false
+        }
+      ]
+    },
+    {
+      "name": "incremental-raw",
+      "config": {
+        "input_chunk": 127,
+        "output_chunk": 31,
+        "block_len": 256,
+        "hq": true,
+        "quality": 11,
+        "window_bits": 18,
+        "npostfix": 1,
+        "ndirect_high": 6,
+        "search_depth": 32,
+        "nice_len": 64,
+        "beam_width": 4,
+        "iterations": 1,
+        "raw_dictionary_paths": [
+          "/tmp/vort-br-total-final-20261024-n_7jpt2j/reference/total-raw.dictionary"
+        ],
+        "api": "incremental"
+      },
+      "input_bytes": 65,
+      "wire_bytes": 12,
+      "wire_sha256": "3261479987765b7f032448ff81ee9efc409eb1fab4e5cd98f7cd42757d1598b8",
+      "total_peak_requested_bytes": 9979227,
+      "hq_workspace_peak": 9978793,
+      "after_operation_live_requested_bytes": 0,
+      "exact_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9979227,
+        "live_requested_bytes": 0,
+        "limit": 9979227
+      },
+      "below_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 9961211,
+        "live_requested_bytes": 0,
+        "limit": 9979226
+      },
+      "zero_total_profile": {
+        "available": true,
+        "peak_requested_bytes": 0,
+        "live_requested_bytes": 0,
+        "limit": 0
+      },
+      "reference_results": [
+        {
+          "reference": "modern",
+          "status": "ok",
+          "direction": "bidirectional",
+          "dictionary_attached": true
+        },
+        {
+          "reference": "system",
+          "status": "skipped",
+          "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+        }
+      ]
+    }
+  ],
+  "independent_caps": {
+    "total_peak_requested_bytes": 8987731,
+    "workspace_peak": 8987113,
+    "workspace_failure_total_profile": {
+      "available": true,
+      "peak_requested_bytes": 8969715,
+      "live_requested_bytes": 0,
+      "limit": 8987731
+    },
+    "scope": "workspace failure with independently sufficient total budget; error name does not identify its cap source"
+  },
+  "baseline_rows": 15,
+  "baseline_manifest_sha256": "c6544053cb9a39ede6c8b86763471bebfe40bb70f9bb8d2e4bbb9d92b30d5095",
+  "references": {
+    "modern": {
+      "header_version": "0x1002000",
+      "header_version_note": "matching source common/version.h",
+      "encoder_version": "0x1002000",
+      "decoder_version": "0x1002000",
+      "helper_sha256": "bb94f9699c81d5046718da3ff1e8c083e8c1fed09dc67d6d28657b73e0fbc4c4",
+      "libraries": {
+        "encoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlienc.so.1.2.0",
+          "sha256": "413f83e8a5915edd7994d77e5d42ed5d520ae6950ac11ed20d8e1b765fcd75ef"
+        },
+        "decoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+          "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+        },
+        "common": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlicommon.so.1.2.0",
+          "sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+        }
+      },
+      "raw_dictionary_api": true,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+      "existing_runtime_source_revision": "not independently reconstructed"
+    },
+    "system": {
+      "header_version": null,
+      "header_version_note": "system public headers expose no package-version macro",
+      "encoder_version": "0x1000009",
+      "decoder_version": "0x1000009",
+      "helper_sha256": "4059bb20e72bc690eb6971cf21adcfcfab2ca1ee5c9253c4bb52abd6e89af149",
+      "libraries": {
+        "encoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9",
+          "sha256": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+        },
+        "decoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        },
+        "common": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+          "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+        }
+      },
+      "raw_dictionary_api": false,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": null,
+      "existing_runtime_source_revision": "not independently reconstructed"
+    }
+  },
+  "probe_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/b4500be2f44adc8f47c736d94582fcd9/vort-br-hq-probe",
+  "probe_sha256": "1d55a206f7f97be5c9ee6dcfbb08a5659ad2e0ec73292adec329c6f74229dc0c",
+  "source_sha256": {
+    "build.zig": "aa5cb2d8b7f778ca5ae83c3df998734fee0b53798a356d0b8c76a2fabcb49d85",
+    "src/root.zig": "040a54419423d58d94d7ca11f5692cea7fd9fd66906fc807a38e577e38e1d6ce",
+    "src/br.zig": "494c994eb7793395cde6f04e23930c15b11e18009897eaf8e8d909b19a3df869",
+    "src/br/allocator_dispatch.zig": "dd270fb9dd13efaa44559e41e706bdf59508f47341980d6402f579f8d9b6be6f",
+    "src/br/code_length_decoder.zig": "a264713818744d94fe111910f94659bb9ed2c0bd18af85fac736e12f7369e93f",
+    "src/br/command_lut.zig": "b98501f929129c72108d6c1536befb988203893da01ce8fa2859052e1d684a80",
+    "src/br/decoder/distance_history.zig": "223e70640cc5d9ee3396c3753ee7ff8de2d44e6f316127b66447cf560591d174",
+    "src/br/dictionary_copy.zig": "d2857a33ce9200f66f4360b5bb60d7bc304b34f11b8f2308195b65a0d1007ff0",
+    "src/br/encoder/adaptive_block_code.zig": "6d3a3cebd57ad3023cf3b82f568b04aa529c5007061465ddd67c6ded44325560",
+    "src/br/encoder/adaptive_block_split.zig": "d3649bea365395e11f2d3818492a590ea49bc6943c61571453d01baeef33dbd5",
+    "src/br/encoder/block_split_plan.zig": "4f115d9775588a9c0837b9c4755812d35ff551b28446955fab65e3e182a52212",
+    "src/br/encoder/block_switch_model.zig": "b320722c3572dda1055ee98d257c4e1603ea2cb05bfc5fdea6f4edf34e61cf09",
+    "src/br/encoder/code_length_huffman.zig": "0d32345ed9d49a33e5b380bab11032ad125db9b1ec39cd249c3392fbcff51fe2",
+    "src/br/encoder/code_length_rle.zig": "1174a7aa83ebc410ef60294727dccf2500e9957612637f783fb25d0c6e28f0f8",
+    "src/br/encoder/command_block_split.zig": "750d0a5e586465c3aeacca00fc624df9bdd5d61fb0ac62287d745e24068e9c76",
+    "src/br/encoder/command_encoding.zig": "530dbb3d3f4d6b54448c734413dcfb6fb9f2f4803dcc4d65d7e93892f15ae268",
+    "src/br/encoder/command_plan.zig": "c50a9cabc68ab956111528c1cf8bb8a584ab98787900d562114746ac667feb92",
+    "src/br/encoder/complex_prefix.zig": "eadb870f72133d75069d80c2269009cb367ff3a240650542da11c2866d6a758a",
+    "src/br/encoder/compound_dictionary_matcher.zig": "ef6d45415f78ec9d18c9eae2d2d054ccd3541b0ee763b95e3da530547854a34c",
+    "src/br/encoder/compound_wire.zig": "6257bed458d20153a16a72e00b0938a78cfc66c6151caebc2693889c0bd477d5",
+    "src/br/encoder/context_map.zig": "2196fc90b4dbc073a32a964229b102115ad39d954cb82eefe1c0a2f8dce34775",
+    "src/br/encoder/dictionary_visitor_tests.zig": "bac1bfb56fc3b522f8184cc90bd62affe8f91cb1f2cb1b1c78ea4ede6bd7c853",
+    "src/br/encoder/distance.zig": "a4b1211b3d96b44ff68e078f382884bd8efe29af6e69d321f9884599fb04f68f",
+    "src/br/encoder/distance_block_split.zig": "1fb1c79408297f297950d3a48a2a8121b357dce1020855c767db221dbcb8cedd",
+    "src/br/encoder/distance_parameter_search.zig": "f396440049e61672a9fbd220f1c5f2f368a71a40671755749c1be73c68b49da2",
+    "src/br/encoder/dynamic_context_map.zig": "23497f10795ce3664072a7042f980de6e846a4607899f99b7981e00375c16be5",
+    "src/br/encoder/entropy_feedback.zig": "06ba8c1e8faaf284fe6c95e8f748a38198cd6887790313918a9635fcef95327f",
+    "src/br/encoder/fast_fragment.zig": "3a0f3d7db0e0c6400971a35b2401456481d3ca21f29abbeeb194cb5a95509f5c",
+    "src/br/encoder/fast_fragment_one_pass.zig": "0d6f34c5741d79c4bb437b62f474a493a9a5781db854e7cc989c0b5a276534f2",
+    "src/br/encoder/fast_fragment_two_pass.zig": "9624ee7afbe6aacc8995b39974f07a89c913a836b1b4bd631ac38d3a6b7e5315",
+    "src/br/encoder/histogram_model.zig": "8994aea03c22b2ab8f04c1056a61acba4155a1d3a7c370449b73cae3ecbc56fd",
+    "src/br/encoder/hq_codec/alias.zig": "e55e4540aa00bb272f9288890442463957ec5774c53c818ea8bcaa4fe7419ed5",
+    "src/br/encoder/hq_codec/alias_tests.zig": "7d6fb6696041717ab33f0264e98b7dbca87455901589267f83aa9f3741ed3801",
+    "src/br/encoder/hq_codec/exact.zig": "b99d62ce437bace66cdb84684bb19a7bf9968bc4f9bee97a95fb5040c1af0a33",
+    "src/br/encoder/hq_codec/frame.zig": "dbfda5e6ba4e4bcb0be8fdc30d1b5d1ab76092cbcc6c8b15d86bb086afb73705",
+    "src/br/encoder/hq_codec/history.zig": "9842a8a7510193c61284fc7b08e7be6e793cabdbebc6661e1bec5a6ddcf00a68",
+    "src/br/encoder/hq_codec/huffman_model.zig": "517b8a22306405181162309dbd415b9ae73760f6e965ab166fb1a7fe75eaf17d",
+    "src/br/encoder/hq_codec/legacy.zig": "3d369eda50bba97afd9b515da04f0da81ef2c7c54af6643bc1807a0da08ee860",
+    "src/br/encoder/hq_codec/native.zig": "e1e095b32707b5be539b2dd5ac5b1a8a725eb9a92578101be1c6581ed26b6701",
+    "src/br/encoder/hq_codec/transaction.zig": "fa6b09ee673bb224468bf744fda4a3ed635cce45e82344896a7b5167f93dbee7",
+    "src/br/encoder/hq_codec/wire.zig": "0f91b85a892ba40f1085035581cbc2a16f6fc54c6ad9890deb2d99ad67184ff1",
+    "src/br/encoder/hq_codec.zig": "4b759ceb02194d598f91773316d034531529ccfe80247d0862df5ee4be2d1246",
+    "src/br/encoder/hq_command_parser.zig": "15ce6c795265306424ddad429db6ff6dd71d5504c835ad146642d3ab6f622d81",
+    "src/br/encoder/hq_dictionary/options_tests.zig": "0822d1fe24e194e042b764476f3a844791750de021c9519ac4f0368f68ea18ea",
+    "src/br/encoder/hq_dictionary/provider_tests.zig": "a0a66b574ec894744b1c34b7341bb8a77aaaec2a81d4e8fa6849f294acef5cc6",
+    "src/br/encoder/hq_dictionary/types_tests.zig": "00ec0966c950c8849f4b17209260429c3bc7836483dc171a907fd0ea63aac87a",
+    "src/br/encoder/hq_dictionary.zig": "a19aa3338e21883262799ff8b38a570606a00f5205d37bf31b23d1a98a060a37",
+    "src/br/encoder/hq_options.zig": "bf06c1c503773027bd001c5316a1eacf089c9e2638cc2ffdf566c557129804d4",
+    "src/br/encoder/hq_parser/dictionary_tests.zig": "499899722b5c0cda203db91c072b81a11fa26a70d9ada1c8a9419565fecf57aa",
+    "src/br/encoder/hq_parser/dp.zig": "f3a0bd50623cb7c9fa31a84aae4949f0e77d57540a0ac12a3fbb2aeb9c78a767",
+    "src/br/encoder/hq_parser/extension.zig": "858f905d97cd714c5125952baa10fe4679c393f1cfafa96af9f741bd09122566",
+    "src/br/encoder/hq_parser/extension_tests.zig": "d742e690182fbc3ecfa62e9a5feab64928f492c8e3227d9dae15e3f25d7c952b",
+    "src/br/encoder/hq_parser/oracle_tests.zig": "6e230196744ba2432394614721b65aa539cf96acf50303d6ea54bf67d3512f30",
+    "src/br/encoder/hq_parser/prices.zig": "8f3109a37ce55210f6ab8f5c9e9f2ef7e2052be79de8078ecfd5b327f4fd0ba7",
+    "src/br/encoder/hq_parser/rep.zig": "ab3a158eb6b7a41e75b29b90adfe61d0212c5e4ec6444a384d7e34dcfad74920",
+    "src/br/encoder/hq_parser/resource_tests.zig": "8632d40b59e8c1bebb8f8e9f85ed11d61762068a8dc5f9bd7981e446f52ccb41",
+    "src/br/encoder/hq_parser/resources.zig": "b25c35d6f7bce40377ae2964c1dcff9f332efeed44e795207170841e6d6994f1",
+    "src/br/encoder/hq_parser/state.zig": "c4b41636f3bcfb97c226efd99b915bb7e0283756f34c332621a1a857bfc4ed7d",
+    "src/br/encoder/hq_parser/tests.zig": "4a968324e9af5bfdf6416ac87b75a180bf0b603fbd221109737d86d39ee60e7b",
+    "src/br/encoder/hq_parser.zig": "103ade1b39b2dbe9098d4091f524684d23f77461b73a48ff044e768bd606f6a6",
+    "src/br/encoder/hq_tree/forest.zig": "e86e5f9eaa57df31b7c7fa82c7bd951b6d268e577501900aab2a8b4a4400d08f",
+    "src/br/encoder/hq_tree/resources.zig": "bc462b4b15c2351444e1fe7f7141a602e583304a4f194c29094abeed436287d3",
+    "src/br/encoder/hq_tree/types.zig": "96aa50f509cc6222e50797821f3adaa34605614064a1986d902b8be4e3344216",
+    "src/br/encoder/hq_tree/view.zig": "44ffce9867e45e9cceacd11d82f69ae8806ab5d236959f2c6601e242517906e9",
+    "src/br/encoder/hq_tree.zig": "add5c107d3a6f087ea9c14ffe32a93447e75426cc48a666d84cf6972ee09b375",
+    "src/br/encoder/hq_tree_oracle_tests/oracle.zig": "1ba9bbf21893b9844ad1e2d15c8d4835018947d9e8dfc9fc6056384f50277236",
+    "src/br/encoder/hq_tree_oracle_tests/resources_tests.zig": "4a1f1f9d6c892c0250f6299f6fc90f151ffe77ff2483ecb7b44e58e7aff7de90",
+    "src/br/encoder/hq_tree_oracle_tests.zig": "95c3b0b3b13243aafb65df360ce9fba3c1986e9fab78fa83a33457b54e301c2f",
+    "src/br/encoder/hq_types.zig": "83187ac29b9607b5633620dbc758961a3523a0fc8e2b497d43cda0093ff00f3c",
+    "src/br/encoder/huffman_rle_counts.zig": "3c5a08cadea7d723258badd4a93ade115da034050ece53f814b1c8d83637b860",
+    "src/br/encoder/identity_context_map.zig": "b2e90b919b78266d032b2f10c41bbd38e14c27d9c1d2382a70992fa4370b1b3a",
+    "src/br/encoder/literal_block_split.zig": "5be1cfabed9bb9223afb41eab03931f4570ab6835c5c1d99846c756bff284159",
+    "src/br/encoder/literal_context.zig": "ed77ac8c494be94e940338d7652cf3fff3710fe244b0fc34730b3a8aeae876fd",
+    "src/br/encoder/literal_context_profile.zig": "02990823ef0ca0d781d7843bc5e82fa1bbeb3fc0401e9d29bdac8dcec704778a",
+    "src/br/encoder/literal_context_split.zig": "a131382cf3cf0d8c9a801dc766b59440467cfac526509655d7ec38af5e2f2d34",
+    "src/br/encoder/literal_entropy_plan.zig": "a855c9afdfdea6d96ffeb817121feb09da0b2400f59d80a35173361bcde2d482",
+    "src/br/encoder/literal_joint_context_split.zig": "1b85927bfea4824be8ed40f94677ac77060ed5608c5d93afd855d0de1b0720a3",
+    "src/br/encoder/long_distance.zig": "0c8b295525b1bc62db3b51161215fcbd65e3cf4b20f28292cb207ece62983b38",
+    "src/br/encoder/quality_schedule.zig": "657c1e5fe4aa848bd006ba82ce8d71f08ef259d1d88928285c86d65c6fac9421",
+    "src/br/encoder/record_classifier.zig": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+    "src/br/encoder/record_optimal_abi.zig": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+    "src/br/encoder/record_optimal_object.zig": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+    "src/br/encoder/scoped_static_dictionary.zig": "035fd6ffce7c8480a9167d3e11af477d1658ee97956b4a739ccdddee770c5811",
+    "src/br/encoder/scoped_static_dictionary_tests.zig": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+    "src/br/encoder/serialized_dictionary_matcher.zig": "17aea20d8f7997b2ab97f7259dea1418bca86c9ecfa3131e085bafb24178d19a",
+    "src/br/encoder/short_match_candidates.zig": "4daf98a6687e9ab2842e3ebfe7cefe460c5656f040869896cc11bad03e8c933d",
+    "src/br/encoder/small_huffman.zig": "bfca952ac6a54dd34bec36fce3f73c6c423749ee29730f4ae40ff09f1b7fa394",
+    "src/br/encoder/static_dictionary_candidates.zig": "fc808a2efb318c216407f0337ac57bfb3e3ff3ccef2299c18d6d3253414e5bb1",
+    "src/br/encoder/static_dictionary_matcher.zig": "27a37f7873e75704922ef2c031107acffe15e2e20cfbb9dc0f33f82e46bdc9af",
+    "src/br/encoder/static_dictionary_stream.zig": "f65bd98ed72b4db856d49511a34b2948f89aee7ea91dc40f37ac09b29b17a2e3",
+    "src/br/encoder/stats.zig": "677b34e63129ea853c134b0732f1987c4d59d5cd92f98b606615c5420648bf93",
+    "src/br/encoder/stream_block_split.zig": "7a4e6e44f349e9e2f9d3e7e302f7ae942ab6b71e30d16cac26fc21c3d54f0ba1",
+    "src/br/encoder/total_budget/external.zig": "6f8c5ffbf05e8cc27d17b3eedf7c519e8927d853e88e80f9ada26fa5baf55d77",
+    "src/br/encoder/total_budget/profile.zig": "a0c1c321cf04c88122de57977a4f70bf585cb612d86da54bd3cfaafc68873a32",
+    "src/br/encoder/total_budget/state.zig": "6d76346e9fb01e90441d508871f5b731405a41201967c3d02bfc3277484aa624",
+    "src/br/encoder/total_budget/tests.zig": "e136568bd1a9f68fe6274f7de58d2352edb0e67d9f20875e5d9d40a132fdd4f3",
+    "src/br/encoder/total_budget.zig": "4ac4c8d153373a39a08781c7065c6797534b096500aa1c4a21563e983465549c",
+    "src/br/encoder/total_entry.zig": "403e15a4c6d746877e6fdbe85cec501c71eeab149634f53fb0d385a0fe70098c",
+    "src/br/encoder/total_retained.zig": "91edbbafd9f6bd64c1c66d517e194c81c5709187a252fcf35a3788846856e2db",
+    "src/br/encoder/total_reusable.zig": "1712145adb1353df4378538bba63a52ada60ae364be7c5819e600105ea95463b",
+    "src/br/fast_bit_reader.zig": "e39d8d46787eaaa146596317ec41e65cbd62abe03ad8aad2b8b89cb263f1c788",
+    "src/br/format/code_sections.zig": "67413c51387cf5c8dd8ed85b703b3fee62f2239e966315b6a109c222692a44c7",
+    "src/br/header_profile.zig": "2684232a36855aedf3e83c9809acc622e352af18d39c1167297373423085839e",
+    "src/br/incremental/bit_reader.zig": "4444139f5090541de67b12eb77bbc2b23c728b3abbc510b48a4d96cf2bee4060",
+    "src/br/incremental/contracts_tests.zig": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba",
+    "src/br/incremental/copy_decoder.zig": "7a0a0e481592422485126de773490ae88f8c84a09be38a8971d958daf9f20daa",
+    "src/br/incremental/copy_tests.zig": "1fcc605accdf2b5e9d65f0201f60c2ff3bd4426f2746f777554c8baa07d9f01c",
+    "src/br/incremental/literal_decoder.zig": "63b2e89c279e0a0630d6fa93743d1c4aab6d12f3b7d99b055d931811d06387e8",
+    "src/br/incremental/literal_tests.zig": "e790809cc9ad9715212aeba7b4fac425572121ea7cb6a8c4eb17d274806e6eb3",
+    "src/br/incremental/owned_copy_decoder.zig": "e4a6f928f249db4e2bec2af175654d9d10d13247562a2f9997f72028bc8d01ac",
+    "src/br/incremental/planned_encoder_tests.zig": "2b18663ca9804884dba500ec40c67533b57fdc7c387f27fd57ea8adf0c769c4d",
+    "src/br/incremental/rle_decoder.zig": "49a6c7fea8a9e8d3b35132c21bed456e5f25eb4042447bed4724d7c1e3122f3a",
+    "src/br/incremental/rle_tests.zig": "678150045761e852d108c0d68335fb9430133c263538f6c089b8fe9c5e328f10",
+    "src/br/incremental/stored/allocator_adapter.zig": "ce8cc37d85e3377036d96d599b701ea4366abf756eb3540d8ffab331178d2277",
+    "src/br/incremental/stored/decoder.zig": "ae066a54a84fd63199971cf055a5ffff03a193c85ef247d0fcdd65ec1ae76d19",
+    "src/br/incremental/stored/encoder.zig": "e7dab1fa81bfb07d8bfadaea13a1317c4870cf80635bcce1fedfef80f33246f7",
+    "src/br/incremental/stored/encoder_block_options_tests.zig": "4d4a85f36f37138fe35b4a4f850f5aacaa77b246bb920788cb6fbc1e76fa6c61",
+    "src/br/incremental/stored/encoder_counter_tests.zig": "e0e07272242aaef576e357ff17af5e848eef701925ff8311bb2c14056ef4d057",
+    "src/br/incremental/stored/encoder_memory_tests.zig": "854cab2d8605dff7916fba41842b2a326ecf513d8367a9013dd6c5a8597769b0",
+    "src/br/incremental/stored/encoder_tests.zig": "7d63e45548df28bdf2badda805119655ee9e7432c79f1cf9906f4a47306e063c",
+    "src/br/incremental/stored/hq_encoder_tests.zig": "3aabe64c53acdd5709eec2571ba71c39e36063bd5ff6996335870856f2225dd1",
+    "src/br/incremental/stored/tests.zig": "3230b1c204b9913e4d22f8215b4c643c6f470a20d9a1b35cafb07ed6673b19ff",
+    "src/br/incremental/tests.zig": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84",
+    "src/br/length.zig": "847cb825b2f63e7c8384e95c47bf1320d9b7a2d2b2b7346a2c96e21c0c16a578",
+    "src/br/match_copy.zig": "8dd344beabda07f57c8596ea72888e869b0b395d8f4e1bab5a535053a3ba6157",
+    "src/br/paired_literal_lookup.zig": "dbe1c69df5440d617dc76336b0564c871c755749c3bd71f34099912c28b4eb10",
+    "src/br/pattern.zig": "2e2eccf6e403a7fb5105d818e2205da8ed6f990fe4dc5dcb883c6274c245d8be",
+    "src/br/serialized_dictionary.zig": "e973c6ee0389b70791451fca2433078a35cbd0a64b19969897dba1df9e1cd14d",
+    "src/br/serialized_dictionary_affix_trainer.zig": "88a4d942f393640ba2e8078475eaa6251159d22f0853e6302559a7852445a470",
+    "src/br/serialized_dictionary_builder.zig": "3cf74017292e372312dc9757fba03e9478cf48864b71f756c3a633ac7804bf1e",
+    "src/br/serialized_dictionary_context_clusterer.zig": "367eddea7c3bdeca96529515cfee1e315418dd18dfeb57b6ecab78872cb90c2f",
+    "src/br/serialized_dictionary_shift_trainer.zig": "c9c62dbd5afddabbe61b284d9556c6e23d9e2b10d0faee4a7fe945d21e92edce",
+    "src/br/serialized_dictionary_trainer.zig": "117fa7cff6c5b1d62cc9b9c054ef57bfae0a66e1c7370851c51ca97132ccbc76",
+    "src/br/serialized_dictionary_transform_clusterer.zig": "e299ac2473d299e7e4069123180ef8d66845c856897daacdbd6ba4be1848fc9f",
+    "src/br/serialized_dictionary_word_pruner.zig": "6e7cd1c6112bc4b253a584efc49a4e73be8caa6340d7145c681b3a34dae75005",
+    "src/br/shared_dictionary.zig": "c5fe428e8c3f5e1c4ec21805f5b1c529b933110bf803303e10172dab317aefcf",
+    "src/br/single_command_lookup.zig": "1c93e7efdeda4d9dd840bca28118c95dccd8ca554fc2d63c38d3c7aabcaec7a9",
+    "src/br/static_dictionary.zig": "ff0daead06252c90856df7a18fed429647b2cecfd3f0fd173e49593376499dcb",
+    "tools/br/hq_controls_probe.zig": "fcc986b331663a1c4756a19feb07b7b3207bb35791ced98ed434002974a75e84",
+    "tools/br/hq_controls_diff.py": "cbe6a8c9fc299c7d1ce33660dde450b048bf6339c8c91db217efba739ad25e7c",
+    "tools/br/total_memory_diff.py": "585a7ffc1eaf10b4934d97489d968cbf2d14faa19d8f4d3d8958a8c6cd7223b9"
+  },
+  "source_after_sha256": {
+    "build.zig": "aa5cb2d8b7f778ca5ae83c3df998734fee0b53798a356d0b8c76a2fabcb49d85",
+    "src/root.zig": "040a54419423d58d94d7ca11f5692cea7fd9fd66906fc807a38e577e38e1d6ce",
+    "src/br.zig": "494c994eb7793395cde6f04e23930c15b11e18009897eaf8e8d909b19a3df869",
+    "src/br/allocator_dispatch.zig": "dd270fb9dd13efaa44559e41e706bdf59508f47341980d6402f579f8d9b6be6f",
+    "src/br/code_length_decoder.zig": "a264713818744d94fe111910f94659bb9ed2c0bd18af85fac736e12f7369e93f",
+    "src/br/command_lut.zig": "b98501f929129c72108d6c1536befb988203893da01ce8fa2859052e1d684a80",
+    "src/br/decoder/distance_history.zig": "223e70640cc5d9ee3396c3753ee7ff8de2d44e6f316127b66447cf560591d174",
+    "src/br/dictionary_copy.zig": "d2857a33ce9200f66f4360b5bb60d7bc304b34f11b8f2308195b65a0d1007ff0",
+    "src/br/encoder/adaptive_block_code.zig": "6d3a3cebd57ad3023cf3b82f568b04aa529c5007061465ddd67c6ded44325560",
+    "src/br/encoder/adaptive_block_split.zig": "d3649bea365395e11f2d3818492a590ea49bc6943c61571453d01baeef33dbd5",
+    "src/br/encoder/block_split_plan.zig": "4f115d9775588a9c0837b9c4755812d35ff551b28446955fab65e3e182a52212",
+    "src/br/encoder/block_switch_model.zig": "b320722c3572dda1055ee98d257c4e1603ea2cb05bfc5fdea6f4edf34e61cf09",
+    "src/br/encoder/code_length_huffman.zig": "0d32345ed9d49a33e5b380bab11032ad125db9b1ec39cd249c3392fbcff51fe2",
+    "src/br/encoder/code_length_rle.zig": "1174a7aa83ebc410ef60294727dccf2500e9957612637f783fb25d0c6e28f0f8",
+    "src/br/encoder/command_block_split.zig": "750d0a5e586465c3aeacca00fc624df9bdd5d61fb0ac62287d745e24068e9c76",
+    "src/br/encoder/command_encoding.zig": "530dbb3d3f4d6b54448c734413dcfb6fb9f2f4803dcc4d65d7e93892f15ae268",
+    "src/br/encoder/command_plan.zig": "c50a9cabc68ab956111528c1cf8bb8a584ab98787900d562114746ac667feb92",
+    "src/br/encoder/complex_prefix.zig": "eadb870f72133d75069d80c2269009cb367ff3a240650542da11c2866d6a758a",
+    "src/br/encoder/compound_dictionary_matcher.zig": "ef6d45415f78ec9d18c9eae2d2d054ccd3541b0ee763b95e3da530547854a34c",
+    "src/br/encoder/compound_wire.zig": "6257bed458d20153a16a72e00b0938a78cfc66c6151caebc2693889c0bd477d5",
+    "src/br/encoder/context_map.zig": "2196fc90b4dbc073a32a964229b102115ad39d954cb82eefe1c0a2f8dce34775",
+    "src/br/encoder/dictionary_visitor_tests.zig": "bac1bfb56fc3b522f8184cc90bd62affe8f91cb1f2cb1b1c78ea4ede6bd7c853",
+    "src/br/encoder/distance.zig": "a4b1211b3d96b44ff68e078f382884bd8efe29af6e69d321f9884599fb04f68f",
+    "src/br/encoder/distance_block_split.zig": "1fb1c79408297f297950d3a48a2a8121b357dce1020855c767db221dbcb8cedd",
+    "src/br/encoder/distance_parameter_search.zig": "f396440049e61672a9fbd220f1c5f2f368a71a40671755749c1be73c68b49da2",
+    "src/br/encoder/dynamic_context_map.zig": "23497f10795ce3664072a7042f980de6e846a4607899f99b7981e00375c16be5",
+    "src/br/encoder/entropy_feedback.zig": "06ba8c1e8faaf284fe6c95e8f748a38198cd6887790313918a9635fcef95327f",
+    "src/br/encoder/fast_fragment.zig": "3a0f3d7db0e0c6400971a35b2401456481d3ca21f29abbeeb194cb5a95509f5c",
+    "src/br/encoder/fast_fragment_one_pass.zig": "0d6f34c5741d79c4bb437b62f474a493a9a5781db854e7cc989c0b5a276534f2",
+    "src/br/encoder/fast_fragment_two_pass.zig": "9624ee7afbe6aacc8995b39974f07a89c913a836b1b4bd631ac38d3a6b7e5315",
+    "src/br/encoder/histogram_model.zig": "8994aea03c22b2ab8f04c1056a61acba4155a1d3a7c370449b73cae3ecbc56fd",
+    "src/br/encoder/hq_codec/alias.zig": "e55e4540aa00bb272f9288890442463957ec5774c53c818ea8bcaa4fe7419ed5",
+    "src/br/encoder/hq_codec/alias_tests.zig": "7d6fb6696041717ab33f0264e98b7dbca87455901589267f83aa9f3741ed3801",
+    "src/br/encoder/hq_codec/exact.zig": "b99d62ce437bace66cdb84684bb19a7bf9968bc4f9bee97a95fb5040c1af0a33",
+    "src/br/encoder/hq_codec/frame.zig": "dbfda5e6ba4e4bcb0be8fdc30d1b5d1ab76092cbcc6c8b15d86bb086afb73705",
+    "src/br/encoder/hq_codec/history.zig": "9842a8a7510193c61284fc7b08e7be6e793cabdbebc6661e1bec5a6ddcf00a68",
+    "src/br/encoder/hq_codec/huffman_model.zig": "517b8a22306405181162309dbd415b9ae73760f6e965ab166fb1a7fe75eaf17d",
+    "src/br/encoder/hq_codec/legacy.zig": "3d369eda50bba97afd9b515da04f0da81ef2c7c54af6643bc1807a0da08ee860",
+    "src/br/encoder/hq_codec/native.zig": "e1e095b32707b5be539b2dd5ac5b1a8a725eb9a92578101be1c6581ed26b6701",
+    "src/br/encoder/hq_codec/transaction.zig": "fa6b09ee673bb224468bf744fda4a3ed635cce45e82344896a7b5167f93dbee7",
+    "src/br/encoder/hq_codec/wire.zig": "0f91b85a892ba40f1085035581cbc2a16f6fc54c6ad9890deb2d99ad67184ff1",
+    "src/br/encoder/hq_codec.zig": "4b759ceb02194d598f91773316d034531529ccfe80247d0862df5ee4be2d1246",
+    "src/br/encoder/hq_command_parser.zig": "15ce6c795265306424ddad429db6ff6dd71d5504c835ad146642d3ab6f622d81",
+    "src/br/encoder/hq_dictionary/options_tests.zig": "0822d1fe24e194e042b764476f3a844791750de021c9519ac4f0368f68ea18ea",
+    "src/br/encoder/hq_dictionary/provider_tests.zig": "a0a66b574ec894744b1c34b7341bb8a77aaaec2a81d4e8fa6849f294acef5cc6",
+    "src/br/encoder/hq_dictionary/types_tests.zig": "00ec0966c950c8849f4b17209260429c3bc7836483dc171a907fd0ea63aac87a",
+    "src/br/encoder/hq_dictionary.zig": "a19aa3338e21883262799ff8b38a570606a00f5205d37bf31b23d1a98a060a37",
+    "src/br/encoder/hq_options.zig": "bf06c1c503773027bd001c5316a1eacf089c9e2638cc2ffdf566c557129804d4",
+    "src/br/encoder/hq_parser/dictionary_tests.zig": "499899722b5c0cda203db91c072b81a11fa26a70d9ada1c8a9419565fecf57aa",
+    "src/br/encoder/hq_parser/dp.zig": "f3a0bd50623cb7c9fa31a84aae4949f0e77d57540a0ac12a3fbb2aeb9c78a767",
+    "src/br/encoder/hq_parser/extension.zig": "858f905d97cd714c5125952baa10fe4679c393f1cfafa96af9f741bd09122566",
+    "src/br/encoder/hq_parser/extension_tests.zig": "d742e690182fbc3ecfa62e9a5feab64928f492c8e3227d9dae15e3f25d7c952b",
+    "src/br/encoder/hq_parser/oracle_tests.zig": "6e230196744ba2432394614721b65aa539cf96acf50303d6ea54bf67d3512f30",
+    "src/br/encoder/hq_parser/prices.zig": "8f3109a37ce55210f6ab8f5c9e9f2ef7e2052be79de8078ecfd5b327f4fd0ba7",
+    "src/br/encoder/hq_parser/rep.zig": "ab3a158eb6b7a41e75b29b90adfe61d0212c5e4ec6444a384d7e34dcfad74920",
+    "src/br/encoder/hq_parser/resource_tests.zig": "8632d40b59e8c1bebb8f8e9f85ed11d61762068a8dc5f9bd7981e446f52ccb41",
+    "src/br/encoder/hq_parser/resources.zig": "b25c35d6f7bce40377ae2964c1dcff9f332efeed44e795207170841e6d6994f1",
+    "src/br/encoder/hq_parser/state.zig": "c4b41636f3bcfb97c226efd99b915bb7e0283756f34c332621a1a857bfc4ed7d",
+    "src/br/encoder/hq_parser/tests.zig": "4a968324e9af5bfdf6416ac87b75a180bf0b603fbd221109737d86d39ee60e7b",
+    "src/br/encoder/hq_parser.zig": "103ade1b39b2dbe9098d4091f524684d23f77461b73a48ff044e768bd606f6a6",
+    "src/br/encoder/hq_tree/forest.zig": "e86e5f9eaa57df31b7c7fa82c7bd951b6d268e577501900aab2a8b4a4400d08f",
+    "src/br/encoder/hq_tree/resources.zig": "bc462b4b15c2351444e1fe7f7141a602e583304a4f194c29094abeed436287d3",
+    "src/br/encoder/hq_tree/types.zig": "96aa50f509cc6222e50797821f3adaa34605614064a1986d902b8be4e3344216",
+    "src/br/encoder/hq_tree/view.zig": "44ffce9867e45e9cceacd11d82f69ae8806ab5d236959f2c6601e242517906e9",
+    "src/br/encoder/hq_tree.zig": "add5c107d3a6f087ea9c14ffe32a93447e75426cc48a666d84cf6972ee09b375",
+    "src/br/encoder/hq_tree_oracle_tests/oracle.zig": "1ba9bbf21893b9844ad1e2d15c8d4835018947d9e8dfc9fc6056384f50277236",
+    "src/br/encoder/hq_tree_oracle_tests/resources_tests.zig": "4a1f1f9d6c892c0250f6299f6fc90f151ffe77ff2483ecb7b44e58e7aff7de90",
+    "src/br/encoder/hq_tree_oracle_tests.zig": "95c3b0b3b13243aafb65df360ce9fba3c1986e9fab78fa83a33457b54e301c2f",
+    "src/br/encoder/hq_types.zig": "83187ac29b9607b5633620dbc758961a3523a0fc8e2b497d43cda0093ff00f3c",
+    "src/br/encoder/huffman_rle_counts.zig": "3c5a08cadea7d723258badd4a93ade115da034050ece53f814b1c8d83637b860",
+    "src/br/encoder/identity_context_map.zig": "b2e90b919b78266d032b2f10c41bbd38e14c27d9c1d2382a70992fa4370b1b3a",
+    "src/br/encoder/literal_block_split.zig": "5be1cfabed9bb9223afb41eab03931f4570ab6835c5c1d99846c756bff284159",
+    "src/br/encoder/literal_context.zig": "ed77ac8c494be94e940338d7652cf3fff3710fe244b0fc34730b3a8aeae876fd",
+    "src/br/encoder/literal_context_profile.zig": "02990823ef0ca0d781d7843bc5e82fa1bbeb3fc0401e9d29bdac8dcec704778a",
+    "src/br/encoder/literal_context_split.zig": "a131382cf3cf0d8c9a801dc766b59440467cfac526509655d7ec38af5e2f2d34",
+    "src/br/encoder/literal_entropy_plan.zig": "a855c9afdfdea6d96ffeb817121feb09da0b2400f59d80a35173361bcde2d482",
+    "src/br/encoder/literal_joint_context_split.zig": "1b85927bfea4824be8ed40f94677ac77060ed5608c5d93afd855d0de1b0720a3",
+    "src/br/encoder/long_distance.zig": "0c8b295525b1bc62db3b51161215fcbd65e3cf4b20f28292cb207ece62983b38",
+    "src/br/encoder/quality_schedule.zig": "657c1e5fe4aa848bd006ba82ce8d71f08ef259d1d88928285c86d65c6fac9421",
+    "src/br/encoder/record_classifier.zig": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+    "src/br/encoder/record_optimal_abi.zig": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+    "src/br/encoder/record_optimal_object.zig": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+    "src/br/encoder/scoped_static_dictionary.zig": "035fd6ffce7c8480a9167d3e11af477d1658ee97956b4a739ccdddee770c5811",
+    "src/br/encoder/scoped_static_dictionary_tests.zig": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+    "src/br/encoder/serialized_dictionary_matcher.zig": "17aea20d8f7997b2ab97f7259dea1418bca86c9ecfa3131e085bafb24178d19a",
+    "src/br/encoder/short_match_candidates.zig": "4daf98a6687e9ab2842e3ebfe7cefe460c5656f040869896cc11bad03e8c933d",
+    "src/br/encoder/small_huffman.zig": "bfca952ac6a54dd34bec36fce3f73c6c423749ee29730f4ae40ff09f1b7fa394",
+    "src/br/encoder/static_dictionary_candidates.zig": "fc808a2efb318c216407f0337ac57bfb3e3ff3ccef2299c18d6d3253414e5bb1",
+    "src/br/encoder/static_dictionary_matcher.zig": "27a37f7873e75704922ef2c031107acffe15e2e20cfbb9dc0f33f82e46bdc9af",
+    "src/br/encoder/static_dictionary_stream.zig": "f65bd98ed72b4db856d49511a34b2948f89aee7ea91dc40f37ac09b29b17a2e3",
+    "src/br/encoder/stats.zig": "677b34e63129ea853c134b0732f1987c4d59d5cd92f98b606615c5420648bf93",
+    "src/br/encoder/stream_block_split.zig": "7a4e6e44f349e9e2f9d3e7e302f7ae942ab6b71e30d16cac26fc21c3d54f0ba1",
+    "src/br/encoder/total_budget/external.zig": "6f8c5ffbf05e8cc27d17b3eedf7c519e8927d853e88e80f9ada26fa5baf55d77",
+    "src/br/encoder/total_budget/profile.zig": "a0c1c321cf04c88122de57977a4f70bf585cb612d86da54bd3cfaafc68873a32",
+    "src/br/encoder/total_budget/state.zig": "6d76346e9fb01e90441d508871f5b731405a41201967c3d02bfc3277484aa624",
+    "src/br/encoder/total_budget/tests.zig": "e136568bd1a9f68fe6274f7de58d2352edb0e67d9f20875e5d9d40a132fdd4f3",
+    "src/br/encoder/total_budget.zig": "4ac4c8d153373a39a08781c7065c6797534b096500aa1c4a21563e983465549c",
+    "src/br/encoder/total_entry.zig": "403e15a4c6d746877e6fdbe85cec501c71eeab149634f53fb0d385a0fe70098c",
+    "src/br/encoder/total_retained.zig": "91edbbafd9f6bd64c1c66d517e194c81c5709187a252fcf35a3788846856e2db",
+    "src/br/encoder/total_reusable.zig": "1712145adb1353df4378538bba63a52ada60ae364be7c5819e600105ea95463b",
+    "src/br/fast_bit_reader.zig": "e39d8d46787eaaa146596317ec41e65cbd62abe03ad8aad2b8b89cb263f1c788",
+    "src/br/format/code_sections.zig": "67413c51387cf5c8dd8ed85b703b3fee62f2239e966315b6a109c222692a44c7",
+    "src/br/header_profile.zig": "2684232a36855aedf3e83c9809acc622e352af18d39c1167297373423085839e",
+    "src/br/incremental/bit_reader.zig": "4444139f5090541de67b12eb77bbc2b23c728b3abbc510b48a4d96cf2bee4060",
+    "src/br/incremental/contracts_tests.zig": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba",
+    "src/br/incremental/copy_decoder.zig": "7a0a0e481592422485126de773490ae88f8c84a09be38a8971d958daf9f20daa",
+    "src/br/incremental/copy_tests.zig": "1fcc605accdf2b5e9d65f0201f60c2ff3bd4426f2746f777554c8baa07d9f01c",
+    "src/br/incremental/literal_decoder.zig": "63b2e89c279e0a0630d6fa93743d1c4aab6d12f3b7d99b055d931811d06387e8",
+    "src/br/incremental/literal_tests.zig": "e790809cc9ad9715212aeba7b4fac425572121ea7cb6a8c4eb17d274806e6eb3",
+    "src/br/incremental/owned_copy_decoder.zig": "e4a6f928f249db4e2bec2af175654d9d10d13247562a2f9997f72028bc8d01ac",
+    "src/br/incremental/planned_encoder_tests.zig": "2b18663ca9804884dba500ec40c67533b57fdc7c387f27fd57ea8adf0c769c4d",
+    "src/br/incremental/rle_decoder.zig": "49a6c7fea8a9e8d3b35132c21bed456e5f25eb4042447bed4724d7c1e3122f3a",
+    "src/br/incremental/rle_tests.zig": "678150045761e852d108c0d68335fb9430133c263538f6c089b8fe9c5e328f10",
+    "src/br/incremental/stored/allocator_adapter.zig": "ce8cc37d85e3377036d96d599b701ea4366abf756eb3540d8ffab331178d2277",
+    "src/br/incremental/stored/decoder.zig": "ae066a54a84fd63199971cf055a5ffff03a193c85ef247d0fcdd65ec1ae76d19",
+    "src/br/incremental/stored/encoder.zig": "e7dab1fa81bfb07d8bfadaea13a1317c4870cf80635bcce1fedfef80f33246f7",
+    "src/br/incremental/stored/encoder_block_options_tests.zig": "4d4a85f36f37138fe35b4a4f850f5aacaa77b246bb920788cb6fbc1e76fa6c61",
+    "src/br/incremental/stored/encoder_counter_tests.zig": "e0e07272242aaef576e357ff17af5e848eef701925ff8311bb2c14056ef4d057",
+    "src/br/incremental/stored/encoder_memory_tests.zig": "854cab2d8605dff7916fba41842b2a326ecf513d8367a9013dd6c5a8597769b0",
+    "src/br/incremental/stored/encoder_tests.zig": "7d63e45548df28bdf2badda805119655ee9e7432c79f1cf9906f4a47306e063c",
+    "src/br/incremental/stored/hq_encoder_tests.zig": "3aabe64c53acdd5709eec2571ba71c39e36063bd5ff6996335870856f2225dd1",
+    "src/br/incremental/stored/tests.zig": "3230b1c204b9913e4d22f8215b4c643c6f470a20d9a1b35cafb07ed6673b19ff",
+    "src/br/incremental/tests.zig": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84",
+    "src/br/length.zig": "847cb825b2f63e7c8384e95c47bf1320d9b7a2d2b2b7346a2c96e21c0c16a578",
+    "src/br/match_copy.zig": "8dd344beabda07f57c8596ea72888e869b0b395d8f4e1bab5a535053a3ba6157",
+    "src/br/paired_literal_lookup.zig": "dbe1c69df5440d617dc76336b0564c871c755749c3bd71f34099912c28b4eb10",
+    "src/br/pattern.zig": "2e2eccf6e403a7fb5105d818e2205da8ed6f990fe4dc5dcb883c6274c245d8be",
+    "src/br/serialized_dictionary.zig": "e973c6ee0389b70791451fca2433078a35cbd0a64b19969897dba1df9e1cd14d",
+    "src/br/serialized_dictionary_affix_trainer.zig": "88a4d942f393640ba2e8078475eaa6251159d22f0853e6302559a7852445a470",
+    "src/br/serialized_dictionary_builder.zig": "3cf74017292e372312dc9757fba03e9478cf48864b71f756c3a633ac7804bf1e",
+    "src/br/serialized_dictionary_context_clusterer.zig": "367eddea7c3bdeca96529515cfee1e315418dd18dfeb57b6ecab78872cb90c2f",
+    "src/br/serialized_dictionary_shift_trainer.zig": "c9c62dbd5afddabbe61b284d9556c6e23d9e2b10d0faee4a7fe945d21e92edce",
+    "src/br/serialized_dictionary_trainer.zig": "117fa7cff6c5b1d62cc9b9c054ef57bfae0a66e1c7370851c51ca97132ccbc76",
+    "src/br/serialized_dictionary_transform_clusterer.zig": "e299ac2473d299e7e4069123180ef8d66845c856897daacdbd6ba4be1848fc9f",
+    "src/br/serialized_dictionary_word_pruner.zig": "6e7cd1c6112bc4b253a584efc49a4e73be8caa6340d7145c681b3a34dae75005",
+    "src/br/shared_dictionary.zig": "c5fe428e8c3f5e1c4ec21805f5b1c529b933110bf803303e10172dab317aefcf",
+    "src/br/single_command_lookup.zig": "1c93e7efdeda4d9dd840bca28118c95dccd8ca554fc2d63c38d3c7aabcaec7a9",
+    "src/br/static_dictionary.zig": "ff0daead06252c90856df7a18fed429647b2cecfd3f0fd173e49593376499dcb",
+    "tools/br/hq_controls_probe.zig": "fcc986b331663a1c4756a19feb07b7b3207bb35791ced98ed434002974a75e84",
+    "tools/br/hq_controls_diff.py": "cbe6a8c9fc299c7d1ce33660dde450b048bf6339c8c91db217efba739ad25e7c",
+    "tools/br/total_memory_diff.py": "585a7ffc1eaf10b4934d97489d968cbf2d14faa19d8f4d3d8958a8c6cd7223b9"
+  },
+  "source_before_after_equal": true,
+  "stage_cases": null,
+  "scope": "caller-reported total requested heap, separately measured from HQ workspace; no RSS or allocator bookkeeping claim"
+}

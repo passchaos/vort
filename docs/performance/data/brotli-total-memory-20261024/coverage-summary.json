@@ -1,0 +1,237 @@
+{
+  "generated_utc": "2026-10-24T09:24:24.347248+00:00",
+  "scope": "只读实际正式 ELF、缓存清单和输入内容；未重编译或执行任何测试二进制。",
+  "modes": {
+    "br-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/cd48b8bc5ac0e7e5d454a798c96f2492/vort-br-tests",
+      "binary_sha256": "532f3dd921f88559190c2880a2784c1070fc7e57e517c931a19138b517aa3579",
+      "metadata_count": 1156,
+      "named_count": 1143,
+      "anonymous_count": 13,
+      "group_counts": {
+        "anonymous_import_roots": 13,
+        "other_library_named": 1138,
+        "scoped_dictionary": 5
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/472d6aabc674c886b7347e0cfc9b490d.txt"
+    },
+    "total-rf": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/8dfb39b9902bd316127afb9caecb6181/vort-br-total-memory-tests",
+      "binary_sha256": "8a3e07db9482c437aeb0bedbaae63b9fdcd814b6eab5328cde64aad8f1841bd5",
+      "metadata_count": 53,
+      "named_count": 41,
+      "anonymous_count": 12,
+      "group_counts": {
+        "anonymous_import_roots": 12,
+        "generic_memory": 8,
+        "independent_qa": 21,
+        "total_budget_primitive": 12
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/8d71f25561c7d46a47b770660dd7c4ec.txt"
+    },
+    "total-x86": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/2ade0e83a6e0ca1f833b857163988c40/vort-br-total-memory-tests",
+      "binary_sha256": "e56a12f6ec6490c99f42d16bc5a3219c8789f93f4c749046a896d3701de195b0",
+      "metadata_count": 53,
+      "named_count": 41,
+      "anonymous_count": 12,
+      "group_counts": {
+        "anonymous_import_roots": 12,
+        "generic_memory": 8,
+        "independent_qa": 21,
+        "total_budget_primitive": 12
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7e0168d205bb48301749d7563adf2342.txt"
+    },
+    "total-debug": {
+      "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/1aff6539733197cb59789f1aeec003b5/vort-br-total-memory-tests",
+      "binary_sha256": "1a32ea7a5d8b6e6927e70ca1870f3b914306357e17ad1a2d12d779dc541bfe03",
+      "metadata_count": 53,
+      "named_count": 41,
+      "anonymous_count": 12,
+      "group_counts": {
+        "anonymous_import_roots": 12,
+        "generic_memory": 8,
+        "independent_qa": 21,
+        "total_budget_primitive": 12
+      },
+      "run_manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f7264143cf96eb8ecf2ab88526798d7b.txt"
+    }
+  },
+  "ordered_names_equal_between_total_modes": true,
+  "all_compile_and_run_inputs_verified": true,
+  "dedicated_target_named_scope": {
+    "independent_qa": 21,
+    "total_budget_primitive": 12,
+    "generic_memory": 8
+  },
+  "expected_scoped_named_count": 5,
+  "actual_scoped_named_counts": {
+    "br-rf": 5,
+    "total-rf": 0,
+    "total-x86": 0,
+    "total-debug": 0
+  },
+  "scoped_coverage_source": "完整 Brotli 正式 ReleaseFast ELF 单独证明这五项；不计入专用总预算目标。",
+  "exact_child_test_argv_logged": false,
+  "frozen_source_sha256": "0c0628aa12a9820a93ba07d884c4f4bdb51500ee06d87a4abd8eaeafe22674e1",
+  "full_frozen_source_binding_path": "/tmp/vort-br-total-final-20261024-n_7jpt2j/coverage/full-frozen-source-binding.json",
+  "embedded_and_js_source_binding_path": "/tmp/vort-br-total-final-20261024-n_7jpt2j/coverage/embedded-and-js-source-binding.json",
+  "full_frozen_source_content_count": 1542,
+  "all_frozen_source_contents_verified": true,
+  "baseline_revision": "997fe5e56eb03ca21e7e66885d84f368d94ccc4e",
+  "baseline_provenance_path": "/tmp/vort-br-total-memory-baseline-997fe5e5/provenance.json",
+  "baseline_provenance_sha256": "d58ea2e6d2dffe6ef12fbdfcbbef6c9ff3c1a67c749ea4892b90d6999a18f969",
+  "compiled_input_bindings": {
+    "total-debug": {
+      "compile_manifest": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/c4e730ecc2ad53fd9a8e21424d2cbef7.txt",
+      "compiled_input_count": 983,
+      "prefix_counts": {
+        "1": 814,
+        "0": 168,
+        "2": 1
+      },
+      "recursive_object_source_counts": [
+        549
+      ]
+    },
+    "total-rf": {
+      "compile_manifest": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/b780037763e701c51e26cb1be9e4e1a2.txt",
+      "compiled_input_count": 982,
+      "prefix_counts": {
+        "1": 813,
+        "0": 168,
+        "2": 1
+      },
+      "recursive_object_source_counts": [
+        549
+      ]
+    },
+    "total-x86": {
+      "compile_manifest": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/ef79603cf563dc46bbd5689669011c4a.txt",
+      "compiled_input_count": 982,
+      "prefix_counts": {
+        "1": 813,
+        "0": 168,
+        "2": 1
+      },
+      "recursive_object_source_counts": [
+        549
+      ]
+    },
+    "br-rf": {
+      "compile_manifest": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f05814ce0d2c0e8a4a090a940d4772a1.txt",
+      "compiled_input_count": 982,
+      "prefix_counts": {
+        "1": 813,
+        "0": 168,
+        "2": 1
+      },
+      "recursive_object_source_counts": [
+        549
+      ]
+    }
+  },
+  "scoped_dictionary_full_br_metadata": [
+    {
+      "index": 825,
+      "name": "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked cold zero exact and below count all legacy index storage",
+      "name_address": "0x132d821",
+      "name_length": 142,
+      "function_address": "0x188e390",
+      "function_symbols": [
+        "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked cold zero exact and below count all legacy index storage"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x131b8e0",
+      "metadata_file_offset": 3258592,
+      "function_shared_with": [],
+      "group": "scoped_dictionary",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/scoped_static_dictionary_tests.zig",
+      "source_line": 67,
+      "source_sha256": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+      "compile_manifest_line": 957
+    },
+    {
+      "index": 826,
+      "name": "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary owned legacy lookup matches original indexes and survives move",
+      "name_address": "0x132d8af",
+      "name_length": 140,
+      "function_address": "0x1889cc0",
+      "function_symbols": [
+        "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary owned legacy lookup matches original indexes and survives move"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x131b8f8",
+      "metadata_file_offset": 3258616,
+      "function_shared_with": [],
+      "group": "scoped_dictionary",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/scoped_static_dictionary_tests.zig",
+      "source_line": 92,
+      "source_sha256": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+      "compile_manifest_line": 957
+    },
+    {
+      "index": 827,
+      "name": "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only preserves compact complete mixed and cached command plans",
+      "name_address": "0x132d93b",
+      "name_length": 148,
+      "function_address": "0x1880430",
+      "function_symbols": [
+        "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only preserves compact complete mixed and cached command plans"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x131b910",
+      "metadata_file_offset": 3258640,
+      "function_shared_with": [],
+      "group": "scoped_dictionary",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/scoped_static_dictionary_tests.zig",
+      "source_line": 112,
+      "source_sha256": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+      "compile_manifest_line": 957
+    },
+    {
+      "index": 828,
+      "name": "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked backing OOM frees each legacy construction allocation",
+      "name_address": "0x132d9cf",
+      "name_length": 139,
+      "function_address": "0x1880180",
+      "function_symbols": [
+        "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked backing OOM frees each legacy construction allocation"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x131b928",
+      "metadata_file_offset": 3258664,
+      "function_shared_with": [],
+      "group": "scoped_dictionary",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/scoped_static_dictionary_tests.zig",
+      "source_line": 159,
+      "source_sha256": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+      "compile_manifest_line": 957
+    },
+    {
+      "index": 829,
+      "name": "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only retains independently frozen complete wire",
+      "name_address": "0x132da5a",
+      "name_length": 133,
+      "function_address": "0x187f800",
+      "function_symbols": [
+        "br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only retains independently frozen complete wire"
+      ],
+      "function_symbol_has_exact_name": true,
+      "metadata_address": "0x131b940",
+      "metadata_file_offset": 3258688,
+      "function_shared_with": [],
+      "group": "scoped_dictionary",
+      "anonymous": false,
+      "source_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/scoped_static_dictionary_tests.zig",
+      "source_line": 163,
+      "source_sha256": "923be8d6e6e927a91340faff6bddc19b21826357ae461ad5777874b3f037fecf",
+      "compile_manifest_line": 957
+    }
+  ]
+}
