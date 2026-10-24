@@ -230,6 +230,13 @@ pub fn build(b: *std.Build) void {
     const run_br_tests = b.addRunArtifact(br_tests);
     const br_test_step = b.step("test-br", "Run focused Brotli codec tests");
     br_test_step.dependOn(&run_br_tests.step);
+    const br_hq_tests = b.addTest(.{
+        .name = "vort-br-hq-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli HQ", "BrHQ core", "Brotli dictionary visitors" },
+    });
+    const br_hq_test_step = b.step("test-br-hq", "Run Brotli HQ matching, exact commands and resource contracts");
+    br_hq_test_step.dependOn(&b.addRunArtifact(br_hq_tests).step);
     const zstd_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/zstd.zig"),
         .target = target,
@@ -1698,6 +1705,47 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| zstd_hq_diff.addArgs(args);
     const zstd_hq_diff_step = b.step("run-zstd-hq-diff", "Validate Zstd HQ output and controls against versioned references");
     zstd_hq_diff_step.dependOn(&zstd_hq_diff.step);
+    const br_hq_probe = b.addExecutable(.{
+        .name = "vort-br-hq-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/hq_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_hq_diff = b.addSystemCommand(&.{ "python3", "tools/br/hq_controls_diff.py", "--probe" });
+    br_hq_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_hq_diff.addArgs(args);
+    const br_hq_diff_step = b.step("run-br-hq-diff", "Validate Brotli HQ wire and controls against versioned references");
+    br_hq_diff_step.dependOn(&br_hq_diff.step);
+    const br_hq_cli_probe = b.addExecutable(.{
+        .name = "vort-br-hq-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/brotli_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_hq_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/hq_cli_gate.py", "--cli" });
+    br_hq_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_hq_cli_gate.addArgs(args);
+    const br_hq_cli_step = b.step("test-br-hq-cli", "Validate Brotli HQ CLI controls and failed-output preservation");
+    br_hq_cli_step.dependOn(&br_hq_cli_gate.step);
+    const br_hq_cli_tests = b.addTest(.{
+        .name = "vort-br-hq-cli-controls-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli/brotli_controls_tests.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    br_hq_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
+    br_hq_tools_step.dependOn(&br_hq_probe.step);
+    br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
     const zstd_hq_cli_probe = b.addExecutable(.{
         .name = "vort-zstd-hq-cli-probe",
         .root_module = b.createModule(.{
@@ -6370,6 +6418,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_controls_probe.step);
     check_step.dependOn(&zstd_hq_probe.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);
+    check_step.dependOn(&br_hq_probe.step);
+    check_step.dependOn(&br_hq_cli_probe.step);
+    check_step.dependOn(&br_hq_cli_tests.step);
     check_step.dependOn(&fast_cover_probe.step);
     check_step.dependOn(&lzma_encode_controls_probe.step);
     check_step.dependOn(&lzma_controls_cli_probe.step);

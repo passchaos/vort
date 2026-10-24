@@ -54,6 +54,7 @@ const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
 const zstd_controls_cli = @import("cli/zstd_controls.zig");
 const fast_cover_cli = @import("cli/fast_cover.zig");
+const brotli_cli = @import("cli/brotli.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -474,6 +475,12 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-br-file")) {
+        try brotli_cli.encodeFile(init, &args, stdout, false);
+    } else if (std.mem.eql(u8, command, "encode-br-stream-file")) {
+        try brotli_cli.encodeFile(init, &args, stdout, true);
+    } else if (std.mem.eql(u8, command, "encode-br-hex")) {
+        try brotli_cli.encodeHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-br-stored-hex")) {
         const payload = args.next() orelse "";
         const options = try parseBrotliStoredOptions(args.next(), args.next());
@@ -2803,6 +2810,16 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-bgzf-file <path>    List BGZF blocks and virtual offsets
         \\  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
         \\                              Decode an indexed BGZF virtual range
+        \\  encode-br-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+        \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
+        \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
+        \\    --hq (quality 10/11 only); HQ parameters also explicitly select HQ:
+        \\    --hq-depth=1..65536 --hq-nice-len=2..16777216 --hq-beam-width=0..32
+        \\    --hq-iterations=0..8 --hq-block-len=1..16777216 --hq-memory=bytes
+        \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
+        \\                              Zero beam/iterations selects the public quality defaults
+        \\                              HQ controls describe Vort native effort, not upstream speed parity
         \\  encode-br-stored-hex [text] [window_bits] [metadata]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
