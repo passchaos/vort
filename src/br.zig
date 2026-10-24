@@ -39,6 +39,7 @@ const hq_types = @import("br/encoder/hq_types.zig");
 const hq_codec = @import("br/encoder/hq_codec.zig");
 const new_hq_parser = @import("br/encoder/hq_parser.zig");
 const total_budget = @import("br/encoder/total_budget.zig");
+const encoder_window_format = @import("br/encoder/window_format.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
@@ -287,7 +288,9 @@ pub const PlannedEncodeOptions = struct {
     /// Explicit standard-window HQ command parsing for quality 10 or 11.
     /// Null preserves the established quality policy and complete wire.
     hq: ?HqOptions = null,
-    /// Emit the explicit Large Window extension for HQ quality 10 or 11.
+    /// Emit the explicit Large Window extension at every quality or legacy level.
+    /// All widths 10...30 retain extension identity. Non-HQ matching uses
+    /// bounded fragment/LZ history; the header does not imply a 1 GiB search.
     /// The decoder must opt in. False preserves the standard wire format.
     large_window: bool = false,
     /// Generic, text, or font policy for quality-scheduled encoding. A
@@ -1582,7 +1585,7 @@ const IncrementalStoredEncoderCodec = struct {
 
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        try writeWindowBits(allocator, &writer, options.window_bits);
+        try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
         state.bit_index = writer.bit_index;
     }
@@ -1896,6 +1899,7 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
+        large_window: bool = false,
         commands: std.ArrayList(command_plan.Command) = .empty,
         wire_state: PlannedWireState = .{},
     };
@@ -1907,6 +1911,7 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
     pub fn resetState(state: *State) void {
         state.bit_index = 0;
         state.window_bits = default_window_bits;
+        state.large_window = false;
         state.commands.clearRetainingCapacity();
         state.wire_state = .{};
     }
@@ -1933,14 +1938,14 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
         state: *State,
         options: StreamOptions,
     ) br.Error!void {
-        if (options.window_bits < 10 or options.window_bits > 24)
-            return error.InvalidBlockPlan;
+        try encoder_window_format.validate(options.window_bits, options.large_window);
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        try writeWindowBits(allocator, &writer, options.window_bits);
+        try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0)
             try writeMetadataMetaBlock(allocator, &writer, options.metadata);
         state.bit_index = writer.bit_index;
         state.window_bits = options.window_bits;
+        state.large_window = options.large_window;
     }
 
     pub fn writeBlock(
@@ -1985,6 +1990,7 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
             null,
             &stats,
             .{
+                .large_window = state.large_window,
                 .window_bits = state.window_bits,
                 .write_stream_prefix = false,
                 .final_meta_block = final,
@@ -2181,6 +2187,9 @@ test {
     _ = @import("tests/br_complete_lengths_contracts.zig");
     _ = @import("tests/br_complete_lengths_resources.zig");
     _ = @import("tests/br_complete_lengths_transactions.zig");
+    _ = @import("tests/br_general_large_window_contracts.zig");
+    _ = @import("tests/br_general_large_window_resources.zig");
+    _ = @import("tests/br_general_large_window_transactions.zig");
     _ = @import("br/encoder/hq_parser/length_options_tests.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
@@ -2321,6 +2330,7 @@ pub const IncrementalTestSupport = struct {
             &payload,
             &commands,
             default_window_bits,
+            false,
             0,
             .{},
         );
@@ -3461,13 +3471,16 @@ const planned_chunk_max_input_len: usize = 64 * 1024;
 // multi-block logic without a measured throughput benefit.
 const direct_stored_stream_max_input_len: usize = 16 * 1024;
 
-fn plannedWindowLen(level: PlannedCompressionLevel, window_bits: u5) Error!usize {
-    if (window_bits < 10 or window_bits > 24 or (window_bits > 16 and level != .ratio))
+fn plannedWindowLen(level: PlannedCompressionLevel, window_bits: u5, large_window: bool) Error!usize {
+    try encoder_window_format.validate(window_bits, large_window);
+    if (!large_window and window_bits > 16 and level != .ratio)
         return error.InvalidBlockPlan;
     return (@as(usize, 1) << window_bits) - 16;
 }
 
 pub const StoredStreamOptions = struct {
+    /// Explicit non-RFC Large Window identity at every width 10...30.
+    large_window: bool = false,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
 };
@@ -3500,7 +3513,6 @@ pub const PlannedStreamChunksOptions = struct {
 };
 
 fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error!void {
-    if (options.large_window and options.hq == null) return error.InvalidBlockPlan;
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
     if (options.window_bits < 10 or options.window_bits > (if (options.large_window) @as(u5, 30) else 24))
@@ -3554,7 +3566,7 @@ fn plannedStreamAdaptiveBlocks(options: PlannedStreamChunksOptions) Error!bool {
         (automatic and options.window_bits <= default_window_bits);
     if (enabled and block_len != stream_block_split.full_block_len)
         return error.InvalidBlockPlan;
-    if (enabled and options.window_bits > default_window_bits)
+    if (enabled and !options.large_window and options.window_bits > default_window_bits)
         return error.InvalidBlockPlan;
     return enabled;
 }
@@ -3564,7 +3576,7 @@ pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
 }
 
 pub fn encodedStoredStreamBoundWithOptions(input_len: usize, options: StoredStreamOptions) Error!usize {
-    var bit_count = try storedWindowBitsLen(options.window_bits);
+    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0) {
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     }
@@ -3585,7 +3597,7 @@ pub fn encodedStoredStreamChunksBound(chunks: []const []const u8) Error!usize {
 }
 
 pub fn encodedStoredStreamChunksBoundWithOptions(chunks: []const []const u8, options: StoredStreamOptions) Error!usize {
-    var bit_count = try storedWindowBitsLen(options.window_bits);
+    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0) {
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     }
@@ -4383,8 +4395,14 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
+    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator, out.items.ptr[0..out.capacity], input, options.metadata);
+    defer protected.deinit();
+    const active_input = protected.input();
+    var active_options = options;
+    active_options.metadata = protected.metadata();
+
     var writer = BitWriter{ .out = out };
-    try encodeStoredStreamWithOptionsWrite(allocator, &writer, input, options);
+    try encodeStoredStreamWithOptionsWrite(allocator, &writer, active_input, active_options);
 }
 
 pub fn encodeStoredStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
@@ -4392,8 +4410,14 @@ pub fn encodeStoredStreamChunksAppend(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 pub fn encodeStoredStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: StoredStreamOptions) Error!void {
+    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator, out.items.ptr[0..out.capacity], chunks, options.metadata);
+    defer protected.deinit();
+    const active_input = protected.input();
+    var active_options = options;
+    active_options.metadata = protected.metadata();
+
     var writer = BitWriter{ .out = out };
-    try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, chunks, options);
+    try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, active_input, active_options);
 }
 
 /// Encode a single-byte run as one compressed Brotli meta-block. This is a
@@ -4531,6 +4555,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
 ) Error![]u8 {
     const window_bits = try resolvedPlannedWindowBits(options);
     const stream_options = StoredStreamOptions{
+        .large_window = options.large_window,
         .window_bits = window_bits,
         .metadata = options.metadata,
     };
@@ -4647,12 +4672,14 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             .try_distance_split = options.level == .ratio,
             .try_adaptive_distance_split = options.adaptive_distance_split orelse
                 (options.level == .ratio and input.len >= 64 * 1024),
+            .large_window = options.large_window,
             .window_bits = window_bits,
             .metadata = options.metadata,
         };
     lazy_options.compound_dictionary_size = compound_size;
     var best = (if (options.level == .fast and options.quality == null)
         encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
+            .large_window = options.large_window,
             .window_bits = window_bits,
             .metadata = options.metadata,
             .compound_dictionary_size = compound_size,
@@ -4673,6 +4700,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             null,
             &serialized_stats,
             .{
+                .large_window = options.large_window,
                 .window_bits = window_bits,
                 .metadata = options.metadata,
                 .compound_dictionary_size = compound_size,
@@ -4717,6 +4745,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 &context_stats,
                 .{
                     .literal_context_candidate = context,
+                    .large_window = options.large_window,
                     .window_bits = window_bits,
                     .metadata = options.metadata,
                     .compound_dictionary_size = compound_size,
@@ -4748,6 +4777,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             .{
                 .use_recent_distances = true,
                 .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .large_window = options.large_window,
                 .window_bits = window_bits,
                 .metadata = options.metadata,
                 .compound_dictionary_size = compound_size,
@@ -4817,7 +4847,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         const long_window_bits: u5 = if (schedule != null)
             window_bits
         else
-            options.window_bits orelse 17;
+            options.window_bits orelse if (options.large_window) window_bits else 17;
         const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
         const literal_commands = [_]command_plan.Command{.{
             .insert_start = 0,
@@ -4829,11 +4859,12 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 base_commands
             else
                 &literal_commands;
-            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+            const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormat(
                 allocator,
                 input,
                 proposal,
                 long_max_distance,
+                encoder_window_format.format(options.large_window),
             ) orelse continue;
             defer allocator.free(long_commands);
             var long_stats: encoder_stats.PlannedEncodeStats = .{};
@@ -4846,6 +4877,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 .{
                     .use_recent_distances = true,
                     .use_utf8_text_contexts = true,
+                    .large_window = options.large_window,
                     .window_bits = long_window_bits,
                     .metadata = options.metadata,
                     .compound_dictionary_size = compound_size,
@@ -4874,7 +4906,7 @@ pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEn
             input_len,
             try plannedStreamChunksOptionsFromEncodeOptions(options),
         );
-    return encodedStoredStreamBoundWithOptions(input_len, .{ .window_bits = window_bits, .metadata = options.metadata });
+    return encodedStoredStreamBoundWithOptions(input_len, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
 }
 
 fn resolvedQualitySchedule(options: PlannedEncodeOptions) Error!quality_schedule.Schedule {
@@ -4919,7 +4951,9 @@ fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
         }
         return schedule.window.resolve(options.window_bits) catch error.InvalidBlockPlan;
     }
-    return options.window_bits orelse default_window_bits;
+    const bits = options.window_bits orelse default_window_bits;
+    try encoder_window_format.validate(bits, options.large_window);
+    return bits;
 }
 
 fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Error!PlannedStreamChunksOptions {
@@ -4951,6 +4985,7 @@ fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncod
         .try_adaptive_command_split = schedule.split.adaptive_command or options.adaptive_command_split,
         .try_distance_split = schedule.split.distance,
         .try_adaptive_distance_split = options.adaptive_distance_split orelse schedule.split.adaptive_distance,
+        .large_window = options.large_window,
         .window_bits = window_bits,
         .metadata = options.metadata,
     };
@@ -4962,8 +4997,8 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
     options: PlannedEncodeOptions,
 ) Error![]u8 {
     const schedule = try resolvedQualitySchedule(options);
-    const window_bits = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
-    const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = options.metadata };
+    const window_bits = try resolvedPlannedWindowBits(options);
+    const stream_options = StoredStreamOptions{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata };
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
     std.debug.assert(input.len <= max_uncompressed_meta_block_len);
 
@@ -5036,11 +5071,12 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
                 command_stream.commands
             else
                 &literal_commands;
-            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+            const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormat(
                 allocator,
                 input,
                 proposal,
                 max_backward_distance,
+                encoder_window_format.format(options.large_window),
             ) orelse continue;
             defer allocator.free(long_commands);
             var long_stats: encoder_stats.PlannedEncodeStats = .{};
@@ -5067,6 +5103,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             .{
                 .use_recent_distances = true,
                 .distance_parameters = encoder_distance.Parameters.init(0, 0),
+                .large_window = options.large_window,
                 .window_bits = window_bits,
                 .metadata = options.metadata,
             },
@@ -5088,6 +5125,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             allocator,
             input,
             window_bits,
+            options.large_window,
             options.metadata,
             search_distance_parameters,
             &record_stats,
@@ -5105,6 +5143,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             .{
                 .use_recent_distances = schedule.use_recent_distances,
                 .distance_parameters = encoder_distance.Parameters.init(1, 6),
+                .large_window = options.large_window,
                 .window_bits = window_bits,
                 .metadata = options.metadata,
                 .optimize_same_last_distance = false,
@@ -5125,6 +5164,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             command_stream.commands,
             best,
             window_bits,
+            options.large_window,
             options.metadata,
         );
         best_owned = true;
@@ -5139,6 +5179,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
                 input,
                 command_stream.commands,
                 window_bits,
+                options.large_window,
                 options.metadata,
                 probes,
                 &best,
@@ -5440,7 +5481,7 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
         stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
-    var bit_count: usize = if (options.large_window) 14 else try storedWindowBitsLen(options.window_bits);
+    var bit_count: usize = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     var remaining = input_len;
@@ -5464,7 +5505,7 @@ pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, op
         stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
-    var bit_count = try storedWindowBitsLen(options.window_bits);
+    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     for (chunks) |chunk| {
@@ -5535,25 +5576,25 @@ pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, optio
 
 fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     const window_bits = options.window_bits orelse default_window_bits;
-    const advertised_window_len = try plannedWindowLen(options.level, window_bits);
-    const window_len = if (options.window_bits == null) lz77.default_window_len else advertised_window_len;
+    const advertised_window_len = try plannedWindowLen(options.level, window_bits, options.large_window);
+    const window_len = if (options.window_bits == null) lz77.default_window_len else if (options.large_window) @min(advertised_window_len, lz77.max_window_len) else advertised_window_len;
     const compressed = switch (options.level) {
-        .fast => encodePlannedStreamAllocForWindow(allocator, input, window_bits, window_len, options.metadata),
+        .fast => encodePlannedStreamAllocForWindow(allocator, input, window_bits, options.large_window, window_len, options.metadata),
         .balanced => encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
             .window_len = window_len,
-        }, .{ .window_bits = window_bits, .metadata = options.metadata }),
+        }, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
         .ratio => unreachable,
     };
     const encoded = compressed catch |err| switch (err) {
-        error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata }),
+        error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
         else => return err,
     };
-    return chooseStoredIfSmallerWithOptions(allocator, input, encoded, .{ .window_bits = window_bits, .metadata = options.metadata });
+    return chooseStoredIfSmallerWithOptions(allocator, input, encoded, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
 }
 
-fn encodePlannedStreamAllocForWindow(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, window_len: usize, metadata: []const u8) Error![]u8 {
+fn encodePlannedStreamAllocForWindow(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, window_len: usize, metadata: []const u8) Error![]u8 {
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    return encodePlannedStreamAllocWithStatsTimedForWindow(allocator, input, null, &stats, window_bits, window_len, metadata);
+    return encodePlannedStreamAllocWithStatsTimedForWindow(allocator, input, null, &stats, window_bits, large_window, window_len, metadata);
 }
 
 /// Ratio-oriented planner variant using the shared lazy LZ77 parser. The wire
@@ -5797,10 +5838,10 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         input[input.len - 1] == '\n' and vortBrStableFixedWidthRecord(input.ptr, input.len) != 0;
     const explicit_window_bits = options.window_bits;
     const window_bits = options.window_bits orelse default_window_bits;
-    const window_len = try plannedWindowLen(.ratio, window_bits);
+    const window_len = try plannedWindowLen(.ratio, window_bits, options.large_window);
     const primary_window_len = @min(window_len, planner_max_backward_distance);
     std.debug.assert(input.len <= max_uncompressed_meta_block_len);
-    if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
+    if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
     const parser_options = PlannedParserOptions{
         .window_len = primary_window_len,
         .max_chain = 512,
@@ -5818,16 +5859,16 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     defer lz_plan.deinit(allocator);
     if (lz_plan.stats.matches == 0) {
         if (input.len <= ratio_static_dictionary_max_input_len) {
-            return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input, window_bits, options.metadata);
+            return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input, window_bits, options.large_window, options.metadata);
         }
-        var baseline = try encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
+        var baseline = try encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
         errdefer allocator.free(baseline);
         if (options.extended_dictionary_probes != 0) {
             const literal_plan = [_]command_plan.Command{.{
                 .insert_start = 0,
                 .insert_len = input.len,
             }};
-            try selectExtendedRatioStaticDictionary(allocator, input, &literal_plan, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
+            try selectExtendedRatioStaticDictionary(allocator, input, &literal_plan, window_bits, options.large_window, options.metadata, options.extended_dictionary_probes, &baseline);
         }
         return baseline;
     }
@@ -5842,6 +5883,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         .try_adaptive_command_split = options.adaptive_command_split,
         .try_distance_split = true,
         .try_adaptive_distance_split = options.adaptive_distance_split orelse (input.len >= 64 * 1024),
+        .large_window = options.large_window,
         .window_bits = window_bits,
         .metadata = options.metadata,
     });
@@ -5855,31 +5897,32 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     // memory/latency on the existing path.
     if (input.len >= 4 * 1024 and input.len <= 64 * 1024) {
         if (use_record_optimal)
-            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.metadata, options.distance_parameter_search orelse true, &stats, &baseline)
+            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse true, &stats, &baseline)
         else
-            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.metadata, options.distance_parameter_search orelse false, &stats, &baseline);
+            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse false, &stats, &baseline);
     }
     if (input.len <= ratio_static_dictionary_max_input_len) {
         baseline_owned = false;
-        return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.metadata);
+        return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline, window_bits, options.large_window, options.metadata);
     }
     if (options.extended_dictionary_probes != 0)
-        try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.metadata, options.extended_dictionary_probes, &baseline);
+        try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.large_window, options.metadata, options.extended_dictionary_probes, &baseline);
     if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance) {
         baseline_owned = false;
-        return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+        return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
     }
 
-    const long_window_bits: u5 = explicit_window_bits orelse 17;
+    const long_window_bits: u5 = explicit_window_bits orelse if (options.large_window) window_bits else 17;
     const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
-    const commands = try long_distance.augmentAllocWithMaxDistance(allocator, input, plan.commands, long_max_distance) orelse {
+    const commands = try long_distance.augmentAllocWithMaxDistanceForFormat(allocator, input, plan.commands, long_max_distance, encoder_window_format.format(options.large_window)) orelse {
         baseline_owned = false;
-        return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+        return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
     };
     defer allocator.free(commands);
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
+        .large_window = options.large_window,
         .window_bits = long_window_bits,
         .metadata = options.metadata,
     });
@@ -5887,16 +5930,16 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         allocator.free(baseline);
         baseline_owned = false;
         return if (explicit_window_bits == null)
-            chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .metadata = options.metadata })
+            chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .large_window = options.large_window, .metadata = options.metadata })
         else
-            chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .window_bits = window_bits, .metadata = options.metadata });
+            chooseStoredIfSmallerWithOptions(allocator, input, candidate, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
     }
     allocator.free(candidate);
     baseline_owned = false;
-    return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .window_bits = window_bits, .metadata = options.metadata });
+    return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
 }
 
-fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
     // Four-byte matching avoids expensive one-off command/distance symbols on
     // the retained source corpus. The fixed-bit DP is only a proposal stage:
     // exact Brotli wire size decides whether the candidate survives.
@@ -5919,6 +5962,7 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
         .use_utf8_text_contexts = true,
         .utf8_context_cutoff = 48,
         .distance_parameters = encoder_distance.Parameters.init(0, 0),
+        .large_window = large_window,
         .window_bits = window_bits,
         .metadata = metadata,
     });
@@ -5965,15 +6009,15 @@ fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error
     };
 }
 
-fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
-    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, metadata, search_distance_parameters, stats)) orelse return;
+fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, large_window, metadata, search_distance_parameters, stats)) orelse return;
     if (record.len < baseline.*.len) {
         allocator.free(baseline.*);
         baseline.* = record;
     } else allocator.free(record);
 }
 
-fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
+fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
     const plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return null;
     defer plan.deinit(allocator);
     const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
@@ -5986,6 +6030,7 @@ fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, in
         .optimize_literal_tree_wire = true,
         .utf8_context_cutoff = 48,
         .distance_parameters = encoder_distance.Parameters.init(0, 0),
+        .large_window = large_window,
         .window_bits = window_bits,
         .metadata = metadata,
     });
@@ -6137,6 +6182,7 @@ fn chooseDistanceParameterAlternativeAlloc(
     }
 
     const selection = distance_parameter_search.selectAlloc(allocator, .{
+        .format = encoder_window_format.format(options.large_window),
         .distance_frequencies = semantic_distances[0..unique_count],
         .short_symbol_frequencies = short_symbol_frequencies,
     }) catch |err| switch (err) {
@@ -6174,11 +6220,10 @@ fn chooseStoredIfSmallerWithOptions(allocator: std.mem.Allocator, input: []const
 // ordinary short JSON/source data from regressing in size.
 const ratio_static_dictionary_max_input_len: usize = 256;
 const ratio_extended_static_dictionary_max_input_len: usize = 4096;
-const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10 }) catch unreachable;
+const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10, .large_window = true }) catch unreachable;
 
 fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions) Error!void {
     if (options.large_window) {
-        if (options.hq == null) return error.InvalidBlockPlan;
         _ = try resolvedPlannedWindowBits(options);
     }
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
@@ -6203,7 +6248,7 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
         return error.InvalidBlockPlan;
     if (options.mode != .generic) return error.InvalidBlockPlan;
     const window_bits = options.window_bits orelse default_window_bits;
-    _ = try plannedWindowLen(options.level, window_bits);
+    _ = try plannedWindowLen(options.level, window_bits, options.large_window);
     if ((options.adaptive_command_split or options.adaptive_literal_split or options.adaptive_distance_split == true) and
         (options.level != .ratio or input_len > max_uncompressed_meta_block_len))
         return error.InvalidBlockPlan;
@@ -6217,7 +6262,7 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
             input_len > ratio_extended_static_dictionary_max_input_len)) return error.InvalidBlockPlan;
 }
 
-fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, window_bits: u5, metadata: []const u8, probe_limit: usize, baseline: *[]u8) Error!void {
+fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, window_bits: u5, large_window: bool, metadata: []const u8, probe_limit: usize, baseline: *[]u8) Error!void {
     std.debug.assert(input.len > ratio_static_dictionary_max_input_len);
     std.debug.assert(input.len <= ratio_extended_static_dictionary_max_input_len);
     std.debug.assert(probe_limit != 0 and probe_limit <= max_extended_dictionary_probes);
@@ -6227,6 +6272,7 @@ fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []co
 
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, mixed_plan.commands, null, &stats, .{
+        .large_window = large_window,
         .window_bits = window_bits,
         .metadata = metadata,
     });
@@ -6236,21 +6282,21 @@ fn selectExtendedRatioStaticDictionary(allocator: std.mem.Allocator, input: []co
     } else allocator.free(candidate);
 }
 
-fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, metadata: []const u8) Error![]u8 {
+fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8) Error![]u8 {
     const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
     defer plan.deinit(allocator);
-    const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = metadata };
+    const stream_options = StoredStreamOptions{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata };
     if (plan.match_count == 0) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
     if (metadata.len != 0) {
         var stats: encoder_stats.PlannedEncodeStats = .{};
-        const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, plan.commands, null, &stats, .{ .window_bits = window_bits, .metadata = metadata });
+        const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, plan.commands, null, &stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata });
         return chooseStoredIfSmallerWithOptions(allocator, input, candidate, stream_options);
     }
 
     const stored_len = try encodedStoredStreamBoundWithOptions(input.len, stream_options);
     var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
         error.OutOfMemory => {
             try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
             return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
@@ -6261,7 +6307,7 @@ fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input:
     return allocator.dupe(u8, candidate_storage[0..candidate_len]);
 }
 
-fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8, window_bits: u5, metadata: []const u8) Error![]u8 {
+fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8, window_bits: u5, large_window: bool, metadata: []const u8) Error![]u8 {
     var best = baseline;
     var best_owned = true;
     errdefer if (best_owned) allocator.free(best);
@@ -6271,13 +6317,13 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
     // Anything reaching the stored ceiling cannot beat final arbitration, so
     // the exact stored bound is also a complete candidate-search budget.
-    const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = metadata };
+    const stream_options = StoredStreamOptions{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata };
     if (metadata.len != 0) {
         const mixed_plan = try command_plan.mixStaticDictionaryWithCacheAlloc(allocator, input, lz_commands, &match_cache);
         defer mixed_plan.deinit(allocator);
         if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
             var mixed_stats: encoder_stats.PlannedEncodeStats = .{};
-            const mixed = try encodeCommandPlanWithOptionsAlloc(allocator, input, mixed_plan.commands, null, &mixed_stats, .{ .window_bits = window_bits, .metadata = metadata });
+            const mixed = try encodeCommandPlanWithOptionsAlloc(allocator, input, mixed_plan.commands, null, &mixed_stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata });
             if (mixed.len < best.len) {
                 allocator.free(best);
                 best = mixed;
@@ -6287,7 +6333,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         defer dictionary_plan.deinit(allocator);
         if (dictionary_plan.match_count != 0) {
             var dictionary_stats: encoder_stats.PlannedEncodeStats = .{};
-            const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, dictionary_plan.commands, null, &dictionary_stats, .{ .window_bits = window_bits, .metadata = metadata });
+            const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, dictionary_plan.commands, null, &dictionary_stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata });
             if (candidate.len < best.len) {
                 allocator.free(best);
                 best = candidate;
@@ -6305,7 +6351,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     defer mixed_plan.deinit(allocator);
     if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
         var stats: encoder_stats.PlannedEncodeStats = .{};
-        const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
+        const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
             // A candidate that exhausts the current winner's byte budget cannot
             // win the strict final-size comparison, so no retry is needed.
             error.OutOfMemory => failed: {
@@ -6327,7 +6373,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
     }
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
         error.OutOfMemory => {
             try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
             best_owned = false;
@@ -6413,6 +6459,7 @@ const PlannedWireState = struct {
     output_pos: usize = 0,
 };
 const PlannedWireContext = struct {
+    large_window: bool = false,
     window_bits: u5 = default_window_bits,
     compound_dictionary_size: usize = 0,
     initial_output_pos: usize = 0,
@@ -6599,6 +6646,60 @@ const Q0OnePassPayloadWriter = struct {
     }
 };
 
+/// Keep the compact 64-symbol payload model while emitting the correct
+/// Large Window active/wire alphabet. Symbols outside this subset cause the
+/// dedicated candidate to fall back to the complete command-plan writer.
+fn writeCompactPlannedCompressedHeader(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    large_window: bool,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(64),
+    literal_lengths: *const [256]u4,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [64]u4,
+) Error!void {
+    const parameters = encoder_distance.Parameters.init(0, 0);
+    if (!large_window) return writePlannedCompressedHeader(
+        64,
+        allocator,
+        writer,
+        literal_context.mode_lsb6,
+        literal_alphabet,
+        command_alphabet,
+        null,
+        distance_alphabet,
+        null,
+        parameters,
+        64,
+        literal_lengths,
+        command_lengths,
+        distance_lengths,
+    );
+    const active_size = comptime encoder_distance.Parameters.init(0, 0).activeAlphabetSize(.large_window);
+    var padded: [active_size]u4 = @splat(0);
+    @memcpy(padded[0..64], distance_lengths);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2);
+    try writer.writeBits(allocator, 0, 4);
+    try writer.writeBits(allocator, literal_context.mode_lsb6, 2);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
+    try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, null);
+    try writePrefixSymbolsWithAlphabetSizes(
+        allocator,
+        writer,
+        active_size,
+        parameters.wireAlphabetSize(.large_window),
+        distance_alphabet,
+        &padded,
+    );
+}
+
 fn encodeQ0OnePassMetaBlockCandidate(
     allocator: std.mem.Allocator,
     bytes: *std.ArrayList(u8),
@@ -6608,6 +6709,7 @@ fn encodeQ0OnePassMetaBlockCandidate(
     commands: []const command_plan.Command,
     initial_wire_state: PlannedWireState,
     entropy_state: *const fast_fragment_one_pass.State,
+    large_window: bool,
 ) Error!Q0OnePassCandidate {
     bytes.clearRetainingCapacity();
     if (start_bit_index != 0) try bytes.append(allocator, start_byte);
@@ -6637,18 +6739,13 @@ fn encodeQ0OnePassMetaBlockCandidate(
     );
 
     try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
-    try writePlannedCompressedHeader(
-        64,
+    try writeCompactPlannedCompressedHeader(
         allocator,
         &writer,
-        literal_context.mode_lsb6,
+        large_window,
         &literal_alphabet,
         &command_alphabet,
-        null,
         &distance_alphabet,
-        null,
-        encoder_distance.Parameters.init(0, 0),
-        64,
         &literal_lengths,
         &command_lengths,
         &entropy_state.distance_lengths,
@@ -6806,6 +6903,7 @@ fn encodeQ1TwoPassMetaBlockCandidate(
     input: []const u8,
     commands: []const command_plan.Command,
     initial_wire_state: PlannedWireState,
+    large_window: bool,
 ) Error!PlannedMetaBlockCandidate {
     bytes.clearRetainingCapacity();
     if (start_bit_index != 0) try bytes.append(allocator, start_byte);
@@ -6860,19 +6958,13 @@ fn encodeQ1TwoPassMetaBlockCandidate(
     );
 
     try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
-    const parameters = encoder_distance.Parameters.init(0, 0);
-    try writePlannedCompressedHeader(
-        64,
+    try writeCompactPlannedCompressedHeader(
         allocator,
         &writer,
-        literal_context.mode_lsb6,
+        large_window,
         &literal_alphabet,
         &command_alphabet,
-        null,
         &distance_alphabet,
-        null,
-        parameters,
-        64,
         &literal_lengths,
         &command_lengths,
         &distance_lengths,
@@ -6982,6 +7074,7 @@ fn resolveQ23Command(
     command: command_plan.Command,
     wire_distance: usize,
     last_distances: *const [4]usize,
+    format: encoder_distance.Format,
 ) Error!Q23ResolvedCommand {
     const recent_symbol: ?u4 = if (!command.has_copy)
         null
@@ -6999,9 +7092,10 @@ fn resolveQ23Command(
         if (recent_symbol) |symbol|
             encoder_distance.Encoding{ .symbol = symbol }
         else
-            encoder_distance.encodeWithParameters(
+            encoder_distance.encodeWithFormat(
                 wire_distance,
                 encoder_distance.Parameters.init(0, 0),
+                format,
             ) orelse return error.InvalidBlockPlan
     else
         null;
@@ -7056,6 +7150,7 @@ fn collectQ23Frequencies(
             command,
             wire_distance,
             &result.final_last_distances,
+            encoder_window_format.format(wire_context.large_window),
         );
         result.commands[resolved.encoding.symbol] += 1;
         if (resolved.distance) |distance| {
@@ -7118,6 +7213,7 @@ fn encodeQ23MetaBlockCandidate(
     input: []const u8,
     commands: []const command_plan.Command,
     window_bits: u5,
+    large_window: bool,
     compound_dictionary_size: usize,
     initial_wire_state: PlannedWireState,
 ) Error!PlannedMetaBlockCandidate {
@@ -7126,6 +7222,7 @@ fn encodeQ23MetaBlockCandidate(
     var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
     const start_bit_position = writer.bitPosition();
     const wire_context = PlannedWireContext{
+        .large_window = large_window,
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
         .initial_output_pos = initial_wire_state.output_pos,
@@ -7171,18 +7268,13 @@ fn encodeQ23MetaBlockCandidate(
         );
 
     try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
-    try writePlannedCompressedHeader(
-        64,
+    try writeCompactPlannedCompressedHeader(
         allocator,
         &writer,
-        literal_context.mode_lsb6,
+        large_window,
         &literal_alphabet,
         &command_alphabet,
-        null,
         &distance_alphabet,
-        null,
-        encoder_distance.Parameters.init(0, 0),
-        64,
         &literal_lengths,
         &command_lengths,
         &distance_lengths,
@@ -7204,7 +7296,7 @@ fn encodeQ23MetaBlockCandidate(
             )
         else
             0;
-        const resolved = try resolveQ23Command(mode, command, wire_distance, &last_distances);
+        const resolved = try resolveQ23Command(mode, command, wire_distance, &last_distances, encoder_window_format.format(large_window));
         try writeQ23Symbol(
             704,
             allocator,
@@ -7347,6 +7439,7 @@ fn considerPlannedMetaBlockCommands(
             commands,
             wire_state,
             &state.q0_entropy_state,
+            state.large_window,
         )) |candidate| {
             try retainSmallerMetaBlockCandidate(
                 allocator,
@@ -7373,6 +7466,7 @@ fn considerPlannedMetaBlockCommands(
             input,
             commands,
             wire_state,
+            state.large_window,
         )) |candidate| {
             try retainSmallerMetaBlockCandidate(
                 allocator,
@@ -7404,6 +7498,7 @@ fn considerPlannedMetaBlockCommands(
             input,
             commands,
             window_bits,
+            state.large_window,
             compound_dictionary_size,
             wire_state,
         )) |candidate| {
@@ -7423,6 +7518,7 @@ fn considerPlannedMetaBlockCommands(
         }
     }
     const common = CommandPlanEncodeOptions{
+        .large_window = state.large_window,
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
         .initial_previous = state.context_previous,
@@ -7493,6 +7589,7 @@ fn considerPlannedMetaBlockCommands(
         policy.split.distance,
         policy.split.adaptive_distance,
         .{
+            .large_window = state.large_window,
             .window_bits = window_bits,
             .compound_dictionary_size = compound_dictionary_size,
             .initial_output_pos = wire_state.output_pos,
@@ -7519,6 +7616,7 @@ fn considerPlannedMetaBlockCommands(
         else
             null,
         .adaptive_distance_split = if (symbol_splits.adaptive_distance) |*plan| plan else null,
+        .large_window = state.large_window,
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
         .initial_previous = state.context_previous,
@@ -7614,12 +7712,13 @@ fn considerPlannedLongDistanceMetaBlockCommands(
             commands
         else
             &literal_commands;
-        const augmented = try long_distance.augmentAllocWithHistoryAndMaxDistance(
+        const augmented = try long_distance.augmentAllocWithHistoryAndMaxDistanceForFormat(
             allocator,
             state.history.items,
             input,
             proposal,
             max_backward_distance,
+            encoder_window_format.format(state.large_window),
         ) orelse continue;
         defer allocator.free(augmented);
         try considerPlannedMetaBlockCommands(
@@ -7652,6 +7751,7 @@ fn considerSerializedMetaBlockCommands(
     initial_previous: [2]u8,
     window_bits: u5,
     compound_dictionary_size: usize,
+    large_window: bool,
     start_byte: u8,
     start_bit_index: u3,
     wire_state: PlannedWireState,
@@ -7668,6 +7768,7 @@ fn considerSerializedMetaBlockCommands(
         commands,
         wire_state,
         .{
+            .large_window = large_window,
             .window_bits = window_bits,
             .compound_dictionary_size = compound_dictionary_size,
             .literal_context_mode = context_mode,
@@ -7720,6 +7821,7 @@ fn considerSerializedMetaBlockCommands(
             wire_state,
             .{
                 .literal_context_candidate = context,
+                .large_window = large_window,
                 .window_bits = window_bits,
                 .compound_dictionary_size = compound_dictionary_size,
                 .literal_context_mode = context_mode,
@@ -7775,7 +7877,7 @@ fn considerPlannedMetaBlockPolicy(
             allocator,
             input,
             variant,
-            max_backward_distance,
+            try encoder_window_format.fragmentDistance(state.window_bits, state.large_window),
         );
         match_count = fragment_stats.matches;
     } else {
@@ -7901,6 +8003,7 @@ fn considerPlannedMetaBlockPolicy(
                         state.context_previous,
                         state.window_bits,
                         state.compound_dictionary_size,
+                        state.large_window,
                         start_byte,
                         start_bit_index,
                         state.wire_state,
@@ -8108,6 +8211,7 @@ noinline fn considerPlannedMetaBlockCommandState(
         commandStateCompactEncodeOptions(.{
             .try_recent_distances = policy.use_recent_distances,
             .try_literal_contexts = policy.context.literal_contexts,
+            .large_window = state.large_window,
             .window_bits = state.window_bits,
             .compound_dictionary_size = state.compound_dictionary_size,
             .initial_output_pos = state.wire_state.output_pos,
@@ -8365,7 +8469,7 @@ fn writeAdaptivePlannedStreamBlock(
             state.context_previous = single_context_previous;
             state.q0_entropy_state = single_q0_entropy_state;
             if (try plannedStateRetainsMatchHistory(state)) {
-                const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+                const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
                 try IncrementalPlannedEncoderCodec.appendHistory(
                     &state.history,
                     allocator,
@@ -8497,7 +8601,7 @@ fn writePlannedStreamMetaBlock(
             return error.IntegerOverflow;
     }
     if (update_history and retain_match_history) {
-        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+        const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
         try IncrementalPlannedEncoderCodec.appendHistory(
             &state.history,
             allocator,
@@ -8776,7 +8880,7 @@ fn writeLegacyFinalPlannedBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     try writePlannedStreamMetaBlock(allocator, &candidate, state, block, false);
     try IncrementalPlannedEncoderCodec.writeFinal(allocator, &candidate, state);
     const retain_history = try plannedStateRetainsMatchHistory(state);
-    const window_len = (@as(usize, 1) << state.window_bits) - 16;
+    const window_len = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
     if (retain_history) try state.history.ensureTotalCapacity(allocator, hq_codec.history.capacity(state.history.items.len, block.len, window_len));
     try hq_codec.publication.appendCandidate(allocator, out, original_bit_index, candidate.items);
     if (retain_history) hq_codec.history.appendPrepared(&state.history, block, window_len);
@@ -8786,6 +8890,7 @@ const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
 const command_state_full_wire_slack_bytes: usize = 128;
 const LazyWireOptions = struct {
+    large_window: bool = false,
     try_recent_distances: bool = false,
     /// Null preserves the legacy coupling where recent-distance search also
     /// probes literal contexts. Quality schedules set an explicit boolean so
@@ -8820,6 +8925,7 @@ fn commandStateCompactEncodeOptions(options: LazyWireOptions) CommandPlanEncodeO
             )
         else
             null,
+        .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
         .compound_dictionary_size = options.compound_dictionary_size,
@@ -9094,10 +9200,10 @@ pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []
 }
 
 pub fn encodePlannedStreamAllocWithStatsTimed(allocator: std.mem.Allocator, input: []const u8, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
-    return encodePlannedStreamAllocWithStatsTimedForWindow(allocator, input, io, stats, default_window_bits, lz77.default_window_len, "");
+    return encodePlannedStreamAllocWithStatsTimedForWindow(allocator, input, io, stats, default_window_bits, false, lz77.default_window_len, "");
 }
 
-fn encodePlannedStreamAllocWithStatsTimedForWindow(allocator: std.mem.Allocator, input: []const u8, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, window_bits: u5, window_len: usize, metadata: []const u8) Error![]u8 {
+fn encodePlannedStreamAllocWithStatsTimedForWindow(allocator: std.mem.Allocator, input: []const u8, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, window_bits: u5, large_window: bool, window_len: usize, metadata: []const u8) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     const lz_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, input, .{
@@ -9116,7 +9222,7 @@ fn encodePlannedStreamAllocWithStatsTimedForWindow(allocator: std.mem.Allocator,
     defer plan.deinit(allocator);
     if (io) |active| stats.command_plan_ns = elapsedNs(command_start.?, active);
     const wire_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, plan.commands, io, stats, .{ .window_bits = window_bits, .metadata = metadata });
+    const encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, plan.commands, io, stats, .{ .large_window = large_window, .window_bits = window_bits, .metadata = metadata });
     if (io) |active| stats.wire_ns = elapsedNs(wire_start.?, active);
     stats.input_bytes = input.len;
     stats.token_count = lz_plan.tokens.len;
@@ -9245,6 +9351,13 @@ pub const PlannedStreamEncoder = struct {
         if (output.len < needed) return error.OutOfMemory;
         if (@import("br/encoder/total_reusable.zig").needed(self, options))
             return @import("br/encoder/total_reusable.zig").into(self, chunks, output, options, @This().encodeChunksWithOptionsAlloc);
+        if (self.isTotalOwnedRange(output)) {
+            var temporary = PlannedStreamEncoder.init(self.allocator);
+            defer temporary.deinit();
+            const encoded = try temporary.encodeChunksScratchWithOptions(chunks, options);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
         const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
@@ -9263,6 +9376,13 @@ pub const PlannedStreamEncoder = struct {
             errdefer if (raw.profile) |p| p.restoreEmitted(emitted.?);
             const encoded = try encodeHqWholeStreamAlloc(self.allocator, chunks, options);
             defer self.allocator.free(encoded);
+            try out.appendSlice(self.allocator, encoded);
+            return;
+        }
+        if (self.isTotalOwnedOutput(out)) {
+            var temporary = PlannedStreamEncoder.init(self.allocator);
+            defer temporary.deinit();
+            const encoded = try temporary.encodeChunksScratchWithOptions(chunks, options);
             try out.appendSlice(self.allocator, encoded);
             return;
         }
@@ -9301,7 +9421,7 @@ pub const PlannedStreamEncoder = struct {
         }
         if (options.quality != null)
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
-        if (options.window_bits != null or options.metadata.len != 0)
+        if (options.large_window or options.window_bits != null or options.metadata.len != 0)
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (options.level == .fast and input.len <= 32 * 1024)
             return allocator.dupe(u8, try self.encodeScratchWithOptions(input, options));
@@ -9374,6 +9494,8 @@ pub const PlannedStreamEncoder = struct {
             self.output.appendSliceAssumeCapacity(encoded);
             return self.output.items;
         }
+        if (try @import("br/encoder/total_reusable.zig").aliasScratch(self, chunks, options, @This().encodeChunksScratchWithOptions)) |protected|
+            return protected;
         const block_len = try plannedStreamBlockLen(options);
         _ = try plannedStreamAdaptiveBlocks(options);
         IncrementalPlannedEncoderCodec.resetState(&self.stream_state);
@@ -9418,6 +9540,8 @@ pub const PlannedStreamEncoder = struct {
             const chunks = [_][]const u8{input};
             return self.encodeChunksScratchWithOptions(&chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
         }
+        if (try @import("br/encoder/total_reusable.zig").aliasScratch(self, input, options, @This().encodeScratchWithOptions)) |protected|
+            return protected;
         try validatePlannedEncodeOptions(input.len, options);
         if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
             const chunks = [_][]const u8{input};
@@ -9441,7 +9565,7 @@ pub const PlannedStreamEncoder = struct {
             try self.output.appendSlice(self.allocator, encoded);
             return self.output.items;
         }
-        if (options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level == .ratio or input.len > 32 * 1024) {
+        if (options.large_window or options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level == .ratio or input.len > 32 * 1024) {
             const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
             defer self.allocator.free(encoded);
             self.output.clearRetainingCapacity();
@@ -9509,7 +9633,15 @@ pub const PlannedStreamEncoder = struct {
         if (output.len < needed) return error.OutOfMemory;
         if (@import("br/encoder/total_reusable.zig").needed(self, options))
             return @import("br/encoder/total_reusable.zig").into(self, input, output, options, @This().encodeWithOptionsAlloc);
-        if (options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level != .fast or
+        if (self.isTotalOwnedRange(output)) {
+            var temporary = PlannedStreamEncoder.init(self.allocator);
+            defer temporary.deinit();
+            const encoded = try temporary.encodeWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
+        if (options.large_window or options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level != .fast or
             (try plannedSharedDictionarySize(options.shared_dictionary)) != 0)
         {
             // Route balanced through this encoder's retained token/command
@@ -9693,7 +9825,8 @@ fn estimatedPrefixBitLength(total: u32, frequency: u32) u4 {
 fn prefixTreePlanBitCost(
     comptime capacity: usize,
     allocator: std.mem.Allocator,
-    alphabet_size: usize,
+    active_size: usize,
+    wire_size: usize,
     frequencies: *const [capacity]u32,
     alphabet: *const command_plan.PrefixAlphabetFor(capacity),
     lengths: *const [capacity]u4,
@@ -9702,11 +9835,11 @@ fn prefixTreePlanBitCost(
     for (frequencies, lengths) |frequency, length|
         payload_bits += @as(u64, frequency) * length;
     const tree_bits: u64 = if (alphabet.len <= 4)
-        4 + @as(u64, alphabet.len) * alphabetBitsRuntime(alphabet_size) + @intFromBool(alphabet.len == 4)
+        4 + @as(u64, alphabet.len) * alphabetBitsRuntime(wire_size) + @intFromBool(alphabet.len == 4)
     else blk: {
         var highest: usize = 0;
         for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
-        break :blk try complex_prefix.bitCost(allocator, alphabet_size, lengths, highest + 1);
+        break :blk try complex_prefix.bitCost(allocator, active_size, lengths, highest + 1);
     };
     return tree_bits + payload_bits;
 }
@@ -9716,18 +9849,20 @@ fn prefixTreePlanBitCost(
 /// vs explicit-command-plus-distance-zero per insert/copy shape, then complete
 /// command and distance tree costs decide whether the plan is retained.
 fn chooseSameLastDistancePlan(
+    comptime distance_capacity: usize,
     allocator: std.mem.Allocator,
     command_frequencies: *[704]u32,
     sparse_command_alphabet: *const command_plan.PrefixAlphabet,
-    distance_frequencies: *[planned_distance_alphabet_size]u32,
+    distance_frequencies: *[distance_capacity]u32,
     shape_counts: *const [24][24]u32,
-    replaced_distance_frequencies: *const [planned_distance_alphabet_size]u32,
+    replaced_distance_frequencies: *const [distance_capacity]u32,
     replaced_distance_extra_bits: u64,
-    distance_alphabet_size: usize,
+    distance_active_size: usize,
+    distance_wire_size: usize,
     final_command_alphabet: *command_plan.PrefixAlphabet,
     final_command_lengths: *[704]u4,
-    final_distance_alphabet: *command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
-    final_distance_lengths: *[planned_distance_alphabet_size]u4,
+    final_distance_alphabet: *command_plan.PrefixAlphabetFor(distance_capacity),
+    final_distance_lengths: *[distance_capacity]u4,
 ) Error!SameLastDistancePlan {
     var candidate_count: u32 = 0;
     for (shape_counts) |row| {
@@ -9741,11 +9876,11 @@ fn chooseSameLastDistancePlan(
     var baseline_command_alphabet: command_plan.PrefixAlphabet = undefined;
     try command_plan.alphabetFromFrequenciesInto(704, &baseline_command_alphabet, &baseline_command_frequencies);
     const baseline_command_lengths = try baseline_command_alphabet.codeLengths(&baseline_command_frequencies);
-    var baseline_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &baseline_distance_alphabet, distance_frequencies);
+    var baseline_distance_alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(distance_capacity, &baseline_distance_alphabet, distance_frequencies);
     const baseline_distance_lengths = try baseline_distance_alphabet.codeLengths(distance_frequencies);
-    const baseline_bits = try prefixTreePlanBitCost(704, allocator, 704, &baseline_command_frequencies, &baseline_command_alphabet, &baseline_command_lengths) +
-        try prefixTreePlanBitCost(planned_distance_alphabet_size, allocator, distance_alphabet_size, distance_frequencies, &baseline_distance_alphabet, &baseline_distance_lengths) +
+    const baseline_bits = try prefixTreePlanBitCost(704, allocator, 704, 704, &baseline_command_frequencies, &baseline_command_alphabet, &baseline_command_lengths) +
+        try prefixTreePlanBitCost(distance_capacity, allocator, distance_active_size, distance_wire_size, distance_frequencies, &baseline_distance_alphabet, &baseline_distance_lengths) +
         replaced_distance_extra_bits;
 
     // Model both command forms as available while choosing per-shape costs.
@@ -9781,17 +9916,17 @@ fn chooseSameLastDistancePlan(
             } else candidate_distance_frequencies[0] += count;
         }
     }
-    if (allZeroFrequencies(planned_distance_alphabet_size, &candidate_distance_frequencies))
+    if (allZeroFrequencies(distance_capacity, &candidate_distance_frequencies))
         candidate_distance_frequencies[0] = 1;
 
     var candidate_command_alphabet: command_plan.PrefixAlphabet = undefined;
     try command_plan.alphabetFromFrequenciesInto(704, &candidate_command_alphabet, &candidate_command_frequencies);
     const candidate_command_lengths = try candidate_command_alphabet.codeLengths(&candidate_command_frequencies);
-    var candidate_distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &candidate_distance_alphabet, &candidate_distance_frequencies);
+    var candidate_distance_alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(distance_capacity, &candidate_distance_alphabet, &candidate_distance_frequencies);
     const candidate_distance_lengths = try candidate_distance_alphabet.codeLengths(&candidate_distance_frequencies);
-    const candidate_bits = try prefixTreePlanBitCost(704, allocator, 704, &candidate_command_frequencies, &candidate_command_alphabet, &candidate_command_lengths) +
-        try prefixTreePlanBitCost(planned_distance_alphabet_size, allocator, distance_alphabet_size, &candidate_distance_frequencies, &candidate_distance_alphabet, &candidate_distance_lengths);
+    const candidate_bits = try prefixTreePlanBitCost(704, allocator, 704, 704, &candidate_command_frequencies, &candidate_command_alphabet, &candidate_command_lengths) +
+        try prefixTreePlanBitCost(distance_capacity, allocator, distance_active_size, distance_wire_size, &candidate_distance_frequencies, &candidate_distance_alphabet, &candidate_distance_lengths);
     // Eight bits guarantee at least one output byte saved regardless of the
     // surrounding bit offset and final byte alignment.
     if (candidate_bits > baseline_bits or baseline_bits - candidate_bits < 8) {
@@ -9841,6 +9976,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     // Additional full wire candidates are worthwhile only on ratio-sized plans
     // already paying for recent-distance analysis.
     const use_recent_distances = options.try_recent_distances and try countReusableRecentDistances(commands, .{
+        .large_window = options.large_window,
         .window_bits = options.window_bits,
         .compound_dictionary_size = options.compound_dictionary_size,
         .initial_output_pos = options.initial_output_pos,
@@ -9856,6 +9992,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     const primary_options = CommandPlanEncodeOptions{
         .use_recent_distances = use_recent_distances,
         .literal_context_candidate = primary_context,
+        .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
         .compound_dictionary_size = options.compound_dictionary_size,
@@ -9894,6 +10031,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
                 const adaptive = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &adaptive_stats, .{
                     .use_recent_distances = use_recent_distances,
                     .literal_context_candidate = adaptive_context,
+                    .large_window = options.large_window,
                     .window_bits = options.window_bits,
                     .metadata = options.metadata,
                     .compound_dictionary_size = options.compound_dictionary_size,
@@ -9955,6 +10093,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     }
     var baseline_stats = initial_stats;
     const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &baseline_stats, .{
+        .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
         .compound_dictionary_size = options.compound_dictionary_size,
@@ -10013,6 +10152,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         options.try_distance_split,
         options.try_adaptive_distance_split,
         .{
+            .large_window = options.large_window,
             .window_bits = options.window_bits,
             .compound_dictionary_size = options.compound_dictionary_size,
             .initial_output_pos = options.initial_output_pos,
@@ -10526,6 +10666,7 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
         .adaptive_command_split = adaptive_command_split,
         .distance_split = distance_split,
         .adaptive_distance_split = adaptive_distance_split,
+        .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
         .compound_dictionary_size = options.compound_dictionary_size,
@@ -10543,6 +10684,7 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
                 .adaptive_command_split = adaptive_command_split,
                 .distance_split = distance_split,
                 .adaptive_distance_split = adaptive_distance_split,
+                .large_window = options.large_window,
                 .window_bits = options.window_bits,
                 .metadata = options.metadata,
                 .compound_dictionary_size = options.compound_dictionary_size,
@@ -10563,6 +10705,7 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
                 .adaptive_command_split = adaptive_command_split,
                 .distance_split = distance_split,
                 .adaptive_distance_split = adaptive_distance_split,
+                .large_window = options.large_window,
                 .window_bits = options.window_bits,
                 .metadata = options.metadata,
                 .compound_dictionary_size = options.compound_dictionary_size,
@@ -10636,7 +10779,7 @@ fn chooseCommandAndDistanceSplitsAlloc(
         if (command_accumulator) |*accumulator| if (!accumulator.add(encoding.symbol)) return error.InvalidBlockPlan;
         if (command_symbols) |symbols| symbols[command_index] = encoding.symbol;
         if (collect_distances and command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(wire_distance, 15) orelse return error.InvalidBlockPlan;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encodeWithFormat(wire_distance, encoder_distance.Parameters.init(0, 15), encoder_window_format.format(wire_context.large_window)) orelse return error.InvalidBlockPlan;
             distance_symbols.?[distance_symbol_count] = distance.symbol;
             distance_symbol_count += 1;
         }
@@ -10664,7 +10807,7 @@ fn chooseCommandAndDistanceSplitsAlloc(
         error.OutOfMemory => return error.OutOfMemory,
     } else null;
     errdefer if (adaptive_command) |plan| plan.deinit(allocator);
-    const adaptive_distance = if (try_adaptive_distance_split and distance_symbol_count >= 2 * 1024 and distance_symbol_count <= 32 * 1024) distance_block_split.chooseAdaptiveAlloc(
+    const adaptive_distance = if (try_adaptive_distance_split and distance_symbol_count >= 2 * 1024 and distance_symbol_count <= 32 * 1024) distance_block_split.chooseAdaptiveAllocWithFormat(
         allocator,
         distance_symbols.?[0..distance_symbol_count],
         .{
@@ -10674,6 +10817,7 @@ fn chooseCommandAndDistanceSplitsAlloc(
             .max_symbols = 32 * 1024,
             .scratch_budget_bytes = 2 * 1024 * 1024,
         },
+        encoder_window_format.format(wire_context.large_window),
     ) catch |err| switch (err) {
         error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded => return error.InvalidBlockPlan,
         error.InvalidBlockPlan => return error.InvalidBlockPlan,
@@ -10882,6 +11026,8 @@ noinline fn encodeCommandPlanWithWideDistanceWrite(
 }
 
 noinline fn encodeCommandPlanWithLargeWindowWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    if (options.adaptive_literal_split != null or options.adaptive_command_split != null or options.adaptive_distance_split != null)
+        return encodeCommandPlanWithOptionsWriteInternal(true, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
     return encodeCommandPlanWithOptionsWriteInternal(false, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
 }
 
@@ -10901,7 +11047,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             distance_capacity != planned_wide_distance_alphabet_size and
             distance_capacity != large_max_distance_alphabet_size)
             @compileError("unsupported planned Brotli distance capacity");
-        if (allow_adaptive_split and distance_capacity != planned_distance_alphabet_size)
+        if (allow_adaptive_split and distance_capacity != planned_distance_alphabet_size and distance_capacity != large_max_distance_alphabet_size)
             @compileError("adaptive Brotli split writer must use narrow distance capacity");
     }
     if (commands.len == 0) return error.InvalidBlockPlan;
@@ -11264,9 +11410,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         if (adaptive_distance_block_index + 1 != split.blockCount() or
             adaptive_distance_block_end != distance_index) return error.InvalidBlockPlan;
     }
-    const same_last_distance_plan = if (comptime distance_capacity == planned_distance_alphabet_size)
+    const same_last_distance_plan = if (comptime distance_capacity == planned_distance_alphabet_size or distance_capacity == large_max_distance_alphabet_size)
         if (has_same_last_candidate)
             try chooseSameLastDistancePlan(
+                distance_capacity,
                 allocator,
                 &command_frequencies,
                 &command_alphabet,
@@ -11274,7 +11421,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 &same_last_shape_counts,
                 &same_last_distance_frequencies,
                 same_last_distance_extra_bits,
-                options.distance_parameters.alphabetSize(),
+                options.distance_parameters.activeAlphabetSize(distance_format),
+                options.distance_parameters.wireAlphabetSize(distance_format),
                 &command_alphabet,
                 &prepared_command_lengths,
                 &prepared_distance_alphabet,
@@ -12148,14 +12296,20 @@ pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
 pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
     if (output.len < needed) return error.OutOfMemory;
-    if (options.window_bits == default_window_bits and options.metadata.len == 0 and input.len <= direct_stored_stream_max_input_len)
-        return encodeDefaultStoredStreamInto(input, output[0..needed]);
+    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator_dispatch.singleton, output[0..needed], input, options.metadata);
+    defer protected.deinit();
+    const active_input = protected.input();
+    var active_options = options;
+    active_options.metadata = protected.metadata();
+
+    if (!active_options.large_window and active_options.window_bits == default_window_bits and active_options.metadata.len == 0 and active_input.len <= direct_stored_stream_max_input_len)
+        return encodeDefaultStoredStreamInto(active_input, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamWithOptionsWrite(allocator_dispatch.singleton, &writer, input, options);
+    try encodeStoredStreamWithOptionsWrite(allocator_dispatch.singleton, &writer, active_input, active_options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -12187,14 +12341,20 @@ pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Er
 pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
-    if (options.window_bits == default_window_bits and options.metadata.len == 0 and storedChunksInputLenAtMost(chunks, direct_stored_stream_max_input_len))
-        return encodeDefaultStoredStreamChunksInto(chunks, output[0..needed]);
+    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator_dispatch.singleton, output[0..needed], chunks, options.metadata);
+    defer protected.deinit();
+    const active_input = protected.input();
+    var active_options = options;
+    active_options.metadata = protected.metadata();
+
+    if (!active_options.large_window and active_options.window_bits == default_window_bits and active_options.metadata.len == 0 and storedChunksInputLenAtMost(active_input, direct_stored_stream_max_input_len))
+        return encodeDefaultStoredStreamChunksInto(active_input, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
     };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamChunksWithOptionsWrite(allocator_dispatch.singleton, &writer, chunks, options);
+    try encodeStoredStreamChunksWithOptionsWrite(allocator_dispatch.singleton, &writer, active_input, active_options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
 }
@@ -12239,7 +12399,7 @@ fn writeDefaultStoredBlockInto(block: []const u8, output: []u8, first_block: boo
 }
 
 fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, options: StoredStreamOptions) Error!void {
-    try writeWindowBits(allocator, writer, options.window_bits);
+    try writePlannedWindowBits(allocator, writer, options.window_bits, options.large_window);
     if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
 
     var offset: usize = 0;
@@ -12257,7 +12417,7 @@ fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *Bit
 }
 
 fn encodeStoredStreamChunksWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, chunks: []const []const u8, options: StoredStreamOptions) Error!void {
-    try writeWindowBits(allocator, writer, options.window_bits);
+    try writePlannedWindowBits(allocator, writer, options.window_bits, options.large_window);
     if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
 
     var chunk_index: usize = 0;
@@ -13657,10 +13817,16 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeScratchWithOptions(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
+        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, self.scratch.items.ptr[0..self.scratch.capacity], input, options.metadata);
+        defer protected.deinit();
+        const active_input = protected.input();
+        var active_options = options;
+        active_options.metadata = protected.metadata();
+
+        const needed = try encodedStoredStreamBoundWithOptions(active_input.len, active_options);
         try self.scratch.ensureTotalCapacity(self.allocator, needed);
-        const written = try encodeStoredStreamWithOptionsInto(input, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.clearRetainingCapacity();
+        const written = try encodeStoredStreamWithOptionsInto(active_input, self.scratch.allocatedSlice()[0..needed], active_options);
         self.scratch.items.len = written;
         return self.scratch.items;
     }
@@ -13670,10 +13836,16 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]const u8 {
-        self.scratch.clearRetainingCapacity();
-        const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
+        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, self.scratch.items.ptr[0..self.scratch.capacity], chunks, options.metadata);
+        defer protected.deinit();
+        const active_input = protected.input();
+        var active_options = options;
+        active_options.metadata = protected.metadata();
+
+        const needed = try encodedStoredStreamChunksBoundWithOptions(active_input, active_options);
         try self.scratch.ensureTotalCapacity(self.allocator, needed);
-        const written = try encodeStoredStreamChunksWithOptionsInto(chunks, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.clearRetainingCapacity();
+        const written = try encodeStoredStreamChunksWithOptionsInto(active_input, self.scratch.allocatedSlice()[0..needed], active_options);
         self.scratch.items.len = written;
         return self.scratch.items;
     }
@@ -13695,23 +13867,31 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeIntoSlice(self: *StoredStreamEncoder, input: []const u8, output: []u8) Error!usize {
-        _ = self;
-        return try encodeStoredStreamInto(input, output);
+        return self.encodeWithOptionsIntoSlice(input, .{}, output);
     }
 
     pub fn encodeWithOptionsIntoSlice(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
-        _ = self;
-        return try encodeStoredStreamWithOptionsInto(input, output, options);
+        const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
+        if (output.len < needed) return error.OutOfMemory;
+        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, output[0..needed], input, options.metadata);
+        defer protected.deinit();
+        var active_options = options;
+        active_options.metadata = protected.metadata();
+        return encodeStoredStreamWithOptionsInto(protected.input(), output, active_options);
     }
 
     pub fn encodeChunksIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
-        _ = self;
-        return try encodeStoredStreamChunksInto(chunks, output);
+        return self.encodeChunksWithOptionsIntoSlice(chunks, .{}, output);
     }
 
     pub fn encodeChunksWithOptionsIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
-        _ = self;
-        return try encodeStoredStreamChunksWithOptionsInto(chunks, output, options);
+        const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
+        if (output.len < needed) return error.OutOfMemory;
+        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, output[0..needed], chunks, options.metadata);
+        defer protected.deinit();
+        var active_options = options;
+        active_options.metadata = protected.metadata();
+        return encodeStoredStreamChunksWithOptionsInto(protected.input(), output, active_options);
     }
 };
 
@@ -21354,38 +21534,15 @@ fn largeWindowDistanceAlphabetLimit(npostfix: u2, ndirect: u16) usize {
 }
 
 fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
-    switch (window_bits) {
-        16 => try writer.writeBits(allocator, 0, 1),
-        18...24 => {
-            try writer.writeBits(allocator, 1, 1);
-            try writer.writeBits(allocator, @as(u64, window_bits - 17), 3);
-        },
-        17 => {
-            try writer.writeBits(allocator, 1, 1);
-            try writer.writeBits(allocator, 0, 3);
-            try writer.writeBits(allocator, 0, 3);
-        },
-        10...15 => {
-            try writer.writeBits(allocator, 1, 1);
-            try writer.writeBits(allocator, 0, 3);
-            try writer.writeBits(allocator, @as(u64, window_bits - 8), 3);
-        },
-        else => return error.InvalidBlockPlan,
-    }
+    return encoder_window_format.write(allocator, writer, window_bits, false);
 }
 
 fn writePlannedWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5, large_window: bool) Error!void {
-    if (large_window) return writeLargeWindowBits(allocator, writer, window_bits);
-    return writeWindowBits(allocator, writer, window_bits);
+    return encoder_window_format.write(allocator, writer, window_bits, large_window);
 }
 
 fn writeLargeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
-    if (window_bits < 10 or window_bits > 30) return error.InvalidBlockPlan;
-    try writer.writeBits(allocator, 1, 1);
-    try writer.writeBits(allocator, 0, 3);
-    try writer.writeBits(allocator, 1, 3);
-    try writer.writeBits(allocator, 0, 1);
-    try writer.writeBits(allocator, window_bits, 6);
+    return encoder_window_format.write(allocator, writer, window_bits, true);
 }
 
 test "br large window header preserves extension identity for all supported widths" {
@@ -21406,13 +21563,209 @@ test "br large window header preserves extension identity for all supported widt
     }
 }
 
-fn storedWindowBitsLen(window_bits: u5) Error!usize {
-    return switch (window_bits) {
-        16 => 1,
-        18...24 => 4,
-        10...15, 17 => 7,
-        else => error.InvalidBlockPlan,
+test "Br general large window quality legacy and tiny fallback candidates retain extension identity" {
+    const allocator = std.testing.allocator;
+    const input = "compression dictionary transformation compression dictionary transformation " ** 2;
+    for ([_]u5{ 10, 16, 25, 30 }) |bits| {
+        for (0..15) |index| {
+            const options: PlannedEncodeOptions = if (index < 12)
+                .{ .quality = @intCast(index), .window_bits = bits, .large_window = true }
+            else
+                .{ .level = @enumFromInt(index - 12), .window_bits = bits, .large_window = true };
+            for ([_][]const u8{ "", "xyz", input }) |plain| {
+                const encoded = try encodePlannedStreamWithOptionsAlloc(allocator, plain, options);
+                defer allocator.free(encoded);
+                try std.testing.expectError(error.CorruptFrame, summarizeStream(encoded));
+                const summary = try summarizeStreamWithOptions(encoded, .{ .allow_large_window = true });
+                try std.testing.expect(summary.large_window);
+                try std.testing.expectEqual(bits, summary.window_bits);
+                const decoded = try decodeStreamAllocWithOptions(allocator, encoded, .{ .allow_large_window = true });
+                defer allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, plain, decoded);
+                try std.testing.expect(encoded.len <= try encodedPlannedStreamBoundWithOptions(plain.len, options));
+            }
+        }
+    }
+}
+
+test "Br general large window null legacy reusable APIs and actual ratio long copies keep format" {
+    const allocator = std.testing.allocator;
+    const plain = "legacy compression legacy compression legacy compression";
+    var encoder = PlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const options: PlannedEncodeOptions = .{ .level = level, .large_window = true };
+        const owned = try encoder.encodeWithOptionsAlloc(allocator, plain, options);
+        defer allocator.free(owned);
+        const borrowed = try encoder.encodeScratchWithOptions(plain, options);
+        try std.testing.expectEqualSlices(u8, owned, borrowed);
+        var output: [128]u8 = undefined;
+        const len = try encoder.encodeIntoWithOptions(plain, &output, options);
+        try std.testing.expectEqualSlices(u8, owned, output[0..len]);
+        const summary = try summarizeStreamWithOptions(owned, .{ .allow_large_window = true });
+        try std.testing.expect(summary.large_window);
+        try std.testing.expectEqual(default_window_bits, summary.window_bits);
+    }
+
+    // The initial recent distance is four. Reusing it exercises the prepared
+    // command/distance tree path even when recent-distance search is disabled.
+    const repeated = "abcdabcdabcdabcd";
+    const same_last = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = 4,
+        .copy_len = 12,
+        .has_copy = true,
+        .distance = 4,
+    }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const same_last_wire = try encodeCommandPlanWithOptionsAlloc(allocator, repeated, &same_last, null, &stats, .{ .large_window = true, .window_bits = 30 });
+    defer allocator.free(same_last_wire);
+    const same_last_decoded = try decodeStreamAllocWithOptions(allocator, same_last_wire, .{ .allow_large_window = true });
+    defer allocator.free(same_last_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, same_last_decoded);
+
+    const alias_plain = "compression dictionary transformation compression dictionary transformation"[0..64];
+    const independent_chunks = [_][]const u8{ alias_plain[0..32], alias_plain[32..] };
+    const independent_raw = [_][]const u8{alias_plain};
+    const independent_options: PlannedStreamChunksOptions = .{
+        .quality = 0,
+        .large_window = true,
+        .window_bits = 30,
+        .shared_dictionary = .{ .raw_prefixes = &independent_raw },
     };
+    const alias_expected = try encodePlannedStreamChunksWithOptionsAlloc(allocator, &independent_chunks, independent_options);
+    defer allocator.free(alias_expected);
+    for ([_]bool{ false, true }) |tracked| {
+        var aliased = PlannedStreamEncoder.init(allocator);
+        defer aliased.deinit();
+        try aliased.output.resize(allocator, 256);
+        @memset(aliased.output.items, 0xa5);
+        @memcpy(aliased.output.items[128..192], alias_plain);
+        const borrowed_chunks: *[2][]const u8 = @ptrCast(@alignCast(aliased.output.items.ptr));
+        borrowed_chunks.* = .{ aliased.output.items[128..160], aliased.output.items[160..192] };
+        const borrowed_raw: *[1][]const u8 = @ptrCast(@alignCast(aliased.output.items.ptr + 32));
+        borrowed_raw.* = .{aliased.output.items[128..192]};
+        var profile: EncodeMemoryProfile = .{};
+        var alias_options = independent_options;
+        alias_options.shared_dictionary = .{ .raw_prefixes = borrowed_raw };
+        alias_options.memory_profile = if (tracked) &profile else null;
+        const alias_wire = try aliased.encodeChunksScratchWithOptions(borrowed_chunks, alias_options);
+        try std.testing.expectEqualSlices(u8, alias_expected, alias_wire);
+        // The snapshot belongs to the temporary codec. It must not become a
+        // dictionary view cached in this reusable encoder after return.
+        try std.testing.expectEqual(@as(usize, 0), aliased.stream_state.shared_dictionary.raw_prefixes.len);
+    }
+
+    var destination_alias = PlannedStreamEncoder.init(allocator);
+    defer destination_alias.deinit();
+    try destination_alias.output.ensureTotalCapacity(allocator, 512);
+    try destination_alias.output.appendSlice(allocator, "keep:");
+    try destination_alias.encodeChunksWithOptionsAppend(&destination_alias.output, &independent_chunks, independent_options);
+    try std.testing.expectEqualSlices(u8, "keep:", destination_alias.output.items[0..5]);
+    try std.testing.expectEqualSlices(u8, alias_expected, destination_alias.output.items[5..]);
+    const alias_len = try destination_alias.encodeChunksWithOptionsInto(&independent_chunks, destination_alias.output.allocatedSlice(), independent_options);
+    try std.testing.expectEqualSlices(u8, alias_expected, destination_alias.output.allocatedSlice()[0..alias_len]);
+
+    const distance: usize = 70 * 1024 + 13;
+    const input = try allocator.alloc(u8, distance + 2048);
+    defer allocator.free(input);
+    var random: u32 = 0x5a91be31;
+    for (input) |*byte| {
+        random = random *% 1664525 +% 1013904223;
+        byte.* = @truncate(random >> 24);
+    }
+    @memcpy(input[distance..], input[0..2048]);
+    const bytes = try encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .level = .ratio, .large_window = true, .window_bits = 30 });
+    defer allocator.free(bytes);
+    const summary = try summarizeStreamWithOptions(bytes, .{ .allow_large_window = true });
+    try std.testing.expect(summary.large_window);
+    try std.testing.expectEqual(@as(u5, 30), summary.window_bits);
+    try std.testing.expect(summary.max_lz77_distance > encoder_window_format.non_hq_history_limit);
+    const actual = try decodeStreamAllocWithOptions(allocator, bytes, .{ .allow_large_window = true });
+    defer allocator.free(actual);
+    try std.testing.expectEqualSlices(u8, input, actual);
+}
+
+test "Br general large window static stored codecs and non HQ history keep explicit bounded state" {
+    const allocator = std.testing.allocator;
+    const word = "compression dictionary transformation compression dictionary transformation ";
+    const stored_options: StoredStreamOptions = .{ .large_window = true, .window_bits = 30 };
+    var stored = StoredStreamEncoder.init(allocator);
+    defer stored.deinit();
+    try stored.scratch.appendSlice(allocator, word);
+    const aliased_stored = try stored.encodeScratchWithOptions(stored.scratch.items, stored_options);
+    const stored_decoded = try decodeStreamAllocWithOptions(allocator, aliased_stored, .{ .allow_large_window = true });
+    defer allocator.free(stored_decoded);
+    try std.testing.expectEqualSlices(u8, word, stored_decoded);
+    try stored.scratch.resize(allocator, 256);
+    @memcpy(stored.scratch.items[128..192], word[0..64]);
+    const stored_chunks: *[2][]const u8 = @ptrCast(@alignCast(stored.scratch.items.ptr));
+    stored_chunks.* = .{ stored.scratch.items[128..160], stored.scratch.items[160..192] };
+    const aliased_chunks = try stored.encodeChunksScratchWithOptions(stored_chunks, stored_options);
+    const chunks_decoded = try decodeStreamAllocWithOptions(allocator, aliased_chunks, .{ .allow_large_window = true });
+    defer allocator.free(chunks_decoded);
+    try std.testing.expectEqualSlices(u8, word[0..64], chunks_decoded);
+
+    var append_alias: std.ArrayList(u8) = .empty;
+    defer append_alias.deinit(allocator);
+    try append_alias.appendSlice(allocator, word);
+    try encodeStoredStreamWithOptionsAppend(allocator, &append_alias, append_alias.items, stored_options);
+    const append_decoded = try decodeStreamAllocWithOptions(allocator, append_alias.items[word.len..], .{ .allow_large_window = true });
+    defer allocator.free(append_decoded);
+    try std.testing.expectEqualSlices(u8, word, append_decoded);
+    var into_alias: [256]u8 = @splat(0xa5);
+    @memcpy(into_alias[16..80], word[0..64]);
+    const unchanged_alias = into_alias;
+    var denied_alias = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0 });
+    stored.allocator = denied_alias.allocator();
+    const denied_result = stored.encodeWithOptionsIntoSlice(into_alias[16..80], stored_options, &into_alias);
+    stored.allocator = allocator;
+    try std.testing.expectError(error.OutOfMemory, denied_result);
+    try std.testing.expectEqualSlices(u8, &unchanged_alias, &into_alias);
+    const into_len = try stored.encodeWithOptionsIntoSlice(into_alias[16..80], stored_options, &into_alias);
+    const into_decoded = try decodeStreamAllocWithOptions(allocator, into_alias[0..into_len], .{ .allow_large_window = true });
+    defer allocator.free(into_decoded);
+    try std.testing.expectEqualSlices(u8, word[0..64], into_decoded);
+
+    var static_state: IncrementalStaticDictionaryEncoderCodec.State = .{};
+    defer IncrementalStaticDictionaryEncoderCodec.deinitState(&static_state, allocator);
+    var wire: std.ArrayList(u8) = .empty;
+    defer wire.deinit(allocator);
+    try IncrementalStaticDictionaryEncoderCodec.writePrefix(allocator, &wire, &static_state, .{ .large_window = true, .window_bits = 30, .metadata = "identity" });
+    try IncrementalStaticDictionaryEncoderCodec.writeFinalBlock(allocator, &wire, &static_state, word);
+    const decoded = try decodeStreamAllocWithOptions(allocator, wire.items, .{ .allow_large_window = true });
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, word, decoded);
+    const summary = try summarizeStreamWithOptions(wire.items, .{ .allow_large_window = true });
+    try std.testing.expect(summary.large_window and summary.uses_static_dictionary);
+    IncrementalStaticDictionaryEncoderCodec.resetState(&static_state);
+    try std.testing.expect(!static_state.large_window);
+
+    var block: [40 * 1024]u8 = undefined;
+    for (&block, 0..) |*byte, index| byte.* = @intCast(index % 251);
+    for ([_]u4{ 0, 1, 4 }) |quality| {
+        var state: IncrementalPlannedEncoderCodec.State = .{};
+        defer IncrementalPlannedEncoderCodec.deinitState(&state, allocator);
+        wire.clearRetainingCapacity();
+        try IncrementalPlannedEncoderCodec.writePrefix(allocator, &wire, &state, .{
+            .quality = quality,
+            .large_window = true,
+            .window_bits = 30,
+            .block_len = block.len,
+            .adaptive_blocks = false,
+        });
+        try IncrementalPlannedEncoderCodec.writeBlock(allocator, &wire, &state, &block);
+        try IncrementalPlannedEncoderCodec.writeFinalBlock(allocator, &wire, &state, &block);
+        try std.testing.expectEqual(if (quality <= 1) @as(usize, 0) else encoder_window_format.non_hq_history_limit, state.history.items.len);
+        const actual = try decodeStreamAllocWithOptions(allocator, wire.items, .{ .allow_large_window = true });
+        defer allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, &block, actual[0..block.len]);
+        try std.testing.expectEqualSlices(u8, &block, actual[block.len..]);
+    }
+}
+
+fn storedWindowBitsLen(window_bits: u5) Error!usize {
+    return encoder_window_format.prefixBitLen(window_bits, false);
 }
 
 fn alignBitCountToByte(bit_count: usize) usize {

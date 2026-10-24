@@ -14,6 +14,7 @@ pub const DistanceFrequency = struct {
 /// every candidate's Huffman tree unchanged. `distances` contains only semantic
 /// explicit distances that must be recoded for each parameter shape.
 pub const Input = struct {
+    format: distance.Format = .standard,
     distances: []const usize = &.{},
     distance_frequencies: []const DistanceFrequency = &.{},
     short_symbol_frequencies: [16]u32 = @splat(0),
@@ -21,11 +22,15 @@ pub const Input = struct {
 
 /// Caller-owned dense work area. Every active field is initialized by `score`,
 /// so callers may construct this as `undefined` and reuse it across searches.
-pub const Scratch = struct {
-    frequencies: [max_alphabet_size]u32,
-    alphabet: command_plan.PrefixAlphabetFor(max_alphabet_size),
-    lengths: [max_alphabet_size]u4,
-};
+pub fn ScratchFor(comptime capacity: usize) type {
+    return struct {
+        frequencies: [capacity]u32,
+        alphabet: command_plan.PrefixAlphabetFor(capacity),
+        lengths: [capacity]u4,
+    };
+}
+pub const Scratch = ScratchFor(max_alphabet_size);
+pub const LargeScratch = ScratchFor(544);
 
 pub const Candidate = struct {
     parameters: distance.Parameters,
@@ -55,7 +60,7 @@ pub const Selection = struct {
 /// Score all 64 RFC 7932 parameter shapes. The result retains both the fixed
 /// (NPOSTFIX=0, NDIRECT=0) baseline and the best non-baseline candidate. This is
 /// a score-only stage: no Brotli wire bytes are written.
-pub fn select(allocator: std.mem.Allocator, input: Input, scratch: *Scratch) !Selection {
+pub fn select(allocator: std.mem.Allocator, input: Input, scratch: anytype) !Selection {
     const baseline_parameters = distance.Parameters.init(0, 0);
     const baseline = try score(allocator, input, baseline_parameters, scratch);
     var alternative: ?Candidate = null;
@@ -65,34 +70,48 @@ pub fn select(allocator: std.mem.Allocator, input: Input, scratch: *Scratch) !Se
         for (0..16) |ndirect_high_value| {
             const ndirect_high: u4 = @intCast(ndirect_high_value);
             if (npostfix == 0 and ndirect_high == 0) continue;
-            const candidate = try score(
+            const candidate = score(
                 allocator,
                 input,
                 distance.Parameters.init(npostfix, ndirect_high),
                 scratch,
-            );
+            ) catch |err| switch (err) {
+                // Large Window exposes only whole signed-safe groups. A shape
+                // unable to express this stream is not a search candidate.
+                error.InvalidDistance => if (input.format == .large_window) continue else return err,
+                else => return err,
+            };
             if (alternative == null or candidate.totalBits() < alternative.?.totalBits())
                 alternative = candidate;
         }
     }
 
-    return .{ .baseline = baseline, .alternative = alternative.? };
+    return .{ .baseline = baseline, .alternative = alternative orelse baseline };
 }
 
 pub fn selectAlloc(allocator: std.mem.Allocator, input: Input) !Selection {
+    if (input.format == .large_window) {
+        const scratch = try allocator.create(LargeScratch);
+        defer allocator.destroy(scratch);
+        return select(allocator, input, scratch);
+    }
     const scratch = try allocator.create(Scratch);
     defer allocator.destroy(scratch);
     return select(allocator, input, scratch);
 }
 
-pub fn selectDistances(allocator: std.mem.Allocator, distances: []const usize, scratch: *Scratch) !Selection {
+pub fn selectDistances(allocator: std.mem.Allocator, distances: []const usize, scratch: anytype) !Selection {
     return select(allocator, .{ .distances = distances }, scratch);
 }
 
 /// Compute the exact distance-tree, Huffman payload, and extra-bit cost for one
 /// legal parameter shape. The common six NPOSTFIX/NDIRECT header bits are
 /// intentionally omitted because they cannot affect candidate ordering.
-pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Parameters, scratch: *Scratch) !Candidate {
+pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Parameters, scratch: anytype) !Candidate {
+    const capacity = scratch.frequencies.len;
+    const active_size = parameters.activeAlphabetSize(input.format);
+    const wire_size = parameters.wireAlphabetSize(input.format);
+    if (active_size > capacity) return error.InvalidDistance;
     @memset(&scratch.frequencies, 0);
     var event_count: u64 = 0;
     for (input.short_symbol_frequencies, 0..) |frequency, symbol| {
@@ -102,9 +121,9 @@ pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Pa
 
     var extra_bits: u64 = 0;
     for (input.distances) |semantic_distance| {
-        const encoding = distance.encodeWithParameters(semantic_distance, parameters) orelse
+        const encoding = distance.encodeWithFormat(semantic_distance, parameters, input.format) orelse
             return error.InvalidDistance;
-        if (encoding.symbol >= parameters.alphabetSize() or encoding.symbol >= max_alphabet_size)
+        if (encoding.symbol >= active_size or encoding.symbol >= capacity)
             return error.InvalidDistance;
         if (scratch.frequencies[encoding.symbol] == std.math.maxInt(u32))
             return error.FrequencyOverflow;
@@ -115,9 +134,9 @@ pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Pa
     }
     for (input.distance_frequencies) |entry| {
         if (entry.frequency == 0) return error.InvalidDistance;
-        const encoding = distance.encodeWithParameters(entry.semantic_distance, parameters) orelse
+        const encoding = distance.encodeWithFormat(entry.semantic_distance, parameters, input.format) orelse
             return error.InvalidDistance;
-        if (encoding.symbol >= parameters.alphabetSize() or encoding.symbol >= max_alphabet_size)
+        if (encoding.symbol >= active_size or encoding.symbol >= capacity)
             return error.InvalidDistance;
         scratch.frequencies[encoding.symbol] = std.math.add(
             u32,
@@ -135,7 +154,7 @@ pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Pa
     if (event_count == 0) return error.EmptyDistanceStream;
 
     try command_plan.alphabetFromFrequenciesInto(
-        max_alphabet_size,
+        capacity,
         &scratch.alphabet,
         &scratch.frequencies,
     );
@@ -146,7 +165,7 @@ pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Pa
         payload_bits += @as(u64, frequency) * length;
 
     const tree_bits: u64 = if (scratch.alphabet.len <= 4)
-        4 + @as(u64, scratch.alphabet.len) * alphabetBits(parameters.alphabetSize()) +
+        4 + @as(u64, scratch.alphabet.len) * alphabetBits(wire_size) +
             @intFromBool(scratch.alphabet.len == 4)
     else blk: {
         var highest: usize = 0;
@@ -154,7 +173,7 @@ pub fn score(allocator: std.mem.Allocator, input: Input, parameters: distance.Pa
             highest = @max(highest, symbol);
         break :blk try complex_prefix.bitCost(
             allocator,
-            parameters.alphabetSize(),
+            active_size,
             &scratch.lengths,
             highest + 1,
         );
@@ -244,25 +263,48 @@ test "distance parameter search propagates allocation failures" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
-fn oracleScore(allocator: std.mem.Allocator, input: Input, parameters: distance.Parameters, scratch: *Scratch) !Candidate {
+test "Br general large window distance scoring uses safe active shapes and wire tree costs" {
+    const input: Input = .{
+        .format = .large_window,
+        .distances = &.{ 1, 2, 3, 7, 31, 511, 65520, 1 << 28 },
+    };
+    var scratch: LargeScratch = undefined;
+    var oracle_scratch: LargeScratch = undefined;
+    for (0..4) |postfix| for (0..16) |direct| {
+        const parameters = distance.Parameters.init(@intCast(postfix), @intCast(direct));
+        const actual = try score(std.testing.allocator, input, parameters, &scratch);
+        const expected = try oracleScore(std.testing.allocator, input, parameters, &oracle_scratch);
+        try std.testing.expectEqual(expected, actual);
+    };
+    const selected = try selectAlloc(std.testing.allocator, input);
+    try std.testing.expect(selected.preferred().totalBits() <= selected.baseline.totalBits());
+    const last = distance.Parameters.init(0, 0).maximumDistanceForFormat(.large_window);
+    _ = try selectAlloc(std.testing.allocator, .{ .format = .large_window, .distances = &.{last} });
+    try std.testing.expectError(error.InvalidDistance, selectAlloc(std.testing.allocator, .{
+        .format = .large_window,
+        .distances = &.{distance.safe_max_distance + 1},
+    }));
+}
+
+fn oracleScore(allocator: std.mem.Allocator, input: Input, parameters: distance.Parameters, scratch: anytype) !Candidate {
     @memset(&scratch.frequencies, 0);
     var extra_bits: u64 = 0;
     for (input.short_symbol_frequencies, 0..) |frequency, symbol|
         scratch.frequencies[symbol] = frequency;
     for (input.distances) |semantic_distance| {
-        const encoding = distance.encodeWithParameters(semantic_distance, parameters) orelse
+        const encoding = distance.encodeWithFormat(semantic_distance, parameters, input.format) orelse
             return error.InvalidDistance;
         scratch.frequencies[encoding.symbol] += 1;
         extra_bits += encoding.extra_bits;
     }
     for (input.distance_frequencies) |entry| {
-        const encoding = distance.encodeWithParameters(entry.semantic_distance, parameters) orelse
+        const encoding = distance.encodeWithFormat(entry.semantic_distance, parameters, input.format) orelse
             return error.InvalidDistance;
         scratch.frequencies[encoding.symbol] += entry.frequency;
         extra_bits += @as(u64, encoding.extra_bits) * entry.frequency;
     }
     try command_plan.alphabetFromFrequenciesInto(
-        max_alphabet_size,
+        scratch.frequencies.len,
         &scratch.alphabet,
         &scratch.frequencies,
     );
@@ -273,7 +315,7 @@ fn oracleScore(allocator: std.mem.Allocator, input: Input, parameters: distance.
         payload_bits += @as(u64, frequency) * length;
 
     const tree_bits: u64 = if (scratch.alphabet.len <= 4)
-        4 + @as(u64, scratch.alphabet.len) * oracleAlphabetBits(parameters.alphabetSize()) +
+        4 + @as(u64, scratch.alphabet.len) * oracleAlphabetBits(parameters.wireAlphabetSize(input.format)) +
             @intFromBool(scratch.alphabet.len == 4)
     else blk: {
         var highest: usize = 0;
@@ -283,7 +325,7 @@ fn oracleScore(allocator: std.mem.Allocator, input: Input, parameters: distance.
         try complex_prefix.writeWithStopIndex(
             allocator,
             &counter,
-            parameters.alphabetSize(),
+            parameters.activeAlphabetSize(input.format),
             &scratch.lengths,
             highest + 1,
         );
