@@ -161,6 +161,23 @@ pub fn build(b: *std.Build) void {
     stream_counter_wasm_run.addArtifactArg(stream_counter_wasm);
     const stream_counter_wasm_step = b.step("test-stream-counters-wasm", "Execute public wide stream count and preflight contracts in WebAssembly");
     stream_counter_wasm_step.dependOn(&stream_counter_wasm_run.step);
+    const zstd_hq_search_wasm = b.addExecutable(.{
+        .name = "vort-zstd-hq-search-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/zstd_hq_search_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    zstd_hq_search_wasm.entry = .disabled;
+    zstd_hq_search_wasm.rdynamic = true;
+    zstd_hq_search_wasm.stack_size = 8 * 1024 * 1024;
+    const zstd_hq_search_wasm_run = b.addSystemCommand(&.{ "node", "tools/zstd/hq_search_wasm_gate.js" });
+    zstd_hq_search_wasm_run.addArtifactArg(zstd_hq_search_wasm);
+    const zstd_hq_search_wasm_step = b.step("test-zstd-hq-search-wasm", "Execute HQ complete search, admission and retry contracts in WebAssembly");
+    zstd_hq_search_wasm_step.dependOn(&zstd_hq_search_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -465,6 +482,13 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_stream_counter_step = b.step("test-zstd-stream-counters", "Run wide Zstd stream counts, pledges, checksum and history positions");
     zstd_stream_counter_step.dependOn(&b.addRunArtifact(zstd_stream_counter_tests).step);
+    const zstd_hq_search_tests = b.addTest(.{
+        .name = "vort-zstd-hq-search-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd HQ search", "Zstd HQ storage", "Zstd HQ complete", "Zstd HQ whole", "Zstd HQ price", "Zstd HQ codec", "Zstd HQ safeguard", "Zstd incremental HQ search" },
+    });
+    const zstd_hq_search_step = b.step("test-zstd-hq-search", "Run HQ position coverage, complete length, pricing and safeguard contracts");
+    zstd_hq_search_step.dependOn(&b.addRunArtifact(zstd_hq_search_tests).step);
     const zstd_controls_tests = b.addTest(.{
         .name = "vort-zstd-encode-controls-tests",
         .root_module = zstd_tests_mod,
@@ -2051,6 +2075,25 @@ pub fn build(b: *std.Build) void {
     zstd_hq_cli_gate.addArtifactArg(zstd_hq_cli_probe);
     if (b.args) |args| zstd_hq_cli_gate.addArgs(args);
     const zstd_hq_cli_step = b.step("test-zstd-hq-cli", "Validate Zstd HQ CLI flags, defaults and failed-output preservation");
+    const zstd_hq_search_probe = b.addExecutable(.{
+        .name = "vort-zstd-hq-search-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/hq_search_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_hq_search_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_search_diff.py", "--probe" });
+    zstd_hq_search_diff.addArtifactArg(zstd_hq_search_probe);
+    if (b.args) |args| zstd_hq_search_diff.addArgs(args);
+    const zstd_hq_search_diff_step = b.step("run-zstd-hq-search-diff", "Validate complete HQ search and wire safeguards against versioned references");
+    zstd_hq_search_diff_step.dependOn(&zstd_hq_search_diff.step);
+    const zstd_hq_search_cli = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_search_cli_gate.py", "--cli" });
+    zstd_hq_search_cli.addArtifactArg(zstd_hq_cli_probe);
+    if (b.args) |args| zstd_hq_search_cli.addArgs(args);
+    const zstd_hq_search_cli_step = b.step("test-zstd-hq-search-cli", "Validate HQ search CLI controls and failed-output preservation");
+    zstd_hq_search_cli_step.dependOn(&zstd_hq_search_cli.step);
     const zstd_cli_controls_tests = b.addTest(.{
         .name = "vort-zstd-cli-controls-tests",
         .root_module = b.createModule(.{
@@ -6821,6 +6864,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_controls_probe.step);
     check_step.dependOn(&zstd_hq_probe.step);
+    check_step.dependOn(&zstd_hq_search_probe.step);
+    check_step.dependOn(&zstd_hq_search_wasm.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);
     check_step.dependOn(&br_general_large_probe.step);
     check_step.dependOn(&zstd_large_history_probe.step);
