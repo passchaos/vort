@@ -160,3 +160,27 @@ test "Zstd CLI history range follows the public encoder limit" {
     try std.testing.expectEqual(@as(?usize, maximum), native.max_match_history_len);
     try std.testing.expectError(error.InvalidBlockPlan, (cli.Controls{ .window_log = 41, .max_match_history_len = maximum + 1 }).resolved());
 }
+
+test "Zstd CLI logical stream limits cross 2^32 without selecting an encoder mode" {
+    const parsed = try parse(&.{ "--max-input-len=4294967313", "--max-output-len", "4294967333" });
+    const boundary: vort.StreamCount = @as(vort.StreamCount, 1) << 32;
+    try std.testing.expectEqual(@as(?vort.StreamCount, boundary + 17), parsed.max_input_len);
+    try std.testing.expectEqual(@as(?vort.StreamCount, boundary + 37), parsed.max_output_len);
+    try std.testing.expect(parsed.hasStreamLimits() and parsed.strategy == null and !parsed.hasHqOverrides());
+    try std.testing.expectEqual(@as(?vort.StreamCount, boundary + 17), try cli.parseLogicalLimit("4294967313"));
+    try std.testing.expectEqual(@as(?vort.StreamCount, null), try cli.parseLogicalLimit(null));
+    try std.testing.expectEqual(@as(?vort.StreamCount, 19), vort.core.stream_count.fromOptionalLocal(@as(?usize, 19)));
+    try std.testing.expectEqual(@as(?usize, 19), try cli.localLimit(19));
+    if (@bitSizeOf(usize) < 64) try std.testing.expectError(error.IntegerOverflow, cli.localLimit(boundary));
+    try std.testing.expectError(error.DuplicateZstdOption, parse(&.{ "--max-input-len=1", "--max-input-len=2" }));
+    try std.testing.expectError(error.DuplicateZstdOption, parse(&.{ "--max-output-len=1", "--max-output-len=2" }));
+}
+
+test "Zstd CLI stream file count and output cap remain independent of local IO buffers" {
+    const files = @import("stream_files.zig");
+    const boundary: vort.StreamCount = @as(vort.StreamCount, 1) << 32;
+    try std.testing.expectEqual(boundary + 19, try files.fileSizeCounter(4294967315));
+    try std.testing.expectEqual(boundary + 7, try files.checkedAdvance(boundary - 3, 10, boundary + 7));
+    try std.testing.expectError(error.OutputLimitExceeded, files.checkedAdvance(boundary - 3, 10, boundary + 6));
+    try std.testing.expectError(error.IntegerOverflow, files.checkedAdvance(std.math.maxInt(vort.StreamCount), 1, null));
+}

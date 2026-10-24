@@ -486,7 +486,7 @@ pub fn main(init: std.process.Init) !void {
         try brotli_cli.encodeStoredHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-hex")) {
         const hex = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try brotli_cli.parseLocalOutputLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
         const decoded = if (max_output_len) |limit|
@@ -500,7 +500,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "decode-br-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try brotli_cli.parseLocalOutputLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded = if (max_output_len) |limit|
@@ -1595,7 +1595,7 @@ pub fn main(init: std.process.Init) !void {
         try zstd_controls_cli.encodeStreamFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
         const decoded = if (max_output_len) |limit|
@@ -1606,7 +1606,7 @@ pub fn main(init: std.process.Init) !void {
         try printDecoded(stdout, "zstd_native", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded = if (max_output_len) |limit|
@@ -1618,7 +1618,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "decode-zstd-native-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded = if (max_output_len) |limit|
@@ -1630,7 +1630,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "size-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
         const decoded_len = if (max_output_len) |limit|
@@ -1640,7 +1640,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "size-zstd-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded_len = if (max_output_len) |limit|
@@ -2805,6 +2805,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
         \\                              Zero beam/iterations selects the public quality defaults
         \\                              HQ controls describe Vort native effort, not upstream speed parity
+        \\    Stream-file only: --max-input-len=BYTES caps source bytes; --max-output-len=BYTES caps encoded bytes
+        \\                              Stream totals and file pledges use wide counters; one-shot inputs remain limited to 128 MiB
         \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
@@ -3003,6 +3005,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  --window-log=10..41 --max-match-history-len=1024..{d} (requires explicit window)
         \\                  --max-total-memory=bytes --memory-profile
         \\                  Window_Log selects frame metadata; history bytes separately cap reachable matches
+        \\                  Stream-file only: --max-input-len=BYTES --max-output-len=BYTES (source/encoded byte caps)
+        \\                  Stream totals and file pledges remain wide; one-shot files/hex use addressable buffers
         \\    Negative level -N selects fast acceleration N. New controls default to level 1.
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]

@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const stream_files = @import("stream_files.zig");
 
 pub const Controls = struct {
     selection: vort.ZstdNativeFrameSelection = .auto,
@@ -17,6 +18,12 @@ pub const Controls = struct {
     max_match_history_len: ?usize = null,
     max_total_memory: ?usize = null,
     memory_profile: bool = false,
+    max_input_len: ?vort.StreamCount = null,
+    max_output_len: ?vort.StreamCount = null,
+
+    pub fn hasStreamLimits(self: Controls) bool {
+        return self.max_input_len != null or self.max_output_len != null;
+    }
 
     pub fn hasHqOverrides(self: Controls) bool {
         return self.hq_depth != null or self.hq_nice_len != null or self.hq_min_match != null or self.hq_memory != null;
@@ -137,6 +144,12 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
         } else if (try optionValue("--max-total-memory", arg, args)) |value| {
             if (result.max_total_memory != null) return error.DuplicateZstdOption;
             result.max_total_memory = try std.fmt.parseInt(usize, value, 10);
+        } else if (try optionValue("--max-input-len", arg, args)) |value| {
+            if (result.max_input_len != null) return error.DuplicateZstdOption;
+            result.max_input_len = try std.fmt.parseInt(vort.StreamCount, value, 10);
+        } else if (try optionValue("--max-output-len", arg, args)) |value| {
+            if (result.max_output_len != null) return error.DuplicateZstdOption;
+            result.max_output_len = try std.fmt.parseInt(vort.StreamCount, value, 10);
         } else if (std.mem.eql(u8, arg, "--memory-profile")) {
             if (result.memory_profile) return error.DuplicateZstdOption;
             result.memory_profile = true;
@@ -164,7 +177,7 @@ pub fn parseStrategy(value: []const u8) !vort.zstd.Strategy {
 }
 
 pub fn isControlArgument(arg: []const u8) bool {
-    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile" }) |name| {
+    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
         if (std.mem.eql(u8, arg, name) or std.mem.startsWith(u8, arg, name ++ "=")) return true;
     }
     return false;
@@ -195,6 +208,7 @@ pub fn encodeTextHex(init: std.process.Init, args: *std.process.Args.Iterator, s
     const option_first = if (first) |arg| isControlArgument(arg) else false;
     const payload = if (option_first) "" else first orelse "";
     const parsed = try parse(args, if (option_first) first else null);
+    if (parsed.hasStreamLimits()) return error.UnsupportedZstdStreamLimit;
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
@@ -212,6 +226,7 @@ pub fn encodeBytesHex(init: std.process.Init, args: *std.process.Args.Iterator, 
     defer init.gpa.free(payload);
     for (payload, 0..) |*byte, index| byte.* = try std.fmt.parseInt(u8, hex[index * 2 ..][0..2], 16);
     const parsed = try parse(args, null);
+    if (parsed.hasStreamLimits()) return error.UnsupportedZstdStreamLimit;
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
@@ -225,6 +240,7 @@ pub fn encodeBytesHex(init: std.process.Init, args: *std.process.Args.Iterator, 
 pub fn encodeFileHex(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const path = args.next() orelse return error.MissingCorpusPath;
     const parsed = try parse(args, null);
+    if (parsed.hasStreamLimits()) return error.UnsupportedZstdStreamLimit;
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
@@ -242,6 +258,7 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     const output_path = args.next() orelse return error.MissingCorpusPath;
     if (isControlArgument(output_path)) return error.MissingCorpusPath;
     const parsed = try parse(args, null);
+    if (parsed.hasStreamLimits()) return error.UnsupportedZstdStreamLimit;
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
@@ -266,6 +283,7 @@ pub fn encodeLevelFile(init: std.process.Init, args: *std.process.Args.Iterator,
     const output_path = args.next() orelse return error.MissingCorpusPath;
     if (isControlArgument(output_path)) return error.MissingCorpusPath;
     const parsed = try parse(args, null);
+    if (parsed.hasStreamLimits()) return error.UnsupportedZstdStreamLimit;
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.frameOptionsWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
@@ -310,6 +328,10 @@ pub fn printMemoryProfile(stdout: *std.Io.Writer, profile: vort.zstd.EncodeMemor
     if (profile.limit) |limit| try stdout.print("{d}\n", .{limit}) else try stdout.writeAll("unlimited\n");
 }
 
+pub fn fileSizeCounter(size: u64) !vort.StreamCount {
+    return stream_files.fileSizeCounter(size);
+}
+
 pub fn encodeStreamFile(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -318,34 +340,39 @@ pub fn encodeStreamFile(init: std.process.Init, args: *std.process.Args.Iterator
     var profile: vort.ZstdEncoderControlProfile = .{};
     var memory_profile: vort.zstd.EncodeMemoryProfile = .{};
     const options = try parsed.resolvedWithProfiles(if (parsed.profile) &profile else null, if (parsed.memory_profile) &memory_profile else null);
-    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-    defer init.gpa.free(input);
-    var encoder = if (options.include_content_size)
-        try vort.zstd.NativeIncrementalFrameEncoder.initExactSize(init.gpa, options, input.len)
-    else
-        try vort.zstd.NativeIncrementalFrameEncoder.init(init.gpa, options);
-    var encoded: std.ArrayList(u8) = .empty;
-    defer encoded.deinit(init.gpa);
-    {
-        defer encoder.deinit();
-        var output: [4096]u8 = undefined;
-        var offset: usize = 0;
-        while (offset != input.len) {
-            const step = try encoder.step(input[offset..][0..@min(97, input.len - offset)], &output);
-            offset += step.progress.input_read;
-            try encoded.appendSlice(init.gpa, output[0..step.progress.output_written]);
-            if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.InvalidBlockPlan;
-        }
-        encoder.finish();
-        while (true) {
-            const step = try encoder.step(&.{}, &output);
-            try encoded.appendSlice(init.gpa, output[0..step.progress.output_written]);
-            if (step.status == .done) break;
-            if (step.progress.output_written == 0) return error.InvalidBlockPlan;
-        }
-    }
-    try writeAtomic(init, output_path, encoded.items);
-    try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.items.len, input.len, output_path });
+    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    var input_open = true;
+    defer if (input_open) input_file.close(init.io);
+    const input_size = try fileSizeCounter((try input_file.stat(init.io)).size);
+    if (parsed.max_input_len) |limit| if (input_size > limit) return error.OutputLimitExceeded;
+    var atomic = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
+    defer atomic.deinit(init.io);
+    var write_buffer: [32 * 1024]u8 = undefined;
+    var writer = atomic.file.writerStreaming(init.io, &write_buffer);
+    const totals = try pumpStreamFile(init, input_file, &writer.interface, options, input_size, parsed.max_input_len, parsed.max_output_len);
+    input_file.close(init.io);
+    input_open = false;
+    try writer.interface.flush();
+    try atomic.replace(init.io);
+    try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ totals.output_written, totals.input_read, output_path });
     if (parsed.profile) try printProfile(stdout, profile);
     if (parsed.memory_profile) try printMemoryProfile(stdout, memory_profile);
+}
+
+fn pumpStreamFile(init: std.process.Init, input_file: std.Io.File, writer: *std.Io.Writer, options: vort.ZstdNativeFrameOptions, input_size: vort.StreamCount, max_input: ?vort.StreamCount, max_output: ?vort.StreamCount) !stream_files.Totals {
+    var encoder = if (options.include_content_size)
+        try vort.zstd.NativeIncrementalFrameEncoder.initExactSize(init.gpa, options, input_size)
+    else
+        try vort.zstd.NativeIncrementalFrameEncoder.init(init.gpa, options);
+    defer encoder.deinit();
+    return stream_files.pump(init, input_file, writer, &encoder, max_input, max_output);
+}
+
+/// Stream limits stay wide; allocating APIs must explicitly check narrowing.
+pub fn parseLogicalLimit(value: ?[]const u8) !?vort.StreamCount {
+    return if (value) |text| try std.fmt.parseInt(vort.StreamCount, text, 10) else null;
+}
+
+pub fn localLimit(value: ?vort.StreamCount) !?usize {
+    return if (value) |limit| try vort.core.stream_count.toLocal(limit) else null;
 }
