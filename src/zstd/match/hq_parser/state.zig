@@ -16,16 +16,22 @@ pub const Parameters = struct {
 pub const horizon: usize = 4096;
 pub const max_beam: usize = 16;
 pub const Record = source_mod.Record;
-pub const Node = struct {
-    cost: u64 = std.math.maxInt(u64),
-    repeats: rep.Repeats = rep.initial_repeats,
-    literal_len: u32 = 0,
-    previous_position: u16 = 0,
-    previous_slot: u8 = 0,
-    match_len: u32 = 0,
-    distance: usize = 0,
-    offset_value: u32 = 0,
-};
+/// Bounded parsing keeps its original compact predecessor coordinates. A
+/// whole-block parse can point beyond u16.max within the 128 KiB format block.
+pub fn NodeFor(comptime whole: bool) type {
+    return struct {
+        cost: u64 = std.math.maxInt(u64),
+        repeats: rep.Repeats = rep.initial_repeats,
+        literal_len: u32 = 0,
+        previous_position: if (whole) u32 else u16 = 0,
+        previous_slot: u8 = 0,
+        match_len: u32 = 0,
+        distance: usize = 0,
+        offset_value: u32 = 0,
+    };
+}
+pub const Node = NodeFor(false);
+pub const WholeNode = NodeFor(true);
 
 /// Owned result storage is included in the parser's requested working budget.
 /// Used slices are separate from allocation slices to avoid an unbudgeted
@@ -50,7 +56,7 @@ pub const Plan = struct {
     }
 };
 
-pub fn less(left: Node, right: Node) bool {
+pub fn less(left: anytype, right: @TypeOf(left)) bool {
     if (left.cost != right.cost) return left.cost < right.cost;
     if (left.literal_len != right.literal_len) return left.literal_len < right.literal_len;
     for (left.repeats, right.repeats) |a, b| if (a != b) return a < b;
@@ -61,7 +67,7 @@ pub fn less(left: Node, right: Node) bool {
     return left.previous_slot < right.previous_slot;
 }
 
-pub fn insert(row: []Node, candidate: Node) bool {
+pub fn insert(row: anytype, candidate: @TypeOf(row[0])) bool {
     var replace = row.len - 1;
     for (row, 0..) |old, slot| {
         if (old.cost != std.math.maxInt(u64) and old.literal_len == candidate.literal_len and std.mem.eql(usize, &old.repeats, &candidate.repeats)) {
@@ -73,6 +79,6 @@ pub fn insert(row: []Node, candidate: Node) bool {
     if (!less(candidate, row[replace])) return false;
     row[replace] = candidate;
     while (replace > 0 and less(row[replace], row[replace - 1])) : (replace -= 1)
-        std.mem.swap(Node, &row[replace], &row[replace - 1]);
+        std.mem.swap(@TypeOf(candidate), &row[replace], &row[replace - 1]);
     return true;
 }

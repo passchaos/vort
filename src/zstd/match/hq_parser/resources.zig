@@ -6,6 +6,9 @@ pub const WorkingAllocator = @import("../../../io/working_allocator.zig").Workin
 
 pub fn validate(source: source_mod.Source, parameters: state.Parameters) !void {
     try parameters.hq_options.validate();
+    if (parameters.hq_options.hasSearchControls() and
+        parameters.strategy != .btopt and parameters.strategy != .btultra and parameters.strategy != .btultra2)
+        return error.InvalidBlockPlan;
     try parameters.entropy.validate();
     try source.validate();
     for (parameters.initial_repeated_offsets) |offset|
@@ -18,6 +21,23 @@ pub fn add(left: usize, right: usize) error{WorkingMemoryLimitExceeded}!usize {
 pub fn multiply(left: usize, right: usize) error{WorkingMemoryLimitExceeded}!usize {
     return std.math.mul(usize, left, right) catch error.WorkingMemoryLimitExceeded;
 }
+
+pub const NodeLayout = struct {
+    row_count: usize,
+    node_count: usize,
+    bytes: usize,
+};
+
+/// Allocation and preflight share the same span and node representation. Keep
+/// each calculation checked before a caller forms a node allocation slice.
+pub fn nodeLayout(block_len: usize, width: usize, whole: bool) error{WorkingMemoryLimitExceeded}!NodeLayout {
+    const parse_span = if (whole) block_len else @min(state.horizon, block_len);
+    const rows = try add(parse_span, 1);
+    const nodes = try multiply(rows, width);
+    const node_size: usize = if (whole) @sizeOf(state.WholeNode) else @sizeOf(state.Node);
+    return .{ .row_count = rows, .node_count = nodes, .bytes = try multiply(nodes, node_size) };
+}
+
 pub fn resultBytes(source: source_mod.Source, minimum: usize) !usize {
     return multiply(source.block.len / minimum, @sizeOf(state.Record) + @sizeOf(u32));
 }

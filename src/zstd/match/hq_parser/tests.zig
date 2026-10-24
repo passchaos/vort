@@ -7,6 +7,8 @@ const dp = @import("dp.zig");
 
 test {
     _ = @import("price_tests.zig");
+    _ = @import("storage_controls_tests.zig");
+    _ = @import("search_controls_tests.zig");
     _ = @import("lazy2_tests.zig");
 }
 
