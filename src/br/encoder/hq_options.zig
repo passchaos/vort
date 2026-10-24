@@ -15,6 +15,7 @@ pub const Resolved = struct {
     max_working_memory: usize,
     block_len: usize,
     distance_parameters: distance.Parameters,
+    format: distance.Format = .standard,
 };
 
 /// Caller-owned work and published-output instrumentation. Work survives a
@@ -114,6 +115,9 @@ pub const HqOptions = struct {
             self.block_len == 0 or self.block_len > max_block_len) return error.InvalidBlockPlan;
     }
     pub fn resolve(self: HqOptions, quality: u8, mode: anytype) Error!Resolved {
+        return self.resolveForFormat(quality, mode, .standard);
+    }
+    pub fn resolveForFormat(self: HqOptions, quality: u8, mode: anytype, format: distance.Format) Error!Resolved {
         try self.validate(quality);
         return .{
             .quality = quality,
@@ -124,6 +128,7 @@ pub const HqOptions = struct {
             .max_working_memory = self.max_working_memory,
             .block_len = self.block_len,
             .distance_parameters = self.distance_parameters orelse if (mode == .font) distance.Parameters.init(1, 6) else distance.Parameters.init(0, 0),
+            .format = format,
         };
     }
 };

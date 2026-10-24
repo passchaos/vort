@@ -1,4 +1,8 @@
 const std = @import("std");
+const large_distance = @import("large_distance.zig");
+
+pub const Format = enum { standard, large_window };
+pub const safe_max_distance = large_distance.safe_max_distance;
 
 pub const Encoding = struct {
     symbol: u16,
@@ -23,6 +27,17 @@ pub const Parameters = struct {
 
     pub fn alphabetSize(self: Parameters) usize {
         return 16 + @as(usize, self.ndirect()) + (@as(usize, 48) << self.npostfix);
+    }
+
+    pub fn wireAlphabetSize(self: Parameters, format: Format) usize {
+        const bits: usize = if (format == .standard) 24 else large_distance.wire_distance_bits;
+        return 16 + @as(usize, self.ndirect()) + ((bits * 2) << self.npostfix);
+    }
+    pub fn activeAlphabetSize(self: Parameters, format: Format) usize {
+        return if (format == .standard) self.alphabetSize() else large_distance.calculateLimit(self.npostfix, self.ndirect()).alphabet_size;
+    }
+    pub fn maximumDistanceForFormat(self: Parameters, format: Format) usize {
+        return if (format == .standard) self.maximumDistance() else large_distance.calculateLimit(self.npostfix, self.ndirect()).max_distance;
     }
 
     pub fn maximumDistance(self: Parameters) usize {
@@ -55,7 +70,20 @@ pub fn encodeWithParameters(distance: usize, parameters: Parameters) ?Encoding {
     return encoding;
 }
 
+pub fn encodeWithFormat(distance: usize, parameters: Parameters, format: Format) ?Encoding {
+    if (format == .standard) return encodeWithParameters(distance, parameters);
+    if (distance == 0 or distance > parameters.maximumDistanceForFormat(format)) return null;
+    if (distance <= parameters.ndirect()) return .{ .symbol = @intCast(15 + distance) };
+    const encoded = encodeRegularWithBits(distance, parameters.npostfix, parameters.ndirect(), 29) orelse return null;
+    if (encoded.symbol >= parameters.activeAlphabetSize(format)) return null;
+    return encoded;
+}
+
 fn encodeRegular(distance: usize, npostfix: u2, ndirect: u16) ?Encoding {
+    return encodeRegularWithBits(distance, npostfix, ndirect, 24);
+}
+
+fn encodeRegularWithBits(distance: usize, npostfix: u2, ndirect: u16, max_extra_bits: u5) ?Encoding {
     const adjusted = distance - ndirect - 1;
     const initial = std.math.add(
         usize,
@@ -68,7 +96,7 @@ fn encodeRegular(distance: usize, npostfix: u2, ndirect: u16) ?Encoding {
     const prefix = (initial >> bucket) & 1;
     const offset = (@as(usize, 2) + prefix) << bucket;
     const extra_bits_value = bucket - npostfix;
-    if (extra_bits_value == 0 or extra_bits_value > 24) return null;
+    if (extra_bits_value == 0 or extra_bits_value > max_extra_bits) return null;
     const hcode = (2 * (@as(usize, extra_bits_value) - 1)) + prefix;
     const symbol = @as(usize, 16) + ndirect + (hcode << npostfix) + postfix;
     if (symbol > std.math.maxInt(u16)) return null;
@@ -90,6 +118,10 @@ pub fn decodeWithParameters(encoding: Encoding, parameters: Parameters) ?usize {
     return decodeParts(encoding, parameters.npostfix, parameters.ndirect());
 }
 
+pub fn decodeWithFormat(encoding: Encoding, parameters: Parameters, format: Format) ?usize {
+    return if (format == .standard) decodeWithParameters(encoding, parameters) else large_distance.decode(encoding, parameters.npostfix, parameters.ndirect());
+}
+
 fn decodeParts(encoding: Encoding, npostfix: u2, ndirect: u16) ?usize {
     if (encoding.symbol < 16) return null;
     const direct_index = encoding.symbol - 16;
@@ -107,6 +139,10 @@ fn decodeParts(encoding: Encoding, npostfix: u2, ndirect: u16) ?usize {
     const postfix = xcode & postfix_mask;
     const base = ((@as(usize, 2) + (hcode & 1)) << bits) - 4;
     return (((base + encoding.extra) << npostfix) + postfix + ndirect + 1);
+}
+
+test {
+    _ = @import("large_distance_tests.zig");
 }
 
 test "regular distance inversion covers direct-count candidates" {

@@ -13,6 +13,7 @@ pub const ExactEncoding = struct {
     distance_code: usize = 0,
     distance_encoding: ?distance.Encoding = null,
     distance_parameters: distance.Parameters = distance.Parameters.init(0, 0),
+    format: distance.Format = .standard,
 
     pub fn validate(self: ExactEncoding, insert_len: usize, copy_len: usize, has_copy: bool) Error!void {
         if (self.command_symbol >= command_lut.entries.len) return error.InvalidBlockPlan;
@@ -30,7 +31,7 @@ pub const ExactEncoding = struct {
             const expected = if (self.distance_code < 16)
                 distance.Encoding{ .symbol = @intCast(self.distance_code) }
             else
-                distance.encodeWithParameters(self.distance_code - 15, self.distance_parameters) orelse return error.InvalidBlockPlan;
+                distance.encodeWithFormat(self.distance_code - 15, self.distance_parameters, self.format) orelse return error.InvalidBlockPlan;
             if (!std.meta.eql(expected, encoded)) return error.InvalidBlockPlan;
         }
     }
@@ -60,18 +61,32 @@ pub const Match = struct { length: usize = 0, distance: usize = 0 };
 pub const Source = struct {
     history: []const u8,
     input: []const u8,
-    /// Maximum backward distance: the standard window size minus sixteen.
+    /// Maximum backward distance: the selected format's window size minus sixteen.
     window_len: usize,
     frame_offset: u64,
     recent: [4]usize = initial_recent,
+    format: distance.Format = .standard,
 
     pub fn init(history: []const u8, input: []const u8, window_bits: u8, frame_offset: u64) Error!Source {
-        if (window_bits < 10 or window_bits > 24 or history.len > frame_offset) return error.InvalidBlockPlan;
+        return initWithFormat(history, input, window_bits, frame_offset, .standard);
+    }
+    pub fn initWithFormat(history: []const u8, input: []const u8, window_bits: u8, frame_offset: u64, format: distance.Format) Error!Source {
+        const maximum: u8 = if (format == .standard) 24 else 30;
+        if (window_bits < 10 or window_bits > maximum or history.len > frame_offset) return error.InvalidBlockPlan;
         const window_len = (@as(usize, 1) << @intCast(window_bits)) - 16;
-        const source: Source = .{ .history = history[history.len - @min(history.len, window_len) ..], .input = input, .window_len = window_len, .frame_offset = frame_offset };
-        _ = try source.checkedTotalLen();
-        _ = try source.absolutePosition(input.len);
+        const source: Source = .{ .history = history[history.len - @min(history.len, window_len) ..], .input = input, .window_len = window_len, .frame_offset = frame_offset, .format = format };
+        try source.validate();
         return source;
+    }
+    pub fn validate(self: Source) Error!void {
+        const max_bits: u5 = if (self.format == .standard) 24 else 30;
+        const maximum = (@as(usize, 1) << max_bits) - 16;
+        if (self.window_len < (1 << 10) - 16 or self.window_len > maximum or self.history.len > self.window_len or self.history.len > self.frame_offset)
+            return error.InvalidBlockPlan;
+        const size = std.math.add(usize, self.window_len, 16) catch return error.IntegerOverflow;
+        if (!std.math.isPowerOfTwo(size)) return error.InvalidBlockPlan;
+        _ = try self.checkedTotalLen();
+        _ = try self.absolutePosition(self.input.len);
     }
     pub fn prefixLen(self: Source) usize {
         return self.history.len;
@@ -107,3 +122,7 @@ pub const Source = struct {
         return if (length >= minimum) .{ .length = length, .distance = position - candidate } else .{};
     }
 };
+
+test {
+    _ = @import("large_window_types_tests.zig");
+}
