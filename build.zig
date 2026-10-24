@@ -144,6 +144,23 @@ pub fn build(b: *std.Build) void {
     br_zstd_window_wasm_run.addArtifactArg(br_zstd_window_wasm);
     const br_zstd_window_wasm_step = b.step("test-br-zstd-window-wasm", "Execute real Brotli and Zstd window/resource APIs in WebAssembly");
     br_zstd_window_wasm_step.dependOn(&br_zstd_window_wasm_run.step);
+    const stream_counter_wasm = b.addExecutable(.{
+        .name = "vort-stream-counter-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/stream_counter_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    stream_counter_wasm.entry = .disabled;
+    stream_counter_wasm.rdynamic = true;
+    stream_counter_wasm.stack_size = 8 * 1024 * 1024;
+    const stream_counter_wasm_run = b.addSystemCommand(&.{ "node", "tools/stream_counters/wasm_gate.js" });
+    stream_counter_wasm_run.addArtifactArg(stream_counter_wasm);
+    const stream_counter_wasm_step = b.step("test-stream-counters-wasm", "Execute public wide stream count and preflight contracts in WebAssembly");
+    stream_counter_wasm_step.dependOn(&stream_counter_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -344,6 +361,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_general_large_step = b.step("test-br-general-large-window", "Run non-HQ Brotli Large Window format, ownership and resource contracts");
     br_general_large_step.dependOn(&b.addRunArtifact(br_general_large_tests).step);
+    const br_stream_counter_tests = b.addTest(.{
+        .name = "vort-br-stream-counter-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "counter", "Counter", "streaming diagnostics" },
+    });
+    const br_stream_counter_step = b.step("test-br-stream-counters", "Run wide Brotli stream counts, offsets, limits and state transitions");
+    br_stream_counter_step.dependOn(&b.addRunArtifact(br_stream_counter_tests).step);
     const br_large_tree_tests = b.addTest(.{
         .name = "vort-br-large-tree-tests",
         .root_module = b.createModule(.{
@@ -414,6 +438,33 @@ pub fn build(b: *std.Build) void {
     });
     const requested_heap_step = b.step("test-requested-heap-budget", "Run shared requested-heap allocator accounting and concurrency contracts");
     requested_heap_step.dependOn(&b.addRunArtifact(requested_heap_tests).step);
+    const stream_count_tests = b.addTest(.{
+        .name = "vort-stream-count-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/core.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const stream_count_step = b.step("test-stream-count", "Run cumulative stream count and diagnostic type contracts");
+    stream_count_step.dependOn(&b.addRunArtifact(stream_count_tests).step);
+    const xxh64_stream_tests = b.addTest(.{
+        .name = "vort-xxh64-stream-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/checksum/xxh64_stream.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const xxh64_stream_step = b.step("test-xxh64-stream", "Run portable XXH64 vectors and full-width cumulative length contracts");
+    xxh64_stream_step.dependOn(&b.addRunArtifact(xxh64_stream_tests).step);
+    const zstd_stream_counter_tests = b.addTest(.{
+        .name = "vort-zstd-stream-counter-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "counter", "Counter", "streaming diagnostics", "XXH64 stream" },
+    });
+    const zstd_stream_counter_step = b.step("test-zstd-stream-counters", "Run wide Zstd stream counts, pledges, checksum and history positions");
+    zstd_stream_counter_step.dependOn(&b.addRunArtifact(zstd_stream_counter_tests).step);
     const zstd_controls_tests = b.addTest(.{
         .name = "vort-zstd-encode-controls-tests",
         .root_module = zstd_tests_mod,
@@ -2036,6 +2087,27 @@ pub fn build(b: *std.Build) void {
     window_tools_step.dependOn(&zstd_large_history_probe.step);
     window_tools_step.dependOn(&zstd_hq_cli_probe.step);
     window_tools_step.dependOn(&zstd_far_history_generator.step);
+    const br_stream_counter_probe = b.addExecutable(.{
+        .name = "vort-br-stream-counter-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/stream_counters/br_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_stream_counter_probe = b.addExecutable(.{
+        .name = "vort-zstd-stream-counter-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/stream_counters/zstd_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const stream_counter_tools_step = b.step("build-stream-counter-tools", "Compile public bounded-memory long-stream probes");
+    stream_counter_tools_step.dependOn(&b.addInstallArtifact(br_stream_counter_probe, .{}).step);
+    stream_counter_tools_step.dependOn(&b.addInstallArtifact(zstd_stream_counter_probe, .{}).step);
 
     const fast_cover_probe = b.addExecutable(.{ .name = "vort-fast-cover-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/zstd/fast_cover_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }) });
     const fast_cover_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/fast_cover_diff.py", "--probe" });
@@ -6743,6 +6815,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_large_history_probe.step);
     check_step.dependOn(&zstd_far_history_generator.step);
     check_step.dependOn(&br_zstd_window_wasm.step);
+    check_step.dependOn(&stream_counter_wasm.step);
+    check_step.dependOn(&br_stream_counter_probe.step);
+    check_step.dependOn(&zstd_stream_counter_probe.step);
     check_step.dependOn(&br_hq_probe.step);
     check_step.dependOn(&br_hq_cli_probe.step);
     check_step.dependOn(&br_hq_cli_tests.step);
