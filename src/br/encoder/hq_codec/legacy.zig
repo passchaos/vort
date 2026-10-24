@@ -8,7 +8,7 @@ const initial_recent = @import("../hq_types.zig").initial_recent;
 pub fn inspect(comptime Codec: type, allocator: std.mem.Allocator, encoded: []const u8, options: Codec.Options, resolved: options_mod.Resolved, expected_len: usize) Codec.Error!?options_mod.HqProfile.Emitted {
     var reader = Codec.Reader.init(encoded);
     const window = try Codec.readWindow(&reader, options);
-    if (window.large or window.bits != options.window_bits) return null;
+    if (window.large != (resolved.format == .large_window) or window.bits != options.window_bits) return null;
     var shared = try Codec.dictionary(options);
     const dictionary = if (shared) |*value| value else null;
     const history_len = @min(expected_len, (@as(usize, 1) << window.bits) - 16);

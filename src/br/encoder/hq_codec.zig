@@ -60,7 +60,7 @@ pub const State = struct {
 
     pub fn ensure(self: *State, allocator: std.mem.Allocator, resolved: options.Resolved, shared: shared_dictionary.Dictionary, profile: ?*options.HqProfile, literal_mode: u2) Error!void {
         if (self.model) |model| {
-            if (!std.meta.eql(model.distance_parameters, resolved.distance_parameters) or
+            if (!std.meta.eql(model.distance_parameters, resolved.distance_parameters) or model.format != resolved.format or
                 self.configured_literal_mode != literal_mode or self.raw_prefix_count != shared.raw_prefixes.len or
                 self.serialized_dictionary != shared.serialized) return error.InvalidBlockPlan;
             for (self.raw_prefixes[0..self.raw_prefix_count], shared.raw_prefixes) |prior, current|
@@ -84,7 +84,7 @@ pub const State = struct {
             if (budget.last_failure_was_limit) return error.WorkingMemoryLimitExceeded;
             return err;
         };
-        model.* = Model.init(resolved.distance_parameters, literal_mode);
+        model.* = Model.initForFormat(resolved.distance_parameters, literal_mode, resolved.format);
         self.provider = provider;
         self.model = model;
         self.raw_prefix_count = shared.raw_prefixes.len;

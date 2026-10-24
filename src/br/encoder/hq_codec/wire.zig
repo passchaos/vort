@@ -7,6 +7,7 @@ pub const Context = struct {
     start_byte: u8 = 0,
     start_bit_index: u3 = 0,
     window_bits: u5,
+    format: distance.Format = .standard,
     literal_mode: u2,
     previous: [2]u8 = .{ 0, 0 },
     distance_parameters: distance.Parameters,

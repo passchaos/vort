@@ -266,6 +266,7 @@ pub const HqOptions = hq_options.HqOptions;
 pub const HqProfile = hq_options.HqProfile;
 pub const HqResolvedOptions = hq_options.Resolved;
 pub const HqDistanceParameters = encoder_distance.Parameters;
+pub const HqDistanceFormat = encoder_distance.Format;
 pub const EncodeMemoryProfile = total_budget.EncodeMemoryProfile;
 pub const PlannedEncodeOptions = struct {
     /// Optional cap for all live encoder-owned requested heap during this
@@ -284,6 +285,9 @@ pub const PlannedEncodeOptions = struct {
     /// Explicit standard-window HQ command parsing for quality 10 or 11.
     /// Null preserves the established quality policy and complete wire.
     hq: ?HqOptions = null,
+    /// Emit the explicit Large Window extension for HQ quality 10 or 11.
+    /// The decoder must opt in. False preserves the standard wire format.
+    large_window: bool = false,
     /// Generic, text, or font policy for quality-scheduled encoding. A
     /// non-generic mode requires `quality` so legacy level calls remain stable.
     mode: PlannedMode = .generic,
@@ -1609,6 +1613,7 @@ const IncrementalPlannedEncoderCodec = struct {
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
+        large_window: bool = false,
         level: PlannedCompressionLevel = .fast,
         quality: ?u4 = null,
         hq: ?HqOptions = null,
@@ -1665,6 +1670,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.hq_state.deinit();
         state.bit_index = 0;
         state.window_bits = default_window_bits;
+        state.large_window = false;
         state.level = .fast;
         state.quality = null;
         state.hq = null;
@@ -1759,7 +1765,7 @@ const IncrementalPlannedEncoderCodec = struct {
         var active_shared = options.shared_dictionary;
         var active_metadata = options.metadata;
         if (options.hq) |raw| {
-            const resolved = try raw.resolve(options.quality orelse return error.InvalidBlockPlan, options.mode);
+            const resolved = try raw.resolveForFormat(options.quality orelse return error.InvalidBlockPlan, options.mode, if (options.large_window) .large_window else .standard);
             if (raw.profile) |p| p.recordEffective(resolved);
             const allocation = out.items.ptr[0..out.capacity];
             const alias_bytes = hq_codec.alias.requiredInputBytes(allocation, active_metadata, active_shared) catch |err| return hqCodecError(err);
@@ -1806,10 +1812,11 @@ const IncrementalPlannedEncoderCodec = struct {
         }
         state.shared_dictionary = active_shared;
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        try writeWindowBits(allocator, &writer, options.window_bits);
+        try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
         if (active_metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, active_metadata);
         state.bit_index = writer.bit_index;
         state.window_bits = options.window_bits;
+        state.large_window = options.large_window;
         state.level = options.level;
         state.quality = options.quality;
         state.hq = options.hq;
@@ -2160,6 +2167,9 @@ test {
     _ = total_budget;
     _ = @import("tests/br_total_memory_contracts.zig");
     _ = @import("tests/br_total_memory_transactions.zig");
+    _ = @import("tests/br_large_window_contracts.zig");
+    _ = @import("tests/br_large_window_resources.zig");
+    _ = @import("tests/br_large_window_transactions.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
     _ = @import("br/encoder/hq_codec/exact.zig");
@@ -2191,6 +2201,7 @@ pub const IncrementalTestSupport = struct {
     pub const HqCommand = command_plan.Command;
     pub const HqCommandWireOptions = struct {
         window_bits: u5 = default_window_bits,
+        large_window: bool = false,
         distance_parameters: HqDistanceParameters = HqDistanceParameters.init(0, 0),
         compound_dictionary_size: usize = 0,
         starting_last_distances: [4]usize = initial_last_distances,
@@ -2202,7 +2213,7 @@ pub const IncrementalTestSupport = struct {
         options: PlannedStreamChunksOptions,
         expected_len: usize,
     ) Error!?HqProfile.Emitted {
-        var resolved = try (options.hq orelse return error.InvalidBlockPlan).resolve(options.quality orelse return error.InvalidBlockPlan, options.mode);
+        var resolved = try (options.hq orelse return error.InvalidBlockPlan).resolveForFormat(options.quality orelse return error.InvalidBlockPlan, options.mode, if (options.large_window) .large_window else .standard);
         resolved.block_len = try plannedStreamBlockLen(options);
         return hq_codec.legacy.inspect(LegacyHqInspectionCodec, allocator, encoded, options, resolved, expected_len);
     }
@@ -2220,6 +2231,7 @@ pub const IncrementalTestSupport = struct {
             .use_recent_distances = true,
             .distance_parameters = options.distance_parameters,
             .window_bits = options.window_bits,
+            .large_window = options.large_window,
             .compound_dictionary_size = options.compound_dictionary_size,
             .starting_last_distances = options.starting_last_distances,
             .final_wire_state = &final_state,
@@ -3455,6 +3467,8 @@ pub const PlannedStreamChunksOptions = struct {
     quality: ?u4 = null,
     /// Same opt-in HQ controls as `PlannedEncodeOptions`.
     hq: ?HqOptions = null,
+    /// Same explicit Large Window format selection as one-shot options.
+    large_window: bool = false,
     mode: PlannedMode = .generic,
     /// Zero selects the policy default: 16 KiB for q0; 32 KiB for legacy
     /// fast/q1/q6/q7/q11; and 64 KiB for balanced/ratio/q2...q5/q8...q10.
@@ -3474,15 +3488,18 @@ pub const PlannedStreamChunksOptions = struct {
 };
 
 fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error!void {
+    if (options.large_window and options.hq == null) return error.InvalidBlockPlan;
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
-    if (options.window_bits < 10 or options.window_bits > 24)
+    if (options.window_bits < 10 or options.window_bits > (if (options.large_window) @as(u5, 30) else 24))
         return error.InvalidBlockPlan;
     if (options.quality != null) {
         if (options.level != .fast) return error.InvalidBlockPlan;
         const schedule = try resolvedStreamQualitySchedule(options);
-        _ = schedule.window.resolve(options.window_bits) catch
-            return error.InvalidBlockPlan;
+        if (!options.large_window) {
+            _ = schedule.window.resolve(options.window_bits) catch
+                return error.InvalidBlockPlan;
+        }
     } else if (options.mode != .generic) {
         return error.InvalidBlockPlan;
     } else if (options.command_state_max_input_kib != command_state_default_max_input_kib) {
@@ -4854,7 +4871,9 @@ fn resolvedQualitySchedule(options: PlannedEncodeOptions) Error!quality_schedule
         return error.InvalidBlockPlan;
     try applyCommandStateLimit(&schedule, options.command_state_max_input_kib);
     schedule.validate() catch return error.InvalidBlockPlan;
-    _ = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
+    if (!options.large_window) {
+        _ = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
+    }
     return schedule;
 }
 
@@ -4881,6 +4900,11 @@ fn applyCommandStateLimit(
 fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
     if (options.quality != null) {
         const schedule = try resolvedQualitySchedule(options);
+        if (options.large_window) {
+            const bits = options.window_bits orelse schedule.window.default_bits;
+            if (bits < 10 or bits > 30) return error.InvalidBlockPlan;
+            return bits;
+        }
         return schedule.window.resolve(options.window_bits) catch error.InvalidBlockPlan;
     }
     return options.window_bits orelse default_window_bits;
@@ -4893,6 +4917,7 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
         .level = options.level,
         .quality = options.quality,
         .hq = options.hq,
+        .large_window = options.large_window,
         .mode = options.mode,
         .window_bits = try resolvedPlannedWindowBits(options),
         .metadata = options.metadata,
@@ -5403,7 +5428,7 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
         stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
-    var bit_count = try storedWindowBitsLen(options.window_bits);
+    var bit_count: usize = if (options.large_window) 14 else try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     var remaining = input_len;
@@ -6140,6 +6165,10 @@ const ratio_extended_static_dictionary_max_input_len: usize = 4096;
 const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10 }) catch unreachable;
 
 fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions) Error!void {
+    if (options.large_window) {
+        if (options.hq == null) return error.InvalidBlockPlan;
+        _ = try resolvedPlannedWindowBits(options);
+    }
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
     if (options.quality != null) {
@@ -6323,6 +6352,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 }
 
 const CommandPlanEncodeOptions = struct {
+    large_window: bool = false,
     hq_model_output: ?*@import("br/encoder/hq_codec.zig").Model = null,
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
@@ -8469,12 +8499,13 @@ fn writePlannedStreamMetaBlock(
 fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *IncrementalPlannedEncoderCodec.State, block: []const u8, final: bool) Error!void {
     if (block.len == 0 or block.len > hq_options.max_block_len) return error.InvalidBlockPlan;
     const raw = state.hq orelse return error.InvalidBlockPlan;
-    const resolved = try raw.resolve(state.quality orelse return error.InvalidBlockPlan, state.mode);
+    const format: encoder_distance.Format = if (state.large_window) .large_window else .standard;
+    const resolved = try raw.resolveForFormat(state.quality orelse return error.InvalidBlockPlan, state.mode, format);
     defer if (raw.profile) |p| p.recordEffective(resolved);
     const previous_emitted = if (raw.profile) |p| p.emitted() else null;
     errdefer if (raw.profile) |p| p.restoreEmitted(previous_emitted.?);
     if (raw.profile) |p| p.recordEffective(resolved);
-    var source = try hq_types.Source.init(state.history.items, block, state.window_bits, state.hq_state.frame_offset);
+    var source = try hq_types.Source.initWithFormat(state.history.items, block, state.window_bits, state.hq_state.frame_offset, format);
     source.recent = state.wire_state.last_distances;
     const original_resources = state.hq_state;
     errdefer {
@@ -8499,6 +8530,7 @@ fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayLi
         .start_bit_index = state.bit_index,
         .window_bits = state.window_bits,
         .literal_mode = state.hq_state.model.?.literal_mode,
+        .format = format,
         .previous = state.context_previous,
         .distance_parameters = resolved.distance_parameters,
         .compound_dictionary_size = state.hq_state.provider.?.dictionarySize(),
@@ -8507,7 +8539,7 @@ fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayLi
     var best = encodeHqStoredCandidate(a, source, context) catch |err| return hqWorkingError(err, state.hq_state.budget.?);
     defer best.deinit(a);
     if (resolved.quality == 11) {
-        const q10 = try raw.resolve(10, state.mode);
+        const q10 = try raw.resolveForFormat(10, state.mode, format);
         var baseline = try hq_codec.native.candidate(BrotliHqEncoderCodec, source, q10, raw.profile, .{ state.context_previous[1], state.context_previous[0] }, &state.hq_state, context);
         if (baseline.bit_count <= best.bit_count) {
             best.deinit(a);
@@ -8546,7 +8578,7 @@ fn encodeHqWholeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []cons
     var effective = options;
     effective.hq.?.block_len = try plannedStreamBlockLen(options);
     const raw = effective.hq orelse return error.InvalidBlockPlan;
-    const resolved = try raw.resolve(effective.quality orelse return error.InvalidBlockPlan, effective.mode);
+    const resolved = try raw.resolveForFormat(effective.quality orelse return error.InvalidBlockPlan, effective.mode, if (effective.large_window) .large_window else .standard);
     var q10_profile: hq_options.HqProfile = .{};
     var native_profile: hq_options.HqProfile = .{};
     defer if (raw.profile) |profile| {
@@ -8578,6 +8610,9 @@ fn encodeHqWholeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []cons
 }
 
 fn selectSameShapeLegacyWhole(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions, resolved: hq_options.Resolved, baseline: []u8, profile: *hq_options.HqProfile) Error![]u8 {
+    // The legacy planner emits standard window headers. Such a wire is not
+    // eligible for an explicitly requested extension, even below window 25.
+    if (resolved.format == .large_window) return baseline;
     var input_len: usize = 0;
     for (chunks) |chunk| input_len = std.math.add(usize, input_len, chunk.len) catch return baseline;
     if (input_len == 0) return baseline;
@@ -8608,10 +8643,10 @@ const LegacyHqInspectionCodec = struct {
     pub const history_capacity = planner_max_backward_distance;
 
     pub fn readWindow(reader: *Reader, options: Options) br.Error!WindowInfo {
-        return readWindowInfo(reader, .{ .shared_dictionary = options.shared_dictionary });
+        return readWindowInfo(reader, .{ .shared_dictionary = options.shared_dictionary, .allow_large_window = options.large_window });
     }
     pub fn dictionary(options: Options) br.Error!?DecodeSharedDictionary {
-        return decodeSharedDictionary(.{ .shared_dictionary = options.shared_dictionary });
+        return decodeSharedDictionary(.{ .shared_dictionary = options.shared_dictionary, .allow_large_window = options.large_window });
     }
     pub fn readMetaBlock(reader: *Reader) br.Error!StreamMetaBlockHeader {
         return readStreamMetaBlockHeader(reader);
@@ -10680,6 +10715,8 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 }
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    if (options.large_window)
+        return encodeCommandPlanWithLargeWindowWrite(allocator, writer, input, commands, io, stats, options);
     if (options.distance_parameters.alphabetSize() > planned_distance_alphabet_size)
         return encodeCommandPlanWithWideDistanceWrite(
             allocator,
@@ -10757,6 +10794,10 @@ noinline fn encodeCommandPlanWithWideDistanceWrite(
     );
 }
 
+noinline fn encodeCommandPlanWithLargeWindowWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    return encodeCommandPlanWithOptionsWriteInternal(false, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
+}
+
 inline fn encodeCommandPlanWithOptionsWriteInternal(
     comptime allow_adaptive_split: bool,
     comptime distance_capacity: usize,
@@ -10770,15 +10811,18 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
 ) Error!void {
     comptime {
         if (distance_capacity != planned_distance_alphabet_size and
-            distance_capacity != planned_wide_distance_alphabet_size)
+            distance_capacity != planned_wide_distance_alphabet_size and
+            distance_capacity != large_max_distance_alphabet_size)
             @compileError("unsupported planned Brotli distance capacity");
         if (allow_adaptive_split and distance_capacity != planned_distance_alphabet_size)
             @compileError("adaptive Brotli split writer must use narrow distance capacity");
     }
     if (commands.len == 0) return error.InvalidBlockPlan;
-    if ((options.distance_parameters.alphabetSize() > planned_distance_alphabet_size) !=
-        (distance_capacity == planned_wide_distance_alphabet_size))
-        return error.InvalidBlockPlan;
+    if (options.large_window) {
+        if (distance_capacity != large_max_distance_alphabet_size) return error.InvalidBlockPlan;
+    } else if (distance_capacity == large_max_distance_alphabet_size or
+        ((options.distance_parameters.alphabetSize() > planned_distance_alphabet_size) !=
+            (distance_capacity == planned_wide_distance_alphabet_size))) return error.InvalidBlockPlan;
     const has_exact_commands = for (commands) |command| {
         if (command.hq_encoding != null) break true;
     } else false;
@@ -10852,7 +10896,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             previous = boundary;
         }
     }
-    if (options.distance_parameters.alphabetSize() > distance_capacity)
+    const distance_format: encoder_distance.Format = if (options.large_window) .large_window else .standard;
+    if (options.distance_parameters.activeAlphabetSize(distance_format) > distance_capacity)
         return error.InvalidBlockPlan;
     if (comptime distance_capacity == planned_wide_distance_alphabet_size) {
         if (options.literal_split != null or options.adaptive_literal_split != null or options.literal_entropy_plan != null or options.command_split != null or
@@ -10986,7 +11031,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             options.compound_dictionary_size,
             options.initial_output_pos,
         ) else 0;
-        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances);
+        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
         const recent_symbol = if (exact_selection) |selected|
             selected.recent_symbol
         else if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
@@ -11075,9 +11120,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             else if (recent_symbol) |symbol|
                 encoder_distance.Encoding{ .symbol = symbol }
             else
-                encoder_distance.encodeWithParameters(
+                encoder_distance.encodeWithFormat(
                     wire_distance,
                     options.distance_parameters,
+                    distance_format,
                 ) orelse return error.InvalidBlockPlan;
             if (distance.symbol >= distance_capacity) return error.InvalidBlockPlan;
             if (same_last_shape != null) {
@@ -11253,11 +11299,11 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     // scratch memory with multi-megabyte inputs.
     if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
     if (options.write_stream_prefix) {
-        try writeWindowBits(allocator, writer, options.window_bits);
+        try writePlannedWindowBits(allocator, writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
     } else if (options.metadata.len != 0) return error.InvalidBlockPlan;
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
-    const distance_alphabet_size = options.distance_parameters.alphabetSize();
+    const distance_alphabet_size = options.distance_parameters.wireAlphabetSize(distance_format);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = if (options.literal_split == null and adaptive_literal_split == null)
         try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
@@ -11561,7 +11607,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             options.compound_dictionary_size,
             options.initial_output_pos,
         ) else 0;
-        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances);
+        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
         const optimized_shape = if (same_last_distance_plan.enabled) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
         const recent_symbol = if (exact_selection) |selected|
             selected.recent_symbol
@@ -11688,9 +11734,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             else if (recent_symbol) |symbol|
                 encoder_distance.Encoding{ .symbol = symbol }
             else
-                encoder_distance.encodeWithParameters(
+                encoder_distance.encodeWithFormat(
                     wire_distance,
                     options.distance_parameters,
+                    distance_format,
                 ) orelse unreachable;
             if (adaptive_distance_split) |split| {
                 if (distance_index > adaptive_distance_block_end) return error.InvalidBlockPlan;
@@ -11750,6 +11797,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (options.hq_model_output) |model| {
         const capture = @import("br/encoder/hq_codec/huffman_model.zig");
+        model.format = distance_format;
         model.distance_parameters = options.distance_parameters;
         model.literal_mode = if (context_candidate) |candidate| candidate.mode else options.literal_context_mode;
         model.literal_position_prices = null;
@@ -11825,12 +11873,12 @@ fn chooseLiteralTreeLengths(allocator: std.mem.Allocator, frequencies: *const [2
     return candidate_lengths;
 }
 
-fn resolveHqCommand(command: command_plan.Command, wire_distance: usize, parameters: encoder_distance.Parameters, recent: [4]usize) Error!?@import("br/encoder/hq_codec/exact.zig").Selection {
+fn resolveHqCommand(command: command_plan.Command, wire_distance: usize, parameters: encoder_distance.Parameters, recent: [4]usize, format: encoder_distance.Format) Error!?@import("br/encoder/hq_codec/exact.zig").Selection {
     const selected = command.hq_encoding orelse return null;
     try selected.validate(command.insert_len, command.copy_len, command.has_copy);
-    if (!std.meta.eql(selected.distance_parameters, parameters)) return error.InvalidBlockPlan;
+    if (!std.meta.eql(selected.distance_parameters, parameters) or selected.format != format) return error.InvalidBlockPlan;
     if (command.has_copy and try @import("br/encoder/hq_types.zig").resolveDistanceCode(selected.distance_code, &recent) != wire_distance) return error.InvalidBlockPlan;
-    return try @import("br/encoder/hq_codec/exact.zig").resolve(selected.command_symbol, command.insert_len, command.copy_len, command.has_copy, command.isStatic(), selected.distance_encoding, wire_distance, parameters, recent);
+    return try @import("br/encoder/hq_codec/exact.zig").resolveWithFormat(selected.command_symbol, command.insert_len, command.copy_len, command.has_copy, command.isStatic(), selected.distance_encoding, wire_distance, parameters, recent, format);
 }
 
 fn encodeHqCommandsCandidate(allocator: std.mem.Allocator, source: hq_types.Source, commands: []const command_plan.Command, context: hq_codec.wire.Context, actual_model: *hq_codec.Model) Error!hq_codec.wire.Artifact {
@@ -11841,6 +11889,7 @@ fn encodeHqCommandsCandidate(allocator: std.mem.Allocator, source: hq_types.Sour
     var final_state: PlannedWireState = .{};
     var stats: PlannedEncodeStats = .{};
     try encodeCommandPlanWithOptionsWrite(allocator, &writer, source.input, commands, null, &stats, .{
+        .large_window = context.format == .large_window,
         .hq_model_output = actual_model,
         .use_recent_distances = true,
         .optimize_same_last_distance = false,
@@ -11883,7 +11932,7 @@ const BrotliHqEncoderCodec = struct {
     }
 
     pub fn writePlan(allocator: std.mem.Allocator, source: hq_types.Source, plan: anytype, context: Context, model: *hq_codec.Model) br.Error!Artifact {
-        if (plan.consumed != source.input.len or plan.pending_insert != 0 or !std.meta.eql(plan.distance_parameters, context.distance_parameters)) return error.InvalidBlockPlan;
+        if (plan.consumed != source.input.len or plan.pending_insert != 0 or !std.meta.eql(plan.distance_parameters, context.distance_parameters) or plan.format != context.format) return error.InvalidBlockPlan;
         return encodeHqCommandsCandidate(allocator, source, plan.commands, context, model);
     }
 
@@ -11914,7 +11963,7 @@ fn encodeHqStoredCandidate(allocator: std.mem.Allocator, source: hq_types.Source
     if (context.start_bit_index != 0) try result.bytes.append(allocator, context.start_byte);
     var writer = BitWriter{ .out = &result.bytes, .bit_index = context.start_bit_index };
     if (context.write_stream_prefix) {
-        try writeWindowBits(allocator, &writer, context.window_bits);
+        try writePlannedWindowBits(allocator, &writer, context.window_bits, context.format == .large_window);
         if (context.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, context.metadata);
     }
     try writeUncompressedMetaBlock(allocator, &writer, source.input);
@@ -21236,6 +21285,11 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
         },
         else => return error.InvalidBlockPlan,
     }
+}
+
+fn writePlannedWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5, large_window: bool) Error!void {
+    if (large_window) return writeLargeWindowBits(allocator, writer, window_bits);
+    return writeWindowBits(allocator, writer, window_bits);
 }
 
 fn writeLargeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
@@ -37737,13 +37791,15 @@ fn writeWideDistanceBlockContextMap(allocator: std.mem.Allocator, writer: *BitWr
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 
-fn writePlannedDistanceTrees(comptime distance_capacity: usize, allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity), lengths: *const [distance_capacity]u4, split: ?DistanceBlockSplitHeaderFor(distance_capacity)) Error!void {
-    if (split == null) return writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, alphabet, lengths);
+fn writePlannedDistanceTrees(comptime distance_capacity: usize, allocator: std.mem.Allocator, writer: *BitWriter, parameters: encoder_distance.Parameters, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity), lengths: *const [distance_capacity]u4, split: ?DistanceBlockSplitHeaderFor(distance_capacity)) Error!void {
+    const format: encoder_distance.Format = if (distance_capacity == large_max_distance_alphabet_size) .large_window else .standard;
+    const active_size = parameters.activeAlphabetSize(format);
+    if (split == null) return writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, alphabet, lengths);
     switch (split.?) {
         .legacy => |header| for (0..header.type_count) |tree|
-            try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
+            try writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
         .adaptive => |header| for (0..header.type_count) |tree|
-            try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
+            try writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, alphabet_size, &header.alphabets[tree], &header.lengths[tree]),
     }
 }
 
@@ -37790,7 +37846,7 @@ fn writePlannedCompressedHeaderLiteralBlocks(
     for (0..split_code.type_count) |tree|
         try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writePlannedCompressedHeaderAdaptiveLiteralBlocks(
@@ -37852,6 +37908,7 @@ fn writePlannedCompressedHeaderAdaptiveLiteralBlocks(
         distance_capacity,
         allocator,
         writer,
+        distance_parameters,
         distance_alphabet_size,
         distance_alphabet,
         distance_lengths,
@@ -37919,6 +37976,7 @@ fn writePlannedCompressedHeaderAdaptiveLiteralContexts(
         distance_capacity,
         allocator,
         writer,
+        distance_parameters,
         distance_alphabet_size,
         distance_alphabet,
         distance_lengths,
@@ -38007,7 +38065,7 @@ fn writePlannedCompressedHeader(
     try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
     try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writePlannedCompressedHeaderLiteralContexts(
@@ -38038,7 +38096,7 @@ fn writePlannedCompressedHeaderLiteralContexts(
     for (0..context_candidate.tree_count) |tree|
         try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
-    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+    try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
 }
 
 fn writeLiteralContextMap(allocator: std.mem.Allocator, writer: *BitWriter, candidate: literal_context_split.Candidate) Error!void {
@@ -38090,11 +38148,15 @@ fn writeLiteralSuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter
 }
 
 fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
+    return writePrefixSymbolsWithAlphabetSizes(allocator, writer, alphabet_size, alphabet_size, alphabet, lengths);
+}
+
+fn writePrefixSymbolsWithAlphabetSizes(allocator: std.mem.Allocator, writer: *BitWriter, active_size: usize, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
         var highest: usize = 0;
         for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
-        return complex_prefix.writeWithStopIndex(allocator, writer, alphabet_size, lengths, highest + 1);
+        return complex_prefix.writeWithStopIndex(allocator, writer, active_size, lengths, highest + 1);
     }
     try writer.writeBits(allocator, 1, 2);
     try writer.writeBits(allocator, alphabet.len - 1, 2);
