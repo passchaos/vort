@@ -1,0 +1,498 @@
+{
+  "actual_input_source_files_matching_original_sha_and_git_blob": 233,
+  "all_actual_compiled_source_projections_unchanged": true,
+  "build_file_absent_from_all_nine_test_object_manifests": true,
+  "count_note": "96 sums TestFn execution entries from two artifacts; seven new shared named tests execute in both artifacts. It is not 96 unique behaviors or 96 newly added tests.",
+  "current_source_changes": {
+    "build.zig": {
+      "current_sha256": "9aec1aea06225d203ba4b140310e941e725420f9a8ee47fbfc29a52a0463630c",
+      "original_after_sha256": "9cc29bf2e846ad2fcbd10645884446bd27a650766b4d4165c573d73c647a356a",
+      "original_before_sha256": "f753c8caebeb1c4a2dc202084d71fa5239f3df9e70399885387d79d583b45ebb"
+    },
+    "src/br.zig": {
+      "current_sha256": "e51295358bd297b8dff778f02687bfb631f06d622b637751e5e08dbb73452401",
+      "original_after_sha256": "5fa298a2851a682f722c25a1dbcdb15c35061334b2b11d17bc0d26084d48c000",
+      "original_before_sha256": "5fa298a2851a682f722c25a1dbcdb15c35061334b2b11d17bc0d26084d48c000"
+    },
+    "src/lzms/decoder.zig": {
+      "current_sha256": "50d0c87c4962914c3b44b09acada60d4ec9ccc0df52e811b23350b2c6ba131e3",
+      "original_after_sha256": "d7c744aa32581ca3db30cddd85cc023bcd86c894225f5e7954c60cf0a8e29837",
+      "original_before_sha256": "d7c744aa32581ca3db30cddd85cc023bcd86c894225f5e7954c60cf0a8e29837"
+    },
+    "src/snappy/block_decode.zig": {
+      "current_sha256": "ad3d7677708f063d28349d0a405df54679ca811c16f8547204b8d3308d412475",
+      "original_after_sha256": "4a7289733eae082a619e54683bc8ba7e4c9e0f9b9a223ea3858f9ae5ff0870e5",
+      "original_before_sha256": "4a7289733eae082a619e54683bc8ba7e4c9e0f9b9a223ea3858f9ae5ff0870e5"
+    },
+    "src/wia/archive.zig": {
+      "current_sha256": "6776ef68c0aa0bd6de50b9c54db6e2213aba5f63c623a702e9a35fbd2d1dc212",
+      "original_after_sha256": "74322aa9994548955a947284905b57977b5da8d4410e88a652b0f016a45bc9f8",
+      "original_before_sha256": "74322aa9994548955a947284905b57977b5da8d4410e88a652b0f016a45bc9f8"
+    },
+    "src/zip/incremental_reader/codecs.zig": {
+      "current_sha256": "78b46d92b732bcb87d56c18520fe84d09c8c13f82b78a21cb05e578ed6d7b2cd",
+      "original_after_sha256": "fc2519211e7661097fc5637b5ffeee3ed3f10df0ef4949372115f463f8bb11fe",
+      "original_before_sha256": "fc2519211e7661097fc5637b5ffeee3ed3f10df0ef4949372115f463f8bb11fe"
+    }
+  },
+  "existing_fast_test_count_against_269bdf49": 5,
+  "frozen_git_source_archive_sha256": "a5e3cbfdbc82cb93aef4cfcd01661d0aab0c69dd92575147348730e7d15e4916",
+  "frozen_git_source_ref": "fb17d20c",
+  "groups": {
+    "native-debug": {
+      "distinct_named_tests_across_artifacts": 64,
+      "families": {
+        "brotli": {
+          "binary_sha256": "38635da391b40d4b4b704418a96529e1dc584991fdd68caf5c2cf9f6d12c80d3",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "d4ac69b7dbc2c931340da0f9b3833da4",
+            "content_siphash_mismatches": 0,
+            "input_records": 1048,
+            "manifest_archive": "manifest-1f5c13f26295a3c3227462aba7260622.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/1f5c13f26295a3c3227462aba7260622.txt",
+            "manifest_sha256": "3ac73c4955c63746252caaa25721c12e11a11fbacf5461e1db200769c4facbb6",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 24,
+          "named_count": 40,
+          "test_count": 64
+        },
+        "shared": {
+          "binary_sha256": "6fa4e375060b3e7e4aee2031516d33dffab30880c1a51067fad22a64c3a0207e",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "5f8c40460597b54caa89c018252668a0",
+            "content_siphash_mismatches": 0,
+            "input_records": 821,
+            "manifest_archive": "manifest-d9c39c15d582b2cbfe293063979fd1a3.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/d9c39c15d582b2cbfe293063979fd1a3.txt",
+            "manifest_sha256": "f2e85bcac70a9b4526b112f0329c5debdba99747c54d53a4e7576bb0ea7bd3b5",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 1,
+          "named_count": 31,
+          "test_count": 32
+        }
+      },
+      "independent_public_qa_present_in_brotli": 23,
+      "passed": 96,
+      "shared_named_overlap": [
+        "bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors",
+        "bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation",
+        "bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width",
+        "bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain",
+        "bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment",
+        "bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged",
+        "bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries"
+      ],
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 96,
+      "total_named_execution_entries": 71
+    },
+    "native-releasefast": {
+      "distinct_named_tests_across_artifacts": 64,
+      "families": {
+        "brotli": {
+          "binary_sha256": "76ed0ec7333df2c2b971087b8a9d055c1c761a4c892e13a3502b04f57def5ef8",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "f818e49ce0f23e7e38050ab9335beb08",
+            "content_siphash_mismatches": 0,
+            "input_records": 1047,
+            "manifest_archive": "manifest-d08684886dd9d35afbfa6bd6e0d4eab1.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/d08684886dd9d35afbfa6bd6e0d4eab1.txt",
+            "manifest_sha256": "d8d91d63724719549be5ee90e6d87a35d74b9bcbd49e1211e6c8b406f8f24e2f",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 24,
+          "named_count": 40,
+          "test_count": 64
+        },
+        "shared": {
+          "binary_sha256": "210651ef3f03b456da15f7167c43c40114f0b5d731a7b7049406d618722176f8",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "4175bbca02b100ae450b1f13096ff48c",
+            "content_siphash_mismatches": 0,
+            "input_records": 820,
+            "manifest_archive": "manifest-d3a5a7eb8041fa1e1178489e1a579d75.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/d3a5a7eb8041fa1e1178489e1a579d75.txt",
+            "manifest_sha256": "cbcda70292de4740de859770599c643ecdb751480e9ae0eba82a65fa02f22fa9",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 1,
+          "named_count": 31,
+          "test_count": 32
+        }
+      },
+      "independent_public_qa_present_in_brotli": 23,
+      "passed": 96,
+      "shared_named_overlap": [
+        "bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors",
+        "bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation",
+        "bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width",
+        "bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain",
+        "bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment",
+        "bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged",
+        "bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries"
+      ],
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 96,
+      "total_named_execution_entries": 71
+    },
+    "x86-releasefast": {
+      "distinct_named_tests_across_artifacts": 64,
+      "families": {
+        "brotli": {
+          "binary_sha256": "e701910ebb0ed36f15b032949684a611af3d2b4eb3369ae2bcf8db5d823fa820",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "e6edcc35987d3b18af3fe51708627073",
+            "content_siphash_mismatches": 0,
+            "input_records": 1047,
+            "manifest_archive": "manifest-7c398f7ef8a8f6a8817d29724b544f06.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7c398f7ef8a8f6a8817d29724b544f06.txt",
+            "manifest_sha256": "b73f9ba51193bde377654be33810adffa30904cf0dfbbe57a9d0118b6f3c90b0",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 32,
+          "module_entries": 24,
+          "named_count": 40,
+          "test_count": 64
+        },
+        "shared": {
+          "binary_sha256": "caf8452430d126ec309168719961faa98e7569d451f916ae51b35890829d8843",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "bda0d76d3caf6cde4756f16b7cd1bb82",
+            "content_siphash_mismatches": 0,
+            "input_records": 820,
+            "manifest_archive": "manifest-842f88156d0b331fa46ef2f4c77848cb.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/842f88156d0b331fa46ef2f4c77848cb.txt",
+            "manifest_sha256": "cbcda70292de4740de859770599c643ecdb751480e9ae0eba82a65fa02f22fa9",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 32,
+          "module_entries": 1,
+          "named_count": 31,
+          "test_count": 32
+        }
+      },
+      "independent_public_qa_present_in_brotli": 23,
+      "passed": 96,
+      "shared_named_overlap": [
+        "bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors",
+        "bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation",
+        "bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width",
+        "bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain",
+        "bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment",
+        "bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged",
+        "bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries"
+      ],
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 96,
+      "total_named_execution_entries": 71
+    }
+  },
+  "inherited_shared_commit": "269bdf49",
+  "limitations": [
+    "No original compiler/test raw protocol was available. Actual ELF names plus original all-pass aggregates establish selected coverage; individual raw PASS packets are not claimed.",
+    "Parent build source changed during the original aggregate; it is outside the actual test/object input manifests. The parent build-driver executable is not independently bound by this audit.",
+    "Current global/full-codec source changes are preserved separately and are outside this six-binary evidence task. No 512 MiB runtime probe or broader suite was repeated."
+  ],
+  "new_fast_test_count_against_269bdf49": 2,
+  "new_fast_tests_against_269bdf49": [
+    "Brotli fast bit reader absolute cursors cross narrow bit boundaries",
+    "Brotli fast bit reader padded peeks match independent logical bit oracle"
+  ],
+  "no_tests_reexecuted": true,
+  "objects": {
+    "7960a9e44560a2f132911be94cf53cac": {
+      "artifact_key": "7960a9e44560a2f132911be94cf53cac",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "7960a9e44560a2f132911be94cf53cac",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "70aeead567f4b55522b9e63f0eb50d899d52b12ce823d40dea071c89593f1d97",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    },
+    "a975e198daf1c08dc02b311878b81563": {
+      "artifact_key": "a975e198daf1c08dc02b311878b81563",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "a975e198daf1c08dc02b311878b81563",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "fff97c75a532a116927b19344ad98e698e7f04584c17611f72cb68f6beba247d",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    },
+    "b0d047ba2b114a510a29fad6255d7eaf": {
+      "artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "016f50b7b6a6748daecdb3ae56c89c1bfa527f02123c80a6601dd10a158a8def",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "fb17d20c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    }
+  },
+  "original_parent_result": "/tmp/vort-wide-bit-final-20261025/aggregate/result.json",
+  "original_source_differences": {
+    "build.zig": {
+      "after_sha256": "9cc29bf2e846ad2fcbd10645884446bd27a650766b4d4165c573d73c647a356a",
+      "before_sha256": "f753c8caebeb1c4a2dc202084d71fa5239f3df9e70399885387d79d583b45ebb"
+    }
+  },
+  "restored_original_source": [
+    {
+      "current_sha256": "e51295358bd297b8dff778f02687bfb631f06d622b637751e5e08dbb73452401",
+      "git_blob_oid": "fc307235f29c216de1931d9084dbd5befab12611",
+      "git_ref": "fb17d20c",
+      "kind": "git_blob_matches_run_before_sha256",
+      "original_path": "/home/passchaos/project-z/vort-stream-contracts/src/br.zig",
+      "project_path": "src/br.zig",
+      "restored_path": "/tmp/vort-wide-bit-final-20261025/aggregate-binding/restored-source/src/br.zig",
+      "run_before_sha256": "5fa298a2851a682f722c25a1dbcdb15c35061334b2b11d17bc0d26084d48c000"
+    }
+  ],
+  "source_after_manifest_sha256": "9eb96c9f675ec8de53bd772ab0ad04c777f2a7d3968e49b86944314359e5ed84",
+  "source_before_manifest_sha256": "9ba3f806df631a17f5381354b3a51d694e7e9c9826aafde0ec18e57874eb610a",
+  "status": "bound_passed",
+  "utc": "2026-10-24T18:03:59.352042+00:00",
+  "whole_source_snapshot_unchanged": false
+}

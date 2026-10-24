@@ -44,6 +44,13 @@ buffers are charged. Nested quota classification and pending-prefix retry
 transactions are explicit. Remaining physical API boundaries, fuller quality
 models and competitor ratio/throughput/memory leadership remain work.
 
+The [wide-bit addressing contract](formats/wide-bit-addressing.md) extends
+whole-input bit addresses on 32-bit targets without widening physical byte
+indices. Scalar, buffered, chunked and Brotli fast readers retain logical tails
+and full legal read widths; Brotli bounds use exact constant-work block geometry.
+Real mappings beyond 512 MiB validate complete APIs and direct fast reads.
+Physical allocation limits and broad codec/platform performance remain separate.
+
 The long-term objective remains incomplete. The current
 [mainstream codec and industry gap audit](performance/industry-gap-audit.md)
 separates implemented format/API behavior, remaining encoder capabilities,

@@ -1,0 +1,71 @@
+{
+  "named_test_count": 23,
+  "owned_files": [
+    "src/tests/wide_bit_contracts.zig",
+    "src/tests/wide_bit_resources.zig",
+    "src/tests/wide_bit_helpers.zig"
+  ],
+  "owned_source_unchanged": true,
+  "native": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "src/br.zig",
+      "/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/record-native.o",
+      "-O",
+      "Debug",
+      "--test-filter",
+      "Wide bit",
+      "-femit-bin=/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/qa-native"
+    ],
+    "object_command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build-obj",
+      "src/br/encoder/record_optimal_object.zig",
+      "-O",
+      "Debug",
+      "-femit-bin=/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/record-native.o"
+    ],
+    "exit": 0,
+    "named_passes": 23,
+    "source_stable": true,
+    "changed_sources": []
+  },
+  "x86": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "src/br.zig",
+      "/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/record-x86.o",
+      "-O",
+      "Debug",
+      "--test-filter",
+      "Wide bit",
+      "-femit-bin=/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/qa-x86",
+      "-target",
+      "x86-linux"
+    ],
+    "object_command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build-obj",
+      "src/br/encoder/record_optimal_object.zig",
+      "-O",
+      "Debug",
+      "-femit-bin=/tmp/vort-wide-bit-qa-final-20261025-g76b77qe/record-x86.o",
+      "-target",
+      "x86-linux"
+    ],
+    "exit": 0,
+    "named_passes": 23,
+    "source_stable": true,
+    "changed_sources": []
+  },
+  "same_source_epoch": true,
+  "artifact_sha256": {
+    "qa-native": "e0b550971f17ae779c1c9c89040e9e7e57e76681bf57afaace6446a6484423b4",
+    "qa-x86": "b89fe5cee83d6fd33a48e99e604b73b9c597d5986ea97a7e8f2a9fc8400459e0",
+    "record-native.o": "4150c9675c4601f4a31bbffbb90c457557ff5529657c56f02d3c7c6e8ce203f8",
+    "record-x86.o": "3b25490490e76230a3e9488ac43a43159d4cd8101f692cbd43af3c11f817ef56"
+  },
+  "geometry_scope": "Numeric checkpoint tests do not read or peek synthetic large addresses; physical mmap gates are owned by the tool agent."
+}

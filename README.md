@@ -653,6 +653,13 @@ domain. Their `stream-file` commands use bounded 32 KiB file I/O and atomic
 output publication. See the [stream-count contract](docs/formats/stream-counts.md)
 for physical limits, cyclic coded-bit positions and verification scope.
 
+Whole-input bit readers use `BitCount` to preserve bit addresses above the
+32-bit boundary while byte indices remain local. Brotli complete parsing and
+stored/planned bounds use the same domain; real sparse mappings larger than
+512 MiB are validated separately from numeric geometry tests. See the
+[wide-bit contract](docs/formats/wide-bit-addressing.md) for logical tails,
+wide-field reads and platform limits.
+
 Brotli HQ also exposes independent
 [complete copy lengths and per-plan pricing limits](docs/formats/brotli-complete-copy-lengths.md).
 The default remains sampled. Complete search retains exact command selectors

@@ -1,0 +1,67 @@
+{
+  "scope": "Non-Brotli shared BitReader consumers: fused cumulative BitCount, checked bounded-header narrowing and byte-divided ZOO padding indexing; no codec feature changes",
+  "utc": "2026-10-24T17:37:29.101208+00:00",
+  "files": {
+    "src/deflate.zig": "2a788cd7f5ab81554e8c9c636fbe4ef0927b69e641d8f657ce6216737ac66ca3",
+    "src/zoo/lzd.zig": "6c8d51cdb1e69031efd002d3abd4791279605f571535ee0e54fc4c90ece7113b",
+    "src/huffman.zig": "fcce302f7ae5510a5737d0878cf0bb6293412266e658d1bc86ed9b122e5252b3"
+  },
+  "checks": {
+    "x86_debug_deflate": {
+      "passed": 8,
+      "named": 4,
+      "includes": "metadata-only wide fused state; old header/semantic paths"
+    },
+    "native_debug_deflate": {
+      "passed": 8,
+      "named": 4
+    },
+    "x86_debug_zoo": {
+      "passed": 4,
+      "named": 2
+    },
+    "native_debug_zoo": {
+      "passed": 4,
+      "named": 2
+    },
+    "x86_debug_huffman": {
+      "passed": 3,
+      "named": 2
+    },
+    "consumer_compile": {
+      "target": "x86-linux-musl",
+      "mode": "Debug",
+      "exit_code": 0,
+      "types": [
+        "Deflate header metadata",
+        "Deflate fixed payload",
+        "ZOO LZD payload",
+        "Deflate64 payload"
+      ],
+      "artifact": "/tmp/vort-wide-bit-consumers-20261025/consumer.o",
+      "source": "/tmp/vort-wide-bit-consumers-20261025/consumer.zig"
+    },
+    "fmt": {
+      "exit_code": 0,
+      "files": 3
+    }
+  },
+  "unchanged_consumers": [
+    "src/deflate64/decoder.zig",
+    "src/deflate64/encoder.zig",
+    "src/png_ultrafast.zig",
+    "src/fuzz.zig"
+  ],
+  "ownership_exclusions": [
+    "Brotli",
+    "src/bitstream.zig",
+    "src/io/bit_count.zig",
+    "Core",
+    "root",
+    "build",
+    "CLI",
+    "tools",
+    "docs",
+    "Git"
+  ]
+}

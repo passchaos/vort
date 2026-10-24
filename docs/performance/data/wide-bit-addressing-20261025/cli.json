@@ -1,0 +1,36 @@
+{
+  "schema": "vort-wide-bit-cli-verification-v1",
+  "utc": "2026-10-24T17:53:38.942589+00:00",
+  "thin_brotli_cli_status": "passed",
+  "old_wire_checks": 20,
+  "reference_roundtrips": 30,
+  "cso_roundtrips_and_ranges": 6,
+  "dax_roundtrips_and_ranges": 4,
+  "public_profile_small_cases": 6,
+  "public_geometry_high_bits": 4294967311,
+  "geometry_scope": "model from real public byte-bit conversion; no huge input materialized",
+  "snappy_raw_existing_native_x86": [
+    8,
+    8
+  ],
+  "snappy_length_boundary_native_x86": [
+    1,
+    1
+  ],
+  "lzms_pinned_malformed_all_delta_native_x86": [
+    4,
+    4
+  ],
+  "native_full_cli_semantic_status": "passed",
+  "x86_full_cli_semantic_status": "passed after parent WIA/ZIP and external KDF fixes",
+  "owned_source": "owned-final-source.json",
+  "artifact_bindings": "artifact-summary.json",
+  "brotli_smoke": "brotli-smoke/report.json",
+  "cso_smoke": "cso-smoke/report.json",
+  "dax_smoke": "dax-smoke/report.json",
+  "public_profiles": "public-profiles-final/report.json",
+  "retained_validation_error": "public-profiles/validation-error.json",
+  "full_cli_compile": "full-cli-semantic-check.json",
+  "cli_read_limits_scope": "Brotli one-shot 128 MiB unchanged; 9 container complete input/output limits min(logical ceiling,usize max); logical OTA streaming 32 GiB cap retained",
+  "final_full_cli_semantic": "final-full-cli-semantic.json"
+}

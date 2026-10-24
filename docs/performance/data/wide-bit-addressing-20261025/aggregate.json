@@ -1,0 +1,61 @@
+{
+  "source_delta": [
+    "build.zig"
+  ],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-wide-bit-addressing",
+        "test-shared-bit-readers",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=Debug"
+      ],
+      "exit_code": 0,
+      "name": "native-debug",
+      "seconds": 5.0760022511240095
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-wide-bit-addressing",
+        "test-shared-bit-readers",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast"
+      ],
+      "exit_code": 0,
+      "name": "native-releasefast",
+      "seconds": 60.726302488008514
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-wide-bit-addressing",
+        "test-shared-bit-readers",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl"
+      ],
+      "exit_code": 0,
+      "name": "x86-releasefast",
+      "seconds": 57.379944378044456
+    }
+  ],
+  "utc": "2026-10-24T17:43:00.650245+00:00"
+}

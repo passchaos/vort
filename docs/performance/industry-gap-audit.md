@@ -88,8 +88,10 @@ memory comparison.
    performance parity. The [stream-count increment](../formats/stream-counts.md) uses
    wide cumulative bytes, pledges, offsets and history positions on 32-bit
    targets, a full-length streaming XXH64 state and bounded atomic file I/O.
-   Physical allocation and contiguous bit-reader limits remain separate API
-   boundaries. Formal native/x86 count gates pass 142/142; long-stream and full
+   The [wide-bit increment](wide-bit-addressing-functional-baseline.md) also
+   removes the former 32-bit bit-reader boundary, with real mappings beyond
+   512 MiB. Physical allocation limits remain separate API boundaries.
+   Formal native/x86 count gates pass 142/142; long-stream and full
    family/platform evidence is recorded in the corresponding functional report.
 2. Extend the remaining HQ/quality models. LZMA custom dictionary/chunk range
    now covers 1.5 GiB dictionaries and 2 MiB compressed plaintext groups.

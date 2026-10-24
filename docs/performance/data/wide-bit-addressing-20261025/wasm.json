@@ -1,0 +1,29 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-wide-bit-wasm",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 10.000576745951548,
+  "utc": "2026-10-24T17:52:01.502705+00:00",
+  "source_before_after_equal": true,
+  "changed_sources": [],
+  "log": "/tmp/vort-wide-bit-final-20261025/wasm/compile-node.log",
+  "actual_wasm_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/0a2369402f1d30bae8988fbf44bd0555/vort-wide-bit-wasm.wasm",
+  "archived_wasm_path": "/tmp/vort-wide-bit-final-20261025/wasm/vort-wide-bit-wasm.wasm",
+  "wasm_sha256": "ee6cfffaa5697fe6731118c751c4a7ac460c9427531aabe2e7bb7a234dd93f2b",
+  "consumer_source_sha256": "f833d7f96efb1a6547841a287815da3e9475db71d2fd20739baf63dd433eb4e4",
+  "node_gate_sha256": "54701e025d7240eb859d6752e25c619f9cae24127d71c5c64535567d7996bd4e",
+  "operations": {
+    "wideBitGeometry": 0,
+    "wideBitSmallReaders": 0,
+    "wideBitStoredBounds": 0
+  },
+  "node_report": "/tmp/vort-wide-bit-final-20261025/wasm/node-report.json",
+  "input_manifest": "/tmp/vort-wide-bit-final-20261025/wasm/inputs/manifest.json",
+  "big_physical_input_processed": false
+}

@@ -101,9 +101,10 @@ to have physically processed it. Real large-stream gates separately consume
 and produce the logical multi-GiB data through reusable bounded buffers, with
 independent content/checksum validation.
 
-Contiguous one-shot arrays remain bounded by the address space. Brotli's shared
-whole-input bit reader has a separate 32-bit bit-addressability limitation;
-the cumulative incremental fixes do not establish that every contiguous API
-can accept every physically representable input size. Current platform/API
-boundaries and industry-wide quality/throughput/memory comparisons remain
-separate work.
+Contiguous one-shot arrays remain bounded by the address space. The subsequent
+[wide-bit addressing increment](wide-bit-addressing.md) removes the former
+32-bit whole-input bit-addressability boundary and independently validates real
+input mappings beyond 512 MiB. It does not enlarge a physical allocation or
+establish that every allocating API can materialize the maximum platform input.
+Current platform/API boundaries and industry-wide quality/throughput/memory
+comparisons remain separate work.

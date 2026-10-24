@@ -1,0 +1,131 @@
+{
+  "status": "passed",
+  "source_file": "/tmp/vail-archive-crypto-x86-20261025/archive_crypto/src/seven_zip.zig",
+  "source_sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+  "declared_baseline": "86d305bf",
+  "baseline_source_sha256": "42d05a937a61cfdfcc6bb27b1c464898c3a443104cbce70ad52eb588fc2c2342",
+  "only_original_code_change": "replace usize range with explicit u64 counter/while; four new tests appended",
+  "hard_max_cycles_power_unchanged": 24,
+  "direct_key_power_unchanged": 63,
+  "counter_encoding": "eight-byte little-endian u64",
+  "counter_overflow_bound": "hashed power <=24; last increment reaches 2^24, below u64 max",
+  "allocation_behavior": "production allocation/free/secure-zero paths unchanged; direct and hashed allocation-failure tests pass",
+  "gates": {
+    "native": {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "/tmp/vail-archive-crypto-x86-20261025/archive_crypto/src/seven_zip.zig",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-wide-bit-final-20261025/external-crypto/native/seven-zip-tests"
+      ],
+      "cwd": "/tmp/vail-archive-crypto-x86-20261025",
+      "exit_code": 0,
+      "started_utc": "2026-10-24T17:56:32.625634+00:00",
+      "finished_utc": "2026-10-24T17:56:45.769082+00:00",
+      "source_before_sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+      "source_after_sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+      "source_stable": true,
+      "log_sha256": "916fbf75524d0eeae9fd410f6b21efff90f03fb955c78d8615309a64f9e4e95b",
+      "binary_sha256": "4f762e95cf6dfdbdcbce9d0c54db2cd8c2d5c05457669b164664d916913c45d0",
+      "actual_execution": true,
+      "full_vail_or_cli_build": false,
+      "test_count": 8,
+      "original_tests": 4,
+      "new_tests": 4,
+      "all_passed": true,
+      "elf_class_bits": 64,
+      "elf_machine": 62,
+      "parity": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "run",
+          "/tmp/vort-wide-bit-final-20261025/external-crypto/final-parity/probe.zig",
+          "-O",
+          "ReleaseFast"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T17:57:30.598879+00:00",
+        "finished_utc": "2026-10-24T17:57:42.348728+00:00",
+        "raw_keys_match_baseline": true,
+        "log_sha256": "c407ff285148c996c3ef61bfca0c64fb8ae40d1bc1ac9b2cb305d51e38b3bd1a",
+        "actual_execution": true
+      }
+    },
+    "x86": {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "/tmp/vail-archive-crypto-x86-20261025/archive_crypto/src/seven_zip.zig",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-wide-bit-final-20261025/external-crypto/x86/seven-zip-tests",
+        "-target",
+        "x86-linux-musl"
+      ],
+      "cwd": "/tmp/vail-archive-crypto-x86-20261025",
+      "exit_code": 0,
+      "started_utc": "2026-10-24T17:56:32.662807+00:00",
+      "finished_utc": "2026-10-24T17:56:45.143402+00:00",
+      "source_before_sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+      "source_after_sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+      "source_stable": true,
+      "log_sha256": "916fbf75524d0eeae9fd410f6b21efff90f03fb955c78d8615309a64f9e4e95b",
+      "binary_sha256": "8962471d3b0b364044969671c06adee6bfdd8c75aab881c8fefaeea147614a7c",
+      "actual_execution": true,
+      "full_vail_or_cli_build": false,
+      "test_count": 8,
+      "original_tests": 4,
+      "new_tests": 4,
+      "all_passed": true,
+      "elf_class_bits": 32,
+      "elf_machine": 3,
+      "parity": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "run",
+          "/tmp/vort-wide-bit-final-20261025/external-crypto/final-parity/probe.zig",
+          "-O",
+          "ReleaseFast",
+          "-target",
+          "x86-linux-musl"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T17:57:30.540246+00:00",
+        "finished_utc": "2026-10-24T17:57:40.743648+00:00",
+        "raw_keys_match_baseline": true,
+        "log_sha256": "c407ff285148c996c3ef61bfca0c64fb8ae40d1bc1ac9b2cb305d51e38b3bd1a",
+        "actual_execution": true
+      }
+    }
+  },
+  "legacy_keys": {
+    "ascii-default": "6511f1507a3c2a982ae6def4f65818ed6cf242651aca19d15cebc6a67ae2891d",
+    "unicode-twelve": "030bdaea2db2deec556a84fe28f051d4c5ba507f022f85bbcbd43144a52137e9",
+    "direct-truncated": "000102030405060708090a0b0c0d0e0fc65b01783dd812dd6100620063006400"
+  },
+  "baseline_matches_independent_reference": true,
+  "baseline_x86_compile_refusal": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "/tmp/vort-wide-bit-final-20261025/external-crypto/baseline/seven_zip.zig",
+      "-target",
+      "x86-linux-musl",
+      "-O",
+      "ReleaseFast"
+    ],
+    "exit_code": 1,
+    "expected_compile_failure": true,
+    "started_utc": "2026-10-24T17:55:04.301928+00:00",
+    "finished_utc": "2026-10-24T17:55:05.149674+00:00",
+    "log_sha256": "7a9597e5eeba7bb08a85c12d6c5dfe71fbf79ed5bea754065c2197121af235ff"
+  },
+  "actual_max_tested_hashed_power": 19,
+  "actual_large_2_to_32_round_loop": false,
+  "full_vail_or_cli_build_executed": false,
+  "native_archive_wire_encoded": false,
+  "git_writes_performed": false,
+  "completed_utc": "2026-10-24T17:59:00.414235+00:00"
+}
