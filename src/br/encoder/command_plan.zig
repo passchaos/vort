@@ -7,6 +7,7 @@ const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
 const literal_context = @import("literal_context.zig");
 const serialized_dictionary = @import("../serialized_dictionary.zig");
 const serialized_dictionary_matcher = @import("serialized_dictionary_matcher.zig");
+const scoped_static_dictionary = @import("scoped_static_dictionary.zig");
 const hq_types = @import("hq_types.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
@@ -383,9 +384,9 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
 }
 
 /// Dictionary planner that prefers the longest transformed word at each
-/// position and emits remaining bytes as literal inserts. The immutable
-/// process-wide index is reused across calls; candidate transforms still pass
-/// through the independent RFC transform implementation before selection.
+/// position and emits remaining bytes as literal inserts. Total-tracked calls
+/// own their legacy indexes; untracked calls reuse process-wide indexes.
+/// Candidate transforms still pass through the RFC implementation before use.
 pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
     return buildStaticDictionaryWithCacheAlloc(allocator, input, null);
 }
@@ -454,11 +455,12 @@ fn buildStaticDictionaryReuseInternal(
 ) !usize {
     commands.clearRetainingCapacity();
     errdefer commands.clearRetainingCapacity();
-    const matcher = try static_dictionary_matcher.Index.sharedIndex();
-    const complete_matcher = if (search == .complete)
-        try static_dictionary_matcher.CompleteIndex.sharedIndex()
-    else
-        null;
+    // The exhaustive reference needs no index. Each indexed plan acquires its
+    // compact/supplemental owners once, before probing any input position.
+    var indexes = if (search == .reference) scoped_static_dictionary.Indexes{} else try scoped_static_dictionary.Indexes.init(allocator, search == .complete);
+    defer indexes.deinit();
+    const matcher = if (search == .reference) null else indexes.compact();
+    const complete_matcher = if (search == .complete) indexes.complete() else null;
     var position: usize = 0;
     var insert_start: usize = 0;
     var insert_len: usize = 0;
@@ -466,12 +468,12 @@ fn buildStaticDictionaryReuseInternal(
 
     while (position < input.len) {
         const match = switch (search) {
-            .complete => complete_matcher.?.findLongest(matcher, input[position..]),
+            .complete => complete_matcher.?.findLongest(matcher.?, input[position..]),
             .reference => static_dictionary.findLongestMatch(input[position..]),
             .compact => if (cache) |active|
-                active.findLongest(matcher, input, position)
+                active.findLongest(matcher.?, input, position)
             else
-                matcher.findLongest(input[position..]),
+                matcher.?.findLongest(input[position..]),
         };
         const selected = match orelse {
             position += 1;
@@ -516,7 +518,9 @@ pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []
 /// Replace dictionary matches in at most `probe_limit` literal positions. This
 /// lets high-ratio callers bound dictionary search independently of input size.
 pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command, cache: ?*StaticDictionaryMatchCache, probe_limit: usize) !Plan {
-    const matcher = try static_dictionary_matcher.Index.sharedIndex();
+    var indexes = try scoped_static_dictionary.Indexes.init(allocator, false);
+    defer indexes.deinit();
+    const matcher = indexes.compact();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var cursor: usize = 0;
