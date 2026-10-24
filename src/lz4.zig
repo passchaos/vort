@@ -14,11 +14,21 @@ const incremental_decoder_tests = @import("lz4/incremental/decoder_tests.zig");
 const incremental_limits_tests = @import("lz4/incremental/limits_tests.zig");
 const dictionary_resume_tests = @import("lz4/incremental/dictionary_resume_tests.zig");
 const working = @import("io/working_allocator.zig");
+const fast_options = @import("lz4/fast_options.zig");
+const fast_parser = @import("lz4/fast_parser.zig");
+const fast_input = @import("lz4/fast_input.zig");
+pub const BlockEncodeOptions = fast_options.BlockEncodeOptions;
+pub const FastResolvedOptions = fast_options.FastResolvedOptions;
+pub const FastEncodeProfile = fast_options.FastEncodeProfile;
+pub const normalizeFastAcceleration = fast_options.normalizeFastAcceleration;
+pub const max_fast_acceleration = fast_options.max_fast_acceleration;
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
 pub const DestSizeResult = dest_size.Result;
 const HcPreparedPrefix = hc_dest_size.PreparedPrefix;
 
+/// Fixed-destination compression keeps its established default acceleration;
+/// use the full-input BlockEncodeOptions APIs for configurable miss skipping.
 pub fn encodeBlockDestSize(input: []const u8, output: []u8) Error!DestSizeResult {
     return dest_size.compress(input, output) catch |err| switch (err) {
         error.InputTooLarge => error.OutputLimitExceeded,
@@ -275,11 +285,9 @@ const invalid_pos = std.math.maxInt(u32);
 // of same-hash short candidates. Several real structured payloads place the
 // long repeat just behind many shallow four-byte hash hits; depth 16 keeps the
 // search cheap but avoids truncating those obvious wins.
-const max_chain_depth = 16;
+const max_chain_depth = fast_options.max_chain_depth;
 pub const native_max_chain_depth: u8 = max_chain_depth;
 pub const native_dictionary_window_len: usize = max_block_history_len;
-const good_match_len = 64;
-const lazy_extra_gain = 1;
 
 pub const FrameOptions = struct {
     include_content_size: bool = true,
@@ -289,10 +297,7 @@ pub const FrameOptions = struct {
     block_mode: BlockMode = .linked,
 };
 
-const Match = struct {
-    start: usize = 0,
-    len: usize = 0,
-};
+const Match = fast_parser.Match;
 
 pub const NativeFrameOptions = struct {
     include_content_size: bool = true,
@@ -304,6 +309,9 @@ pub const NativeFrameOptions = struct {
     /// Maximum hash-chain candidates to inspect per position. Lower values
     /// favor encode speed; the default keeps the deeper-ratio parser enabled.
     chain_depth: u8 = native_max_chain_depth,
+    /// Independent miss-scan stride control; nonpositive values normalize to one.
+    acceleration: i32 = 1,
+    profile: ?*FastEncodeProfile = null,
 };
 
 /// Options for LZ4 frames encoded with the liblz4 1.9.3-compatible
@@ -356,10 +364,11 @@ const IncrementalEncoderCodec = struct {
     pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
         const allocator = state.allocator;
         const header_start = out.items.len;
+        errdefer out.items.len = header_start;
         try out.appendNTimes(allocator, 0, 4);
         const encoded_start = out.items.len;
-        const chain_depth = try nativeChainDepth(options);
-        const compressed_len = if (history.len == 0) try state.appendWithChainDepth(out, block, chain_depth) else try state.appendWithPrefixAndChainDepth(out, block, history, chain_depth);
+        const block_options = nativeBlockOptions(options);
+        const compressed_len = if (history.len == 0) try state.appendWithOptions(out, block, block_options) else try state.appendWithPrefixAndOptions(out, block, history, block_options);
         if (compressed_len < block.len) {
             std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
             if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
@@ -479,6 +488,11 @@ test {
     _ = incremental_decoder_tests;
     _ = incremental_limits_tests;
     _ = dictionary_resume_tests;
+    _ = @import("lz4/fast_options_tests.zig");
+    _ = @import("lz4/fast_parser_tests.zig");
+    _ = @import("tests/lz4_fast_controls_contracts.zig");
+    _ = @import("tests/lz4_fast_controls_resources.zig");
+    _ = @import("tests/lz4_fast_controls_transactions.zig");
 }
 
 pub const NativeDictionary = struct {
@@ -680,7 +694,7 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
     if (options.dictionary_id != null) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
     if (input_len != 0) {
         const max_block_len = options.block_size_id.maxLen();
-        const block_count = (input_len + max_block_len - 1) / max_block_len;
+        const block_count = (input_len - 1) / max_block_len + 1;
         bound = std.math.add(usize, bound, input_len) catch return error.IntegerOverflow;
         const per_block_overhead = 4 + if (options.block_checksum) @as(usize, 4) else 0;
         const block_overhead = std.math.mul(usize, block_count, per_block_overhead) catch return error.IntegerOverflow;
@@ -726,6 +740,10 @@ pub fn encodedHcFrameBoundWithDictionarySet(
 ) Error!usize {
     const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
     return encodedHcFrameBoundWithDictionary(input_len, options, dictionary);
+}
+
+fn nativeBlockOptions(options: NativeFrameOptions) BlockEncodeOptions {
+    return .{ .acceleration = options.acceleration, .chain_depth = options.chain_depth, .profile = options.profile };
 }
 
 fn nativeChainDepth(options: NativeFrameOptions) Error!u8 {
@@ -806,9 +824,15 @@ pub fn encodePureFrameWithOptionsAlloc(
 pub fn encodePureFrameAppend(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
-    input: []const u8,
+    caller_input: []const u8,
     options: NativeFrameOptions,
 ) Error!void {
+    try nativeBlockOptions(options).validate();
+    const out_start = out.items.len;
+    errdefer out.items.len = out_start;
+    var snapshot = try fast_input.Snapshot.init(allocator, out.allocatedSlice(), caller_input, "");
+    defer snapshot.deinit(allocator);
+    const input = snapshot.input;
     try out.appendSlice(allocator, &frame_magic);
     const descriptor_start = out.items.len;
     var flg: u8 = 0x40; // version=01
@@ -858,7 +882,8 @@ pub fn encodePureFrameAppend(
 
     var offset: usize = 0;
     const max_block_len = options.block_size_id.maxLen();
-    const chain_depth = try nativeChainDepth(options);
+    const block_options = nativeBlockOptions(options);
+    try block_options.validate();
     while (offset < input.len) {
         const block_len = @min(input.len - offset, max_block_len);
         var header: [4]u8 = undefined;
@@ -871,9 +896,9 @@ pub fn encodePureFrameAppend(
         try out.appendNTimes(allocator, 0, 4);
         const encoded_start = out.items.len;
         const compressed_len = if (history.len == 0)
-            try encodeBlockInto(allocator, out, block, hash_table, occupancy_bits, chain_table, chain_depth)
+            try encodeBlockInto(allocator, out, block, hash_table, occupancy_bits, chain_table, block_options)
         else
-            try encodeLinkedBlockInto(allocator, out, history, block, hash_table, occupancy_bits, chain_table, chain_depth);
+            try encodeLinkedBlockInto(allocator, out, history, block, hash_table, occupancy_bits, chain_table, block_options);
         if (compressed_len < block.len) {
             std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
             if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
@@ -6016,115 +6041,122 @@ pub const BlockEncoder = struct {
         self.* = undefined;
     }
 
-    pub fn encodeAlloc(self: *BlockEncoder, input: []const u8) Error![]u8 {
+    pub fn encodeWithOptionsAlloc(self: *BlockEncoder, input: []const u8, options: BlockEncodeOptions) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        _ = try self.append(&out, input);
+        _ = try self.appendWithOptions(&out, input, options);
         return out.toOwnedSlice(self.allocator);
     }
-
-    pub fn encodeWithChainDepthAlloc(self: *BlockEncoder, input: []const u8, chain_depth: u8) Error![]u8 {
+    pub fn encodeWithPrefixAndOptionsAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8, options: BlockEncodeOptions) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        _ = try self.appendWithChainDepth(&out, input, chain_depth);
+        _ = try self.appendWithPrefixAndOptions(&out, input, prefix, options);
         return out.toOwnedSlice(self.allocator);
     }
-
-    pub fn encodeWithPrefixAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        _ = try self.appendWithPrefix(&out, input, prefix);
-        return out.toOwnedSlice(self.allocator);
+    pub fn appendWithOptions(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, options: BlockEncodeOptions) Error!usize {
+        return encodeBlockInto(self.allocator, out, input, self.hash_table, self.occupancy_bits, self.chain_table, options);
     }
-
-    pub fn encodeWithPrefixAndChainDepthAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        _ = try self.appendWithPrefixAndChainDepth(&out, input, prefix, chain_depth);
-        return out.toOwnedSlice(self.allocator);
-    }
-
-    pub fn append(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8) Error!usize {
-        return try self.appendWithChainDepth(out, input, max_chain_depth);
-    }
-
-    pub fn appendWithChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, chain_depth: u8) Error!usize {
-        if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
-        return try encodeBlockInto(self.allocator, out, input, self.hash_table, self.occupancy_bits, self.chain_table, chain_depth);
-    }
-
-    pub fn appendWithPrefix(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8) Error!usize {
-        return try self.appendWithPrefixAndChainDepth(out, input, prefix, max_chain_depth);
-    }
-
-    pub fn appendWithPrefixAndChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8, chain_depth: u8) Error!usize {
-        if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
+    pub fn appendWithPrefixAndOptions(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8, options: BlockEncodeOptions) Error!usize {
         const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-        return try encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table, chain_depth);
+        return encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table, options);
+    }
+    pub fn encodeScratchWithOptions(self: *BlockEncoder, input: []const u8, options: BlockEncodeOptions) Error![]const u8 {
+        try options.validate();
+        var snapshot = try fast_input.Snapshot.init(self.allocator, self.output_scratch.allocatedSlice(), input, "");
+        defer snapshot.deinit(self.allocator);
+        self.output_scratch.clearRetainingCapacity();
+        _ = self.appendWithOptions(&self.output_scratch, snapshot.input, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+    pub fn encodeWithPrefixAndOptionsScratch(self: *BlockEncoder, input: []const u8, prefix: []const u8, options: BlockEncodeOptions) Error![]const u8 {
+        try options.validate();
+        const retained = prefix[prefix.len - @min(prefix.len, max_match_offset) ..];
+        var snapshot = try fast_input.Snapshot.init(self.allocator, self.output_scratch.allocatedSlice(), input, retained);
+        defer snapshot.deinit(self.allocator);
+        self.output_scratch.clearRetainingCapacity();
+        _ = self.appendWithPrefixAndOptions(&self.output_scratch, snapshot.input, snapshot.prefix, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+    pub fn encodeIntoSliceWithOptions(self: *BlockEncoder, input: []const u8, output: []u8, options: BlockEncodeOptions) Error!usize {
+        if (fast_input.overlaps(self.output_scratch.allocatedSlice(), output)) {
+            const owned = try self.encodeWithOptionsAlloc(input, options);
+            defer self.allocator.free(owned);
+            if (output.len < owned.len) return error.OutputTooSmall;
+            @memcpy(output[0..owned.len], owned);
+            return owned.len;
+        }
+        const scratch = try self.encodeScratchWithOptions(input, options);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
+    }
+    pub fn encodeWithPrefixIntoSliceAndOptions(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8, options: BlockEncodeOptions) Error!usize {
+        if (fast_input.overlaps(self.output_scratch.allocatedSlice(), output)) {
+            const owned = try self.encodeWithPrefixAndOptionsAlloc(input, prefix, options);
+            defer self.allocator.free(owned);
+            if (output.len < owned.len) return error.OutputTooSmall;
+            @memcpy(output[0..owned.len], owned);
+            return owned.len;
+        }
+        const scratch = try self.encodeWithPrefixAndOptionsScratch(input, prefix, options);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
     }
 
+    pub fn encodeAlloc(self: *BlockEncoder, input: []const u8) Error![]u8 {
+        return self.encodeWithOptionsAlloc(input, .{});
+    }
+    pub fn encodeWithChainDepthAlloc(self: *BlockEncoder, input: []const u8, chain_depth: u8) Error![]u8 {
+        return self.encodeWithOptionsAlloc(input, .{ .chain_depth = chain_depth });
+    }
+    pub fn encodeWithPrefixAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]u8 {
+        return self.encodeWithPrefixAndOptionsAlloc(input, prefix, .{});
+    }
+    pub fn encodeWithPrefixAndChainDepthAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]u8 {
+        return self.encodeWithPrefixAndOptionsAlloc(input, prefix, .{ .chain_depth = chain_depth });
+    }
+    pub fn append(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8) Error!usize {
+        return self.appendWithOptions(out, input, .{});
+    }
+    pub fn appendWithChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, chain_depth: u8) Error!usize {
+        return self.appendWithOptions(out, input, .{ .chain_depth = chain_depth });
+    }
+    pub fn appendWithPrefix(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8) Error!usize {
+        return self.appendWithPrefixAndOptions(out, input, prefix, .{});
+    }
+    pub fn appendWithPrefixAndChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8, chain_depth: u8) Error!usize {
+        return self.appendWithPrefixAndOptions(out, input, prefix, .{ .chain_depth = chain_depth });
+    }
     pub fn encodeScratch(self: *BlockEncoder, input: []const u8) Error![]const u8 {
-        self.output_scratch.clearRetainingCapacity();
-        _ = self.append(&self.output_scratch, input) catch |err| {
-            self.output_scratch.clearRetainingCapacity();
-            return err;
-        };
-        return self.output_scratch.items;
+        return self.encodeScratchWithOptions(input, .{});
     }
-
     pub fn encodeScratchWithChainDepth(self: *BlockEncoder, input: []const u8, chain_depth: u8) Error![]const u8 {
-        self.output_scratch.clearRetainingCapacity();
-        _ = self.appendWithChainDepth(&self.output_scratch, input, chain_depth) catch |err| {
-            self.output_scratch.clearRetainingCapacity();
-            return err;
-        };
-        return self.output_scratch.items;
+        return self.encodeScratchWithOptions(input, .{ .chain_depth = chain_depth });
     }
-
     pub fn encodeWithPrefixScratch(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]const u8 {
-        self.output_scratch.clearRetainingCapacity();
-        _ = self.appendWithPrefix(&self.output_scratch, input, prefix) catch |err| {
-            self.output_scratch.clearRetainingCapacity();
-            return err;
-        };
-        return self.output_scratch.items;
+        return self.encodeWithPrefixAndOptionsScratch(input, prefix, .{});
     }
-
     pub fn encodeWithPrefixScratchAndChainDepth(self: *BlockEncoder, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]const u8 {
-        self.output_scratch.clearRetainingCapacity();
-        _ = self.appendWithPrefixAndChainDepth(&self.output_scratch, input, prefix, chain_depth) catch |err| {
-            self.output_scratch.clearRetainingCapacity();
-            return err;
-        };
-        return self.output_scratch.items;
+        return self.encodeWithPrefixAndOptionsScratch(input, prefix, .{ .chain_depth = chain_depth });
     }
-
     pub fn encodeIntoSlice(self: *BlockEncoder, input: []const u8, output: []u8) Error!usize {
-        const scratch = try self.encodeScratch(input);
-        if (output.len < scratch.len) return error.OutputTooSmall;
-        @memcpy(output[0..scratch.len], scratch);
-        return scratch.len;
+        return self.encodeIntoSliceWithOptions(input, output, .{});
     }
-
     pub fn encodeIntoSliceWithChainDepth(self: *BlockEncoder, input: []const u8, output: []u8, chain_depth: u8) Error!usize {
-        const scratch = try self.encodeScratchWithChainDepth(input, chain_depth);
-        if (output.len < scratch.len) return error.OutputTooSmall;
-        @memcpy(output[0..scratch.len], scratch);
-        return scratch.len;
+        return self.encodeIntoSliceWithOptions(input, output, .{ .chain_depth = chain_depth });
     }
-
     pub fn encodeWithPrefixIntoSlice(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
-        const scratch = try self.encodeWithPrefixScratch(input, prefix);
-        if (output.len < scratch.len) return error.OutputTooSmall;
-        @memcpy(output[0..scratch.len], scratch);
-        return scratch.len;
+        return self.encodeWithPrefixIntoSliceAndOptions(input, prefix, output, .{});
     }
-
     pub fn encodeWithPrefixIntoSliceAndChainDepth(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8, chain_depth: u8) Error!usize {
-        const scratch = try self.encodeWithPrefixScratchAndChainDepth(input, prefix, chain_depth);
-        if (output.len < scratch.len) return error.OutputTooSmall;
-        @memcpy(output[0..scratch.len], scratch);
-        return scratch.len;
+        return self.encodeWithPrefixIntoSliceAndOptions(input, prefix, output, .{ .chain_depth = chain_depth });
     }
 };
 
@@ -6177,12 +6209,20 @@ pub const NativeFrameEncoder = struct {
     fn encodeAppendInternal(
         self: *NativeFrameEncoder,
         out: *std.ArrayList(u8),
-        input: []const u8,
+        caller_input: []const u8,
         options: NativeFrameOptions,
-        dictionary: ?NativeDictionary,
+        caller_dictionary: ?NativeDictionary,
     ) Error!void {
         const allocator = self.block_encoder.allocator;
-        const frame_options = optionsWithNativeDictionary(options, dictionary);
+        const frame_options = optionsWithNativeDictionary(options, caller_dictionary);
+        try nativeBlockOptions(frame_options).validate();
+        const out_start = out.items.len;
+        errdefer out.items.len = out_start;
+        const retained = if (caller_dictionary) |dict| dict.content[dict.content.len - @min(dict.content.len, max_match_offset) ..] else "";
+        var snapshot = try fast_input.Snapshot.init(allocator, out.allocatedSlice(), caller_input, retained);
+        defer snapshot.deinit(allocator);
+        const input = snapshot.input;
+        const dictionary: ?NativeDictionary = if (caller_dictionary) |dict| .{ .id = dict.id, .content = snapshot.prefix } else null;
         try out.appendSlice(allocator, &frame_magic);
         const descriptor_start = out.items.len;
         var flg: u8 = 0x40;
@@ -6208,7 +6248,8 @@ pub const NativeFrameEncoder = struct {
 
         var offset: usize = 0;
         const max_block_len = frame_options.block_size_id.maxLen();
-        const chain_depth = try nativeChainDepth(frame_options);
+        const block_options = nativeBlockOptions(frame_options);
+        try block_options.validate();
         while (offset < input.len) {
             const block_len = @min(input.len - offset, max_block_len);
             var header: [4]u8 = undefined;
@@ -6223,9 +6264,9 @@ pub const NativeFrameEncoder = struct {
             try out.appendNTimes(allocator, 0, 4);
             const encoded_start = out.items.len;
             const compressed_len = if (history.len == 0)
-                try self.block_encoder.appendWithChainDepth(out, block, chain_depth)
+                try self.block_encoder.appendWithOptions(out, block, block_options)
             else
-                try self.block_encoder.appendWithPrefixAndChainDepth(out, block, history, chain_depth);
+                try self.block_encoder.appendWithPrefixAndOptions(out, block, history, block_options);
             if (compressed_len < block.len) {
                 std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
                 if (frame_options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
@@ -6274,8 +6315,12 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeScratch(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]const u8 {
+        try nativeBlockOptions(options).validate();
+        const allocator = self.block_encoder.allocator;
+        var snapshot = try fast_input.Snapshot.init(allocator, self.output_scratch.allocatedSlice(), input, "");
+        defer snapshot.deinit(allocator);
         self.output_scratch.clearRetainingCapacity();
-        self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+        self.encodeAppend(&self.output_scratch, snapshot.input, options) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -6283,8 +6328,14 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeScratchWithDictionary(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary: NativeDictionary) Error![]const u8 {
+        try nativeBlockOptions(options).validate();
+        const allocator = self.block_encoder.allocator;
+        const retained = dictionary.content[dictionary.content.len - @min(dictionary.content.len, max_match_offset) ..];
+        var snapshot = try fast_input.Snapshot.init(allocator, self.output_scratch.allocatedSlice(), input, retained);
+        defer snapshot.deinit(allocator);
+        const captured_dictionary = NativeDictionary{ .id = dictionary.id, .content = snapshot.prefix };
         self.output_scratch.clearRetainingCapacity();
-        self.encodeAppendWithDictionary(&self.output_scratch, input, options, dictionary) catch |err| {
+        self.encodeAppendWithDictionary(&self.output_scratch, snapshot.input, options, captured_dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -6297,6 +6348,13 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
+        if (fast_input.overlaps(self.output_scratch.allocatedSlice(), output)) {
+            const owned = try self.encodeWithOptionsAlloc(input, options);
+            defer self.block_encoder.allocator.free(owned);
+            if (output.len < owned.len) return error.OutputTooSmall;
+            @memcpy(output[0..owned.len], owned);
+            return owned.len;
+        }
         const scratch = try self.encodeScratch(input, options);
         if (output.len < scratch.len) return error.OutputTooSmall;
         @memcpy(output[0..scratch.len], scratch);
@@ -6304,6 +6362,13 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeIntoSliceWithDictionary(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
+        if (fast_input.overlaps(self.output_scratch.allocatedSlice(), output)) {
+            const owned = try self.encodeWithDictionaryAlloc(input, options, dictionary);
+            defer self.block_encoder.allocator.free(owned);
+            if (output.len < owned.len) return error.OutputTooSmall;
+            @memcpy(output[0..owned.len], owned);
+            return owned.len;
+        }
         const scratch = try self.encodeScratchWithDictionary(input, options, dictionary);
         if (output.len < scratch.len) return error.OutputTooSmall;
         @memcpy(output[0..scratch.len], scratch);
@@ -6715,7 +6780,11 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 }
 
 pub fn encodeBlockWithChainDepthAlloc(allocator: std.mem.Allocator, input: []const u8, chain_depth: u8) Error![]u8 {
-    if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
+    return encodeBlockWithOptionsAlloc(allocator, input, .{ .chain_depth = chain_depth });
+}
+
+pub fn encodeBlockWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: BlockEncodeOptions) Error![]u8 {
+    try options.validate();
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var occupancy_bits: []u64 = &.{};
@@ -6741,7 +6810,7 @@ pub fn encodeBlockWithChainDepthAlloc(allocator: std.mem.Allocator, input: []con
         if (occupancy_bits.len != 0) allocator.free(occupancy_bits);
         if (hash_table.len != 0) allocator.free(hash_table);
     }
-    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table, chain_depth);
+    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table, options);
     return out.toOwnedSlice(allocator);
 }
 
@@ -6750,7 +6819,11 @@ pub fn encodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u
 }
 
 pub fn encodeBlockWithPrefixAndChainDepthAlloc(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]u8 {
-    if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
+    return encodeBlockWithPrefixAndOptionsAlloc(allocator, input, prefix, .{ .chain_depth = chain_depth });
+}
+
+pub fn encodeBlockWithPrefixAndOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, options: BlockEncodeOptions) Error![]u8 {
+    try options.validate();
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var occupancy_bits: []u64 = &.{};
@@ -6777,7 +6850,7 @@ pub fn encodeBlockWithPrefixAndChainDepthAlloc(allocator: std.mem.Allocator, inp
         if (hash_table.len != 0) allocator.free(hash_table);
     }
     const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table, chain_depth);
+    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table, options);
     return out.toOwnedSlice(allocator);
 }
 
@@ -6799,6 +6872,31 @@ pub fn encodeBlockWithPrefixIntoSliceAndChainDepth(allocator: std.mem.Allocator,
     var encoder = try BlockEncoder.init(allocator);
     defer encoder.deinit();
     return try encoder.encodeWithPrefixIntoSliceAndChainDepth(input, prefix, output, chain_depth);
+}
+
+pub fn encodeBlockWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: BlockEncodeOptions) Error!usize {
+    try options.validate();
+    var encoder = try BlockEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.appendWithOptions(out, input, options);
+}
+pub fn encodeBlockWithPrefixAndOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8, options: BlockEncodeOptions) Error!usize {
+    try options.validate();
+    var encoder = try BlockEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.appendWithPrefixAndOptions(out, input, prefix, options);
+}
+pub fn encodeBlockIntoSliceWithOptions(allocator: std.mem.Allocator, input: []const u8, output: []u8, options: BlockEncodeOptions) Error!usize {
+    try options.validate();
+    var encoder = try BlockEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoSliceWithOptions(input, output, options);
+}
+pub fn encodeBlockWithPrefixIntoSliceAndOptions(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, output: []u8, options: BlockEncodeOptions) Error!usize {
+    try options.validate();
+    var encoder = try BlockEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeWithPrefixIntoSliceAndOptions(input, prefix, output, options);
 }
 
 pub fn decodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8, expected_size: ?usize) Error![]u8 {
@@ -7230,294 +7328,31 @@ fn appendMatchFromOutput(out: *std.ArrayList(u8), repeat_start: usize, match_len
     }
 }
 
-fn encodeBlockInto(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    input: []const u8,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-    chain_depth: u8,
-) Error!usize {
-    const out_start = out.items.len;
-    if (input.len == 0) return 0;
-    if (table.len < hash_table_len or
-        occupancy_bits.len < hash_occupancy_words or
-        chain_table.len < chain_table_len or
-        input.len > std.math.maxInt(u32))
-    {
-        return error.IntegerOverflow;
+const FastEmitter = struct {
+    pub fn emitSequence(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8, offset: u16, match_len: usize) Error!void {
+        return lz4.emitSequence(allocator, out, literal, offset, match_len);
     }
-    // Only clear a small occupancy bitset per block. The position table is
-    // intentionally left uninitialized/reused; entries are read only when their
-    // occupancy bit is set. The chain table is also initialized lazily because
-    // candidates outside LZ4's 64 KiB window are never followed.
-    @memset(occupancy_bits[0..hash_occupancy_words], 0);
-    try out.ensureUnusedCapacity(allocator, try maxCompressedLen(input.len));
-
-    var anchor: usize = 0;
-    var index: usize = 0;
-    while (block_format.hasMatchSearchRoom(index, input.len)) {
-        var match_index = index;
-        var best = insertAndFindBest(input, index, table, occupancy_bits, chain_table, chain_depth);
-        if (best.len != 0 and index + 13 <= input.len and best.len < good_match_len) {
-            const next = insertAndFindBest(input, index + 1, table, occupancy_bits, chain_table, chain_depth);
-            if (next.len > best.len + lazy_extra_gain) {
-                match_index = index + 1;
-                best = next;
-            }
-        }
-
-        if (best.len != 0) {
-            var match_start = match_index;
-            var candidate_start = best.start;
-            var match_len = best.len;
-            while (match_start > anchor and candidate_start > 0 and input[match_start - 1] == input[candidate_start - 1]) {
-                match_start -= 1;
-                candidate_start -= 1;
-                match_len += 1;
-            }
-            match_len = @min(
-                match_len,
-                block_format.maxMatchLen(match_start, input.len),
-            );
-            std.debug.assert(match_len >= block_format.min_match_len);
-            try emitSequence(allocator, out, input[anchor..match_start], @intCast(match_start - candidate_start), match_len);
-            index = match_start + match_len;
-            anchor = index;
-            if (index >= input.len) break;
-            const seed_start = match_start + 1;
-            var seed = seed_start;
-            while (seed < index and seed + 4 <= input.len) : (seed += 1) {
-                _ = insertHash(input, seed, table, occupancy_bits, chain_table);
-            }
-        } else {
-            index += 1;
-        }
+    pub fn emitLastLiteral(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8) Error!void {
+        return lz4.emitLastLiteral(allocator, out, literal);
     }
-    try emitLastLiteral(allocator, out, input[anchor..]);
-    return out.items.len - out_start;
+};
+fn encodeBlockInto(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, table: []u32, bits: []u64, chain: []u32, options: BlockEncodeOptions) Error!usize {
+    return fast_parser.encodeBlockInto(FastEmitter, allocator, out, input, table, bits, chain, try options.work());
 }
-
-fn encodeLinkedBlockInto(
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
-    history: []const u8,
-    input: []const u8,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-    chain_depth: u8,
-) Error!usize {
-    const out_start = out.items.len;
-    if (input.len == 0) return 0;
-    const block_start = history.len;
-    const virtual_len = try checkedAdd(history.len, input.len);
-    if (table.len < hash_table_len or
-        occupancy_bits.len < hash_occupancy_words or
-        chain_table.len < chain_table_len or
-        virtual_len > std.math.maxInt(u32))
-    {
-        return error.IntegerOverflow;
-    }
-
-    @memset(occupancy_bits[0..hash_occupancy_words], 0);
-    try out.ensureUnusedCapacity(allocator, try maxCompressedLen(input.len));
-
-    // Linked LZ4 blocks may reference the previous 64 KiB of decoded frame
-    // history. Seed that prefix into the same bounded hash-chain tables used by
-    // independent blocks, then emit only sequences whose literals live in the
-    // current block. Candidate positions near the history/block boundary are
-    // intentionally allowed to hash across the boundary: the decoder can replay
-    // such matches by copying the history bytes first and then overlapping with
-    // the output it just produced.
-    var seed: usize = 0;
-    while (seed < block_start and seed + 4 <= virtual_len) : (seed += 1) {
-        _ = insertLinkedHash(history, input, seed, table, occupancy_bits, chain_table);
-    }
-
-    var anchor: usize = block_start;
-    var index: usize = block_start;
-    while (block_format.hasMatchSearchRoom(index, virtual_len)) {
-        var match_index = index;
-        var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table, chain_depth);
-        if (best.len != 0 and index + 13 <= virtual_len and best.len < good_match_len) {
-            const next = insertAndFindBestLinked(history, input, index + 1, table, occupancy_bits, chain_table, chain_depth);
-            if (next.len > best.len + lazy_extra_gain) {
-                match_index = index + 1;
-                best = next;
-            }
-        }
-
-        if (best.len != 0) {
-            var match_start = match_index;
-            var candidate_start = best.start;
-            var match_len = best.len;
-            while (match_start > anchor and candidate_start > 0 and linkedByteAt(history, input, match_start - 1) == linkedByteAt(history, input, candidate_start - 1)) {
-                match_start -= 1;
-                candidate_start -= 1;
-                match_len += 1;
-            }
-            match_len = @min(
-                match_len,
-                block_format.maxMatchLen(match_start, virtual_len),
-            );
-            std.debug.assert(match_len >= block_format.min_match_len);
-            const literal_start = anchor - block_start;
-            const literal_end = match_start - block_start;
-            try emitSequence(
-                allocator,
-                out,
-                input[literal_start..literal_end],
-                @intCast(match_start - candidate_start),
-                match_len,
-            );
-            index = match_start + match_len;
-            anchor = index;
-            if (index >= virtual_len) break;
-            seed = match_start + 1;
-            while (seed < index and seed + 4 <= virtual_len) : (seed += 1) {
-                _ = insertLinkedHash(history, input, seed, table, occupancy_bits, chain_table);
-            }
-        } else {
-            index += 1;
-        }
-    }
-
-    try emitLastLiteral(allocator, out, input[anchor - block_start ..]);
-    return out.items.len - out_start;
+fn encodeLinkedBlockInto(allocator: std.mem.Allocator, out: *std.ArrayList(u8), history: []const u8, input: []const u8, table: []u32, bits: []u64, chain: []u32, options: BlockEncodeOptions) Error!usize {
+    return fast_parser.encodeLinkedBlockInto(FastEmitter, allocator, out, history, input, table, bits, chain, try options.work());
 }
-
-fn insertAndFindBest(
-    input: []const u8,
-    index: usize,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-    chain_depth: usize,
-) Match {
-    const candidate_entry = insertHash(input, index, table, occupancy_bits, chain_table);
-
-    var best: Match = .{};
-    var candidate = candidate_entry;
-    var depth: usize = 0;
-    while (candidate != invalid_pos and depth < chain_depth) : (depth += 1) {
-        const candidate_start: usize = @intCast(candidate);
-        if (candidate_start >= index) break;
-        if (index - candidate_start > max_match_offset) break;
-        if (input[candidate_start] == input[index] and
-            input[candidate_start + 1] == input[index + 1] and
-            input[candidate_start + 2] == input[index + 2] and
-            input[candidate_start + 3] == input[index + 3])
-        {
-            var match_len: usize = 4;
-            while (index + match_len < input.len and input[candidate_start + match_len] == input[index + match_len]) {
-                match_len += 1;
-            }
-            if (match_len > best.len) {
-                best = .{ .start = candidate_start, .len = match_len };
-                if (match_len >= good_match_len) break;
-            }
-        }
-        candidate = chain_table[candidate_start & chain_table_mask];
-    }
-    return best;
+const insertHash = fast_parser.insertHash;
+const insertLinkedHash = fast_parser.insertLinkedHash;
+fn insertAndFindBest(input: []const u8, index: usize, table: []u32, bits: []u64, chain: []u32, depth: usize) Match {
+    return fast_parser.insertAndFindBest(input, index, table, bits, chain, .{ .acceleration = 1, .chain_depth = @intCast(depth), .profile = null });
 }
-
-fn insertAndFindBestLinked(
-    history: []const u8,
-    input: []const u8,
-    index: usize,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-    chain_depth: usize,
-) Match {
-    const virtual_len = history.len + input.len;
-    const candidate_entry = insertLinkedHash(history, input, index, table, occupancy_bits, chain_table);
-
-    var best: Match = .{};
-    var candidate = candidate_entry;
-    var depth: usize = 0;
-    while (candidate != invalid_pos and depth < chain_depth) : (depth += 1) {
-        const candidate_start: usize = @intCast(candidate);
-        if (candidate_start >= index) break;
-        if (index - candidate_start > max_match_offset) break;
-        if (linkedByteAt(history, input, candidate_start) == linkedByteAt(history, input, index) and
-            linkedByteAt(history, input, candidate_start + 1) == linkedByteAt(history, input, index + 1) and
-            linkedByteAt(history, input, candidate_start + 2) == linkedByteAt(history, input, index + 2) and
-            linkedByteAt(history, input, candidate_start + 3) == linkedByteAt(history, input, index + 3))
-        {
-            var match_len: usize = 4;
-            while (index + match_len < virtual_len and linkedByteAt(history, input, candidate_start + match_len) == linkedByteAt(history, input, index + match_len)) {
-                match_len += 1;
-            }
-            if (match_len > best.len) {
-                best = .{ .start = candidate_start, .len = match_len };
-                if (match_len >= good_match_len) break;
-            }
-        }
-        candidate = chain_table[candidate_start & chain_table_mask];
-    }
-    return best;
-}
-
-fn insertHash(
-    input: []const u8,
-    index: usize,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-) u32 {
-    const h = hash4(input[index..][0..4]);
-    const candidate_seen = hashOccupied(occupancy_bits, h);
-    const candidate_entry = if (candidate_seen) table[h] else invalid_pos;
-    markHashOccupied(occupancy_bits, h);
-
-    // Lazy matching can probe index+1 before knowing whether the current match
-    // wins; back-extension and seeding can later revisit the same index. Avoid
-    // turning that ring slot into a self-loop that wastes bounded chain depth.
-    if (candidate_entry == index) return chain_table[index & chain_table_mask];
-
-    table[h] = @intCast(index);
-    chain_table[index & chain_table_mask] = candidate_entry;
-    return candidate_entry;
-}
-
-fn insertLinkedHash(
-    history: []const u8,
-    input: []const u8,
-    index: usize,
-    table: []u32,
-    occupancy_bits: []u64,
-    chain_table: []u32,
-) u32 {
-    const h = hashLinked4(history, input, index);
-    const candidate_seen = hashOccupied(occupancy_bits, h);
-    const candidate_entry = if (candidate_seen) table[h] else invalid_pos;
-    markHashOccupied(occupancy_bits, h);
-
-    if (candidate_entry == index) return chain_table[index & chain_table_mask];
-
-    table[h] = @intCast(index);
-    chain_table[index & chain_table_mask] = candidate_entry;
-    return candidate_entry;
+fn insertAndFindBestLinked(history: []const u8, input: []const u8, index: usize, table: []u32, bits: []u64, chain: []u32, depth: usize) Match {
+    return fast_parser.insertAndFindBestLinked(history, input, index, table, bits, chain, .{ .acceleration = 1, .chain_depth = @intCast(depth), .profile = null });
 }
 
 fn maxCompressedLen(input_len: usize) Error!usize {
     return try checkedAdd(try checkedAdd(input_len, input_len / 255), 16);
-}
-
-fn hashOccupied(occupancy_bits: []const u64, hash: usize) bool {
-    const word = hash >> 6;
-    const bit: u6 = @intCast(hash & 63);
-    return (occupancy_bits[word] & (@as(u64, 1) << bit)) != 0;
-}
-
-fn markHashOccupied(occupancy_bits: []u64, hash: usize) void {
-    const word = hash >> 6;
-    const bit: u6 = @intCast(hash & 63);
-    occupancy_bits[word] |= @as(u64, 1) << bit;
 }
 
 test "LZ4HC public block APIs round trip levels and preserve caller output" {
@@ -7727,21 +7562,6 @@ test "LZ4HC reusable encoders release every workspace allocation failure" {
         Test.run,
         .{},
     );
-}
-
-fn hash4(bytes: *const [4]u8) usize {
-    const value = std.mem.readInt(u32, bytes, .little);
-    return @intCast((value *% 2654435761) >> 16);
-}
-
-fn hashLinked4(history: []const u8, input: []const u8, index: usize) usize {
-    var bytes: [4]u8 = undefined;
-    inline for (0..4) |i| bytes[i] = linkedByteAt(history, input, index + i);
-    return hash4(&bytes);
-}
-
-fn linkedByteAt(history: []const u8, input: []const u8, index: usize) u8 {
-    return if (index < history.len) history[index] else input[index - history.len];
 }
 
 fn emitSequence(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8, match_offset: u16, match_len: usize) Error!void {
