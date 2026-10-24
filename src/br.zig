@@ -4847,7 +4847,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         const long_window_bits: u5 = if (schedule != null)
             window_bits
         else
-            options.window_bits orelse if (options.large_window) window_bits else 17;
+            options.window_bits orelse 17;
         const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
         const literal_commands = [_]command_plan.Command{.{
             .insert_start = 0,
@@ -5912,7 +5912,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
     }
 
-    const long_window_bits: u5 = explicit_window_bits orelse if (options.large_window) window_bits else 17;
+    const long_window_bits: u5 = explicit_window_bits orelse 17;
     const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
     const commands = try long_distance.augmentAllocWithMaxDistanceForFormat(allocator, input, plan.commands, long_max_distance, encoder_window_format.format(options.large_window)) orelse {
         baseline_owned = false;
@@ -21675,15 +21675,17 @@ test "Br general large window null legacy reusable APIs and actual ratio long co
         byte.* = @truncate(random >> 24);
     }
     @memcpy(input[distance..], input[0..2048]);
-    const bytes = try encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .level = .ratio, .large_window = true, .window_bits = 30 });
-    defer allocator.free(bytes);
-    const summary = try summarizeStreamWithOptions(bytes, .{ .allow_large_window = true });
-    try std.testing.expect(summary.large_window);
-    try std.testing.expectEqual(@as(u5, 30), summary.window_bits);
-    try std.testing.expect(summary.max_lz77_distance > encoder_window_format.non_hq_history_limit);
-    const actual = try decodeStreamAllocWithOptions(allocator, bytes, .{ .allow_large_window = true });
-    defer allocator.free(actual);
-    try std.testing.expectEqualSlices(u8, input, actual);
+    for ([_]?u5{ 30, null }) |width| {
+        const bytes = try encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .level = .ratio, .large_window = true, .window_bits = width });
+        defer allocator.free(bytes);
+        const summary = try summarizeStreamWithOptions(bytes, .{ .allow_large_window = true });
+        try std.testing.expect(summary.large_window);
+        try std.testing.expectEqual(width orelse @as(u5, 17), summary.window_bits);
+        try std.testing.expect(summary.max_lz77_distance > encoder_window_format.non_hq_history_limit);
+        const actual = try decodeStreamAllocWithOptions(allocator, bytes, .{ .allow_large_window = true });
+        defer allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, input, actual);
+    }
 }
 
 test "Br general large window static stored codecs and non HQ history keep explicit bounded state" {
