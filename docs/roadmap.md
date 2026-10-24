@@ -32,9 +32,13 @@ length-safe streaming XXH64 implementation. Both Zstd decoder policies use
 wide preflight totals; file encoders use bounded atomic I/O. Formal count gates
 pass 142/142 in native Debug, native ReleaseFast and actual x86 ReleaseFast.
 Real long-stream and final family/platform evidence are recorded separately.
-Bounded Zstd HQ search-control and Brotli stored-resource API increments remain
-the next functionality-first priorities. Full competitor ratio, throughput
-and memory leadership remains unproven.
+The subsequent [Zstd HQ search controls](formats/zstd-hq-search-controls.md) add
+whole-block positions, complete admitted-match lengths and per-plan price
+admission. Complete-input encoders compare full frames; incremental encoders
+compare same-state blocks. Ordinary defaults retain their existing output.
+Brotli stored-resource API consistency remains the next functionality-first
+priority. Full competitor ratio, throughput and memory leadership remains
+unproven.
 
 The long-term objective remains incomplete. The current
 [mainstream codec and industry gap audit](performance/industry-gap-audit.md)

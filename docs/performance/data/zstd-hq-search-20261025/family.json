@@ -1,0 +1,68 @@
+{
+  "each_group_actual_runs": 1,
+  "end_utc": "2026-10-24T16:46:30.371786+00:00",
+  "evidence": "Original test runner fd1 indexed metadata/TestResults, fd2 matched by index, compiler file_system_inputs protocol, SHA256 actual ELF and linked object, source before/after snapshot and recomputed Zig Cache SipHash128(1,3) digests. No separate metadata-query execution or duplicate tests.",
+  "git_modified_by_agent": false,
+  "groups": [
+    {
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/050b4cfcf26beef39266ad41f28ba941/vort-zstd-tests",
+        "sha256": "25ad3101d401ec4ddc1e7925da370ec98b589e84beb10c2c6757d20c44af28bf"
+      },
+      "compiled_content_bound_count": 167,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 167,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1053,
+        "pending": 0,
+        "skip": 0
+      },
+      "elapsed_seconds": 230.492929453,
+      "group": "native",
+      "head_at_start": "cb70f38879a2d58232f3691b7ba75595c8898b33",
+      "hq_scope_inputs_changed_during_run": {},
+      "non_input_changed_paths": [
+        "src/tests/zstd_hq_search_wasm.zig"
+      ],
+      "report": "/tmp/vort-zstd-hq-search-final-20261025/family/native/result.json",
+      "root_source_sha256": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35"
+    },
+    {
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/97322d12d133f19dbe530b8e52fadbfe/vort-zstd-tests",
+        "sha256": "a81121c4d89d08c0ad66bece0e2d6d4228e552b1f8dfa042d4b065d7d8a4af01"
+      },
+      "compiled_content_bound_count": 167,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 167,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1053,
+        "pending": 0,
+        "skip": 0
+      },
+      "elapsed_seconds": 360.620314256,
+      "group": "x86",
+      "head_at_start": "cb70f38879a2d58232f3691b7ba75595c8898b33",
+      "hq_scope_inputs_changed_during_run": {},
+      "non_input_changed_paths": [
+        "build.zig",
+        "src/tests/zstd_hq_search_wasm.zig"
+      ],
+      "report": "/tmp/vort-zstd-hq-search-final-20261025/family/x86/result.json",
+      "root_source_sha256": "f8c3f6b906d23913a358afab8c4885e085e176468be6c57809f048e699436d35"
+    }
+  ],
+  "job_limit_per_group": 2,
+  "live_exec_sessions": [],
+  "repository_files_modified_by_agent": false,
+  "status": "passed",
+  "total_failed": 0,
+  "total_passed": 2106,
+  "total_skipped": 0
+}

@@ -1,0 +1,12 @@
+{
+  "status": "source_frozen",
+  "algorithm": "shared compact/wide Node DP; bounded complete finite cross-horizon continuation; whole all endpoints; per actual DP price admission before sequencePrice",
+  "native_own_tests": "7 named + imports18/18 after necessary spill strengthening",
+  "x86_own_tests": "7 named + imports18/18 actual run",
+  "storage_tests": "7 named + imports17/17 native; x86 earlier combined26/26 actual run",
+  "default_regression": "old model/rep/refinement/terminal/price/kernel21/21 passed",
+  "default_archive_comparison": "/tmp/vort-zstd-hq-parser-default/result.json; 9 exact old/new plans and legacy work/heap counters",
+  "other_qa_failure": "external helpers length table mismatch was reported to owner; not modified by this agent",
+  "matcher": "unchanged; full retained-frontier lengths proved by read-only review",
+  "timestamp_utc": "2026-10-24T16:34:01.614286+00:00"
+}

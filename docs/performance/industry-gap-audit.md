@@ -78,10 +78,12 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Extend explicit whole-block/complete-length and pricing controls for Zstd
-   HQ, then consistent total-heap controls for standalone Brotli stored
-   convenience APIs. These are additional controls, not missing supported-format
-   decoding. The [stream-count increment](../formats/stream-counts.md) now uses
+1. Unify total-heap controls for standalone Brotli stored convenience APIs,
+   then address other documented physical API boundaries. Zstd optimal HQ now
+   exposes [whole-block, complete-length and price controls](../formats/zstd-hq-search-controls.md)
+   with explicit wire safeguards. Finite beam and matcher limits still constrain
+   quality; these controls do not establish global optimality or competitor
+   performance parity. The [stream-count increment](../formats/stream-counts.md) uses
    wide cumulative bytes, pledges, offsets and history positions on 32-bit
    targets, a full-length streaming XXH64 state and bounded atomic file I/O.
    Physical allocation and contiguous bit-reader limits remain separate API

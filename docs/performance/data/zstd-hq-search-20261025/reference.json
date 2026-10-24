@@ -1,0 +1,178 @@
+{
+  "utc": "2026-10-24T16:50:07.925469+00:00",
+  "status": "ok",
+  "native_and_x86": {
+    "native": {
+      "main_rows": 41,
+      "frozen_old_wire_rows": 8,
+      "frozen_old_wire_manifest_sha256": "e742acab7b16806a548e9fd23f453aae6c296d5c4f6262e96d37478a26cd623f",
+      "probe_calls_from_actual_events": 223,
+      "event_groups": {
+        "regression": 8,
+        "same_settings_bounded_sampled": 41,
+        "main": 41,
+        "profile_off": 41,
+        "reverse": 82,
+        "auxiliary": 10
+      },
+      "actual_error_counts": {
+        "SearchLimitExceeded": 2,
+        "InvalidBlockPlan": 2,
+        "OutputTooSmall": 1,
+        "WorkingMemoryLimitExceeded": 1
+      },
+      "all_error_output_sentinels_preserved": true,
+      "all_error_live_requested_bytes_zero": true,
+      "same_settings_complete_wire_guarded_rows": 32,
+      "incremental_rows_with_same_state_block_safeguard_only": 9,
+      "strict_wire_improvements_observed": 0,
+      "references_from_successful_rows": {
+        "modern": 41,
+        "system": 41
+      },
+      "price_budget": {
+        "per_plan_limit": 103963,
+        "actual_max_plan": 103963,
+        "aggregate_price_evaluations": 404145,
+        "failures": [
+          {
+            "limit": 103962,
+            "max_plan_price_evaluations": 103962,
+            "price_limit_refusals": 1
+          },
+          {
+            "limit": 0,
+            "max_plan_price_evaluations": 0,
+            "price_limit_refusals": 1
+          }
+        ],
+        "reusable_profile_cycle_verified": true,
+        "scope": "requested search failure is returned before a wire safeguard; limit applies to each DP plan, not cumulative profile work"
+      },
+      "full128k_span_profile": {
+        "max_parse_positions": 131072,
+        "max_match_length_considered": 96,
+        "max_plan_price_evaluations": 36753,
+        "price_evaluations": 73231,
+        "peak_working_memory": 72002776
+      },
+      "probe_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/2f3f984d100fd90284b8259bc37732be/vort-zstd-hq-search-probe",
+      "probe_sha256": "a11f2cd36a7ee8c521e0a56cfd75e931972039ed4139141728522e025e7b6f8b",
+      "actual_elf_class": "ELF64",
+      "actual_elf_machine": "x86-64",
+      "source_before_after_equal": true,
+      "source_files": 1877,
+      "compiler_input_contents_archived_and_verified": 3085,
+      "scope": "functional compatibility and public API search-control guarantees; campaign elapsed time is not throughput evidence; reference bytes/profile work are not parser or quality parity"
+    },
+    "x86": {
+      "main_rows": 41,
+      "frozen_old_wire_rows": 8,
+      "frozen_old_wire_manifest_sha256": "e742acab7b16806a548e9fd23f453aae6c296d5c4f6262e96d37478a26cd623f",
+      "probe_calls_from_actual_events": 223,
+      "event_groups": {
+        "regression": 8,
+        "same_settings_bounded_sampled": 41,
+        "main": 41,
+        "profile_off": 41,
+        "reverse": 82,
+        "auxiliary": 10
+      },
+      "actual_error_counts": {
+        "SearchLimitExceeded": 2,
+        "InvalidBlockPlan": 2,
+        "OutputTooSmall": 1,
+        "WorkingMemoryLimitExceeded": 1
+      },
+      "all_error_output_sentinels_preserved": true,
+      "all_error_live_requested_bytes_zero": true,
+      "same_settings_complete_wire_guarded_rows": 32,
+      "incremental_rows_with_same_state_block_safeguard_only": 9,
+      "strict_wire_improvements_observed": 0,
+      "references_from_successful_rows": {
+        "modern": 41,
+        "system": 41
+      },
+      "price_budget": {
+        "per_plan_limit": 103963,
+        "actual_max_plan": 103963,
+        "aggregate_price_evaluations": 404145,
+        "failures": [
+          {
+            "limit": 103962,
+            "max_plan_price_evaluations": 103962,
+            "price_limit_refusals": 1
+          },
+          {
+            "limit": 0,
+            "max_plan_price_evaluations": 0,
+            "price_limit_refusals": 1
+          }
+        ],
+        "reusable_profile_cycle_verified": true,
+        "scope": "requested search failure is returned before a wire safeguard; limit applies to each DP plan, not cumulative profile work"
+      },
+      "full128k_span_profile": {
+        "max_parse_positions": 131072,
+        "max_match_length_considered": 96,
+        "max_plan_price_evaluations": 36753,
+        "price_evaluations": 73231,
+        "peak_working_memory": 49982496
+      },
+      "probe_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/8492efa94060e15558cdf905847da47f/vort-zstd-hq-search-probe",
+      "probe_sha256": "f7598baa1730789c5ea0589ad61bb394ed7b078813d51dbe597018e9a505c44b",
+      "actual_elf_class": "ELF32",
+      "actual_elf_machine": "Intel 80386",
+      "source_before_after_equal": true,
+      "source_files": 1879,
+      "compiler_input_contents_archived_and_verified": 3085,
+      "scope": "functional compatibility and public API search-control guarantees; campaign elapsed time is not throughput evidence; reference bytes/profile work are not parser or quality parity"
+    }
+  },
+  "compiled_project_input_projection_equal": true,
+  "compiled_project_input_projection_files": 1156,
+  "all_41_main_wires_equal_between_platforms": true,
+  "archive_content_checks": {
+    "native": {
+      "all_archived_compiler_input_sha256_equal_binding": true,
+      "archive_input_records_checked": 3085,
+      "actual_elf_sha256_matches_campaign_probe": true
+    },
+    "x86": {
+      "all_archived_compiler_input_sha256_equal_binding": true,
+      "archive_input_records_checked": 3085,
+      "actual_elf_sha256_matches_campaign_probe": true
+    }
+  },
+  "source_transition": {
+    "changed": {
+      "build.zig": {
+        "native_sha256": "c32c60920c91c996a6a017f4baefa808bf2d4c30580f866c216ad32b5e910cc1",
+        "x86_sha256": "a8444eca5aafa4cd3552917e59093cacef7e0d542c620df8f3ddf239e281e378"
+      }
+    },
+    "added": {
+      "tools/zstd/hq_search_wasm_gate.js": "294a5c9ac8b43e362f37abcf3d7678cd9e6089b579d5a982fae834aaa5fee003",
+      "src/tests/zstd_hq_search_wasm.zig": "3b30b0cf90e440784383a9bae75c0602cdbcc657622b324ea8007765bc4dad43"
+    },
+    "removed": [],
+    "all_previous_production_and_three_probe_tool_bytes_equal": true,
+    "scope": "parent-authorized final build/Wasm consumer wiring; native compiled input projection is independently retained; source changes outside this exact set are rejected"
+  },
+  "source_transition_scope": "native and x86 each stayed frozen during its campaign; broader source freeze differs between campaigns only through authorized build/Wasm stage wiring; all actual production/tool compiler inputs equal",
+  "cache_binding_tool_sha256": "839223fa5ca967818819e613f8a354a55174c4d6077d6d2c34db39f69cfa3d8f",
+  "legacy_source_binding_path": "/tmp/vort-zstd-search-legacy-binding.json",
+  "legacy_archive_sha256": "438428a97d87fb450e09196d5ea49969e519f35c602576c1cd50d624113f2f89",
+  "legacy_probe_sha256": "331d934a8614d15bc713423372589e77fccd50a71bfc334fd96956e44de1eef0",
+  "formal_campaign_reruns": 0,
+  "scope": "public API, archive-byte regression, two independent compatible references, actual profiles, budget/error/memory output preservation; strict cost/offset quality witnesses remain QA-owned",
+  "three_domains": {
+    "production_compiled_projection": "native/x86 actual Probe and linked-object inputs; 1156 project files are equal",
+    "tool_source_epochs": "native broad snapshot1877 and x86 snapshot1879 are each frozen during own campaign; explained build/Wasm transition is retained",
+    "default_wire_baseline": "eight archived old-revision public wires copied and verified without regeneration"
+  },
+  "archive_after_source_manifest_provenance": {
+    "native": "source-after.json materializes the source-before map because run-result.json independently verified all1877 source bytes equal after the campaign; original run-result/raw report retained",
+    "x86": "source-after.json was captured directly by the formal wrapper after the campaign"
+  }
+}

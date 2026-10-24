@@ -1,0 +1,26 @@
+{
+  "scope": "nonformal code connection smoke before source freeze",
+  "old_wire_connection_rows": [
+    {
+      "strategy": "default",
+      "bytes": 45,
+      "sha256": "8d468ff998dc59b4c9cdcb10db662bf577f25dbdf99c4d69c57e906d56a8546b",
+      "old_equal": true
+    },
+    {
+      "strategy": "auto",
+      "bytes": 45,
+      "sha256": "8d468ff998dc59b4c9cdcb10db662bf577f25dbdf99c4d69c57e906d56a8546b",
+      "old_equal": true
+    },
+    {
+      "strategy": "btopt",
+      "bytes": 45,
+      "sha256": "8d468ff998dc59b4c9cdcb10db662bf577f25dbdf99c4d69c57e906d56a8546b",
+      "old_equal": true
+    }
+  ],
+  "zero_cap_error": "SearchLimitExceeded",
+  "output_preserved": true,
+  "current_binary_sha256": "4a25ce0c1dce58d59caad6244ad21af88e7e298b8bf49472aca243cd4bea9fc0"
+}

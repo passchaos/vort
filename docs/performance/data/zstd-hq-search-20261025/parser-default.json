@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "baseline_commit": "97c4ad99",
+  "cases": 9,
+  "compared": "exact Plan records/offBase/repeated/cost/pass/refinement fields and legacy price_evaluations/HQpasses/workspace values",
+  "old_sha256": "cfd6bce8c1066abb77059bafd1350c6b3e44f78a70119f9a5e8d4bc8d1d1a03d",
+  "new_sha256": "cfd6bce8c1066abb77059bafd1350c6b3e44f78a70119f9a5e8d4bc8d1d1a03d"
+}

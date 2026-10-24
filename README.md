@@ -658,6 +658,14 @@ Brotli HQ also exposes independent
 The default remains sampled. Complete search retains exact command selectors
 and sampled wire safeguards while preserving finite beam/matcher limitations.
 
+Zstd optimal HQ strategies expose `hq.parse_mode = .whole_block`,
+`hq.match_lengths = .complete` and a per-plan `hq.max_price_evaluations`.
+Expanded searches compare actual wire against corresponding bounded/sampled
+settings; complete-input APIs compare frames, while incremental APIs compare
+blocks from the same incoming state. See the [HQ search contract](docs/formats/zstd-hq-search-controls.md)
+for exact coverage, price admission, resource limits and remaining finite-search
+constraints.
+
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
 `ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`

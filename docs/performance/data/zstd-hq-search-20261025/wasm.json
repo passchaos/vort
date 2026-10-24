@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-zstd-hq-search-wasm",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 31.852119082817808,
+  "utc": "2026-10-24T16:45:45.741513+00:00",
+  "source_before_after_equal": true,
+  "changed_sources": [],
+  "log": "/tmp/vort-zstd-hq-search-final-20261025/wasm/compile-node.log",
+  "actual_wasm_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/262ba965f0546fcd30b68fedd758d6f5/vort-zstd-hq-search-wasm.wasm",
+  "archived_wasm_path": "/tmp/vort-zstd-hq-search-final-20261025/wasm/vort-zstd-hq-search-wasm.wasm",
+  "wasm_sha256": "eee57c349c19245739509ead89cbce6a1d279ea95762e799e63fd61c004d0a28",
+  "consumer_source_sha256": "3b30b0cf90e440784383a9bae75c0602cdbcc657622b324ea8007765bc4dad43",
+  "node_gate_sha256": "294a5c9ac8b43e362f37abcf3d7678cd9e6089b579d5a982fae834aaa5fee003",
+  "operations": {
+    "zstdHqSearchWholeComplete": 0,
+    "zstdHqSearchFullSpan": 0,
+    "zstdHqSearchIncrementalRetry": 0,
+    "zstdHqSearchUnsupported": 0
+  },
+  "node_report": "/tmp/vort-zstd-hq-search-final-20261025/wasm/node-report.json",
+  "fixture_manifest": "/tmp/vort-zstd-hq-search-final-20261025/wasm/inputs/manifest.json",
+  "source_archive": "/tmp/vort-zstd-hq-search-final-20261025/wasm/zstd_hq_search_wasm.zig",
+  "node_gate_archive": "/tmp/vort-zstd-hq-search-final-20261025/wasm/hq_search_wasm_gate.js"
+}

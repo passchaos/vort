@@ -1,0 +1,56 @@
+{
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-zstd-hq-search",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=Debug"
+      ],
+      "exit_code": 0,
+      "name": "native-debug",
+      "seconds": 13.210378288989887
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-zstd-hq-search",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast"
+      ],
+      "exit_code": 0,
+      "name": "native-releasefast",
+      "seconds": 48.224113231990486
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-zstd-hq-search",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl"
+      ],
+      "exit_code": 0,
+      "name": "x86-releasefast",
+      "seconds": 42.05336345615797
+    }
+  ],
+  "utc": "2026-10-24T16:40:37.844830+00:00"
+}
