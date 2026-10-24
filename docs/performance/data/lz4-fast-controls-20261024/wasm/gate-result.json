@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-lz4-fast-controls-wasm",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "source_before_after_equal": true,
+  "changed_sources": [],
+  "source_count": 1603,
+  "source_content_set_sha256": "2d84e187694f15112325e3cae63f4974b6aa3780d2d9eaebfc4b0acff2be0f26",
+  "elapsed_seconds": 1.9779279250651598,
+  "utc": "2026-10-24T11:52:07.110800+00:00"
+}

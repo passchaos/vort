@@ -1,0 +1,29 @@
+{
+  "name": "lz4-rf",
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-lz4-fast-controls",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all",
+    "--verbose"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 16.517569852992892,
+  "started_utc": "2026-10-24T11:55:30.524905+00:00",
+  "utc": "2026-10-24T11:55:47.391410+00:00",
+  "changed_sources": [],
+  "source_sha256": "33c60eef6cd5ff0d97ba804ec9e4d5559b1d837e0490e1bcb9b63d20bca236c5",
+  "before_file_count": 1776,
+  "after_file_count": 1776,
+  "test_counts": [
+    [
+      "26",
+      "26"
+    ]
+  ],
+  "log": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/native/lz4-rf.log",
+  "scope": "formal functional validation; elapsed time and compiler RSS are not codec throughput benchmarks"
+}

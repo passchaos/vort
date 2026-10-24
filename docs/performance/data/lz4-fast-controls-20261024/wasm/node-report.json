@@ -1,0 +1,94 @@
+{
+  "schema": "vort-lz4-fast-controls-wasm-v1",
+  "node_version": "v26.10.0",
+  "wasm_sha256": "fcbf31c8ed2b6532dedb3af79ad63464425354e8b1202d42e01f212206f593b3",
+  "pointer_bits": 32,
+  "imports": [],
+  "wasi_host": null,
+  "results": [
+    {
+      "export": "lz4FastWasmDefaultSmoke",
+      "status": 0
+    },
+    {
+      "export": "lz4FastWasmMissSmoke",
+      "status": 0
+    },
+    {
+      "export": "lz4FastWasmMaximumPrefixSmoke",
+      "status": 0
+    }
+  ],
+  "profiles": {
+    "default_raw": {
+      "resolved_acceleration": "1",
+      "resolved_chain_depth": "16",
+      "positions_inspected": "43",
+      "positions_skipped": "0",
+      "chain_candidates": "3",
+      "history_positions_seeded": "0",
+      "match_positions_seeded": "97",
+      "blocks_attempted": "1",
+      "max_skip_step": "1"
+    },
+    "unmatched_acceleration8_raw": {
+      "resolved_acceleration": "8",
+      "resolved_chain_depth": "0",
+      "positions_inspected": "64",
+      "positions_skipped": "437",
+      "chain_candidates": "0",
+      "history_positions_seeded": "0",
+      "match_positions_seeded": "0",
+      "blocks_attempted": "1",
+      "max_skip_step": "8"
+    },
+    "unmatched_acceleration8_frame": {
+      "resolved_acceleration": "8",
+      "resolved_chain_depth": "0",
+      "positions_inspected": "64",
+      "positions_skipped": "437",
+      "chain_candidates": "0",
+      "history_positions_seeded": "0",
+      "match_positions_seeded": "0",
+      "blocks_attempted": "1",
+      "max_skip_step": "8"
+    },
+    "clamped_maximum_raw": {
+      "resolved_acceleration": "65537",
+      "resolved_chain_depth": "0",
+      "positions_inspected": "2",
+      "positions_skipped": "499",
+      "chain_candidates": "0",
+      "history_positions_seeded": "0",
+      "match_positions_seeded": "0",
+      "blocks_attempted": "1",
+      "max_skip_step": "500"
+    },
+    "clamped_maximum_prefix": {
+      "resolved_acceleration": "65537",
+      "resolved_chain_depth": "16",
+      "positions_inspected": "1",
+      "positions_skipped": "0",
+      "chain_candidates": "1",
+      "history_positions_seeded": "128",
+      "match_positions_seeded": "90",
+      "blocks_attempted": "1",
+      "max_skip_step": "0"
+    }
+  },
+  "input_bytes": {
+    "unmatched": 512,
+    "prefix": 128,
+    "prefixed_input": 96
+  },
+  "checks": {
+    "default_and_acceleration1_wire": true,
+    "nonpositive_normalization": true,
+    "maximum_clamp": true,
+    "raw_and_frame_roundtrip": true,
+    "prefix_roundtrip": true,
+    "actual_miss_skip_counts": true,
+    "wasm32_skip_clipped": true,
+    "profile_off_wire": true
+  }
+}

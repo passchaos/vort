@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "run",
+    "--",
+    "--help"
+  ],
+  "exit_code": 0,
+  "started_utc": "2026-10-24T11:55:47.721458+00:00",
+  "finished_utc": "2026-10-24T11:55:47.793166+00:00",
+  "log_sha256": "7ece83816d6905eee265e14d141e2e07fd0ed235080e692a7dc09e34f756cd0b",
+  "controlled_lz4_help_present": true
+}

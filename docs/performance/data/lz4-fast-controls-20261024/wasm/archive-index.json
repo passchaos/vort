@@ -1,0 +1,10 @@
+{
+  "status": "passed",
+  "unified_archive": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/wasm",
+  "source_archive": "/tmp/vort-lz4-fast-wasm-final-20261024-q1e0eyca",
+  "formal_summary_sha256": "db8d7d2be8b4d42bf7c8f62d2830d6e1f99c2e93c68e3c41a664461d04303613",
+  "node_report_sha256": "104ed243bae596ee9e693d5fe3be2909e63d54577bca0a27551d8276407b453c",
+  "compile_binding_sha256": "eea6bb539f7a716629a786c68a03a91bc619e5f18091ef8a63b0b3e0fe1f3d32",
+  "wasm_sha256": "fcbf31c8ed2b6532dedb3af79ad63464425354e8b1202d42e01f212206f593b3",
+  "actual_wasm_copy": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/wasm/artifacts/229e00112f15ba9a209144680335dcb8-vort-lz4-fast-controls-wasm.wasm"
+}

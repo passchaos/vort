@@ -1,0 +1,45 @@
+{
+  "phase": "formal-final-lz4-fast-controls-cli",
+  "time_before_utc": "2026-10-24T11:52:28.779174+00:00",
+  "git_head": "fef87a827f5aeaa1c5a7b2035a7eb0c7648d9389",
+  "source_count": 1736,
+  "source_snapshot_sha256": "17404e266498248e8dd4045b286fe027a6cdc5e15512e4cf3e13907238fba952",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-lz4-fast-controls-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "reference_round_trips": 60,
+    "raw_empty_legacy_wire_checks": 5,
+    "canonical_empty_reverse_decode_checks": 1,
+    "profile_wire_checks": 22,
+    "default_acceleration_wire_checks": 9,
+    "normalization_checks": 4,
+    "skipping_work_checks": 3,
+    "prefix_history_checks": 2,
+    "zero_chain_checks": 3,
+    "rejected_output_preserved": 21,
+    "same_path_checks": 6
+  },
+  "status": "failed-gate-idle-empty-frame-profile-assumption",
+  "source_equal": true,
+  "source_delta": {},
+  "build_exit_code": 1,
+  "parser_tests_passed": 6,
+  "executed_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/a042fab793f5073857243f772bb8c63d/vort-lz4-fast-controls-cli",
+  "binary_sha256": "77508cfd3eef003104429134d3dd16f1272bc4f2ff4e23905e34737a8d2ed5c4",
+  "compile_manifest": ".zig-cache/h/064d22088e761b894c9197bce91f4cec.txt",
+  "failure": "Gate requires resolved controls on an empty native frame despite zero block attempts. Raw empty block attempt metadata is valid; native empty work counters remain zero.",
+  "failed_binary_input_binding": {
+    "records": 1920,
+    "unique_inputs": 1918,
+    "mismatches": [],
+    "uncovered": [],
+    "verified": true
+  }
+}

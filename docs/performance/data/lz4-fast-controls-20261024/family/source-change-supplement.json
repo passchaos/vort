@@ -1,0 +1,23 @@
+{
+  "global_source_before_after_equal": false,
+  "compiled_input_projection_before_after_equal": true,
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/lz4/fast_controls_cli_gate.py"
+  ],
+  "changed_sources_absent_from_compiler_inputs": true,
+  "changed_sources_absent_from_run_inputs": true,
+  "before_sha256": "a39878c5c05267c852ac65cb30c2387975125138df263c73dfd38a78b03aacfc",
+  "after_sha256": "8d557710bc59e712b3491ff2d9583f59330f99d75b3537696b13bf333f07568c",
+  "raw_result_sha256": "9af7723f5daea2edf0e1bda6b19b128bc4716ce8c1f994bf6e416976abeec2f3",
+  "raw_log_sha256": "748e88c3067524308038a220481ce732a5edf5a8c2dfde363603bd8fe60131f6",
+  "changes": [
+    {
+      "path": "/home/passchaos/project-z/vort-stream-contracts/tools/lz4/fast_controls_cli_gate.py",
+      "before_sha256": "cb4fe245a1c98e7497bb560d28e734cc19de8b4bdf6827053ce4d80f63264990",
+      "after_sha256": "c2b0e65b921a8c3a34e5c34684480832bf62c365dac8c0db75bab7413c33051d"
+    }
+  ],
+  "wrapper_exit_code": 99,
+  "build_exit_code": 0,
+  "scope": "Original source-snapshot wrapper 99 is retained; changed host script is proven absent from actual test compile and run inputs, so tests remain passed"
+}

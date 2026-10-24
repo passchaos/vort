@@ -120,6 +120,14 @@ whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 
+The [LZ4 fast-control increment](performance/lz4-fast-controls-functional-baseline.md)
+adds signed acceleration, miss-stride scheduling, independent chain depth and
+actual parser-work profiles across raw/prefix/reusable/native/incremental
+encoding. It preserves default wires and fixes output-alias, scratch-capacity,
+frame-append rollback and numeric-bound defects. Native chains and default
+search retain their own behavior; reference parameter normalization does not
+establish liblz4 byte, ratio or throughput parity.
+
 ### Earlier detailed completion audit (started 2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these

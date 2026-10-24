@@ -1,0 +1,15 @@
+{
+  "reference_round_trips": 60,
+  "raw_empty_legacy_wire_checks": 5,
+  "canonical_empty_reverse_decode_checks": 1,
+  "profile_wire_checks": 22,
+  "default_acceleration_wire_checks": 9,
+  "normalization_checks": 4,
+  "skipping_work_checks": 3,
+  "prefix_history_checks": 2,
+  "zero_chain_checks": 3,
+  "idle_frame_profile_checks": 2,
+  "rejected_output_preserved": 21,
+  "same_path_checks": 6,
+  "reference_lz4_version": "1.9.3"
+}

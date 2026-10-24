@@ -1,0 +1,23 @@
+{
+  "status": "passed_compiled_inputs_bound_non_input_source_change",
+  "utc": "2026-10-24T11:57:47.441908+00:00",
+  "metadata_count": 242,
+  "named_count": 238,
+  "anonymous_count": 4,
+  "group_counts": {
+    "anonymous_import_roots": 4,
+    "other_named": 215,
+    "fast_core": 5,
+    "independent_qa": 18
+  },
+  "compiled_input_unique_count": 854,
+  "binary_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/7752fa2b3368880de1db8992117507ea/vort-lz4-full-tests",
+  "binary_sha256": "662f8106a2aedb77561d6d645e40477416ff61f6807d65898b8c8b8dcd709841",
+  "actual_child_compile_argv_observed": false,
+  "coverage_path": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/family/coverage/coverage.json",
+  "source_change_supplement_path": "/tmp/vort-lz4-fast-final-20261024-mp6azj4l/family/source-change-supplement.json",
+  "build_exit_code": 0,
+  "wrapper_exit_code": 99,
+  "compiled_input_projection_before_after_equal": true,
+  "global_source_before_after_equal": false
+}

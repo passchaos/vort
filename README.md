@@ -27,7 +27,10 @@ The library is under active development. Its current capabilities include:
   caller-owned encode/decode-into/append, incremental fast/HC frame encode with
   optional pledged content size, resumable flush, linked history, preset
   dictionary, and dictionary-set resolution, plus reusable
-  scratch encoder/decoder APIs; incremental decode defaults to bounded block
+  scratch encoder/decoder APIs; native raw/prefix/frame encoding also supports
+  independent signed acceleration and chain-depth controls, actual search-work
+  profiles, and overlap-safe caller/reusable output through the
+  [fast-control APIs](docs/formats/lz4-fast-controls.md); incremental decode defaults to bounded block
   streaming immediately after the frame header, using raw input directly and a
   resumable token cursor for unchecked compressed payloads under caller
   backpressure without decoded-block scratch, including linked-block and
