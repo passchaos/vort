@@ -7,6 +7,7 @@ const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
 const literal_context = @import("literal_context.zig");
 const serialized_dictionary = @import("../serialized_dictionary.zig");
 const serialized_dictionary_matcher = @import("serialized_dictionary_matcher.zig");
+const hq_types = @import("hq_types.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -32,6 +33,7 @@ pub const Command = struct {
     /// their logical address in `dictionary_address`, and leave this zero.
     dictionary_output_len: usize = 0,
     dictionary_address: usize = 0,
+    hq_encoding: ?hq_types.ExactEncoding = null,
 
     pub fn outputLen(self: Command) usize {
         if (!self.has_copy) return 0;
@@ -42,6 +44,8 @@ pub const Command = struct {
     }
 
     pub fn updatesRecentDistance(self: Command) bool {
+        if (self.hq_encoding) |encoding|
+            if (encoding.distance_code == 0) return false;
         return self.has_copy and !self.isStatic();
     }
 
