@@ -36,9 +36,13 @@ The subsequent [Zstd HQ search controls](formats/zstd-hq-search-controls.md) add
 whole-block positions, complete admitted-match lengths and per-plan price
 admission. Complete-input encoders compare full frames; incremental encoders
 compare same-state blocks. Ordinary defaults retain their existing output.
-Brotli stored-resource API consistency remains the next functionality-first
-priority. Full competitor ratio, throughput and memory leadership remains
-unproven.
+The following [Brotli stored-resource contract](formats/brotli-stored-memory.md)
+unifies whole-operation heap limits and profiles across allocating,
+caller-buffer, reusable and incremental stored entrypoints. Zero-heap caller
+output remains possible, while snapshots, retained capacities and replacement
+buffers are charged. Nested quota classification and pending-prefix retry
+transactions are explicit. Remaining physical API boundaries, fuller quality
+models and competitor ratio/throughput/memory leadership remain work.
 
 The long-term objective remains incomplete. The current
 [mainstream codec and industry gap audit](performance/industry-gap-audit.md)

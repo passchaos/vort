@@ -78,8 +78,10 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Unify total-heap controls for standalone Brotli stored convenience APIs,
-   then address other documented physical API boundaries. Zstd optimal HQ now
+1. Address the remaining documented physical API boundaries and broader
+   compatibility cases. [Standalone Brotli stored resource controls](../formats/brotli-stored-memory.md)
+   now cover caller-buffer, allocating, reusable and incremental paths with
+   exact requested-heap accounting. Zstd optimal HQ
    exposes [whole-block, complete-length and price controls](../formats/zstd-hq-search-controls.md)
    with explicit wire safeguards. Finite beam and matcher limits still constrain
    quality; these controls do not establish global optimality or competitor

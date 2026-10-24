@@ -1,0 +1,58 @@
+{
+  "source_delta": [
+    "src/tests/br_stored_memory_wasm.zig"
+  ],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-br-stored-memory",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=Debug"
+      ],
+      "exit_code": 0,
+      "name": "native-debug",
+      "seconds": 1.0350444191135466
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-br-stored-memory",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast"
+      ],
+      "exit_code": 0,
+      "name": "native-releasefast",
+      "seconds": 25.80171142402105
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "-fno-incremental",
+        "test-br-stored-memory",
+        "-j2",
+        "--summary",
+        "all",
+        "--verbose",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl"
+      ],
+      "exit_code": 0,
+      "name": "x86-releasefast",
+      "seconds": 24.758460886077955
+    }
+  ],
+  "utc": "2026-10-24T17:13:44.603196+00:00"
+}

@@ -70,10 +70,11 @@ Returned scratch keeps its existing borrowed lifetime. Caller-buffer failures,
 allocation failures and stream reset/continuation use the existing progress
 and rollback contracts.
 
-Standalone `StoredStreamOptions` adds only the format flag; it does not expose
-the planned encoder's total-budget or HQ controls. Its explicit allocator and
-caller-buffer/bound APIs remain available. The CLI rejects unsupported stored
-controls instead of silently ignoring them.
+Standalone `StoredStreamOptions` accepts the format flag and the subsequent
+[stored requested-heap controls](brotli-stored-memory.md). Its explicit
+allocator and caller-buffer/bound APIs remain available. HQ and compression
+policy controls are still inapplicable to stored encoding and are rejected by
+the CLI instead of being silently ignored.
 
 ## Validation
 

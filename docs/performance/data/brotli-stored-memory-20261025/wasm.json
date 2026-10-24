@@ -1,0 +1,19 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-br-stored-memory-wasm",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 4.238481377949938,
+  "utc": "2026-10-24T17:12:52.911932+00:00",
+  "source_before_after_equal": true,
+  "changed_sources": [],
+  "log": "/tmp/vort-br-stored-resources-final-20261025/wasm/compile-node.log",
+  "artifact_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/ac677d919b1e3b55d7cbf35a9856be9d/vort-br-stored-memory-wasm.wasm",
+  "artifact_sha256": "70cb9c18622be5396ece74299766d4a70512a4366b3bdf1468181f7fab47882a",
+  "failure_reason": "Consumer expected an allocation for nonoverlapping retained tail. Frozen production correctly snapshots only sources overlapping its actual write span. Corrected same-op fixture borrows old wire and metadata from overlapping initialized bytes."
+}

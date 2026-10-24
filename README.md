@@ -666,6 +666,12 @@ blocks from the same incoming state. See the [HQ search contract](docs/formats/z
 for exact coverage, price admission, resource limits and remaining finite-search
 constraints.
 
+Standalone Brotli stored encoders expose the same total requested-heap limit
+and memory profile as planned encoding. Clean caller-buffer encoding retains
+its zero-heap path; retained scratch, output growth and alias snapshots are
+charged before publication. See the [stored memory contract](docs/formats/brotli-stored-memory.md)
+for ownership, nested quotas and incremental retry behavior.
+
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
 `ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`

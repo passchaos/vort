@@ -1,0 +1,69 @@
+{
+  "each_group_actual_runs": 1,
+  "end_utc": "2026-10-24T17:25:26.352458+00:00",
+  "evidence": "Original test runner fd1 metadata/indexed TestResults and fd2 by-index errors; actual compiler file_system_inputs, emitted ELF/object digests and SHA256, source before/after SHA snapshots and saved startup bytes, recomputed Zig cache SipHash128(1,3) content digests. No metadata-query extra test run.",
+  "far_or_4gib_tool_run": false,
+  "full_root_releasefast_build": false,
+  "git_modified_by_agent": false,
+  "groups": [
+    {
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/ea68917bdbc76d826087141026bf9d22/vort-br-tests",
+        "sha256": "7016e25f3afe4d4b2f9a55d8003f886df3fd33066a1be13e995b402dac5073f7"
+      },
+      "compiled_content_bound_count": 226,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 226,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1378,
+        "pending": 0,
+        "skip": 1
+      },
+      "elapsed_seconds": 606.147405666,
+      "group": "native",
+      "head_at_start": "a0cc61fa616f436d0dc1640689a9437bfed376dd",
+      "non_input_changed_paths": [
+        "src/tests/br_stored_memory_wasm.zig"
+      ],
+      "report": "/tmp/vort-br-stored-resources-final-20261025/family/native/result.json",
+      "root_source_sha256": "74a3e2ad21c269a93e64ea27c3fac432a410476b29a8bad4bf5837a7298c8b86",
+      "stored_resource_inputs_changed_during_run": {}
+    },
+    {
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/dcf5720be91d33d4ec251025ea3be3a7/vort-br-tests",
+        "sha256": "e6724d2e267e80bc450e60d350a84ec0282344be22ea3540253dcf8dfc8eaaed"
+      },
+      "compiled_content_bound_count": 226,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 226,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1379,
+        "pending": 0,
+        "skip": 0
+      },
+      "elapsed_seconds": 668.808983515,
+      "group": "x86",
+      "head_at_start": "a0cc61fa616f436d0dc1640689a9437bfed376dd",
+      "non_input_changed_paths": [
+        "src/tests/br_stored_memory_wasm.zig"
+      ],
+      "report": "/tmp/vort-br-stored-resources-final-20261025/family/x86/result.json",
+      "root_source_sha256": "74a3e2ad21c269a93e64ea27c3fac432a410476b29a8bad4bf5837a7298c8b86",
+      "stored_resource_inputs_changed_during_run": {}
+    }
+  ],
+  "job_limit_per_group": 2,
+  "live_exec_sessions": [],
+  "repository_files_modified_by_agent": false,
+  "status": "passed",
+  "total_failed": 0,
+  "total_passed": 2757,
+  "total_skipped": 1
+}

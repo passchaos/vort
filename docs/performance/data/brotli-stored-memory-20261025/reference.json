@@ -1,0 +1,711 @@
+{
+  "schema": "vort-br-stored-resources-formal-v1",
+  "status": "ok",
+  "utc": "2026-10-24T17:17:17.978722+00:00",
+  "native_and_x86": {
+    "native": {
+      "main_rows": 28,
+      "frozen_old_wire_rows": 28,
+      "separate_frozen_old_retry_rows": 1,
+      "baseline_manifest_sha256": "371a1d6ee8048a90d9103c0ba78848f8e203a61475baeb73c19a1fb8b936ebff",
+      "actual_probe_calls": 100,
+      "actual_returned_error_counts": {
+        "WorkingMemoryLimitExceeded": 14,
+        "InvalidBlockPlan": 5,
+        "OutOfMemory": 2
+      },
+      "internally_observed_recoverable_retry_errors": {
+        "OutOfMemory": 1,
+        "WorkingMemoryLimitExceeded": 1
+      },
+      "all_100_backing_ledgers_zero_after_owner_deinit": true,
+      "all_returned_failures_preserved_output_files": true,
+      "sum_actual_metadata_calls": 8,
+      "sum_actual_flush_calls": 8,
+      "sum_actual_reset_calls": 2,
+      "sum_actual_next_stream_calls": 2,
+      "exact_requested_byte_budgets_by_api": {
+        "alloc": 194,
+        "chunks_alloc": 218,
+        "scratch": 194,
+        "incremental": 353
+      },
+      "budgets": [
+        {
+          "api": "alloc",
+          "limit": 194,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 194,
+            "live_requested_bytes": 0,
+            "limit": 194
+          }
+        },
+        {
+          "api": "alloc",
+          "limit": 193,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 80,
+            "live_requested_bytes": 0,
+            "limit": 193
+          }
+        },
+        {
+          "api": "alloc",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 218,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 218,
+            "live_requested_bytes": 0,
+            "limit": 218
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 217,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 80,
+            "live_requested_bytes": 0,
+            "limit": 217
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 194,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 194,
+            "live_requested_bytes": 194,
+            "limit": 194
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 193,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 80,
+            "live_requested_bytes": 0,
+            "limit": 193
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 353,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 353,
+            "live_requested_bytes": 0,
+            "limit": 353
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 352,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 209,
+            "live_requested_bytes": 0,
+            "limit": 352
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        }
+      ],
+      "zero_heap_apis": [
+        "into",
+        "chunks_into",
+        "reuse_into",
+        "reuse_chunks_into",
+        "append",
+        "reuse_append"
+      ],
+      "zero_heap_no_hidden_encoder_allocations": true,
+      "alias_requested_byte_peaks": {
+        "alias_source-reuse_into": 172,
+        "alias_metadata-reuse_into": 96,
+        "alias_chunks-reuse_chunks_into": 112,
+        "alias_chunks-chunks_append": 112
+      },
+      "retained_scratch": {
+        "retained_capacity": 516,
+        "logical_retained_bytes": 114,
+        "profile_after_operation": {
+          "available": true,
+          "peak_requested_bytes": 516,
+          "live_requested_bytes": 516,
+          "limit": null
+        },
+        "total_profile": {
+          "available": true,
+          "peak_requested_bytes": 516,
+          "live_requested_bytes": 516,
+          "limit": null
+        },
+        "independent_live_after_deinit": 0,
+        "cycle_verified": true
+      },
+      "owner_handoff": {
+        "ownership_handoff_verified": true,
+        "total_profile": {
+          "available": true,
+          "peak_requested_bytes": 194,
+          "live_requested_bytes": 194,
+          "limit": null
+        },
+        "independent_live_after_deinit": 0
+      },
+      "first_four_wires": [
+        {
+          "name": "alloc",
+          "wire_bytes": 114,
+          "wire_sha256": "37edc8b790370436e32b92bd91446825a50637d484331db82bd7f1421d791a6b",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "chunks_alloc",
+          "wire_bytes": 138,
+          "wire_sha256": "170162bceec90000947c9612f07d84fec175f3d1d55a292136d5ee21ca417413",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "into",
+          "wire_bytes": 114,
+          "wire_sha256": "37edc8b790370436e32b92bd91446825a50637d484331db82bd7f1421d791a6b",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "chunks_into",
+          "wire_bytes": 138,
+          "wire_sha256": "170162bceec90000947c9612f07d84fec175f3d1d55a292136d5ee21ca417413",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        }
+      ],
+      "references": {
+        "modern": {
+          "header_version": "0x1002000",
+          "header_version_note": "matching source common/version.h",
+          "encoder_version": "0x1002000",
+          "decoder_version": "0x1002000",
+          "helper_sha256": "704bb17c43738cc1cdc53aabd0821d854add2ab774eb9ea4149132e66d8525ec",
+          "libraries": {
+            "encoder": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlienc.so.1.2.0",
+              "sha256": "413f83e8a5915edd7994d77e5d42ed5d520ae6950ac11ed20d8e1b765fcd75ef"
+            },
+            "decoder": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+              "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+            },
+            "common": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlicommon.so.1.2.0",
+              "sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+            }
+          },
+          "raw_dictionary_api": true,
+          "serialized_dictionary_public_api": false,
+          "header_source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+          "existing_runtime_source_revision": "not independently reconstructed"
+        },
+        "system": {
+          "header_version": null,
+          "header_version_note": "system public headers expose no package-version macro",
+          "encoder_version": "0x1000009",
+          "decoder_version": "0x1000009",
+          "helper_sha256": "da34753f37f4e8c96316a07ada28c1a35e16794e2f28d7704bc6cf9eec18ceaa",
+          "libraries": {
+            "encoder": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9",
+              "sha256": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+            },
+            "decoder": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+              "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+            },
+            "common": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+              "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+            }
+          },
+          "raw_dictionary_api": false,
+          "serialized_dictionary_public_api": false,
+          "header_source_revision": null,
+          "existing_runtime_source_revision": "not independently reconstructed"
+        }
+      },
+      "source_before_after_equal": true,
+      "wide_source_files": 1898,
+      "probe_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/3deacc46ec3346981fb154122effda59/vort-br-stored-memory-probe",
+      "probe_sha256": "ef555d7ac265be4a14ea2314660f1f7b2c72626a2ebd025c434f774cb84caa0e",
+      "actual_elf_class": "ELF64",
+      "actual_elf_machine": "Advanced Micro Devices X86-64",
+      "probe_input_count": 1998,
+      "linked_object_input_counts": [
+        549,
+        551
+      ],
+      "all_archived_compiler_records_sha256_verified": 3098,
+      "compiled_project_projection_count": 1169,
+      "scope": "bounded functional resource guarantees and old compatible wires; profile retains actual call-scoped scratch live snapshot after detach, independent backing ledger proves cleanup; no large-input throughput or compression-ratio claim",
+      "actual_step_call_counts": {
+        "incremental_pump_reported_steps": 416,
+        "nested_outer_activation_steps_verified_by_nested_events": 3,
+        "total": 419,
+        "scope": "Probe.steps counts incremental pump calls; each nested_call_verified event also proves the one successful outer.step activation performed before its classified child call"
+      }
+    },
+    "x86": {
+      "main_rows": 28,
+      "frozen_old_wire_rows": 28,
+      "separate_frozen_old_retry_rows": 1,
+      "baseline_manifest_sha256": "371a1d6ee8048a90d9103c0ba78848f8e203a61475baeb73c19a1fb8b936ebff",
+      "actual_probe_calls": 100,
+      "actual_returned_error_counts": {
+        "WorkingMemoryLimitExceeded": 14,
+        "InvalidBlockPlan": 5,
+        "OutOfMemory": 2
+      },
+      "internally_observed_recoverable_retry_errors": {
+        "OutOfMemory": 1,
+        "WorkingMemoryLimitExceeded": 1
+      },
+      "all_100_backing_ledgers_zero_after_owner_deinit": true,
+      "all_returned_failures_preserved_output_files": true,
+      "sum_actual_metadata_calls": 8,
+      "sum_actual_flush_calls": 8,
+      "sum_actual_reset_calls": 2,
+      "sum_actual_next_stream_calls": 2,
+      "exact_requested_byte_budgets_by_api": {
+        "alloc": 154,
+        "chunks_alloc": 178,
+        "scratch": 154,
+        "incremental": 349
+      },
+      "budgets": [
+        {
+          "api": "alloc",
+          "limit": 154,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 154,
+            "live_requested_bytes": 0,
+            "limit": 154
+          }
+        },
+        {
+          "api": "alloc",
+          "limit": 153,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 40,
+            "live_requested_bytes": 0,
+            "limit": 153
+          }
+        },
+        {
+          "api": "alloc",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 178,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 178,
+            "live_requested_bytes": 0,
+            "limit": 178
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 177,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 40,
+            "live_requested_bytes": 0,
+            "limit": 177
+          }
+        },
+        {
+          "api": "chunks_alloc",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 154,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 154,
+            "live_requested_bytes": 154,
+            "limit": 154
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 153,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 40,
+            "live_requested_bytes": 0,
+            "limit": 153
+          }
+        },
+        {
+          "api": "scratch",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 349,
+          "error": null,
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 349,
+            "live_requested_bytes": 0,
+            "limit": 349
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 348,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 185,
+            "live_requested_bytes": 0,
+            "limit": 348
+          }
+        },
+        {
+          "api": "incremental",
+          "limit": 0,
+          "error": "WorkingMemoryLimitExceeded",
+          "profile": {
+            "available": true,
+            "peak_requested_bytes": 0,
+            "live_requested_bytes": 0,
+            "limit": 0
+          }
+        }
+      ],
+      "zero_heap_apis": [
+        "into",
+        "chunks_into",
+        "reuse_into",
+        "reuse_chunks_into",
+        "append",
+        "reuse_append"
+      ],
+      "zero_heap_no_hidden_encoder_allocations": true,
+      "alias_requested_byte_peaks": {
+        "alias_source-reuse_into": 132,
+        "alias_metadata-reuse_into": 56,
+        "alias_chunks-reuse_chunks_into": 56,
+        "alias_chunks-chunks_append": 56
+      },
+      "retained_scratch": {
+        "retained_capacity": 476,
+        "logical_retained_bytes": 114,
+        "profile_after_operation": {
+          "available": true,
+          "peak_requested_bytes": 476,
+          "live_requested_bytes": 476,
+          "limit": null
+        },
+        "total_profile": {
+          "available": true,
+          "peak_requested_bytes": 476,
+          "live_requested_bytes": 476,
+          "limit": null
+        },
+        "independent_live_after_deinit": 0,
+        "cycle_verified": true
+      },
+      "owner_handoff": {
+        "ownership_handoff_verified": true,
+        "total_profile": {
+          "available": true,
+          "peak_requested_bytes": 154,
+          "live_requested_bytes": 154,
+          "limit": null
+        },
+        "independent_live_after_deinit": 0
+      },
+      "first_four_wires": [
+        {
+          "name": "alloc",
+          "wire_bytes": 114,
+          "wire_sha256": "37edc8b790370436e32b92bd91446825a50637d484331db82bd7f1421d791a6b",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "chunks_alloc",
+          "wire_bytes": 138,
+          "wire_sha256": "170162bceec90000947c9612f07d84fec175f3d1d55a292136d5ee21ca417413",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "into",
+          "wire_bytes": 114,
+          "wire_sha256": "37edc8b790370436e32b92bd91446825a50637d484331db82bd7f1421d791a6b",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        },
+        {
+          "name": "chunks_into",
+          "wire_bytes": 138,
+          "wire_sha256": "170162bceec90000947c9612f07d84fec175f3d1d55a292136d5ee21ca417413",
+          "header": {
+            "window_bits": 16,
+            "large_window": false,
+            "header_bits": 1
+          }
+        }
+      ],
+      "references": {
+        "modern": {
+          "header_version": "0x1002000",
+          "header_version_note": "matching source common/version.h",
+          "encoder_version": "0x1002000",
+          "decoder_version": "0x1002000",
+          "helper_sha256": "704bb17c43738cc1cdc53aabd0821d854add2ab774eb9ea4149132e66d8525ec",
+          "libraries": {
+            "encoder": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlienc.so.1.2.0",
+              "sha256": "413f83e8a5915edd7994d77e5d42ed5d520ae6950ac11ed20d8e1b765fcd75ef"
+            },
+            "decoder": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+              "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+            },
+            "common": {
+              "path": "/tmp/vort-brotli-shared-build/libbrotlicommon.so.1.2.0",
+              "sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+            }
+          },
+          "raw_dictionary_api": true,
+          "serialized_dictionary_public_api": false,
+          "header_source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+          "existing_runtime_source_revision": "not independently reconstructed"
+        },
+        "system": {
+          "header_version": null,
+          "header_version_note": "system public headers expose no package-version macro",
+          "encoder_version": "0x1000009",
+          "decoder_version": "0x1000009",
+          "helper_sha256": "da34753f37f4e8c96316a07ada28c1a35e16794e2f28d7704bc6cf9eec18ceaa",
+          "libraries": {
+            "encoder": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9",
+              "sha256": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+            },
+            "decoder": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+              "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+            },
+            "common": {
+              "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+              "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+            }
+          },
+          "raw_dictionary_api": false,
+          "serialized_dictionary_public_api": false,
+          "header_source_revision": null,
+          "existing_runtime_source_revision": "not independently reconstructed"
+        }
+      },
+      "source_before_after_equal": true,
+      "wide_source_files": 1898,
+      "probe_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/85d07ec626b6b7dfe821e57be841c3e0/vort-br-stored-memory-probe",
+      "probe_sha256": "70221549c3f51030c78784cda705fe98c1d783e7803163a501e909da8fbbf901",
+      "actual_elf_class": "ELF32",
+      "actual_elf_machine": "Intel 80386",
+      "probe_input_count": 1998,
+      "linked_object_input_counts": [
+        549,
+        551
+      ],
+      "all_archived_compiler_records_sha256_verified": 3098,
+      "compiled_project_projection_count": 1169,
+      "scope": "bounded functional resource guarantees and old compatible wires; profile retains actual call-scoped scratch live snapshot after detach, independent backing ledger proves cleanup; no large-input throughput or compression-ratio claim",
+      "actual_step_call_counts": {
+        "incremental_pump_reported_steps": 421,
+        "nested_outer_activation_steps_verified_by_nested_events": 3,
+        "total": 424,
+        "scope": "Probe.steps counts incremental pump calls; each nested_call_verified event also proves the one successful outer.step activation performed before its classified child call"
+      }
+    }
+  },
+  "all_28_main_wires_equal_between_platforms": true,
+  "all_actual_project_compiler_inputs_equal_between_platforms": true,
+  "compiled_project_input_projection_files": 1169,
+  "wide_source_epoch_transition": {
+    "changed": {
+      "tools/br/stored_memory_cli_gate.py": {
+        "native_sha256": "882c868c77ca7494479551959fc0e77e7aaee7727ba7d9b2ebda4c07b8af996a",
+        "x86_sha256": "5275394c7486f395149887103090a0070f2c1c68541efdb0f01d82db4ce56ce8"
+      },
+      "tools/br/__pycache__/stored_memory_cli_gate.cpython-310.pyc": {
+        "native_sha256": "c24cf7518a5b56237fde97a8c354e1a261fd1062fe28f811039e86071cec4190",
+        "x86_sha256": "061a99a35f49bb6e735dc9c4292139be465e56cc33ed49f0b7845e579185ebd3"
+      },
+      "tools/br/stored_memory_wasm_gate.js": {
+        "native_sha256": "c47788122c24d04db9f2177ba0ba28fba69eeec3fd7f0754aa7383f91853b9a1",
+        "x86_sha256": "34eb693218e15712eec5064de2f9b61946dcfca45f858b7d796f57fb510315a7"
+      },
+      "src/tests/br_stored_memory_wasm.zig": {
+        "native_sha256": "f6c7abb5353c1f9888fda2d4b080832cb470f79743090b5bc21c84b071e87e33",
+        "x86_sha256": "f6cf4ba80d13fa5b24f77f4e3c0b15e0487b8436d2c23c5ec843c3346b0905a7"
+      }
+    },
+    "all_other_existing_source_bytes_equal": true,
+    "scope": "parent/QA finalized Wasm-only fixtures and CLI owner finalized independent CLI gate/cache outside public Probe compiled input projection; native source epoch retained; no production or owned Probe/driver/ledger delta accepted"
+  },
+  "changed_wasm_and_cli_gate_files_are_probe_inputs": false,
+  "archive_content_checks": {
+    "native": {
+      "all_archived_input_records_sha256_verified": true,
+      "input_records_checked": 3098,
+      "probe_elf_sha256_matches_executed_artifact": true
+    },
+    "x86": {
+      "all_archived_input_records_sha256_verified": true,
+      "input_records_checked": 3098,
+      "probe_elf_sha256_matches_executed_artifact": true
+    }
+  },
+  "independent_old_archive": {
+    "revision": "3703184975920d44ed3e781f0e562f45cfe31fa5",
+    "archive_path": "/tmp/vort-br-stored-legacy-37031849.tar",
+    "archive_sha256": "0fd76b39ba99934f420529c12db9bdd1a4ae522f77e8bbb24348a03bb4d16277",
+    "source_path": "/tmp/vort-br-stored-legacy-37031849",
+    "from_git_archive": true,
+    "current_tree_used": false,
+    "general_probe_path": "/tmp/vort-br-stored-legacy-general-probe",
+    "general_probe_sha256": "a9fc288ea1916226fefd28b0baca71fc468057747f0d1e3c39f1e296b494919e",
+    "general_probe_source_sha256": "6bbba2a4be7f222067a5ae6bab4997fef1d10c2ca7b21436b619353166a393ef",
+    "objects": {
+      "/tmp/vort-br-stored-legacy-record.o": "92dd99798d3e465ea511f465475354fb6e37ab2490ba778acd5ab71e0b2995ef",
+      "/tmp/vort-br-stored-legacy-huffman.o": "4aad5aa11c87da4a43f7ae5334b1e2cc89fcdbc76d54f06e3ca7e4755b295ee3"
+    },
+    "memory_probe_path": "/tmp/vort-br-stored-legacy-memory-probe",
+    "memory_probe_sha256": "f119b10e2aef7c3d4cef0826038776fdc9ca42d660f51b27004267fb00d16104",
+    "memory_probe_harness_source": {
+      "stored_memory_probe.zig": "e38fa282d2f1b0403af0f44efafde08eb742b444f1c4a6c441e669c7b17200b4",
+      "stored_memory_ledger.zig": "307398b22a681aa5befdf40bf933c0d930ed2ce9a06052c46d28a2fec0c30826"
+    },
+    "baseline_path": "/tmp/vort-br-stored-prepared/stored-baseline.json",
+    "baseline_sha256": "371a1d6ee8048a90d9103c0ba78848f8e203a61475baeb73c19a1fb8b936ebff",
+    "baseline_rows": 28
+  },
+  "profile_lifetimes": "complete and reusable options carry call-scoped profiles; reusable scope detaches caller pointer, so old profile preserves its last actual retained-live snapshot and is not written during later deinit; incremental profiles remain attached until reconfiguration/deinit and end at zero; all actual backing requested allocations end at zero",
+  "source_wire_projection_domains": "both campaigns retain separate source-before/source-after epoch files and exact Probe+object .h compiler-input records; old28+retry wire baseline is independently copied from revision37031849 and never regenerated from current code",
+  "formal_campaign_reruns": 0,
+  "scope": "28 bounded main rows and100 actual Probe calls per platform; no new large fixtures or prior4GiB campaigns; public resource/wire guarantees only"
+}

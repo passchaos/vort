@@ -1,0 +1,360 @@
+{
+  "actual_input_source_files_matching_original_sha_and_git_blob": 225,
+  "all_actual_compiled_source_projections_unchanged": true,
+  "code_commits_in_archive": [
+    "e8e6ff0d",
+    "a0cc61fa",
+    "cf87a488"
+  ],
+  "current_source_changes": {
+    "src/tests/br_stored_memory_wasm.zig": {
+      "current_sha256": "f6cf4ba80d13fa5b24f77f4e3c0b15e0487b8436d2c23c5ec843c3346b0905a7",
+      "original_after_sha256": "f6cf4ba80d13fa5b24f77f4e3c0b15e0487b8436d2c23c5ec843c3346b0905a7",
+      "original_before_sha256": "f6c7abb5353c1f9888fda2d4b080832cb470f79743090b5bc21c84b071e87e33"
+    }
+  },
+  "frozen_git_source_archive_sha256": "fd8aa2cf622ad40e8db84faaed4502dbb944cbf47ca378fbf62014c23bef4b8a",
+  "frozen_git_source_ref": "7ae1301c",
+  "groups": {
+    "native-debug": {
+      "binary_sha256": "06e6f4999ec324007817b9a953cd240b5edf5c63cdbe1f6aeabb6c1639db009a",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "814f0e64c84983740af23d67d6942fc4",
+        "content_siphash_mismatches": 0,
+        "input_records": 1040,
+        "manifest_archive": "manifest-6af583925d0950a62a3cbd70ca0a81d1.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/6af583925d0950a62a3cbd70ca0a81d1.txt",
+        "manifest_sha256": "7f67ff14ee312e80a8f62db1f19c065f8a9f0af34e2a12192e602af3c0d83317",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "elf_class": 64,
+      "module_entries": 18,
+      "named_count": 47,
+      "original_wasm_delta_is_noninput": true,
+      "passed": 65,
+      "skipped": 0,
+      "status": "bound_passed",
+      "test_count": 65
+    },
+    "native-releasefast": {
+      "binary_sha256": "fd3ee628f918b4b212fe4637447f989b4be99aeaac21fb5e4dc0e5f04a749ef5",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "227e4e9d2cb09ba64a4a6c21454db00f",
+        "content_siphash_mismatches": 0,
+        "input_records": 1039,
+        "manifest_archive": "manifest-8f2c6fc149ef453dcb65aa1765ca3f9e.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/8f2c6fc149ef453dcb65aa1765ca3f9e.txt",
+        "manifest_sha256": "fd63d2c05fea8b76fed1182f659439ab8f1a89e30919dd4515af2180c29bf24e",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "elf_class": 64,
+      "module_entries": 18,
+      "named_count": 47,
+      "original_wasm_delta_is_noninput": true,
+      "passed": 65,
+      "skipped": 0,
+      "status": "bound_passed",
+      "test_count": 65
+    },
+    "x86-releasefast": {
+      "binary_sha256": "a12b598052d07e3cc49d8136c3ddfd1443ddd6589ed5ae6f77a7968624df790b",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "6e8e203c71a7eb91d4021ffd50a8e604",
+        "content_siphash_mismatches": 0,
+        "input_records": 1039,
+        "manifest_archive": "manifest-930b82995d3466875e58a813263089c3.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/930b82995d3466875e58a813263089c3.txt",
+        "manifest_sha256": "148f3038cff45d229a9742f053c73bc9adfd31215f25316dc151d4d02e507975",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "elf_class": 32,
+      "module_entries": 18,
+      "named_count": 47,
+      "original_wasm_delta_is_noninput": true,
+      "passed": 65,
+      "skipped": 0,
+      "status": "bound_passed",
+      "test_count": 65
+    }
+  },
+  "limitations": [
+    "No original compiler/test raw protocol is available to this audit. Actual ELF tables plus the original all-pass aggregate establish selected coverage; individual raw PASS packets are not claimed.",
+    "The original source snapshots bind parent build source during the stage, while test/object manifests do not independently bind the parent build-driver executable.",
+    "Original Wasm source changed during the aggregate; it is absent from all six actual compiler manifests. Native projections are unchanged, but the whole source tree is not claimed unchanged."
+  ],
+  "linked_objects": {
+    "7960a9e44560a2f132911be94cf53cac": {
+      "artifact_key": "7960a9e44560a2f132911be94cf53cac",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "7960a9e44560a2f132911be94cf53cac",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "70aeead567f4b55522b9e63f0eb50d899d52b12ce823d40dea071c89593f1d97",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    },
+    "a975e198daf1c08dc02b311878b81563": {
+      "artifact_key": "a975e198daf1c08dc02b311878b81563",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "a975e198daf1c08dc02b311878b81563",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "fff97c75a532a116927b19344ad98e698e7f04584c17611f72cb68f6beba247d",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    },
+    "b0d047ba2b114a510a29fad6255d7eaf": {
+      "artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "object_sha256": "016f50b7b6a6748daecdb3ae56c89c1bfa527f02123c80a6601dd10a158a8def",
+      "source_projection": [
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "path": "src/br/encoder/record_optimal_object.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+            "matching_git_content_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_object.zig",
+            "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+          },
+          "run_after_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "run_before_sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "path": "src/br/encoder/record_classifier.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+            "matching_git_content_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_classifier.zig",
+            "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+          },
+          "run_after_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "run_before_sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78",
+          "unchanged_during_original_run": true
+        },
+        {
+          "compiled_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "path": "src/br/encoder/record_optimal_abi.zig",
+          "provenance": {
+            "kind": "current_content_matches_run_before_sha256",
+            "matching_git_blob_oid": "c56ecef1defb776423183234b153ba62dd2ad110",
+            "matching_git_content_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+            "matching_git_ref": "7ae1301c",
+            "project_path": "src/br/encoder/record_optimal_abi.zig",
+            "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+          },
+          "run_after_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "run_before_sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803",
+          "unchanged_during_original_run": true
+        }
+      ]
+    }
+  },
+  "module_entries_per_group": 18,
+  "named_categories": {
+    "incremental_resources": 10,
+    "independent_public_qa": 23,
+    "shared_authority": 5,
+    "stored_owner": 8,
+    "stored_reuse": 1
+  },
+  "named_per_group": 47,
+  "no_tests_reexecuted": true,
+  "original_parent_result": "/tmp/vort-br-stored-resources-final-20261025/aggregate/result.json",
+  "original_source_after_manifest_sha256": "22f0844bd7b52bf3d60856abd305a7daa06a0051e170d84a435709fad3bfecb1",
+  "original_source_before_manifest_sha256": "d150148e8660b6ff3feef0a9966c02576134fddece7724e7ca6a559ba767ebc6",
+  "original_source_differences": {
+    "src/tests/br_stored_memory_wasm.zig": {
+      "after_sha256": "f6cf4ba80d13fa5b24f77f4e3c0b15e0487b8436d2c23c5ec843c3346b0905a7",
+      "before_sha256": "f6c7abb5353c1f9888fda2d4b080832cb470f79743090b5bc21c84b071e87e33"
+    }
+  },
+  "status": "bound_passed",
+  "total_per_group": 65,
+  "utc": "2026-10-24T17:21:43.769968+00:00",
+  "wasm_file_absent_from_all_original_test_and_object_manifests": true,
+  "whole_source_snapshot_unchanged": false
+}
