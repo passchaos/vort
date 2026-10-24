@@ -23,6 +23,7 @@ pub fn encodeFile(init: std.process.Init, args: *std.process.Args.Iterator, stdo
     if (parsed.profile) {
         try controls.printProfile(stdout, profile);
         try controls.printFormatProfile(stdout, profile);
+        try controls.printParseProfile(stdout, parsed.parse_mode, profile);
     }
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }
@@ -43,6 +44,7 @@ pub fn encodeHex(init: std.process.Init, args: *std.process.Args.Iterator, stdou
     if (parsed.profile) {
         try controls.printProfile(stdout, profile);
         try controls.printFormatProfile(stdout, profile);
+        try controls.printParseProfile(stdout, parsed.parse_mode, profile);
     }
     if (parsed.memory_profile) try controls.printMemoryProfile(stdout, memory_profile);
 }

@@ -8,6 +8,7 @@ const Config = struct {
     operation: []const u8 = "encode",
     api: []const u8 = "one_shot",
     hq: bool = false,
+    parse_mode: ?[]const u8 = null,
     quality: ?u8 = null,
     level: []const u8 = "fast",
     mode: []const u8 = "generic",
@@ -32,6 +33,7 @@ const Config = struct {
 };
 const Resolved = struct {
     hq: bool,
+    parse_mode: ?[]const u8 = null,
     quality: ?u8,
     level: []const u8,
     mode: []const u8,
@@ -118,11 +120,16 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
     resolved.* = .{ .hq = config.hq, .quality = config.quality, .level = config.level, .mode = config.mode, .window_bits = config.window_bits, .large_window = config.large_window, .format = if (config.large_window) "large_window" else "standard", .max_total_working_memory = config.max_total_working_memory };
     if (!config.hq) {
         if (config.search_depth != null or config.nice_len != null or config.beam_width != null or config.iterations != null or
-            config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null) return error.InvalidBlockPlan;
+            config.max_working_memory != null or config.npostfix != null or config.ndirect_high != null or config.parse_mode != null) return error.InvalidBlockPlan;
         return;
     }
     if (@hasField(@TypeOf(options.*), "hq")) {
         var hq = br.HqOptions{};
+        if (@hasField(br.HqOptions, "parse_mode")) {
+            if (config.parse_mode) |value| hq.parse_mode = std.meta.stringToEnum(@FieldType(br.HqOptions, "parse_mode"), value) orelse return error.InvalidBlockPlan;
+        } else if (config.parse_mode) |value| {
+            if (!std.mem.eql(u8, value, "bounded")) return error.UnsupportedParseMode;
+        }
         if (config.search_depth) |value| hq.search_depth = value;
         if (config.nice_len) |value| hq.nice_len = value;
         if (config.beam_width) |value| hq.beam_width = value;
@@ -141,6 +148,7 @@ fn configure(options: anytype, config: Config, profile: ?*Profile, total_profile
         else
             try hq.resolve(config.quality orelse return error.InvalidBlockPlan, options.mode);
         const selected = &resolved.*.?;
+        selected.parse_mode = if (@hasField(@TypeOf(effective), "parse_mode")) @tagName(effective.parse_mode) else "bounded";
         selected.search_depth = effective.search_depth;
         selected.nice_len = effective.nice_len;
         selected.beam_width = effective.beam_width;

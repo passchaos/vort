@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const br = vort.br;
+const ParseMode = @FieldType(vort.BrotliHqOptions, "parse_mode");
 
 pub const Controls = struct {
     quality: ?u4 = null,
@@ -12,6 +13,7 @@ pub const Controls = struct {
     nice_len: ?u32 = null,
     beam_width: ?u8 = null,
     iterations: ?u8 = null,
+    parse_mode: ?ParseMode = null,
     block_len: ?usize = null,
     memory: ?usize = null,
     npostfix: ?u2 = null,
@@ -22,7 +24,7 @@ pub const Controls = struct {
 
     pub fn hqSelected(self: Controls) bool {
         return self.hq or self.search_depth != null or self.nice_len != null or self.beam_width != null or
-            self.iterations != null or self.block_len != null or self.memory != null or self.npostfix != null or self.ndirect_high != null;
+            self.iterations != null or self.parse_mode != null or self.block_len != null or self.memory != null or self.npostfix != null or self.ndirect_high != null;
     }
 
     pub fn resolve(self: Controls, comptime Options: type, profile: ?*vort.BrotliHqProfile) !Options {
@@ -47,6 +49,7 @@ pub const Controls = struct {
         if (self.nice_len) |value| hq.nice_len = value;
         if (self.beam_width) |value| hq.beam_width = value;
         if (self.iterations) |value| hq.iterations = value;
+        if (self.parse_mode) |value| hq.parse_mode = value;
         if (self.block_len) |value| hq.block_len = value;
         if (self.memory) |value| hq.max_working_memory = value;
         // Preserve font's public default distance shape when only one field
@@ -75,7 +78,7 @@ pub fn parseWithFirst(args: anytype, first: ?[]const u8) !Controls {
     while (true) {
         const arg = pending orelse args.next() orelse break;
         pending = null;
-        if (try optionValue("--quality", arg, args)) |value| try set(&result, "quality", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--mode", arg, args)) |value| try set(&result, "mode", try parseMode(value)) else if (try optionValue("--window-bits", arg, args)) |value| try set(&result, "window_bits", try std.fmt.parseInt(u5, value, 10)) else if (try optionValue("--hq-depth", arg, args)) |value| try set(&result, "search_depth", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-nice-len", arg, args)) |value| try set(&result, "nice_len", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-beam-width", arg, args)) |value| try set(&result, "beam_width", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-iterations", arg, args)) |value| try set(&result, "iterations", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-block-len", arg, args)) |value| try set(&result, "block_len", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-memory", arg, args)) |value| try set(&result, "memory", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-npostfix", arg, args)) |value| try set(&result, "npostfix", try std.fmt.parseInt(u2, value, 10)) else if (try optionValue("--hq-ndirect-high", arg, args)) |value| try set(&result, "ndirect_high", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--max-total-memory", arg, args)) |value| try set(&result, "max_total_memory", try std.fmt.parseInt(usize, value, 10)) else if (std.mem.eql(u8, arg, "--memory-profile")) {
+        if (try optionValue("--quality", arg, args)) |value| try set(&result, "quality", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--mode", arg, args)) |value| try set(&result, "mode", try parseMode(value)) else if (try optionValue("--window-bits", arg, args)) |value| try set(&result, "window_bits", try std.fmt.parseInt(u5, value, 10)) else if (try optionValue("--hq-depth", arg, args)) |value| try set(&result, "search_depth", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-nice-len", arg, args)) |value| try set(&result, "nice_len", try std.fmt.parseInt(u32, value, 10)) else if (try optionValue("--hq-beam-width", arg, args)) |value| try set(&result, "beam_width", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-iterations", arg, args)) |value| try set(&result, "iterations", try std.fmt.parseInt(u8, value, 10)) else if (try optionValue("--hq-parse-mode", arg, args)) |value| try set(&result, "parse_mode", std.meta.stringToEnum(ParseMode, value) orelse return error.InvalidBrotliParseMode) else if (try optionValue("--hq-block-len", arg, args)) |value| try set(&result, "block_len", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-memory", arg, args)) |value| try set(&result, "memory", try std.fmt.parseInt(usize, value, 10)) else if (try optionValue("--hq-npostfix", arg, args)) |value| try set(&result, "npostfix", try std.fmt.parseInt(u2, value, 10)) else if (try optionValue("--hq-ndirect-high", arg, args)) |value| try set(&result, "ndirect_high", try std.fmt.parseInt(u4, value, 10)) else if (try optionValue("--max-total-memory", arg, args)) |value| try set(&result, "max_total_memory", try std.fmt.parseInt(usize, value, 10)) else if (std.mem.eql(u8, arg, "--memory-profile")) {
             if (result.memory_profile) return error.DuplicateBrotliOption;
             result.memory_profile = true;
         } else if (std.mem.eql(u8, arg, "--large-window")) {
@@ -123,6 +126,14 @@ pub fn printProfile(stdout: *std.Io.Writer, profile: vort.BrotliHqProfile) !void
         effective.distance_parameters.npostfix, effective.distance_parameters.ndirect_high, effective.max_working_memory, profile.tree_nodes,          profile.states,             profile.transitions,
         profile.price_evaluations,              profile.passes,                             profile.refinement_passes,    profile.peak_working_memory, profile.emitted_metablocks, profile.emitted_commands,
         profile.emitted_copy_bytes,
+    });
+}
+
+pub fn printParseProfile(stdout: *std.Io.Writer, requested: ?ParseMode, profile: vort.BrotliHqProfile) !void {
+    if (requested != .whole_block) return;
+    const mode = if (profile.effective) |resolved| resolved.parse_mode else .whole_block;
+    try stdout.print("br_parse_profile parse_mode={s} bounded_passes={d} whole_block_passes={d} max_parse_positions={d}\n", .{
+        @tagName(mode), profile.bounded_passes, profile.whole_block_passes, profile.max_parse_positions,
     });
 }
 

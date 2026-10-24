@@ -7,11 +7,12 @@ const moduleObject = new WebAssembly.Module(bytes);
 const imports = WebAssembly.Module.imports(moduleObject);
 assert.deepEqual(imports, []);
 const instance = new WebAssembly.Instance(moduleObject, {});
-for (const name of ["brWasmHq10", "brWasmHq11", "brWasmHqSmoke", "brWasmTotalMemorySmoke"]) {
+for (const name of ["brWasmHq10", "brWasmHq11", "brWasmHqSmoke", "brWasmTotalMemorySmoke", "brWasmWholeBlockSmoke"]) {
     assert.equal(typeof instance.exports[name], "function");
 }
 assert.equal(instance.exports.brWasmHqSmoke(), 0);
 assert.equal(instance.exports.brWasmTotalMemorySmoke(), 0);
+assert.equal(instance.exports.brWasmWholeBlockSmoke(), 0);
 console.log(JSON.stringify({
     node_version: process.version,
     wasm_sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
@@ -20,4 +21,6 @@ console.log(JSON.stringify({
     round_trips: 2,
     total_memory_qualities: [0, 11],
     total_memory_exact_and_below_checked: true,
+    whole_block_modes: ["standard", "large_window"],
+    whole_block_max_positions: 4098,
 }));

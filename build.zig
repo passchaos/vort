@@ -289,6 +289,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_large_window_test_step = b.step("test-br-large-window", "Run Brotli Large Window format, parser and resource contracts");
     br_large_window_test_step.dependOn(&b.addRunArtifact(br_large_window_tests).step);
+    const br_whole_block_tests = b.addTest(.{
+        .name = "vort-br-whole-block-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli whole block", "Brotli whole-block", "Brotli HQ whole block", "BrHQ whole block", "Brotli HQ command storage" },
+    });
+    const br_whole_block_test_step = b.step("test-br-whole-block", "Run complete-meta-block Brotli search, wire and resource contracts");
+    br_whole_block_test_step.dependOn(&b.addRunArtifact(br_whole_block_tests).step);
     const br_large_tree_tests = b.addTest(.{
         .name = "vort-br-large-tree-tests",
         .root_module = b.createModule(.{
@@ -1857,6 +1864,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| br_large_window_diff.addArgs(args);
     const br_large_window_diff_step = b.step("run-br-large-window-diff", "Validate Brotli Large Window HQ against opt-in reference decoders");
     br_large_window_diff_step.dependOn(&br_large_window_diff.step);
+    const br_whole_block_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/whole_block_cli_gate.py", "--cli" });
+    br_whole_block_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_whole_block_cli_gate.addArgs(args);
+    const br_whole_block_cli_step = b.step("test-br-whole-block-cli", "Validate explicit complete-meta-block Brotli CLI search");
+    br_whole_block_cli_step.dependOn(&br_whole_block_cli_gate.step);
+    br_whole_block_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
+    const br_whole_block_diff = b.addSystemCommand(&.{ "python3", "tools/br/whole_block_diff.py", "--probe" });
+    br_whole_block_diff.addArtifactArg(br_hq_probe);
+    if (b.args) |args| br_whole_block_diff.addArgs(args);
+    const br_whole_block_diff_step = b.step("run-br-whole-block-diff", "Validate complete-meta-block Brotli planning against reference decoders");
+    br_whole_block_diff_step.dependOn(&br_whole_block_diff.step);
     const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
     br_hq_tools_step.dependOn(&br_hq_probe.step);
     br_hq_tools_step.dependOn(&br_hq_cli_probe.step);

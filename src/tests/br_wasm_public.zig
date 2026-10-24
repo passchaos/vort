@@ -64,6 +64,43 @@ export fn brWasmTotalMemorySmoke() callconv(.c) u32 {
     return 0;
 }
 
+export fn brWasmWholeBlockSmoke() callconv(.c) u32 {
+    const allocator = std.heap.page_allocator;
+    var bytes: [4098]u8 = undefined;
+    var random: u64 = 0x4098;
+    for (&bytes) |*byte| {
+        random = random *% 6364136223846793005 +% 1442695040888963407;
+        byte.* = @truncate(random >> 32);
+    }
+    @memcpy(bytes[4094..], bytes[0..4]);
+    inline for (.{ @as(u4, 10), @as(u4, 11) }) |quality| {
+        const large = quality == 11;
+        const input: []const u8 = if (large) bytes[0..64] else &bytes;
+        var profile: vort.BrotliHqProfile = .{};
+        var memory: vort.BrotliEncodeMemoryProfile = .{};
+        var options: vort.BrotliPlannedEncodeOptions = .{
+            .quality = quality,
+            .window_bits = if (large) 25 else 16,
+            .large_window = large,
+            .memory_profile = &memory,
+            .hq = .{ .block_len = input.len, .beam_width = 1, .search_depth = 1, .iterations = 1, .profile = &profile },
+        };
+        const baseline = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options) catch return 12;
+        defer allocator.free(baseline);
+        profile.reset();
+        memory.reset();
+        options.hq.?.parse_mode = .whole_block;
+        const whole = vort.brEncodePlannedStreamWithOptionsAlloc(allocator, input, options) catch return 13;
+        defer allocator.free(whole);
+        if (whole.len > baseline.len or profile.whole_block_passes == 0 or profile.bounded_passes == 0 or profile.max_parse_positions != input.len) return 14;
+        if (profile.effective.?.parse_mode != .whole_block or memory.live_requested_bytes != 0) return 15;
+        const decoded = vort.brDecodeStreamAllocExactSizeWithOptions(allocator, whole, input.len, .{ .allow_large_window = large }) catch return 16;
+        defer allocator.free(decoded);
+        if (!std.mem.eql(u8, input, decoded)) return 17;
+    }
+    return 0;
+}
+
 test "Brotli wasm public consumer instantiates both HQ qualities and decode" {
     try std.testing.expectEqual(@as(u32, 0), brWasmHqSmoke());
 }

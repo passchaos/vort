@@ -163,3 +163,43 @@ test "Brotli CLI Large Window public bounds require HQ and enforce each format r
     try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--large-window", "--quality=9", "--hq" })).resolve(vort.br.PlannedEncodeOptions, null));
     try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--large-window", "--large-window" }));
 }
+
+test "Brotli CLI whole-block mode is an explicit HQ override with stable bounded defaults" {
+    const unselected = try parse(&.{});
+    try std.testing.expect(!unselected.hqSelected());
+    const defaults = try unselected.resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expectEqualDeep(vort.br.PlannedEncodeOptions{}, defaults);
+    const a = try parse(&.{ "--quality=11", "--hq-parse-mode=whole_block" });
+    const b = try parse(&.{ "--hq-parse-mode", "whole_block", "--quality", "11" });
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expect(a.hqSelected());
+    inline for (.{ vort.br.PlannedEncodeOptions, vort.br.PlannedStreamChunksOptions }) |Options| {
+        const mapped = try a.resolve(Options, null);
+        try std.testing.expectEqual(.whole_block, mapped.hq.?.parse_mode);
+    }
+    const implicit = try (try parse(&.{ "--quality=10", "--hq" })).resolve(vort.br.PlannedEncodeOptions, null);
+    const explicit = try (try parse(&.{ "--quality=10", "--hq", "--hq-parse-mode=bounded" })).resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expectEqualDeep(implicit, explicit);
+    try std.testing.expectEqual(.bounded, implicit.hq.?.parse_mode);
+}
+
+test "Brotli CLI whole-block validation and profiling preserve requested mode" {
+    inline for (.{ "10", "11" }) |quality| {
+        var profile: vort.BrotliHqProfile = .{};
+        const controls = try parse(&.{ "--quality=" ++ quality, "--hq-parse-mode=whole_block", "--profile" });
+        const one = try controls.resolve(vort.br.PlannedEncodeOptions, &profile);
+        const stream = try controls.resolve(vort.br.PlannedStreamChunksOptions, &profile);
+        _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one);
+        _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
+        const resolved = try one.hq.?.resolve(one.quality.?, one.mode);
+        try std.testing.expectEqual(.whole_block, resolved.parse_mode);
+        try std.testing.expect(one.hq.?.profile == &profile);
+        try std.testing.expectEqualDeep(vort.BrotliHqProfile{}, profile);
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{"--hq-parse-mode=whole_block"})).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.InvalidBlockPlan, (try parse(&.{ "--quality=9", "--hq-parse-mode=whole_block" })).resolve(vort.br.PlannedEncodeOptions, null));
+    try std.testing.expectError(error.InvalidBrotliParseMode, parse(&.{"--hq-parse-mode=optimal"}));
+    try std.testing.expectError(error.InvalidBrotliParseMode, parse(&.{"--hq-parse-mode="}));
+    try std.testing.expectError(error.MissingBrotliOptionValue, parse(&.{"--hq-parse-mode"}));
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--hq-parse-mode=bounded", "--hq-parse-mode=whole_block" }));
+}
