@@ -62,7 +62,13 @@ pub const Source = struct {
         return std.math.add(usize, try self.checkedPrefixLen(), position) catch error.IntegerOverflow;
     }
     pub fn initChecked(dictionary: []const u8, history: []const u8, block: []const u8, window_len: usize) history_limit.Error!Source {
-        _ = try history_limit.validate(window_len, 0, block.len);
+        // Prove the retained geometry from lengths before forming any suffix
+        // slice. Arithmetic errors retain priority over format/window bounds.
+        const history_len = @min(history.len, window_len);
+        const dictionary_len = @min(dictionary.len, window_len - history_len);
+        const prefix = std.math.add(usize, dictionary_len, history_len) catch return error.IntegerOverflow;
+        _ = std.math.add(usize, prefix, block.len) catch return error.IntegerOverflow;
+        _ = try history_limit.validate(window_len, prefix, block.len);
         const source = init(dictionary, history, block, window_len);
         try source.validate();
         return source;

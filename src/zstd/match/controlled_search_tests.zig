@@ -117,13 +117,39 @@ test "controlled search budget binds probes and optimal transitions including re
     for (strategies) |strategy| {
         for ([_]usize{ 0, 1, 2, 3, 7, 16, 96, 512 }) |budget| {
             var profile: controls.Profile = .{};
-            const source: Source = .{ .dictionary = dictionary, .history = "", .block = block, .window_len = 2 };
+            const source = Source.init(dictionary, "", block, 2);
             try search.planReuse(&records, gpa, source, .{ .strategy = strategy, .search_budget = budget, .profile = &profile });
             try verifyPlan(source, records.items);
             try std.testing.expect(profile.candidate_checks + profile.optimal_transitions <= profile.positions_tested * budget);
             try std.testing.expectEqual(profile.candidate_checks, profile.rep_probes + profile.short_hash_probes);
             if (budget == 0) try std.testing.expectEqual(@as(usize, 0), records.items.len);
         }
+
+        // The block really has an earlier equal hash at distance three. The
+        // prefix remains legal; only that candidate exceeds the two-byte window.
+        const rejected = Source.init("", "", "abcabcabcabc", 2);
+        var rejected_profile: controls.Profile = .{};
+        try search.planReuse(&records, gpa, rejected, .{ .strategy = strategy, .search_budget = 512, .profile = &rejected_profile });
+        try verifyPlan(rejected, records.items);
+        try std.testing.expectEqual(@as(usize, 0), records.items.len);
+        try std.testing.expect(rejected_profile.short_hash_probes > 0);
+        try std.testing.expect(rejected_profile.positions_tested >= rejected.block.len - 2);
+        try std.testing.expectEqual(@as(usize, 0), rejected.match(3, 0, 3).length);
+        try std.testing.expect(rejected_profile.candidate_checks + rejected_profile.optimal_transitions <= rejected_profile.positions_tested * 512);
+        try std.testing.expectEqual(rejected_profile.candidate_checks, rejected_profile.rep_probes + rejected_profile.short_hash_probes);
+
+        // Changing only the window admits the same actual distance-three match.
+        const admitted = Source.init("", "", rejected.block, 3);
+        try search.planReuse(&records, gpa, admitted, .{ .strategy = strategy, .search_budget = 512 });
+        try verifyPlan(admitted, records.items);
+        try std.testing.expect(records.items.len != 0);
+        try std.testing.expectEqual(@as(usize, 3), records.items[0].distance);
+
+        var failing = std.testing.FailingAllocator.init(gpa, .{ .fail_index = 0 });
+        const illegal: Source = .{ .dictionary = dictionary, .history = "", .block = block, .window_len = 2 };
+        try std.testing.expectError(error.InvalidBlockPlan, search.planReuse(&records, failing.allocator(), illegal, .{ .strategy = strategy, .search_budget = 512 }));
+        try std.testing.expectEqual(@as(usize, 0), failing.allocated_bytes);
+        try std.testing.expect(!failing.has_induced_failure);
     }
 }
 
