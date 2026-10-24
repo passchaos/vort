@@ -250,6 +250,12 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_controls_test_step = b.step("test-zstd-encode-controls", "Run signed Zstd level, strategy, profile and matcher contracts");
     zstd_controls_test_step.dependOn(&b.addRunArtifact(zstd_controls_tests).step);
+    const fast_cover_dictionary_mod = b.createModule(.{ .root_source_file = b.path("src/dictionary.zig"), .target = target, .optimize = optimize });
+    const fast_cover_dictionary_tests = b.addTest(.{ .name = "vort-fast-cover-dictionary-tests", .root_module = fast_cover_dictionary_mod, .filters = &.{ "FastCover", "fast cover" } });
+    const fast_cover_zstd_tests = b.addTest(.{ .name = "vort-fast-cover-zstd-tests", .root_module = zstd_tests_mod, .filters = &.{ "FastCover", "fast cover" } });
+    const fast_cover_test_step = b.step("test-fast-cover", "Run FastCover selection, optimization, standard dictionary and resource contracts");
+    fast_cover_test_step.dependOn(&b.addRunArtifact(fast_cover_dictionary_tests).step);
+    fast_cover_test_step.dependOn(&b.addRunArtifact(fast_cover_zstd_tests).step);
     const zstd_far_window_tests = b.addTest(.{
         .name = "vort-zstd-far-window-tests",
         .root_module = zstd_tests_mod,
@@ -1638,6 +1644,13 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| zstd_controls_diff.addArgs(args);
     const zstd_controls_diff_step = b.step("run-zstd-controls-diff", "Validate signed levels and explicit Zstd match strategies against independent references");
     zstd_controls_diff_step.dependOn(&zstd_controls_diff.step);
+
+    const fast_cover_probe = b.addExecutable(.{ .name = "vort-fast-cover-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/zstd/fast_cover_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }) });
+    const fast_cover_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/fast_cover_diff.py", "--probe" });
+    fast_cover_diff.addArtifactArg(fast_cover_probe);
+    if (b.args) |args| fast_cover_diff.addArgs(args);
+    const fast_cover_diff_step = b.step("run-fast-cover-diff", "Validate FastCover trained dictionaries and workflows against libzstd");
+    fast_cover_diff_step.dependOn(&fast_cover_diff.step);
 
     const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
     const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
@@ -6253,6 +6266,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_controls_probe.step);
+    check_step.dependOn(&fast_cover_probe.step);
     check_step.dependOn(&lz4_dictionary_resume_probe.step);
     check_step.dependOn(&lzma_contract_probe.step);
     check_step.dependOn(&lzma_one_shot_probe.step);
