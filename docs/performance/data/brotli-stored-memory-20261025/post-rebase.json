@@ -1,0 +1,69 @@
+{
+  "head": "dcdd6ede66774372f31c067a06e8db937bc08954",
+  "help_exit_code": 0,
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "check",
+        "-Doptimize=Debug",
+        "-j8",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "check",
+      "seconds": 0.4025550289079547
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-stored-memory",
+        "test-br-total-memory",
+        "test-br-stored-memory-wasm",
+        "-Doptimize=ReleaseFast",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "native-wasm",
+      "seconds": 123.73571268795058
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-stored-memory",
+        "test-br-total-memory",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "x86",
+      "seconds": 110.20143661787733
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-general-window-cli",
+        "-Doptimize=Debug",
+        "-j2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "cli-smoke",
+      "seconds": 7.28666129685007
+    }
+  ],
+  "utc": "2026-10-24T17:29:15.185455+00:00"
+}

@@ -67,6 +67,13 @@ control计费1064B，真实alias峰值1216B。Incremental128Bpayload+276Bmetadat
 
 ## 证据与剩余目标
 
+交付前`git pull --rebase origin main`确认基线仍为`37031849`，无需冲突处理。
+四路相关复验全部通过：全局Debug164/164；native/实际Wasm15/15步骤且
+128/128测试；x86专项8/8步骤且128/128测试；旧CLI门禁9/9步骤、23/23
+解析测试和38参考往返。完整CLI help再次实际运行，28个本轮Zig文件格式
+检查通过，复验期间源码前后无变化。[最终结果](data/brotli-stored-memory-20261025/post-rebase.json)
+保存该阶段的命令、日志和源码投影。
+
 [永久证据索引](data/brotli-stored-memory-20261025/index.json)保存原始结果、
 命令、测试名单、日志、源码hash、实际编译输入及产物身份，必要修复和失败
 阶段分别保留。完整源码ZIP、ELF/Wasm和二进制wire记录本地路径与hash，
