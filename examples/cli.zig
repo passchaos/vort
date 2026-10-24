@@ -2807,12 +2807,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              HQ controls describe Vort native effort, not upstream speed parity
         \\    Stream-file only: --max-input-len=BYTES caps source bytes; --max-output-len=BYTES caps encoded bytes
         \\                              Stream totals and file pledges use wide counters; one-shot inputs remain limited to 128 MiB
-        \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT]
+        \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
         \\                              Decode dependency-free Brotli stored-stream hex
-        \\  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT]
+        \\  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
         \\                              Encode file bytes as dependency-free Brotli stored stream
+        \\    stored_memory_options: --max-total-memory=BYTES --memory-profile
+        \\                              Total budget covers encoder-owned requested heap; 0 rejects allocated wire
+        \\                              Memory profile reports released encoder heap after output handoff
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
         \\  encode-bzip2-file <in> <out> [block_size_100k]

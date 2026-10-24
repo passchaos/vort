@@ -52,7 +52,20 @@ def main():
         for width in (16,25,30):
             okay('encode-br-stored-file',[str(width),'caller-meta','--large-window'],width)
         old,_=okay('encode-br-stored-file',['16','caller-meta'],16,False);named,_=okay('encode-br-stored-file',['--window-bits=16','--metadata=caller-meta'],16,False);assert old==named;counts['stored_positional_wire_checks']+=1
-        fail('encode-br-stored-file',['--large-window','--max-total-memory=0'],error='UnsupportedBrotliStoredOption')
+        stored_flags=['--large-window','--window-bits=30','--metadata=caller-meta']
+        stored_plain,_=okay('encode-br-stored-file',stored_flags,30)
+        stored_tracked,stored_log=okay('encode-br-stored-file',stored_flags+['--memory-profile'],30)
+        stored_info=memory_profile(stored_log)
+        assert stored_plain==stored_tracked and stored_info['available'] and stored_info['peak_requested_bytes']>0 and stored_info['live_requested_bytes']==0 and stored_info['limit'] is None
+        counts['profile_wire_checks']+=1
+        stored_peak=stored_info['peak_requested_bytes']
+        stored_exact,stored_exact_log=okay('encode-br-stored-file',stored_flags+[f'--max-total-memory={stored_peak}','--memory-profile'],30)
+        assert stored_exact==stored_plain and memory_profile(stored_exact_log)['limit']==stored_peak
+        counts['exact_total_cap_checks']+=1
+        fail('encode-br-stored-file',stored_flags+[f'--max-total-memory={stored_peak-1}'],error='WorkingMemoryLimitExceeded');counts['below_total_cap_checks']+=1
+        fail('encode-br-stored-file',['--large-window','--max-total-memory=0'],error='WorkingMemoryLimitExceeded')
+        for unsupported in ('--quality=0','--hq','--profile'):
+            fail('encode-br-stored-file',['--memory-profile',unsupported],folder/'missing.raw',error='UnsupportedBrotliStoredOption')
         fail('encode-br-stored-file',['--large-window','--window-bits=31'],error='InvalidBlockPlan')
         # Existing legal HQ configurations remain explicit and independent.
         for command in ('encode-br-file','encode-br-stream-file'):

@@ -38,12 +38,18 @@ pub const Controls = struct {
     }
 
     pub fn storedOptions(self: Controls) !vort.br.StoredStreamOptions {
-        if (self.quality != null or self.mode != null or self.hqSelected() or self.profile or
-            self.max_total_memory != null or self.memory_profile or self.hasStreamLimits()) return error.UnsupportedBrotliStoredOption;
+        return self.storedOptionsWithMemoryProfile(null);
+    }
+
+    pub fn storedOptionsWithMemoryProfile(self: Controls, memory_profile: ?*vort.BrotliEncodeMemoryProfile) !vort.br.StoredStreamOptions {
+        if (self.quality != null or self.mode != null or self.hqSelected() or self.profile or self.hasStreamLimits())
+            return error.UnsupportedBrotliStoredOption;
         const options: vort.br.StoredStreamOptions = .{
             .large_window = self.large_window,
             .window_bits = self.window_bits orelse vort.brotliDefaultWindowBits,
             .metadata = self.metadata orelse "",
+            .max_total_working_memory = self.max_total_memory,
+            .memory_profile = if (self.memory_profile) memory_profile else null,
         };
         _ = try vort.br.encodedStoredStreamBoundWithOptions(0, options);
         return options;
@@ -129,7 +135,7 @@ pub fn parseWithFirst(args: anytype, first: ?[]const u8) !Controls {
 }
 
 /// Stored commands retain their established [window_bits] [metadata]
-/// positionals. Only format/header controls apply to this standalone API.
+/// positionals. Format/header and total-memory controls apply to this API.
 pub fn parseStored(args: anytype) !Controls {
     return parseStoredWithFirst(args, null);
 }
@@ -155,8 +161,7 @@ pub fn parseStoredWithFirst(args: anytype, first: ?[]const u8) !Controls {
         positional += 1;
     }
     var parsed = try parseWithFirst(args, first_option);
-    if (parsed.quality != null or parsed.mode != null or parsed.hqSelected() or parsed.profile or
-        parsed.max_total_memory != null or parsed.memory_profile or parsed.hasStreamLimits())
+    if (parsed.quality != null or parsed.mode != null or parsed.hqSelected() or parsed.profile or parsed.hasStreamLimits())
         return error.UnsupportedBrotliStoredOption;
     if (window_bits != null) {
         if (parsed.window_bits != null) return error.DuplicateBrotliOption;
@@ -170,7 +175,7 @@ pub fn parseStoredWithFirst(args: anytype, first: ?[]const u8) !Controls {
 }
 
 pub fn isStoredControlArgument(value: []const u8) bool {
-    inline for (.{ "--large-window", "--window-bits", "--metadata" }) |name| {
+    inline for (.{ "--large-window", "--window-bits", "--metadata", "--max-total-memory", "--memory-profile" }) |name| {
         if (std.mem.eql(u8, value, name) or std.mem.startsWith(u8, value, name ++ "=")) return true;
     }
     return false;

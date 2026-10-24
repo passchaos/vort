@@ -262,7 +262,7 @@ test "Brotli CLI stored controls keep old positionals and format flags separate"
     try std.testing.expect(named.large_window and !named.hqSelected());
     try std.testing.expectEqual(@as(?u5, 30), named.window_bits);
     try std.testing.expectEqualStrings("new metadata", named.metadata.?);
-    inline for (.{ "--quality=0", "--hq", "--max-total-memory=0", "--memory-profile" }) |flag| {
+    inline for (.{ "--quality=0", "--mode=text", "--hq", "--hq-memory=0", "--profile", "--max-input-len=0", "--max-output-len=0" }) |flag| {
         var args = Args{ .values = &.{flag} };
         try std.testing.expectError(error.UnsupportedBrotliStoredOption, cli.parseStored(&args));
     }
@@ -305,6 +305,64 @@ test "Brotli CLI stored hex permits format flags with omitted text" {
     try std.testing.expectEqualStrings("empty content metadata", control.metadata.?);
     try std.testing.expect(cli.isStoredControlArgument("--large-window"));
     try std.testing.expect(!cli.isStoredControlArgument("--literal-user-text"));
+}
+
+test "Brotli CLI stored memory controls parse both styles without selecting quality or HQ" {
+    var first = Args{ .values = &.{ "16", "legacy metadata", "--max-total-memory=0", "--memory-profile" } };
+    const a = try cli.parseStored(&first);
+    var second = Args{ .values = &.{ "--memory-profile", "--max-total-memory", "0", "--metadata=legacy metadata", "--window-bits=16" } };
+    const b = try cli.parseStored(&second);
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expectEqual(@as(?usize, 0), a.max_total_memory);
+    try std.testing.expect(a.memory_profile and !a.hqSelected() and a.quality == null and a.mode == null and !a.profile);
+    var profile: vort.BrotliEncodeMemoryProfile = .{};
+    const mapped = try a.storedOptionsWithMemoryProfile(&profile);
+    try std.testing.expectEqual(@as(?usize, 0), mapped.max_total_working_memory);
+    try std.testing.expect(mapped.memory_profile == &profile);
+    try std.testing.expectEqual(@as(u5, 16), mapped.window_bits);
+    try std.testing.expectEqualStrings("legacy metadata", mapped.metadata);
+    try std.testing.expectEqualDeep(vort.BrotliEncodeMemoryProfile{}, profile);
+    try std.testing.expect((try a.storedOptions()).memory_profile == null);
+    const disabled = try (cli.Controls{ .max_total_memory = 42 }).storedOptionsWithMemoryProfile(&profile);
+    try std.testing.expect(disabled.memory_profile == null);
+    try std.testing.expectEqual(@as(?usize, 42), disabled.max_total_working_memory);
+    try std.testing.expectEqualDeep(vort.br.StoredStreamOptions{}, try (cli.Controls{}).storedOptions());
+}
+
+test "Brotli CLI stored memory flags reject duplicate malformed and unsupported controls" {
+    inline for (.{ "--max-total-memory=0", "--memory-profile" }) |flag| {
+        var args = Args{ .values = &.{ flag, flag } };
+        try std.testing.expectError(error.DuplicateBrotliOption, cli.parseStored(&args));
+    }
+    var missing = Args{ .values = &.{"--max-total-memory"} };
+    try std.testing.expectError(error.MissingBrotliOptionValue, cli.parseStored(&missing));
+    var empty = Args{ .values = &.{"--max-total-memory="} };
+    try std.testing.expectError(error.InvalidCharacter, cli.parseStored(&empty));
+    var negative = Args{ .values = &.{"--max-total-memory=-1"} };
+    try std.testing.expectError(error.Overflow, cli.parseStored(&negative));
+    inline for (.{ "--quality=0", "--mode=text", "--hq", "--hq-depth=1", "--hq-parse-mode=bounded", "--profile", "--max-input-len=0", "--max-output-len=0" }) |flag| {
+        var args = Args{ .values = &.{ "--max-total-memory=100", "--memory-profile", flag } };
+        try std.testing.expectError(error.UnsupportedBrotliStoredOption, cli.parseStored(&args));
+    }
+    try std.testing.expectError(error.UnsupportedBrotliStoredOption, (cli.Controls{ .quality = 0, .memory_profile = true }).storedOptionsWithMemoryProfile(null));
+    try std.testing.expectError(error.InvalidBlockPlan, (cli.Controls{ .window_bits = 30, .max_total_memory = 100 }).storedOptions());
+}
+
+test "Brotli CLI stored memory flags recognize omitted text and keep quotas addressable" {
+    var args = Args{ .values = &.{ "--max-total-memory=4294967295", "--large-window", "--window-bits=30" } };
+    const parsed = try cli.parseStoredWithFirst(&args, "--memory-profile");
+    try std.testing.expectEqual(@as(?usize, std.math.maxInt(u32)), parsed.max_total_memory);
+    try std.testing.expect(parsed.large_window and parsed.memory_profile);
+    _ = try parsed.storedOptions();
+    inline for (.{ "--max-total-memory", "--max-total-memory=0", "--memory-profile" }) |flag|
+        try std.testing.expect(cli.isStoredControlArgument(flag));
+    if (@bitSizeOf(usize) == 32) {
+        var wide = Args{ .values = &.{"--max-total-memory=4294967296"} };
+        try std.testing.expectError(error.Overflow, cli.parseStored(&wide));
+    } else {
+        var wide = Args{ .values = &.{"--max-total-memory=4294967296"} };
+        try std.testing.expectEqual(@as(?usize, 4294967296), (try cli.parseStored(&wide)).max_total_memory);
+    }
 }
 
 test "Brotli CLI logical stream limits cross 2^32 without selecting an encoder mode" {
