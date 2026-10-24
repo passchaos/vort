@@ -110,6 +110,23 @@ pub fn build(b: *std.Build) void {
     br_public_wasm_run.addArtifactArg(br_public_wasm);
     const br_public_wasm_test = b.step("test-br-public-wasm", "Execute public Brotli HQ encode and decode routes in WebAssembly");
     br_public_wasm_test.dependOn(&br_public_wasm_run.step);
+    const lz4_fast_wasm = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/lz4_fast_controls_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    lz4_fast_wasm.entry = .disabled;
+    lz4_fast_wasm.rdynamic = true;
+    lz4_fast_wasm.stack_size = 2 * 1024 * 1024;
+    const lz4_fast_wasm_run = b.addSystemCommand(&.{ "node", "tools/lz4/wasm_fast_controls_gate.js" });
+    lz4_fast_wasm_run.addArtifactArg(lz4_fast_wasm);
+    const lz4_fast_wasm_step = b.step("test-lz4-fast-controls-wasm", "Execute public LZ4 acceleration and profile contracts in WebAssembly");
+    lz4_fast_wasm_step.dependOn(&lz4_fast_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -531,6 +548,19 @@ pub fn build(b: *std.Build) void {
     const lz4_tests = b.addTest(.{ .name = "vort-lz4-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lz4.zig"), .target = target, .optimize = optimize, .link_libc = true }), .filters = &.{"LZ4"} });
     const lz4_test_step = b.step("test-lz4", "Run focused LZ4 codec and incremental tests");
     lz4_test_step.dependOn(&b.addRunArtifact(lz4_tests).step);
+    const lz4_fast_controls_tests = b.addTest(.{
+        .name = "vort-lz4-fast-controls-tests",
+        .root_module = lz4_tests.root_module,
+        .filters = &.{ "LZ4 fast controls", "LZ4 fast options", "LZ4 fast parser" },
+    });
+    const lz4_fast_controls_step = b.step("test-lz4-fast-controls", "Run LZ4 acceleration, search-work and public ownership contracts");
+    lz4_fast_controls_step.dependOn(&b.addRunArtifact(lz4_fast_controls_tests).step);
+    const lz4_full_tests = b.addTest(.{
+        .name = "vort-lz4-full-tests",
+        .root_module = lz4_tests.root_module,
+    });
+    const lz4_full_step = b.step("test-lz4-full", "Run the complete LZ4 family, including lowercase native tests and imported kernels");
+    lz4_full_step.dependOn(&b.addRunArtifact(lz4_full_tests).step);
     const zlib_stream_tests = b.addTest(.{
         .name = "vort-zlib-stream-tests",
         .root_module = b.createModule(.{ .root_source_file = b.path("src/deflate.zig"), .target = target, .optimize = optimize }),
@@ -4309,6 +4339,49 @@ pub fn build(b: *std.Build) void {
     const lz4_native_probe_step = b.step("run-lz4-native-probe", "Run bounded generated-corpus probe for native LZ4 frames and blocks");
     lz4_native_probe_step.dependOn(&run_lz4_native_probe.step);
 
+    const lz4_fast_controls_probe = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lz4/fast_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli = b.addExecutable(.{
+        .name = "vort-lz4-fast-controls-cli",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/lz4_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli_tests = b.addTest(.{
+        .name = "vort-lz4-fast-controls-cli-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli/lz4_controls_tests.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const lz4_fast_controls_cli_gate = b.addSystemCommand(&.{ "python3", "tools/lz4/fast_controls_cli_gate.py", "--cli" });
+    lz4_fast_controls_cli_gate.addArtifactArg(lz4_fast_controls_cli);
+    if (b.args) |args| lz4_fast_controls_cli_gate.addArgs(args);
+    const lz4_fast_controls_cli_step = b.step("test-lz4-fast-controls-cli", "Validate LZ4 acceleration CLI controls and atomic output");
+    lz4_fast_controls_cli_step.dependOn(&lz4_fast_controls_cli_gate.step);
+    lz4_fast_controls_cli_step.dependOn(&b.addRunArtifact(lz4_fast_controls_cli_tests).step);
+    const lz4_fast_controls_diff = b.addSystemCommand(&.{ "python3", "tools/lz4/fast_controls_diff.py", "--probe" });
+    lz4_fast_controls_diff.addArtifactArg(lz4_fast_controls_probe);
+    if (b.args) |args| lz4_fast_controls_diff.addArgs(args);
+    const lz4_fast_controls_diff_step = b.step("run-lz4-fast-controls-diff", "Validate LZ4 acceleration effects and versioned interoperability");
+    lz4_fast_controls_diff_step.dependOn(&lz4_fast_controls_diff.step);
+    const lz4_fast_controls_tools_step = b.step("build-lz4-fast-controls-tools", "Compile public LZ4 acceleration API and CLI consumers");
+    lz4_fast_controls_tools_step.dependOn(&lz4_fast_controls_probe.step);
+    lz4_fast_controls_tools_step.dependOn(&lz4_fast_controls_cli.step);
+
     const lz4_native_dictionary_probe_exe = b.addExecutable(.{
         .name = "lz4-native-dictionary-probe",
         .root_module = b.createModule(.{
@@ -6657,6 +6730,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
+    check_step.dependOn(&lz4_fast_controls_probe.step);
+    check_step.dependOn(&lz4_fast_controls_cli.step);
+    check_step.dependOn(&lz4_fast_wasm.step);
     check_step.dependOn(&lzma2_incremental_report_exe.step);
     check_step.dependOn(&xz_progressive_probe.step);
     check_step.dependOn(&xz_one_shot_probe.step);

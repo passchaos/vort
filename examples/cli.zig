@@ -13,6 +13,7 @@ const compress_z_cli = @import("cli/compress_z.zig");
 const filters_cli = @import("cli/filters.zig");
 const hadoop_lzo_cli = @import("cli/hadoop_lzo.zig");
 const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
+const lz4_controls_cli = @import("cli/lz4_controls.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
@@ -1673,14 +1674,11 @@ pub fn main(init: std.process.Init) !void {
         };
         try printZstdNativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const frame = try vort.lz4EncodeNativeFrameAlloc(init.gpa, payload);
-        defer init.gpa.free(frame);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = frame });
-        try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ frame.len, payload.len, output_path });
+        try lz4_controls_cli.encodeNativeFile(init, &args, stdout, false);
+    } else if (std.mem.eql(u8, command, "encode-lz4-native-stream-file")) {
+        try lz4_controls_cli.encodeNativeFile(init, &args, stdout, true);
+    } else if (std.mem.eql(u8, command, "encode-lz4-block-file")) {
+        try lz4_controls_cli.encodeBlockFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lz4-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1736,12 +1734,7 @@ pub fn main(init: std.process.Init) !void {
         const summary = try vort.lz4SummarizeBlock(block);
         try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const encoded = try vort.lz4EncodeBlockAlloc(init.gpa, payload);
-        defer init.gpa.free(encoded);
-        try printHex(stdout, encoded);
+        try lz4_controls_cli.encodeBlockHex(init, &args, stdout, false);
     } else if (std.mem.eql(u8, command, "decode-lz4-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1929,15 +1922,7 @@ pub fn main(init: std.process.Init) !void {
         const summary = try vort.lz4SummarizeBlockWithPrefix(block, prefix);
         try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-prefix-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const prefix_hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const prefix = try hexToOwnedBytes(init.gpa, prefix_hex);
-        defer init.gpa.free(prefix);
-        const encoded = try vort.lz4EncodeBlockWithPrefixAlloc(init.gpa, payload, prefix);
-        defer init.gpa.free(encoded);
-        try printHex(stdout, encoded);
+        try lz4_controls_cli.encodeBlockHex(init, &args, stdout, true);
     } else if (std.mem.eql(u8, command, "decode-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -3044,8 +3029,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
         \\  summary-zstd-native-file [path] [text|json]
         \\                              Summarize dependency-free native-subset Zstandard frame/stream blocks
-        \\  encode-lz4-native-file <in> <out>
+        \\  encode-lz4-native-file <in> <out> [lz4_options]
         \\                              Encode file bytes as dependency-free native LZ4 frame
+        \\  encode-lz4-native-stream-file <in> <out> [lz4_options]
+        \\  encode-lz4-block-file <in> <out> [lz4_options]
+        \\    lz4_options: --acceleration=NUM --chain-depth=0..16 --profile
+        \\                              Acceleration <=0 uses 1; values above 65537 clamp to 65537
+        \\                              Default acceleration 1 preserves Vort's bytewise scan; chain depth is independent
         \\  size-lz4-native-file [path] [max_output]
         \\                              Preflight dependency-free native LZ4 frame decoded size
         \\  summary-lz4-native-file [path] [text|json]
@@ -3056,7 +3046,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight LZ4 block decoded size
         \\  summary-lz4-block-hex [hex]
         \\                              Summarize LZ4 block literal/match tokens
-        \\  encode-lz4-block-hex [hex]
+        \\  encode-lz4-block-hex [hex] [lz4_options]
         \\                              Encode LZ4 block
         \\  decode-lz4-block-hex [hex] [max_output]
         \\                              Decode LZ4 block
@@ -3096,7 +3086,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight LZ4 block decoded size with prefix history
         \\  summary-lz4-block-prefix-hex [hex] [prefix_hex]
         \\                              Summarize LZ4 block tokens with prefix history
-        \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
+        \\  encode-lz4-block-prefix-hex [hex] [prefix_hex] [lz4_options]
         \\                              Encode LZ4 block with prefix history
         \\  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Decode LZ4 block with prefix history
