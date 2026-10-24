@@ -346,7 +346,8 @@ fn copyDelta(
     const power: u6 = @intCast(pair >> 32);
     if (power > 7) return error.InvalidLzms;
     const raw_offset: u32 = @truncate(pair);
-    const span: usize = @as(usize, 1) << power;
+    const shift: std.math.Log2Int(usize) = @intCast(power);
+    const span: usize = @as(usize, 1) << shift;
     const offset = std.math.mul(usize, raw_offset, span) catch
         return error.InvalidLzms;
     const length: usize = length_u32;

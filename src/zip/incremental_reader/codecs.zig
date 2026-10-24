@@ -567,7 +567,7 @@ pub const ZstdState = struct {
         const decoder_options: zstd.NativeIncrementalFrameDecoder.Options = .{
             .max_compressed_buffer_len = reader_options.max_zstd_compressed_buffer_len,
             .max_decoded_buffer_len = entry_limit,
-            .expected_output_len = expected_uncompressed_size,
+            .expected_output_len = core.stream_count.fromOptionalLocal(expected_uncompressed_size),
             .stop_after_first_frame = true,
         };
         return .{

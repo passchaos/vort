@@ -321,8 +321,8 @@ pub const Archive = struct {
                     const relative = position - adjusted_offset;
                     const local_group = relative / self.header2.chunk_size;
                     if (local_group >= entry.group_count) return error.InvalidWia;
-                    const group_index = entry.group_index + local_group;
-                    const group_offset = local_group * @as(usize, self.header2.chunk_size);
+                    const group_index = std.math.cast(usize, entry.group_index + local_group) orelse return error.InvalidWia;
+                    const group_offset = std.math.cast(usize, local_group * self.header2.chunk_size) orelse return error.InvalidWia;
                     const chunk_size: usize = self.header2.chunk_size;
                     const remaining = if (std.math.cast(usize, adjusted_size)) |size|
                         size - group_offset
@@ -336,7 +336,8 @@ pub const Archive = struct {
                         group_offset,
                     );
                     defer allocator.free(decoded);
-                    const within_group = relative - group_offset;
+                    const within_group = std.math.cast(usize, relative - group_offset) orelse return error.InvalidWia;
+                    if (within_group >= decoded.len) return error.InvalidWia;
                     const length = @min(
                         output.len - written,
                         decoded.len - within_group,

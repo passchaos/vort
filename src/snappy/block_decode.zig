@@ -17,12 +17,12 @@ pub const Header = struct {
 
 pub fn readHeader(block: []const u8) Error!Header {
     var result: usize = 0;
-    var shift: u6 = 0;
     var index: usize = 0;
     while (index < block.len and index < 5) : (index += 1) {
         const byte = block[index];
         const payload = byte & 0x7f;
         if (index == 4 and payload > 0x0f) return error.CorruptFrame;
+        const shift: std.math.Log2Int(usize) = @intCast(index * 7);
         result |= @as(usize, payload) << shift;
         if ((byte & 0x80) == 0) {
             return .{
@@ -30,7 +30,6 @@ pub fn readHeader(block: []const u8) Error!Header {
                 .index = index + 1,
             };
         }
-        shift += 7;
     }
     return if (index < 5) error.TruncatedFrame else error.CorruptFrame;
 }
@@ -47,11 +46,10 @@ pub fn readLiteralLen(
         return error.TruncatedFrame;
     }
     var len_minus_one: usize = 0;
-    var shift: u6 = 0;
     for (0..byte_count) |index| {
+        const shift: std.math.Log2Int(usize) = @intCast(index * 8);
         len_minus_one |= @as(usize, block[input_index.* + index]) <<
             shift;
-        shift += 8;
     }
     input_index.* += byte_count;
     return std.math.add(usize, len_minus_one, 1) catch
@@ -252,4 +250,23 @@ test "Snappy block validation covers malformed token boundaries" {
             .{ .decoded_len = 0, .index = 1 },
         ),
     );
+}
+
+test "Snappy length fields retain all four bytes on narrow targets" {
+    const header = try readHeader(&.{ 0xff, 0xff, 0xff, 0xff, 0x0f });
+    try std.testing.expectEqual(@as(usize, std.math.maxInt(u32)), header.decoded_len);
+    try std.testing.expectEqual(@as(usize, 5), header.index);
+    try std.testing.expectError(error.CorruptFrame, readHeader(&.{ 0xff, 0xff, 0xff, 0xff, 0x10 }));
+    try std.testing.expectError(error.CorruptFrame, readHeader(&.{ 0x80, 0x80, 0x80, 0x80, 0x80 }));
+    try std.testing.expectError(error.TruncatedFrame, readHeader(&.{ 0x80, 0x80, 0x80, 0x80 }));
+
+    var index: usize = 0;
+    try std.testing.expectEqual(@as(usize, 60), try readLiteralLen(0xfc, &.{ 59, 0, 0, 0 }, &index));
+    try std.testing.expectEqual(@as(usize, 4), index);
+    index = 0;
+    if (@bitSizeOf(usize) == 32) {
+        try std.testing.expectError(error.IntegerOverflow, readLiteralLen(0xfc, &.{ 0xff, 0xff, 0xff, 0xff }, &index));
+    } else {
+        try std.testing.expectEqual(@as(usize, 4294967296), try readLiteralLen(0xfc, &.{ 0xff, 0xff, 0xff, 0xff }, &index));
+    }
 }

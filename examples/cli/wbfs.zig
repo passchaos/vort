@@ -1,7 +1,8 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const max_file_size = 16 * 1024 * 1024 * 1024;
+const max_file_size: u64 = 16 * 1024 * 1024 * 1024;
+const max_local_file_size: usize = @intCast(@min(max_file_size, std.math.maxInt(usize)));
 
 pub fn inspect(
     init: std.process.Init,
@@ -40,7 +41,7 @@ pub fn decode(
     const limit = if (args.next()) |text|
         try std.fmt.parseInt(usize, text, 10)
     else
-        max_file_size;
+        max_local_file_size;
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     var archive = try vort.parseWbfsAlloc(init.gpa, bytes, .{});
@@ -138,6 +139,6 @@ fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
         init.io,
         path,
         init.gpa,
-        .limited(max_file_size),
+        .limited(max_local_file_size),
     );
 }

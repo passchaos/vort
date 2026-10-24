@@ -1,7 +1,8 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const max_file_size = 32 * 1024 * 1024 * 1024;
+const max_file_size: u64 = 32 * 1024 * 1024 * 1024;
+const max_local_file_size: usize = @intCast(@min(max_file_size, std.math.maxInt(usize)));
 const max_public_key_size = 1024 * 1024;
 const max_public_keys = 128;
 
@@ -166,7 +167,7 @@ pub fn extract(
     const limit = if (args.next()) |text|
         try std.fmt.parseInt(usize, text, 0)
     else
-        max_file_size;
+        max_local_file_size;
     const source_path = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
@@ -521,7 +522,7 @@ pub fn puffDeflate(
         input,
         bit_offset,
         bit_length,
-        max_file_size,
+        max_local_file_size,
     );
     defer init.gpa.free(result.bytes);
     try std.Io.Dir.cwd().writeFile(init.io, .{
@@ -637,6 +638,6 @@ fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
         init.io,
         path,
         init.gpa,
-        .limited(max_file_size),
+        .limited(max_local_file_size),
     );
 }
