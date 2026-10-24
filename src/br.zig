@@ -38,6 +38,7 @@ const hq_options = @import("br/encoder/hq_options.zig");
 const hq_types = @import("br/encoder/hq_types.zig");
 const hq_codec = @import("br/encoder/hq_codec.zig");
 const new_hq_parser = @import("br/encoder/hq_parser.zig");
+const total_budget = @import("br/encoder/total_budget.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
@@ -265,7 +266,15 @@ pub const HqOptions = hq_options.HqOptions;
 pub const HqProfile = hq_options.HqProfile;
 pub const HqResolvedOptions = hq_options.Resolved;
 pub const HqDistanceParameters = encoder_distance.Parameters;
+pub const EncodeMemoryProfile = total_budget.EncodeMemoryProfile;
 pub const PlannedEncodeOptions = struct {
+    /// Optional cap for all live encoder-owned requested heap during this
+    /// operation, including retained storage and complete candidate wires.
+    /// Borrowed input/output buffers and allocator bookkeeping are excluded.
+    max_total_working_memory: ?usize = null,
+    /// Caller-owned total-allocation instrumentation; independent of HQ's
+    /// workspace profile. Enabling instrumentation must preserve output bytes.
+    memory_profile: ?*EncodeMemoryProfile = null,
     level: PlannedCompressionLevel = .fast,
     /// Optional Vort-native Brotli quality preset. When present, `level` must
     /// remain `.fast` and the deterministic q0...q11 schedule is used; null
@@ -1684,23 +1693,23 @@ const IncrementalPlannedEncoderCodec = struct {
     }
 
     pub fn stateRetainedCapacity(state: *const State) usize {
-        return state.tokens.capacity * @sizeOf(lz77.Token) +
-            state.commands.capacity * @sizeOf(command_plan.Command) +
-            state.history.capacity +
-            state.candidate_wire.capacity +
-            state.best_wire.capacity +
-            state.adaptive_single_wire.capacity +
-            state.adaptive_split_wire.capacity +
-            state.adaptive_grid_wire.capacity +
-            state.adaptive_grid_candidate_wire.capacity +
-            state.history_snapshot.capacity +
-            state.adaptive_split_history.capacity +
-            state.adaptive_grid_history.capacity +
-            state.greedy_scratch.retainedCapacity() +
-            state.dictionary_greedy_scratch.retainedCapacity() +
-            state.fragment_scratch.retainedCapacity() +
-            (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0) +
-            (if (state.serialized_matcher) |*matcher| matcher.retainedCapacity() else 0);
+        return @import("br/encoder/total_retained.zig").codec(state) catch std.math.maxInt(usize);
+    }
+
+    pub const MemoryConfig = @import("br/incremental/stored/allocator_adapter.zig").Config;
+
+    pub fn extractMemoryConfig(options: StreamOptions) MemoryConfig {
+        return .{ .limit = options.max_total_working_memory, .profile = options.memory_profile };
+    }
+
+    pub fn requiredTotalRetainedBytes(state: *const State) br.Error!usize {
+        return @import("br/encoder/total_retained.zig").codec(state);
+    }
+
+    pub fn rebindStateAllocator(state: *State, allocator: std.mem.Allocator) void {
+        if (state.compound_matcher) |*matcher| matcher.allocator = allocator;
+        if (state.serialized_matcher) |*matcher| matcher.allocator = allocator;
+        if (state.hq_state.budget) |budget| budget.backing = allocator;
     }
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
@@ -2148,6 +2157,9 @@ test {
     _ = hq_types;
     _ = hq_codec;
     _ = new_hq_parser;
+    _ = total_budget;
+    _ = @import("tests/br_total_memory_contracts.zig");
+    _ = @import("tests/br_total_memory_transactions.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
     _ = @import("br/encoder/hq_codec/exact.zig");
@@ -3436,6 +3448,9 @@ pub const StoredStreamOptions = struct {
     metadata: []const u8 = "",
 };
 pub const PlannedStreamChunksOptions = struct {
+    /// Same whole-encoder allocation cap and profile as one-shot options.
+    max_total_working_memory: ?usize = null,
+    memory_profile: ?*EncodeMemoryProfile = null,
     level: PlannedCompressionLevel = .fast,
     quality: ?u4 = null,
     /// Same opt-in HQ controls as `PlannedEncodeOptions`.
@@ -4441,6 +4456,8 @@ fn usesDedicatedQualityBlockCore(quality: ?u4) bool {
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     try validatePlannedEncodeOptions(input.len, options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").owned(allocator, input, options, encodePlannedStreamWithOptionsAlloc);
     if (options.hq != null) {
         const chunks = [_][]const u8{input};
         return encodeHqWholeStreamAlloc(allocator, &chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
@@ -4871,6 +4888,8 @@ fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
 
 fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Error!PlannedStreamChunksOptions {
     return .{
+        .max_total_working_memory = options.max_total_working_memory,
+        .memory_profile = options.memory_profile,
         .level = options.level,
         .quality = options.quality,
         .hq = options.hq,
@@ -5428,6 +5447,9 @@ pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []co
 }
 
 pub fn encodePlannedStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    try validatePlannedStreamChunksOptions(options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").owned(allocator, chunks, options, encodePlannedStreamChunksWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
     return encoder.encodeChunksWithOptionsAlloc(allocator, chunks, options);
@@ -5440,6 +5462,8 @@ pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) E
 pub fn encodePlannedStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
     const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").into(allocator_dispatch.singleton, chunks, output, options, encodePlannedStreamChunksWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeChunksWithOptionsInto(chunks, output, options);
@@ -5450,6 +5474,9 @@ pub fn encodePlannedStreamChunksAppend(allocator: std.mem.Allocator, out: *std.A
 }
 
 pub fn encodePlannedStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
+    try validatePlannedStreamChunksOptions(options);
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").append(allocator, out, chunks, options, encodePlannedStreamChunksWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
     try encoder.encodeChunksWithOptionsAppend(out, chunks, options);
@@ -5460,6 +5487,10 @@ pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
+    const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
+    if (output.len < needed) return error.OutOfMemory;
+    if (@import("br/encoder/total_entry.zig").enabled(options))
+        return @import("br/encoder/total_entry.zig").into(allocator_dispatch.singleton, input, output, options, encodePlannedStreamWithOptionsAlloc);
     var encoder = PlannedStreamEncoder.init(allocator_dispatch.singleton);
     defer encoder.deinit();
     return encoder.encodeIntoWithOptions(input, output, options);
@@ -6179,7 +6210,10 @@ fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input:
     var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
-        error.OutOfMemory => return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options),
+        error.OutOfMemory => {
+            try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
+            return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+        },
         else => return err,
     };
     if (candidate_len >= stored_len) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
@@ -6233,7 +6267,10 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
             // A candidate that exhausts the current winner's byte budget cannot
             // win the strict final-size comparison, so no retry is needed.
-            error.OutOfMemory => null,
+            error.OutOfMemory => failed: {
+                try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
+                break :failed null;
+            },
             else => return err,
         };
         if (mixed_len) |len| if (len < best.len) {
@@ -6251,6 +6288,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{ .window_bits = window_bits, .metadata = metadata }) catch |err| switch (err) {
         error.OutOfMemory => {
+            try @import("br/encoder/total_entry.zig").propagateAllocatorLimit(allocator);
             best_owned = false;
             return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
         },
@@ -9010,6 +9048,9 @@ pub const PlannedStreamEncoder = struct {
     compound_matcher: compound_dictionary_matcher.Matcher,
     serialized_matcher: serialized_dictionary_matcher.Matcher,
     stream_state: IncrementalPlannedEncoderCodec.State = .{},
+    total_memory_lease: ?@import("br/encoder/total_budget.zig").Lease = null,
+    total_memory_inherited: bool = false,
+    total_operation_depth: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
         return .{
@@ -9020,14 +9061,41 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn deinit(self: *PlannedStreamEncoder) void {
-        IncrementalPlannedEncoderCodec.deinitState(&self.stream_state, self.allocator);
-        self.greedy_scratch.deinit(self.allocator);
+        const allocator = if (self.total_memory_lease) |lease| lease.allocator() else self.allocator;
+        IncrementalPlannedEncoderCodec.deinitState(&self.stream_state, allocator);
+        self.greedy_scratch.deinit(allocator);
         self.compound_matcher.deinit();
         self.serialized_matcher.deinit();
-        self.tokens.deinit(self.allocator);
-        self.commands.deinit(self.allocator);
-        self.output.deinit(self.allocator);
+        self.tokens.deinit(allocator);
+        self.commands.deinit(allocator);
+        self.output.deinit(allocator);
+        if (self.total_memory_lease) |*lease| lease.deinit();
         self.* = undefined;
+    }
+
+    pub fn rebindTotalStateAllocator(self: *PlannedStreamEncoder, allocator: std.mem.Allocator) void {
+        IncrementalPlannedEncoderCodec.rebindStateAllocator(&self.stream_state, allocator);
+    }
+
+    pub fn isTotalOwnedOutput(self: *PlannedStreamEncoder, output: *std.ArrayList(u8)) bool {
+        if (output == &self.output) return true;
+        inline for (.{ "history", "candidate_wire", "best_wire", "adaptive_single_wire", "adaptive_split_wire", "adaptive_grid_wire", "adaptive_grid_candidate_wire", "history_snapshot", "adaptive_split_history", "adaptive_grid_history" }) |field| {
+            if (output == &@field(self.stream_state, field)) return true;
+        }
+        return false;
+    }
+
+    pub fn isTotalOwnedRange(self: *const PlannedStreamEncoder, bytes: []const u8) bool {
+        const overlap = hq_codec.alias.overlaps;
+        if (overlap(bytes, self.output.items.ptr[0..self.output.capacity])) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.tokens.items.ptr[0..self.tokens.capacity]))) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.commands.items.ptr[0..self.commands.capacity]))) return true;
+        if (overlap(bytes, std.mem.sliceAsBytes(self.greedy_scratch.prev.items.ptr[0..self.greedy_scratch.prev.capacity]))) return true;
+        inline for (.{ "history", "candidate_wire", "best_wire", "adaptive_single_wire", "adaptive_split_wire", "adaptive_grid_wire", "adaptive_grid_candidate_wire", "history_snapshot", "adaptive_split_history", "adaptive_grid_history" }) |field| {
+            const list = @field(self.stream_state, field);
+            if (overlap(bytes, list.items.ptr[0..list.capacity])) return true;
+        }
+        return false;
     }
 
     pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -9039,6 +9107,9 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").owned(self, allocator, chunks, options, @This().encodeChunksWithOptionsAlloc);
         if (options.hq != null) return encodeHqWholeStreamAlloc(allocator, chunks, options);
         return allocator.dupe(u8, try self.encodeChunksScratchWithOptions(chunks, options));
     }
@@ -9050,6 +9121,8 @@ pub const PlannedStreamEncoder = struct {
     pub fn encodeChunksWithOptionsInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8, options: PlannedStreamChunksOptions) Error!usize {
         const needed = try encodedPlannedStreamChunksBoundWithOptions(chunks, options);
         if (output.len < needed) return error.OutOfMemory;
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").into(self, chunks, output, options, @This().encodeChunksWithOptionsAlloc);
         const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
@@ -9060,6 +9133,9 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!void {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").append(self, out, chunks, options, @This().encodeChunksWithOptionsAlloc);
         if (options.hq) |raw| {
             const emitted = if (raw.profile) |p| p.emitted() else null;
             errdefer if (raw.profile) |p| p.restoreEmitted(emitted.?);
@@ -9076,6 +9152,8 @@ pub const PlannedStreamEncoder = struct {
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
         try validatePlannedEncodeOptions(input.len, options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").owned(self, allocator, input, options, @This().encodeWithOptionsAlloc);
         if (options.hq != null) {
             const chunks = [_][]const u8{input};
             return encodeHqWholeStreamAlloc(allocator, &chunks, try plannedStreamChunksOptionsFromEncodeOptions(options));
@@ -9140,13 +9218,9 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
-        return self.tokens.capacity * @sizeOf(lz77.Token) +
-            self.commands.capacity * @sizeOf(command_plan.Command) +
-            self.output.capacity +
-            self.greedy_scratch.retainedCapacity() +
-            self.compound_matcher.retainedCapacity() +
-            self.serialized_matcher.retainedCapacity() +
-            IncrementalPlannedEncoderCodec.stateRetainedCapacity(&self.stream_state);
+        const bytes = @import("br/encoder/total_retained.zig").reusable(self) catch return std.math.maxInt(usize);
+        const control = if (self.total_memory_lease) |lease| if (lease.snapshot().available and !self.total_memory_inherited) lease.snapshot().control_bytes else 0 else 0;
+        return std.math.add(usize, bytes, control) catch std.math.maxInt(usize);
     }
 
     /// Encode a planned stream into retained encoder-owned output. The
@@ -9165,6 +9239,9 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
+        try validatePlannedStreamChunksOptions(options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").scratch(self, chunks, options, @This().encodeChunksScratchWithOptions);
         if (options.hq) |raw| {
             const emitted = if (raw.profile) |p| p.emitted() else null;
             errdefer if (raw.profile) |p| p.restoreEmitted(emitted.?);
@@ -9211,6 +9288,9 @@ pub const PlannedStreamEncoder = struct {
     /// stable one-shot candidate selection and copies only its final winner.
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
+        try validatePlannedEncodeOptions(input.len, options);
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").scratch(self, input, options, @This().encodeScratchWithOptions);
         if (options.hq != null) {
             try validatePlannedEncodeOptions(input.len, options);
             const chunks = [_][]const u8{input};
@@ -9305,6 +9385,8 @@ pub const PlannedStreamEncoder = struct {
     pub fn encodeIntoWithOptions(self: *PlannedStreamEncoder, input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
         const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
         if (output.len < needed) return error.OutOfMemory;
+        if (@import("br/encoder/total_reusable.zig").needed(self, options))
+            return @import("br/encoder/total_reusable.zig").into(self, input, output, options, @This().encodeWithOptionsAlloc);
         if (options.quality != null or options.window_bits != null or options.metadata.len != 0 or options.level != .fast or
             (try plannedSharedDictionarySize(options.shared_dictionary)) != 0)
         {
