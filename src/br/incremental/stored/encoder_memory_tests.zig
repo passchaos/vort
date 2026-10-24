@@ -31,6 +31,9 @@ const Codec = struct {
     pub fn requiredTotalRetainedBytes(state: *const State) Error!usize {
         return state.payload.capacity;
     }
+    pub fn stateRetainedCapacity(state: *const State) usize {
+        return state.payload.capacity;
+    }
     pub fn rebindStateAllocator(state: *State, a: std.mem.Allocator) void {
         state.payload_allocator = a;
     }
@@ -120,6 +123,7 @@ test "Brotli total memory generic activates only configured tracking and charges
             try std.testing.expectEqual(ledger.peak, profile.peak_requested_bytes);
             try std.testing.expectEqual(total.control_bytes + encoder.plain.capacity + encoder.pending.capacity, ledger.live);
         }
+        try std.testing.expectEqual(ledger.live, encoder.retainedCapacity());
         try encoder.finish();
         var wire: std.ArrayList(u8) = .empty;
         defer wire.deinit(std.testing.allocator);
@@ -130,6 +134,7 @@ test "Brotli total memory generic activates only configured tracking and charges
             try std.testing.expectEqual(ledger.peak, profile.peak_requested_bytes);
             try std.testing.expectEqual(total.control_bytes + encoder.plain.capacity + encoder.pending.capacity + encoder.codec_state.payload.capacity, ledger.live);
         }
+        try std.testing.expectEqual(ledger.live, encoder.retainedCapacity());
         encoder.deinit();
         encoder_alive = false;
         try std.testing.expectEqual(@as(usize, 0), ledger.live);
@@ -206,6 +211,7 @@ test "Brotli total memory generic moves with a shared lease and frees through it
     try drain(&moved, &wire, .done);
     try std.testing.expect(moved.memory_binding.lease.?.state == stable);
     try std.testing.expectEqual(ledger.live, profile.live_requested_bytes);
+    try std.testing.expectEqual(ledger.live - total.control_bytes - winner.len, moved.retainedCapacity());
     // Cleanup must use the stored active allocator, not a changed public base.
     moved.allocator = std.testing.allocator;
     moved.deinit();

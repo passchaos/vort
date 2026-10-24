@@ -127,9 +127,19 @@ pub fn Encoder(comptime Codec: type) type {
             };
         }
         pub fn retainedCapacity(self: *const Self) usize {
-            var total = self.plain.capacity + self.pending.capacity;
-            if (@hasDecl(Codec, "stateRetainedCapacity")) total += Codec.stateRetainedCapacity(&self.codec_state);
-            return total;
+            const maximum = std.math.maxInt(usize);
+            var retained = std.math.add(usize, self.plain.capacity, self.pending.capacity) catch return maximum;
+            if (@hasDecl(Codec, "stateRetainedCapacity")) {
+                retained = std.math.add(usize, retained, Codec.stateRetainedCapacity(&self.codec_state)) catch return maximum;
+            }
+            if (!self.memory_binding.shared) {
+                if (self.memory_binding.lease) |lease| {
+                    const budget = lease.snapshot();
+                    if (budget.available)
+                        retained = std.math.add(usize, retained, budget.control_bytes) catch return maximum;
+                }
+            }
+            return retained;
         }
         pub fn finish(self: *Self) Error!void {
             self.finishing = true;
