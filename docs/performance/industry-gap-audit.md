@@ -138,6 +138,16 @@ no statistical-significance claim. Throughput still loses on every reference
 row (geometric ratio 0.00396409x). All XML/MR candidate work fields remain
 unchanged. Complete native Zstd tests pass 1098/1098 and build checks 172/172.
 
+The following [paired-anchor cache experiment](zstd-paired-anchor-experiment.md)
+preserves the original suffix pairing and all candidate pricing traces. Its
+five-round candidate-stage controls, including allocation/preparation, give
+only 1.01385x...1.01885x with counted diagnostics and 1.01892x...1.02380x in a
+temporary build that does not export Work. Each 64 KiB input needs 393,174
+bytes of additional storage. It is retained as an explicit diagnostic;
+default encoding remains uncached and all fourteen default frame identities
+stay unchanged. Complete native Zstd tests pass 1101/1101 and build checks
+172/172. This experiment does not establish a new production throughput lead.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

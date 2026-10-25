@@ -1,0 +1,23 @@
+[
+  {
+    "case": "silesia-xml",
+    "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "input_bytes": 65536,
+    "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+    "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/silesia-xml-65536.bin"
+  },
+  {
+    "case": "silesia-mr",
+    "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin",
+    "input_bytes": 65536,
+    "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+    "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/silesia-mr-65536.bin"
+  },
+  {
+    "case": "brotli-source",
+    "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/brotli-source-65536.bin",
+    "input_bytes": 65536,
+    "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+    "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/brotli-source-65536.bin"
+  }
+]

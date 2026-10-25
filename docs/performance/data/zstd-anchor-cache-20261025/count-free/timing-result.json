@@ -1,0 +1,26 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free",
+    "--run"
+  ],
+  "source_before": {
+    "src/zstd.zig": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+    "src/zstd/match/paired_anchor_cache.zig": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+    "probe.zig": "f3825a1000aa2a116d1dacb3a7fce802be0ed5ddf1b43d3af0bc0c34b982a82c"
+  },
+  "executable_sha256": "0f2747a25fb9b505ec4ddb9810f97ca90aec082df363609e7899c860ef8147bc",
+  "start_utc": "2026-10-25T07:38:29.713997+00:00",
+  "exit_code": 0,
+  "end_utc": "2026-10-25T07:38:45.583972+00:00",
+  "source_after": {
+    "src/zstd.zig": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+    "src/zstd/match/paired_anchor_cache.zig": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+    "probe.zig": "f3825a1000aa2a116d1dacb3a7fce802be0ed5ddf1b43d3af0bc0c34b982a82c"
+  },
+  "source_stable": true,
+  "compiler_observations": 148,
+  "compiler_observations_with_process": 0
+}

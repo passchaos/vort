@@ -1,0 +1,26 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build-exe",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "--dep",
+    "vort_zstd",
+    "--dep",
+    "benchmark_provenance",
+    "-Mroot=probe.zig",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-Mvort_zstd=src/zstd.zig",
+    "-OReleaseFast",
+    "-mcpu=native",
+    "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+    "-femit-bin=/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free"
+  ],
+  "affinity": "13-15",
+  "started_utc": "2026-10-25T07:35:30.618031+00:00",
+  "timing_probe_not_run": true,
+  "exit_code": 0,
+  "wall_seconds": 30.27860384201631,
+  "finished_utc": "2026-10-25T07:36:00.896752+00:00"
+}

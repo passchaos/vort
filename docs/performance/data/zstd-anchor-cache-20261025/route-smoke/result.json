@@ -1,0 +1,22 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "2-7",
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "run-zstd-multi-duplicate-profile",
+    "-j2",
+    "--summary",
+    "all",
+    "--",
+    "--anchors",
+    "/tmp/vort-zstd-anchor-cache-20261025/route-smoke/rle65536.bin",
+    "--no-anchors",
+    "/tmp/vort-zstd-anchor-cache-20261025/route-smoke/rle65536.bin"
+  ],
+  "exit_code": 0,
+  "route_and_mode_switch_verified": true,
+  "rle_no_candidate_verified": true,
+  "scope": "Build-route/mode-switch smoke only; elapsed values not benchmark evidence."
+}

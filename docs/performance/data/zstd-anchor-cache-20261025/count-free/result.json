@@ -1,0 +1,94 @@
+{
+  "baseline_call": "emitMultiDuplicateMatchCompressedBlockProfiledMode(true,false,.prune,...,profile=null)",
+  "build": {
+    "affinity": "13-15",
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build-exe",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "--dep",
+      "vort_zstd",
+      "--dep",
+      "benchmark_provenance",
+      "-Mroot=probe.zig",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "-Mvort_zstd=src/zstd.zig",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+      "-femit-bin=/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free"
+    ],
+    "exit_code": 0,
+    "finished_utc": "2026-10-25T07:36:00.896752+00:00",
+    "started_utc": "2026-10-25T07:35:30.618031+00:00",
+    "timing_probe_not_run": true,
+    "wall_seconds": 30.27860384201631
+  },
+  "cached_call": "Cache.init(block,u16 hashes,u32 lengths,duplicateHash8) then emitMultiDuplicateMatchCompressedBlockWithAnchors(true,false,.prune,true,...,profile=null)",
+  "complete_snapshot_files": 1354,
+  "hashes": {
+    "anchor-count-free": "0f2747a25fb9b505ec4ddb9810f97ca90aec082df363609e7899c860ef8147bc",
+    "probe.zig": "f3825a1000aa2a116d1dacb3a7fce802be0ed5ddf1b43d3af0bc0c34b982a82c",
+    "src/zstd.zig": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+    "src/zstd/match/paired_anchor_cache.zig": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1"
+  },
+  "inputs": [
+    {
+      "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/silesia-xml-65536.bin",
+      "case": "silesia-xml",
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin"
+    },
+    {
+      "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/silesia-mr-65536.bin",
+      "case": "silesia-mr",
+      "input_bytes": 65536,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+    },
+    {
+      "archive_path": "/tmp/vort-zstd-anchor-cache-20261025/count-free/frozen-inputs/brotli-source-65536.bin",
+      "case": "brotli-source",
+      "input_bytes": 65536,
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/brotli-source-65536.bin"
+    }
+  ],
+  "next_run_requires_parent_authorization": true,
+  "probe_design": {
+    "cases": 3,
+    "clock_per_query": false,
+    "every_timed_wire_checked": true,
+    "order": "baseline first on zero-based even rounds, cached first on odd rounds",
+    "premeasurement": "construct both candidate wires without clocks; require equal availability and bytes",
+    "rounds_per_case": 5,
+    "timer_excludes": "input reads, wire hashing, comparison, JSON and output buffer free",
+    "timer_includes": "anchor allocation/init, hash preparation, candidate emission, internal anchor frees"
+  },
+  "proposed_command_after_authorization": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free",
+    "--run"
+  ],
+  "scope": "Temporary isolated experiment only. It does not enable or change the production/default anchor strategy.",
+  "snapshot": "/tmp/vort-zstd-anchor-cache-20261025/count-free",
+  "snapshot_modified_files": [
+    "src/zstd.zig"
+  ],
+  "status": "built_waiting_for_timing_authorization",
+  "tests_executed": false,
+  "timing_executed": false,
+  "utc": "2026-10-25T07:36:30.805549+00:00",
+  "work_counter_observation": "No NativeMultiDuplicateProfile is constructed and no anchor Work member is read/exported by these wrappers or probe. Original Cache code is unchanged; unused Work writes are eligible for dead-code elimination, not asserted removed without machine-code inspection.",
+  "workspace": "/home/passchaos/project-z/vort-zstd-anchor-cache",
+  "workspace_head": "18a42b4ec5a54b6655f36dc4d970805b1762f0aa",
+  "workspace_source_edits": false,
+  "workspace_source_stable": true,
+  "wrapper": "benchmarkUnprofiledAnchorCandidate(comptime enabled: bool, allocator, out, block) Error!bool"
+}

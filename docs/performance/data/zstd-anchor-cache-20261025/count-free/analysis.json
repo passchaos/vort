@@ -1,0 +1,26 @@
+{
+  "rows": [
+    {
+      "case": "XML64K",
+      "baseline_median_ns": 605592815,
+      "cached_median_ns": 594348866,
+      "speedup": 1.0189180961607152,
+      "wire_unchanged": true
+    },
+    {
+      "case": "MR64K",
+      "baseline_median_ns": 498784699,
+      "cached_median_ns": 487190332,
+      "speedup": 1.0237984340789423,
+      "wire_unchanged": true
+    },
+    {
+      "case": "source64K",
+      "baseline_median_ns": 225659034,
+      "cached_median_ns": 221295588,
+      "speedup": 1.0197177270429811,
+      "wire_unchanged": true
+    }
+  ],
+  "scope": "Temporary unprofiled candidate-stage comparison; compiler DCE inspected separately, timer includes anchor alloc/preparation/free/emission, no public API ranking."
+}

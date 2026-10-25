@@ -1,0 +1,18 @@
+[
+  "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+  "build-exe",
+  "-OReleaseFast",
+  "-mcpu=native",
+  "--dep",
+  "vort_zstd",
+  "--dep",
+  "benchmark_provenance",
+  "-Mroot=probe.zig",
+  "-OReleaseFast",
+  "-mcpu=native",
+  "-Mvort_zstd=src/zstd.zig",
+  "-OReleaseFast",
+  "-mcpu=native",
+  "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+  "-femit-bin=/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free"
+]

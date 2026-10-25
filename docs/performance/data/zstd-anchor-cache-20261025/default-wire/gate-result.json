@@ -1,0 +1,22 @@
+{
+  "command": [
+    "python3",
+    "tools/codec_bench/sample_gate.py",
+    "--samples-json",
+    "/tmp/vort-zstd-anchor-cache-20261025/default-wire/samples.json",
+    "--manifest",
+    "/tmp/vort-zstd-anchor-cache-20261025/input-manifest.json",
+    "--csv",
+    "/tmp/vort-zstd-anchor-cache-20261025/default-wire/samples.csv",
+    "--executable",
+    "/home/passchaos/project-z/vort-zstd-anchor-cache/.zig-cache/o/cb65c150ad435ec3299a71a1ad71caff/vort-zstd-encode-bench",
+    "--require-explicit-references"
+  ],
+  "result": {
+    "codec": "zstd",
+    "input_identity": "verified frozen length and SHA-256",
+    "reference_scope": "requested files only; loaded dependency identities unverified",
+    "rounds": 14,
+    "rows": 14
+  }
+}

@@ -1,0 +1,23 @@
+
+/// Temporary count-free experiment: both specializations keep profiling off.
+/// Anchor Work is never exported or inspected, so its writes are dead to this
+/// consumer and eligible for optimization alongside the original scanner.
+pub fn benchmarkUnprofiledAnchorCandidate(
+    comptime enabled: bool,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+) Error!bool {
+    if (block.len <= duplicate_index_max_input_len or block.len > std.compress.zstd.block_size_max)
+        return error.InvalidBlockPlan;
+    var first: ?DuplicateMatch = null;
+    if (!enabled)
+        return emitMultiDuplicateMatchCompressedBlockProfiledMode(true, false, .prune, allocator, out, block, true, null, &first, null);
+    const count = block.len - 7;
+    const hashes = try allocator.alloc(u16, count);
+    defer allocator.free(hashes);
+    const lengths = try allocator.alloc(u32, count);
+    defer allocator.free(lengths);
+    var anchors = paired_anchor_cache.Cache.init(block, hashes, lengths, duplicateHash8) catch return error.InvalidBlockPlan;
+    return emitMultiDuplicateMatchCompressedBlockWithAnchors(true, false, .prune, true, allocator, out, block, true, null, &first, null, &anchors);
+}

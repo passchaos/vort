@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded
+run-zstd-multi-duplicate-profile success
++- run exe vort-zstd-multi-duplicate-profile success 17ms
+   +- compile exe vort-zstd-multi-duplicate-profile ReleaseFast native cached 5ms MaxRSS:40M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 4ms MaxRSS:40M
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+

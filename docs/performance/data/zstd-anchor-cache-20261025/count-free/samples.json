@@ -1,0 +1,176 @@
+{
+  "schema": "vort.zstd.anchor-cache-unprofiled.v1",
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "8",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "0f2747a25fb9b505ec4ddb9810f97ca90aec082df363609e7899c860ef8147bc",
+    "command": "/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free --run"
+  },
+  "profile_work": false,
+  "profile_argument": "null",
+  "anchor_work_observed": false,
+  "purpose": "isolate unprofiled candidate-stage cache overhead and benefit",
+  "round_count": 5,
+  "timer_includes": "candidate allocation and emission; cached hash/length allocation, preparation and deallocation",
+  "timer_excludes": "input reads, hashing, validation, JSON, output-buffer deallocation",
+  "premeasurement": "one untimed baseline and cached candidate with exact wire equality",
+  "rows": [
+    {
+      "case": "XML64K",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "candidate_available": true,
+      "baseline_wire_bytes": 41940,
+      "cached_wire_bytes": 41940,
+      "baseline_wire_sha256": "c9cd347b16a6b169ed788632eb75f3ddf68c851497a443c8a3c698e6e54dd068",
+      "cached_wire_sha256": "c9cd347b16a6b169ed788632eb75f3ddf68c851497a443c8a3c698e6e54dd068",
+      "wire_equal_before_timing": true,
+      "every_timed_wire_equal": true,
+      "rounds": [
+        {
+          "index": 0,
+          "baseline_first": true,
+          "baseline_ns": 622576174,
+          "cached_ns": 596256258
+        },
+        {
+          "index": 1,
+          "baseline_first": false,
+          "baseline_ns": 601602286,
+          "cached_ns": 594348866
+        },
+        {
+          "index": 2,
+          "baseline_first": true,
+          "baseline_ns": 605592815,
+          "cached_ns": 589242118
+        },
+        {
+          "index": 3,
+          "baseline_first": false,
+          "baseline_ns": 602317293,
+          "cached_ns": 592012957
+        },
+        {
+          "index": 4,
+          "baseline_first": true,
+          "baseline_ns": 620984521,
+          "cached_ns": 608171223
+        }
+      ],
+      "baseline_min_ns": 601602286,
+      "cached_min_ns": 589242118,
+      "baseline_median_ns": 605592815,
+      "cached_median_ns": 594348866
+    },
+    {
+      "case": "MR64K",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "candidate_available": true,
+      "baseline_wire_bytes": 22857,
+      "cached_wire_bytes": 22857,
+      "baseline_wire_sha256": "d0f3dace061d5b0497dd1ec95d931e12b95a2d34683f3fd5fd9da90248fcb6af",
+      "cached_wire_sha256": "d0f3dace061d5b0497dd1ec95d931e12b95a2d34683f3fd5fd9da90248fcb6af",
+      "wire_equal_before_timing": true,
+      "every_timed_wire_equal": true,
+      "rounds": [
+        {
+          "index": 0,
+          "baseline_first": true,
+          "baseline_ns": 499821398,
+          "cached_ns": 485606488
+        },
+        {
+          "index": 1,
+          "baseline_first": false,
+          "baseline_ns": 497405209,
+          "cached_ns": 487190332
+        },
+        {
+          "index": 2,
+          "baseline_first": true,
+          "baseline_ns": 498042310,
+          "cached_ns": 488129922
+        },
+        {
+          "index": 3,
+          "baseline_first": false,
+          "baseline_ns": 498784699,
+          "cached_ns": 486240292
+        },
+        {
+          "index": 4,
+          "baseline_first": true,
+          "baseline_ns": 501421716,
+          "cached_ns": 491477602
+        }
+      ],
+      "baseline_min_ns": 497405209,
+      "cached_min_ns": 485606488,
+      "baseline_median_ns": 498784699,
+      "cached_median_ns": 487190332
+    },
+    {
+      "case": "source64K",
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/brotli-source-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "candidate_available": true,
+      "baseline_wire_bytes": 37686,
+      "cached_wire_bytes": 37686,
+      "baseline_wire_sha256": "bedad7f93263217fa6d997b6381ba859cbacfece147f832be3db131963eaa952",
+      "cached_wire_sha256": "bedad7f93263217fa6d997b6381ba859cbacfece147f832be3db131963eaa952",
+      "wire_equal_before_timing": true,
+      "every_timed_wire_equal": true,
+      "rounds": [
+        {
+          "index": 0,
+          "baseline_first": true,
+          "baseline_ns": 225659034,
+          "cached_ns": 223998022
+        },
+        {
+          "index": 1,
+          "baseline_first": false,
+          "baseline_ns": 224919323,
+          "cached_ns": 220454214
+        },
+        {
+          "index": 2,
+          "baseline_first": true,
+          "baseline_ns": 223665334,
+          "cached_ns": 221295588
+        },
+        {
+          "index": 3,
+          "baseline_first": false,
+          "baseline_ns": 225785167,
+          "cached_ns": 223009269
+        },
+        {
+          "index": 4,
+          "baseline_first": true,
+          "baseline_ns": 225680031,
+          "cached_ns": 220997257
+        }
+      ],
+      "baseline_min_ns": 223665334,
+      "cached_min_ns": 220454214,
+      "baseline_median_ns": 225659034,
+      "cached_median_ns": 221295588
+    }
+  ]
+}

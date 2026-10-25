@@ -1,0 +1,20 @@
+{
+  "schema": "vort.zstd.anchor-cache.precompute-address-summary.v1",
+  "method": "Static loop enumeration from audited four-way bulk and scalar remainder; no target execution.",
+  "N": 65536,
+  "M": 65529,
+  "bulk_positions": 65528,
+  "scalar_remainder_positions": 1,
+  "hash_store_symbols_covered_once": true,
+  "length_store_symbols_covered_once": true,
+  "logical_input_span": [
+    0,
+    65536
+  ],
+  "input_load_operand_bytes": 524232,
+  "input_byte_load_count_min": 1,
+  "input_byte_load_count_max": 8,
+  "hash_store_operand_bytes": 131058,
+  "length_store_operand_bytes": 262116,
+  "overread": false
+}

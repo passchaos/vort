@@ -1,0 +1,8 @@
+{
+  "workspace_head": "18a42b4ec5a54b6655f36dc4d970805b1762f0aa",
+  "base_zstd_sha256": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+  "temporary_zstd_sha256": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+  "append_file": "temporary-wrapper.zig.txt",
+  "other_src_files": "Unmodified source snapshot listed in temporary-source-sha256.json; build commands retained in result.json/build-command.json.",
+  "probe": "probe.zig"
+}

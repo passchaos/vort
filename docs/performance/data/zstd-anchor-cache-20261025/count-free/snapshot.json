@@ -1,0 +1,14 @@
+{
+  "status": "snapshot_created",
+  "utc": "2026-10-25T07:34:45.363705+00:00",
+  "workspace": "/home/passchaos/project-z/vort-zstd-anchor-cache",
+  "snapshot": "/tmp/vort-zstd-anchor-cache-20261025/count-free",
+  "files": 1354,
+  "original_zstd_sha256": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+  "temporary_zstd_sha256": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+  "anchor_cache_sha256": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+  "only_snapshot_mutation": "appended benchmarkUnprofiledAnchorCandidate to src/zstd.zig",
+  "profile_work": false,
+  "profile_argument": null,
+  "timing_not_authorized": true
+}

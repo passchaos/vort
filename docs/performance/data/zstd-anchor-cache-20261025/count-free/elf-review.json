@@ -1,0 +1,249 @@
+{
+  "schema": "vort.zstd.anchor-cache.count-free-elf-review.v1",
+  "created_utc": "2026-10-25T07:41:14.725579+00:00",
+  "created_asia_shanghai": "2026-10-25T15:41:14.725579+08:00",
+  "scope": "Read-only independent count-free experiment ELF review; no compilation, timing, source or Git mutation; no production claim",
+  "artifacts": {
+    "elf": "/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free",
+    "temporary_zstd": "/tmp/vort-zstd-anchor-cache-20261025/count-free/src/zstd.zig",
+    "core": "/tmp/vort-zstd-anchor-cache-20261025/count-free/src/zstd/match/paired_anchor_cache.zig",
+    "profile_true_elf": "/tmp/vort-zstd-anchor-cache-20261025/anchor-profile",
+    "probe": "/tmp/vort-zstd-anchor-cache-20261025/count-free/probe.zig"
+  },
+  "sha256": {
+    "elf": "0f2747a25fb9b505ec4ddb9810f97ca90aec082df363609e7899c860ef8147bc",
+    "temporary_zstd": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+    "core": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+    "profile_true_elf": "c6382712b17036e8dfd92c9d2bf3936fd4baccddf9583e78ed41dada65fc2424",
+    "probe": "f3825a1000aa2a116d1dacb3a7fce802be0ed5ddf1b43d3af0bc0c34b982a82c"
+  },
+  "snapshot_record": {
+    "status": "snapshot_created",
+    "utc": "2026-10-25T07:34:45.363705+00:00",
+    "workspace": "/home/passchaos/project-z/vort-zstd-anchor-cache",
+    "snapshot": "/tmp/vort-zstd-anchor-cache-20261025/count-free",
+    "files": 1354,
+    "original_zstd_sha256": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+    "temporary_zstd_sha256": "94b657e61588848718baca559ddf85a0f0d9d2e989bf4b3edbcd5db8a4e5572c",
+    "anchor_cache_sha256": "162a3afef29c137aba7d2fbcfb4cf702c01e38493cc079cbad850a818c935dc7",
+    "only_snapshot_mutation": "appended benchmarkUnprofiledAnchorCandidate to src/zstd.zig",
+    "profile_work": false,
+    "profile_argument": null,
+    "timing_not_authorized": true
+  },
+  "build_record": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build-exe",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "--dep",
+      "vort_zstd",
+      "--dep",
+      "benchmark_provenance",
+      "-Mroot=probe.zig",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "-Mvort_zstd=src/zstd.zig",
+      "-OReleaseFast",
+      "-mcpu=native",
+      "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+      "-femit-bin=/tmp/vort-zstd-anchor-cache-20261025/count-free/anchor-count-free"
+    ],
+    "affinity": "13-15",
+    "started_utc": "2026-10-25T07:35:30.618031+00:00",
+    "timing_probe_not_run": true,
+    "exit_code": 0,
+    "wall_seconds": 30.27860384201631,
+    "finished_utc": "2026-10-25T07:36:00.896752+00:00"
+  },
+  "symbols": {
+    "baseline": {
+      "enabled": false,
+      "symbol": "zstd.benchmarkUnprofiledAnchorCandidate__anon_3085",
+      "address": "0x10f4aa0",
+      "size_bytes": 1562,
+      "timed_symbol": "probe.timed__anon_3112",
+      "timed_address": "0x1060a20",
+      "timed_size_bytes": 469,
+      "timed_candidate_call": "0x1060a98",
+      "cache_costs": true,
+      "profile_work": false,
+      "mode": "prune",
+      "reuse_anchors": false,
+      "profile_argument": null,
+      "query_hash": "load original input anchor, multiply golden-ratio constant, shift 49",
+      "extender_call": "0x10f4cae",
+      "cost_cache_call": "0x10f4d4f",
+      "candidate_emit_call": "0x10f506e",
+      "outer_block_admission": "65535 < N <= 131072"
+    },
+    "enabled": {
+      "enabled": true,
+      "symbol": "zstd.benchmarkUnprofiledAnchorCandidate__anon_3091",
+      "address": "0x10beed0",
+      "size_bytes": 2404,
+      "timed_symbol": "probe.timed__anon_3146",
+      "timed_address": "0x1060c00",
+      "timed_size_bytes": 469,
+      "timed_candidate_call": "0x1060c78",
+      "cache_costs": true,
+      "profile_work": false,
+      "mode": "prune",
+      "reuse_anchors": true,
+      "profile_argument": null,
+      "query_hash": "0x10bf34b movzwl from prepared u16 hashes",
+      "cache_length_load": "0x10bf3a2",
+      "sentinel_compare": "0x10bf3ab",
+      "hit_branch": "0x10bf3b2 jne 0x10bf406",
+      "extender_call_on_miss": "0x10bf3d4",
+      "length_store_on_miss": "0x10bf402",
+      "cost_cache_call": "0x10bf4a4",
+      "candidate_emit_call": "0x10bf7a4",
+      "outer_block_admission": "65535 < N <= 131072"
+    }
+  },
+  "anchor_work": {
+    "build_hashes_update_removed_in_enabled_entry": true,
+    "query_hashes_update_removed_in_enabled_scanner": true,
+    "extension_hits_update_removed_in_enabled_hit": true,
+    "extension_calls_update_removed_in_enabled_miss": true,
+    "work_publication_absent": true,
+    "all_entry_cmov_instructions": 0,
+    "claim_scope": "Only anchor Work updates in these local inlined specializations; not all counters or zero measured overhead."
+  },
+  "remaining_cost_work": {
+    "shared_symbol": "zstd.literals.winner_cost_cache.Cache(zstd.SingleLiteralCostCodec,.prune).payloadForWinner",
+    "address": "0x10f1840",
+    "size_bytes": 9063,
+    "called_by_both_entries": true,
+    "examples": [
+      {
+        "address_range": "0x10f1868\u20130x10f187d",
+        "offset": "0x1600",
+        "field": "bound_work.queries",
+        "pattern": "load; inc; cmove UINT64_MAX; store"
+      },
+      {
+        "address_range": "0x10f188d\u20130x10f189b",
+        "offset": "0x15f8",
+        "field": "certificate_age",
+        "pattern": "conditional load; inc; cmove UINT64_MAX; store"
+      },
+      {
+        "address_range": "0x10f2cf2\u20130x10f2d07",
+        "offset": "0x1080",
+        "field": "inner.work.cost_queries",
+        "pattern": "load; inc; cmove UINT64_MAX; store"
+      },
+      {
+        "address_range": "0x10f2d36\u20130x10f2d44",
+        "offset": "0x1088",
+        "field": "inner.work.huffman_plans",
+        "pattern": "conditional load; inc; cmove UINT64_MAX; store"
+      },
+      {
+        "address_range": "0x10f328f\u20130x10f329d",
+        "offset": "0x10a0",
+        "field": "inner.work.stream_symbol_products",
+        "pattern": "conditional load; inc; cmove UINT64_MAX; store"
+      }
+    ],
+    "context": "The local scanner is inlined with unobserved anchor Work, while the cost routine remains a shared function with pointer writes. Disassembly records retained writes; it does not prove the optimizer reason or their cycle cost."
+  },
+  "profile_true_comparison": {
+    "elf": "/tmp/vort-zstd-anchor-cache-20261025/anchor-profile",
+    "sha256": "c6382712b17036e8dfd92c9d2bf3936fd4baccddf9583e78ed41dada65fc2424",
+    "symbol": "multi_duplicate_profile.main",
+    "address": "0x1060b80",
+    "size_bytes": 48703,
+    "examples": [
+      {
+        "field": "query_hashes",
+        "address_range": "0x1064b8c\u20130x1064b93",
+        "operation": "register inc/cmove(UINT64_MAX) before prepared hash load"
+      },
+      {
+        "field": "extension_hits",
+        "address_range": "0x1064bef\u20130x1064bfd",
+        "operation": "stack load/inc/cmove(UINT64_MAX)/store on hit"
+      },
+      {
+        "field": "extension_calls",
+        "address_range": "0x1064c0c\u20130x1064c1a",
+        "operation": "stack load/inc/cmove(UINT64_MAX)/store before extender on miss"
+      }
+    ],
+    "comparison_scope": "Static counter retention contrast only; whole programs and factoring differ, no timing or production performance conclusion."
+  },
+  "preparation": {
+    "included_in_candidate_timer": true,
+    "count_formula": "M=N-7",
+    "hash_alloc": {
+      "address": "0x10bef5a",
+      "bytes": "2*M",
+      "alignment_log2": 1
+    },
+    "length_alloc": {
+      "address": "0x10befb1",
+      "bytes": "4*M",
+      "alignment_log2": 2
+    },
+    "precompute": {
+      "address_range": "0x10bf14b\u20130x10bf1f0",
+      "operations": "read eight-byte anchor, multiply/shift15-bit hash, store u16 hash, store UINT32_MAX length; four-way unrolled bulk + scalar remainder",
+      "M_65536": 65529,
+      "used_payload_bytes_65536": 393174,
+      "logical_input_span_bytes_65536": 65536,
+      "anchor_load_operand_bytes_65536": 524232,
+      "hash_store_operand_bytes_65536": 131058,
+      "length_init_store_operand_bytes_65536": 262116,
+      "explanation": "Overlapping eight-byte anchor loads; 64KiB logical input does not imply 64KiB load operands."
+    },
+    "normal_free_addresses": [
+      "0x10bf803",
+      "0x10bf820"
+    ],
+    "normal_free_before_entry_return": true,
+    "relative_filter_order": "Enabled allocation+Cache.init precede rleByte filtering; baseline filters before cost-cache setup. Both still follow the outer admissible block-length guard.",
+    "measure_limit": "Allocation sizes are API arguments, not observed heap/RSS or process footprint."
+  },
+  "candidate_output": {
+    "same_emitter_symbol": "zstd.emitBestSequenceCompressedBlock",
+    "address": "0x10bf840",
+    "size_bytes": 15377,
+    "calls_retained": true,
+    "caller_out_forwarded": true,
+    "emitter_alloc_append_memcpy_calls_retained": true,
+    "timed_enabled_output_compare": "0x1060cf6 call mem.eqlBytes with actual output pointer and length after stop-clock call 0x1060caa",
+    "timed_baseline_output_compare": "0x1060b16 call mem.eqlBytes after stop-clock call 0x1060aca",
+    "full_output_consumer_retained": true,
+    "output_deinit_outside_timer": true,
+    "validation_not_executed_by_this_audit": true
+  },
+  "limitations": [
+    "No compiler or benchmark process run by this audit.",
+    "profile_work=false removes explicit profile publication/accounting, but does not automatically make all generic Work counters disappear.",
+    "No zero-overhead, speed ranking, production benefit, heap, RSS or process total-stack claim.",
+    "Static code presence cannot establish branch execution counts or correctness on this corpus.",
+    "Parent owns any later timing after check/compiler activity ends."
+  ],
+  "evidence": {
+    "baseline.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/baseline.asm",
+    "candidate-emitter.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/candidate-emitter.asm",
+    "cost-payload-for-winner.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/cost-payload-for-winner.asm",
+    "enabled-allocate-and-build.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/enabled-allocate-and-build.asm",
+    "enabled-cache-hit-miss.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/enabled-cache-hit-miss.asm",
+    "enabled-emit-and-free.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/enabled-emit-and-free.asm",
+    "enabled.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/enabled.asm",
+    "precompute-address-summary.json": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/precompute-address-summary.json",
+    "probe-candidate-call-sites.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/probe-candidate-call-sites.asm",
+    "profile-true-anchor-query-hit-miss.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/profile-true-anchor-query-hit-miss.asm",
+    "profile-true-main.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/profile-true-main.asm",
+    "remaining-cost-work-writes.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/remaining-cost-work-writes.asm",
+    "symbols.nm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/symbols.nm",
+    "timed-baseline.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/timed-baseline.asm",
+    "timed-enabled.asm": "/tmp/vort-zstd-anchor-cache-20261025/count-free/exactasm/timed-enabled.asm"
+  },
+  "temporary_wrapper_only_append_verified": true
+}
