@@ -32,6 +32,7 @@ const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
 const literal_copy = @import("zstd/literals/copy.zig");
 const single_literal_cost = @import("zstd/literals/single_cost_cache.zig");
+const winner_literal_cost = @import("zstd/literals/winner_cost_cache.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
@@ -19494,11 +19495,24 @@ pub fn benchmarkNativeMultiDuplicateProfile(
     block: []const u8,
     profile: *NativeMultiDuplicateProfile,
 ) Error!bool {
+    return benchmarkNativeMultiDuplicateProfileMode(allocator, out, block, profile, .prune);
+}
+
+pub fn benchmarkNativeMultiDuplicateProfileMode(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    profile: *NativeMultiDuplicateProfile,
+    mode: winner_literal_cost.Mode,
+) Error!bool {
     if (block.len <= duplicate_index_max_input_len or block.len > std.compress.zstd.block_size_max)
         return error.InvalidBlockPlan;
     profile.* = .{};
     var first: ?DuplicateMatch = null;
-    return emitMultiDuplicateMatchCompressedBlockProfiled(true, true, allocator, out, block, true, null, &first, profile);
+    return switch (mode) {
+        .shadow => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .shadow, allocator, out, block, true, null, &first, profile),
+        .prune => emitMultiDuplicateMatchCompressedBlockProfiledMode(true, true, .prune, allocator, out, block, true, null, &first, profile),
+    };
 }
 
 pub const NativeMatchStageScratch = struct {
@@ -23259,19 +23273,25 @@ fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: boo
 }
 
 fn emitMultiDuplicateMatchCompressedBlockProfiled(comptime cache_costs: bool, comptime profile_work: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockProfiledMode(cache_costs, profile_work, .prune, allocator, out, block, last, duplicate_index, first_match, profile);
+}
+
+fn emitMultiDuplicateMatchCompressedBlockProfiledMode(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
     first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
-    var cost_cache: ?SingleLiteralCostCache = if (cache_costs and duplicate_index == null and
+    const ActiveCostCache = if (mode == .shadow) SingleLiteralShadowCache else SingleLiteralWinnerCache;
+    var cost_cache: ?ActiveCostCache = if (cache_costs and duplicate_index == null and
         block.len > duplicate_exact_hash_input_max and block.len <= std.compress.zstd.block_size_max)
-        try SingleLiteralCostCache.init(block)
+        try ActiveCostCache.init(block)
     else
         null;
     defer if (profile_work) {
         if (cost_cache) |*cache| {
-            profile.?.cost = cache.work;
-            profile.?.histogram_scanned_bytes = cache.histogram.scanned_bytes;
-            profile.?.histogram_updates = cache.histogram.update_count;
-            profile.?.cache_state_bytes = @sizeOf(SingleLiteralCostCache);
+            profile.?.cost = cache.inner.work;
+            profile.?.histogram_scanned_bytes = cache.inner.histogram.scanned_bytes;
+            profile.?.histogram_updates = cache.inner.histogram.update_count;
+            profile.?.cache_state_bytes = @sizeOf(ActiveCostCache);
+            profile.?.cost_bound = cache.bound_work;
         }
     };
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
@@ -30426,10 +30446,17 @@ fn findBestDuplicateMatchHashedImpl(comptime cache_costs: bool, block: []const u
 
         const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
         if (duplicateMatchCannotBeat(candidate, best)) continue;
-        const candidate_payload_len = (if (cache_costs)
-            cost_cache.payloadLen(index - start_min, index - candidate_start, len, index + len)
-        else
-            singleMatchPayloadLenFrom(block, candidate, start_min)) catch continue;
+        const maybe_payload_len: ?usize = if (cache_costs) blk: {
+            if (@hasDecl(@TypeOf(cost_cache.*), "payloadForWinner")) {
+                const incumbent: ?winner_literal_cost.Winner = if (best) |current|
+                    .{ .payload_len = best_payload_len, .match_len = current.len }
+                else
+                    null;
+                break :blk cost_cache.payloadForWinner(index - start_min, index - candidate_start, len, index + len, incumbent) catch continue;
+            }
+            break :blk cost_cache.payloadLen(index - start_min, index - candidate_start, len, index + len) catch continue;
+        } else singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+        const candidate_payload_len = maybe_payload_len orelse continue;
         if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
             var scored = candidate;
             scored.payload_len = candidate_payload_len;
@@ -31065,6 +31092,10 @@ const SingleLiteralCostCodec = struct {
     pub const literalHeaderLen = literalsHeaderLen;
     pub const huffmanHeaderLen = huffmanLiteralsHeaderLen;
     pub const treeLen = smallHuffmanTreeSerializedLen;
+    // All fresh plans use the proven length-limited weighted optimum. This
+    // contract does not claim optimal serialized tree/header/stream bytes.
+    pub const optimal_huffman_bits: u8 = 11;
+    pub const minimum_tree_bytes: usize = 2;
 
     pub fn planFromFrequencies(frequencies: *const [256]u32) ?SmallHuffmanLiteralPlan {
         var plan: SmallHuffmanLiteralPlan = .{ .frequencies = frequencies.* };
@@ -31086,6 +31117,8 @@ const SingleLiteralCostCodec = struct {
 };
 
 const SingleLiteralCostCache = single_literal_cost.Cache(SingleLiteralCostCodec);
+const SingleLiteralShadowCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .shadow);
+const SingleLiteralWinnerCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .prune);
 
 const SingleLiteralCostTestCodec = struct {
     pub const CostCodec = SingleLiteralCostCodec;
@@ -31119,6 +31152,20 @@ test "zstd single literal cost cache preserves multi wire and allocator requests
     try @import("zstd/literals/single_cost_cache_tests.zig").wireAndAllocations(SingleLiteralCostTestCodec);
 }
 
+test "zstd weighted bound tiny exhaustive Kraft oracle" {
+    try @import("zstd/literals/weighted_bound_tests.zig").tinyExhaustive();
+}
+test "zstd weighted bound checked resources and trusted cost contracts" {
+    try @import("zstd/literals/weighted_bound_tests.zig").resources();
+}
+test "zstd weighted bound real full width optimal cost oracle" {
+    try @import("zstd/literals/weighted_bound_tests.zig").realistic(huffman);
+}
+
+test "zstd winner cost cache preserves every bounded candidate and tie" {
+    try @import("zstd/literals/winner_cost_cache_tests.zig").contracts(SingleLiteralCostTestCodec);
+}
+
 test "zstd multi duplicate profile preserves candidate wire and reports real cache work" {
     var block: [65536]u8 = undefined;
     var state: u32 = 0x1319_8a2e;
@@ -31145,6 +31192,10 @@ test "zstd multi duplicate profile preserves candidate wire and reports real cac
     try std.testing.expect(profile.cost.huffman_plans <= profile.cost.cost_queries);
     try std.testing.expectEqual(profile.cost.huffman_plans, profile.cost.tree_serializations + profile.cost.tree_cache_hits);
     try std.testing.expectEqual(@as(u64, 0), profile.cost.reference_checks);
+    try std.testing.expectEqual(profile.cost.cost_queries, profile.cost_bound.queries);
+    try std.testing.expectEqual(@as(u64, 0), profile.cost_bound.bound_violations);
+    try std.testing.expectEqual(@as(u64, 0), profile.cost_bound.false_rejections);
+    try std.testing.expectEqual(@as(u64, 0), profile.cost_bound.rejected);
 }
 
 test "zstd multi duplicate profile checks input bounds and clears empty work" {

@@ -36,6 +36,23 @@ const TreeEntry = struct {
     serialized_len: ?usize,
 };
 
+pub const PreparedLiterals = struct {
+    frequencies: [256]u32,
+    unique: usize,
+    regenerated: usize,
+    raw_cost: usize,
+};
+
+pub const LiteralCost = struct {
+    len: usize,
+    weighted_bits: ?u64 = null,
+};
+
+pub const PayloadCost = struct {
+    len: usize,
+    weighted_bits: ?u64 = null,
+};
+
 /// Codec delegates the existing Huffman tree, header, and sequence-table rules.
 /// `prefix_len` deliberately means block[0..prefix_len], even for a finder
 /// query whose start_min is nonzero. This preserves the legacy cost view.
@@ -53,23 +70,56 @@ pub fn Cache(comptime Codec: type) type {
         }
 
         pub fn payloadLen(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!usize {
+            const result = try self.payloadCost(prefix_len, offset, match_len, tail_start);
+            return result.len;
+        }
+
+        fn payloadCost(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!PayloadCost {
             self.work.cost_queries +|= 1;
             const actual = self.calculatePayloadLen(prefix_len, offset, match_len, tail_start);
+            self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+            return actual;
+        }
+
+        pub fn failedPreparation(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize, err: Codec.Error) Codec.Error!PayloadCost {
+            self.work.cost_queries +|= 1;
+            const actual: Codec.Error!PayloadCost = err;
+            self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+            return err;
+        }
+
+        /// The diagnostic wrapper prepares each cut once before examining its
+        /// lower bound. Retain the original literal-then-sequence error order.
+        /// The caller must not update this cache's cut between preparation and
+        /// pricing: frequencies and stream histograms must describe one view.
+        pub fn payloadCostPrepared(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize, prepared: *const PreparedLiterals) Codec.Error!PayloadCost {
+            self.work.cost_queries +|= 1;
+            const actual = self.calculatePayloadPrepared(prefix_len, offset, match_len, prepared);
+            self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+            return actual;
+        }
+
+        fn checkReference(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize, actual: Codec.Error!PayloadCost) void {
             // Test codecs compare every query, including rejected and losing
             // candidates. Production codecs retain no reference callback.
             if (@hasDecl(Codec, "referenceCost")) {
                 self.work.reference_checks +|= 1;
                 const reference = Codec.referenceCost(self.block, prefix_len, offset, match_len, tail_start);
                 const equal = if (reference) |expected|
-                    if (actual) |value| value == expected else |_| false
+                    if (actual) |value| value.len == expected else |_| false
                 else |expected_error| if (actual) |_| false else |actual_error| actual_error == expected_error;
                 self.work.reference_mismatches +|= @intFromBool(!equal);
             }
-            return actual;
         }
 
-        fn calculatePayloadLen(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!usize {
-            const literals_len = try self.literalSectionLen(prefix_len, tail_start);
+        fn calculatePayloadLen(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!PayloadCost {
+            const prepared = try self.prepareLiterals(prefix_len, tail_start);
+            return self.calculatePayloadPrepared(prefix_len, offset, match_len, &prepared);
+        }
+
+        fn calculatePayloadPrepared(self: *Self, prefix_len: usize, offset: usize, match_len: usize, prepared: *const PreparedLiterals) Codec.Error!PayloadCost {
+            const literal = try self.literalCostPrepared(prepared);
+            const literals_len = literal.len;
             var best: ?usize = null;
             if (Codec.rlePayloadLen(prefix_len, offset, match_len, literals_len)) |len| {
                 best = len;
@@ -83,10 +133,15 @@ pub fn Cache(comptime Codec: type) type {
                 error.CorruptFrame => {},
                 else => return err,
             }
-            return best orelse error.CorruptFrame;
+            return .{ .len = best orelse return error.CorruptFrame, .weighted_bits = literal.weighted_bits };
         }
 
         pub fn literalSectionLen(self: *Self, prefix_len: usize, tail_start: usize) Codec.Error!usize {
+            const prepared = try self.prepareLiterals(prefix_len, tail_start);
+            return (try self.literalCostPrepared(&prepared)).len;
+        }
+
+        pub fn prepareLiterals(self: *Self, prefix_len: usize, tail_start: usize) Codec.Error!PreparedLiterals {
             try self.histogram.update(prefix_len, tail_start);
             var frequencies: [256]u32 = undefined;
             self.histogram.totalFrequencies(&frequencies);
@@ -94,21 +149,27 @@ pub fn Cache(comptime Codec: type) type {
             for (frequencies) |frequency| unique += @intFromBool(frequency != 0);
             const regenerated = self.histogram.regenerated_len;
             const raw_len = if (unique == 1) 1 else regenerated;
-            var best = std.math.add(usize, try Codec.literalHeaderLen(regenerated), raw_len) catch return error.IntegerOverflow;
-            if (unique < 2 or regenerated < 64) return best;
+            const raw_cost = std.math.add(usize, try Codec.literalHeaderLen(regenerated), raw_len) catch return error.IntegerOverflow;
+            return .{ .frequencies = frequencies, .unique = unique, .regenerated = regenerated, .raw_cost = raw_cost };
+        }
+
+        pub fn literalCostPrepared(self: *Self, prepared: *const PreparedLiterals) Codec.Error!LiteralCost {
+            var best = prepared.raw_cost;
+            const regenerated = prepared.regenerated;
+            if (prepared.unique < 2 or regenerated < 64) return .{ .len = best };
 
             self.work.huffman_plans +|= 1;
-            const plan = Codec.planFromFrequencies(&frequencies) orelse return best;
-            const tree_len = try self.cachedTreeLen(&plan) orelse return best;
-            const streams_len = try self.streamsLen(&plan.bit_counts) orelse return best;
-            const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
+            const plan = Codec.planFromFrequencies(&prepared.frequencies) orelse return .{ .len = best };
+            const tree_len = try self.cachedTreeLen(&plan) orelse return .{ .len = best };
+            const streams = try self.streamsLen(&plan.bit_counts) orelse return .{ .len = best };
+            const compressed_size = std.math.add(usize, tree_len, streams.len) catch return error.IntegerOverflow;
             const header_len = Codec.huffmanHeaderLen(regenerated, compressed_size) catch |err| switch (err) {
-                error.UnsupportedZstdFeature => return best,
+                error.UnsupportedZstdFeature => return .{ .len = best },
                 else => return err,
             };
             const compressed = std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
             if (compressed < best) best = compressed;
-            return best;
+            return .{ .len = best, .weighted_bits = streams.weighted_bits };
         }
 
         /// One finalized plan at a time, scoped to this fixed compiled codec.
@@ -129,8 +190,9 @@ pub fn Cache(comptime Codec: type) type {
 
         /// The histogram already divides the regenerated prefix/tail view into
         /// the canonical one or four streams. Count bits without scanning bytes.
-        fn streamsLen(self: *Self, bit_counts: *const [256]u8) Codec.Error!?usize {
+        fn streamsLen(self: *Self, bit_counts: *const [256]u8) Codec.Error!?LiteralCost {
             var total: usize = if (self.histogram.stream_count == 1) 0 else 6;
+            var weighted_bits: u64 = 0;
             for (self.histogram.stream_frequencies[0..self.histogram.stream_count]) |*frequencies| {
                 var stream_bits: usize = 0;
                 for (frequencies, bit_counts) |frequency, bits| {
@@ -141,11 +203,12 @@ pub fn Cache(comptime Codec: type) type {
                     stream_bits = std.math.add(usize, stream_bits, product) catch return error.IntegerOverflow;
                 }
                 const rounded = std.math.add(usize, stream_bits, 8) catch return error.IntegerOverflow;
+                weighted_bits = std.math.add(u64, weighted_bits, stream_bits) catch return error.IntegerOverflow;
                 const stream_len = rounded / 8; // One end bit followed by padding.
                 if (self.histogram.stream_count != 1 and stream_len > std.math.maxInt(u16)) return null;
                 total = std.math.add(usize, total, stream_len) catch return error.IntegerOverflow;
             }
-            return total;
+            return .{ .len = total, .weighted_bits = weighted_bits };
         }
     };
 }
