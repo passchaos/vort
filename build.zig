@@ -5876,6 +5876,23 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_zstd_encode_bench.addArgs(args);
     const zstd_encode_bench_step = b.step("run-zstd-encode-bench", "Compare Zstd encoding with runtime libzstd");
     zstd_encode_bench_step.dependOn(&run_zstd_encode_bench.step);
+
+    const zstd_multi_duplicate_profile_exe = b.addExecutable(.{
+        .name = "vort-zstd-multi-duplicate-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/multi_duplicate_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort_zstd", .module = zstd_encode_bench_mod },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_zstd_multi_duplicate_profile = b.addRunArtifact(zstd_multi_duplicate_profile_exe);
+    if (b.args) |args| run_zstd_multi_duplicate_profile.addArgs(args);
+    const zstd_multi_duplicate_profile_step = b.step("run-zstd-multi-duplicate-profile", "Count unindexed Zstd multi-duplicate work for 64...128 KiB file inputs");
+    zstd_multi_duplicate_profile_step.dependOn(&run_zstd_multi_duplicate_profile.step);
     const run_zstd_encode_bench_csv = b.addRunArtifact(zstd_encode_bench_exe);
     run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "3", "--rounds", "3", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
     const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv", "--executable" });
@@ -7077,6 +7094,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_seekable_parallel_bench_exe.step);
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
+    check_step.dependOn(&zstd_multi_duplicate_profile_exe.step);
     check_step.dependOn(&zstd_large_sequence_probe_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);

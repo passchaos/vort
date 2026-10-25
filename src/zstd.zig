@@ -19484,6 +19484,23 @@ pub const NativeMatchStageResult = struct {
 pub const NativeSingleBeamProfile = single_beam_match.Profile;
 pub const NativeOptimalSearchProfile = lz77.OptimalSearchProfile;
 
+/// Diagnostic work for the unindexed multi-duplicate candidate. Normal frame
+/// encoders do not construct this profile or execute its accounting branches.
+pub const NativeMultiDuplicateProfile = @import("zstd/match/multi_duplicate_profile.zig").Profile;
+
+pub fn benchmarkNativeMultiDuplicateProfile(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    profile: *NativeMultiDuplicateProfile,
+) Error!bool {
+    if (block.len <= duplicate_index_max_input_len or block.len > std.compress.zstd.block_size_max)
+        return error.InvalidBlockPlan;
+    profile.* = .{};
+    var first: ?DuplicateMatch = null;
+    return emitMultiDuplicateMatchCompressedBlockProfiled(true, true, allocator, out, block, true, null, &first, profile);
+}
+
 pub const NativeMatchStageScratch = struct {
     candidate: std.ArrayList(u8) = .empty,
     greedy_tokens: std.ArrayList(lz77.Token) = .empty,
@@ -23238,6 +23255,10 @@ fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator,
 }
 
 fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockProfiled(cache_costs, false, allocator, out, block, last, duplicate_index, first_match, null);
+}
+
+fn emitMultiDuplicateMatchCompressedBlockProfiled(comptime cache_costs: bool, comptime profile_work: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
     first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
     var cost_cache: ?SingleLiteralCostCache = if (cache_costs and duplicate_index == null and
@@ -23245,11 +23266,20 @@ fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: boo
         try SingleLiteralCostCache.init(block)
     else
         null;
+    defer if (profile_work) {
+        if (cost_cache) |*cache| {
+            profile.?.cost = cache.work;
+            profile.?.histogram_scanned_bytes = cache.histogram.scanned_bytes;
+            profile.?.histogram_updates = cache.histogram.update_count;
+            profile.?.cache_state_bytes = @sizeOf(SingleLiteralCostCache);
+        }
+    };
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var literal_start: usize = 0;
     while (count < matches.len and literal_start < block.len) {
+        if (profile_work) profile.?.finder_calls +|= 1;
         const match = if (duplicate_index) |index|
             try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
         else if (cost_cache) |*cache|
@@ -23261,6 +23291,7 @@ fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: boo
         matches[count] = match;
         literal_lens[count] = literal_len;
         count += 1;
+        if (profile_work) profile.?.selected_matches +|= 1;
         literal_start = match.second_start + match.len;
     }
     if (count < 2) return false;
@@ -31086,6 +31117,48 @@ test "zstd single literal cost cache verifies every candidate and complete finde
 }
 test "zstd single literal cost cache preserves multi wire and allocator requests" {
     try @import("zstd/literals/single_cost_cache_tests.zig").wireAndAllocations(SingleLiteralCostTestCodec);
+}
+
+test "zstd multi duplicate profile preserves candidate wire and reports real cache work" {
+    var block: [65536]u8 = undefined;
+    var state: u32 = 0x1319_8a2e;
+    for (&block) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const first_fragment = block[16..208].*;
+    const second_fragment = block[480..608].*;
+    @memcpy(block[256..448], &first_fragment);
+    @memcpy(block[736..864], &second_fragment);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    const available = try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected, &block, true, null);
+    var profile: NativeMultiDuplicateProfile = .{};
+    try std.testing.expectEqual(available, try benchmarkNativeMultiDuplicateProfile(std.testing.allocator, &actual, &block, &profile));
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    try std.testing.expect(profile.selected_matches >= 2);
+    try std.testing.expect(profile.finder_calls >= profile.selected_matches);
+    try std.testing.expect(profile.cost.cost_queries != 0);
+    try std.testing.expectEqual(profile.cost.cost_queries, profile.histogram_updates);
+    try std.testing.expect(profile.cost.huffman_plans <= profile.cost.cost_queries);
+    try std.testing.expectEqual(profile.cost.huffman_plans, profile.cost.tree_serializations + profile.cost.tree_cache_hits);
+    try std.testing.expectEqual(@as(u64, 0), profile.cost.reference_checks);
+}
+
+test "zstd multi duplicate profile checks input bounds and clears empty work" {
+    var block: [131073]u8 = @splat('a');
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    var profile: NativeMultiDuplicateProfile = .{ .finder_calls = 7 };
+    try std.testing.expectError(error.InvalidBlockPlan, benchmarkNativeMultiDuplicateProfile(std.testing.allocator, &out, block[0..65535], &profile));
+    try std.testing.expectEqual(@as(u64, 7), profile.finder_calls);
+    try std.testing.expectError(error.InvalidBlockPlan, benchmarkNativeMultiDuplicateProfile(std.testing.allocator, &out, &block, &profile));
+    try std.testing.expectEqual(@as(u64, 7), profile.finder_calls);
+    try std.testing.expect(!try benchmarkNativeMultiDuplicateProfile(std.testing.allocator, &out, block[0..65536], &profile));
+    try std.testing.expectEqualDeep(@as(NativeMultiDuplicateProfile, .{}), profile);
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 fn singleMatchPayloadLenFromIndex(block: []const u8, match: DuplicateMatch, literal_start: usize, index: *const DuplicateMatchIndex) Error!usize {
