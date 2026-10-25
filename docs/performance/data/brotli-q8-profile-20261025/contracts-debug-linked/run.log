@@ -1,0 +1,26 @@
+1/25 br.test.Brotli q8 quality profile complete wire and bounded diagnostic contracts...OK
+2/25 br.test_0...OK
+3/25 br.incremental.stored.encoder.test_0...OK
+4/25 br.incremental.copy_decoder.test_0...OK
+5/25 br.incremental.owned_copy_decoder.test_0...OK
+6/25 br.encoder.distance.test_0...OK
+7/25 br.encoder.hq_options.test_0...OK
+8/25 br.encoder.hq_types.test_0...OK
+9/25 br.encoder.hq_parser.test_0...OK
+10/25 br.encoder.total_budget.test_0...OK
+11/25 tests.br_total_memory_contracts.test_0...OK
+12/25 br.encoder.stored_memory_owner.test_0...OK
+13/25 br.encoder.stored_memory_reuse.test_0...OK
+14/25 br.encoder.hq_tree_oracle_tests.test_0...OK
+15/25 br.encoder.hq_dictionary.test_0...OK
+16/25 br.encoder.hq_codec.alias.test_0...OK
+17/25 br.encoder.static_dictionary_matcher.test_0...OK
+18/25 br.encoder.stored_bit_bound.test_0...OK
+19/25 bitstream.test_0...OK
+20/25 lz77.test_0...OK
+21/25 br.encoder.scoped_static_dictionary.test_0...OK
+22/25 br.encoder.hq_tree.test_0...OK
+23/25 br.encoder.hq_parser.command_storage.test_0...OK
+24/25 br.encoder.total_budget.tests.test_0...OK
+25/25 br.encoder.hq_parser.tests.test_0...OK
+All 25 tests passed.

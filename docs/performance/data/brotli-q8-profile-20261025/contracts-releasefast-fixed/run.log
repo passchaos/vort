@@ -1,0 +1,14 @@
+error: ld.lld: undefined symbol: vortBrStableFixedWidthRecord
+    note: referenced by br.zig:6012
+    note:               .zig-cache/o/49d5458dca6255f574de29e24114e4c8/test_zcu.o:(br.encodePlannedStreamRatioWithOptionsAlloc)
+    note: referenced by br.zig:5276
+    note:               .zig-cache/o/49d5458dca6255f574de29e24114e4c8/test_zcu.o:(br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_93194)
+    note: referenced by br.zig:4831
+    note:               .zig-cache/o/49d5458dca6255f574de29e24114e4c8/test_zcu.o:(br.encodePlannedStreamWithPreparedSharedDictionaryAlloc)
+    note: referenced 1 more times
+error: ld.lld: undefined symbol: vortBrRecordOptimalPlan
+    note: referenced by br.zig:6164
+    note:               .zig-cache/o/49d5458dca6255f574de29e24114e4c8/test_zcu.o:(br.encodeRecordOptimalCandidateWithOptionsAlloc)
+error: ld.lld: undefined symbol: vortBrRefineRecordDistances
+    note: referenced by br.zig:6165
+    note:               .zig-cache/o/49d5458dca6255f574de29e24114e4c8/test_zcu.o:(br.encodeRecordOptimalCandidateWithOptionsAlloc)

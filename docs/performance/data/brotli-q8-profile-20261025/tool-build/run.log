@@ -1,0 +1,35 @@
+run-br-quality-stage-profile
++- run exe vort-br-quality-stage-profile
+   +- compile exe vort-br-quality-stage-profile ReleaseFast native 5 errors
+src/br.zig:5085:39: error: expected error union type, found 'error{IntegerOverflow,InvalidBlockPlan,OutOfMemory,WorkingMemoryLimitExceeded}'
+        if (err == error.OutOfMemory) return lease.translateError(error.OutOfMemory);
+                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    profilePass: tools/br/quality_stage_profile.zig:120:55
+    main: tools/br/quality_stage_profile.zig:73:32
+    5 reference(s) hidden; use '-freference-trace=7' to see all references
+src/br.zig:5310:21: error: expected error union type, found 'error{BadGzipHeader,BadZlibHeader,ChecksumMismatch,CorruptFrame,DictionaryMismatch,DuplicateDictionaryId,InputTooSmall,IntegerOverflow,InvalidBlockPlan,InvalidDeflateBlockType,InvalidDictionaryMetadata,InvalidDictionaryTraining,InvalidDynamicBlockHeader,InvalidHuffmanCode,InvalidMagic,InvalidMatch,InvalidStreamState,NeedDictionary,OutOfMemory,OutputLimitExceeded,OutputTooSmall,RangeOutOfBounds,SearchLimitExceeded,SizeMismatch,StoredLengthMismatch,TrailingData,TruncatedFrame,UnsupportedBrotliFeature,UnsupportedDeflateFeature,UnsupportedSnappyFeature,UnsupportedVersion,UnsupportedZstdFeature,WorkingMemoryLimitExceeded}'
+            else => return err,
+                    ^~~~~~~~~~
+src/br.zig:5310:21: error: expected error union type, found 'error{BadGzipHeader,BadZlibHeader,ChecksumMismatch,CorruptFrame,DictionaryMismatch,DuplicateDictionaryId,InputTooSmall,IntegerOverflow,InvalidBlockPlan,InvalidDeflateBlockType,InvalidDictionaryMetadata,InvalidDictionaryTraining,InvalidDynamicBlockHeader,InvalidHuffmanCode,InvalidMagic,InvalidMatch,InvalidStreamState,NeedDictionary,OutOfMemory,OutputLimitExceeded,OutputTooSmall,RangeOutOfBounds,SearchLimitExceeded,SizeMismatch,StoredLengthMismatch,TrailingData,TruncatedFrame,UnsupportedBrotliFeature,UnsupportedDeflateFeature,UnsupportedSnappyFeature,UnsupportedVersion,UnsupportedZstdFeature,WorkingMemoryLimitExceeded}'
+            else => return err,
+                    ^~~~~~~~~~
+src/br.zig:9201:17: error: expected error union type, found 'error{BadGzipHeader,BadZlibHeader,ChecksumMismatch,CorruptFrame,DictionaryMismatch,DuplicateDictionaryId,InputTooSmall,IntegerOverflow,InvalidBlockPlan,InvalidDeflateBlockType,InvalidDictionaryMetadata,InvalidDictionaryTraining,InvalidDynamicBlockHeader,InvalidHuffmanCode,InvalidMagic,InvalidMatch,InvalidStreamState,NeedDictionary,OutOfMemory,OutputLimitExceeded,OutputTooSmall,RangeOutOfBounds,SearchLimitExceeded,SizeMismatch,StoredLengthMismatch,TrailingData,TruncatedFrame,UnsupportedBrotliFeature,UnsupportedDeflateFeature,UnsupportedSnappyFeature,UnsupportedVersion,UnsupportedZstdFeature,WorkingMemoryLimitExceeded}'
+                return err;
+                ^~~~~~~~~~
+src/br.zig:9201:17: error: expected error union type, found 'error{BadGzipHeader,BadZlibHeader,ChecksumMismatch,CorruptFrame,DictionaryMismatch,DuplicateDictionaryId,InputTooSmall,IntegerOverflow,InvalidBlockPlan,InvalidDeflateBlockType,InvalidDictionaryMetadata,InvalidDictionaryTraining,InvalidDynamicBlockHeader,InvalidHuffmanCode,InvalidMagic,InvalidMatch,InvalidStreamState,NeedDictionary,OutOfMemory,OutputLimitExceeded,OutputTooSmall,RangeOutOfBounds,SearchLimitExceeded,SizeMismatch,StoredLengthMismatch,TrailingData,TruncatedFrame,UnsupportedBrotliFeature,UnsupportedDeflateFeature,UnsupportedSnappyFeature,UnsupportedVersion,UnsupportedZstdFeature,WorkingMemoryLimitExceeded}'
+                return err;
+                ^~~~~~~~~~
+error: 5 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseFast --dep vort_br --dep benchmark_provenance -Mroot=/home/passchaos/project-z/vort-brotli-q8-profile/tools/br/quality_stage_profile.zig .zig-cache/o/1ce4443d2778e0b187892cf1213a7bdd/vort-br-record-optimal-releasefast.o -OReleaseFast -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mvort_br=/home/passchaos/project-z/vort-brotli-q8-profile/src/br.zig -OReleaseFast -Mbenchmark_provenance=/home/passchaos/project-z/vort-brotli-q8-profile/tools/benchmark_provenance.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-quality-stage-profile --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/5 steps succeeded (1 failed)
+run-br-quality-stage-profile transitive failure
++- run exe vort-br-quality-stage-profile transitive failure
+   +- compile exe vort-br-quality-stage-profile ReleaseFast native 5 errors
+      +- WriteFile success
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native success 140ms MaxRSS:109M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/b1ca672e1bd20c523049a8f1b3f9de6a/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-q8-profile .zig-cache /home/passchaos/.cache/zig --seed 0x2fde2ae1 -Z283e888c7a8cc9d8 run-br-quality-stage-profile -j2 --summary all -- --rounds 1 --path /tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin --json /tmp/vort-brotli-q8-profile-20261025/tool-build-smoke.json

@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded
+run-br-quality-stage-profile success
++- run exe vort-br-quality-stage-profile success 328ms
+   +- compile exe vort-br-quality-stage-profile ReleaseFast native success 50s MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 5ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+

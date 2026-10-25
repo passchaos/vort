@@ -1,0 +1,15 @@
+src/tests/br_quality_profile_contracts.zig:93:101: error: expected type 'br.PlannedEncodeOptions', found 'tests.br_quality_profile_contracts.q8_options__struct_34819'
+    const ordinary = try Codec.encodePlannedStreamWithOptionsAlloc(regular_heap.allocator(), input, q8_options);
+                                                                                                    ^~~~~~~~~~
+src/tests/br_quality_profile_contracts.zig:4:21: note: struct declared here
+const q8_options = .{ .quality = 8, .mode = .generic };
+                   ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/br.zig:288:34: note: struct declared here
+pub const PlannedEncodeOptions = struct {
+                                 ^~~~~~
+src/br.zig:4575:102: note: parameter type declared here
+pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+                                                                                                     ^~~~~~~~~~~~~~~~~~~~
+referenced by:
+    contracts__anon_34693: src/tests/br_quality_profile_contracts.zig:274:21
+    test.Brotli q8 quality profile complete wire and bounded diagnostic contracts: src/br.zig:130:68

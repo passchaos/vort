@@ -1,0 +1,46 @@
+{
+  "scope": "Supplemental explicit Br-tool identities; shared run_command source snapshots originally list src/build and tools/zstd. Profile core identities and executed ELF hashes separately retained. Final paths source includes output alias helper; bytes stable since its successful build and timing run.",
+  "sources": {
+    "tools/br/complete_dictionary_bench.zig": "4ccc1512446a04abd041f1837595bb9a6d9e885223e93b3e4c3e929bd057a7e9",
+    "tools/br/compound_dictionary_diff.zig": "777f491600d422a8116477ca749e352d327acc6c1401f1966f00f6fdd1cb18b0",
+    "tools/br/compressed_header_profile.zig": "75e687f14a474a0e644c70dd3bb65b931fe0f335f3b0ee3b5f42476e98281965",
+    "tools/br/context_tree_report.zig": "cfc6d3c91c73725c0fd9f3e4460e22481329532cba213774b545acd5901b4fe5",
+    "tools/br/decode_stage_profile.zig": "c9f4913792b5464af30fb651baed52b3d51dc6b81d6acebd07d61171e3af1e95",
+    "tools/br/encode_samples.zig": "16e62d9d6e9b32718f43bc9512ffddc55d4c8e3794ddb352cbed402dd8010369",
+    "tools/br/general_large_window_probe.zig": "6bbba2a4be7f222067a5ae6bab4997fef1d10c2ca7b21436b619353166a393ef",
+    "tools/br/hq_controls_probe.zig": "10946730fac32d3b59fec143a6915c5fdc5bb515657de54d2c49979da79071ec",
+    "tools/br/incremental_planned_bench.zig": "cc583a67f00bf37a2daf5995dc207edf1006c2392f1886a8bd9ea5b6e65551cf",
+    "tools/br/lazy_sweep.zig": "c4b1f5ff8718b1ee3120f380990db549521dd4783c809cfdede285195be6ab2d",
+    "tools/br/libbrotli_runtime.zig": "7668461b9aaf6cbd7f62336ad230ae5d463e2d9d5362686e0814fcae9f500155",
+    "tools/br/literal_context_profile.zig": "d484f5157ab9bfbe9b5d4adf5205eebc623595b1fd1aff92579fd70cdff90ad0",
+    "tools/br/planned_chunks_bench.zig": "a3ce89a60266861fc6c8528d1219cda5117123ecba6a2825e4392353d3910492",
+    "tools/br/planned_encode_bench.zig": "945f4cf531d91334e692dc620d49cb92a788614431b52785800815a249070517",
+    "tools/br/planned_stage_bench.zig": "b97d5c61d379b2b54b24edeee8d2392a7d4f8f3d022e79685b60a3391f400cee",
+    "tools/br/planned_stage_profile.zig": "fde99629b5fc76a643834ac208172b96c182a73fee06269f69bb34ae54adb678",
+    "tools/br/progressive_copy_bench.zig": "2161bbec87df869db33fe06080946f1b11a038328b48e3676714b91e6dc3fca2",
+    "tools/br/progressive_huffman_bench.zig": "58447ca73b46b12a84fda6d9ca03be327f6e293d520b211548797cb86127622b",
+    "tools/br/q8_records_fixture.zig": "4d692a07162c37d1d9cbbaee1788c0a2d9dd3d18d92d3babdfad7401e5b94c63",
+    "tools/br/quality_command_state_profile.zig": "179cd93d0616d474d549d085ba7d1773128937776ef64f9f63825d028dcfcc40",
+    "tools/br/quality_stage_profile.zig": "a94eaf4d9ebddcf5d692a8f5c9d002c1980b79f2b847522be84a9b5c02793b9f",
+    "tools/br/ratio_stage_profile.zig": "929148ec301ff634fe4d3fc28a97dd25036a7c2f6898f593e90e41a2916bffb1",
+    "tools/br/record_optimal_audit.zig": "0c2f784b5a4649aa7b2ae6629bf79c7227282c6459afc6c5f03a6e4878e6c15b",
+    "tools/br/record_optimal_shape.zig": "fe55798bfa36d13f1a0f64269eb9fc32d1927a0dc6db490a7cf26f3d7660ef65",
+    "tools/br/reference_bench.zig": "38b3eecb7db8bd3dfc07fc3686751430b84dc24194bfb7c028cb47c14ffde409",
+    "tools/br/serialized_dictionary_bench.zig": "dff23b86d72c7f58dfa9d2c0723ef8e1bf692e6e5e3c5250e0d8c2df3dd16437",
+    "tools/br/serialized_dictionary_trainer_report.zig": "05765702794ea207fcc265b5c16b857a241ebd1a44d9f28f09bd7fa328532ab3",
+    "tools/br/stored_memory_ledger.zig": "307398b22a681aa5befdf40bf933c0d930ed2ce9a06052c46d28a2fec0c30826",
+    "tools/br/stored_memory_probe.zig": "94a1fc3e7bf4045e3905f283fab2ac72538b538ae4c9461125d9c50a5e1d8289",
+    "tools/br/stream_contract_probe.zig": "423761174f947160c31ffc6b7bfd43b55054a32f703640e7a7b5e5e4c6e021ca",
+    "tools/br/upstream_multiblock_diff.zig": "a6f104cdb892ce50d03a40b2dc9eae8e2b958b17f8fa3810f56aa5ba4cc2979b"
+  },
+  "executables": {
+    "profile-executable.json": {
+      "path": "/home/passchaos/project-z/vort-brotli-q8-profile/.zig-cache/o/8045678957cfbe98cd56c3dba8f67877/vort-br-quality-stage-profile",
+      "sha256": "eb7309f7f37f0e73b4ca2f44be6509a1dc1bc35d44413c78f3c05c7a52945be7"
+    },
+    "public-executable.json": {
+      "path": "/home/passchaos/project-z/vort-brotli-q8-profile/.zig-cache/o/d54ab236499589e8c9225c90450b9b10/vort-br-planned-encode-bench",
+      "sha256": "a6f1f0bb5d4d403605b9989e6006f64b3f44d86fedb87d9215140b9cf216b725"
+    }
+  }
+}

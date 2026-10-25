@@ -1,0 +1,15 @@
+error: undefined symbol: vortBrStableFixedWidthRecord
+    note: referenced by br.o:br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_65597
+    note: referenced by br.o:br.encodePlannedStreamWithPreparedSharedDictionaryAlloc
+    note: referenced by br.o:br.encodePlannedStreamRatioWithOptionsAlloc
+    note: referenced by br.o:br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_101519
+error: undefined symbol: vortBrRecordOptimalPlan
+    note: referenced by br.o:br.recordOptimalPlanAlloc
+error: undefined symbol: vortBrRefineRecordDistances
+    note: referenced by br.o:br.recordOptimalPlanAlloc
+error: undefined symbol: vortBrStableFixedWidthRecord
+    note: referenced by br.o:.debug_info
+error: undefined symbol: vortBrRecordOptimalPlan
+    note: referenced by br.o:.debug_info
+error: undefined symbol: vortBrRefineRecordDistances
+    note: referenced by br.o:.debug_info

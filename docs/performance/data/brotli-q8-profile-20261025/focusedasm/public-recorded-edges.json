@@ -1,0 +1,267 @@
+[
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea447",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_43479"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea50a",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_43479"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea57a",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea609",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_43479"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea7b4",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_43479"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea908",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11ea998",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_43479"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11eaa07",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "instruction": "11eaaff",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11eba78",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ebbe7",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ebd4a",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ebea6",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec03e",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec201",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec3ba",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec5c0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec779",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ec97c",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ecb03",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ecc9c",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ece6f",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ed105",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ed2d2",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ed4b5",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ed69a",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ed889",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11eda2e",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11edc57",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ede19",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11edfd0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ee1ed",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ee390",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ee545",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "instruction": "11ee6fc",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+    "instruction": "12102d8",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+    "instruction": "1210a30",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+    "instruction": "1211094",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613",
+    "instruction": "128b31f",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_43465"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613",
+    "instruction": "128b53d",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_43465"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "1289cef",
+    "callee": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128a090",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_43465"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128a334",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_43465"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128a5fa",
+    "callee": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128a711",
+    "callee": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128aa8e",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "instruction": "128ac52",
+    "callee": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_35219"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+    "instruction": "11f092b",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+    "instruction": "11f0c2d",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+    "instruction": "11f0e84",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106",
+    "instruction": "1221c29",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106",
+    "instruction": "1221d51",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106",
+    "instruction": "1221e31",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307"
+  }
+]

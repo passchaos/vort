@@ -1,0 +1,469 @@
+{
+  "schema": "vort.brotli.q8-profile.elf-audit.v1",
+  "created_utc": "2026-10-25T08:54:32.409005+00:00",
+  "created_asia_shanghai": "2026-10-25T16:54:32.409005+08:00",
+  "scope": "Read-only ELF/source audit of pinned public q8 normal and diagnostic recorded candidate paths. No compilation, benchmark execution, source or Git mutation.",
+  "elfs": {
+    "public": {
+      "path": "/home/passchaos/project-z/vort-brotli-q8-profile/.zig-cache/o/d54ab236499589e8c9225c90450b9b10/vort-br-planned-encode-bench",
+      "sha256": "a6f1f0bb5d4d403605b9989e6006f64b3f44d86fedb87d9215140b9cf216b725"
+    },
+    "diagnostic": {
+      "path": "/home/passchaos/project-z/vort-brotli-q8-profile/.zig-cache/o/f67ed575467f368cf1ce021440d4e813/vort-br-quality-stage-profile",
+      "sha256": "d11b00006fd2229e0150d0f17fdbdaf705d1a951f30722fb16d3e182253a2c4e"
+    },
+    "old_public_reference": {
+      "path": "/home/passchaos/project-z/vort-zstd-work-accounting/.zig-cache/o/c4a89fec1d193b588a8d9cccafd48ad3/vort-br-planned-encode-bench",
+      "sha256": "541df153c9ba535d998ab3e53d6c4401da834b438a2f84b312cea1909aeced5b"
+    }
+  },
+  "build_records": {
+    "public": {
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run-br-planned-encode-bench",
+        "-j2",
+        "--summary",
+        "all",
+        "--",
+        "--iterations",
+        "1",
+        "--case",
+        "json",
+        "--planned-quality",
+        "8",
+        "--quality",
+        "8",
+        "--planned-mode",
+        "generic",
+        "--samples-json",
+        "/tmp/vort-brotli-q8-profile-20261025/public-build-smoke.json",
+        "--csv",
+        "/tmp/vort-brotli-q8-profile-20261025/public-build-smoke.csv"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-brotli-q8-profile",
+      "start_utc": "2026-10-25T08:45:24.978203+00:00",
+      "end_utc": "2026-10-25T08:46:50.351899+00:00",
+      "exit_code": 0,
+      "source_stable": true,
+      "build_summary": [
+        "5/5 steps succeeded"
+      ]
+    },
+    "diagnostic": {
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "run-br-quality-stage-profile",
+        "-j2",
+        "--summary",
+        "all",
+        "--",
+        "--rounds",
+        "1",
+        "--path",
+        "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin",
+        "--json",
+        "/tmp/vort-brotli-q8-profile-20261025/tool-build-smoke.json"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-brotli-q8-profile",
+      "start_utc": "2026-10-25T08:43:29.710586+00:00",
+      "end_utc": "2026-10-25T08:44:23.765311+00:00",
+      "exit_code": 0,
+      "source_stable": true,
+      "build_summary": [
+        "5/5 steps succeeded"
+      ]
+    }
+  },
+  "normal": {
+    "source_route": [
+      "encodePlannedStreamWithOptionsAlloc accepts quality8/generic/defaultwindow16",
+      "encodePlannedStreamQualityWithOptionsAlloc -> Recorded(false,.{},allocator,input,options)",
+      "Recorder(false)=Disabled; EmptyScope carries no storage and methods are no-op; prefer only compares lengths",
+      "same Recorded candidate body passes trace_enabled and trace through lazy, optimal, preferred, split and wire helpers"
+    ],
+    "entry_caller": "0x1283a72",
+    "symbols": {
+      "quality_root": {
+        "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+        "address": "0x12898f0",
+        "size_bytes": 6270
+      },
+      "lazy": {
+        "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+        "address": "0x11ea3d0",
+        "size_bytes": 2340
+      },
+      "preferred": {
+        "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+        "address": "0x120fcd0",
+        "size_bytes": 6419
+      },
+      "split": {
+        "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+        "address": "0x11eb020",
+        "size_bytes": 21732
+      },
+      "split_wire": {
+        "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+        "address": "0x11f05f0",
+        "size_bytes": 2589
+      },
+      "wire": {
+        "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307",
+        "address": "0x1174a00",
+        "size_bytes": 357
+      },
+      "optimal": {
+        "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613",
+        "address": "0x128b170",
+        "size_bytes": 2751
+      }
+    },
+    "recorded_function_audit": [
+      {
+        "symbol": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_35219",
+        "address": "0x1174910",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106",
+        "address": "0x1221b00",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307",
+        "address": "0x1174a00",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*(%rax)",
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+        "address": "0x11eb020",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitCandidateAllocRecorded__anon_43527.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%r12)",
+          "*0x18(%r13)",
+          "*0x18(%rax)",
+          "*0x18(%rbx)"
+        ]
+      },
+      {
+        "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+        "address": "0x11f05f0",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+        "address": "0x11ea3d0",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeLazyCommandPlanAllocRecorded__anon_43465.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+        "address": "0x12898f0",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+        "address": "0x120fcd0",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      },
+      {
+        "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613",
+        "address": "0x128b170",
+        "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeQualityOptimalCandidateAllocRecorded__anon_253613.asm",
+        "quality_profile_calls": 0,
+        "clock_now_calls": 0,
+        "indirect_call_operands": [
+          "*0x18(%rax)"
+        ]
+      }
+    ],
+    "quality_recorder_append_begin_finish_calls_present": false,
+    "quality_recorder_clock_calls_present": false,
+    "quality_recorder_event_or_config_store_state_present": false,
+    "quality_recorder_mutable_global_state": false,
+    "original_stats_io": "null passed by lazy candidates to preferred and by candidate pipeline to wire; original optional stats clocks are separate from Recorder",
+    "allocator_calls_remain": true,
+    "limited_claim": "No quality recorder operations in these normal specialized candidate functions. Does not mean entire ELF/libc has no clocks, allocation, memory accounting or other profilers."
+  },
+  "diagnostic": {
+    "source_api": "benchmarkQualityQ8ProfileAlloc",
+    "source_trace_enabled": true,
+    "api_inlined_into": "quality_stage_profile.profilePass",
+    "entry_caller": "0x11473bc",
+    "symbols": {
+      "quality_root": {
+        "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+        "address": "0x11b3de0",
+        "size_bytes": 7931
+      },
+      "lazy": {
+        "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+        "address": "0x1268fe0",
+        "size_bytes": 4528
+      },
+      "preferred": {
+        "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+        "address": "0x1273b10",
+        "size_bytes": 8667
+      },
+      "split": {
+        "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+        "address": "0x126a190",
+        "size_bytes": 35305
+      },
+      "split_wire": {
+        "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+        "address": "0x1272b80",
+        "size_bytes": 3976
+      },
+      "wire": {
+        "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+        "address": "0x122eb30",
+        "size_bytes": 2400
+      },
+      "optimal": {
+        "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+        "address": "0x123a8a0",
+        "size_bytes": 3415
+      }
+    },
+    "normal_pass_in_same_elf": {
+      "symbol": "quality_stage_profile.normalPass",
+      "address": "0x1146f10",
+      "candidate_api_call": "0x1146f68 -> br.encodePlannedStreamWithOptionsAlloc",
+      "false_quality_root": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+      "false_root_address": "0x129a820",
+      "false_root_caller": "0x12999ab"
+    },
+    "event_methods": {
+      "begin": {
+        "symbol": "br.encoder.quality_profile.Active.begin",
+        "address": "0x1277590",
+        "size_bytes": 609,
+        "clock_call": "0x12777d6 call *0x2c0(Io vtable), awake selector1",
+        "other_calls": [],
+        "append_inlined": true,
+        "event_count_rsp_or_profile_offset": "profile+0x23020",
+        "events_total_offset": "profile+0x23028",
+        "event_stride_bytes": 280,
+        "event_capacity": 512,
+        "depth_offset": "profile+0x232c8",
+        "frame_capacity": 32,
+        "frame_stride_bytes": 16,
+        "parent_stack_access_and_depth_push": true
+      },
+      "finish": {
+        "symbol": "br.encoder.quality_profile.Scope.finish",
+        "address": "0x1277170",
+        "size_bytes": 1044,
+        "clock_call": "0x127719e call *0x2c0(Io vtable), awake selector1",
+        "other_calls": [],
+        "event_inclusive_exclusive_stores": "0x1277227/0x127722c",
+        "depth_pop": "0x12771e5",
+        "parent_child_ns_add": "0x1277249 and commit0x1277261/0x1277285",
+        "timing_complete_and_overflow_flags_retained": true
+      },
+      "prefer": {
+        "symbol": "br.encoder.quality_profile.Active.prefer",
+        "address": "0x123dfe0",
+        "size_bytes": 846,
+        "call_instructions": 0,
+        "strict_length_comparison_retained": true,
+        "selection_event_append_inlined": true
+      }
+    },
+    "stages": {
+      "root_other_begin": "0x11b3e9d",
+      "lazy_parse_begin": "0x11b4382",
+      "lazy_commands_begin": "0x11b45e2",
+      "preferred_context_begin": "0x1273c11",
+      "split_planning_begin": "0x126a287 stage6",
+      "wire_begin": "0x122eb8f stage7",
+      "optimal_scope_begin": "0x123a93e"
+    },
+    "wire_config": {
+      "source": "quality_profile.Scope.config -> Config.from(options)",
+      "actual_store_range": "0x122f0f8\u20130x122f19a",
+      "context_map_stores": "0x122f176/0x122f17b, two32-byte writes",
+      "config_fields": "window, large_window, recent distance, npostfix/ndirect, literal context mode/trees/cutoff/map, split flags/type counts, same-last-distance policy",
+      "output": {
+        "encode_write_call": "0x122f2ba -> shared br.encodeCommandPlanWithOptionsWrite",
+        "to_owned_call": "0x122f2dd -> shared array_list.toOwnedSlice",
+        "scope_finish_after_wire": "0x122f34f",
+        "error_paths_finish_and_failure_retained": true
+      }
+    },
+    "budget": {
+      "lease_init_call": "0x1147313 -> br.encoder.total_budget.Lease.init at0x1276f60",
+      "lease_deinit_call": "0x1147555",
+      "allocator_passthrough_null_limit_profile": true,
+      "counted_state_for_requested_cap_or_memory_profile": true,
+      "counted_state_alloc_call": "0x1277095 allocator.vtable.alloc, size80/alignment8",
+      "release_to_caller_and_error_translation_retained_in_profilePass": true,
+      "limit_error_not_fallback": true
+    },
+    "profile_storage": {
+      "caller_owned": true,
+      "event_and_frame_nodes_inline_fixed_arrays": true,
+      "Active_begin_finish_prefer_allocate_nodes": false,
+      "tool_allocates_Profile_once_outside_passes": true,
+      "tool_Profile_create_call": "0x114ac9e, size148696/alignment8",
+      "profile_size_bytes_from_existing_smoke_metadata": 148696,
+      "profile_size_is_not_RSS": true
+    },
+    "post_pass_validation": {
+      "normal_wire_equality_call": "0x1146fbd -> mem.eqlBytes after stop-clock0x1146f92",
+      "profile_wire_equality_call": "0x1147853 -> mem.eqlBytes after stop-clock0x1147823",
+      "validation_static_presence_only": true
+    }
+  },
+  "old_public_reference": {
+    "sha256": "541df153c9ba535d998ab3e53d6c4401da834b438a2f84b312cea1909aeced5b",
+    "quality_function": "br.encodePlannedStreamQualityWithOptionsAlloc",
+    "address": "0x1289b20",
+    "size_bytes": 6883,
+    "scope": "Optional identity/caller reference only; no structural-equivalence, performance or whole-program claims made."
+  },
+  "limitations": [
+    "No throughput, latency, speed ranking, heap/RSS, total-stack or ISA claim from this audit.",
+    "No target benchmark or tests executed by this audit; existing build metadata is provenance only.",
+    "Recorded symbols can contain branches for qualities other than8; source API/caller establishes the q8 scenario.",
+    "Public encode options may independently request total memory accounting; disabled quality recorder does not remove existing budget APIs.",
+    "Presence of Io.Threaded.now or clocks elsewhere does not identify quality recorder activity on the normal candidate path.",
+    "Fixed caller-owned event arrays do not mean the diagnostic tool or encoder performs no allocations.",
+    "Shared tools/br/quality_stage_profile.zig changed during final review; pinned ELF was not replaced and core source hashes remained matched."
+  ],
+  "evidence": {
+    "diagnostic-chooseStoredIfSmallerWithOptionsRecorded__anon_41516.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-chooseStoredIfSmallerWithOptionsRecorded__anon_41516.asm",
+    "diagnostic-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477.asm",
+    "diagnostic-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626.asm",
+    "diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_29509-entry-extract.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_29509-entry-extract.asm",
+    "diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_29509.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_29509.asm",
+    "diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_30089.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithOptionsAllocRecorded__anon_30089.asm",
+    "diagnostic-encodeCommandPlanWithOptionsWrite.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeCommandPlanWithOptionsWrite.asm",
+    "diagnostic-encodeEntropySplitCandidateAllocRecorded__anon_205540.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeEntropySplitCandidateAllocRecorded__anon_205540.asm",
+    "diagnostic-encodeEntropySplitCandidateAllocRecorded__anon_231669.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeEntropySplitCandidateAllocRecorded__anon_231669.asm",
+    "diagnostic-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684.asm",
+    "diagnostic-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681.asm",
+    "diagnostic-encodeLazyCommandPlanAllocRecorded__anon_205492.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeLazyCommandPlanAllocRecorded__anon_205492.asm",
+    "diagnostic-encodeLazyCommandPlanAllocRecorded__anon_29228.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeLazyCommandPlanAllocRecorded__anon_29228.asm",
+    "diagnostic-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831.asm",
+    "diagnostic-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584.asm",
+    "diagnostic-encodePlannedStreamWithOptionsAlloc.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodePlannedStreamWithOptionsAlloc.asm",
+    "diagnostic-encodePreferredCommandPlanAllocRecorded__anon_205502.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodePreferredCommandPlanAllocRecorded__anon_205502.asm",
+    "diagnostic-encodePreferredCommandPlanAllocRecorded__anon_231663.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodePreferredCommandPlanAllocRecorded__anon_231663.asm",
+    "diagnostic-encodeQualityOptimalCandidateAllocRecorded__anon_248937.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeQualityOptimalCandidateAllocRecorded__anon_248937.asm",
+    "diagnostic-encodeQualityOptimalCandidateAllocRecorded__anon_29486.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeQualityOptimalCandidateAllocRecorded__anon_29486.asm",
+    "diagnostic-encodeStoredStreamRecorded__anon_28729.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encodeStoredStreamRecorded__anon_28729.asm",
+    "diagnostic-encoder.total_budget.Lease.init.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-encoder.total_budget.Lease.init.asm",
+    "diagnostic-event-begin.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-event-begin.asm",
+    "diagnostic-event-finish.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-event-finish.asm",
+    "diagnostic-freeQualityRecorded__anon_28969.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-freeQualityRecorded__anon_28969.asm",
+    "diagnostic-main-profile-allocation-extract.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-main-profile-allocation-extract.asm",
+    "diagnostic-normalPass-entry-extract.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-normalPass-entry-extract.asm",
+    "diagnostic-normalPass.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-normalPass.asm",
+    "diagnostic-profile-api-lease-route.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-profile-api-lease-route.asm",
+    "diagnostic-profilePass-entry-extract.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-profilePass-entry-extract.asm",
+    "diagnostic-profilePass.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-profilePass.asm",
+    "diagnostic-quality-entry-call-sites.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-quality-entry-call-sites.asm",
+    "diagnostic-quality_profile.Active.begin.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-quality_profile.Active.begin.asm",
+    "diagnostic-quality_profile.Active.prefer.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-quality_profile.Active.prefer.asm",
+    "diagnostic-quality_profile.Scope.finish.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-quality_profile.Scope.finish.asm",
+    "diagnostic-recorded-edges.json": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-recorded-edges.json",
+    "diagnostic-retainSmallerOwnedWireRecorded__anon_29234.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-retainSmallerOwnedWireRecorded__anon_29234.asm",
+    "diagnostic-symbols.nm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-symbols.nm",
+    "diagnostic-wire-config.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-wire-config.asm",
+    "diagnostic-wire-output-and-finish.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/diagnostic-wire-output-and-finish.asm",
+    "old_public-quality-entry-call-sites.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/old_public-quality-entry-call-sites.asm",
+    "public-chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm",
+    "public-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106.asm",
+    "public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307-entry-extract.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307-entry-extract.asm",
+    "public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm",
+    "public-encodeCommandPlanWithOptionsWrite.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithOptionsWrite.asm",
+    "public-encodeEntropySplitCandidateAllocRecorded__anon_43527.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitCandidateAllocRecorded__anon_43527.asm",
+    "public-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm",
+    "public-encodeLazyCommandPlanAllocRecorded__anon_43465.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeLazyCommandPlanAllocRecorded__anon_43465.asm",
+    "public-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589.asm",
+    "public-encodePlannedStreamWithOptionsAlloc.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePlannedStreamWithOptionsAlloc.asm",
+    "public-encodePreferredCommandPlanAllocRecorded__anon_43479.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+    "public-encodeQualityOptimalCandidateAllocRecorded__anon_253613.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeQualityOptimalCandidateAllocRecorded__anon_253613.asm",
+    "public-encoder.total_budget.Lease.init.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encoder.total_budget.Lease.init.asm",
+    "public-quality-entry-call-sites.asm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-quality-entry-call-sites.asm",
+    "public-recorded-call-audit.json": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-recorded-call-audit.json",
+    "public-recorded-edges.json": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-recorded-edges.json",
+    "public-symbols.nm": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-symbols.nm"
+  },
+  "source_sha256_at_initial_read": {
+    "src/br.zig": "0be45f1153d120230bcadcdcc9958df54d32d06d92537f90fe3057ba9d722082",
+    "src/br/encoder/quality_profile.zig": "aa3e79ec0c3d304fe84bd15e6f88591762e02e1e70e3bfbf4512444902078451",
+    "src/tests/br_quality_profile_contracts.zig": "4684b0d75d0a01395597cf35379384179c7c7e15f687f07bc5441b04a967f8ca",
+    "tools/br/quality_stage_profile.zig": "a3f6e80df09cf980b8b44e44d021d4d2208032e57c77c03db6eb62338e9b9d33"
+  },
+  "source_final_recheck": {
+    "src/br.zig": {
+      "sha256": "0be45f1153d120230bcadcdcc9958df54d32d06d92537f90fe3057ba9d722082",
+      "matches_initial": true
+    },
+    "src/br/encoder/quality_profile.zig": {
+      "sha256": "aa3e79ec0c3d304fe84bd15e6f88591762e02e1e70e3bfbf4512444902078451",
+      "matches_initial": true
+    },
+    "src/tests/br_quality_profile_contracts.zig": {
+      "sha256": "4684b0d75d0a01395597cf35379384179c7c7e15f687f07bc5441b04a967f8ca",
+      "matches_initial": true
+    },
+    "tools/br/quality_stage_profile.zig": {
+      "sha256": "a94eaf4d9ebddcf5d692a8f5c9d002c1980b79f2b847522be84a9b5c02793b9f",
+      "matches_initial": false
+    }
+  },
+  "source_final_recheck_note": "Three frozen core/QA sources match. Shared diagnostic tool changed during parent work; initial tool source observations are tied to initial SHA and verified ELF instructions, not a claim that current tool remains unchanged. Current Profile create and normal/profile API calls remain in source with lines shifted by one.",
+  "final_verification_utc": "2026-10-25T08:57:07.085909+00:00"
+}

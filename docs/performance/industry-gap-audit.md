@@ -168,6 +168,20 @@ tracked-stage improvements did not establish a public speed benefit. The
 candidate has been withdrawn and runtime source restored to `6b262754`;
 the recorded experiment is not a new production throughput improvement.
 
+The [native Brotli q8 candidate profile](brotli-q8-candidate-profile.md) now
+records the actual public lazy/optimal/context/split chain. Fourteen frozen
+64 KiB inputs, each with five normal/profile pairs, retain all previous output
+identities and pass independent event/exclusive-time validation. Mozilla's
+instrumented preferred/context preparation is 69.792ms of a 100.994ms outer
+call, whereas the source control is 7.258ms of 37.488ms. Each materializes
+eighteen common wire candidates, with different winning plan families. These
+stage medians are non-additive and do not attribute all preferred time to one
+subroutine. Separate ordinary q8 measurements still lose all fourteen
+reference throughput rows (geometric ratio 0.0282557x); 9/14 outputs are
+smaller and total bytes remain 288,091/296,445. This is a diagnostic milestone,
+not an encoder performance lead. Three-target contracts pass 25/25; the full
+Brotli family reports 1420/1421 with one skip, and build checks pass 173/173.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded
+run-br-planned-encode-bench success
++- run exe vort-br-planned-encode-bench success 72ms
+   +- compile exe vort-br-planned-encode-bench ReleaseFast native success 1m MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 5ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+

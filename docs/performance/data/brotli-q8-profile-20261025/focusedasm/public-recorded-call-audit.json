@@ -1,0 +1,96 @@
+[
+  {
+    "symbol": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_35219",
+    "address": "0x1174910",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106",
+    "address": "0x1221b00",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77106.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307",
+    "address": "0x1174a00",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*(%rax)",
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "address": "0x11eb020",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitCandidateAllocRecorded__anon_43527.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%r12)",
+      "*0x18(%r13)",
+      "*0x18(%rax)",
+      "*0x18(%rbx)"
+    ]
+  },
+  {
+    "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+    "address": "0x11f05f0",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "address": "0x11ea3d0",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeLazyCommandPlanAllocRecorded__anon_43465.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589",
+    "address": "0x12898f0",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253589.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+    "address": "0x120fcd0",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  },
+  {
+    "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253613",
+    "address": "0x128b170",
+    "assembly": "/tmp/vort-brotli-q8-profile-20261025/focusedasm/public-encodeQualityOptimalCandidateAllocRecorded__anon_253613.asm",
+    "quality_profile_calls": 0,
+    "clock_now_calls": 0,
+    "indirect_call_operands": [
+      "*0x18(%rax)"
+    ]
+  }
+]

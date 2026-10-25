@@ -1,0 +1,1442 @@
+[
+  {
+    "caller": "quality_stage_profile.profilePass",
+    "instruction": "1147204",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "quality_stage_profile.profilePass",
+    "instruction": "11472b1",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "quality_stage_profile.profilePass",
+    "instruction": "11473bc",
+    "callee": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584"
+  },
+  {
+    "caller": "quality_stage_profile.profilePass",
+    "instruction": "11474f7",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "quality_stage_profile.profilePass",
+    "instruction": "1147800",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684",
+    "instruction": "1244b99",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684",
+    "instruction": "1244e9d",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684",
+    "instruction": "12450f4",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b3e9d",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b419a",
+    "callee": "br.encodeStoredStreamRecorded__anon_28729"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b41de",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b429f",
+    "callee": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4382",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b447f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4557",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b45e2",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b463c",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4839",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_29228"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b48c4",
+    "callee": "br.encodeStoredStreamRecorded__anon_28729"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b490b",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4b15",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_29228"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4b4b",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4da0",
+    "callee": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4dd6",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4ec7",
+    "callee": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4f07",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b4ff8",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b51a7",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b51e4",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5351",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b53b6",
+    "callee": "br.encodeStoredStreamRecorded__anon_28729"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b54b0",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5511",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b55f5",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5687",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b56d1",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5768",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5789",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b57c7",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5858",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b58a1",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b58f5",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5935",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b596c",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b59bf",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5a47",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5a81",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5b57",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5b80",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5c29",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_28584",
+    "instruction": "11b5cc9",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "123fcee",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "123fe57",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "123ffb4",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1240109",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12402b0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "124044b",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1240622",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12407ee",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12409c4",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1240b93",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1240d21",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1240f40",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "124110d",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12412db",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12414a7",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "124166f",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "124183c",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1241aeb",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1241c80",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1241e53",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1242018",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12421db",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12423a0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "12425d7",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1242784",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540",
+    "instruction": "1242936",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_205684"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123b693",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123b790",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123b8ce",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123b90d",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123b9fa",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123ba46",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bac5",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bba3",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bd42",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bd63",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bd9e",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bdbf",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_29477",
+    "instruction": "123bdf9",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_205502",
+    "instruction": "1265ee6",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_205502",
+    "instruction": "1266593",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_205502",
+    "instruction": "1266c79",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123a93e",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123a993",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123aa32",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123aa67",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123aabd",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123ab2c",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_29228"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123ad64",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_29228"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123ad9e",
+    "callee": "br.retainSmallerOwnedWireRecorded__anon_29234"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123aed7",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123aef7",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123af2f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123afb8",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b07c",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b0d6",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b119",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b17e",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b216",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b242",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b2cb",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b35b",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b40b",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b4a0",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b54f",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_29486",
+    "instruction": "123b5e5",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626",
+    "instruction": "122ff19",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626",
+    "instruction": "1230041",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626",
+    "instruction": "1230121",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1272c53",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1272f0f",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "12731fc",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273237",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "12736ab",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "12736e7",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "127388b",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273a18",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273a52",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273a9a",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273aba",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681",
+    "instruction": "1273af5",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122eb8f",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122f1f5",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122f34f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122f39e",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122f41b",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509",
+    "instruction": "122f480",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129ac2f",
+    "callee": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129affe",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_205492"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129b317",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_205492"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129b566",
+    "callee": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_41626"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129b684",
+    "callee": "br.encodeQualityOptimalCandidateAllocRecorded__anon_248937"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129b9e6",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_30089"
+  },
+  {
+    "caller": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_248831",
+    "instruction": "129bba5",
+    "callee": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_41516"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269045",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12690a2",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_231663"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12691b6",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_231663"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126920d",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126928c",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12692b5",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12692c8",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269306",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269362",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_231663"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12695e7",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_231663"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269640",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126991c",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "12699dc",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269a19",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_231663"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269a81",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269b40",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269b5d",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269b81",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269db1",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269df0",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269e09",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269e43",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269e64",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269e9f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269ee9",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269f02",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269fe2",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "1269fee",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a03f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a060",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a09a",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a0f4",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a147",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_29228",
+    "instruction": "126a179",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123e647",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_205502"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123e70a",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_205502"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123e77a",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123e809",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_205502"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123e9b4",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_205502"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123eb08",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123eb98",
+    "callee": "br.encodePreferredCommandPlanAllocRecorded__anon_205502"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123ec07",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540"
+  },
+  {
+    "caller": "br.encodeLazyCommandPlanAllocRecorded__anon_205492",
+    "instruction": "123ecff",
+    "callee": "br.encodeEntropySplitCandidateAllocRecorded__anon_205540"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126a287",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126acce",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126ae47",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126afb8",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b123",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b2f6",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b328",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b5cf",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b601",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b89b",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126b8cf",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126bb5f",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126bb91",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126bdb5",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126bded",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c019",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c04c",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c3db",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c410",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c60d",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c63e",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c8d0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126c902",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126cb1f",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126cb58",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126cd77",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126cdae",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d03f",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d071",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d320",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d358",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d742",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126d777",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126daa0",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126dad1",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126dd5b",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126dd8d",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e03c",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e06d",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e30b",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e340",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e5da",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e60b",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e868",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126e89e",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126eb0c",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126eb47",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126edb6",
+    "callee": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_231681"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126ede8",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126ef55",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126f1f6",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "126f4d6",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271381",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12713b0",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "127149c",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271587",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271675",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271763",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271850",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "127193b",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271a2c",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271b18",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271c05",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271cf0",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271ddb",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271eca",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1271fb6",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12720a2",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12721bb",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12721da",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12722c6",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12723b5",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12724a3",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12725bc",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12725dc",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12726f5",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1272718",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "127282e",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "127284d",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1272964",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "12729e6",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeEntropySplitCandidateAllocRecorded__anon_231669",
+    "instruction": "1272a77",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_248937",
+    "instruction": "129d74f",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_205492"
+  },
+  {
+    "caller": "br.encodeQualityOptimalCandidateAllocRecorded__anon_248937",
+    "instruction": "129d96a",
+    "callee": "br.encodeLazyCommandPlanAllocRecorded__anon_205492"
+  },
+  {
+    "caller": "br.encodeStoredStreamRecorded__anon_28729",
+    "instruction": "12768eb",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodeStoredStreamRecorded__anon_28729",
+    "instruction": "1276957",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodeStoredStreamRecorded__anon_28729",
+    "instruction": "12769a8",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.retainSmallerOwnedWireRecorded__anon_29234",
+    "instruction": "1268d5d",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1273c11",
+    "callee": "br.encoder.quality_profile.Active.begin"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "127418f",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1274859",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "127489b",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "12751a2",
+    "callee": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_29509"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "12751e2",
+    "callee": "br.encoder.quality_profile.Active.prefer"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1275643",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "12757bb",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1275bd3",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1275c4f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1275c9f",
+    "callee": "br.encoder.quality_profile.Scope.finish"
+  },
+  {
+    "caller": "br.encodePreferredCommandPlanAllocRecorded__anon_231663",
+    "instruction": "1275ccb",
+    "callee": "br.freeQualityRecorded__anon_28969"
+  }
+]

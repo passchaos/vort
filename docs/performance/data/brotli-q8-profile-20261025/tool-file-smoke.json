@@ -1,0 +1,32 @@
+{
+  "executable_sha256": "eb7309f7f37f0e73b4ca2f44be6509a1dc1bc35d44413c78f3c05c7a52945be7",
+  "cases": [
+    {
+      "case": "same",
+      "rejected": true,
+      "input_preserved": true
+    },
+    {
+      "case": "spelling",
+      "rejected": true,
+      "input_preserved": true
+    },
+    {
+      "case": "symlink",
+      "rejected": true,
+      "input_preserved": true
+    },
+    {
+      "case": "hardlink",
+      "rejected": true,
+      "input_preserved": true
+    },
+    {
+      "case": "separate_output",
+      "accepted": true,
+      "input_preserved": true,
+      "timing_and_identity_validated": true
+    }
+  ],
+  "scope": "Isolated temporary file aliases and one tiny input report; no benchmark timing claim."
+}

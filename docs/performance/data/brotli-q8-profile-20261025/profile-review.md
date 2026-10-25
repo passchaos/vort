@@ -1,0 +1,152 @@
+# Brotli真实q8 candidate profile 只读审查
+
+- 工作树：`/home/passchaos/project-z/vort-brotli-q8-profile`
+- 基线：`b5606cd7b40b1ab21e07019dff87ba51eb371196`
+- 审查时间：2026-10-25 16:40:27（Asia/Shanghai）
+- 范围：真实q8调用链、录制工厂与事件/计时/配置合同、allocatorbudget/释放、普通false路径、QAhelper及新工具静态范围。没有编译、跑test/编码/基准、计时或修改源码/Git；唯一写入为本报告。父代理/worker正在并行完成接线与运行，本报告hash对应读取快照，不把后续sourcefreeze结果提前视为通过。
+
+## 结论
+
+新入口固定nativequality8/generic/defaultwindow16且input<=65536，直接录制原qualitypipeline，保持parser、candidate顺序、strictwire选优和资源allocator合同。Recorder(false)为空type，无clock/profile/globalstate，普通encoder仍使用同一Recorded核心的false实例。事件和Profile为callerownedfixedstorage，不在codec额外分配日志heap；显式memorycap/profile使用原totalbudget.Lease，不能失败后静默storedfallback。
+
+Nestedscope的inclusive/exclusive模型在正常完整LIFO层级下正确；summary按每层exclusive统计，nestedinclusive不能再累加。eventcapacity截断不改变codec/wire；timeoverflow、negativeclock、childoverlap/总和异常或stackoverflow会标timing_complete=false。短输入dictionary分支有明确wire_attempt_coverage_complete=false，不能把其已记录wireattempts声称为全部q8尝试。大于4096的固定q8输入不触发这两个未录字典分支。
+
+未发现本轮instrumentation改变byte候选配置/选优或cleanup的必要代码错误。最新代码已修正初稿计时overflowflag与pointerreuse事件链接问题。最终linked nativeDebug/nativeReleaseFast/x86ReleaseFast契约各25/25通过，源码已freeze（末节）。主br.zig已注册QA，正值budget/profile同配置对照已纳运行；synthetic超深scope/计时异常仍是未来扩大诊断边界覆盖建议。本次变更是instrumentation，不是codec性能优化。
+
+## 真实q8调用图和参数
+
+普通公共 `encodePlannedStreamWithOptionsAlloc`（src/br.zig约4569）先validate，显式total-memory配置走total_entry.owned，再HQ/chunk/shareddictionary门槛，最终quality!=null调用qualitypipeline。新 `benchmarkQualityQ8ProfileAlloc`（约5061）固定options quality8/generic、noHQ/noShareddictionary/largewindowfalse/window默认16，input>65536拒绝在allocatorrequest前。其直接qualityRecorded入口等价这组公共options下的最终分支，不是独立ratio候选工具。
+
+quality_schedule base_rows[8]（quality_schedule.zig:233）：lazymax_chain128、nice_len192、min_gain1；optimalenabled、chain128、nice192、max_candidates64、maxinput64KiB、没有q10/q11entropyfeedback/commandstate。windowdefault16，ratiofamily；contextenabled及cluster(q>=7)，joint(q>=10)为false；literal/command/distance split启用，adaptiveLiteral(q>=8)与adaptiveDistance(q>=7)启用，adaptiveCommand(q>=9)false；recentdistance与distanceparamsearch启用。
+
+实际质量主链：
+
+1. N<5直接storedstream录wire；否则lazyGreedyPlan参数来自原schedule，buildcommandplan；没有match则stored，否则lazyCommandRecorded。
+2. lazyCommand依原shortmatch规则：恰两command/leadingcopy3时特定dropcandidate，或collectshortalternatives逐dropmask；每candidate先preferredcontext，再chosencommandplan的一次entropy split。
+3. Preferredcontext先countrecentreuse决定实际use_recent，primaryUTF8suffixcandidate、聚类suffix/up_to16/full候选去重，必要plainbaseline严格选优；每completewire都调用原commoncommandplanwriter。
+4. Splitplanning先原literal/adaptiveLiteral/joint(此q8false)、command/distance提案，依原顺序逐completewire评估，含alternateliteralcontexts和plainvariant；仅completebytes决定获选。选优strict<，相等保 incumbent。
+5. 质量主链依原条件评估distanceparametersearch，然后N>=4096且<=64KiB时boundedoptimal。optimalwindow最多原32KiB，但lazy可原window16−16；同commonwire/context/split路线，主incumbent再strictcompare。
+6. 固定q8不触发q11继承、q10+recordoptimal或fontdistance候选；window16也不触发17+longdistance。dictionarysmall分支按原门槛保留，最后与storedlen比较。
+
+所有Recordedwrappers只是传Recorder、begin/deferfinish/errdeferfailure、记录wire/config、以trace.prefer替换相同candidate.len<incumbent.len条件；Disabled.prefer与Active.prefer返回同一个strictbool。没有通过clock/events/requestlimit改变搜索或wire配置。原allocator.free变freeQualityRecorded仍释放同一对象，额外只更新profile中已freewire生命周期，不影响实际allocator。
+
+## 预算、返回ownership与错误时序
+
+Profile.request只增加max_total_working_memory、memory_profile、event_limit。qualityentry使用total_budget.Lease.init(caller,requestcap/requestprofile,0)，正常无cap/profile时原allocator，无新增controlallocation；有请求时和publictotal_entry.owned相同stableledger并传lease.allocator到实际q8pipeline。nestedcodec没有重新设cap、hiddenloggingheap或通过另一allocator绕policy。
+
+成功wire作为toOwnedSlice精确allocation返回，entry先releaseToCaller(caller,wire.len)，再返回；same trackedcaller保持其charge，plainbackingcaller正确释放ledger所有权。lease.deinit在outerfinish前，outer时间包含该scope全部工作/cleanup。errorpipeline原candidate/plan/command/statsdefer释放，最后wireerrdefer在handoff失败时free；OOM由lease.translateError映cap，其他errors保留。输入size拒绝和validate在codecalloc前；0cap也在backingalloc前拒绝，profile错误名仅诊断不改error类型。
+
+普通falseentry还是publicmemorytotal_entry原流程；新profile不调用publicentry递归，所以不会为同request创建第二个ledger。borrowedparenttrackedallocator继承原quota/ownerprofile冲突规则，不能resetouteroperation。event_limit不会增加request heap或改变quality；Profile大小是caller资源，工具创建Profile/JSON/input/expectedwire在另一个工具层且timer外，不是codec隐藏allocator工作。要比较finitecap/profile行为，应给normalpublicoptions和Profile.request完全相同cap/profile，不能拿带memoryrequestprofiled与无capnormal称allocationexact。
+
+## 固定事件storage、ID与生命周期
+
+quality_profile.zig使用512Event与32Frame，event_limit clamp至512；append超过limit标events_truncated，不返回codecerror。events_total和wire_attempts饱和计数，id由全事件序号派生，parentid由最近activeFrame提供。normal层级下parentbegin先于childbegin，recordedEvents只读event_countprefix，不读undefinedunusedslots。
+
+选择事件记录candidate/incumbentbytes、strictaccepted、gain和wire事件ID；origin=lazy/optimal由入口传递，variant记录shortdropalternate。parent跨度是计时层级，origin不是另一次独立调用或exclusive总量。
+
+最新wire_addresses+wire_live只用于identity查找，不retainedallocationownership。freeQualityRecorded在u8slice free前forgetWire；new查找只返回当前live且size/address符合的最近wire事件，避免allocator同地址重用误链。events_truncated或dictionary未全覆盖时wireId全局返回null，以免伪造完整候选来源；returnedwireeventID在工具已输出。Profile.reset保request、清状态，snapshot/events寿命在下次reset前；工具每round序列化后再reset，不能跨round引用buffer中的oldEvent。
+
+计数达到usize极端饱和会失去唯一eventID，但这属于诊断数值极限，当前boundedq8不接近。wire_attempts计的是Recorded .wire begin（含失败），不是所有未录内部dictionary尝试。它不改变actualcallcounter或policy。
+
+## Inclusive / exclusive / unaccounted 的正确范围
+
+begin在eventappend/stackpush之后读startclock；finish先读endclock，再填event/summary。每Frame.child_ns记录直接child的inclusive，父exclusive=inclusive−childsum。直接child范围在正常LIFO下互不重叠并包含于父，递归sum所有**非outerexclusive**得到不重复accountedtime；outer的剩余是unaccounted。不能sum所有Event.inclusive，亦不能parentinclusive+childexclusive来解释总耗时。
+
+summary.exclusive_ns按stage累积所有完成scope（包括未保存eventslot），outer不加其中；unaccounted=outerelapsed−checkedTotal。nested .other 是每层余下成本，不重复含childwire时间。preferred_context和split_planning自身exclusive排除其nested .wire；distance_parameters同理。selection的即时prefer事件exclusive0，实际记录/比较开销留在parent余量，最后stored arbitration有显式selectionscope。cleanup延迟/trace bookkeeping通常归父other或unaccounted；不能说exclusive是无instrumentation净CPU时间。
+
+最新finish已对negativeelapsed/u64castoverflow、child>inclusive、child/summaryaddoverflow及sum>outer标timing_complete=false；不因异常向codec传播error。checkedTotal保sum未溢出的关系，saturating输出仅便于报告。使用分解必须看timing_complete；简单sum+unaccounted恒等本身不能证明时钟覆盖正确。
+
+stackdepth超过32时不pushframe，标timing_complete=false。继续录事件不会越界，但多层overflow的inclusive可能累计到同一个顶层frame并使summary不可用；这不是保持完整层级的fallback。当前q8固定调用深度较浅，仍应通过synthetic超深测试明确timingfalse后消费者拒绝完整分解，不能把这种模式的summary叫exclusiveaccurate。
+
+eventcapacity与timingcapacity是两个独立状态：eventslimit0/1可截断保存数组，但正常depth的summary仍累加全部scopes，timing_complete可以true。此时保存Event.exclusive之和不等于summary全部accounted；消费者不能用recordedprefixsum替代summary。事件截断和timingfalse都不能反馈wirequality。
+
+## 配置labels及覆盖遗漏
+
+Config.from从实际CommandPlanEncodeOptions typedfields复制window、largewindow、use_recent、npostfix/ndirect_high、contextmode/treecount/map/cutoff、literal/adaptive/joint/command/distance split配置和optimize_same_lastdistance。没有为取得这些labels重新decodeframe或调用昂贵inspect；而是记录当次wire候选配置。字段代表传入candidate配置，不能保证writer内部优化一定被启用/所有bit字段被选中；不把configuredflag当wireparser实测。
+
+N<=256 staticdictionary selector、256<N<=4096 extendeddictionary helpers仍走未Recorded内层，quality主链调用incompleteWires标wire_attempt_coverage_complete=false；这些cost仍在outer/otherinclusive−children余量中，没有计时总量丢失，但该分支的每wire/config/selection无法完整归因。fixedq8data>4096不触发两者。短输入coveragefalse时不能展示“所有q8wireattempts”等完整标题；nullreturned_eventID也不是missingselectedwirebug。
+
+现有tools/br/ratio_stage_profile只运行isolatedratio/lazy/optimal/record候选计时，records_q8是fixture名；它不能当作此真实quality8policyprofile或wholeq8throughput。新tools/br/quality_stage_profile明确固定q8generic/window16，通过ordinarypublicwireoracle，对每roundprofiledwire等字节检查；记录normal_ns与profile_call_ns是同源normalvsinstrumented的诊断开销观察，不是与libbrotli竞速或新的codec优化收益。
+
+工具profilecalltimer覆盖整个API includingProfile.reset/setup，outer开始时刻晚些；所以profile_call_ns和outer_elapsed_ns本就不同，exclusive分解只对应outer。输入读取、expectedencode+decode、profileallocation和JSON写在timer外。round5正常/profile交替减少先后偏差，但仅diagnostic窗口，不能赋吞吐排名/无额外clockoverhead结论。
+
+## QA与最后需要确认的项
+
+现有src/tests/br_quality_profile_contracts.zig已读：ordinaryprofilewire相等/decode、多个tiny/structured/random64KiB、FailingAllocator请求/释放相同、repeatstableeventsemantics（不比较时间）、parentID/child范围、exclusive+unaccounted关系、eventlimits0/1不改wire/allocation、选定失败index0/1/2/lastcleanup/error相同、0cap在backingrequest前limiterror、oversize65537拒绝beforealloc。
+
+这些检查已由读取最终linked结果确认通过；本审计没有执行命令。最后回读已确认br.zig:129的“Brotli q8 quality profile complete wire and bounded diagnostic contracts”注册helper。新增finiteMemory对normal/publicoptions与Profile.request传相同cap/profile，通过32MiB初始测peak、恰好peak成功、peak−1两侧同WorkingMemoryLimitExceeded；force_moving_growth，两侧全alloc/resize/remap/live/peak相等，返回后物理calleroutput仍live而memorylease已结束，callerfree再zero。该正值budget测试已纳最终linked契约，三target各25/25通过；详见最终epoch。还建议补：nestedborrowedbudget继承；duration/childsumoverflow与stack>32 syntheticdiagnosticflag；truncation后的SummaryvsEventprefix关系及更明确pointerreuseidentity压力。
+
+初稿overflow和freewireID疑点最新源码已修，不把已解决问题作为终稿缺陷。剩余短输入dictionarycoverage和stackoverflowtimingfalse是明示范围限制；不能靠选择只展示大输入掩盖公共请求范围。最终SOURCE_READY如果更改此模块应更新相应hash/review，不把本次静态audit写成实际运行通过。
+
+## 本轮内容哈希
+
+- `src/br.zig`: `0be45f1153d120230bcadcdcc9958df54d32d06d92537f90fe3057ba9d722082`
+- `src/br/encoder/quality_profile.zig`: `aa3e79ec0c3d304fe84bd15e6f88591762e02e1e70e3bfbf4512444902078451`
+- `src/tests/br_quality_profile_contracts.zig`: `4684b0d75d0a01395597cf35379384179c7c7e15f687f07bc5441b04a967f8ca`
+- `tools/br/quality_stage_profile.zig`: `a3f6e80df09cf980b8b44e44d021d4d2208032e57c77c03db6eb62338e9b9d33`
+- `src/br/encoder/quality_schedule.zig`: `657c1e5fe4aa848bd006ba82ce8d71f08ef259d1d88928285c86d65c6fac9421`
+- `src/br/encoder/total_budget.zig`: `85b5c6f0ba44ad00b2532c7345237edc552207b43c352a3e1454c9480cddbb61`
+- `src/br/encoder/total_entry.zig`: `403e15a4c6d746877e6fdbe85cec501c71eeab149634f53fb0d385a0fe70098c`
+
+
+最后源回读：2026-10-25 16:40:59 Asia/Shanghai，QA注册及finiteMemory已纳入当前snapshot；工具返回wire事件ID和profile overflow flags也包含，前文初稿疑点已修。实际运行/源码freeze证据由父代理稍后提供，不在本静态结论中。
+
+
+## 最终冻结契约、exclusive方程与smoke范围（2026-10-25 16:48:33 Asia/Shanghai）
+
+最终核心SHA256：brroot=`0be45f1153d120230bcadcdcc9958df54d32d06d92537f90fe3057ba9d722082`，profilemodule=`aa3e79ec0c3d304fe84bd15e6f88591762e02e1e70e3bfbf4512444902078451`，QA=`4684b0d75d0a01395597cf35379384179c7c7e15f687f07bc5441b04a967f8ca`。current读hash与三target-linked result.source_after完全匹配；早期未linked或编译修正epoch不作为最终通过证据。
+
+### Error union、同错误及positive预算
+
+profileentry对pipeline失败显式返回 `@as(Error![]u8,lease.translateError(error.OutOfMemory))` 或 `@as(Error![]u8,err)`；这修正Zig表达式类型推断，保留原同一errorunion/typedreturn语义，没有将error转成成功wire。OOM仅由同publicmemorylease映WorkingMemoryLimitExceeded；其他error保持。最后wirehandoff及errdeferfree仍原顺序。
+
+正值预算QA已覆盖32MiB初始峰值测量、exactpeak成功、peak−1两侧同WorkingMemoryLimitExceeded；同cap/profile对照、forcedmovinggrow、request数/allocbytes/frees/live/peak相同，output返回后物理callerheap仍live而endedlease.memoryprofilelive0，callerfree后都zero。无预算/selectedfailureindex测试也保持samewire/sameerror和cleanup。短输入dictionarycoveragefalse仍是明示范围，eventlimit0/1以及profiling饱和/异常只影响诊断，不改wire或fallbackpolicy。
+
+### 已完成运行（仅读取已有结果）
+
+- contracts-debug-linked：native Debug，配套record-debug.o，exit0/source_stable/25pass。
+- contracts-releasefast-linked：native ReleaseFast，record-releasefast.o，exit0/source_stable/25pass。
+- contracts-x86-linked：x86-linux-musl ReleaseFast，record-x86.o，exit0/source_stable/25pass。
+- tool-build-fixed：已读buildsummary5/5success；新工具route普通q8wireoracle、profiledwire/decode等。
+- tool-smoke-gate：validate1run成功，独立核本地input/exe身份、事件层级和timing分解。
+
+25是linkedfilter加importedcontracttests的数量，不代表25个独立候选profile或全input排名。fullfamily/check当前由父代理执行，本报告不提前写完成。没有运行任何审计工具命令来重编译或计时。
+
+### 对源码和gate的独立方程复核
+
+Recorder.begin推进Frame，Scope.finish仅将**直接子**inclusive加到parent.child_ns，再令本scope exclusive=owninclusive−childsum。prefer即时事件通过append产生，不beginScope、不读clock、不pushFrame，Event默认inclusive/exclusive0；因此它既能表达strictselection/IDs又不重复计时。最终storedselection是不同的timedScope，其accepted=null，不是这种instantprefer。
+
+独立gate `tools/br/quality_profile_gate.py`拒绝truncated/timingfalse、要求全events_total==savedcount，按parentID列直接children，然后检查：
+
+```
+parent.exclusive = parent.inclusive - sum(direct_child.inclusive)
+summary[stage] = sum(nonouter event.exclusive for that stage)
+sum(summary) + unaccounted = outer
+```
+
+它将instantselection0作为directchildren，不能把孙scope也减一次。wireattemptcount等于全部Recorded wireevents；completecoverage的大input还要求returnedwireID指向已记录wire。gate不直接证明encoderbyte输出，wire_equal/roundtrip由producer断言，本地input与optionalexe SHA由gate独立验证，静态报告不扩大这一分工。
+
+本审计不运行gate程序，仅读取source和gate产物，并独立从smokeJSON按所有events（包括无children的leaf）重算上述方程。54个event全部满足，17个instantpreferinclusive/exclusive0，18个wireleafinclusive==exclusive。byStageexact等于profile.summary，不通过简单“所有inclusive相加”虚增覆盖。
+
+### Mozilla smoke仅诊断，不是安静吞吐
+
+读取tool-build-smoke.json：ReleaseFast/Zig0.16.0/x86_64/skylake+pku+sgx/i7-10700K，工具affinity13–15、benchmarkthread1，exeSHA=`d11b00006fd2229e0150d0f17fdbdaf705d1a951f30722fb16d3e182253a2c4e`；重新读该exe hash相符。输入Mozilla65536byte SHA b0050240...，ordinarywire14216byte、SHA0edaa9cf...，producerwireequal/roundtriptrue。
+
+计时窗口有并行编译工作，**不是quiet performance sample**。raw诊断观察：
+
+| 指标 | 数值 |
+|---|---:|
+| outer_elapsed | 98.885505 ms |
+| summary.preferred_context exclusive | 68.088105 ms |
+| summary.wire exclusive | 17.809353 ms |
+| summary.optimal_parse exclusive | 7.838701 ms |
+| 非outerexclusive总和 | 98.884663 ms |
+| unaccounted | 0.000842 ms |
+| 事件 / Recorded wireattempts | 54 / 18 |
+| returned wire event ID | 26 |
+
+classified_fraction=(sum(summary)−summary.other)/outer=`0.9992565037717105`（约99.93%），精确等于gate产物。它只是该诊断scope中具名非other时段的覆盖率；不能证明CPUtime测量准确、没有抢占/编译干扰，亦不能把preferred_context68ms全部归因某个尚未细分的内部步骤。
+
+normal_ns98.486626ms、profile_call_ns98.886995ms的点差不作为profileoverhead/吞吐显著性结论。outer与profilecall开始时间不同且计时受扰；所有18个wireattempt是真实配置的fullwire构建，但other中仍可能有contextproposal等工作，不能以全wirecoverage推断profile已分解所有内部kernel。更细context分析由另外任务负责。
+
+接受当前改动作为真实q8instrumentation与验证surface；没有压缩算法/性能优化或quiet competitor速度claim。后续需要在family/check和freeze后独立公开bench验证ordinary路径字节/资源及无profilingcodegen，不用这次smoke替代。
