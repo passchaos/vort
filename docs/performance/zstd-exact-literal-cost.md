@@ -63,3 +63,8 @@ alloc115/remap51，返回输出live5078B，caller free后0。累计增长与释�
 
 [证据索引](data/zstd-literal-cost-20261025/index.json)保存原始轮次、家族协议、源码/编译输入、
 oracle、内存事件和存储失败/恢复记录；[逐项结果](data/zstd-literal-cost-20261025/analysis.json)可复算。
+
+交付前再次`git pull --rebase origin main`确认分支最新；随后现有test-zstd
+步骤实际运行完整1085项并通过，源SHA前后相同。命令中的filter没有缩减
+该build目标，记录以实际1085计数为准。
+[post-rebase记录](data/zstd-literal-cost-20261025/post-rebase.json)保留该结果。

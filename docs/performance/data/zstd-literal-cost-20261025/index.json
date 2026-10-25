@@ -439,6 +439,23 @@
     ],
     "source_directory": "/tmp/vort-zstd-literal-cost-20261025/memory"
   },
+  "post-rebase": {
+    "bundle": "post-rebase.tar.gz",
+    "bundle_sha256": "9e2685bff6f0678f637845fec09a6955f09f9b13ee0fb1de62d53adc37444c2b",
+    "files": [
+      {
+        "bytes": 1519,
+        "path": "result.json",
+        "sha256": "ec370b0fca51463a2921d43752148d598f8163125d42a718c995637433b199d0"
+      },
+      {
+        "bytes": 1881,
+        "path": "test.log",
+        "sha256": "bd4742acbc90e132ca2fb7ae5399945efe760c4c38530e57bb974e787ece666c"
+      }
+    ],
+    "source_directory": "/tmp/vort-zstd-literal-cost-20261025/post-rebase"
+  },
   "quiet-final": {
     "bundle": "quiet-final.tar.gz",
     "bundle_sha256": "cc2c9ca36dc1287a530d8b23062b1949f3b1ab4205d5a3228ed24b6106c689e0",

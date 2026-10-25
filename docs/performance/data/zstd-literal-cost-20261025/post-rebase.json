@@ -1,0 +1,33 @@
+{
+  "scope": "post-rebase related tests; full1085family preserved separately",
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-zstd",
+    "-Doptimize=ReleaseFast",
+    "-j8",
+    "--summary",
+    "all",
+    "--",
+    "--test-filter",
+    "zstd single literal cost"
+  ],
+  "exit_code": 0,
+  "start_utc": "2026-10-25T04:56:30.366833+00:00",
+  "end_utc": "2026-10-25T04:59:43.173106+00:00",
+  "source_before": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+    "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652"
+  },
+  "source_after": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+    "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652"
+  },
+  "changed": [],
+  "actual_test_count": 1085,
+  "test_filter_note": "The build step ran the full suite; actual build summary reports1085. No filtered-count claim."
+}
