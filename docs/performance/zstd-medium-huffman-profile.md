@@ -102,6 +102,9 @@ build check passes 169/169. CLI help passes its seven-step build/run check.
 The diagnostic file smoke independently verifies exact JSON/input/empty-output
 identities and acceptance of 65536/131072 bytes, rejecting 65535/131073 before
 encoding. The diagnostic contracts are included in the complete family.
+After `git pull --rebase origin main`, the medium-kernel test passes again and
+the twelve-test diagnostic filter passes again. Source manifests remain
+unchanged across the pull and these checks.
 
 ## Public-API measurements
 
