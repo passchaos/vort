@@ -263,6 +263,7 @@ pub const State = union(enum) {
     pub fn failedProgress(self: *const Self) ?core.Progress {
         return switch (self.*) {
             .deflate64 => |*encoder| encoder.failedProgress(),
+            .xz => |*encoder| encoder.failedProgress(),
             else => null,
         };
     }
@@ -319,6 +320,7 @@ pub fn validate(
             if (options.xz.block_size == 0 or options.xz.dictionary_size < 4096 or
                 options.xz.max_pending_output_len == 0 or options.xz.max_block_count == 0)
                 return error.InvalidBlockPlan;
+            if (options.xz.parallel) |parallel| try parallel.validate();
             try validateExpectedSize(expected_size, options.xz.max_input_len);
         },
         .ppmd => try ppmd_codec.validateOptions(options.ppmd, expected_size),

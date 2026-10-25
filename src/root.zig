@@ -286,6 +286,8 @@ pub const XzDecodeWorkspace = xz.DecodeWorkspace;
 pub const XzEncodeOptions = xz.EncodeOptions;
 pub const XzParallelOptions = xz.ParallelOptions;
 pub const XzParallelProfile = xz.ParallelProfile;
+pub const XzIncrementalParallelOptions = xz.IncrementalParallelOptions;
+pub const XzIncrementalParallelSnapshot = xz.IncrementalParallelSnapshot;
 pub const xz_parallel_worker_stack_bytes = xz.parallel_worker_stack_bytes;
 pub const RawLzma2EncodeOptions = xz.RawLzma2EncodeOptions;
 pub const validateXzEncodeOptions = xz.validateEncodeOptions;
@@ -2438,6 +2440,10 @@ test "root XZ parallel consumer contracts" {
 
 test "root XZ block sizes consumer contracts" {
     try @import("tests/xz_block_sizes_consumers.zig").contracts(@This());
+}
+
+test "root XZ parallel incremental consumer contracts" {
+    try @import("tests/xz_parallel_incremental_consumers.zig").contracts(@This());
 }
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
 pub const zstdMinCompressionLevel = zstd.min_compression_level;

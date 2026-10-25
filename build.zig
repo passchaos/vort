@@ -124,6 +124,17 @@ pub fn build(b: *std.Build) void {
     xz_block_sizes_wasm_run.addArtifactArg(xz_block_sizes_wasm);
     const xz_block_sizes_wasm_step = b.step("test-xz-block-sizes-wasm", "Execute XZ declared block sizes, aliases and quota contracts in WebAssembly");
     xz_block_sizes_wasm_step.dependOn(&xz_block_sizes_wasm_run.step);
+    const xz_parallel_incremental_wasm = b.addExecutable(.{
+        .name = "vort-xz-parallel-incremental-wasm",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/tests/xz_parallel_incremental_wasm.zig"), .target = wasm_target, .optimize = optimize, .single_threaded = true, .imports = &.{.{ .name = "xz", .module = xz_parallel_wasm_mod }} }),
+    });
+    xz_parallel_incremental_wasm.entry = .disabled;
+    xz_parallel_incremental_wasm.rdynamic = true;
+    xz_parallel_incremental_wasm.stack_size = 8 * 1024 * 1024;
+    const xz_parallel_incremental_wasm_run = b.addSystemCommand(&.{ "node", "tools/xz/incremental_parallel_wasm_gate.js" });
+    xz_parallel_incremental_wasm_run.addArtifactArg(xz_parallel_incremental_wasm);
+    const xz_parallel_incremental_wasm_step = b.step("test-xz-parallel-incremental-wasm", "Execute persistent incremental XZ ownership, credits and fallback in WebAssembly");
+    xz_parallel_incremental_wasm_step.dependOn(&xz_parallel_incremental_wasm_run.step);
     const br_public_wasm = b.addExecutable(.{
         .name = "vort-br-public-wasm",
         .root_module = b.createModule(.{
@@ -926,6 +937,14 @@ pub fn build(b: *std.Build) void {
     const xz_parallel_single_tests = b.addTest(.{ .name = "vort-xz-parallel-single-tests", .root_module = xz_single_thread_mod, .filters = &.{"XZ parallel"} });
     const xz_parallel_single_step = b.step("test-xz-parallel-single", "Run the complete XZ parallel contracts through the single-thread fallback");
     xz_parallel_single_step.dependOn(&b.addRunArtifact(xz_parallel_single_tests).step);
+    const xz_parallel_incremental_tests = b.addTest(.{ .name = "vort-xz-parallel-incremental-tests", .root_module = xz_tests_mod, .filters = &.{"XZ parallel incremental"} });
+    const xz_parallel_incremental_root_tests = b.addTest(.{ .name = "vort-xz-parallel-incremental-root-tests", .root_module = tests_mod, .filters = &.{"root XZ parallel incremental"} });
+    const xz_parallel_incremental_step = b.step("test-xz-parallel-incremental", "Run persistent bounded XZ workers, credit, lifecycle and consumer contracts");
+    xz_parallel_incremental_step.dependOn(&b.addRunArtifact(xz_parallel_incremental_tests).step);
+    xz_parallel_incremental_step.dependOn(&b.addRunArtifact(xz_parallel_incremental_root_tests).step);
+    const xz_parallel_incremental_single_tests = b.addTest(.{ .name = "vort-xz-parallel-incremental-single-tests", .root_module = xz_single_thread_mod, .filters = &.{"XZ parallel incremental"} });
+    const xz_parallel_incremental_single_step = b.step("test-xz-parallel-incremental-single", "Run incremental parallel XZ contracts in a single-thread build");
+    xz_parallel_incremental_single_step.dependOn(&b.addRunArtifact(xz_parallel_incremental_single_tests).step);
     const lzma_encode_controls_tests = b.addTest(.{
         .name = "vort-lzma-encode-controls-tests",
         .root_module = lzma_contracts_mod,
@@ -3004,6 +3023,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xz_block_sizes_diff.addArgs(args);
     const xz_block_sizes_diff_step = b.step("run-xz-block-sizes-diff", "Validate XZ declared sizes against liblzma and actual MT decoder worker calls");
     xz_block_sizes_diff_step.dependOn(&xz_block_sizes_diff.step);
+    const xz_incremental_parallel_probe = b.addExecutable(.{
+        .name = "vort-xz-incremental-parallel-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/xz/incremental_parallel_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xz", .module = xz_tests_mod }} }),
+    });
+    const xz_incremental_parallel_probe_step = b.step("build-xz-incremental-parallel-probe", "Build the public incremental XZ parallel interoperability probe");
+    xz_incremental_parallel_probe_step.dependOn(&b.addInstallArtifact(xz_incremental_parallel_probe, .{}).step);
+    const xz_incremental_parallel_diff = b.addSystemCommand(&.{ "python3", "tools/xz/incremental_parallel_diff.py", "--probe" });
+    xz_incremental_parallel_diff.addArtifactArg(xz_incremental_parallel_probe);
+    if (b.args) |args| xz_incremental_parallel_diff.addArgs(args);
+    const xz_incremental_parallel_diff_step = b.step("run-xz-incremental-parallel-diff", "Validate persistent XZ worker input ownership and stream progress against liblzma");
+    xz_incremental_parallel_diff_step.dependOn(&xz_incremental_parallel_diff.step);
 
     const xz_encode_bench_exe = b.addExecutable(.{
         .name = "vort-xz-encode-bench",
@@ -7301,6 +7331,11 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&xz_block_sizes_wasm.step);
     check_step.dependOn(&xz_block_sizes_tests.step);
     check_step.dependOn(&xz_block_sizes_cli_tests.step);
+    check_step.dependOn(&xz_parallel_incremental_tests.step);
+    check_step.dependOn(&xz_parallel_incremental_root_tests.step);
+    check_step.dependOn(&xz_parallel_incremental_single_tests.step);
+    check_step.dependOn(&xz_incremental_parallel_probe.step);
+    check_step.dependOn(&xz_parallel_incremental_wasm.step);
     check_step.dependOn(&zstd_magicless_tests.step);
     check_step.dependOn(&zstd_magicless_root_tests.step);
     check_step.dependOn(&zstd_magicless_probe.step);

@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const writer = @import("writer.zig");
+const parallel_types = @import("incremental_parallel/types.zig");
+const parallel_owner = @import("incremental_parallel/owner.zig");
 
 /// Block-bounded XZ/LZMA2 encoder. Complete blocks are serialized through the
 /// same helpers as one-shot writing, while plaintext and pending output remain
@@ -24,8 +26,10 @@ pub const Encoder = struct {
     total_output: usize = 0,
     block_count: usize = 0,
     stream_count: usize = 0,
+    parallel_state: ?*parallel_owner.Owner = null,
 
     pub const Error = writer.Error || std.mem.Allocator.Error;
+    pub const ParallelSnapshot = parallel_types.Snapshot;
     pub const Options = struct {
         check: writer.Check = .crc64,
         block_size: usize = 1024 * 1024,
@@ -38,6 +42,9 @@ pub const Encoder = struct {
         /// Declare exact packed and unpacked sizes in every complete Block
         /// Header, using the same block writer as the one-shot APIs.
         include_block_sizes: bool = false,
+        /// Explicit persistent Block workers. Caller I/O, filters, allocator
+        /// and profile storage must remain valid until all workers join.
+        parallel: ?parallel_types.Options = null,
         payload_encoding: writer.PayloadEncoding = .compressed,
         max_input_len: usize = std.math.maxInt(usize),
         max_pending_output_len: usize = 16 * 1024 * 1024,
@@ -84,6 +91,7 @@ pub const Encoder = struct {
         retained_input_capacity: usize,
         retained_output_capacity: usize,
         retained_record_capacity: usize,
+        parallel: ParallelSnapshot = .{},
     };
 
     pub fn init(allocator: std.mem.Allocator) Error!Encoder {
@@ -91,9 +99,17 @@ pub const Encoder = struct {
     }
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Error!Encoder {
+        return initConfigured(allocator, options, null);
+    }
+
+    fn initConfigured(allocator: std.mem.Allocator, options: Options, expected_input_len: ?usize) Error!Encoder {
         try validateOptions(options);
+        var state: Encoder = .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
+        if (options.parallel != null)
+            state.parallel_state = try parallel_owner.Owner.create(allocator, try parallelConfig(options, expected_input_len), .{}, .{});
         options.recordEffectiveSettings();
-        return .{ .allocator = allocator, .options = options };
+        if (state.parallel_state) |owner| owner.publishProfiles();
+        return state;
     }
 
     pub fn initExactSize(
@@ -101,12 +117,15 @@ pub const Encoder = struct {
         options: Options,
         expected_input_len: usize,
     ) Error!Encoder {
-        var state = try initWithOptions(allocator, options);
-        state.expected_input_len = expected_input_len;
-        return state;
+        return initConfigured(allocator, options, expected_input_len);
     }
 
     pub fn deinit(self: *Encoder) void {
+        if (self.parallel_state) |owner| {
+            owner.deinit();
+            self.* = undefined;
+            return;
+        }
         self.plain.deinit(self.allocator);
         self.pending.deinit(self.allocator);
         self.records.deinit(self.allocator);
@@ -114,6 +133,11 @@ pub const Encoder = struct {
     }
 
     pub fn reset(self: *Encoder) void {
+        if (self.parallel_state) |owner| {
+            owner.reset(self.expected_input_len);
+            self.syncParallelState();
+            return;
+        }
         self.total_input = 0;
         self.total_output = 0;
         self.block_count = 0;
@@ -122,10 +146,7 @@ pub const Encoder = struct {
     }
 
     pub fn nextStream(self: *Encoder, options: Options) Error!void {
-        if (!self.done or self.pending_offset != self.pending.items.len)
-            return error.InvalidBlockPlan;
-        try validateOptions(options);
-        self.resetStream(options, null);
+        try self.nextConfiguredStream(options, null);
     }
 
     pub fn nextStreamExactSize(
@@ -133,9 +154,56 @@ pub const Encoder = struct {
         options: Options,
         expected_input_len: usize,
     ) Error!void {
+        try self.nextConfiguredStream(options, expected_input_len);
+    }
+
+    fn nextConfiguredStream(self: *Encoder, options: Options, expected_input_len: ?usize) Error!void {
         if (!self.done or self.pending_offset != self.pending.items.len)
             return error.InvalidBlockPlan;
         try validateOptions(options);
+        if (self.parallel_state) |owner| {
+            if (options.parallel != null) {
+                try owner.nextStream(try parallelConfig(options, expected_input_len));
+                self.options = options;
+                self.expected_input_len = expected_input_len;
+                self.syncParallelState();
+                return;
+            }
+            const released = try owner.releaseToSerial();
+            self.parallel_state = null;
+            self.plain = released.storage.plain;
+            self.pending = released.storage.pending;
+            self.records = released.storage.records;
+            self.total_input = released.counters.total_input;
+            self.total_output = released.counters.total_output;
+            self.block_count = released.counters.block_count;
+            self.stream_count = released.counters.stream_count;
+            self.resetStream(options, expected_input_len);
+            return;
+        }
+        if (options.parallel != null) {
+            const owner = try parallel_owner.Owner.create(self.allocator, try parallelConfig(options, expected_input_len), .{
+                .plain = self.plain,
+                .pending = self.pending,
+                .records = self.records,
+            }, .{
+                .total_input = self.total_input,
+                .total_output = self.total_output,
+                .block_count = self.block_count,
+                .stream_count = self.stream_count,
+            });
+            // Publication cannot fail: the old descriptors remain owned by
+            // this value until the complete new authority has been created.
+            self.plain = .empty;
+            self.pending = .empty;
+            self.pending_offset = 0;
+            self.records = .empty;
+            self.parallel_state = owner;
+            self.options = options;
+            self.expected_input_len = expected_input_len;
+            self.syncParallelState();
+            return;
+        }
         self.resetStream(options, expected_input_len);
     }
 
@@ -157,6 +225,28 @@ pub const Encoder = struct {
     }
 
     pub fn snapshot(self: *const Encoder) Snapshot {
+        if (self.parallel_state) |owner| {
+            const observed = owner.snapshot();
+            return .{
+                .input_read = observed.counters.total_input,
+                .output_written = observed.counters.total_output,
+                .current_input = observed.current_input,
+                .current_output = observed.current_output,
+                .buffered_input = observed.buffered_input,
+                .pending_output = observed.pending_output,
+                .current_stream_blocks = observed.current_stream_blocks,
+                .block_count = observed.counters.block_count,
+                .stream_count = observed.counters.stream_count,
+                .stream_index = observed.stream_index,
+                .flush_requested = observed.flush_requested,
+                .finishing = observed.finishing,
+                .done = observed.done,
+                .retained_input_capacity = observed.retained_input_capacity,
+                .retained_output_capacity = observed.retained_output_capacity,
+                .retained_record_capacity = observed.retained_record_capacity,
+                .parallel = observed.parallel,
+            };
+        }
         return .{
             .input_read = self.total_input,
             .output_written = self.total_output,
@@ -178,10 +268,20 @@ pub const Encoder = struct {
     }
 
     pub fn flush(self: *Encoder) void {
+        if (self.parallel_state) |owner| {
+            owner.flush();
+            self.syncParallelState();
+            return;
+        }
         if (!self.finishing and !self.done) self.flush_requested = true;
     }
 
     pub fn finish(self: *Encoder) void {
+        if (self.parallel_state) |owner| {
+            owner.finish();
+            self.syncParallelState();
+            return;
+        }
         if (!self.done) {
             self.finishing = true;
             self.flush_requested = false;
@@ -189,6 +289,11 @@ pub const Encoder = struct {
     }
 
     pub fn step(self: *Encoder, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.parallel_state) |owner| {
+            defer self.syncParallelState();
+            self.options.recordEffectiveSettings();
+            return owner.step(input, output, self.options.max_input_len, self.options.max_pending_output_len, self.options.max_block_count);
+        }
         if (self.done) {
             if (input.len != 0) return error.TrailingData;
             self.options.recordEffectiveSettings();
@@ -318,6 +423,30 @@ pub const Encoder = struct {
             return error.OutputLimitExceeded;
     }
 
+    /// Progress committed before the most recent failing step. Consumers must
+    /// account for these caller bytes before propagating an encoder error.
+    pub fn failedProgress(self: *const Encoder) ?core.Progress {
+        return if (self.parallel_state) |owner|
+            owner.failedProgress()
+        else
+            null;
+    }
+
+    fn syncParallelState(self: *Encoder) void {
+        const owner = self.parallel_state orelse return;
+        self.total_input = owner.state.total_input;
+        self.total_output = owner.state.total_output;
+        self.block_count = owner.state.block_count;
+        self.stream_count = owner.state.stream_count;
+        self.current_input = owner.state.current_input;
+        self.current_output = owner.state.current_output;
+        self.header_written = owner.state.header_written;
+        self.footer_written = owner.state.footer_written;
+        self.flush_requested = owner.state.flush_requested;
+        self.finishing = owner.state.finishing;
+        self.done = owner.state.done;
+    }
+
     fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
         return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
     }
@@ -325,6 +454,19 @@ pub const Encoder = struct {
 
 fn validateOptions(options: Encoder.Options) Encoder.Error!void {
     try writer.validateOptions(options.writerOptions());
+    if (options.parallel) |parallel| try parallel.validate();
     if (options.max_pending_output_len == 0 or options.max_block_count == 0)
         return error.OutputLimitExceeded;
+}
+
+fn parallelConfig(options: Encoder.Options, expected_input_len: ?usize) Encoder.Error!parallel_types.Config {
+    return .{
+        .writer_options = options.writerOptions(),
+        .payload_encoding = options.payload_encoding,
+        .max_input_len = options.max_input_len,
+        .max_pending_output_len = options.max_pending_output_len,
+        .max_block_count = options.max_block_count,
+        .expected_input_len = expected_input_len,
+        .parallel = options.parallel orelse return error.InvalidBlockPlan,
+    };
 }
