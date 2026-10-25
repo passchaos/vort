@@ -1310,11 +1310,27 @@ pub fn treeCodeLengthsKnownActive(
     if (active_symbols.len <= 64 and n > 64)
         return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 64);
     if (n > 64) {
+        if (comptime n == 256) if (max_bits == 11 and active_symbols.len >= 65 and active_symbols.len <= 127)
+            return treeCodeLengthsMediumKnownActive(n, freqs, max_bits, active_symbols);
         if (comptime n == 256) if (max_bits == 11 and active_symbols.len >= 128)
             return treeCodeLengthsDenseKnownActive(n, freqs, max_bits, active_symbols);
         return backrefPackageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
     }
     return packageMergeCodeLengths(n, freqs, max_bits, active_symbols.len);
+}
+
+// Use the same creation-serial tie policy as the old full-width back-reference
+// path. Packed-count package merge has a different tie policy and cannot serve
+// as a byte-exact replacement here. The sorted active list supplies identical
+// leaves without compact-frequency copies or a final symbol remapping pass.
+noinline fn treeCodeLengthsMediumKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: anytype,
+) [n]u4 {
+    std.debug.assert(n == 256 and max_bits == 11 and active_symbols.len >= 65 and active_symbols.len <= 127);
+    return backrefPackageMergeCodeLengthsWithWorkspace(n, 128, freqs, max_bits, active_symbols.len, true, false, active_symbols);
 }
 
 // Keep the larger bucket workspace and package-merge instance out of the shared
@@ -1546,7 +1562,21 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
     comptime linear_recovery: bool,
     comptime bucket_leaves: bool,
 ) [n]u4 {
-    comptime std.debug.assert(n * max_code_bits <= std.math.maxInt(u16));
+    return backrefPackageMergeCodeLengthsWithWorkspace(n, n, freqs, max_bits, active, linear_recovery, bucket_leaves, {});
+}
+
+fn backrefPackageMergeCodeLengthsWithWorkspace(
+    comptime n: usize,
+    comptime workspace_n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime linear_recovery: bool,
+    comptime bucket_leaves: bool,
+    active_symbols: anytype,
+) [n]u4 {
+    comptime std.debug.assert(workspace_n * max_code_bits <= std.math.maxInt(u16));
+    std.debug.assert(active <= workspace_n);
     const invalid = std.math.maxInt(u16);
     const Node = struct {
         weight: u64,
@@ -1572,15 +1602,25 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
     // Each level creates fewer than `active` packages. Keeping one compact
     // arena of back-references avoids copying an n-symbol multiplicity vector
     // through every package and defers code-length recovery until selection.
-    var nodes: [n * max_code_bits]Node = undefined;
+    var nodes: [workspace_n * max_code_bits]Node = undefined;
     var node_len: usize = 0;
-    var leaves: [n]u16 = undefined;
-    for (freqs.*, 0..) |freq, symbol| {
-        if (freq == 0) continue;
-        const index: u16 = @intCast(node_len);
-        nodes[node_len] = .{ .weight = freq, .symbol = @intCast(symbol), .serial = index };
-        leaves[node_len] = index;
-        node_len += 1;
+    var leaves: [workspace_n]u16 = undefined;
+    if (comptime @TypeOf(active_symbols) == void) {
+        for (freqs.*, 0..) |freq, symbol| {
+            if (freq == 0) continue;
+            const index: u16 = @intCast(node_len);
+            nodes[node_len] = .{ .weight = freq, .symbol = @intCast(symbol), .serial = index };
+            leaves[node_len] = index;
+            node_len += 1;
+        }
+    } else {
+        for (active_symbols) |symbol_value| {
+            const symbol: usize = @intCast(symbol_value);
+            const index: u16 = @intCast(node_len);
+            nodes[node_len] = .{ .weight = freqs[symbol], .symbol = @intCast(symbol), .serial = index };
+            leaves[node_len] = index;
+            node_len += 1;
+        }
     }
     std.debug.assert(node_len == active);
     if (bucket_leaves)
@@ -1588,8 +1628,8 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
     else
         std.mem.sort(u16, leaves[0..active], Less{ .nodes = nodes[0..node_len] }, Less.less);
 
-    var current: [2 * n]u16 = undefined;
-    var next: [n]u16 = undefined;
+    var current: [2 * workspace_n]u16 = undefined;
+    var next: [workspace_n]u16 = undefined;
     var current_len = active;
     @memcpy(current[0..current_len], leaves[0..active]);
 
@@ -1621,7 +1661,7 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
     std.debug.assert(selected_count <= current_len);
     var lengths: [n]u4 = @splat(0);
     if (comptime linear_recovery) {
-        var multiplicities: [n * max_code_bits]u16 = undefined;
+        var multiplicities: [workspace_n * max_code_bits]u16 = undefined;
         @memset(multiplicities[0..node_len], 0);
         for (current[0..selected_count]) |index| multiplicities[index] += 1;
         var index = node_len;
@@ -1647,6 +1687,10 @@ fn backrefPackageMergeCodeLengthsWithRecovery(
             accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
     }
     return lengths;
+}
+
+test "Zstd medium known-active back-reference workspace preserves exact lengths" {
+    try @import("huffman/medium_alphabet_tests.zig").mediumAlphabet(@This());
 }
 
 const leaf_exact_count_cutoff = 166;
