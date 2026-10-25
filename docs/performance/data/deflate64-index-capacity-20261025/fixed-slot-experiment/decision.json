@@ -1,0 +1,4 @@
+{
+  "source_sha256": "a149d36ce699001e985b77541bb3cafc46447161efee8b5690db95acb127b0e4",
+  "decision": "Withdraw full/small fixed-slot specialization; no whole-call benefit on measured full-window repeat pool and extra code complexity. Retain simpler a149 span-based allocation/remap as requested-memory increment; explicit negative speed point data remain visible."
+}

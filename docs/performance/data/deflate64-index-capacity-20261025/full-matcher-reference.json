@@ -1,0 +1,6 @@
+{
+  "base": "35229f7c2363e61da2be31b3bf18c001f6d6c198",
+  "source": "/home/passchaos/project-z/vort/src/deflate64/stream_match.zig",
+  "sha256": "13879c9f5dcf45cecd1ae2d9cc7e7400db3748bae45f568dd49340706e4ae76b",
+  "copy_sha256": "13879c9f5dcf45cecd1ae2d9cc7e7400db3748bae45f568dd49340706e4ae76b"
+}

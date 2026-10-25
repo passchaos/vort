@@ -1,0 +1,5 @@
+{
+  "scope": "Rejected full/small fixed-slot specialization",
+  "file": "src/deflate64/stream_match.zig",
+  "sha256": "44dba5b4fabf0655657ad09106a304ec0ad3609b70f0567a4c73e6e6e9cc484c"
+}

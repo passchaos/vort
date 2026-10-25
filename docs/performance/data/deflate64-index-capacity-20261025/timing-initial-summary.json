@@ -1,0 +1,146 @@
+{
+  "geomean_point_speedup": 1.0058034050919613,
+  "rows": [
+    {
+      "case": "empty",
+      "ratios": [
+        0.9915032679738562,
+        0.994428056374959,
+        0.9546915167095116
+      ],
+      "old_median_ns_per_call": [
+        30.34,
+        30.34,
+        29.71
+      ],
+      "new_median_ns_per_call": [
+        30.6,
+        30.51,
+        31.12
+      ],
+      "median_point_speedup": 0.9915032679738562,
+      "geomean_point_speedup": 0.9800393811996861
+    },
+    {
+      "case": "tiny16",
+      "ratios": [
+        1.064791293043209,
+        1.049479618557611,
+        1.0503152877669637
+      ],
+      "old_median_ns_per_call": [
+        92372.54,
+        90598.49,
+        91090.82
+      ],
+      "new_median_ns_per_call": [
+        86751.78,
+        86327.06,
+        86727.12
+      ],
+      "median_point_speedup": 1.0503152877669637,
+      "geomean_point_speedup": 1.0548387180577654
+    },
+    {
+      "case": "pattern12079",
+      "ratios": [
+        1.000251043444705,
+        0.9877609617014204,
+        0.9867989243485473
+      ],
+      "old_median_ns_per_call": [
+        179057.78,
+        177576.09,
+        177171.29
+      ],
+      "new_median_ns_per_call": [
+        179012.84,
+        179776.38,
+        179541.43
+      ],
+      "median_point_speedup": 0.9877609617014204,
+      "geomean_point_speedup": 0.9915847664735293
+    },
+    {
+      "case": "random4097",
+      "ratios": [
+        1.0966583053417907,
+        1.0802984961585227,
+        1.0833899985488986
+      ],
+      "old_median_ns_per_call": [
+        98373.2,
+        97278.06,
+        97953.71
+      ],
+      "new_median_ns_per_call": [
+        89702.69,
+        90047.39,
+        90414.08
+      ],
+      "median_point_speedup": 1.0833899985488986,
+      "geomean_point_speedup": 1.0867591577368982
+    },
+    {
+      "case": "random16387",
+      "ratios": [
+        1.0161914050597214,
+        0.9614472436689079,
+        0.9940604028110755
+      ],
+      "old_median_ns_per_call": [
+        257790.22,
+        248434.67,
+        253126.03
+      ],
+      "new_median_ns_per_call": [
+        253682.74,
+        258396.57,
+        254638.48
+      ],
+      "median_point_speedup": 0.9940604028110755,
+      "geomean_point_speedup": 0.990310195385882
+    },
+    {
+      "case": "repeat65539",
+      "ratios": [
+        0.9655887890063005,
+        0.969965049632754,
+        0.9687057019188431
+      ],
+      "old_median_ns_per_call": [
+        552404.26,
+        554514.45,
+        549608.49
+      ],
+      "new_median_ns_per_call": [
+        572090.59,
+        571684.98,
+        567363.74
+      ],
+      "median_point_speedup": 0.9687057019188431,
+      "geomean_point_speedup": 0.9680847648910785
+    },
+    {
+      "case": "distant131072",
+      "ratios": [
+        1.0108381596289193,
+        0.9751768471492094,
+        0.9403249998479858
+      ],
+      "old_median_ns_per_call": [
+        3404800.29,
+        3287930.53,
+        3281551.77
+      ],
+      "new_median_ns_per_call": [
+        3368294.18,
+        3371624.89,
+        3489805.94
+      ],
+      "median_point_speedup": 0.9751768471492094,
+      "geomean_point_speedup": 0.9750218109891501
+    }
+  ],
+  "scope": "Finalremap variable-mask resource implementation, quietthreeprocesspair point timings. No significance assignment; fullwindownegative points investigated before shipping."
+}

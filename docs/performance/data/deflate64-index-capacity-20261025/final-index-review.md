@@ -1,0 +1,76 @@
+# Deflate64 predecessor 容量与 remap 最终只读审计
+
+结论：指定最终源码的grow/remap/nullfallback事务、smallspan不回绕与fullwindow匹配等价性、one-shot两遍借用生命周期及stream接入未发现阻断缺陷。固定hash/head shape、搜索预算、最长匹配tie规则保持；内存收益结论必须等待最终测量，不能把成功remap视为任意allocator都降低physicalpeak。
+
+本轮未编辑源码、编译、运行测试/计时或进行Git操作，只读源码/标准库/父任务已有QA，并写此/tmp报告。dynamic研究已在独立下一步计划完成，本轮不实施或继续扩展dynamic。
+
+## 来源与范围
+
+隔离树 `/home/passchaos/project-z/vort-brotli-context-cache`：
+
+| 文件 | 最终审计 SHA-256 |
+|---|---|
+| `src/deflate64/stream_match.zig` | `a149d36ce699001e985b77541bb3cafc46447161efee8b5690db95acb127b0e4` |
+| `src/deflate64/one_shot.zig` | `a08bdd2beb610ad19dc9dce3a23797f8e1e6ea4753028f2f382655ca5c749332` |
+| `src/deflate64/stream_encoder.zig` | `8f9e7d4df4707e0bf365ba8f630f639ed4edf11f6995be308353005691af2b85` |
+| `src/deflate64/stream_match_tests.zig` | `bb65e454e9fe1f36eb56470457a2c1644fabd0d51f5634b63f7286d5a362cb8f` |
+| `src/deflate64/full_match_reference_tests.zig` | `e7f37b10fd412c1370456a3a6f87065ee27bd1529d66f314b8373da1ce83956d` |
+
+旧固定65536previous参考为main `35229f7c2363e61da2be31b3bf18c001f6d6c198` 的 `13879c9f5dcf45cecd1ae2d9cc7e7400db3748bae45f568dd49340706e4ae76b`。测试副本去掉新增3行来源注释后，重算SHA恰好为13879，且与已发布旧文件逐字节一致；参考不importcandidate。
+
+## capacity 与候选等价性
+
+`requiredPreviousLen:12–13` 把span夹到1..65536再ceilPowerOfTwo，结果P在1..65536，始终poweroftwo。即使span=usizeMax，也先clamp再算，不存在ceilpow2overflow。
+
+对于history+block总长S：
+
+- S<65536时requiredP>=S，freshtableP或retainedlargerP都>=S，全部合法插入坐标0..S-1映射唯一，没有ringwrap。候选previous值与旧65536ring相同。
+- S>=65536时requiredP=65536，table也只能65536，slotmask与旧fullring完全相同。search-before-insert继续保留恰好distance65536，过期candidate在读取其可能被覆盖slot之前退出。
+
+heads仍32768，hashmul/shift/byteaccess没有变化。只读body对比确认hash、byte逐字相同；find和insert把新mask `self.previous.len-1`归一化为旧`window_len-1`后，完整body逐字相同。因此没有修改max_chain、nice、visited计数、候选先后、长度严格更佳tie、matchrange或literalfallback。smalltable不是缩formatwindow，也没有缩hash让collisionbudget变化。
+
+begin:68–70要求history<=65536、headssize固定、previouspoweroftwo且<=window且>=当前required。它清全部heads，再按相同顺序seedhistory；previous未写尾部仍可undefined，但只从head reachable链访问已经insert写过的slot。没有因为容量变化整数组读undefined。
+
+## remap/grow/OOM事务
+
+`ensureForSize:32–56` 只grow，不shrink：
+
+1. 若无heads，先分配到局部new_heads，并errdeferfree。Matcher值尚未改变。
+2. previous需grow且已有allocation时，先请求allocator.remap(old,required)。标准库允许原地或搬迁，成功返回新len allocation并consume旧allocation。
+3. remap成功后只剩赋值/publish，不再执行可失败allocation；remapped=true阻止free已被allocatorconsume的oldslice。
+4. remap返回null时oldslice仍可用；fallbackallocnew。若OOM，errdefer回收临时new_heads，self的所有slice/len/links/borrowrefs不变。
+5. fallbackalloc成功才publishnewheads/previous，并freeoldprevious一次。freshprevious不复制oldlinks，下一begin完整重建reachableindex。
+
+成功remap的返回值按新requestedlen保存，deinit按其真实lenfree；fallback也保留完整ownedslice，不通过切短len假装activecapacity，符合Allocator.free“最近一次成功alloc/resize/remap长度”契约。growthfailure不会先改变mask、previouslen或reference。
+
+注释明确ensure在activepass之外prepare、随后必须begin；成功grow不承诺保留现有activechain（fallback故意不copy）。QA在activepass上故意令grow失败，确认旧pass仍可查；成功grow后立即begin再查。内部生产调用符合该前提。futurecaller不能成功grow后直接用旧headchains继续find。
+
+allocator.remap可能处理raw未初始化previous尾部，这是allocationstorage操作，不是把undefinedu32值当语义数据读取。candidate自身没有wholeprevcopy或未初始化尾部比较。
+
+## borrowed pass 与公开接入
+
+one_shot.plan:28每非空chunk调用ensureForSize(end-history_start)，局部span=history+block<=196608。每个已计划chunk在line34 resetmatcher借用history/block，再进入下chunk的prepare，所以成长发生在新pass开始之前。失败时尚未设置新chunkborrowrefs；既有allocator归publicdeferdeinit，inputcallerownership不变。
+
+pass1capacity只grow，结束时覆盖所有已处理chunkrequiredP；pass2没有allocation，emit的每chunkspan与pass1相同，因此始终满足begincapacity。候选mask可因pass1保留较大表而大于某个tinychunkrequiredP，但无wrap证明仍保持相同match。输出emitbody和u128candidateSizebody与主树旧版本逐字相同，未改widecost/wholeglobalstoredfallback。
+
+stream_encoder与main旧文件作单处ensure调用归一化后完整逐字节相同：只把原ensure改成ensureForSize(history.len+block.len)。growth发生fixedPlan.begin之前，现history/plain是Encoderownedslices，previousremap不会移动它们。plan/emit写完前后原pendingreservation、bitstate/统计/historycommit、stickyfirstfailure规则保持；正常commit后resetmatcherrefs再clearplain。
+
+ensureOOMEarly或fallbackOOM发生在新事件publish前；此前同call已drain/accept的progress仍由原stickyfailedProgress保存。remapsuccess后preparePending/historyallocation若失败，Matcher已经新capacity且可能规划过，但Encoderfatal禁止继续使用半事件，reset清refs/语义，deinit释放当前allocations。此优化没有新增callerinputborrow或snapshotclone接口。
+
+## 内存声明边界
+
+源码可证明freshheadallocation恒131072bytes，previouspayload为4*P（4..262144bytes），且livepreviouscapacity只grow。tinyfreshinstance请求更少previousmemory；largewindow最终liveindex仍393216bytes。reset或随后tinyinput保留largecapacity，不等于memory回落。
+
+remapsuccess时candidate层不同时拥有old/new两环，也不额外copyoldchain；但allocator允许内部搬迁，physicaltransientpeak不能由这个调用模式推断。nullfallback仍在成功newalloc后释放old，短暂双环所有权的峰值是安全事务的代价；不保证所有allocator或growthworkload优于旧fixedallocation。
+
+已只读查看 `growth-peak-decision.json` 的历史观察：initialallocate-first候选streamrequestedpeak593981高于old462909，促成remap路径。这是旧initialcandidate数据，不能迁移为本finala149的测量结论。父任务finalmeasurement待完成；本报告不提前声称总memory/所有输入/所有platformwin，也不把requested/livecapacity当physicalresidentmemory。
+
+## 已有QA与范围
+
+只读复核四份父任务结果：final-matcher-debug、final-matcher-x86、final-matcher-releasefast与final-codec-debug。source_before/after均匹配上述5文件SHA，source_stable=true、exitcode0；三个matcher各1个contractsuite通过，fullDeflate64Debug100/100通过。x86为ReleaseFast-targetx86-linux-gnu，另外两matcher分别nativeDebug/ReleaseFast；本轮未执行这些命令。
+
+QA包括freshsmallspan/partialhistory/fullhistory、random/repetitive/zero、power边界、每个真实greedytoken位置匹配对比、initializedheads/insertedprev对比、distance65536/length65538、0/1/4/128chain与0/3/128/65538nice边界、初始两allocation失败和nullremap+growOOM旧状态保持、FixedBufferAllocator原地growpointer、retainedcapacity与freebalance。fullreference与candidateindependent；大input字节wise所有位置find是抽样，但另一个match-drivenpass逐token比对，不能把抽样说成每字节全配置穷举。
+
+这些证据支持对应frozenreference行为与allocationcontracts，不构成finalmemorybenchmark或allplatform保证。下一步由父任务完成finalmemoryprobe/sourcebinding、必要publicsmoke和发布；dynamicplan作为后续功能路线保持独立。
+
+最近取得系统时间：2026-10-25 13:26:32 UTC / 2026-10-25 21:26:32 Asia/Shanghai。

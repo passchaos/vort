@@ -1,0 +1,38 @@
+{
+  "time_utc": "2026-10-25T13:40:27.028407+00:00",
+  "reason": "Use independent compilation CPUs for full retained source check; timing is finished, no compiler/speed overlap.",
+  "results": [
+    {
+      "pid": 686595,
+      "exit_code": 0
+    },
+    {
+      "pid": 686602,
+      "exit_code": 0
+    },
+    {
+      "pid": 686626,
+      "exit_code": 0
+    },
+    {
+      "pid": 686716,
+      "exit_code": 0
+    },
+    {
+      "pid": 686746,
+      "exit_code": 0
+    },
+    {
+      "pid": 686763,
+      "exit_code": 0
+    },
+    {
+      "pid": 686781,
+      "exit_code": 0
+    },
+    {
+      "pid": 686782,
+      "exit_code": 0
+    }
+  ]
+}

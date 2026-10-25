@@ -1,0 +1,709 @@
+{
+  "schema": "vort.deflate64.index-resources.v1",
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "8",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "6333face63d9ecbcc93211b6e65808df83e21917a76af4d38013a3207de6c8a2",
+    "command": "/tmp/vort-deflate64-index-capacity-20261025/new-index-probe-final --iterations 100"
+  },
+  "codec_options": {
+    "max_chain": 128,
+    "nice_length": 128
+  },
+  "scope": "successful codec allocator requests only, including returned raw output; input generation, collectors, decoder and metadata excluded",
+  "memory_metric": "current and peak requested live allocation bytes; not RSS, total process heap, stack or cumulative requests",
+  "remap_metric_limit": "successful rawRemap replaces one logical owned request; backing allocator's private transient physical allocation is unobservable and excluded",
+  "index_observation": "tool reads common encoder.matcher heads/previous lengths; diagnostic capacity, not a new public snapshot guarantee",
+  "timing_scope": "only when --iterations is supplied: five rounds of noinline one-shot encodeAlloc, complete output wrapping checksum and free through plain allocator; no tracker, input generation, decoding or SHA hashing inside timer; stream resource pass is not timed",
+  "one_shot": [
+    {
+      "name": "empty",
+      "input_bytes": 0,
+      "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "wire_bytes": 2,
+      "wire_sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+      "encoded_bound": 5,
+      "memory_at_return": {
+        "current_requested_bytes": 2,
+        "peak_requested_bytes": 2,
+        "live_allocations": 1,
+        "allocation_attempts": 1,
+        "successful_allocations": 1,
+        "successful_allocation_requested_bytes": 2,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 0,
+        "growth_requested_bytes": 2,
+        "released_requested_bytes": 0,
+        "maximum_single_request": 2
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 2,
+        "live_allocations": 0,
+        "allocation_attempts": 1,
+        "successful_allocations": 1,
+        "successful_allocation_requested_bytes": 2,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 1,
+        "growth_requested_bytes": 2,
+        "released_requested_bytes": 2,
+        "maximum_single_request": 2
+      },
+      "codec_allocations": [
+        {
+          "bytes": 2,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 1,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          3209,
+          3107,
+          3107,
+          3112,
+          3135
+        ],
+        "minimum_ns": 3107,
+        "median_ns": 3112,
+        "mix": 2500
+      }
+    },
+    {
+      "name": "tiny16",
+      "input_bytes": 16,
+      "input_sha256": "1705d52bea1fc818cca4497fa74021ae19216603abe4fbf32a11e82f6984ef64",
+      "wire_bytes": 18,
+      "wire_sha256": "20effbe607bb669b1168c6d0e3e7543d2a93ce8c292ad270d874c16e797001ea",
+      "encoded_bound": 21,
+      "memory_at_return": {
+        "current_requested_bytes": 18,
+        "peak_requested_bytes": 131154,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 131154,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 131154,
+        "released_requested_bytes": 131136,
+        "maximum_single_request": 131072
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 131154,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 131154,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 131154,
+        "released_requested_bytes": 131154,
+        "maximum_single_request": 131072
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 64,
+          "succeeded": true
+        },
+        {
+          "bytes": 18,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          8699148,
+          8941233,
+          8651799,
+          8653680,
+          8672712
+        ],
+        "minimum_ns": 8651799,
+        "median_ns": 8672712,
+        "mix": 7008500
+      }
+    },
+    {
+      "name": "pattern12079",
+      "input_bytes": 12079,
+      "input_sha256": "0ad6a673028043f46eefe7c0b722e6abde1fcff28687a50cc4031c911e489940",
+      "wire_bytes": 46,
+      "wire_sha256": "8087fd91ce7ba2fa8f8bbf2c3d0fb3c1d57e4a2375eda04f9f199a1ed1d399da",
+      "encoded_bound": 12084,
+      "memory_at_return": {
+        "current_requested_bytes": 46,
+        "peak_requested_bytes": 196654,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 196654,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 196654,
+        "released_requested_bytes": 196608,
+        "maximum_single_request": 131072
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 196654,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 196654,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 196654,
+        "released_requested_bytes": 196654,
+        "maximum_single_request": 131072
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 65536,
+          "succeeded": true
+        },
+        {
+          "bytes": 46,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          17829357,
+          17780163,
+          18196185,
+          18553144,
+          17954143
+        ],
+        "minimum_ns": 17780163,
+        "median_ns": 17954143,
+        "mix": 46201000
+      }
+    },
+    {
+      "name": "random4097",
+      "input_bytes": 4097,
+      "input_sha256": "0f16c46d7a8c245a2836935b09ed712c5267ab48a7346a0ae2b421c796c7d4c2",
+      "wire_bytes": 4102,
+      "wire_sha256": "da98d767dedc85bccaa77aae5bcdb1bdd1ea54559f243b70f1ff792b6770695a",
+      "encoded_bound": 4102,
+      "memory_at_return": {
+        "current_requested_bytes": 4102,
+        "peak_requested_bytes": 167942,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 167942,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 167942,
+        "released_requested_bytes": 163840,
+        "maximum_single_request": 131072
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 167942,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 167942,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 167942,
+        "released_requested_bytes": 167942,
+        "maximum_single_request": 131072
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 32768,
+          "succeeded": true
+        },
+        {
+          "bytes": 4102,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          9037722,
+          9157247,
+          9051228,
+          9041408,
+          9032567
+        ],
+        "minimum_ns": 9032567,
+        "median_ns": 9041408,
+        "mix": 541739577000
+      }
+    },
+    {
+      "name": "random16387",
+      "input_bytes": 16387,
+      "input_sha256": "642b711df2896a9f4fb1b37a677b7323a3c85cb155c08d8b60afa6dfd55f42a4",
+      "wire_bytes": 16392,
+      "wire_sha256": "fe1dfa53ccb659320ef279d9303217fc85eb8dbf8e309092f768a6a9892088c6",
+      "encoded_bound": 16392,
+      "memory_at_return": {
+        "current_requested_bytes": 16392,
+        "peak_requested_bytes": 278536,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 278536,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 278536,
+        "released_requested_bytes": 262144,
+        "maximum_single_request": 131072
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 278536,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 278536,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 278536,
+        "released_requested_bytes": 278536,
+        "maximum_single_request": 131072
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 16392,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          25530802,
+          25695894,
+          25260304,
+          25387945,
+          25463848
+        ],
+        "minimum_ns": 25260304,
+        "median_ns": 25463848,
+        "mix": 8614006233500
+      }
+    },
+    {
+      "name": "repeat65539",
+      "input_bytes": 65539,
+      "input_sha256": "1342ae5e830645ad0d79c18c7fd6cd56a2af77245129982225e438ada52ecc8c",
+      "wire_bytes": 6,
+      "wire_sha256": "c1cfce70a1e9478cf250f88d719844e34dc964907a84d4adde97807b83674966",
+      "encoded_bound": 65549,
+      "memory_at_return": {
+        "current_requested_bytes": 6,
+        "peak_requested_bytes": 393222,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 393222,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 393222,
+        "released_requested_bytes": 393216,
+        "maximum_single_request": 262144
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 393222,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 393222,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 393222,
+        "released_requested_bytes": 393222,
+        "maximum_single_request": 262144
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 262144,
+          "succeeded": true
+        },
+        {
+          "bytes": 6,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          56977794,
+          56530878,
+          56736374,
+          57036389,
+          56297667
+        ],
+        "minimum_ns": 56297667,
+        "median_ns": 56736374,
+        "mix": 943500
+      }
+    },
+    {
+      "name": "distant131072",
+      "input_bytes": 131072,
+      "input_sha256": "5180e38b0c72f0a2c322b150385a2529b224be456b025851bc4867cbb8119402",
+      "wire_bytes": 69098,
+      "wire_sha256": "c6d31c72c762e910e7e00962f2c0f5a269ebf83b013c4e2ebc37c1673b460368",
+      "encoded_bound": 131087,
+      "memory_at_return": {
+        "current_requested_bytes": 69098,
+        "peak_requested_bytes": 462314,
+        "live_allocations": 1,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 462314,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 2,
+        "growth_requested_bytes": 462314,
+        "released_requested_bytes": 393216,
+        "maximum_single_request": 262144
+      },
+      "memory_after_free": {
+        "current_requested_bytes": 0,
+        "peak_requested_bytes": 462314,
+        "live_allocations": 0,
+        "allocation_attempts": 3,
+        "successful_allocations": 3,
+        "successful_allocation_requested_bytes": 462314,
+        "resize_attempts": 0,
+        "successful_resizes": 0,
+        "remap_attempts": 0,
+        "successful_remaps": 0,
+        "free_calls": 3,
+        "growth_requested_bytes": 462314,
+        "released_requested_bytes": 462314,
+        "maximum_single_request": 262144
+      },
+      "codec_allocations": [
+        {
+          "bytes": 131072,
+          "succeeded": true
+        },
+        {
+          "bytes": 262144,
+          "succeeded": true
+        },
+        {
+          "bytes": 69098,
+          "succeeded": true
+        }
+      ],
+      "roundtrip_verified": true,
+      "cleanup_failure_checks": 3,
+      "timing": {
+        "iterations": 100,
+        "rounds_ns": [
+          349698131,
+          350649046,
+          348980594,
+          340016145,
+          339808419
+        ],
+        "minimum_ns": 339808419,
+        "median_ns": 348980594,
+        "mix": 170851841398500
+      }
+    }
+  ],
+  "streaming": {
+    "input_bytes": 4194304,
+    "input_sha256": "96e158262eeaa25308f2b1a797a46df245601da8f886317ca7629847d6bcffd5",
+    "reused_input_block_bytes": 4096,
+    "block_len": 4096,
+    "wire_bytes": 6328,
+    "wire_sha256": "8a65c2566ddf379fe22dffbb6e8be754fd2f8d30d65c7cee63145b252db4a8fc",
+    "init_memory": {
+      "current_requested_bytes": 0,
+      "peak_requested_bytes": 0,
+      "live_allocations": 0,
+      "allocation_attempts": 0,
+      "successful_allocations": 0,
+      "successful_allocation_requested_bytes": 0,
+      "resize_attempts": 0,
+      "successful_resizes": 0,
+      "remap_attempts": 0,
+      "successful_remaps": 0,
+      "free_calls": 0,
+      "growth_requested_bytes": 0,
+      "released_requested_bytes": 0,
+      "maximum_single_request": 0
+    },
+    "memory_before_deinit": {
+      "current_requested_bytes": 462909,
+      "peak_requested_bytes": 462909,
+      "live_allocations": 5,
+      "allocation_attempts": 7,
+      "successful_allocations": 7,
+      "successful_allocation_requested_bytes": 315453,
+      "resize_attempts": 0,
+      "successful_resizes": 0,
+      "remap_attempts": 4,
+      "successful_remaps": 2,
+      "free_calls": 2,
+      "growth_requested_bytes": 512061,
+      "released_requested_bytes": 49152,
+      "maximum_single_request": 262144
+    },
+    "memory_after_deinit": {
+      "current_requested_bytes": 0,
+      "peak_requested_bytes": 462909,
+      "live_allocations": 0,
+      "allocation_attempts": 7,
+      "successful_allocations": 7,
+      "successful_allocation_requested_bytes": 315453,
+      "resize_attempts": 0,
+      "successful_resizes": 0,
+      "remap_attempts": 4,
+      "successful_remaps": 2,
+      "free_calls": 7,
+      "growth_requested_bytes": 512061,
+      "released_requested_bytes": 512061,
+      "maximum_single_request": 262144
+    },
+    "maximum_heads_entries": 32768,
+    "maximum_previous_entries": 65536,
+    "checkpoints": [
+      {
+        "input_read": 8192,
+        "wire_bytes": 61,
+        "heads_entries": 32768,
+        "previous_entries": 4096,
+        "memory": {
+          "current_requested_bytes": 217149,
+          "peak_requested_bytes": 217149,
+          "live_allocations": 5,
+          "allocation_attempts": 5,
+          "successful_allocations": 5,
+          "successful_allocation_requested_bytes": 217149,
+          "resize_attempts": 0,
+          "successful_resizes": 0,
+          "remap_attempts": 0,
+          "successful_remaps": 0,
+          "free_calls": 0,
+          "growth_requested_bytes": 217149,
+          "released_requested_bytes": 0,
+          "maximum_single_request": 131072
+        }
+      },
+      {
+        "input_read": 12288,
+        "wire_bytes": 67,
+        "heads_entries": 32768,
+        "previous_entries": 8192,
+        "memory": {
+          "current_requested_bytes": 233533,
+          "peak_requested_bytes": 249917,
+          "live_allocations": 5,
+          "allocation_attempts": 6,
+          "successful_allocations": 6,
+          "successful_allocation_requested_bytes": 249917,
+          "resize_attempts": 0,
+          "successful_resizes": 0,
+          "remap_attempts": 1,
+          "successful_remaps": 0,
+          "free_calls": 1,
+          "growth_requested_bytes": 249917,
+          "released_requested_bytes": 16384,
+          "maximum_single_request": 131072
+        }
+      },
+      {
+        "input_read": 16384,
+        "wire_bytes": 73,
+        "heads_entries": 32768,
+        "previous_entries": 16384,
+        "memory": {
+          "current_requested_bytes": 266301,
+          "peak_requested_bytes": 299069,
+          "live_allocations": 5,
+          "allocation_attempts": 7,
+          "successful_allocations": 7,
+          "successful_allocation_requested_bytes": 315453,
+          "resize_attempts": 0,
+          "successful_resizes": 0,
+          "remap_attempts": 2,
+          "successful_remaps": 0,
+          "free_calls": 2,
+          "growth_requested_bytes": 315453,
+          "released_requested_bytes": 49152,
+          "maximum_single_request": 131072
+        }
+      },
+      {
+        "input_read": 24576,
+        "wire_bytes": 85,
+        "heads_entries": 32768,
+        "previous_entries": 32768,
+        "memory": {
+          "current_requested_bytes": 331837,
+          "peak_requested_bytes": 331837,
+          "live_allocations": 5,
+          "allocation_attempts": 7,
+          "successful_allocations": 7,
+          "successful_allocation_requested_bytes": 315453,
+          "resize_attempts": 0,
+          "successful_resizes": 0,
+          "remap_attempts": 3,
+          "successful_remaps": 1,
+          "free_calls": 2,
+          "growth_requested_bytes": 380989,
+          "released_requested_bytes": 49152,
+          "maximum_single_request": 131072
+        }
+      },
+      {
+        "input_read": 40960,
+        "wire_bytes": 110,
+        "heads_entries": 32768,
+        "previous_entries": 65536,
+        "memory": {
+          "current_requested_bytes": 462909,
+          "peak_requested_bytes": 462909,
+          "live_allocations": 5,
+          "allocation_attempts": 7,
+          "successful_allocations": 7,
+          "successful_allocation_requested_bytes": 315453,
+          "resize_attempts": 0,
+          "successful_resizes": 0,
+          "remap_attempts": 4,
+          "successful_remaps": 2,
+          "free_calls": 2,
+          "growth_requested_bytes": 512061,
+          "released_requested_bytes": 49152,
+          "maximum_single_request": 262144
+        }
+      }
+    ],
+    "codec_allocations": [
+      {
+        "bytes": 4096,
+        "succeeded": true
+      },
+      {
+        "bytes": 131072,
+        "succeeded": true
+      },
+      {
+        "bytes": 16384,
+        "succeeded": true
+      },
+      {
+        "bytes": 61,
+        "succeeded": true
+      },
+      {
+        "bytes": 65536,
+        "succeeded": true
+      },
+      {
+        "bytes": 32768,
+        "succeeded": true
+      },
+      {
+        "bytes": 65536,
+        "succeeded": true
+      }
+    ],
+    "first_output_input_offset": 8192,
+    "steps": 1025,
+    "roundtrip_verified": true,
+    "cleanup_failure_checks": 3
+  }
+}

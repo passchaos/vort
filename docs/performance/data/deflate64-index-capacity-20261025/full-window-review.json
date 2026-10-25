@@ -1,0 +1,167 @@
+{
+  "schema": "vort.deflate64.index-capacity.full-window-elf-review.v1",
+  "created_utc": "2026-10-25T13:34:55.986476+00:00",
+  "created_asia_shanghai": "2026-10-25T21:34:55.986476+08:00",
+  "scope": "Read-only pinned old/new common probe ELF audit; no source/tool/doc edits, compile, timing or Git operations. Only audit outputs under /tmp.",
+  "elfs": {
+    "old": {
+      "path": "/tmp/vort-deflate64-index-capacity-20261025/old-index-probe-final",
+      "sha256": "a92ef667374a061b0809a53bd0e5fc174df9be31373c85c8e406cb39491edaf2"
+    },
+    "new": {
+      "path": "/tmp/vort-deflate64-index-capacity-20261025/new-index-probe-final",
+      "sha256": "6333face63d9ecbcc93211b6e65808df83e21917a76af4d38013a3207de6c8a2"
+    }
+  },
+  "build_record": "/tmp/vort-deflate64-index-capacity-20261025/probe-builds.json",
+  "source_stable": true,
+  "tool_sha256": "50e0ef9c3334a7677f07d37866d69af17ad0303e494bee2166ff3ec3ad32f573",
+  "source_binding": {
+    "old": {
+      "src/deflate64/stream_match.zig": "13879c9f5dcf45cecd1ae2d9cc7e7400db3748bae45f568dd49340706e4ae76b",
+      "src/deflate64/encoder.zig": "9e996ca92cd21f45864eff4c19f5fbea5746231b5c14db3d4519d7dae2da6cf1",
+      "src/deflate64/stream_blocks.zig": "1b888cee9cbd786bfd9b3bea66b98415200ee88a2f424de76d8bfe19c506558e",
+      "src/deflate64/one_shot.zig": "919d7c9d333b68a5409a451a886ebac2d92babd7efc28630fd475d9c84e36738"
+    },
+    "new": {
+      "src/deflate64/stream_match.zig": "a149d36ce699001e985b77541bb3cafc46447161efee8b5690db95acb127b0e4",
+      "src/deflate64/encoder.zig": "9e996ca92cd21f45864eff4c19f5fbea5746231b5c14db3d4519d7dae2da6cf1",
+      "src/deflate64/stream_blocks.zig": "1b888cee9cbd786bfd9b3bea66b98415200ee88a2f424de76d8bfe19c506558e",
+      "src/deflate64/one_shot.zig": "a08bdd2beb610ad19dc9dce3a23797f8e1e6ea4753028f2f382655ca5c749332"
+    }
+  },
+  "function_symbols": {
+    "old": {
+      "encodeAlloc": [
+        "0x105fa70",
+        1573
+      ],
+      "encodePass": [
+        "0x1063a40",
+        365
+      ],
+      "writeFixed": [
+        "0x1091260",
+        1805
+      ],
+      "find": [
+        "0x1091970",
+        456
+      ],
+      "fixedPlan": [
+        "0x1091b40",
+        953
+      ]
+    },
+    "new": {
+      "encodeAlloc": [
+        "0x105fab0",
+        1483
+      ],
+      "encodePass": [
+        "0x1063a20",
+        365
+      ],
+      "writeFixed": [
+        "0x10911c0",
+        1853
+      ],
+      "find": [
+        "0x1091900",
+        460
+      ],
+      "fixedPlan": [
+        "0x1091ad0",
+        985
+      ],
+      "ensureForSize": [
+        "0x1091eb0",
+        568
+      ]
+    }
+  },
+  "find_ring_mask": {
+    "old": "0x1091aee movzwl r15w,ebx; previous[first&65535]",
+    "new": "0x1091a7e load previous.len atself+0x18,0x1091a81 dec,0x1091a83 and first;0x1091a8a link load",
+    "new_hoisted_outside_candidate_backedge": false,
+    "both_find_calls_retained": true,
+    "new_find_allocator_calls": 0,
+    "guard_distance_limit_same": "both rejectdistance>65536 and limit length<=65538",
+    "dynamic_execution_limit": "Only chain continuation reaches this link access. A first candidate satisfyingnice128 returns before it; no per-case branch counts measured."
+  },
+  "insert_ring_mask": {
+    "old": "inlined insert uses16-bit truncation on matched-position loop; history preload path does not needan explicit full-ring mask",
+    "new": "each inlined insertion loads previous.len; adds loop-hoisted0xffffffff then ANDs current bounded position (equivalent requiredlen-1 for valid local positions)",
+    "new_loop_hoisted_constant": "0x1091af7 mov0xffffffff,ebx in fixedPlan; this hoists the -1 equivalent operand, not previous.len or final mask",
+    "plan_matched_insert": "old0x1091de9 movzwl si,esi vsnew0x1091d89 loadlen/0x1091d8d add/0x1091d90 and",
+    "plan_history_preload": "new0x1091b4d loadlen/0x1091b51 add/0x1091b54 and before every validinsert",
+    "emit_matched_insert": "old0x10917c6 movzwl dx,edx vsnew0x1091746 loadlen/0x109174a add/0x109174d and",
+    "length_or_mask_hoisted_outside_insert_loop": false,
+    "allocation_in_inner_insert": false,
+    "functional_behavior": "Masks implement same slot for65536-entry ring; dynamic path additionally accommodates smallerpower-of-two rings."
+  },
+  "allocation_boundary": {
+    "old": "one-shot matcher full tables allocated by inlined ensure code; alloc calls0x105fb44/0x105fb87",
+    "new": "encodeAlloc calls standalone ensureForSize0x105fbd6 beforefixedPlan; helperclampsspan65536, rounds power-of-two, validates existingcapacity and conditionalalloc/remap",
+    "helper_capacity_math": "0x1091ec8 clamp,0x1091ee6 LZCNT,0x1091ef4 SHLX; outside inner matchingloops",
+    "fresh_repeat65539": "derivedrequired previouslen65536sameold; oldpreviouslen0 prevents remapbranch. Staticcode-path reasoning only.",
+    "new_ensure_loop_call_overhead_possible": "generic function boundary and capacity arithmetic remain; nocycle attribution measured",
+    "heap_copy_input_introduced": false
+  },
+  "output_consumption": {
+    "old_encodePass_call": "0x1063a5d ->encodeAlloc",
+    "new_encodePass_call": "0x1063a3d ->encodeAlloc",
+    "normalized_instruction_comparison": {
+      "method": "Compare instruction strings with direct address and local-label relocation normalized; not cycle or byte-equivalence claim.",
+      "instructions_old": 100,
+      "instructions_new": 100,
+      "same_after_address_normalization": true
+    },
+    "old_output_bulk": "0x1063ac0",
+    "new_output_bulk": "0x1063aa0",
+    "old_output_tail": "0x1063b70",
+    "new_output_tail": "0x1063b50",
+    "scope": "noinline helper actual allwirebyteweightedwrapping checksum,freeand returnmix retained; eachfull encodeAlloc remains an actualcall",
+    "plan_calls_retained": [
+      "old0x105fc30",
+      "new0x105fc1f"
+    ],
+    "emit_calls_retained": [
+      "old0x105fe80",
+      "new0x105fe50"
+    ],
+    "actual_output_stores_retained": "writeFixed retains byte storesand outputlen/bitstate; checksumreads wholewire",
+    "measurement_scope": "encode+complete output checksum+free; not codec-onlythroughput or source-only noinline assertion"
+  },
+  "interpretation": {
+    "reported_3_percent_regression_cause_proven": false,
+    "candidate_variant": "Consider a full-window65536 const-mask specializationselected outside loops while retainingdynamic small-ring path. Both findand inlined insertmust use same geometry.",
+    "why_bounded": "Directmask differences and non-hoistedmetadata loads are measurable codegen differences, but frequencies, branchcounts, code placement, allocator costs and noise remain unconstrained.",
+    "required_next_validation": "preserveexact wire/maximumdistance65536/crosschunkhistory/resourcecontracts; newpinnedELF inspectbeforeisolated repeat timing",
+    "no_speed_memory_claim": "No timing or peak/RSS measurement executed; symbolbytes alone do not establishstatisticalcause."
+  },
+  "evidence": {
+    "encodePass-instruction-comparison.json": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/encodePass-instruction-comparison.json",
+    "new-allocation-and-pass-route.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-allocation-and-pass-route.asm",
+    "new-emit-insert.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-emit-insert.asm",
+    "new-encodePass.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-encodePass.asm",
+    "new-encoder.encodeAlloc.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-encoder.encodeAlloc.asm",
+    "new-ensureForSize.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-ensureForSize.asm",
+    "new-find-dynamic-mask.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-find-dynamic-mask.asm",
+    "new-plan-insert.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-plan-insert.asm",
+    "new-stream_blocks.fixedPlan.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-stream_blocks.fixedPlan.asm",
+    "new-stream_blocks.writeFixed.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-stream_blocks.writeFixed.asm",
+    "new-stream_match.Matcher.find.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-stream_match.Matcher.find.asm",
+    "new-symbols.nm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/new-symbols.nm",
+    "old-allocation-and-pass-route.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-allocation-and-pass-route.asm",
+    "old-emit-insert.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-emit-insert.asm",
+    "old-encodePass.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-encodePass.asm",
+    "old-encoder.encodeAlloc.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-encoder.encodeAlloc.asm",
+    "old-find-constant-mask.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-find-constant-mask.asm",
+    "old-plan-insert.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-plan-insert.asm",
+    "old-stream_blocks.fixedPlan.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-stream_blocks.fixedPlan.asm",
+    "old-stream_blocks.writeFixed.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-stream_blocks.writeFixed.asm",
+    "old-stream_match.Matcher.find.asm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-stream_match.Matcher.find.asm",
+    "old-symbols.nm": "/tmp/vort-deflate64-index-capacity-20261025/full-window-evidence/old-symbols.nm"
+  }
+}

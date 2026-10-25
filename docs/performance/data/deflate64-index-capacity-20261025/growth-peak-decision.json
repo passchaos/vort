@@ -1,0 +1,5 @@
+{
+  "initial_old_stream_peak_requested_bytes": 462909,
+  "initial_new_stream_peak_requested_bytes": 593981,
+  "reason": "New small-span previous ring saves one-shot requests but explicitallocate-beforefree growth retains two owned rings at once. Add optional allocator remap success path before safe allocate-first fallback. Preserve all matching semantics and request-level memory/physicaltransient distinctions."
+}

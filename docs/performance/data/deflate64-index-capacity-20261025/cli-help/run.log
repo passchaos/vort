@@ -1,0 +1,620 @@
+vort bootstrap CLI
+
+basics:
+  help | --help              Show this message
+  checksum [text]            Print Adler-32, CRC-32, and CRC-32C for text
+  checksum-file [path]       Print Adler-32, CRC-32, and CRC-32C for a file
+  store-roundtrip [text]     Encode/decode the native store frame
+
+compatibility formats:
+  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
+  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+  encode-xerial-snappy-file <in> <out> [block_size]
+  encode-xerial-snappy-incremental-file <in> <out> [block_size] [input_step] [output_step]
+  decode-xerial-snappy-file <in> <out> [max_output]
+  decode-xerial-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
+  inspect-xerial-snappy-file <path>
+  encode-hadoop-snappy-file <in> <out> [block_size] [chunk_size]
+  encode-hadoop-snappy-incremental-file <in> <out> [block_size] [chunk_size] [input_step] [output_step]
+  decode-hadoop-snappy-file <in> <out> [max_output]
+  decode-hadoop-snappy-incremental-file <in> <out> <expected_output> [input_step] [output_step]
+  inspect-hadoop-snappy-file <path>
+  encode-hadoop-lz4-file <in> <out> [block_size] [chunk_size]
+  encode-hadoop-lz4-incremental-file <in> <out> [block_size] [chunk_size] [input_step] [output_step]
+  decode-hadoop-lz4-file <in> <out> [max_output]
+  decode-hadoop-lz4-incremental-file <in> <out> <expected_output> [input_step] [output_step]
+  inspect-hadoop-lz4-file <path>
+  create-hadoop-lzo-index <input.lzo> [output.lzo.index]
+  inspect-hadoop-lzo-index <input.lzo> <input.lzo.index>
+  extract-hadoop-lzo-blocks <input.lzo> <index> <out> <first> <count> [max_output]
+  encode-lz4-legacy-file <in> <out> [block_size]
+  decode-lz4-legacy-file <in> <out> [max_output]
+  inspect-lz4-legacy-file <path> [max_output]
+  encode-lznt1-file <in> <out> [marker|no-marker]
+  decode-lznt1-file <in> <out> [max_output]
+  inspect-lznt1-file <path> [max_output]
+  encode-xpress-plain-file <in> <out>
+  decode-xpress-plain-file <in> <out> [max_output]
+  inspect-xpress-plain-file <path> [max_output]
+  encode-xpress-huffman-file <in> <out>
+  decode-xpress-huffman-file <in> <out> <decoded_size>
+  inspect-xpress-huffman-file <path> <decoded_size>
+  encode-lzms-file <in> <out> [--strategy=greedy|literals] [--no-delta] [--hash-log=8..20] [--max-distance=bytes] [--working-memory-limit=bytes] [--output-limit=bytes]
+  decode-lzms-file <in> <out> <decoded_size>
+  encode-wof-file <in> <out> <xpress4k|xpress8k|xpress16k|lzx>
+  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]
+  decode-wof-range <in> <out> <algorithm> <decoded_size> <offset> <length>
+  inspect-wof-file <in> <algorithm> <decoded_size>
+  encode-lzfse-file <in> <out> [block_size] [auto|fse|lzvn|stored]
+    [--fse-version=v1|v2] [--hash-log=8..20] [--max-distance=bytes]
+    [--working-memory-limit=bytes] [--output-limit=bytes]
+  decode-lzfse-file <in> <out> [max_output]
+  inspect-lzfse-file <path> [max_output]
+  inspect-decmpfs <xattr> [resource|-]
+  decode-decmpfs <xattr> <resource|-> <out> [max_output]
+  decode-decmpfs-range <xattr> <resource|-> <out> <offset> <length>
+  inspect-dmg <path>
+  decode-dmg-partition <in> <out> <partition> [max_output]
+  decode-dmg-range <in> <out> <partition> <offset> <length>
+  encode-dmg <in> <out> <copy|adc|zlib|bzip2|lzfse|xz> [block_size] [fallback|always]
+  inspect-pbzx <path>
+  decode-pbzx <in> <out> [max_output]
+  decode-pbzx-range <in> <out> <offset> <length>
+  encode-pbzx <in> <out> <auto|xz|stored> [chunk_size]
+  inspect-xar <path>
+  extract-xar-entry <in> <out> <archive_path> [max_output]
+  encode-xar-file <in> <out> <archive_path> <auto|copy|zlib|bzip2|lzma|xz> [none|sha1|md5|sha256|sha512]
+  inspect-zfs-block <in> <algorithm>
+  decode-zfs-block <in> <out> <algorithm> <decoded_size>
+  encode-zfs-block <in> <out> <algorithm> [zstd_level]
+  inspect-qcow2 <path>
+  decode-qcow2 <in> <out> [max_output] [backing|-] [data_file|-]
+  decode-qcow2-range <in> <out> <offset> <length> [backing|-] [data_file|-]
+  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version] [backing backing_name]
+  encode-qcow2-external <in> <image_out> <data_out> <data_name> [cluster_bits]
+  inspect-vmdk <path>
+  decode-vmdk <in> <out> [max_output] [logical_backing|-]
+  decode-vmdk-range <in> <out> <offset> <length> [logical_backing|-]
+  encode-vmdk <in> <out> <none|zlib> [grain_sectors]
+  inspect-ewf <segment> [additional_segments...]
+  decode-ewf <first_segment> <out> [max_output] [additional_segments...]
+  decode-ewf-range <first_segment> <out> <offset> <length> [additional_segments...]
+  encode-ewf <in> <out> <none|zlib|auto> [sectors_per_chunk]
+  encode-ewf-segments <in> <output_prefix> <none|zlib|auto> <max_segment_size> [sectors_per_chunk]
+  inspect-chd <image.chd> [parent.chd]
+  decode-chd <image.chd> <out> [max_output] [parent.chd]
+  decode-chd-range <image.chd> <out> <offset> <length> [parent.chd]
+  encode-chd <in> <out> <none|zlib|lzma|huffman|zstd|auto> [hunk_bytes] [unit_bytes] [level] [parent.chd|-] [TAG=value...]
+  inspect-vhd <image.vhd> [parent.vhd]
+  decode-vhd <image.vhd> <out> [max_output] [parent.vhd]
+  decode-vhd-range <image.vhd> <out> <offset> <length> [parent.vhd]
+  encode-vhd <in> <out> <fixed|dynamic|differencing> [block_size] [parent.vhd]
+  inspect-vhdx <image.vhdx> [parent.vhdx]
+  decode-vhdx <image.vhdx> <out> [max_output] [parent.vhdx]
+  decode-vhdx-range <image.vhdx> <out> <offset> <length> [parent.vhdx]
+  encode-vhdx <in> <out> <dynamic|fixed|differencing> [block_size] [parent.vhdx]
+  inspect-cso <image.cso|image.zso>
+  decode-cso <in> <out> [max_output]
+  decode-cso-range <in> <out> <offset> <length>
+  encode-cso <in> <out> <cso1|cso2|zso> [auto|raw|deflate|lz4] [block_size] [level] [index_shift]
+  inspect-dax <image.dax>
+  decode-dax <in> <out> [max_output]
+  decode-dax-range <in> <out> <offset> <length>
+  encode-dax <in> <out> [auto|raw|zlib] [level]
+  inspect-gcz <image.gcz>
+  decode-gcz <in> <out> [max_output]
+  decode-gcz-range <in> <out> <offset> <length>
+  encode-gcz <in> <out> <auto|raw|zlib> [block_size] [level] [sub_type]
+  inspect-wia|inspect-rvz <image>
+  decode-wia|decode-rvz <in> <out> [max_output]
+  decode-wia-range|decode-rvz-range <in> <out> <offset> <length>
+  encode-wia <in> <out> <none|purge|bzip2|lzma|lzma2> [chunk_size] [level]
+  encode-rvz <in> <out> <none|bzip2|lzma|lzma2|zstd> [chunk_size] [level]
+  encode-wia-partition <in> <out> <codec> <offset> <size> <key_hex> [chunk_size] [level]
+  encode-rvz-partition <in> <out> <codec> <offset> <size> <key_hex> [chunk_size] [level]
+  encode-wia-disc <in> <out> <codec> <common_key_index> <common_key_hex> [chunk_size] [level]
+  encode-rvz-disc <in> <out> <codec> <common_key_index> <common_key_hex> [chunk_size] [level]
+  inspect-wbfs <image.wbfs>
+  decode-wbfs <in> <out> [max_output]
+  decode-wbfs-range <in> <out> <offset> <length>
+  encode-wbfs <in> <out> [sector_size] [sparse|full]
+  inspect-wdf <image.wdf>
+  decode-wdf <in> <out> [max_output]
+  decode-wdf-range <in> <out> <offset> <length>
+  encode-wdf <in> <out> [wdf1|wdf2] [sparse|full] [min_hole_size]
+  inspect-wux <image.wux>
+  decode-wux <in> <out> [max_output]
+  decode-wux-range <in> <out> <offset> <length>
+  encode-wux <in> <out> [sector_size] [deduplicate|store-all]
+  inspect-android-sparse <image.simg>
+  decode-android-sparse <in> <out> [max_output]
+  decode-android-sparse-range <in> <out> <offset> <length>
+  encode-android-sparse <in> <out> [block_size] [sparse|store-zero] [fill|raw-fill] [crc|no-crc] [checksum|no-checksum]
+  inspect-android-ota <payload.bin>
+  inspect-android-ota-source <payload.bin>
+  extract-android-ota <payload> <partition> <out> [max_output] [source|-]
+  extract-android-ota-source <payload> <partition> <out> <chunk_size> [source|-]
+  verify-android-ota-signatures <payload> <public_key.pem> [additional_keys...]
+  verify-android-ota-source-signatures <payload> <public_key.pem> [additional_keys...]
+  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
+  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
+  encode-android-ota-source <in> <out> <partition> [mode] [block_size] [operation_size] [input_step] [output_step]
+  puff-android-deflate <in> <out> [bit_offset] [bit_length]
+  huff-android-deflate <in> <out> <bit_offset> <bit_length>
+  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]
+  decode-zchunk-file <in> <out> [max_output]
+  inspect-zchunk-file <path>
+  extract-zchunk-chunk <in> <number> <out> [max_output]
+  list-squashfs-file <path>
+  create-squashfs-file <out> <entry> <in> [stored|gzip|lzma|lzo|xz|lz4|zstd] [block_size]
+  extract-squashfs-file <image> <entry> <out> [max_output]
+  list-erofs-file <path> [--working-memory-limit=bytes] [--max-directory-bytes=bytes] [device...]
+  create-erofs-file <out> <entry> <in> [stored|lz4|lzma|deflate|zstd] [extent_size] [max_pcluster_size] [working_memory_limit] [--output-chunk-size=bytes] [--working-memory-limit=bytes] [--compressed-index-format=full|compact-4byte|compact]
+  extract-erofs-file <image> <entry> <out> [max_output] [device...] [--working-memory-limit=bytes] [--output-chunk-size=bytes]
+  list-erofs-xattrs <image> <entry> [--working-memory-limit=bytes] [device...]
+  list-wim-file <path>
+  extract-wim-resource <image> <sha1> <out> [max_output]
+  extract-wim-xml <image> <out> [max_output]
+  list-wim-image <image> [image_index]
+  extract-wim-path <image> <image_index> <entry> <out> [max_output]
+  extract-wim-stream <image> <image_index> <entry> <stream> <out> [max_output]
+  extract-wim-reparse <image> <image_index> <entry> <out> [max_output]
+  extract-wim-encrypted-raw <image> <image_index> <entry> <out> [max_output]
+  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name] [early-exit|verify-integrity]
+  inspect-wim-encrypted-esd <image> [max_xml] [max_ranges]
+  decrypt-wim-encrypted-esd <image> <private_key_blob> <out> <max_output>
+  decrypt-wim-encrypted-esd-key <image> <aes256_key_hex> <out> <max_output>
+  list-wim-parts-image <image_index> <part>...
+  extract-wim-parts-path <image_index> <entry> <out> <max_output> <part>...
+  encode-bgzf-file <in> <out> [block_size]
+                              Encode deterministic blocked gzip/BGZF
+  decode-bgzf-file <in> <out> [max_output]
+                              Decode and validate all BGZF blocks
+  inspect-bgzf-file <path>    List BGZF blocks and virtual offsets
+  decode-bgzf-range <in> <out> <start_virtual> <end_virtual> [max_output]
+                              Decode an indexed BGZF virtual range
+  encode-br-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
+  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
+    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
+    --large-window explicitly selects the Brotli Large Window extension (independent of HQ)
+                              With --large-window, --window-bits accepts 10..30; default remains 16
+    --hq (quality 10/11 only); HQ parameters also explicitly select HQ:
+    --hq-depth=1..65536 --hq-nice-len=2..16777216 --hq-beam-width=0..32
+    --hq-iterations=0..8 --hq-block-len=1..16777216 --hq-memory=bytes
+    --hq-parse-mode=bounded|whole_block (default bounded; HQ quality 10/11 only)
+                              Whole-block parsing spans the target meta-block within configured limits
+    --hq-copy-lengths=sampled|complete (default sampled; independent of parse mode)
+    --hq-max-price-evaluations=NUM limits each parser plan; 0 rejects its first price evaluation
+                              Complete lengths can require more work; finite beam search is not globally optimal
+    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
+    --max-total-memory=bytes --memory-profile (all planned qualities)
+    --metadata=TEXT emits caller metadata for planned or stored streams
+                              Total budget covers encoder-owned requested heap; 0 is a strict cap
+                              Zero beam/iterations selects the public quality defaults
+                              HQ controls describe Vort native effort, not upstream speed parity
+    Stream-file only: --max-input-len=BYTES caps source bytes; --max-output-len=BYTES caps encoded bytes
+                              Stream totals and file pledges use wide counters; one-shot inputs remain limited to 128 MiB
+  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
+                              Encode text as dependency-free Brotli stored-stream hex
+  decode-br-hex [hex] [max_output]
+                              Decode dependency-free Brotli stored-stream hex
+  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT] [stored_memory_options]
+                              Encode file bytes as dependency-free Brotli stored stream
+    stored_memory_options: --max-total-memory=BYTES --memory-profile
+                              Total budget covers encoder-owned requested heap; 0 rejects allocated wire
+                              Memory profile reports released encoder heap after output handoff
+  decode-br-file-to <in> <out> [max_output]
+                              Decode dependency-free Brotli stored stream file
+  encode-bzip2-file <in> <out> [block_size_100k]
+                              Encode a deterministic Bzip2 stream
+  decode-bzip2-file <in> <out> [max_output]
+                              Decode one Bzip2 stream with CRC validation
+  decode-bzip2-concat-file <in> <out> [max_output]
+                              Decode concatenated Bzip2 streams
+  size-bzip2-file <path> [max_output]
+                              Preflight a Bzip2 stream's decoded size
+  encode-compress-z-file <in> <out> [max_bits] [block|nonblock]
+                              Encode a deterministic Unix compress (.Z) stream
+  decode-compress-z-file <in> <out> [max_output]
+                              Decode a Unix compress (.Z) stream
+  size-compress-z-file <path> [max_output]
+                              Preflight a Unix compress stream's decoded size
+  encode-lzip-file <in> <out> [dictionary_size]
+                              Encode a deterministic lzip v1 member
+  decode-lzip-file <in> <out> [max_output] [max_dictionary]
+                              Decode and verify a single- or multi-member lzip file
+  size-lzip-file <path> [max_output] [max_dictionary]
+                              Decode and report a verified lzip file's size
+  inspect-lzip-file <path>    Parse and print structural lzip member metadata
+  encode-lzf-file <in> <out> [block_size] [eof|no-eof]
+                              Encode a deterministic LZF ZV stream
+  decode-lzf-file <in> <out> [max_output]
+                              Decode an LZF ZV stream
+  size-lzf-file <path> [max_output]
+                              Validate and report an LZF stream's decoded size
+  inspect-lzf-file <path>     Parse and print LZF ZV block metadata
+  create-lha-file <out> <entry> <in> [stored|lh1|lh4|lh5|lh6|lh7|lz5|lzs]
+                              Create a deterministic level-0 LHA archive
+  list-lha-file <path>        List LHA level-0/1/2/3 and SFX entries
+  extract-lha-file <lha> <entry> <out> [max_output]
+                              Extract common stored/LH/LArc LHA data
+  create-ar-file <out> <entry> <in> [regular|thin]
+                              Create a deterministic Unix ar archive
+  list-ar-file <path>         List GNU/BSD Unix ar members
+  extract-ar-file <ar> <entry> <out> [max_output] [thin_source]
+                              Extract a bounded Unix ar member
+  create-deb-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
+                              Create a deterministic Debian binary package
+  list-deb-file <path>        List Debian control/data archive metadata
+  extract-deb-file <deb> <entry> <out> [max_output]
+                              Extract a bounded Debian data member
+  create-rpm-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
+                              Create a deterministic unsigned RPM package
+  list-rpm-file <path>        List RPM metadata and CPIO payload entries
+  extract-rpm-file <rpm> <entry> <out> [max_output]
+                              Extract a bounded RPM payload member
+  extract-rpm-payload <rpm> <out> [max_output]
+                              Decode the raw RPM CPIO payload
+  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4] [password modifier_hex]
+                              Create a deterministic ARJ archive
+  create-arj-volumes <prefix> <entry> <in> <max_payload> [method] [password modifier_hex]
+                              Create deterministic compressed-payload-limited ARJ volumes
+  list-arj-file <path>        List ARJ entries and methods
+  extract-arj-file <arj> <entry> <out> [max_output] [password]
+                              Extract one ARJ methods 0 through 4 entry
+  extract-arj-volumes <entry> <out> <max_output> <password|-> <volume.arj> [volume.a01...]
+                              Extract an ordered ARJ continuation set
+  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed|crushed|distilled]
+                              Create a deterministic ARC/PAK archive
+  list-arc-file <path>        List ARC/PAK entries and methods
+  extract-arc-file <arc> <entry> <out> [max_output]
+                              Extract ARC/PAK methods 1 through 11
+  create-zoo-file <out> <entry> <in> [stored|lzd|lh5]
+                              Create a deterministic ZOO archive
+  list-zoo-file <path>        List ZOO entries and methods
+  extract-zoo-file <zoo> <entry> <out> [max_output]
+                              Extract ZOO stored, LZD, or LH5 data
+  create-cpio-file <out> <entry> <in> [newc|crc|odc|bin|bin-be] [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|lzf|zstd|lzop]
+                              Create a deterministic CPIO archive
+  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
+  extract-cpio-file <cpio> <entry> <out> [max_output]
+                              Extract a regular file or symlink target
+  create-rar-file <out> <entry> <in> [rar4|rar5] [method] [filter] [solid] [version-specific encryption args]
+                              Create a deterministic stored/compressed RAR archive
+  create-rar-volumes <prefix> <entry> <in> <payload_size> [stored|rar50] [filter] [solid]
+                              Create an ordered RAR5 volume set
+  list-rar-file <path> [password]
+                              List RAR4/RAR5 entries and methods
+  extract-rar-file <rar> <entry> <out> [max_output] [password]
+                              Extract a supported RAR entry
+  extract-rar-volumes <entry> <out> <max_output> [--password=...] <vol1> [vol2...]
+                              Extract across an ordered RAR5 volume set
+  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
+                              Encode compressed-or-stored LZOP blocks
+  encode-lzop-stored-file <in> <out> [block_size] [adler32|crc32]
+                              Encode a deterministic stored-block LZOP stream
+  decode-lzop-file <in> <out> [max_output] [max_block]
+                              Decode LZO1X and stored LZOP blocks
+  size-lzop-file <path> [max_output] [max_block]
+                              Decode and report a verified LZOP stream's size
+  inspect-lzop-file <path>    Parse and print structural LZOP metadata
+  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header] [start_position|-]
+                              Create a deterministic 7z archive; filters are comma-separated
+  list-7z-file <path> [password|-]
+  list-7z-source-file <path> [password|-]
+                              List entries in a supported 7z archive
+  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+  extract-7z-source-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+  extract-7z-source-stream-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+  list-7z-volumes <password|-> <ordered-part>...
+  extract-7z-volumes <entry> <out> [max_output] [max_dictionary] [max_folder] <password|-> <ordered-part>...
+                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
+  encode-lzma-file <in> <out> [end-marker|known] [LZMA options]
+                              Encode deterministic LZMA-Alone data
+  decode-lzma-file <in> <out> [max_output] [max_dictionary]
+                              Decode an LZMA-Alone stream with explicit limits
+  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+                              Encode a complete raw MicroLZMA stream
+  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+                              Encode a terminated source prefix within capacity
+  encode-microlzma-aligned-prefix-file <in> <out> <capacity> <alignment> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
+                              Align partial input consumption to a caller-selected boundary
+  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
+                              Decode an exact-size raw MicroLZMA stream
+  size-lzma-file <path> [max_output]
+                              Decode and report an LZMA-Alone stream's size
+  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
+                              Encode deterministic XZ with uncompressed LZMA2 chunks
+  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
+                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
+  LZMA options (after positionals): --preset=0...9 [--extreme]
+    --match-finder=hc3|hc4|bt2|bt3|bt4 --nice-len=2...273 --depth=u32
+    --dict-size=4096...1610612736 --mode=fast|normal|greedy|lazy|literal-only
+    --lc=0...4 --lp=0...4 --pb=0...4 --match-memory=bytes --profile
+                              lc+lp must be <=4; --extreme requires --preset
+                              Explicit options override the preset regardless of flag order
+                              --profile requires a preset, matcher option, or fast/normal mode
+  XZ-only option: --chunk-size=1...2097152 (default 65536)
+  decode-xz-file <in> <out> [max_output]
+                              Decode one XZ/LZMA2 stream with check validation
+  decode-xz-concat-file <in> <out> [max_output]
+                              Decode concatenated XZ streams and stream padding
+  size-xz-file <path> [max_output]
+                              Preflight an XZ stream's decoded size
+  inspect-xz-file <path>      Validate and print XZ stream metadata
+  create-tar-file <out> <entry> <in> [none|gzip|bzip2|brotli|compress-z|lzma|xz|lz4|lzip|lzf|zstd|lzop]
+                              Create a deterministic one-entry tarball
+  list-tar-file <path> [max_tar_size]
+                              List common compressed tarball formats
+  extract-tar-file <tar> <entry> <out> [max_tar_size]
+                              Extract one named regular file without path traversal
+  create-cab-file <out> <entry> <in> [stored|mszip|quantum|lzx] [block_size] [window_bits] [quantum_level]
+                              Create a deterministic one-folder CAB archive
+  list-cab-file <path>        List single-cabinet Stored/MSZIP/LZX/Quantum metadata
+  create-cab-set <dir> <entry> <in> [max_cabinet] [stored|mszip|quantum|lzx] [window_bits] [quantum_level]
+                              Create a deterministic linked cabinet set
+  extract-cab-file <cab> <entry> <out> [max_file] [max_folder]
+                              Extract a Stored/MSZIP/LZX/Quantum CAB entry with explicit limits
+  extract-cab-set <entry> <out> <cab1> <cab2> [...]
+                              Extract an entry across an explicitly ordered cabinet set
+  create-zip-split-file <prefix> <entry> <in> <max_part> [stored|deflate] [auto|zip32|zip64] [descriptor|sizes]
+                              Create a standard atomic-record split ZIP set
+  create-zip-split-stream-file <prefix> <entry> <in> <max_part> [stored|deflate] [auto|zip32|zip64]
+                              Incrementally create split ZIP parts with bounded output memory
+  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
+  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary] [password|-]
+                              Extract a supported ZIP entry with CRC validation
+  extract-zip-split-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+                              Extract from an owned normalized split/multi-disk ZIP view
+  extract-zip-split-stream-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+                              Sequentially extract split ZIP without a joined archive copy
+  extract-zip-split-source-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+                              Extract while retaining at most one physical part file
+  extract-zip-file-incremental <zip> <entry> <out> [max_output] [password|-]
+                              Incrementally extract one Stored/Deflate ZIP entry
+  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
+                              Sequentially parse and extract a supported ZIP entry
+  size-br-file <path> [max_output]
+                              Preflight dependency-free Brotli stored stream decoded size
+  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+                              Encode text as dependency-free native-subset Zstandard hex
+  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+                              Encode bytes as dependency-free native-subset Zstandard hex
+  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+                              Encode file bytes as dependency-free native-subset Zstandard hex
+  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+  encode-zstd-native-stream-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+    zstd_options: --level=N | --level N (-131072..22)
+                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
+                  --fast-acceleration=N (1..131072; fast or double_fast)
+                  HQ strategies: --hq-depth=1..65536 --hq-nice-len=3..131072
+                  --hq-min-match=3..7 --hq-memory=bytes
+                  --hq-parse-mode=bounded|whole_block (default bounded)
+                  --hq-match-lengths=sampled|complete (default sampled; independent of parse mode)
+                  --hq-max-prices=N caps admitted sequence-edge prices in each actual DP plan
+                  Whole-block, complete lengths and price caps require btopt/btultra/btultra2
+                  0 rejects the first sequence price; an omitted cap is unlimited
+                  HQ flags require an HQ strategy and a positive level; nice_len >= min_match
+                  Native controls specify local effort, not reference compressor speed parity
+                  --profile shows optional encoder work counters
+                  --window-log=10..41 --max-match-history-len=1024..4294836222 (requires explicit window)
+                  --max-total-memory=bytes --memory-profile
+                  Window_Log selects frame metadata; history bytes separately cap reachable matches
+                  Stream-file only: --max-input-len=BYTES --max-output-len=BYTES (source/encoded byte caps)
+                  Stream totals and file pledges remain wide; one-shot files/hex use addressable buffers
+    Negative level -N selects fast acceleration N. New controls default to level 1.
+  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
+  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
+    history_bytes is the selected history target; the standard dictionary header adds bytes. dict_id must be nonzero.
+    fastcover_options: --dmer=6|8 --segment=N --hash-log=1..31 --accel=1..10
+                       --max-corpus=BYTES --max-working=BYTES --max-dictionary=BYTES --json --profile
+    optimize_options: --steps=N --threads=N --shrink[=true|false] --split-num=N --split-den=N
+    Split defaults to 3/4; 1/1 uses every sample for both partitions. Use -- before option-like sample names.
+                              Encode file bytes as dependency-free native-subset Zstandard file
+  decode-zstd-native-hex [hex] [max_output]
+                              Decode dependency-free native-subset Zstandard hex
+  decode-zstd-native-file [path] [max_output]
+                              Decode dependency-free native-subset Zstandard file
+  decode-zstd-native-file-to <in> <out> [max_output]
+                              Decode dependency-free native-subset Zstandard file to output
+  size-zstd-native-hex [hex] [max_output]
+                              Preflight dependency-free native-subset Zstandard decoded size
+  size-zstd-native-file [path] [max_output]
+                              Preflight dependency-free native-subset Zstandard file decoded size
+  summary-zstd-native-file [path] [text|json]
+                              Summarize dependency-free native-subset Zstandard frame/stream blocks
+  encode-lz4-native-file <in> <out> [lz4_options]
+                              Encode file bytes as dependency-free native LZ4 frame
+  encode-lz4-native-stream-file <in> <out> [lz4_options]
+  encode-lz4-block-file <in> <out> [lz4_options]
+    lz4_options: --acceleration=NUM --chain-depth=0..16 --profile
+                              Acceleration <=0 uses 1; values above 65537 clamp to 65537
+                              Default acceleration 1 preserves Vort's bytewise scan; chain depth is independent
+  size-lz4-native-file [path] [max_output]
+                              Preflight dependency-free native LZ4 frame decoded size
+  summary-lz4-native-file [path] [text|json]
+                              Summarize dependency-free native LZ4 frame/stream blocks
+  decode-lz4-native-file-to <in> <out> [max_output]
+                              Decode dependency-free native LZ4 frame to output
+  size-lz4-block-hex [hex] [max_output]
+                              Preflight LZ4 block decoded size
+  summary-lz4-block-hex [hex]
+                              Summarize LZ4 block literal/match tokens
+  encode-lz4-block-hex [hex] [lz4_options]
+                              Encode LZ4 block
+  decode-lz4-block-hex [hex] [max_output]
+                              Decode LZ4 block
+  size-snappy-block-hex [hex] [max_output]
+                              Preflight Snappy raw block decoded size
+  summary-snappy-block-hex [hex]
+                              Summarize Snappy raw block tokens and decoded bytes
+  encode-snappy-block-hex [hex]
+                              Encode Snappy raw block
+  decode-snappy-block-hex [hex] [max_output]
+                              Decode Snappy raw block
+  encode-snappy-block-file <in> <out>
+                              Encode file bytes as a Snappy raw block
+  decode-snappy-block-file-to <in> <out> [max_output]
+                              Decode Snappy raw block file to output
+  size-snappy-block-file [path] [max_output]
+                              Preflight Snappy raw block file decoded size
+  summary-snappy-block-file [path]
+                              Summarize Snappy raw block file tokens and decoded bytes
+  size-snappy-frame-hex [hex] [max_output]
+                              Preflight Snappy framed stream decoded size
+  summary-snappy-frame-hex [hex]
+                              Summarize Snappy framed stream chunks and decoded bytes
+  encode-snappy-frame-hex [hex]
+                              Encode Snappy framed stream
+  decode-snappy-frame-hex [hex] [max_output]
+                              Decode Snappy framed stream
+  encode-snappy-frame-file <in> <out>
+                              Encode file bytes as a Snappy framed stream
+  decode-snappy-frame-file-to <in> <out> [max_output]
+                              Decode Snappy framed stream file to output
+  size-snappy-frame-file [path] [max_output]
+                              Preflight Snappy framed stream file decoded size
+  summary-snappy-frame-file [path]
+                              Summarize Snappy framed stream file chunks and decoded bytes
+  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
+                              Preflight LZ4 block decoded size with prefix history
+  summary-lz4-block-prefix-hex [hex] [prefix_hex]
+                              Summarize LZ4 block tokens with prefix history
+  encode-lz4-block-prefix-hex [hex] [prefix_hex] [lz4_options]
+                              Encode LZ4 block with prefix history
+  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
+                              Decode LZ4 block with prefix history
+  decode-raw-hex [hex] [max_output]
+                              Decode raw deflate hex to text
+  decode-raw-dict-hex [hex] [dict] [max_output]
+                              Decode raw deflate hex with a preset dictionary
+  decode-raw-file <in> <out> [max_output]
+                              Decode raw deflate file bytes with an optional output limit
+  decode-raw-dict-file <in> <out> <dict> [max_output]
+                              Decode raw deflate file bytes with a preset dictionary file
+  inspect-raw-header-hex [hex] [text|json]
+                              Print parsed raw deflate first-block metadata for hex input
+  inspect-raw-header-file <in> [text|json]
+                              Print parsed raw deflate first-block metadata for a file
+  decode-zlib-hex [hex] [max_output]
+                              Decode zlib-wrapped deflate hex to text
+  decode-zlib-concat-hex [hex] [max_output]
+                              Decode concatenated zlib stream hex to text
+  decode-zlib-dict-concat-hex [hex] [dict] [max_output]
+                              Decode concatenated zlib FDICT stream hex with a preset dictionary
+  decode-zlib-dict-hex [hex] [dict] [max_output]
+                              Decode zlib-wrapped deflate hex with a preset dictionary
+  decode-zlib-file <in> <out> [max_output]
+                              Decode a zlib file with an optional output limit
+  decode-zlib-concat-file <in> <out> [max_output]
+                              Decode a concatenated zlib file with an optional output limit
+  decode-zlib-dict-concat-file <in> <out> <dict> [max_output]
+                              Decode a concatenated zlib FDICT file with a preset dictionary file
+  decode-zlib-dict-file <in> <out> <dict> [max_output]
+                              Decode a zlib file with a preset dictionary file
+  inspect-zlib-header-hex [hex] [text|json]
+                              Print parsed zlib header metadata for hex input
+  inspect-zlib-header-file <in> [text|json]
+                              Print parsed zlib header metadata for a file
+  inspect-zlib-deflate-header-hex [hex] [text|json]
+                              Inspect the raw deflate header inside a zlib stream
+  inspect-zlib-dict-deflate-header-hex [hex] [dict] [text|json]
+                              Inspect a zlib FDICT stream using a preset dictionary
+  inspect-zlib-deflate-header-file <in> [text|json]
+                              Inspect the raw deflate header inside a zlib file
+  inspect-zlib-dict-deflate-header-file <in> <dict> [text|json]
+                              Inspect a zlib FDICT file using a preset dictionary file
+  decode-gzip-hex [hex] [max_output]
+                              Decode gzip-wrapped deflate hex to text
+  decode-gzip-file <in> <out> [max_output]
+                              Decode a gzip file with an optional output limit
+  inspect-gzip-header-hex [hex] [text|json]
+                              Print parsed gzip header metadata for hex input
+  inspect-gzip-header-file <in> [text|json]
+                              Print parsed gzip header metadata for a file
+  inspect-gzip-deflate-header-hex [hex] [text|json] [member_index]
+                              Inspect the raw deflate header inside a gzip stream member
+  inspect-gzip-deflate-header-file <in> [text|json] [member_index]
+                              Inspect the raw deflate header inside a gzip file member
+  encode-raw-dict-best-hex [text] [dict] [level]
+                              Encode raw deflate that may reference preset dictionary history
+  encode-zlib-dict-best-hex [text] [dict] [level]
+                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
+  encode-raw-best-file-hex <in> [level]
+                              Encode raw deflate file bytes and print best-block hex
+  encode-zlib-best-file-hex <in> [level]
+                              Encode zlib-compatible file bytes and print best-block hex
+  encode-gzip-best-file-hex <in> [level]
+                              Encode gzip-compatible file bytes and print best-block hex
+  encode-vort-best-file <in> <out>
+                              Encode one native Vort best frame
+  encode-raw-fixed-file <in> <out> [level]
+                              Encode raw deflate file bytes with fixed Huffman blocks
+  encode-zlib-best-file <in> <out> [level]
+                              Encode a zlib-compatible file with best-block selection
+  encode-raw-best-file <in> <out> [level]
+                              Encode raw deflate file bytes with best-block selection
+  encode-gzip-best-file <in> <out> [level]
+                              Encode a gzip-compatible file with best-block selection
+  encode-raw-dict-best-file <in> <out> <dict> [level]
+                              Encode raw deflate file bytes using preset dictionary history
+  encode-raw-dict-best-split-file <in> <out> <dict> <block_len> [level]
+                              Encode split raw deflate file bytes using preset dictionary history
+  encode-raw-dict-best-adaptive-file <in> <out> <dict> [level]
+                              Encode adaptive-split raw deflate file bytes using preset dictionary history
+  encode-zlib-dict-best-file <in> <out> <dict> [level]
+                              Encode a zlib FDICT/DICTID file using preset dictionary history
+  encode-zlib-dict-best-split-file <in> <out> <dict> <block_len> [level]
+                              Encode split zlib FDICT/DICTID file using preset dictionary history
+  encode-zlib-dict-best-adaptive-file <in> <out> <dict> [level]
+                              Encode adaptive-split zlib FDICT/DICTID file using preset dictionary history
+
+native indexed file workflows:
+  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]
+                              Encode native Vort stream plus external sidecar index
+  verify-vort-sidecar-index-file <stream> <sidecar> [full|metadata] [text|json]
+                              Validate an external sidecar index against a stream
+  decode-vort-sidecar-range-file <stream> <sidecar> <out> <offset> <len>
+                              Decode an indexed range through an external sidecar
+  encode-vort-embedded-best-file <in> <stream> [block_len]
+                              Encode native Vort stream with embedded index
+  encode-vort-seekable-tier-file <in> <stream> <seek_fast|balanced|ratio>
+                              Encode native Vort stream using a seekability tier block size
+  encode-vort-blocked-best-file <in> <stream> [block_len]
+                              Encode native Vort blocked stream without embedded index
+  verify-vort-embedded-index-file <stream> [full|metadata] [text|json]
+                              Validate an embedded-index stream
+  decode-vort-embedded-range-file <stream> <out> <offset> <len>
+                              Decode an indexed range from an embedded-index stream
+  bench-decode-raw-file <in> <decoded_len> [iterations]
+                              Time raw deflate decode in one CLI process
+  bench-decode-vort-best-file <in> <decoded_len> [iterations]
+                              Time native Vort best-frame decode in one CLI process
+  bench-decode-vort-embedded-range-file <stream> <decoded_len> [iterations]
+                              Time embedded-index range decode in one CLI process
+  bench-decode-vort-embedded-offset-range-file <stream> <offset> <len> [iterations]
+                              Time embedded-index offset range decode in one CLI process
+  encode-vort-embedded-dict-file <in> <stream> [block_len]
+                              Encode self-contained dictionary stream with embedded index
+  decode-vort-embedded-auto-range-file <stream> <out> <offset> <len>
+                              Decode embedded-index range with dictionary auto-detection
+  encode-vort-sidecar-dict-file <in> <stream> <sidecar> [block_len]
+                              Encode self-contained dictionary stream plus sidecar index
+  decode-vort-sidecar-auto-range-file <stream> <sidecar> <out> <offset> <len>
+                              Decode sidecar range with embedded dictionary auto-detection
+  encode-vort-sidecar-ldm-file <in> <stream> <sidecar> [block_len]
+                              Encode LDM-aware native stream plus sidecar index
+
+This CLI is a smoke surface for the library-first Vort APIs.
+Build Summary: 7/7 steps succeeded
+run success
++- run exe vort success 22ms
+   +- compile exe vort Debug native cached 10ms MaxRSS:41M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:37M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:37M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+

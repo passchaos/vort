@@ -1,0 +1,12 @@
+{
+  "test_exit_code": 0,
+  "passed_test_counts": [
+    1
+  ],
+  "codec_and_test_source_stable": true,
+  "tool_source_stable": false,
+  "changed_paths": [
+    "tools/deflate64_index_probe.zig"
+  ],
+  "scope": "Only independent new resource probe creation occurred during core/test verification. Final full source binding is collected after tools freeze."
+}

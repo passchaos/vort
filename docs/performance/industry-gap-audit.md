@@ -78,6 +78,38 @@ archived cumulative requests are not a final-revision retrace, peak or RSS
 measurement; smaller wires do not establish broad memory or performance
 leadership.
 
+The [Deflate64 index-capacity increment](deflate64-index-capacity-x86.md) keeps
+the 32,768-entry hash-head table and sizes the previous-link ring to the required
+local span, growing through the full 65,536-entry ring. All seven one-shot wire
+identities and the 4 MiB stream remain unchanged. Untimed measurements of codec
+peak requested live bytes, including returned output, change Tiny16 from
+393,234 to 131,154, Pattern12079 from 393,262 to 196,654, Random4097 from
+397,318 to 167,942 and Random16387 from 409,608 to 278,536. Empty and large
+inputs retain their previous peaks. An earlier allocate-before-free candidate
+raised the stream peak from 462,909 to 593,981 bytes; the final remap path
+records two successful remaps and restores that stream peak to 462,909, with
+stable warmed capacity. Refused remaps still use safe allocate-before-free
+growth. These values describe logical allocator requests, excluding backing
+allocator physical transients, input generation, collectors and decoding;
+they are not RSS or a cross-library memory lead. Final codec contracts pass
+100/100 in native Debug, native ReleaseFast and x86; the matcher reference
+contracts pass on all three targets. Focused ZIP contracts pass 44/44, the
+complete ZIP suite passes 1993/1993, build checks pass 177/177 and CLI help
+passes 7/7 on stable final source. Native/x86 independent campaigns verify
+96 artifacts and 128 member plaintexts in total, with unchanged full wire/input/
+progress manifests against the prior revision.
+
+Three alternating process pairs time one-shot encode, full-output checksum and
+free through the plain allocator. Per-case geometric point ratios are 1.054839x
+for Tiny16 and 1.086759x for Random4097, but 0.980039x/0.991585x/0.990310x/
+0.968085x/0.975022x for empty/Pattern12079/Random16387/Repeat65539/Distance131072.
+The aggregate is 1.005803x without statistical significance or a broad throughput
+claim. A separate fixed-slot specialization was withdrawn after unfavorable
+repeat points; the retained resource implementation is the simpler variable-mask
+version, and its source/executable evidence remains separate from that experiment.
+Dynamic encoding and preset dictionaries are future work, with broader
+quality/platform/performance evidence still open.
+
 The former LZMA/XZ complete plaintext staging gap is now closed in
 caller-buffer decoding and size queries, while preserving caller output on
 failure and legacy overlap behavior. Strict XZ inspection uses the same bounded

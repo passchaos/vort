@@ -23451,3 +23451,21 @@ reuse, so production keeps the simpler independently owned plans.
   fixed-index requested memory rises and is recorded without memory-lead claims.
   Dynamic tree/dictionary support, tiny-input resource optimization and broad
   ratio/speed/memory best-in-industry validation remain open.
+
+- 2026-10-25: Deflate64 predecessor storage now grows to a power of two covering
+  the actual bounded history/input span, capped at the original65536 ring;
+  hash32768 shape/search budgets/tie order and full matching range are unchanged.
+  Allocator remap is tried before safe allocate-before-free growth, preserving
+  failure atomicity and retained capacity. Tiny16/Pattern12079/Random4097/
+  Random16387 requested peaks change393234→131154/393262→196654/
+  397318→167942/409608→278536bytes, while empty/full-window peaks remain
+  unchanged and4MiB streaming still peaks462909. The original allocate-first
+  candidate's higher593981 peak and the rejected constant-index specialization
+  are retained as separate experiments. Exact full-ring references and final
+  three-target codec100/100, fullZIP1993/1993, checks177/177 and48raw/ZIP
+  artifacts64 members pernative/x86 pass with unchanged wire/progress identity.
+  [Evidence and tradeoffs](performance/deflate64-index-capacity-x86.md)
+  record some negative whole-call timing points instead of claiming universal
+  speed/memory leadership. Dynamic Huffman work next requires32distance symbols,
+  full285length pricing and bounded318code-length entries with exact block
+  arbitration; current dynamic encoding and preset dictionaries remain open.

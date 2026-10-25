@@ -1,0 +1,7 @@
+{
+  "base_manifest": "/tmp/vort-deflate64-one-shot-20261025/final-reference-fixtures/manifest.json",
+  "all_manifest_fields_equal": true,
+  "artifacts": 48,
+  "member_checks": 64,
+  "scope": "New smaller predecessor table leaves all same-input streaming/one-shot raw/ZIP wire and progress identity unchanged; independent token parser and Info-ZIP validate contents."
+}

@@ -1,0 +1,6 @@
+{
+  "method": "Compare instruction strings with direct address and local-label relocation normalized; not cycle or byte-equivalence claim.",
+  "instructions_old": 100,
+  "instructions_new": 100,
+  "same_after_address_normalization": true
+}

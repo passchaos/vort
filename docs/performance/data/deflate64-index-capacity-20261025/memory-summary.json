@@ -1,0 +1,56 @@
+{
+  "rows": [
+    {
+      "case": "empty",
+      "old_peak": 2,
+      "new_peak": 2,
+      "reduction_fraction": 0.0,
+      "wire_bytes": 2
+    },
+    {
+      "case": "tiny16",
+      "old_peak": 393234,
+      "new_peak": 131154,
+      "reduction_fraction": 0.6664733975190344,
+      "wire_bytes": 18
+    },
+    {
+      "case": "pattern12079",
+      "old_peak": 393262,
+      "new_peak": 196654,
+      "reduction_fraction": 0.4999415148170939,
+      "wire_bytes": 46
+    },
+    {
+      "case": "random4097",
+      "old_peak": 397318,
+      "new_peak": 167942,
+      "reduction_fraction": 0.5773108693791875,
+      "wire_bytes": 4102
+    },
+    {
+      "case": "random16387",
+      "old_peak": 409608,
+      "new_peak": 278536,
+      "reduction_fraction": 0.3199937501220679,
+      "wire_bytes": 16392
+    },
+    {
+      "case": "repeat65539",
+      "old_peak": 393222,
+      "new_peak": 393222,
+      "reduction_fraction": 0.0,
+      "wire_bytes": 6
+    },
+    {
+      "case": "distant131072",
+      "old_peak": 462314,
+      "new_peak": 462314,
+      "reduction_fraction": 0.0,
+      "wire_bytes": 69098
+    }
+  ],
+  "old_stream_peak": 462909,
+  "new_stream_peak": 462909,
+  "scope": "Requested API-level live allocation peaks only; no whole process, RSS, backend physical transient or competitor memory claim. Full/small indexing refinement is validated with its separate source identity."
+}

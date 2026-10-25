@@ -1,0 +1,89 @@
+{
+  "files": {
+    "src/deflate64/stream_match.zig": "a149d36ce699001e985b77541bb3cafc46447161efee8b5690db95acb127b0e4",
+    "src/deflate64/one_shot.zig": "a08bdd2beb610ad19dc9dce3a23797f8e1e6ea4753028f2f382655ca5c749332",
+    "src/deflate64/stream_encoder.zig": "8f9e7d4df4707e0bf365ba8f630f639ed4edf11f6995be308353005691af2b85",
+    "src/deflate64/stream_match_tests.zig": "bb65e454e9fe1f36eb56470457a2c1644fabd0d51f5634b63f7286d5a362cb8f",
+    "src/deflate64/full_match_reference_tests.zig": "e7f37b10fd412c1370456a3a6f87065ee27bd1529d66f314b8373da1ce83956d",
+    "tools/deflate64_index_probe.zig": "50e0ef9c3334a7677f07d37866d69af17ad0303e494bee2166ff3ec3ad32f573",
+    "tools/deflate64_index_gate.py": "b4bfb5a99ab820a76178cd45c5f5cfa702a6b4b1d3b0810c8758d840358621b1",
+    "build.zig": "f33f080240758439e8383f1f416dbeab5a6da931ee26c9f19a0a5d876fe62e36"
+  },
+  "runs": [
+    {
+      "group": "final-codec-debug",
+      "exit_code": 0,
+      "passed_test_counts": [
+        100
+      ],
+      "build_summary": [],
+      "source_stable": true
+    },
+    {
+      "group": "final-codec-releasefast",
+      "exit_code": 0,
+      "passed_test_counts": [
+        100
+      ],
+      "build_summary": [],
+      "source_stable": true
+    },
+    {
+      "group": "final-codec-x86",
+      "exit_code": 0,
+      "passed_test_counts": [
+        100
+      ],
+      "build_summary": [],
+      "source_stable": true
+    },
+    {
+      "group": "zip-debug",
+      "exit_code": 0,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded; 44/44 tests passed"
+      ],
+      "source_stable": true
+    },
+    {
+      "group": "independent-diff",
+      "exit_code": 0,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded"
+      ],
+      "source_stable": true
+    },
+    {
+      "group": "independent-x86-diff",
+      "exit_code": 0,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded"
+      ],
+      "source_stable": true
+    },
+    {
+      "group": "zip-complete",
+      "exit_code": 0,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded; 1993/1993 tests passed"
+      ],
+      "source_stable": true
+    },
+    {
+      "group": "complete-check",
+      "exit_code": 0,
+      "passed_test_counts": [],
+      "build_summary": [
+        "177/177 steps succeeded"
+      ],
+      "source_stable": true
+    }
+  ],
+  "resource_source_matches": true,
+  "timing_source_matches": true,
+  "scope": "Retained a149 currentsource matched to successful before/after snapshots, requested allocator resources and quiet timing. Discarded specialization is excluded; docs changes occur outside source/build/tool snapshots."
+}

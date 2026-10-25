@@ -1,0 +1,5 @@
+{
+  "scope": "Initial capacity-aware matcher before remap optimization",
+  "file": "src/deflate64/stream_match.zig",
+  "sha256": "15aabaaf4152e0cdb5c830282fc54b1b399d85c8d80867e442249c7d2424195f"
+}
