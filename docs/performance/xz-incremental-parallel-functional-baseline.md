@@ -199,7 +199,18 @@ and successful deterministic progress agree. Scheduling, intermediate snapshots,
 worker overlap, requested heap and fatal-worker discovery progress are excluded
 from equality. Raw final reports remain under `/tmp/vort-xz-incremental-parallel-20261026/`
 in `native-final`/`x86-final`, separated from first/fixed attempts. Post-rebase
-validation and publishing remain separate later integration records.
+validation and publishing retain separate integration records.
+
+The [post-rebase record](data/xz-incremental-parallel-20261026/post-rebase.json)
+binds `79a54571`: `git pull --rebase origin main` completed without incoming
+changes or conflicts. Native/x86 ReleaseFast each re-execute 129/129; Debug plus
+single-thread re-executes 164 passed and one genuine thread-dependent skip out
+of 165, with actual Node fallback and CLI help execution and 209/209 combined
+build steps. Distinct explicit test seeds force new test-run cache keys while
+reusing compiled artifacts. Verbose invocation paths and executable hashes are
+preserved in the separate post-rebase archive. All 1,958 source-scan files and
+the fifteen pre-rebase archive checksums still match. Global unfiltered root
+tests remain compile-only in `check`; no new performance campaign is assigned.
 
 The earlier [one-shot parallel baseline](xz-parallel-functional-baseline.md) and
 [Block Header size baseline](xz-block-sizes-functional-baseline.md) stay frozen

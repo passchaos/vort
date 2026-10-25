@@ -1,0 +1,162 @@
+{
+  "schema": "vort.xz.incremental-parallel-post-rebase.v1",
+  "created_utc": "2026-10-25T23:19:17.046039+00:00",
+  "rebase": {
+    "command": [
+      "git",
+      "pull",
+      "--rebase",
+      "origin",
+      "main"
+    ],
+    "exit_code": 0,
+    "observed_output": "From github.com:passchaos/vort\n * branch              main       -> FETCH_HEAD\nCurrent branch main is up to date.\n",
+    "verified_head": "79a545717d4e421a39ffe95ca5d881350e16f71c",
+    "origin_main": "676b957c73884da803d9b695cad812a5aef6842f",
+    "conflicts": false,
+    "scope": "Actual parent exec session 20301 completed before these test invocations."
+  },
+  "tests": [
+    {
+      "name": "debug",
+      "started_utc": "2026-10-25T23:18:28.331157+00:00",
+      "ended_utc": "2026-10-25T23:18:29.910288+00:00",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-xz-parallel-incremental",
+        "test-xz-parallel-incremental-single",
+        "test-xz-parallel-incremental-wasm",
+        "check",
+        "run",
+        "-Doptimize=Debug",
+        "--seed",
+        "2026102601",
+        "--summary",
+        "all",
+        "--verbose",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "head": "79a545717d4e421a39ffe95ca5d881350e16f71c",
+      "measurement_scope": "post-rebase functional verification; no codec throughput/RSS measurement",
+      "summary": "Build Summary: 209/209 steps succeeded; 164/165 tests passed (1 skipped)",
+      "executed_test_lines": [
+        "+- run test vort-xz-parallel-incremental-tests 36 pass (36 total) 1s MaxRSS:38M",
+        "+- run test vort-xz-parallel-incremental-root-tests 93 pass (93 total) 43ms MaxRSS:51M",
+        "+- run test vort-xz-parallel-incremental-single-tests 35 pass, 1 skip (36 total) 1s MaxRSS:33M"
+      ]
+    },
+    {
+      "name": "native-releasefast",
+      "started_utc": "2026-10-25T23:18:28.290546+00:00",
+      "ended_utc": "2026-10-25T23:18:28.990926+00:00",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-xz-parallel-incremental",
+        "-Doptimize=ReleaseFast",
+        "--seed",
+        "2026102602",
+        "--summary",
+        "all",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "head": "79a545717d4e421a39ffe95ca5d881350e16f71c",
+      "measurement_scope": "post-rebase functional verification; no codec throughput/RSS measurement",
+      "summary": "Build Summary: 9/9 steps succeeded; 129/129 tests passed",
+      "executed_test_lines": [
+        "+- run test vort-xz-parallel-incremental-tests 36 pass (36 total) 609ms MaxRSS:9M",
+        "+- run test vort-xz-parallel-incremental-root-tests 93 pass (93 total) 17ms MaxRSS:9M"
+      ]
+    },
+    {
+      "name": "x86-releasefast",
+      "started_utc": "2026-10-25T23:18:28.249482+00:00",
+      "ended_utc": "2026-10-25T23:18:28.858507+00:00",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-xz-parallel-incremental",
+        "-Dtarget=x86-linux-gnu",
+        "-Doptimize=ReleaseFast",
+        "--seed",
+        "2026102603",
+        "--summary",
+        "all",
+        "--verbose"
+      ],
+      "exit_code": 0,
+      "head": "79a545717d4e421a39ffe95ca5d881350e16f71c",
+      "measurement_scope": "post-rebase functional verification; no codec throughput/RSS measurement",
+      "summary": "Build Summary: 9/9 steps succeeded; 129/129 tests passed",
+      "executed_test_lines": [
+        "+- run test vort-xz-parallel-incremental-tests 36 pass (36 total) 530ms MaxRSS:9M",
+        "+- run test vort-xz-parallel-incremental-root-tests 93 pass (93 total) 18ms MaxRSS:9M"
+      ]
+    }
+  ],
+  "source_scan": {
+    "files": 1958,
+    "mismatches": []
+  },
+  "test_execution_scope": "Explicit distinct --seed values changed Zig test-run cache keys; verbose command lines and terminal counts prove these selected tests executed. Compile artifacts reused. Unfiltered global root tests compiled by check, not executed.",
+  "wasm_and_cli": "Node fallback gate and actual CLI help executed in Debug combined invocation.",
+  "archive": {
+    "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/post-rebase.tar.xz",
+    "bytes": 18500,
+    "sha256": "f3d3cb58b305b8e09740e0e283380c98a13243eaf25f38e5943a3d75168b57de"
+  },
+  "archive_members_verified": true,
+  "files": [
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/debug.json",
+      "bytes": 654,
+      "sha256": "c45a4cc6f8cc6f37c7d77fc0eac06f1da208005110e587fdf9c2f0812bfa244b"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/debug.log",
+      "bytes": 238693,
+      "sha256": "7f489e4005d42564398a52fc269613f2998b540acc0b4c6569dc9c46e8722648"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/executables.json",
+      "bytes": 3793,
+      "sha256": "07d833749cb4aefd1e6087a4b098a2dc05631eecff646b69c8507e866f69ef47"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/native-releasefast.json",
+      "bytes": 541,
+      "sha256": "d17ded5701b060afdc5755f6a4a0119cf1273953e206814c9e0f27af5ea54092"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/native-releasefast.log",
+      "bytes": 2797,
+      "sha256": "91086b52fc0707d486a2e392915aaacbd3af59fce617b8427084a629a7d4ca7b"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/rebase.json",
+      "bytes": 481,
+      "sha256": "3a2b742fe35be7c65e7c075138ae2c844bf08d0c9a8d4e0b867fa2392f856cff"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/source-verification.json",
+      "bytes": 1459,
+      "sha256": "63e1235fc5ea9f4e470669957df4d3cb0591f3631f088bb1226d5ea34852c21f"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/x86-releasefast.json",
+      "bytes": 568,
+      "sha256": "836e7cf43c517dfb01b1b81897318d4907cdd692cbaa559e7c74b4d4c0b377da"
+    },
+    {
+      "path": "/tmp/vort-xz-incremental-parallel-post-rebase-20261026/x86-releasefast.log",
+      "bytes": 3024,
+      "sha256": "3c73d6c88404468fa7dccea5579bec4af17cdffef497c1ec32acddaa6233aa9a"
+    }
+  ],
+  "performance_scope": "No encoder throughput, compression-ratio or RSS timing campaign. Build/test MaxRSS is not codec-memory evidence.",
+  "publish_state_at_capture": "Verification complete; final documentation commit and push still pending."
+}
