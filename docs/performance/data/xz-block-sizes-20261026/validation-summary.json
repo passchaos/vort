@@ -1,0 +1,90 @@
+{
+  "schema": "vort.xz.block-sizes-validation.v1",
+  "feature_commit": "63a7dfa254f3567f906b35e73657c6cae4a1db56",
+  "results": {
+    "legacy-family-debug.log": {
+      "summary": "3/3 steps succeeded; 161/161 tests passed",
+      "sha256": "e8dd7a475733db0b69de17fb17681126ca274941b7d17d922abc506a6d6c0d9e"
+    },
+    "consumers-debug-initial.log": {
+      "summary": "7/7 steps succeeded; 112/112 tests passed",
+      "sha256": "2cfb7c93865e45b2fc857512d712eed6e8ec28eda63d494be66bb751f9ba6ffd"
+    },
+    "core-debug-initial.log": {
+      "summary": "10/10 steps succeeded; 134/134 tests passed",
+      "sha256": "9631af6a5348aba9007a08c336615d63e35b9f18c7aa2145d29d770c3f7c57c5"
+    },
+    "core-native-releasefast.log": {
+      "summary": "10/10 steps succeeded; 134/134 tests passed",
+      "sha256": "805060262e20da1b770b37c3bd61e757a29f52d244c355b3c3c86adc277a4a5a"
+    },
+    "core-x86-releasefast.log": {
+      "summary": "13/13 steps succeeded; 134/134 tests passed",
+      "sha256": "5c3d66119833e4816136abeb9bbf6a283ecaf18642a0ca6ba73968481a2e69be"
+    },
+    "wasm-initial.log": {
+      "summary": "3/3 steps succeeded",
+      "sha256": "12cf7af712983f361e34b2db32a880e769916e93a1cd4572f331d936fd002c01"
+    },
+    "family-check-help-debug.log": {
+      "summary": "202/202 steps succeeded; 276/276 tests passed",
+      "sha256": "b9047fab44a4f2d629a523b959d853dd341c36a4bd54ffaca9543c28709c4fd4"
+    },
+    "cli-final-debug.log": {
+      "summary": "201/201 steps succeeded; 10/10 tests passed",
+      "sha256": "3c5610f26da4ff98666c76789bfc47e96eac1cbc06cbdcc6026032ac84acf34f"
+    },
+    "check-final-debug.log": {
+      "summary": "195/195 steps succeeded",
+      "sha256": "23384f7a5a5ebe40da173982ce4c8cfebf85285289d0ae12d1dddf1db9da3378"
+    },
+    "native": {
+      "counts": {
+        "cases": 129,
+        "passed": 129,
+        "failed": 0,
+        "target_encodes": 116,
+        "native_mt_reference_decodes": 13,
+        "multiple_actual_worker_observations": 1,
+        "original_mt_reference_calls": 37,
+        "original_low_memory_mt_reference_calls": 1,
+        "instrumented_mt_reference_calls": 37,
+        "instrumented_low_memory_mt_reference_calls": 1,
+        "maximum_completed_worker_distinct": 3
+      },
+      "report_sha256": "2fa1310d7282ed27802e4dc4cdd1f3eefe9306ab0d233ad7d6fdd43d94b6ac88",
+      "source_digest": "53d35bc3aff21a03b3bfcaa22dec8f399d7c14b10f2f82a4de1e08f580cdacbb",
+      "probe_sha256": "4c82f4a6d7c2ad3696839b2ee858d8026840326da4ce749ad604b0485f4931e6"
+    },
+    "x86": {
+      "counts": {
+        "cases": 129,
+        "passed": 129,
+        "failed": 0,
+        "target_encodes": 116,
+        "native_mt_reference_decodes": 13,
+        "multiple_actual_worker_observations": 1,
+        "original_mt_reference_calls": 37,
+        "original_low_memory_mt_reference_calls": 1,
+        "instrumented_mt_reference_calls": 37,
+        "instrumented_low_memory_mt_reference_calls": 1,
+        "maximum_completed_worker_distinct": 3
+      },
+      "report_sha256": "aad0677cb8e177082d763970d0e25d7b7d45b5d56ed5c520463dcd35f8e7db9b",
+      "source_digest": "53d35bc3aff21a03b3bfcaa22dec8f399d7c14b10f2f82a4de1e08f580cdacbb",
+      "probe_sha256": "9482429dbdb88a4e2d37859fe31923c53cb11c3abe05e4414549b150e34fffc3"
+    },
+    "cli": {
+      "cases": 32,
+      "passed": 32,
+      "sha256": "3fcfef2d62a761b2d497ff16329dcfdb2dcce87683a0cad00efffdb533a7fec1"
+    },
+    "legacy": {
+      "cases": 72,
+      "old_runs": 0,
+      "new_reference_decodes": 72,
+      "sha256": "1c647118336ae96ab1f9436928a8bb27a7107c6413ab33d56ed06094394885c3"
+    }
+  },
+  "scope": "Functional and compile gates; root/import totals are executions, not independent codec cases. Original and instrumented liblzma calls have separate identities. No timing/RSS performance claim."
+}

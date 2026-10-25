@@ -1,0 +1,127 @@
+{
+  "schema": "vort-xz-mt-probe-source-v1",
+  "abi_version": 1,
+  "generated_at_utc": "2026-10-25T21:24:14.392253+00:00",
+  "reference_version": "5.8.4",
+  "original_source_tree": "/tmp/vort-xz-ref.vVVDxq/xz",
+  "original_tree_sha256": "009cb7a779e309321560934707313c64ed2e3c607be13a6cde28c662a70be580",
+  "patched_source_tree": "/tmp/vort-xz-block-sizes-mt-instrumented/xz",
+  "patched_tree_sha256": "6aae8aa4983d5e43763f7ce2ca99c1bc50a3bb0274d5c9e540cf08a2b218ea98",
+  "original_source_index": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/original-source-files.json",
+  "patch": {
+    "path": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/liblzma-5.8.4-mt-probe.patch",
+    "sha256": "88247fff19a6b30889e5b8cafcf520a93c2f383def14c0330b1f66837ea2185c"
+  },
+  "script": {
+    "path": "/home/passchaos/project-z/vort/tools/xz/block_sizes_mt_patch.py",
+    "sha256": "8ecd82d656ad58d5239469250f3da8c1f6af37f36a7386e52cd78c45dd3f373c"
+  },
+  "header": {
+    "path": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/vort_xz_mt_probe.h",
+    "sha256": "d7571e30360be259f9ba88e6c260d85087faabb6b83fa1fc63f4ed4918f4a51f"
+  },
+  "changed_files": [
+    {
+      "path": "src/liblzma/common/stream_decoder_mt.c",
+      "original_sha256": "6287684c71424003f61590c187d2c18fc6a41cc8f1490aab63e76916ef22ebd2",
+      "patched_sha256": "05d08c246d24fbed925675fd28e4983198f08e48308cf658f02c5b24ea64dd0c",
+      "original_bytes": 65193,
+      "patched_bytes": 71416
+    },
+    {
+      "path": "src/liblzma/common/vort_xz_mt_probe.h",
+      "original_sha256": null,
+      "patched_sha256": "d7571e30360be259f9ba88e6c260d85087faabb6b83fa1fc63f4ed4918f4a51f",
+      "original_bytes": 0,
+      "patched_bytes": 3085
+    },
+    {
+      "path": "src/liblzma/liblzma_linux.map",
+      "original_sha256": "455ab61119ca5e219855116df838f749123df365bb1f65f611f381dfe1a8a95a",
+      "patched_sha256": "96f0f5e29aaaa66410ca1daaec6fa7a44c95a8d95492d2fb49c1923904b1bf5a",
+      "original_bytes": 3089,
+      "patched_bytes": 3173
+    },
+    {
+      "path": "src/liblzma/liblzma_generic.map",
+      "original_sha256": "3cf1974b17f461893ebef839b59218299bf6da415091b947279b5545181d4ad9",
+      "patched_sha256": "a761d34feb673758da89d6ccf2accf4eea69d8c54e4c614e3a084cfd6393211b",
+      "original_bytes": 2834,
+      "patched_bytes": 2918
+    }
+  ],
+  "counters": {
+    "0": "workers_created",
+    "1": "worker_threads_entered",
+    "2": "worker_threads_exited",
+    "3": "worker_threads_live",
+    "4": "worker_jobs_entered",
+    "5": "worker_jobs_completed",
+    "6": "worker_jobs_failed",
+    "7": "worker_jobs_abandoned",
+    "8": "worker_decode_calls",
+    "9": "worker_call_input_bytes",
+    "10": "worker_call_output_bytes",
+    "11": "active_worker_decode_calls",
+    "12": "peak_active_worker_decode_calls",
+    "13": "active_worker_jobs",
+    "14": "peak_active_worker_jobs",
+    "15": "worker_call_identity_mask",
+    "16": "worker_completed_identity_mask",
+    "17": "worker_call_distinct",
+    "18": "worker_completed_distinct",
+    "19": "worker_identity_overflow",
+    "20": "direct_blocks_initialized",
+    "21": "direct_blocks_completed",
+    "22": "direct_decode_calls",
+    "23": "direct_call_input_bytes",
+    "24": "direct_call_output_bytes",
+    "25": "direct_reason_missing_size",
+    "26": "direct_reason_oversized",
+    "27": "direct_reason_memory_limit",
+    "28": "direct_reason_memory_overflow",
+    "29": "invariant_failures"
+  },
+  "counter_count": 30,
+  "exports": [
+    "vort_xz_mt_probe_abi_version",
+    "vort_xz_mt_probe_reset",
+    "vort_xz_mt_probe_snapshot"
+  ],
+  "execution": {
+    "compiler_launched": false,
+    "decoder_launched": false,
+    "timing_measured": false,
+    "artificial_delay_or_barrier": false
+  },
+  "build_record_required": [
+    "compiler path/version",
+    "configure command/options",
+    "build command",
+    "instrumented library path/SHA256",
+    "reference wrapper source/compiler/executable SHA256"
+  ],
+  "harness_contract": [
+    "serialize all profiled decoder operations",
+    "reset before initializing the decoder",
+    "call lzma_end before snapshot or the next reset",
+    "use <=64 actual reference worker lifetimes per operation",
+    "require invariant_failures=0 and worker_identity_overflow=0",
+    "require active worker/jobs/calls=0 after lzma_end"
+  ],
+  "evidence": {
+    "actual_multiple_workers": "worker_completed_distinct > 1 with successful full decode",
+    "natural_call_overlap": "peak_active_worker_decode_calls > 1 (observe; do not force)",
+    "not_parallel_proof": [
+      "workers_created",
+      "worker_threads_entered",
+      "peak_active_worker_jobs",
+      "configured thread count"
+    ],
+    "controls": [
+      "unsized multiblock: missing-size direct blocks, zero worker calls",
+      "sized single block: one completed identity",
+      "sized multiblock with low threading memory: memory-limit direct blocks"
+    ]
+  }
+}

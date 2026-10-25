@@ -101,14 +101,26 @@ matcher/parser work destination directly; parallel activity counters are
 synchronized separately. Completion/activity peaks may vary with scheduling;
 they are observations, not deterministic performance promises.
 
-The encoder preserves standard block headers without declared compressed and
-uncompressed block sizes. That layout is valid XZ and preserves serial wire
-parity. liblzma 5.8.4's multithreaded decoder processes such streams in serial
+The default encoder preserves standard block headers without declared compressed
+and uncompressed block sizes. That layout is valid XZ and preserves serial wire
+parity. liblzma 5.8.4's multithreaded decoder processes those streams in serial
 direct mode; Index sizes at the end do not replace the required header fields.
 Both declared sizes and multiple blocks are necessary for its parallel block
 decoding, while thread limits, memory limits, filter work and I/O can still
 restrict activity. Parallel encoding therefore does not establish full liblzma
 MT feature parity or parallel reference decoding.
+
+The subsequent [Block Header size option](xz-block-sizes.md) is independently
+validated. `include_block_sizes = true` can be combined with `parallel`
+and uses the same sized block writer as serial one-shot and incremental encoding.
+Its temporary complete LZMA2 payload is charged to this operation's shared heap
+budget. False remains the default. Declared sizes remove the missing-header
+condition. [New reference activity evidence](../performance/xz-block-sizes-functional-baseline.md)
+observes nine completed jobs on three distinct decoder workers and a peak of
+three active decode calls for a specific native/x86 multiblock case; unsized and
+low-threading-memory controls use direct mode. These test-only reference
+observations do not alter the earlier parallel baseline's source epoch or
+promise three workers for arbitrary streams.
 
 The incremental XZ encoder remains serial and gains no parallel control in this
 increment. Parallel incremental publication or further XZ ratio/matcher quality

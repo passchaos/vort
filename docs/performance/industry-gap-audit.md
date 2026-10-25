@@ -26,7 +26,7 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching remains fragment-local. Explicit Large Window q2+ and legacy non-fragment history grows to the advertised bound, while shared near matching retains its 65535-byte suffix. Far matching still uses bounded chain/stride candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
-| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding; optional bounded persistent workers for one-shot XZ encoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups. Incremental encoding remains serial; headers without declared block sizes make liblzma 5.8.4 MT decoding use serial direct mode. Broad encoder speed/ratio/memory parity remains unproven. |
+| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding; optional bounded persistent workers for one-shot XZ encoding; explicit Block Header size declarations and CLI flag | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups. Incremental encoding remains serial; default unsized blocks make liblzma 5.8.4 MT decoding use serial direct mode. Sized-stream worker activity is verified within a bounded native/x86 matrix, not full MT feature parity. Broad encoder speed/ratio/memory parity remains unproven. |
 
 The [Brotli metadata increment](brotli-metadata-functional-baseline.md) implements
 the complete RFC single-block range 0...16 MiB, shared exact header bounds and
@@ -136,12 +136,41 @@ test binary is compiled, not executed by `check`. Output/Index staging remains
 complete until caller publication; Into
 uses that budget-owned staging directly. Worker stacks, caller output and Io
 runtime private overhead are outside the heap ledger. Target/small-call serial
-fallbacks obey the same quotas, and spawned workers join on failures. Headers
-still omit declared block sizes, so liblzma 5.8.4's MT decoder uses serial direct
-mode for these valid streams; full MT feature parity is not established.
+fallbacks obey the same quotas, and spawned workers join on failures. At that
+epoch headers omit declared block sizes, so liblzma 5.8.4's MT decoder uses
+serial direct mode for those valid streams; full MT feature parity is not established.
 Incremental XZ remains serial; no encoder timing, RSS or throughput/memory-lead
 result is assigned, and past performance epochs
 remain unchanged.
+
+The subsequent [XZ Block Header size increment](xz-block-sizes-functional-baseline.md)
+adds explicit `include_block_sizes = false`
+to one-shot and incremental options, independent of parallel encoding. True
+declares exact LZMA2 payload/original plaintext sizes and stages a complete block
+payload through the supplied allocator, charged to the parallel quota when
+enabled. It shares header/Index framing across destination and incremental
+routes. Direct block
+append now captures overlapping input before relocation in both modes, while
+default non-aliasing writes keep their prior allocation path. Both size fields
+remove a necessary liblzma MT header condition. Native Debug/ReleaseFast and
+actual x86 ReleaseFast each pass 134/134 executions; native/x86 reference
+matrices each pass 129/129, with 124 matching artifacts including 13 upstream
+MT-encoder inputs. For a specific 262177-byte/nine-block stream, a separately
+compiled counter reference completes nine jobs on three worker identities with
+peak active calls three; unsized and low-threading-memory controls each complete
+nine direct blocks with zero worker calls. Default preservation matches 72 new
+wires to saved bytes with 72 new full-content/exact-consumption checks and no
+old rerun. Real Wasm checks two sized successes, two quota rejections and a
+default control. Final Debug XZ/consumer suites pass 276/276, while CLI contracts
+pass 10/10 and actual CLI-module cases 32/32. The pre-CLI family/check/help command
+passes 202 steps; final flag help/check passes 201, and final compile-only check
+passes 195 cached steps. Global root tests are not executed by check. Final
+feature `63a7dfa2` and its 2011-file manifest remain separate from the 118-file
+probe campaign. Only parallel options provide a whole-operation heap cap;
+incremental pending bytes and inner matcher limits do not cap complete payload
+storage. No throughput, RSS or full MT feature-parity result is assigned, and
+earlier evidence stays historical. Bounded parallel incremental encoding and
+broader performance are the next separate scopes.
 
 The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes

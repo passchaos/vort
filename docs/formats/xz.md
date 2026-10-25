@@ -121,10 +121,28 @@ Io runtime private overhead are separate from requested heap, and complete
 staging grows with total output. Defined small-call/unsupported-target fallbacks
 obey the same quotas. [Functional evidence](../performance/xz-parallel-functional-baseline.md)
 records native/x86 reference checks, real Wasm fallback, complete XZ/consumer
-264/264 executions and final build/help checks. Block headers still omit
-declared compressed and uncompressed sizes, so liblzma 5.8.4's MT decoder uses
-serial direct mode for these streams. Incremental XZ remains serial, and this increment establishes no
-throughput or memory lead.
+264/264 executions and final build/help checks at the earlier parallel epoch.
+Default block headers omit declared compressed and uncompressed sizes, so
+liblzma 5.8.4's MT decoder uses serial direct mode for those streams. Incremental
+XZ remains serial, and that increment establishes no throughput or memory lead.
+
+The [Block Header size option](xz-block-sizes.md) adds
+`include_block_sizes = false` to one-shot and incremental
+options. True declares exact LZMA2 payload and original plaintext block sizes,
+independently of `parallel`; stored/lazy and all public destination forms use
+the same block writer. Incremental flush/reset/next-stream retain their existing
+contracts and forward the option. Exact payload staging uses the caller
+allocator; only explicitly enabled parallel options supply a whole-operation
+heap cap. Incremental pending-byte limits and inner matcher budgets do not cap
+all new payload storage. The direct block writer also preserves input
+overlapping its output allocation before relocation in both modes. Default
+non-aliasing writes retain the prior allocation path. Header declarations remove
+one necessary liblzma MT condition. [Functional evidence](../performance/xz-block-sizes-functional-baseline.md)
+records three configurations at 134/134, native/x86 reference matrices each
+129/129, actual counter-reference worker activity and final Debug XZ/consumer
+276/276. The CLI accepts `--block-sizes[=true|false]`, with omission false and
+shorthand true; LZMA/raw LZMA2/MicroLZMA reject even an explicit false flag.
+Those scoped results establish no throughput/RSS or full MT feature-parity claim.
 
 One-shot caller-buffer decoding, decoded-size queries and inspection use a
 reusable bounded workspace rather than complete plaintext storage. A count

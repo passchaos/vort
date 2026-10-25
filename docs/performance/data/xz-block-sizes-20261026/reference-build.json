@@ -1,0 +1,108 @@
+{
+  "schema": "vort-xz-mt-reference-build-v1",
+  "instrumentation_manifest": {
+    "path": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/instrumentation.json",
+    "bytes": 4907,
+    "sha256": "0c113f0939f190e2cd7e09c7f4d062dcb26a84cd4e7327ad04d517510a35723e"
+  },
+  "original_tree_sha256": "009cb7a779e309321560934707313c64ed2e3c607be13a6cde28c662a70be580",
+  "patched_tree_sha256": "6aae8aa4983d5e43763f7ce2ca99c1bc50a3bb0274d5c9e540cf08a2b218ea98",
+  "compiler": {
+    "path": "/usr/bin/cc",
+    "version": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0"
+  },
+  "configure_command": [
+    "/home/passchaos/.pixi/envs/cmake/bin/cmake",
+    "-S",
+    "/tmp/vort-xz-block-sizes-mt-instrumented/xz",
+    "-B",
+    "/tmp/vort-xz-block-sizes-mt-instrumented/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=ON",
+    "-DXZ_THREADS=yes",
+    "-DXZ_NLS=OFF",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  ],
+  "build_command": [
+    "/home/passchaos/.pixi/envs/cmake/bin/cmake",
+    "--build",
+    "/tmp/vort-xz-block-sizes-mt-instrumented/build",
+    "--target",
+    "liblzma",
+    "-j",
+    "8"
+  ],
+  "adapter_command": [
+    "cc",
+    "-std=c11",
+    "-O2",
+    "-fPIC",
+    "-shared",
+    "tools/xz/block_sizes_reference.c",
+    "-I",
+    "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api",
+    "-ldl",
+    "-o",
+    "/tmp/vort-xz-block-sizes-20261026/block_sizes_reference.so"
+  ],
+  "files": [
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/liblzma.so.5.8.4",
+      "bytes": 224088,
+      "sha256": "5484343e9b9e0674f5ccf7f6ecfcbf24ba8bb4f37879dedfb5df83fb3050d85c"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/CMakeCache.txt",
+      "bytes": 28403,
+      "sha256": "85535c579859a5388802552a42a68ee07bdbbf0128766746dbb44067f73cc950"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/compile_commands.json",
+      "bytes": 347805,
+      "sha256": "554e8a703f0914f605bd5900d4f576b99880490b249a34863e3dd364870bbb7d"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-20261026/logs/reference-configure.log",
+      "bytes": 9028,
+      "sha256": "0dcfb0c522b3134a44ad1c4f274118d096426dff12251b853c768654e4e05cfe"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-20261026/logs/reference-build.log",
+      "bytes": 6785,
+      "sha256": "1bfa773e1e09911d783e4b11b890f78137189b9eff519b3f2c80b67ffe804fe9"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-20261026/logs/reference-adapter-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-20261026/block_sizes_reference.so",
+      "bytes": 16200,
+      "sha256": "b256261a2a670285150d94654dfe23cd24d494fc4b7558d932bf9a8ea315ef1b"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/tools/xz/block_sizes_reference.c",
+      "bytes": 6646,
+      "sha256": "fff1b11101d4a05f526e712e9b527c7e4a34712b638b32a343350d20f69db779"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/actual-compile-inputs.json",
+      "bytes": 107393,
+      "sha256": "e91624dc1bc55aaa8190e617244b3f300cc710d36e9f0b0c4b2f63a532815493"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/CMakeFiles/liblzma.dir/flags.make",
+      "bytes": 2654,
+      "sha256": "cf4dadb720a262d6ed0e442e3f5e43b035e3175afef66c626bc79803b151b8bb"
+    },
+    {
+      "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/CMakeFiles/liblzma.dir/link.txt",
+      "bytes": 4918,
+      "sha256": "56ec6987f15a2cee39bca15c22a754e5db93e2a693cb2c5be2b12c23dbc7c646"
+    }
+  ],
+  "scope": "Separately compiled test-only liblzma 5.8.4 instrumentation and public ABI adapter. Commands, frozen source hashes and actual artifacts are retained; no performance measurement.",
+  "actual_objects": 79,
+  "dependency_input_files": 352
+}

@@ -23620,6 +23620,43 @@ reuse, so production keeps the simpler independently owned plans.
   remain unchanged. Headers still omit declared compressed/
   uncompressed sizes, so liblzma 5.8.4's MT decoder uses serial direct mode.
   Incremental XZ remains serial, and no speed/RSS/memory-lead claim is assigned.
-  Next review explicit opt-in Block Header sizes to meet a necessary liblzma MT
-  decoding condition while preserving default wire. Parallel incremental output
-  or specific ratio/matcher quality improvements also need a fresh scope review.
+  The subsequent explicit Block Header size increment is recorded below with
+  independent evidence. Parallel incremental output or specific ratio/matcher
+  quality improvements also need a fresh scope review.
+
+- 2026-10-26: explicit `include_block_sizes = false` on XZ
+  one-shot and incremental options is independent of parallel encoding. True
+  stages each complete LZMA2 payload, declares its exact length including the end
+  marker plus original plaintext size, and recalculates Header CRC, padding,
+  Index unpadded records and stream termination. Shared block writing carries
+  the flag through Alloc/Into/Append, stored/lazy, parallel and incremental
+  full/flush/final blocks; reset retains options and next-stream accepts new ones.
+  Temporary payload/filter/alias storage uses the provided allocator; only
+  enabled parallel options supply a whole-operation heap cap. Incremental
+  pending-byte limits and inner matcher budgets do not cap all payload storage.
+  Direct block append now preserves overlapping input
+  before output relocation and Check computation in both modes; default
+  non-aliasing false retains the original allocation/append path. Both size
+  declarations remove a necessary liblzma MT header condition.
+  [Functional evidence](performance/xz-block-sizes-functional-baseline.md) records
+  native Debug/ReleaseFast and actual x86 ReleaseFast each 134/134 (22 core plus
+  112 root/consumer executions), native/x86 reference each 129/129 (116 target
+  cases including five rejects plus 13 upstream MT streams) and 124 matching
+  artifacts including upstream inputs. Real counter-reference decoding of a
+  262177-byte/nine-block case completes nine jobs on three worker identities,
+  with peak active calls three; unsized and low-threading-memory controls each
+  use nine direct blocks and zero workers. The counter source/library
+  identity is separate from the original compatibility library and encoder
+  profiles, with no artificial delay/barrier or timing gate. Default saved-wire
+  comparison matches 72/72 with 72 new content/consumption checks and zero old
+  runs/compiles. Wasm runs two sized successes, two quota rejects and a 32-byte
+  default-false control. Final Debug XZ173 plus consumer103 passes 276/276;
+  pre-CLI family/check/help passes 202 steps. New `--block-sizes[=true|false]`
+  has 10 CLI unit executions and 32 actual CLI-module cases; other LZMA/raw/Micro
+  formats reject even false. Final CLI/check/help passes 201 steps and standalone
+  Debug check 195 cached steps; global root tests are compile-only.
+  Final feature `63a7dfa2`/2011 files does not refresh the 118-file probe epoch or
+  Wasm runtime identity. Earlier parallel baseline epochs remain unchanged.
+  Incremental encoding is still serial; next review bounded parallel incremental
+  ownership/backpressure, then broader ratio/speed/memory benchmarks. No
+  constant-memory, RSS, throughput or full-MT-parity claim is assigned.

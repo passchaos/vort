@@ -1,0 +1,7 @@
+{
+  "feature_commit": "63a7dfa254f3567f906b35e73657c6cae4a1db56",
+  "source_files_verified": 2011,
+  "mismatches": [],
+  "source_manifest_sha256": "e1fc5c9ffb6f726a3cbfd7f8879fb2aec2ec3f5b870114d5bd498de24ea92569",
+  "scope": "Final code source matches the feature commit; earlier probe/CLI/reference executable identities are preserved."
+}
