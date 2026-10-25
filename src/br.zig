@@ -8072,44 +8072,51 @@ fn considerPlannedLongDistanceMetaBlockCommands(
         .insert_len = input.len,
     }};
     const proposal_count: usize = if (commandPlanHasCopy(commands)) 2 else 1;
-    for (0..proposal_count) |proposal_index| {
-        const proposal = if (proposal_index == 0)
-            commands
-        else
-            &literal_commands;
-        const augmented = (if (state.large_window)
-            try long_distance.augmentLargeWindowHistoryAlloc(
+    // Retain every legacy ratio proposal before trying the new three-byte
+    // history search, including the original winner when exact costs tie.
+    const matcher_count: usize = if (state.large_window and policy.family == .ratio) 2 else 1;
+    for (0..matcher_count) |matcher_index| {
+        const use_legacy_matcher = !state.large_window or
+            (policy.family == .ratio and matcher_index == 0);
+        for (0..proposal_count) |proposal_index| {
+            const proposal = if (proposal_index == 0)
+                commands
+            else
+                &literal_commands;
+            const augmented = (if (use_legacy_matcher)
+                try long_distance.augmentAllocWithHistoryAndMaxDistanceForFormat(
+                    allocator,
+                    state.history.items,
+                    input,
+                    proposal,
+                    max_backward_distance,
+                    encoder_window_format.format(state.large_window),
+                )
+            else
+                try long_distance.augmentLargeWindowHistoryAlloc(
+                    allocator,
+                    state.history.items,
+                    input,
+                    proposal,
+                    max_backward_distance,
+                )) orelse continue;
+            defer allocator.free(augmented);
+            try considerPlannedMetaBlockCommands(
                 allocator,
-                state.history.items,
+                state,
                 input,
-                proposal,
-                max_backward_distance,
-            )
-        else
-            try long_distance.augmentAllocWithHistoryAndMaxDistanceForFormat(
-                allocator,
-                state.history.items,
-                input,
-                proposal,
-                max_backward_distance,
-                .standard,
-            )) orelse continue;
-        defer allocator.free(augmented);
-        try considerPlannedMetaBlockCommands(
-            allocator,
-            state,
-            input,
-            augmented,
-            policy,
-            state.window_bits,
-            state.compound_dictionary_size,
-            start_byte,
-            start_bit_index,
-            state.wire_state,
-            best,
-            &state.candidate_wire,
-            &state.best_wire,
-        );
+                augmented,
+                policy,
+                state.window_bits,
+                state.compound_dictionary_size,
+                start_byte,
+                start_bit_index,
+                state.wire_state,
+                best,
+                &state.candidate_wire,
+                &state.best_wire,
+            );
+        }
     }
 }
 
