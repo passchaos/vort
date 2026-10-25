@@ -162,8 +162,8 @@ test "Wide bit impossible output geometry and invalid formats fail before resour
     try std.testing.expectError(error.IntegerOverflow, br.encodedStoredStreamBound(maximum));
     try std.testing.expectError(error.InvalidBlockPlan, br.encodedStoredStreamBoundWithOptions(maximum, .{ .window_bits = 9, .memory_profile = &profile, .max_total_working_memory = 0 }));
     try std.testing.expectEqualDeep(sentinel, profile);
-    var oversized: [65537]u8 = undefined;
-    const invalid: br.StoredStreamOptions = .{ .metadata = &oversized, .memory_profile = &profile, .max_total_working_memory = 0 };
+    const oversized_metadata: []const u8 = @as([*]const u8, @ptrFromInt(1))[0 .. br.max_metadata_meta_block_len + 1];
+    const invalid: br.StoredStreamOptions = .{ .metadata = oversized_metadata, .memory_profile = &profile, .max_total_working_memory = 0 };
     try std.testing.expectError(error.InvalidBlockPlan, br.encodedStoredStreamBoundWithOptions(maximum, invalid));
     var tracked = h.TrackingAllocator.init(std.testing.allocator);
     tracked.fail_alloc_after = 0;
