@@ -116,3 +116,10 @@ tested code. No RSS or resource-probe duration is used for ranking.
 The complete native Zstd family passes 1102/1102 and all build checks pass
 172/172. Broader levels, streaming, 1 MiB, ARM64 and symmetric competitor
 memory evidence remain separate work.
+
+After pulling with rebase, the accounting filter passes 11/11 again with
+unchanged source manifests. CLI help passes its seven-step build/run check.
+The [evidence package](data/zstd-work-accounting-20261025/artifact-manifest.json)
+retains the complete original screen, supplemental process controls, verified
+raw rounds/settings/output identities, unchanged tracked diagnostics, source
+and ELF reviews, state dimensions, heap events and final verification.
