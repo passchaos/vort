@@ -1,6 +1,6 @@
 # literal alphabet工具静态审查
 
-审查时间：2026-10-25 19:17:52（Asia/Shanghai）。工作树`/home/passchaos/project-z/vort-brotli-context-cache`，分支`work/br-context-alphabet-20261025`。只读新增工具、构建入口、support契约及父已完成的PDQ/radix微测、public14/profile70与验证，独立重算结果。未compile、运行encoder/benchmark、计时、修改源码/tools/Git；本轮新增授权仅写`docs/performance/industry-gap-audit.md`，另写本指定/tmp报告。原PDQ已在public前拒绝；radix源码及正式微测独立绑定通过，公共firstscreen有界结果已复核，三pair尚待完成。
+审查时间：2026-10-25 19:22:53（Asia/Shanghai）。工作树`/home/passchaos/project-z/vort-brotli-context-cache`，分支`work/br-context-alphabet-20261025`。只读新增工具、构建入口、support契约及父已完成的PDQ/radix微测、public14/profile70/paired14与验证，独立重算结果。未compile、运行encoder/benchmark、计时、修改源码/tools/Git；本轮新增授权仅写`docs/performance/industry-gap-audit.md`，另写本指定/tmp报告。原PDQ已在public前拒绝；radix源码、正式微测及firstscreen/三pair有界结果已复核。
 
 ## PDQ方案决定与证据范围
 
@@ -64,13 +64,25 @@
 
 ## 最终firstscreen、完整非计时详情与已完成验证
 
-- 独立重读baseline14/public14原始五round，按input SHA配对，14行settings与完整两库wire长度/hash一致，重算old/new median点比几何值**1.060755910287x**、reference/new **0.034437158996x**，与analysis一致。11/14版本点正向，reference 0胜；Dickens0.999098330、Reymont0.998364309、NCI0.981048186不隐藏。仅冻结64KiB q8/generic，三对进程重复仍待父完成，不宣称显著性、每行稳定改善或全质量/平台领先。
+- 独立重读baseline14/public14原始五round，按input SHA配对，14行settings与完整两库wire长度/hash一致，重算old/new median点比几何值**1.060755910287x**、reference/new **0.034437158996x**，与analysis一致。11/14版本点正向，reference 0胜；Dickens0.999098330、Reymont0.998364309、NCI0.981048186不隐藏。仅冻结64KiB q8/generic，不宣称显著性、每行稳定改善或全质量/平台领先。
 - 独立读取当前profile14与前一dense-Huffman的profile14按输入/round/detail配对，**70次调用、140条实际详情**。逐个origin/variant/command_count和所有非`_ns`字段全部相同，没有允许改动的计数字段；cache/uncached/scope/mode、treecalls、activebuckets、proposal shapes、Huffman/prefix work包括在内。wire与selection所有语义字段比较通过。不是全Profile深相等，Profile细time应不同；没有把shape相等说成所有内部context_map本体的读取oracle。
 - `tree_alphabet_ns`各plan独立median重算：Mozilla lazy/optimal 4.984463/5.291635→1.360870/1.691083ms；SAO11.365281/11.284848→1.718895/1.759234ms；source0.584796/0.629856→0.295514/0.331832ms。这些细time嵌套在parent context，median分别计算不应相加，instrumentation overhead不代表ordinary吞吐。变化为精确alphabet排序方法，未少搜实际树或偷减候选/熵计算。
 - 只读核三平台radix各1个named内部完整matrix、context Debug/x86各76，fullBrotli **1424 pass/1skip/0fail**、check **175/175**、legacyprofile **10/10**、CLIhelp **7/7**，exit0且source_before=after。未重跑验证。
 - 当前kernel、kernel_tests、literal_context_split、literal_alphabet_bench、build共五项hash逐个匹配以上所有QA/check/CLI/micro/public/profile的source_after。这是选定实际源码的绑定，不伪称全Git内容和所有外部工具从未变化。public/micro/profile0 observed compiler processes等记录保留，不能证明全部系统噪声为0。
 
-行业文档本轮已新增`brotli-literal-alphabet-x86.md`链接、PDQ rejected、新radix微测与firstscreen局部值，保留弱样本和5KiB静态scratch非RSS/stackpeak。三pair尚未完成不写未验证数字；后续父通知完成后补对照。
+### 三pair最终对照
+
+父`paired14/result.json`现terminal，六进程退出0。独立重算42个输入×pair点比几何值**1.062096387858x**，三pair各自corpus几何比为1.064994869/1.052963887/1.068392433，与父值一致。Mozilla三点1.186856618/1.136932139/1.161076537，SAO1.225124137/1.217832033/1.238694316，source1.031506425/1.020530260/1.025364199。
+
+保留小负重复点：Dickens第二pair0.979611963、Reymont第二0.999680671、XML第一0.982929370、schema第二0.980425189。不能称所有行每个重复全胜，也不推统计显著性。same wire/settings、frozen inputs/reference/exe和0observed compiler字段保留。paired source maps为old/new两个工作树嵌套字典，两树before=after；candidate五项核心/tool/build hash再次与当前源码逐一匹配。
+
+行业文档本轮已新增`brotli-literal-alphabet-x86.md`链接、PDQ rejected、新radix微测、firstscreen和三pair局部值，保留弱样本和5KiB静态scratch非RSS/stackpeak；另按父授权补ZIP container功能表行与真实缺口。只写授权文档及TMP，未修改codec/cipher。
+
+### 用户五格式状态的现有文档补查
+
+- DEFLATE/gzip/zlib：行业功能表和锁定incremental source/JSON对local zlib-ng level6的已发表优势不构成全level/corpus/ratio/memory一致。`docs/roadmap.md:7767..7772`约2902/3042MiB/s对2822/2880是两锁256KiB历史面，紧接`:7781..7783`另whole-run source2779.93对2812.29示不同scope；不选峰值假称当前gzip全领先。
+- ZIP：`docs/formats/zip.md:279..281`certificate recipients、其他Strong Encryption ciphers、encryptedcentraldirectories未支持；`:500..502`incrementalDeflate64仅stored，one-shot可匹配；`:1008..`已有splitincremental移除owned split wholearchive staging，不把旧边界泛化为当前全部ZIP。bounded docs搜索未找到当前统一archive跨库ratio/吞吐/RSS排名矩阵，未声称不存在所有未搜索文档。
+- XZ/LZMA：`lzma-xz-encode-controls-functional-baseline.md:6..11`20presets/5matchers是2026-10-24功能与参数效果，不宣称ratio/speed/memorylead；`:18..21`normal有限4096pos×8paths。`lzma2-large-blocks-functional-baseline.md:107..109`仍需currentreference corpus与HQ，XZblock默认独立1MiB。行业表2026-10-13 preset1 JSON10.70%小但0.812x ref为dated结果，不伪刷新成后续controls后的当前排名。父用户总结应保这些日期和scope。
 
 ## 当前结论与实质核对项
 

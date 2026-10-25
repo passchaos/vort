@@ -189,6 +189,11 @@ or raw-input ownership.
 The [evidence package](data/brotli-literal-alphabet-20261025/artifact-manifest.json)
 retains rejected PDQ and retained radix source epochs, exact
 outputs, quiet raw ordinary/micro/profile/process-pair samples, machine-code
-reviews and final handoff checks. Next investigate remaining cluster assignment,
+reviews and final handoff checks. After pulling with rebase, combined
+ReleaseFast literal-alphabet/context/q8 contracts pass79/79 and all five
+file-alias/report smoke cases pass under unchanged full src/tools/build hashes.
+The first runner expected77 tests while the filter actually included79; its
+passing test/smoke logs and corrected runner verification are both retained.
+Next investigate remaining cluster assignment,
 context-prefix and wire coding costs without removing candidates, then expand
 quality/streaming/platform and cross-library memory comparisons.

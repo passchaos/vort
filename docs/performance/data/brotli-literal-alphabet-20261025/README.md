@@ -26,7 +26,10 @@ uses fixed local scratch; unsupported entries may be undefined.
   runtime. Profile times are nested/nonadditive and not ordinary throughput.
 - `hotspot-review.md`, `detail-median-audit.json`, `final-kernel-review.md`,
   `bench-review.md`: independent read-only boundaries and invariant reviews.
-- `post-rebase/`: final handoff checks, separate from timing measurements.
+- `post-rebase-count-assumption/`: first test/smoke passed79/5 but the wrapper
+  expected77; preserved with the runner expectation error.
+- `post-rebase/`: corrected79/5 final handoff under stable full snapshots,
+  separate from timing measurements.
 
 Stable passes sort all four complete frequency bytes, skipping only constant
 digits. Initial symbol-ascending input gives tie order without a symbol-byte

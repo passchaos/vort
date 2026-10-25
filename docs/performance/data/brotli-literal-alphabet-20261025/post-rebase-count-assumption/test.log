@@ -1,0 +1,80 @@
+1/79 br.test.Brotli q8 quality profile complete wire and bounded diagnostic contracts...OK
+2/79 br.test_0...OK
+3/79 br.test.br all-UTF8 literal context classifier covers mixed modes...OK
+4/79 br.test.br stored metablock history feeds following compressed literal context...OK
+5/79 br.test.br joint literal context writer cleans up allocation failures...OK
+6/79 br.test.br record ratio uses one literal context tree...OK
+7/79 br.test.br planner-backed encoder covers wider literal alphabet...OK
+8/79 br.test.br planner-backed encoder covers full byte literal alphabet...OK
+9/79 br.test.br minimal compressed stream selects literal context tree...OK
+10/79 br.test.br minimal compressed stream selects literal context tree through IMTF map...OK
+11/79 br.test.br minimal compressed stream selects literal context tree through UTF8 mode...OK
+12/79 br.test.br minimal compressed stream selects literal context tree through RLE context map...OK
+13/79 br.test.br minimal compressed stream selects literal context tree through complex context map...OK
+14/79 br.test.br minimal compressed stream selects fifth literal context tree...OK
+15/79 br.test.br minimal compressed stream selects ninth literal context tree...OK
+16/79 br.test.br minimal compressed stream selects seventeenth literal context tree...OK
+17/79 br.test.br minimal compressed stream keeps UTF8 literal context after distance-three copy...OK
+18/79 br.test.br minimal compressed stream keeps literal context after distance-thirty-three copy...OK
+19/79 br.test.br minimal compressed stream keeps literal context after distance-sixty-five copy...OK
+20/79 br.test.br minimal compressed stream keeps literal context after distance-one-twenty-nine copy...OK
+21/79 br.test.br minimal compressed stream keeps literal context after distance-two-fifty-seven copy...OK
+22/79 br.test.br minimal compressed stream keeps literal context after distance-five-thirteen copy...OK
+23/79 br.test.br minimal compressed stream selects literal context tree through signed mode...OK
+24/79 br.test.br minimal compressed stream selects third literal context tree...OK
+25/79 br.test.br minimal compressed header parser accepts ninth literal context tree...OK
+26/79 br.test.br literal context suffix maps cover complete cutoff range...OK
+27/79 br.test.br planned writer emits every RFC literal context mode...OK
+28/79 br.test.br planned writer emits arbitrary four eight sixteen and sixty-four tree literal context maps...OK
+29/79 br.test.br ratio candidate selects a smaller adaptive literal context wire...OK
+30/79 br.test.br literal context helpers cover LSB6 and MSB6 modes...OK
+31/79 br.test.br serialized dictionary commands jointly select literal context trees...OK
+32/79 br.encoder.command_plan.test.serialized dictionary mixer uses the emitted literal context mode...OK
+33/79 br.encoder.hq_types.test_0...OK
+34/79 br.encoder.distance.test_0...OK
+35/79 br.encoder.literal_context_split.test.literal context original tree cache reference and profiling contracts...OK
+36/79 br.encoder.literal_context_split.test.literal context split finds a predictive RFC mode...OK
+37/79 br.encoder.literal_context_split.test.literal context split reports exact tree and map savings...OK
+38/79 br.encoder.literal_context_split.test.literal context proposals match independent stage selection...OK
+39/79 br.encoder.literal_context_split.test.literal context single-pass analysis cleans up allocation failures...OK
+40/79 br.encoder.literal_context_split.test.literal context profile reports stable stage accounting...OK
+41/79 br.encoder.literal_context_split.test.literal context prepared assignment costs match reference...OK
+42/79 br.encoder.literal_context_split.test.literal context assignment log table matches direct Q8 logs...OK
+43/79 br.encoder.literal_context_split.test.literal context active alphabet covers all byte symbols...OK
+44/79 br.encoder.literal_context_split.test.literal context sparse tree support matches dense scoring...OK
+45/79 br.encoder.literal_context_split.test.literal context suffix map costs match independent planning...OK
+46/79 br.encoder.literal_context_split.test.literal context suffix payload reuse matches independent scoring...OK
+47/79 br.encoder.literal_context_split.test.literal context scored map cache hits and rejects collisions...OK
+48/79 br.encoder.literal_context_split.test.literal context tree score cache hits and rejects collisions...OK
+49/79 br.encoder.literal_context_split.test.literal context sparse tree aggregation matches dense reference...OK
+50/79 br.encoder.literal_context_split.test.literal context incremental tree moves match full aggregation...OK
+51/79 br.encoder.literal_context_split.test.literal context tree workspace clears only requested prefix...OK
+52/79 br.encoder.literal_context_split.test.literal context split rejects stationary literals...OK
+53/79 br.encoder.literal_context_split.test.literal context split builds candidates for every RFC mode...OK
+54/79 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into four trees...OK
+55/79 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into eight trees...OK
+56/79 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into sixteen trees...OK
+57/79 br.encoder.literal_context_split.test.literal context split clusters every literal context independently...OK
+58/79 br.encoder.total_budget.test_0...OK
+59/79 br.encoder.hq_options.test_0...OK
+60/79 lz77.test_0...OK
+61/79 br.encoder.hq_dictionary.test_0...OK
+62/79 br.encoder.hq_tree.test_0...OK
+63/79 br.encoder.hq_codec.alias.test_0...OK
+64/79 br.encoder.static_dictionary_matcher.test_0...OK
+65/79 br.encoder.scoped_static_dictionary.test_0...OK
+66/79 br.encoder.literal_alphabet.test.literal alphabet exact supported rank and output contracts...OK
+67/79 br.encoder.stored_bit_bound.test_0...OK
+68/79 br.encoder.hq_parser.test_0...OK
+69/79 br.encoder.hq_parser.command_storage.test_0...OK
+70/79 br.incremental.stored.encoder.test_0...OK
+71/79 bitstream.test_0...OK
+72/79 br.encoder.hq_parser.tests.test_0...OK
+73/79 br.encoder.total_budget.tests.test_0...OK
+74/79 br.incremental.copy_decoder.test_0...OK
+75/79 br.incremental.owned_copy_decoder.test_0...OK
+76/79 tests.br_total_memory_contracts.test_0...OK
+77/79 br.encoder.stored_memory_owner.test_0...OK
+78/79 br.encoder.stored_memory_reuse.test_0...OK
+79/79 br.encoder.hq_tree_oracle_tests.test_0...OK
+All 79 tests passed.

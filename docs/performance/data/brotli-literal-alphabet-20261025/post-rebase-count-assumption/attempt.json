@@ -1,0 +1,7 @@
+{
+  "test_exit_code": 0,
+  "passed_test_count": 79,
+  "smoke_exit_code": 0,
+  "runner_error": "Expected77, actual79 filtered tests; test/smoke passed. Correct only expected count and rerun without source changes.",
+  "scope": "First post-rebase runner expectation error, not codec failure."
+}
