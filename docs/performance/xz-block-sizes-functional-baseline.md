@@ -44,6 +44,15 @@ incremental bytes returned by earlier calls cannot be rolled back.
 
 ## Completed gates
 
+After documentation commit `c85fc634`, `git pull --rebase origin main` reports
+the branch up to date. The [post-rebase record](data/xz-block-sizes-20261026/post-rebase.json)
+and [raw logs](data/xz-block-sizes-20261026/post-rebase.tar.xz) retain a fresh
+Debug run of 22 core, 112 root/consumer and 10 CLI executions: 144/144 passed,
+with 205/205 combined build steps, actual Wasm fallback and CLI help. Global
+checks use cached compilation; unfiltered root tests are not executed.
+All 2011 final source hashes still match. The evidence manifest now covers 19
+artifacts, including these two records, without relabeling earlier campaigns.
+
 | Gate | Completed result | Scope |
 | --- | --- | --- |
 | Native Debug, native ReleaseFast and actual x86 Linux GNU ReleaseFast | Each 134/134 executions | 22 core (12 named plus 10 imports) and 112 root/consumer executions |
