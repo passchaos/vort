@@ -160,6 +160,14 @@ unchanged. Throughput still loses on every reference row (geometric ratio
 0.00393447x). Independent requested-heap/event sequences are unchanged;
 complete Zstd tests pass 1102/1102 and build checks pass 172/172.
 
+The subsequent [incremental total-frequency experiment](zstd-aggregate-totals-experiment.md)
+passed its native/x86 candidate correctness checks and preserved all fourteen
+frame identities, but its public throughput geometric version ratio was
+0.988277x while cache objects grew by 1040/1032 bytes. Its approximately 1%
+tracked-stage improvements did not establish a public speed benefit. The
+candidate has been withdrawn and runtime source restored to `6b262754`;
+the recorded experiment is not a new production throughput improvement.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

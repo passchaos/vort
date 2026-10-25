@@ -1,0 +1,56 @@
+//! Fixed total frequencies maintained alongside an owned stream histogram.
+//! During repartition, a byte may enter its new stream before leaving the old
+//! one. Intermediate totals are bounded by old+new <= 2*128KiB, not by either
+//! cut's regenerated length. Ordinary u32 updates remain exact in this domain.
+const std = @import("std");
+
+pub const Snapshot = struct {
+    frequencies: *const [256]u32,
+    active: usize,
+};
+
+/// Defaults are deliberately not ready. Only controlled initialization and
+/// synchronized add/remove operations establish the histogram invariant.
+/// The ready flag records that lifecycle; forging it does not validate data.
+/// There is no allocation, retained input, or independent stream planning.
+pub const Totals = struct {
+    frequencies: [256]u32 = @splat(0),
+    active: usize = 0,
+    ready: bool = false,
+
+    const Self = @This();
+
+    /// Start alongside an empty, initialized stream histogram.
+    pub fn init() Self {
+        return .{ .ready = true };
+    }
+
+    /// An uninitialized summary stays untouched so legacy constructed
+    /// histogram states can continue using their four-stream fallback.
+    pub fn add(self: *Self, symbol: u8) void {
+        if (!self.ready) return;
+        const was_zero = self.frequencies[symbol] == 0;
+        self.frequencies[symbol] += 1;
+        self.active += @intFromBool(was_zero);
+    }
+
+    pub fn remove(self: *Self, symbol: u8) void {
+        if (!self.ready) return;
+        std.debug.assert(self.frequencies[symbol] != 0);
+        self.frequencies[symbol] -= 1;
+        self.active -= @intFromBool(self.frequencies[symbol] == 0);
+    }
+
+    /// Borrow only after the owner's complete update. The view expires on
+    /// any mutation or re-init; callers must not edit these public fields or
+    /// the backing stream state while holding the lifecycle contract.
+    /// This view is not a validation proof for a caller-constructed array.
+    pub fn snapshot(self: *const Self) ?Snapshot {
+        if (!self.ready) return null;
+        return .{ .frequencies = &self.frequencies, .active = self.active };
+    }
+};
+
+test "zstd aggregate totals fixed statistics contracts" {
+    try @import("aggregate_totals_tests.zig").contracts(@This());
+}

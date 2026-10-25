@@ -1,0 +1,153 @@
+const std = @import("std");
+
+fn expectSnapshot(totals: anytype, expected: *const [256]u32) !void {
+    const snapshot = totals.snapshot() orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqualSlices(u32, expected, snapshot.frequencies);
+    var active: usize = 0;
+    for (expected) |frequency| active += @intFromBool(frequency != 0);
+    try std.testing.expectEqual(active, snapshot.active);
+    try std.testing.expect(snapshot.frequencies == &totals.frequencies);
+}
+
+pub fn contracts(comptime Module: type) !void {
+    try std.testing.expect(@sizeOf(Module.Totals) < 2 * 1024);
+    var legacy: Module.Totals = .{};
+    const default = legacy;
+    legacy.add(255);
+    legacy.remove(255);
+    try std.testing.expectEqualDeep(default, legacy);
+    try std.testing.expect(legacy.snapshot() == null);
+    var totals = Module.Totals.init();
+    var expected: [256]u32 = @splat(0);
+    try expectSnapshot(&totals, &expected);
+    for (0..256) |symbol| {
+        totals.add(@intCast(symbol));
+        expected[symbol] += 1;
+        try expectSnapshot(&totals, &expected);
+    }
+    for (0..256) |symbol| {
+        totals.remove(@intCast(symbol));
+        expected[symbol] -= 1;
+        try expectSnapshot(&totals, &expected);
+    }
+    var random: u32 = 0x6a09e667;
+    for (0..4096) |_| {
+        random = random *% 1664525 +% 1013904223;
+        const symbol: u8 = @truncate(random >> 24);
+        if (expected[symbol] != 0 and random & 1 == 0) {
+            totals.remove(symbol);
+            expected[symbol] -= 1;
+        } else {
+            totals.add(symbol);
+            expected[symbol] += 1;
+        }
+        try expectSnapshot(&totals, &expected);
+    }
+    totals = Module.Totals.init();
+    @memset(&expected, 0);
+    // A repartition can transiently contain old and new stream bytes before
+    // removals complete. Totals must not impose regenerated/N as an add cap.
+    for (0..262144) |_| totals.add(255);
+    expected[255] = 262144;
+    try expectSnapshot(&totals, &expected);
+    for (0..131072) |_| totals.remove(255);
+    expected[255] = 131072;
+    try expectSnapshot(&totals, &expected);
+    for (0..131071) |_| totals.remove(255);
+    expected[255] = 1;
+    try expectSnapshot(&totals, &expected);
+    totals.remove(255);
+    expected[255] = 0;
+    try expectSnapshot(&totals, &expected);
+    try std.testing.expectEqual(@as(usize, 0), totals.active);
+}
+
+fn physicalOracle(block: []const u8, prefix: usize, tail: usize, expected: *[256]u32) usize {
+    @memset(expected, 0);
+    for (block[0..prefix]) |symbol| expected[symbol] += 1;
+    for (block[tail..]) |symbol| expected[symbol] += 1;
+    var active: usize = 0;
+    for (expected) |frequency| active += @intFromBool(frequency != 0);
+    return active;
+}
+
+fn checkHistogram(histogram: anytype, block: []const u8, prefix: usize, tail: usize) !void {
+    try histogram.update(prefix, tail);
+    const expected_length = prefix + block.len - tail;
+    var expected: [256]u32 = undefined;
+    const active = physicalOracle(block, prefix, tail, &expected);
+    const snapshot = histogram.ownedSnapshot() orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(active, snapshot.active);
+    try std.testing.expectEqualSlices(u32, &expected, snapshot.frequencies);
+    try std.testing.expectEqual(expected_length, histogram.regenerated_len);
+    var merged: [256]u32 = @splat(0xa5a5a5a5);
+    histogram.totalFrequencies(&merged);
+    try std.testing.expectEqualSlices(u32, &expected, &merged);
+    try std.testing.expectEqual(active, histogram.totalFrequenciesAndCount(&merged));
+    try std.testing.expectEqualSlices(u32, &expected, &merged);
+    for (0..256) |symbol| {
+        var sum: u64 = 0;
+        for (histogram.stream_frequencies) |stream| sum += stream[symbol];
+        try std.testing.expectEqual(@as(u64, expected[symbol]), sum);
+    }
+}
+
+pub fn histograms(comptime Hist: type) !void {
+    var tiny: [24]u8 = undefined;
+    for (&tiny, 0..) |*byte, index| byte.* = @intCast((index * 31) % 256);
+    var histogram = try Hist.init(&tiny);
+    for (0..tiny.len + 1) |prefix| {
+        for (prefix..tiny.len + 1) |tail| try checkHistogram(&histogram, &tiny, prefix, tail);
+    }
+    var block: [131072]u8 = undefined;
+    var random: u32 = 0x243f6a88;
+    for (&block, 0..) |*byte, index| {
+        random = random *% 1664525 +% 1013904223;
+        byte.* = if (index % 17 == 0) 255 else @truncate(random >> 24);
+    }
+    histogram = try Hist.init(&block);
+    for ([_]usize{ 0, 1, 63, 64, 1022, 1023, 1024, 1025, 16383, 16384, 65535, 65536, 65537, block.len, 1023, 0 }) |length| {
+        for ([_]usize{ 0, length / 2, length }) |prefix| try checkHistogram(&histogram, &block, prefix, block.len - (length - prefix));
+    }
+    for (0..64) |_| {
+        random = random *% 1664525 +% 1013904223;
+        const left: usize = random % (block.len + 1);
+        random = random *% 1664525 +% 1013904223;
+        const right: usize = random % (block.len + 1);
+        try checkHistogram(&histogram, &block, @min(left, right), @max(left, right));
+    }
+    const before = histogram;
+    try std.testing.expectError(error.CorruptFrame, histogram.update(2, 1));
+    try std.testing.expectEqualDeep(before, histogram);
+    histogram.scanned_bytes = std.math.maxInt(u64);
+    const scan_overflow = histogram;
+    const overflow_prefix: usize = if (histogram.regenerated_len == 0) block.len else 0;
+    try std.testing.expectError(error.IntegerOverflow, histogram.update(overflow_prefix, block.len));
+    try std.testing.expectEqualDeep(scan_overflow, histogram);
+    histogram = before;
+    histogram.update_count = std.math.maxInt(u64);
+    const update_overflow = histogram;
+    try std.testing.expectError(error.IntegerOverflow, histogram.update(0, block.len));
+    try std.testing.expectEqualDeep(update_overflow, histogram);
+
+    // End the old borrow before reusing this same input address for new bytes.
+    @memset(&block, 255);
+    histogram = try Hist.init(&block);
+    try checkHistogram(&histogram, &block, block.len, block.len);
+    try std.testing.expectEqual(@as(usize, 1), histogram.totals.active);
+    try std.testing.expectEqual(@as(u32, 131072), histogram.totals.frequencies[255]);
+    try checkHistogram(&histogram, &block, 0, block.len);
+    try std.testing.expectEqual(@as(usize, 0), histogram.totals.active);
+
+    // Older public struct construction is intentionally unowned. Four rows
+    // remain the reference; update must not silently bootstrap aggregate data.
+    var legacy: Hist = .{ .block = &tiny };
+    try std.testing.expect(legacy.ownedSnapshot() == null);
+    try legacy.update(7, 17);
+    try std.testing.expect(legacy.ownedSnapshot() == null);
+    var expected: [256]u32 = undefined;
+    const active = physicalOracle(&tiny, 7, 17, &expected);
+    var merged: [256]u32 = undefined;
+    try std.testing.expectEqual(active, legacy.totalFrequenciesAndCount(&merged));
+    try std.testing.expectEqualSlices(u32, &expected, &merged);
+}

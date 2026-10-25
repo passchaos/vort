@@ -1,0 +1,128 @@
+{
+  "baseline_head": "6b262754",
+  "candidate_source_hashes": {
+    "src/zstd/literals/aggregate_totals.zig": "8915a6079f6aa19c6c721a42c4a785a31aaffe87b68360dc9e6c81b0d8aac4a2",
+    "src/zstd/literals/cut_histogram.zig": "7c9836675163db4b6982ddcc694eab0748e8a20992a6d17c2cb8047931d432c2",
+    "src/zstd/literals/single_cost_cache.zig": "09f9310ef8c41984cae503fa709354346584bdb4b95bd83e49eabfb4dff7e8d1",
+    "src/zstd/literals/aggregate_totals_tests.zig": "c89f72954acc7db9d8c8b2332d811ce3e11cf37f14c3c4a5c28a64a7dd100582",
+    "src/zstd/literals/aggregate_cost_tests.zig": "13c8aee1f5c8ea3f1c482af8f61e173aeb1421094ed94e35eadc1cf79ac96ef4",
+    "src/zstd.zig": "68c263e1b467bd5c440705754e67fed40249937e7891adff7dcfc1b1f016e760"
+  },
+  "rows": [
+    {
+      "case": "file0_silesia_dickens_65536_bin",
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "old_ns": 104973718,
+      "candidate_ns": 110653003,
+      "version_point_ratio": 0.9486748226796882,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file1_silesia_mozilla_65536_bin",
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "old_ns": 13511641,
+      "candidate_ns": 13726480,
+      "version_point_ratio": 0.9843485729771945,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file2_silesia_mr_65536_bin",
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "old_ns": 494025445,
+      "candidate_ns": 494484507,
+      "version_point_ratio": 0.9990716352211213,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file3_silesia_nci_65536_bin",
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "old_ns": 35130008,
+      "candidate_ns": 35748851,
+      "version_point_ratio": 0.982689149925406,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file4_silesia_ooffice_65536_bin",
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "old_ns": 16649372,
+      "candidate_ns": 16236901,
+      "version_point_ratio": 1.0254033081805451,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file5_silesia_osdb_65536_bin",
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "old_ns": 11420984,
+      "candidate_ns": 11321430,
+      "version_point_ratio": 1.0087934121396325,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file6_silesia_reymont_65536_bin",
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "old_ns": 126602199,
+      "candidate_ns": 129679096,
+      "version_point_ratio": 0.9762729916007434,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file7_silesia_samba_65536_bin",
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "old_ns": 17540766,
+      "candidate_ns": 17299756,
+      "version_point_ratio": 1.0139314103620884,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file8_silesia_sao_65536_bin",
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "old_ns": 14676298,
+      "candidate_ns": 14676505,
+      "version_point_ratio": 0.999985895824653,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file9_silesia_webster_65536_bin",
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "old_ns": 236700681,
+      "candidate_ns": 242430102,
+      "version_point_ratio": 0.9763667096093537,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file10_silesia_xml_65536_bin",
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "old_ns": 571959936,
+      "candidate_ns": 581149093,
+      "version_point_ratio": 0.9841879526085744,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file11_silesia_x_ray_65536_bin",
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "old_ns": 9361153,
+      "candidate_ns": 9264186,
+      "version_point_ratio": 1.0104668667058283,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file12_brotli_source_65536_bin",
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "old_ns": 221186165,
+      "candidate_ns": 233970902,
+      "version_point_ratio": 0.9453575769862186,
+      "frame_identity_unchanged": true
+    },
+    {
+      "case": "file13_validation_schema_json_65536_bin",
+      "input_sha256": "71e74329ab6dc2852d3c187f73935c6dcf59804ae9547b1be14f711d560ca0d0",
+      "old_ns": 29444309,
+      "candidate_ns": 29926616,
+      "version_point_ratio": 0.9838836773258961,
+      "frame_identity_unchanged": true
+    }
+  ],
+  "version_ratio_geomean": 0.9882771746188965,
+  "decision": "Reject aggregate runtime implementation; three-input stage ratios are about1.006..1.011 but public14-row ratio0.988277 is unhelpful and candidate adds1040/1032B object storage. Existing input/quality/checked behavior restored. Candidate code and tests archived as text for reproducibility, not active codec code.",
+  "scope": "One process per version/five rounds, small differences receive no statistical significance claim; does not prove all future aggregate designs cannot improve."
+}

@@ -1,0 +1,125 @@
+const std = @import("std");
+const exact = @import("single_cost_cache.zig");
+
+fn VerifiedCodec(comptime Codec: type, comptime header_error: bool) type {
+    return struct {
+        pub const Error = Codec.CostCodec.Error;
+        pub const huffmanHeaderLen = Codec.CostCodec.huffmanHeaderLen;
+        pub const planFromFrequencies = Codec.CostCodec.planFromFrequencies;
+        pub const treeLen = Codec.CostCodec.treeLen;
+        pub const rlePayloadLen = Codec.CostCodec.rlePayloadLen;
+        pub const predefinedPayloadLen = Codec.CostCodec.predefinedPayloadLen;
+        pub fn literalHeaderLen(length: usize) Error!usize {
+            if (header_error) return error.IntegerOverflow;
+            return Codec.CostCodec.literalHeaderLen(length);
+        }
+        pub fn referenceCost(block: []const u8, prefix: usize, offset: usize, match: usize, tail: usize) Error!usize {
+            if (header_error) return error.IntegerOverflow;
+            return Codec.referenceCost(block, prefix, offset, match, tail);
+        }
+    };
+}
+
+fn equalResult(expected: anytype, actual: anytype) !void {
+    if (expected) |value| try std.testing.expectEqualDeep(value, try actual) else |err| try std.testing.expectError(err, actual);
+}
+
+fn physical(block: []const u8, prefix: usize, tail: usize) [256]u32 {
+    var frequencies: [256]u32 = @splat(0);
+    for (block[0..prefix]) |byte| frequencies[byte] += 1;
+    for (block[tail..]) |byte| frequencies[byte] += 1;
+    return frequencies;
+}
+
+fn checkHistogram(histogram: anytype, expected: *const [256]u32, comptime ready: bool) !void {
+    var merged: [256]u32 = undefined;
+    histogram.totalFrequencies(&merged);
+    try std.testing.expectEqualSlices(u32, expected, &merged);
+    var active: usize = 0;
+    for (expected) |frequency| active += @intFromBool(frequency != 0);
+    if (ready) {
+        const snapshot = histogram.ownedSnapshot() orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqual(active, snapshot.active);
+        try std.testing.expectEqualSlices(u32, expected, snapshot.frequencies);
+    } else try std.testing.expect(histogram.ownedSnapshot() == null);
+}
+
+fn preparationAndCosts(comptime Codec: type) !void {
+    const Verified = VerifiedCodec(Codec, false);
+    var block: [65537]u8 = undefined;
+    var random: u32 = 0x243f6a88;
+    for (&block, 0..) |*byte, index| {
+        random = random *% 1664525 +% 1013904223;
+        byte.* = if (index % 8 < 5) 'a' else @truncate(random >> 24);
+    }
+    var on = try exact.CacheWithAccounting(Verified, true).init(&block);
+    var off = try exact.CacheWithAccounting(Verified, false).init(&block);
+    var legacy = try exact.CacheWithAccounting(Verified, true).init(&block);
+    legacy.histogram.totals = .{}; // old public histogram construction semantics
+    try std.testing.expect(@sizeOf(@TypeOf(on)) < 8 * 1024 and @sizeOf(@TypeOf(off)) < 8 * 1024);
+    for ([_]usize{ 0, 1, 63, 64, 1023, 1024, 1025, 16383, 16384, 65535, 65536, block.len, 1023 }) |length| {
+        const prefix = length / 2;
+        const tail = block.len - (length - prefix);
+        const prepared_on = try on.prepareLiterals(prefix, tail);
+        const prepared_off = try off.prepareLiterals(prefix, tail);
+        const prepared_legacy = try legacy.prepareLiterals(prefix, tail);
+        try std.testing.expectEqualDeep(prepared_on, prepared_off);
+        try std.testing.expectEqualDeep(prepared_on, prepared_legacy);
+        const expected = physical(&block, prefix, tail);
+        try std.testing.expectEqualSlices(u32, &expected, &prepared_on.frequencies);
+        try checkHistogram(on.histogram, &expected, true);
+        try checkHistogram(off.histogram, &expected, true);
+        try checkHistogram(legacy.histogram, &expected, false);
+        const query_on = on.payloadCostPrepared(prefix, 8, 3, tail, &prepared_on);
+        const query_off = off.payloadCostPrepared(prefix, 8, 3, tail, &prepared_off);
+        const query_legacy = legacy.payloadCostPrepared(prefix, 8, 3, tail, &prepared_legacy);
+        try equalResult(query_on, query_off);
+        try equalResult(query_on, query_legacy);
+        const reference = Codec.referenceCost(&block, prefix, 8, 3, tail);
+        if (reference) |cost| try std.testing.expectEqual(cost, (try query_on).len) else |err| try std.testing.expectError(err, query_on);
+    }
+    try std.testing.expectEqual(@as(u64, 0), on.work.reference_mismatches);
+    try std.testing.expectEqual(@as(u64, 0), legacy.work.reference_mismatches);
+    // Prepared data owns its copy: it cannot become a stale pointer into the
+    // mutable aggregate when a later cut updates the histogram.
+    const prepared = try on.prepareLiterals(1024, 2048);
+    const saved = prepared;
+    _ = try on.prepareLiterals(1025, 2048);
+    try std.testing.expectEqualDeep(saved, prepared);
+    try std.testing.expect(!std.mem.eql(u32, &prepared.frequencies, on.histogram.ownedSnapshot().?.frequencies));
+
+    // Malformed cut refusal happens before totals or four-row mutation.
+    const before = on.histogram;
+    try std.testing.expectError(error.CorruptFrame, on.prepareLiterals(2, 1));
+    try std.testing.expectEqualDeep(before, on.histogram);
+}
+
+fn headerFailure(comptime Codec: type) !void {
+    const Broken = VerifiedCodec(Codec, true);
+    var block: [8192]u8 = undefined;
+    for (&block, 0..) |*byte, index| byte.* = @intCast('a' + index % 3);
+    inline for (.{ true, false }) |account| {
+        var cache = try exact.CacheWithAccounting(Broken, account).init(&block);
+        try std.testing.expectError(error.IntegerOverflow, cache.payloadLen(1024, 8, 1024, 2048));
+        try std.testing.expectEqual(@as(u64, 1), cache.histogram.update_count);
+        const expected = physical(&block, 1024, 2048);
+        try checkHistogram(cache.histogram, &expected, true);
+        if (account) {
+            try std.testing.expectEqual(@as(u64, 1), cache.work.cost_queries);
+            try std.testing.expectEqual(@as(u64, 1), cache.work.reference_checks);
+            try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
+        }
+        const rows_before = cache.histogram;
+        // Repeat a different valid view: each error performs exactly one
+        // successful cut update and leaves totals consistent with four rows.
+        try std.testing.expectError(error.IntegerOverflow, cache.payloadLen(1025, 8, 1024, 2048));
+        try std.testing.expectEqual(rows_before.update_count + 1, cache.histogram.update_count);
+        const after = physical(&block, 1025, 2048);
+        try checkHistogram(cache.histogram, &after, true);
+    }
+}
+
+pub fn contracts(comptime Codec: type) !void {
+    try preparationAndCosts(Codec);
+    try headerFailure(Codec);
+}

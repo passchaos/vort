@@ -1,0 +1,14 @@
+1/13 zstd.test_0...OK
+2/13 zstd.test.zstd aggregate preparation preserves snapshots fallback and errors...OK
+3/13 zstd.literals.cut_histogram.test_0...OK
+4/13 zstd.literals.cut_histogram.test.zstd aggregate totals real cut histogram contracts...OK
+5/13 zstd.literals.aggregate_totals.test.zstd aggregate totals fixed statistics contracts...OK
+6/13 tests.zstd_stream_counter_contracts.test_0...OK
+7/13 tests.zstd_large_history_contracts.test_0...OK
+8/13 zstd.incremental.encoder.frame.test_0...OK
+9/13 tests.zstd_hq_search_contracts.test_0...OK
+10/13 zstd.match.hq_tree.test_0...OK
+11/13 zstd.match.hq_parser.test_0...OK
+12/13 zstd.match.lazy2.test_0...OK
+13/13 zstd.match.hq_parser.tests.test_0...OK
+All 13 tests passed.

@@ -1,0 +1,10 @@
+{
+  "head": "6b26275473146c4b6d602c99b91a9eaabe4b75f3",
+  "sources": {
+    "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59",
+    "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+    "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51"
+  },
+  "runtime_source_restored": true,
+  "src_changes": ""
+}
