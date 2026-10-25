@@ -2,6 +2,7 @@
 //! This module checks frequency/scalar geometry. It does not prove that a
 //! caller-provided scalar is an optimum or a valid lower bound on that optimum.
 const std = @import("std");
+const frequency_reduction = @import("frequency_reduction.zig");
 
 pub const max_total_frequency: u32 = 128 * 1024;
 pub const Error = error{
@@ -39,12 +40,7 @@ pub fn Certificate(comptime n: usize, comptime max_bits: u8) type {
         trusted_lower_bits: u64,
 
         const Self = @This();
-        const Inspection = struct {
-            total: u32,
-            active: usize,
-            same_support: bool,
-            negative_delta: u32,
-        };
+        const Inspection = frequency_reduction.Inspection;
 
         pub fn init(frequencies: *const [n]u32, trusted_lower_bits: u64) Error!Self {
             const info = try inspect(false, frequencies, {});
@@ -76,6 +72,17 @@ pub fn Certificate(comptime n: usize, comptime max_bits: u8) type {
         /// Inspection still returns the total, active count, and negative mass.
         pub fn analyze(self: *const Self, frequencies: *const [n]u32) Error!Analysis {
             const info = try inspect(true, frequencies, &self.frequencies);
+            return self.finishAnalysis(info);
+        }
+
+        /// Bounded diagnostics/reference entry. It retains the original
+        /// generic checked inspection and the same final scalar arithmetic.
+        pub fn analyzeReference(self: *const Self, frequencies: *const [n]u32) Error!Analysis {
+            const info = try inspectScalar(true, frequencies, &self.frequencies);
+            return self.finishAnalysis(info);
+        }
+
+        fn finishAnalysis(self: *const Self, info: Inspection) Error!Analysis {
             var result: Analysis = .{
                 .same_support = info.same_support,
                 .current_total = info.total,
@@ -104,6 +111,12 @@ pub fn Certificate(comptime n: usize, comptime max_bits: u8) type {
         }
 
         fn inspect(comptime compare: bool, frequencies: *const [n]u32, previous: anytype) Error!Inspection {
+            if (comptime compare and n == 256)
+                return frequency_reduction.inspect256(frequencies, previous, max_total_frequency);
+            return inspectScalar(compare, frequencies, previous);
+        }
+
+        fn inspectScalar(comptime compare: bool, frequencies: *const [n]u32, previous: anytype) Error!Inspection {
             var total: u64 = 0;
             var active: usize = 0;
             var same_support = true;
@@ -127,4 +140,8 @@ pub fn Certificate(comptime n: usize, comptime max_bits: u8) type {
             };
         }
     };
+}
+
+test "zstd weighted reduction complete scalar oracle contracts" {
+    try @import("weighted_reduction_tests.zig").contracts(@This());
 }
