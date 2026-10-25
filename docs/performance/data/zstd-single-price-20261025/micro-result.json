@@ -1,0 +1,26 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-single-price-20261025/micro-bench",
+    "250000"
+  ],
+  "start_utc": "2026-10-25T06:54:28.034991+00:00",
+  "exe_sha256": "9a58d14cf744028ca06e7fd5b339699d6ccf95cf0d1c48811b481a46e097adef",
+  "source_before": {
+    "src/zstd.zig": "7f654071421b6aba0f1f1441832b2d85842ff462478519f3990a74006a12c6ec",
+    "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48",
+    "tools/zstd/single_cost_bench.zig": "b4b22b73b5c98c3772cac8efa68fd3548814a4a10191d88a99c1c984cccd79e1"
+  },
+  "exit_code": 0,
+  "end_utc": "2026-10-25T06:54:28.502636+00:00",
+  "source_after": {
+    "src/zstd.zig": "7f654071421b6aba0f1f1441832b2d85842ff462478519f3990a74006a12c6ec",
+    "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48",
+    "tools/zstd/single_cost_bench.zig": "b4b22b73b5c98c3772cac8efa68fd3548814a4a10191d88a99c1c984cccd79e1"
+  },
+  "source_stable": true,
+  "compiler_observations": 8,
+  "compiler_observations_with_process": 0
+}

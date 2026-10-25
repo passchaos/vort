@@ -1,0 +1,27 @@
+src/zstd.zig:31168:32: error: ambiguous reference
+    pub const literal_bases = &ll_base;
+                               ^~~~~~~
+src/zstd.zig:31171:9: note: declared here
+    pub const ll_base = zstd.ll_base;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:415:1: note: also declared here
+const ll_base = [_]usize{
+^~~~~
+src/zstd.zig:31169:31: error: ambiguous reference
+    pub const offset_bases = &of_base;
+                              ^~~~~~~
+src/zstd.zig:31172:9: note: declared here
+    pub const of_base = zstd.of_base;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:458:1: note: also declared here
+const of_base = [_]usize{
+^~~~~
+src/zstd.zig:31170:30: error: ambiguous reference
+    pub const match_bases = &ml_base;
+                             ^~~~~~~
+src/zstd.zig:31173:9: note: declared here
+    pub const ml_base = zstd.ml_base;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:431:1: note: also declared here
+const ml_base = [_]usize{
+^~~~~

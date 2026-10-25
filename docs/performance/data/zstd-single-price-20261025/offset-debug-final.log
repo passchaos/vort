@@ -1,0 +1,11 @@
+1/10 zstd.test_0...OK
+2/10 zstd.test.zstd offset code rejects arithmetic overflow before adding bias...OK
+3/10 tests.zstd_stream_counter_contracts.test_0...OK
+4/10 tests.zstd_large_history_contracts.test_0...OK
+5/10 zstd.incremental.encoder.frame.test_0...OK
+6/10 tests.zstd_hq_search_contracts.test_0...OK
+7/10 zstd.match.hq_tree.test_0...OK
+8/10 zstd.match.hq_parser.test_0...OK
+9/10 zstd.match.lazy2.test_0...OK
+10/10 zstd.match.hq_parser.tests.test_0...OK
+All 10 tests passed.

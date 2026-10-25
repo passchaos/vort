@@ -1,0 +1,35 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/home/passchaos/project-z/vort-zstd-single-price/.zig-cache/o/064aa63e99c304ee07968357576cc734/vort-zstd-multi-duplicate-profile",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+  ],
+  "source_before": {
+    "src/zstd.zig": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca",
+    "src/zstd/literals/winner_cost_cache.zig": "f8319362c42e785234dbc961004da5e9258c9caeb5410586414d68a1ead1ddc5",
+    "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48"
+  },
+  "source_after": {
+    "src/zstd.zig": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca",
+    "src/zstd/literals/winner_cost_cache.zig": "f8319362c42e785234dbc961004da5e9258c9caeb5410586414d68a1ead1ddc5",
+    "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48"
+  },
+  "source_stable": true,
+  "exe_sha256": "03f417cdb90df4aaf782a85dfaffd253ab5f94aca881648b351eb63376523dba",
+  "checks": [
+    {
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "wire_unchanged": true,
+      "work_fields_unchanged": true
+    },
+    {
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "wire_unchanged": true,
+      "work_fields_unchanged": true
+    }
+  ],
+  "scope": "Work/output differential check executed during unrelated compiles, so profiled durations are not used as throughput evidence."
+}

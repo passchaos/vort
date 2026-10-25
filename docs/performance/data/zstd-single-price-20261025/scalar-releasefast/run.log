@@ -1,0 +1,6 @@
+src/zstd/sequence/single_cost_tests.zig:209:68: error: type 'u32' cannot represent integer value '18446744073709551615'
+        const section: usize = if (index % 17 == 0) std.math.maxInt(usize) - state % 12 else state % 65536;
+                                                    ~~~~~~~~~~~~~~~^~~~~~~
+referenced by:
+    contracts__anon_146: src/zstd/sequence/single_cost_tests.zig:219:20
+    test.zstd scalar single sequence prices match old tables and packed bits: src/zstd.zig:31220:65

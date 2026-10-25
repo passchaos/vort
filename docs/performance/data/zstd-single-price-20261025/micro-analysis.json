@@ -1,0 +1,31 @@
+{
+  "rows": [
+    {
+      "case": "small_values",
+      "general_ns_per_query": 50.616364,
+      "scalar_ns_per_query": 14.718624,
+      "speedup": 3.4389331502727427
+    },
+    {
+      "case": "block64k_values",
+      "general_ns_per_query": 41.903,
+      "scalar_ns_per_query": 7.757704,
+      "speedup": 5.401469300710622
+    },
+    {
+      "case": "large_offsets",
+      "general_ns_per_query": 82.922312,
+      "scalar_ns_per_query": 10.565972,
+      "speedup": 7.848053354674799
+    },
+    {
+      "case": "invalid_lengths",
+      "general_ns_per_query": 131.600472,
+      "scalar_ns_per_query": 6.718284,
+      "speedup": 19.58840561071845
+    }
+  ],
+  "samples_sha256": "d02b4685aa69cf96fb30256c2c10c0331d1745f8535d988a1f63840a462adfd6",
+  "executable_sha256": "9a58d14cf744028ca06e7fd5b339699d6ccf95cf0d1c48811b481a46e097adef",
+  "scope": "Five alternating rounds in one process. Call/loop/input-selection and error handling included; no whole-API speed inference."
+}

@@ -1,0 +1,183 @@
+{
+  "scope": "Untimed Vort old production/candidate caller allocator verification; no RSS or wall metric, no competitor encoder",
+  "limits": "One level-3 64KiB XML encode per binary and one tiny first-allocation OOM check; no repeated 14-sample baseline. page_allocator request ledger excludes OS bookkeeping and page rounding, embedded input, stack and executable mappings.",
+  "rss_collected": false,
+  "wall_collected": false,
+  "heads": {
+    "old": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+    "new": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a"
+  },
+  "compile_cpus": "13-15",
+  "execution_cpu": "8",
+  "request_events_equal": true,
+  "output_equal": true,
+  "peak_requested_equal": true,
+  "all_cleanup_zero": true,
+  "small_oom_equal": true,
+  "sources_stable": true,
+  "prepared_files_stable": true,
+  "results": {
+    "old": {
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-zstd-single-price-20261025/memory/probe-old"
+      ],
+      "exit": 0,
+      "source_stable": true,
+      "source_sha256": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+      "executable_sha256": "1f85eafd800d45eeaa8e393082085ec2fb118050f16cc2ab9d9c9a1240cedf59",
+      "object_sha256": "1e07b6aff90dc6498853262c4bbe00e858b97576335fcf91f521104feeafcc14",
+      "returned": {
+        "input_bytes": 65536,
+        "output_bytes": 5078,
+        "output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+        "peak_requested": 2561185,
+        "live_after_return": 5078,
+        "alloc_attempts": 115,
+        "successful_allocations": 115,
+        "resize_attempts": 0,
+        "remap_attempts": 51,
+        "successful_resizes": 0,
+        "successful_remaps": 51,
+        "increased_bytes": 4462540,
+        "released_bytes": 4457462,
+        "tracker_size": 16528
+      },
+      "cleanup": {
+        "live_after_caller_free": 0,
+        "increased_bytes": 4462540,
+        "released_bytes": 4462540,
+        "free_calls": 115
+      },
+      "optional_small_oom": {
+        "result": "OutOfMemory",
+        "live": 0,
+        "alloc_attempts": 1
+      },
+      "request_event_count": 282,
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "scope": "Untimed Vort old production/candidate caller allocator verification; no RSS or wall metric, no competitor encoder",
+      "shared_build_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8"
+    },
+    "new": {
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-zstd-single-price-20261025/memory/probe-new"
+      ],
+      "exit": 0,
+      "source_stable": true,
+      "source_sha256": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca",
+      "executable_sha256": "eefc0823a95e7a479ec83994413ababc14161cf44beaa86167a93d84fa798fb1",
+      "object_sha256": "ef2de0182269007ed75290eb7565b581b2d8733fe26d91b40fbf541262c126b4",
+      "returned": {
+        "input_bytes": 65536,
+        "output_bytes": 5078,
+        "output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+        "peak_requested": 2561185,
+        "live_after_return": 5078,
+        "alloc_attempts": 115,
+        "successful_allocations": 115,
+        "resize_attempts": 0,
+        "remap_attempts": 51,
+        "successful_resizes": 0,
+        "successful_remaps": 51,
+        "increased_bytes": 4462540,
+        "released_bytes": 4457462,
+        "tracker_size": 16528
+      },
+      "cleanup": {
+        "live_after_caller_free": 0,
+        "increased_bytes": 4462540,
+        "released_bytes": 4462540,
+        "free_calls": 115
+      },
+      "optional_small_oom": {
+        "result": "OutOfMemory",
+        "live": 0,
+        "alloc_attempts": 1
+      },
+      "request_event_count": 282,
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "scope": "Untimed Vort old production/candidate caller allocator verification; no RSS or wall metric, no competitor encoder",
+      "shared_build_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8"
+    }
+  },
+  "artifact_sha256": {
+    "old.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-old": "1f85eafd800d45eeaa8e393082085ec2fb118050f16cc2ab9d9c9a1240cedf59",
+    "new-source-after.json": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+    "new-x2.o": "ef2de0182269007ed75290eb7565b581b2d8733fe26d91b40fbf541262c126b4",
+    "setup.json": "704ee0b8671b496ce56d269e421345661382cc316cbf0246ab1472f0426c3963",
+    "old-execution.json": "5ca40b7e0e9551a86b47df887ecfd45fcefdd84887f1339ca0ca788db45e9250",
+    "new-allocation-events.json": "bb4e3e13b919217e8df17510cba2a7f4b20c6629b7806f6839d884d39953e0f3",
+    "prepared-sha256.json": "c46f0d140c068b86b5b1c5035dcd7299c38f9494d5979a132b9cbb5a73e08ed8",
+    "new.log": "039d5ebf8033231b019699573315df977501bfa7dc54b31b182365d3b720e5bd",
+    "old-source-after.json": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+    "probe.zig": "21987580e7fa5ceaca64917f773e0f15d58c42451843d6d2783cf0435a96080d",
+    "new-execution.json": "08925daa28813368f839626a69ca14fd475b192f4ecbfb39f2ef35b620b6f832",
+    "build_probe.py": "817533d758ac3cf577253d6287ad6cc3ad587a695499197a5e95c70862f814f1",
+    "new-build.json": "560e66bc931602b331387aed6d22bafdec777fd992b74478481fcca006bda1a9",
+    "old-build.json": "423608e2a1b65e2d1a3b8fa4a3a35c42b141911962fb3d83b0a0b3a59898d019",
+    "new-source-before.json": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+    "old-x2.o": "1e07b6aff90dc6498853262c4bbe00e858b97576335fcf91f521104feeafcc14",
+    "input.bin": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+    "run_resource.py": "39ea69a2d0a8a34e2a7326c3b8223fd17e4bccc35120933eda89515636956544",
+    "old-source-before.json": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+    "new.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-new": "eefc0823a95e7a479ec83994413ababc14161cf44beaa86167a93d84fa798fb1",
+    "tracking_allocator.zig": "1d13b89f918a22e10fdf6cb3f49fed81e3592caffcf98be91d2f91036bfa50ba",
+    "old.log": "039d5ebf8033231b019699573315df977501bfa7dc54b31b182365d3b720e5bd",
+    "old-allocation-events.json": "bb4e3e13b919217e8df17510cba2a7f4b20c6629b7806f6839d884d39953e0f3"
+  },
+  "source_bindings": {
+    "old": {
+      "worktree": "/home/passchaos/project-z/vort",
+      "recorded_head": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+      "current_head": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+      "full_src_file_count": 1203,
+      "full_src_before_after_equal": true,
+      "full_src_before_manifest_sha256": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+      "full_src_after_manifest_sha256": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+      "transitive_source_sha256": {
+        "src/zstd.zig": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+        "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3",
+        "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+        "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b",
+        "src/zstd/literals/winner_cost_cache.zig": "6ba152ff5934a97a6b1945b7d7492505d2760b79cb67630328c04f85ae936166",
+        "src/zstd/literals/single_cost_cache.zig": "f0329e0e93e16996dfcf32451ed6b858ff61c095891e9d84e9518034ab43395b",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+        "src/zstd/sequence/single_cost.zig": null,
+        "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+      },
+      "current_transitive_source_matches": true
+    },
+    "new": {
+      "worktree": "/home/passchaos/project-z/vort-zstd-single-price",
+      "recorded_head": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a",
+      "current_head": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a",
+      "full_src_file_count": 1205,
+      "full_src_before_after_equal": true,
+      "full_src_before_manifest_sha256": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+      "full_src_after_manifest_sha256": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+      "transitive_source_sha256": {
+        "src/zstd.zig": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca",
+        "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3",
+        "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+        "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b",
+        "src/zstd/literals/winner_cost_cache.zig": "f8319362c42e785234dbc961004da5e9258c9caeb5410586414d68a1ead1ddc5",
+        "src/zstd/literals/single_cost_cache.zig": "f0329e0e93e16996dfcf32451ed6b858ff61c095891e9d84e9518034ab43395b",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+        "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48",
+        "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+      },
+      "current_transitive_source_matches": true
+    }
+  },
+  "source_binding_scope": "Complete src/**/*.zig before/after manifests bind transitive modules; root file hash alone is not used as whole-code identity."
+}

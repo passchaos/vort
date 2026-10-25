@@ -1,0 +1,45 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-single-price-20261025/memory/probe-old"
+  ],
+  "exit": 0,
+  "source_stable": true,
+  "source_sha256": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+  "executable_sha256": "1f85eafd800d45eeaa8e393082085ec2fb118050f16cc2ab9d9c9a1240cedf59",
+  "object_sha256": "1e07b6aff90dc6498853262c4bbe00e858b97576335fcf91f521104feeafcc14",
+  "returned": {
+    "input_bytes": 65536,
+    "output_bytes": 5078,
+    "output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+    "peak_requested": 2561185,
+    "live_after_return": 5078,
+    "alloc_attempts": 115,
+    "successful_allocations": 115,
+    "resize_attempts": 0,
+    "remap_attempts": 51,
+    "successful_resizes": 0,
+    "successful_remaps": 51,
+    "increased_bytes": 4462540,
+    "released_bytes": 4457462,
+    "tracker_size": 16528
+  },
+  "cleanup": {
+    "live_after_caller_free": 0,
+    "increased_bytes": 4462540,
+    "released_bytes": 4462540,
+    "free_calls": 115
+  },
+  "optional_small_oom": {
+    "result": "OutOfMemory",
+    "live": 0,
+    "alloc_attempts": 1
+  },
+  "request_event_count": 282,
+  "input_bytes": 65536,
+  "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+  "scope": "Untimed Vort old production/candidate caller allocator verification; no RSS or wall metric, no competitor encoder",
+  "shared_build_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8"
+}

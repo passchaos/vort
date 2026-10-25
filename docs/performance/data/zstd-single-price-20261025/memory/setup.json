@@ -1,0 +1,22 @@
+{
+  "worktrees": {
+    "old": "/home/passchaos/project-z/vort",
+    "new": "/home/passchaos/project-z/vort-zstd-single-price"
+  },
+  "source_expected": {
+    "old": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+    "new": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca"
+  },
+  "input_bytes": 65536,
+  "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+  "expected_output_bytes": 5078,
+  "expected_output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+  "scope": "Untimed Vort old production/candidate caller allocator verification; no RSS or wall metric, no competitor encoder",
+  "concurrent_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8",
+  "requested_heap_scope": "Requests through public caller page_allocator wrapper, including returned output until explicit caller free; excludes embedded input, codec/tracker stack, code mappings and allocator bookkeeping/page rounding.",
+  "heads": {
+    "old": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+    "new": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a"
+  },
+  "limits": "One level-3 64KiB XML encode per binary and one tiny first-allocation OOM check; no repeated 14-sample baseline. page_allocator request ledger excludes OS bookkeeping and page rounding, embedded input, stack and executable mappings."
+}

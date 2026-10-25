@@ -1,0 +1,12 @@
+1/11 zstd.test_0...OK
+2/11 zstd.test.zstd scalar single sequence prices match old tables and packed bits...OK
+3/11 zstd.sequence.single_cost.test.zstd scalar single sequence pricing keeps masks ties and RLE first errors...OK
+4/11 tests.zstd_stream_counter_contracts.test_0...OK
+5/11 tests.zstd_large_history_contracts.test_0...OK
+6/11 zstd.incremental.encoder.frame.test_0...OK
+7/11 tests.zstd_hq_search_contracts.test_0...OK
+8/11 zstd.match.hq_tree.test_0...OK
+9/11 zstd.match.hq_parser.test_0...OK
+10/11 zstd.match.lazy2.test_0...OK
+11/11 zstd.match.hq_parser.tests.test_0...OK
+All 11 tests passed.

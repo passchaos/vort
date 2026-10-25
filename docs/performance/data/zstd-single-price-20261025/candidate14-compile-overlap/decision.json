@@ -1,0 +1,4 @@
+{
+  "decision": "Reject timing evidence: successful codec run with unchanged source/file identity but compiler present in 66/75 observations. Retain artifacts, rerun only after known builds/resources end.",
+  "cause": "Parent started before resource-worker build completion message arrived; coordination corrected."
+}

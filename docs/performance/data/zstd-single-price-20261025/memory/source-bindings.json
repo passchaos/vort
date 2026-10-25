@@ -1,0 +1,44 @@
+{
+  "old": {
+    "worktree": "/home/passchaos/project-z/vort",
+    "recorded_head": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+    "current_head": "5928518f0c6dc4cea028dba3c6692a7128b74275",
+    "full_src_file_count": 1203,
+    "full_src_before_after_equal": true,
+    "full_src_before_manifest_sha256": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+    "full_src_after_manifest_sha256": "1e6c7f14e7a528dd9e6d12a711b3624722361b8d717f6daf2267abf43379204d",
+    "transitive_source_sha256": {
+      "src/zstd.zig": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+      "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3",
+      "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+      "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b",
+      "src/zstd/literals/winner_cost_cache.zig": "6ba152ff5934a97a6b1945b7d7492505d2760b79cb67630328c04f85ae936166",
+      "src/zstd/literals/single_cost_cache.zig": "f0329e0e93e16996dfcf32451ed6b858ff61c095891e9d84e9518034ab43395b",
+      "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+      "src/zstd/sequence/single_cost.zig": null,
+      "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+    },
+    "current_transitive_source_matches": true
+  },
+  "new": {
+    "worktree": "/home/passchaos/project-z/vort-zstd-single-price",
+    "recorded_head": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a",
+    "current_head": "e663ac2fc1c66c3e98dbf270db082e2a2e61949a",
+    "full_src_file_count": 1205,
+    "full_src_before_after_equal": true,
+    "full_src_before_manifest_sha256": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+    "full_src_after_manifest_sha256": "adc295b3e3c89b2d713fca42ddd92855311b2620f6bf2d8b79feb58e2acba000",
+    "transitive_source_sha256": {
+      "src/zstd.zig": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca",
+      "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3",
+      "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+      "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b",
+      "src/zstd/literals/winner_cost_cache.zig": "f8319362c42e785234dbc961004da5e9258c9caeb5410586414d68a1ead1ddc5",
+      "src/zstd/literals/single_cost_cache.zig": "f0329e0e93e16996dfcf32451ed6b858ff61c095891e9d84e9518034ab43395b",
+      "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+      "src/zstd/sequence/single_cost.zig": "d2a33d7d9cd08002db5504890bc7527324f2d4d40ce044cbf5692f45d35cbf48",
+      "src/zstd_huffman_x2_object.zig": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+    },
+    "current_transitive_source_matches": true
+  }
+}

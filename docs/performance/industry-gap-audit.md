@@ -117,6 +117,18 @@ all fourteen reference rows (geometric ratio 0.00330414x). All recorded XML/MR
 candidate work fields remain identical. Complete Zstd tests pass 1093/1093
 and build checks pass 170/170. The remaining performance gap is substantial.
 
+The [scalar single-sequence cost increment](zstd-single-sequence-cost.md)
+replaces only the bound's one-sequence table price with exact closed-form bit
+sizes and original mask availability. Candidate decisions and all fourteen
+frame identities remain unchanged. A matched accepted five-round public
+control gives a 1.08205x geometric version speedup: XML/source/MR medians are
+817.419/315.072/656.416ms. Four rows have small negative point differences,
+without a significance claim. Throughput still loses on all fourteen reference
+rows (geometric ratio 0.00354679x). The first compiler-overlap run is retained
+but excluded. Complete Zstd tests pass 1096/1096 and build checks 171/171;
+independent XML requested heap and all 282 allocator events remain unchanged.
+This increment also safely rejects extreme offsets before numeric bias overflow.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE
