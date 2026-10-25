@@ -91,6 +91,8 @@ occurred after the narrow correctness and full-path performance evidence.
 The restored production literal-cost filter passes 19/19. Its source manifest
 matches the baseline; these checks verify restoration rather than promote the
 rejected candidate to a completed runtime feature.
+After pulling with rebase, the same restored filter passes 19/19 again with
+unchanged source manifests. No active codec source differs from the baseline.
 
 The [evidence package](data/zstd-aggregate-totals-20261025/artifact-manifest.json)
 retains commands, source manifests, candidate text files, old/new raw samples,

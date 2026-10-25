@@ -1,0 +1,20 @@
+1/19 zstd.test_0...OK
+2/19 zstd.test.zstd single literal cost cache matches every reference cut and stream boundary...OK
+3/19 zstd.test.zstd single literal cost cache preserves errors empty and retry transitions...OK
+4/19 zstd.test.zstd single literal cost cache retains the legacy byte zero prefix...OK
+5/19 zstd.test.zstd single literal cost cache records exact delta work without stream byte scans...OK
+6/19 zstd.test.zstd single literal cost cache verifies every candidate and complete finder winner...OK
+7/19 zstd.test.zstd single literal cost cache preserves multi wire and allocator requests...OK
+8/19 zstd.literals.single_cost_cache.test.zstd single literal cost tree key compares ordered bits and both metadata fields...OK
+9/19 zstd.literals.single_cost_cache.test.zstd single literal cost tree cache retains successful null...OK
+10/19 zstd.literals.single_cost_cache.test.zstd single literal cost tree errors do not publish and retain the prior entry...OK
+11/19 zstd.literals.cut_histogram.test_0...OK
+12/19 tests.zstd_stream_counter_contracts.test_0...OK
+13/19 tests.zstd_large_history_contracts.test_0...OK
+14/19 zstd.incremental.encoder.frame.test_0...OK
+15/19 tests.zstd_hq_search_contracts.test_0...OK
+16/19 zstd.match.hq_tree.test_0...OK
+17/19 zstd.match.hq_parser.test_0...OK
+18/19 zstd.match.lazy2.test_0...OK
+19/19 zstd.match.hq_parser.tests.test_0...OK
+All 19 tests passed.

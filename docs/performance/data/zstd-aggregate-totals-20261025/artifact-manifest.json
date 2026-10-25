@@ -37,6 +37,8 @@
     "candidate14/result.json": "79b43bf9bcaadc85b38e9d0348bec1af131878d407deaf612763ec601d01a01c",
     "state-x86/run.log": "978854db2c7aed2e1983da24367f8994a7f5bed2c87af0fd6bfb6cd577f66103",
     "state-x86/result.json": "8ffca46fec190bf96971839d44c1feaa23d386a4f048571c3a2ae2ea18a72d35",
+    "post-rebase/run.log": "79de63fc72ca7274a322c7879ad6659c61eb271bead401654239559c35749d93",
+    "post-rebase/result.json": "3e363e65cb38668b0fe901af209d80491a91375889e9326088e32d7ab58d504c",
     "rejected-source/src__zstd.zig.txt": "68c263e1b467bd5c440705754e67fed40249937e7891adff7dcfc1b1f016e760",
     "rejected-source/src__zstd__literals__cut_histogram.zig.txt": "7c9836675163db4b6982ddcc694eab0748e8a20992a6d17c2cb8047931d432c2",
     "rejected-source/src__zstd__literals__aggregate_totals.zig.txt": "8915a6079f6aa19c6c721a42c4a785a31aaffe87b68360dc9e6c81b0d8aac4a2",
