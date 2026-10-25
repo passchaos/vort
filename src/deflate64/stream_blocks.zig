@@ -1,17 +1,17 @@
-//! Fixed/stored Deflate64 emission into admitted caller storage. Planning and
+//! Fixed/stored/dynamic Deflate64 emission into admitted caller storage. Planning and
 //! emission replay the same bounded matcher, with no retained token array.
 const std = @import("std");
 const huffman = @import("../huffman.zig");
 const matching = @import("stream_match.zig");
+const codes = @import("codes.zig");
+const dynamic = @import("dynamic.zig");
 
 pub const State = struct { scratch: u32 = 0, bit_index: u3 = 0 };
-pub const Stats = struct {
-    match_count: usize = 0,
-    max_match_length: usize = 0,
-    max_match_distance: usize = 0,
-};
+pub const Stats = dynamic.Stats;
 pub const Plan = struct { bits: usize, stats: Stats };
-const Extra = struct { symbol: u16, bits: u5, value: u16 };
+pub const DynamicPlan = dynamic.DynamicPlan;
+const lengthCode = codes.lengthCode;
+const distanceCode = codes.distanceCode;
 
 pub const Writer = struct {
     state: State,
@@ -91,6 +91,48 @@ pub fn writeFixed(writer: *Writer, matcher: *matching.Matcher, history: []const 
     writer.literal(256);
 }
 
+pub fn dynamicPlan(matcher: *matching.Matcher, history: []const u8, block: []const u8, max_chain: usize, nice_length: usize) error{InvalidBlockPlan}!DynamicPlan {
+    return dynamic.plan(matcher, history, block, max_chain, nice_length);
+}
+
+/// Replay the same greedy decisions with a completed dynamic plan. Header,
+/// canonical symbols and their extra values are written as separate <=16-bit
+/// fields; final byte padding remains the caller's stream-level decision.
+pub fn writeDynamic(writer: *Writer, matcher: *matching.Matcher, history: []const u8, block: []const u8, max_chain: usize, nice_length: usize, final: bool, plan: *const DynamicPlan) void {
+    writer.bits(0b100 | @as(u16, @intFromBool(final)), 3);
+    writer.bits(@intCast(plan.hlit - 257), 5);
+    writer.bits(@intCast(plan.hdist - 1), 5);
+    writer.bits(@intCast(plan.hclen - 4), 4);
+    for (huffman.code_length_order[0..plan.hclen]) |symbol| writer.bits(plan.code_length_lengths[symbol], 3);
+    for (plan.code_length_ops.slice()) |op| {
+        writer.bits(plan.code_length_encoder.codes[op.symbol], plan.code_length_encoder.bits[op.symbol]);
+        writer.bits(op.extra_value, @intCast(op.extra_bits));
+    }
+    if (block.len != 0) {
+        matcher.begin(history, block);
+        var position: usize = 0;
+        while (position < block.len) {
+            const current = history.len + position;
+            const match = matcher.find(current, max_chain, nice_length);
+            const take = if (match.length >= 3) match.length else 1;
+            if (match.length >= 3) {
+                const length = lengthCode(match.length);
+                writer.bits(plan.literal_encoder.codes[length.symbol], plan.literal_encoder.bits[length.symbol]);
+                writer.bits(length.value, length.bits);
+                const distance = distanceCode(match.distance);
+                writer.bits(plan.distance_encoder.codes[distance.symbol], plan.distance_encoder.bits[distance.symbol]);
+                writer.bits(distance.value, distance.bits);
+            } else {
+                const symbol = block[position];
+                writer.bits(plan.literal_encoder.codes[symbol], plan.literal_encoder.bits[symbol]);
+            }
+            for (current..current + take) |inserted| matcher.insert(inserted);
+            position += take;
+        }
+    }
+    writer.bits(plan.literal_encoder.codes[256], plan.literal_encoder.bits[256]);
+}
+
 pub fn storedBlockCount(length: usize) usize {
     return if (length == 0) 1 else (length - 1) / 65_535 + 1;
 }
@@ -126,22 +168,6 @@ pub fn pendingBytes(state: State, bits: usize, final: bool) usize {
     return if (final) (total + 7) / 8 else total / 8;
 }
 
-fn lengthCode(length: usize) Extra {
-    std.debug.assert(length >= 3 and length <= matching.max_match_len);
-    if (length > 258) return .{ .symbol = 285, .bits = 16, .value = @intCast(length - 3) };
-    if (length <= 10) return .{ .symbol = @intCast(length + 254), .bits = 0, .value = 0 };
-    const bits: u5 = @intCast(std.math.log2_int(usize, length - 3) - 2);
-    const span: usize = @as(usize, 1) << @intCast(bits);
-    const base = (@as(usize, 1) << @intCast(@as(u8, bits) + 2)) + 3;
-    const offset = length - base;
-    return .{ .symbol = @intCast(261 + @as(usize, bits) * 4 + offset / span), .bits = bits, .value = @intCast(offset & (span - 1)) };
-}
-fn distanceCode(distance: usize) Extra {
-    std.debug.assert(distance >= 1 and distance <= matching.window_len);
-    if (distance <= 4) return .{ .symbol = @intCast(distance - 1), .bits = 0, .value = 0 };
-    const bits: u5 = @intCast(std.math.log2_int(usize, distance - 1) - 1);
-    const span: usize = @as(usize, 1) << @intCast(bits);
-    const base = (@as(usize, 1) << @intCast(@as(u8, bits) + 1)) + 1;
-    const offset = distance - base;
-    return .{ .symbol = @intCast(2 + @as(usize, bits) * 2 + offset / span), .bits = bits, .value = @intCast(offset & (span - 1)) };
+test "Deflate64 dynamic block exact plan and continuous bitstream contracts" {
+    try @import("dynamic_tests.zig").contracts(@This());
 }

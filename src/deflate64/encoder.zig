@@ -17,7 +17,7 @@ const max_stored_block_len: usize = std.math.maxInt(u16);
 
 /// Return a conservative bound for the adaptive encoder.
 ///
-/// The encoder retains a fixed-Huffman candidate only when it is smaller than
+/// The encoder retains a fixed/dynamic candidate only when it is smaller than
 /// the stored representation, so the exact stored size is also its bound.
 pub fn encodedBound(input_len: usize) Error!usize {
     const block_count = if (input_len == 0) 1 else (input_len - 1) / max_stored_block_len + 1;
@@ -25,12 +25,14 @@ pub fn encodedBound(input_len: usize) Error!usize {
     return std.math.add(usize, input_len, overhead) catch return error.IntegerOverflow;
 }
 
-/// Encode one raw Deflate64 stream, choosing between a fixed-Huffman stream
-/// and stored blocks. The fixed encoder uses Deflate64's extended distance
-/// alphabet through distance 65536 and code-285 lengths through 65538. Fixed
+/// Encode one raw Deflate64 stream, choosing fixed or dynamic Huffman coding
+/// per compressed block, then comparing the whole candidate to stored output.
+/// Both compressed encoders use Deflate64's extended distance
+/// alphabet through distance 65536 and code-285 lengths through 65538. Compressed
 /// blocks use borrowed 128KiB chunks with continuous bit packing and preceding
-/// 64KiB history. The whole fixed candidate must beat the original global
-/// stored representation; ties preserve stored output and encodedBound.
+/// 64KiB history. Dynamic must strictly beat fixed bits within a block; the
+/// whole candidate must strictly beat global stored bytes, preserving the
+/// historical stored representation on ties and the exact encodedBound.
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -41,11 +43,12 @@ pub fn encodeAlloc(
     var matcher: one_shot.Matcher = .{};
     defer matcher.deinit(allocator);
     const plan = try one_shot.plan(allocator, &matcher, input, options.max_chain, options.nice_length);
-    const fixed_size = one_shot.candidateSize(plan.bit_len, stored_size) orelse return encodeStoredAlloc(allocator, input);
+    const compressed_size = one_shot.candidateSize(plan.bit_len, stored_size) orelse return encodeStoredAlloc(allocator, input);
 
-    const output = try allocator.alloc(u8, fixed_size);
-    const written = one_shot.emit(&matcher, input, output, options.max_chain, options.nice_length);
-    std.debug.assert(written == fixed_size);
+    const output = try allocator.alloc(u8, compressed_size);
+    errdefer allocator.free(output);
+    const written = try one_shot.emit(&matcher, input, output, options.max_chain, options.nice_length);
+    std.debug.assert(written == compressed_size);
     return output;
 }
 

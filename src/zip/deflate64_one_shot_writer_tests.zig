@@ -90,7 +90,9 @@ pub fn contracts(comptime Zip: type) type {
             try std.testing.expectEqual(@as(?u16, 0o100600), entry.unixMode());
             try std.testing.expectEqualStrings("one-shot method 9", archive.comment);
             const compressed = try archive.compressedData(entry);
-            try std.testing.expectEqual(@as(u8, 1), (compressed[0] >> 1) & 3);
+            // The skewed full-window token alphabet benefits from dynamic
+            // coding while metadata and the full 65536-distance match remain.
+            try std.testing.expectEqual(@as(u8, 2), (compressed[0] >> 1) & 3);
             const plain = try archive.extractAlloc(a, entry);
             defer a.free(plain);
             try std.testing.expectEqualSlices(u8, input, plain);

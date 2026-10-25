@@ -7,6 +7,7 @@ const vort = @import("vort");
 
 const block_len = 128 * 1024;
 const Pattern = enum { one, mixed };
+const Compression = vort.Deflate64IncrementalEncoder.Compression;
 const case_names = [_][]const u8{ "empty", "tiny", "pattern", "binary", "runs", "long_length", "long_distance", "multi_block" };
 const input_chunks = [_]usize{ 0, 1, 2, 0, 3, 5, 7, 31 };
 const output_chunks = [_]usize{ 0, 1, 0, 2, 3, 7, 16 };
@@ -25,6 +26,7 @@ const Progress = struct {
 const Artifact = struct {
     file: []const u8,
     kind: enum { incremental_raw, incremental_zip, one_shot_raw, one_shot_zip },
+    compression: Compression,
     pattern: ?Pattern,
     bytes: usize,
     sha256: []const u8,
@@ -39,7 +41,7 @@ const Case = struct {
     input_bytes: usize,
     input_sha256: []const u8,
     crc32: u32,
-    artifacts: [6]Artifact,
+    artifacts: [10]Artifact,
 };
 const Encoded = struct { bytes: []u8, progress: Progress };
 
@@ -74,24 +76,24 @@ pub fn main(init: std.process.Init) !void {
         errdefer init.gpa.free(input_sha);
         try directory.writeFile(init.io, .{ .sub_path = input_file, .data = input });
 
-        var artifacts: [6]Artifact = undefined;
+        var artifacts: [10]Artifact = undefined;
         var completed: usize = 0;
         errdefer for (artifacts[0..completed]) |artifact| {
             init.gpa.free(artifact.file);
             init.gpa.free(artifact.sha256);
         };
         inline for (.{ Pattern.one, Pattern.mixed }) |pattern| {
-            const raw = try encodeRaw(init.gpa, input, pattern);
+            const raw = try encodeRaw(init.gpa, input, pattern, .fixed);
             defer init.gpa.free(raw.bytes);
             const decoded = try vort.decodeDeflate64AllocLimited(init.gpa, raw.bytes, input.len);
             defer init.gpa.free(decoded);
             if (!std.mem.eql(u8, decoded, input)) return error.RawRoundTripMismatch;
-            artifacts[completed] = try saveArtifact(init, directory, name, pattern, .incremental_raw, raw, true);
+            artifacts[completed] = try saveArtifact(init, directory, name, pattern, .fixed, .incremental_raw, raw, true);
             completed += 1;
 
-            const zip = try encodeZip(init.gpa, input, pattern);
+            const zip = try encodeZip(init.gpa, input, pattern, .fixed);
             defer init.gpa.free(zip.bytes);
-            artifacts[completed] = try saveArtifact(init, directory, name, pattern, .incremental_zip, zip, false);
+            artifacts[completed] = try saveArtifact(init, directory, name, pattern, .fixed, .incremental_zip, zip, false);
             completed += 1;
         }
         const raw_bound = try vort.deflate64EncodedBound(input.len);
@@ -118,6 +120,19 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(one_shot_zip);
         artifacts[completed] = try saveOneShotArtifact(init, directory, name, .one_shot_zip, one_shot_zip, raw_bound, false);
         completed += 1;
+        inline for (.{ Compression.dynamic, Compression.adaptive }) |compression| {
+            const raw = try encodeRaw(init.gpa, input, .mixed, compression);
+            defer init.gpa.free(raw.bytes);
+            const decoded = try vort.decodeDeflate64AllocLimited(init.gpa, raw.bytes, input.len);
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, decoded, input)) return error.RawRoundTripMismatch;
+            artifacts[completed] = try saveArtifact(init, directory, name, .mixed, compression, .incremental_raw, raw, true);
+            completed += 1;
+            const zip = try encodeZip(init.gpa, input, .mixed, compression);
+            defer init.gpa.free(zip.bytes);
+            artifacts[completed] = try saveArtifact(init, directory, name, .mixed, compression, .incremental_zip, zip, false);
+            completed += 1;
+        }
         const after_sha = try digestAlloc(init.gpa, input);
         defer init.gpa.free(after_sha);
         if (!std.mem.eql(u8, input_sha, after_sha)) return error.InputModified;
@@ -131,12 +146,12 @@ pub fn main(init: std.process.Init) !void {
         });
     }
     const manifest = try std.json.Stringify.valueAlloc(init.gpa, .{
-        .schema = "vort.deflate64.stream-fixtures.v2",
+        .schema = "vort.deflate64.stream-fixtures.v3",
         .generator = "public incremental and one-shot Deflate64 and ZIP method 9 encoders",
         .zig_version = builtin.zig_version_string,
         .optimize = @tagName(builtin.mode),
-        .incremental_compression = "fixed",
-        .one_shot_compression = "default adaptive fixed/stored size arbitration",
+        .incremental_compressions = .{ "fixed", "dynamic", "adaptive" },
+        .one_shot_compression = "default adaptive fixed/dynamic/global stored size arbitration",
         .one_shot_max_chain = 128,
         .one_shot_nice_length = 65_538,
         .block_len = block_len,
@@ -147,17 +162,21 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(manifest);
     try directory.writeFile(init.io, .{ .sub_path = "manifest.json", .data = manifest });
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
-    try stdout.interface.print("{{\"schema\":\"vort.deflate64.stream-probe.v2\",\"cases\":{d},\"artifacts\":{d}}}\n", .{ cases.items.len, cases.items.len * 6 });
+    try stdout.interface.print("{{\"schema\":\"vort.deflate64.stream-probe.v3\",\"cases\":{d},\"artifacts\":{d}}}\n", .{ cases.items.len, cases.items.len * 10 });
     try stdout.interface.flush();
 }
 
-fn saveArtifact(init: std.process.Init, directory: std.Io.Dir, name: []const u8, pattern: Pattern, kind: @FieldType(Artifact, "kind"), encoded: Encoded, verified: bool) !Artifact {
-    const file = try std.fmt.allocPrint(init.gpa, "{s}-{s}.{s}", .{ name, @tagName(pattern), if (kind == .incremental_raw) "raw" else "zip" });
+fn saveArtifact(init: std.process.Init, directory: std.Io.Dir, name: []const u8, pattern: Pattern, compression: Compression, kind: @FieldType(Artifact, "kind"), encoded: Encoded, verified: bool) !Artifact {
+    const extension = if (kind == .incremental_raw) "raw" else "zip";
+    const file = if (compression == .fixed)
+        try std.fmt.allocPrint(init.gpa, "{s}-{s}.{s}", .{ name, @tagName(pattern), extension })
+    else
+        try std.fmt.allocPrint(init.gpa, "{s}-{s}-{s}.{s}", .{ name, @tagName(compression), @tagName(pattern), extension });
     errdefer init.gpa.free(file);
     const sha = try digestAlloc(init.gpa, encoded.bytes);
     errdefer init.gpa.free(sha);
     try directory.writeFile(init.io, .{ .sub_path = file, .data = encoded.bytes });
-    return .{ .file = file, .kind = kind, .pattern = pattern, .bytes = encoded.bytes.len, .sha256 = sha, .progress = encoded.progress, .self_decode_verified = verified };
+    return .{ .file = file, .kind = kind, .compression = compression, .pattern = pattern, .bytes = encoded.bytes.len, .sha256 = sha, .progress = encoded.progress, .self_decode_verified = verified };
 }
 
 fn saveOneShotArtifact(init: std.process.Init, directory: std.Io.Dir, name: []const u8, kind: @FieldType(Artifact, "kind"), encoded: []const u8, raw_bound: usize, verified: bool) !Artifact {
@@ -166,7 +185,7 @@ fn saveOneShotArtifact(init: std.process.Init, directory: std.Io.Dir, name: []co
     const sha = try digestAlloc(init.gpa, encoded);
     errdefer init.gpa.free(sha);
     try directory.writeFile(init.io, .{ .sub_path = file, .data = encoded });
-    return .{ .file = file, .kind = kind, .pattern = null, .bytes = encoded.len, .sha256 = sha, .progress = null, .self_decode_verified = verified, .raw_payload_bound = raw_bound };
+    return .{ .file = file, .kind = kind, .compression = .adaptive, .pattern = null, .bytes = encoded.len, .sha256 = sha, .progress = null, .self_decode_verified = verified, .raw_payload_bound = raw_bound };
 }
 
 fn makeInput(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
@@ -248,10 +267,10 @@ fn record(progress: *Progress, input_offer: usize, output: []u8, input_read: usi
     if (output_written != 0 and progress.first_output_input_offset == null) progress.first_output_input_offset = progress.input_read;
 }
 
-fn encodeRaw(allocator: std.mem.Allocator, input: []const u8, pattern: Pattern) !Encoded {
+fn encodeRaw(allocator: std.mem.Allocator, input: []const u8, pattern: Pattern, compression: Compression) !Encoded {
     const options: vort.Deflate64IncrementalEncoder.Options = .{
         .block_len = block_len,
-        .compression = .fixed,
+        .compression = compression,
         .nice_length = 65_538,
     };
     var encoder = if (pattern == .one)
@@ -282,11 +301,11 @@ fn encodeRaw(allocator: std.mem.Allocator, input: []const u8, pattern: Pattern) 
     return error.RawStepLimit;
 }
 
-fn encodeZip(allocator: std.mem.Allocator, input: []const u8, pattern: Pattern) !Encoded {
+fn encodeZip(allocator: std.mem.Allocator, input: []const u8, pattern: Pattern, compression: Compression) !Encoded {
     var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
         .zip64 = .never,
         .archive_comment = "vort Deflate64 streaming fixture",
-        .deflate64_options = .{ .block_len = block_len, .compression = .fixed, .nice_length = 65_538 },
+        .deflate64_options = .{ .block_len = block_len, .compression = compression, .nice_length = 65_538 },
     });
     defer writer.deinit();
     var archive: std.ArrayList(u8) = .empty;

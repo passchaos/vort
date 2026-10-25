@@ -1,131 +1,12 @@
-//! Independent fixed/stored token inspection and resumable encoder contracts.
+//! Independent fixed/stored/dynamic token inspection and resumable encoder contracts.
 //! The public decoder is imported directly, without the Deflate64 facade.
 const std = @import("std");
 const decoder = @import("decoder.zig");
 const stored_encoder = @import("encoder.zig");
 const core = @import("../core.zig");
 
-const Cursor = struct {
-    bytes: []const u8,
-    position: usize = 0,
-    fn read(self: *Cursor, width: u6) !u32 {
-        if (@as(u128, self.position) + width > @as(u128, self.bytes.len) * 8) return error.TruncatedFrame;
-        var result: u32 = 0;
-        for (0..width) |bit| {
-            const absolute = self.position + bit;
-            const one: u32 = (self.bytes[absolute / 8] >> @as(u3, @intCast(absolute % 8))) & 1;
-            result |= one << @as(u5, @intCast(bit));
-        }
-        self.position += width;
-        return result;
-    }
-    fn fixedSymbol(self: *Cursor) !u16 {
-        var code: u16 = 0;
-        for (1..10) |width| {
-            code = (code << 1) | @as(u16, @intCast(try self.read(1)));
-            if (width == 7 and code <= 23) return 256 + code;
-            if (width == 8) {
-                if (code >= 48 and code <= 191) return code - 48;
-                if (code >= 192 and code <= 199) return 280 + code - 192;
-            }
-            if (width == 9 and code >= 400 and code <= 511) return 144 + code - 400;
-        }
-        return error.InvalidHuffmanCode;
-    }
-    fn distanceSymbol(self: *Cursor) !u16 {
-        var code: u16 = 0;
-        for (0..5) |_| code = (code << 1) | @as(u16, @intCast(try self.read(1)));
-        return code;
-    }
-};
-
-const Match = struct {
-    block: usize,
-    output_offset: usize,
-    length_symbol: u16,
-    length: usize,
-    distance_symbol: u16,
-    distance: usize,
-};
-const Inspection = struct {
-    output: []u8,
-    matches: std.ArrayList(Match) = .empty,
-    fixed_blocks: usize = 0,
-    stored_blocks: usize = 0,
-    literals: usize = 0,
-    fn deinit(self: *Inspection) void {
-        self.matches.deinit(std.testing.allocator);
-        std.testing.allocator.free(self.output);
-    }
-};
-
-fn inspect(wire: []const u8, output_len: usize) !Inspection {
-    var result: Inspection = .{ .output = try std.testing.allocator.alloc(u8, output_len) };
-    errdefer result.deinit();
-    var reader: Cursor = .{ .bytes = wire };
-    var written: usize = 0;
-    var block: usize = 0;
-    while (true) : (block += 1) {
-        const final = try reader.read(1) != 0;
-        const kind = try reader.read(2);
-        if (kind == 0) {
-            result.stored_blocks += 1;
-            reader.position = reader.position / 8 * 8 + @as(usize, @intFromBool(reader.position % 8 != 0)) * 8;
-            const length: u16 = @intCast(try reader.read(16));
-            const complement: u16 = @intCast(try reader.read(16));
-            try std.testing.expectEqual(@as(u16, ~length), complement);
-            if (length > result.output.len - written) return error.OutputTooSmall;
-            for (result.output[written..][0..length]) |*byte| byte.* = @intCast(try reader.read(8));
-            written += length;
-        } else if (kind == 1) {
-            result.fixed_blocks += 1;
-            while (true) {
-                const symbol = try reader.fixedSymbol();
-                if (symbol < 256) {
-                    if (written == result.output.len) return error.OutputTooSmall;
-                    result.output[written] = @intCast(symbol);
-                    written += 1;
-                    result.literals += 1;
-                } else if (symbol == 256) {
-                    break;
-                } else {
-                    if (symbol > 285) return error.InvalidHuffmanCode;
-                    var length: usize = undefined;
-                    if (symbol <= 264) {
-                        length = symbol - 254;
-                    } else if (symbol == 285) {
-                        length = 3 + try reader.read(16);
-                    } else {
-                        const group: usize = (symbol - 265) / 4;
-                        const width: u6 = @intCast(group + 1);
-                        const slot: usize = (symbol - 265) % 4;
-                        const base = (@as(usize, 1) << @intCast(width + 2)) + 3 + slot * (@as(usize, 1) << @intCast(width));
-                        length = base + try reader.read(width);
-                    }
-                    const distance_symbol = try reader.distanceSymbol();
-                    const distance: usize = if (distance_symbol < 4)
-                        distance_symbol + 1
-                    else blk: {
-                        const width: u6 = @intCast(distance_symbol / 2 - 1);
-                        const base = ((2 + @as(usize, distance_symbol & 1)) << @intCast(width)) + 1;
-                        break :blk base + try reader.read(width);
-                    };
-                    if (distance > written or distance > 65536) return error.InvalidMatch;
-                    if (length > result.output.len - written) return error.OutputTooSmall;
-                    try result.matches.append(std.testing.allocator, .{ .block = block, .output_offset = written, .length_symbol = symbol, .length = length, .distance_symbol = distance_symbol, .distance = distance });
-                    for (0..length) |_| {
-                        result.output[written] = result.output[written - distance];
-                        written += 1;
-                    }
-                }
-            }
-        } else return error.InvalidDeflateBlockType;
-        if (final) break;
-    }
-    try std.testing.expectEqual(output_len, written);
-    try std.testing.expectEqual(wire.len, reader.position / 8 + @intFromBool(reader.position % 8 != 0));
-    return result;
-}
+const test_wire = @import("test_wire.zig");
+const inspect = test_wire.inspect;
 
 fn untouched(bytes: []const u8) !void {
     for (bytes) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
@@ -202,7 +83,7 @@ fn roundTrips(comptime Codec: type) !void {
     const repetitive = "Deflate64 stream exact caller progress abcdefghabcdefgh\n" ** 79;
     var random: [4097]u8 = undefined;
     fill(&random, 0x243f6a88);
-    inline for (.{ .adaptive, .fixed, .stored }) |compression| {
+    inline for (.{ .adaptive, .fixed, .dynamic, .stored }) |compression| {
         for ([_][]const u8{ "", "x", "abc", "tiny", repetitive, &random }) |input| {
             var baseline = Encoder.initWithOptions(std.testing.allocator, .{ .block_len = 1024, .compression = compression });
             defer baseline.deinit();
@@ -238,48 +119,58 @@ fn roundTrips(comptime Codec: type) !void {
 
 fn extendedTokens(comptime Codec: type) !void {
     const Encoder = Codec.Encoder;
-    const input = try std.testing.allocator.alloc(u8, 131072);
-    defer std.testing.allocator.free(input);
-    fill(input[0..65536], 0x243f6a88);
-    @memcpy(input[65536..], input[0..65536]);
-    var encoder = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .fixed, .max_chain = 128, .nice_length = 65538 });
-    defer encoder.deinit();
-    const wire = try complete(&encoder, input, 4096, 521);
-    defer std.testing.allocator.free(wire);
-    var parsed = try inspect(wire, input.len);
-    defer parsed.deinit();
-    try std.testing.expectEqualSlices(u8, input, parsed.output);
-    var distance_65536 = false;
-    for (parsed.matches.items) |match| if (match.distance == 65536) {
-        distance_65536 = true;
-        try std.testing.expectEqual(@as(u16, 31), match.distance_symbol);
-        try std.testing.expect(match.length >= 32768);
-    };
-    try std.testing.expect(distance_65536);
+    inline for (.{ .fixed, .dynamic }) |compression| {
+        const input = try std.testing.allocator.alloc(u8, 131072);
+        defer std.testing.allocator.free(input);
+        fill(input[0..65536], 0x243f6a88);
+        @memcpy(input[65536..], input[0..65536]);
+        var encoder = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression, .max_chain = 128, .nice_length = 65538 });
+        defer encoder.deinit();
+        const wire = try complete(&encoder, input, 4096, 521);
+        defer std.testing.allocator.free(wire);
+        var parsed = try inspect(wire, input.len);
+        defer parsed.deinit();
+        try std.testing.expectEqualSlices(u8, input, parsed.output);
+        var distance_65536 = false;
+        for (parsed.matches.items) |match| if (match.distance == 65536) {
+            distance_65536 = true;
+            try std.testing.expectEqual(@as(u16, 31), match.distance_code);
+            try std.testing.expect(match.length >= 32768);
+        };
+        try std.testing.expect(distance_65536);
 
-    @memset(input[0..65539], 'R');
-    var long = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .fixed });
-    defer long.deinit();
-    const long_wire = try complete(&long, input[0..65539], 4096, 521);
-    defer std.testing.allocator.free(long_wire);
-    var long_tokens = try inspect(long_wire, 65539);
-    defer long_tokens.deinit();
-    try std.testing.expectEqual(@as(usize, 1), long_tokens.literals);
-    try std.testing.expectEqual(@as(usize, 1), long_tokens.matches.items.len);
-    try std.testing.expectEqual(@as(u16, 285), long_tokens.matches.items[0].length_symbol);
-    try std.testing.expectEqual(@as(usize, 65538), long_tokens.matches.items[0].length);
-    try std.testing.expectEqual(@as(usize, 1), long_tokens.matches.items[0].distance);
-    var length258 = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .fixed });
-    defer length258.deinit();
-    const short_wire = try complete(&length258, input[0..259], 17, 5);
-    defer std.testing.allocator.free(short_wire);
-    var short_tokens = try inspect(short_wire, 259);
-    defer short_tokens.deinit();
-    try std.testing.expectEqual(@as(usize, 1), short_tokens.matches.items.len);
-    try std.testing.expectEqual(@as(u16, 284), short_tokens.matches.items[0].length_symbol);
-    try std.testing.expectEqual(@as(usize, 258), short_tokens.matches.items[0].length);
+        @memset(input[0..65539], 'R');
+        var long = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression });
+        defer long.deinit();
+        const long_wire = try complete(&long, input[0..65539], 4096, 521);
+        defer std.testing.allocator.free(long_wire);
+        var long_tokens = try inspect(long_wire, 65539);
+        defer long_tokens.deinit();
+        try std.testing.expectEqual(@as(usize, 1), long_tokens.literals);
+        try std.testing.expectEqual(@as(usize, 1), long_tokens.matches.items.len);
+        try std.testing.expectEqual(@as(u16, 285), long_tokens.matches.items[0].length_code);
+        try std.testing.expectEqual(@as(usize, 65538), long_tokens.matches.items[0].length);
+        try std.testing.expectEqual(@as(usize, 1), long_tokens.matches.items[0].distance);
+        var length258 = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression });
+        defer length258.deinit();
+        const short_wire = try complete(&length258, input[0..259], 17, 5);
+        defer std.testing.allocator.free(short_wire);
+        var short_tokens = try inspect(short_wire, 259);
+        defer short_tokens.deinit();
+        try std.testing.expectEqual(@as(usize, 1), short_tokens.matches.items.len);
+        try std.testing.expectEqual(@as(u16, 284), short_tokens.matches.items[0].length_code);
+        try std.testing.expectEqual(@as(usize, 258), short_tokens.matches.items[0].length);
+        var length259 = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression });
+        defer length259.deinit();
+        const boundary_wire = try complete(&length259, input[0..260], 17, 5);
+        defer std.testing.allocator.free(boundary_wire);
+        var boundary = try inspect(boundary_wire, 260);
+        defer boundary.deinit();
+        try std.testing.expectEqual(@as(usize, 1), boundary.matches.items.len);
+        try std.testing.expectEqual(@as(u16, 285), boundary.matches.items[0].length_code);
+        try std.testing.expectEqual(@as(usize, 259), boundary.matches.items[0].length);
+    }
 }
-
 fn drainFlush(encoder: anytype, wire: *std.ArrayList(u8)) !void {
     var output: [521]u8 = undefined;
     for (0..8192) |_| {
@@ -297,55 +188,149 @@ fn flushHistory(comptime Codec: type) !void {
     fill(input[0..1024], 0x6a09e667);
     @memcpy(input[1024..], input[0..1024]);
     const Flush = enum { block, partial, sync, full };
-    for (std.enums.values(Flush)) |mode| {
-        var encoder = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .fixed, .block_len = 1024 });
-        defer encoder.deinit();
-        var wire: std.ArrayList(u8) = .empty;
-        defer wire.deinit(std.testing.allocator);
-        try feed(&encoder, input[0..1024], 17, 5, &wire);
-        switch (mode) {
-            .block => encoder.blockFlush(),
-            .partial => encoder.partialFlush(),
-            .sync => encoder.flush(),
-            .full => encoder.fullFlush(),
+    inline for (.{ .fixed, .dynamic }) |compression| {
+        for (std.enums.values(Flush)) |mode| {
+            var encoder = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression, .block_len = 1024 });
+            defer encoder.deinit();
+            var wire: std.ArrayList(u8) = .empty;
+            defer wire.deinit(std.testing.allocator);
+            try feed(&encoder, input[0..1024], 17, 5, &wire);
+            switch (mode) {
+                .block => encoder.blockFlush(),
+                .partial => encoder.partialFlush(),
+                .sync => encoder.flush(),
+                .full => encoder.fullFlush(),
+            }
+            try drainFlush(&encoder, &wire);
+            const boundary_len = wire.items.len;
+            switch (mode) {
+                .block => encoder.blockFlush(),
+                .partial => encoder.partialFlush(),
+                .sync => encoder.flush(),
+                .full => encoder.fullFlush(),
+            }
+            try drainFlush(&encoder, &wire);
+            try std.testing.expectEqual(boundary_len, wire.items.len);
+            if (mode == .full) try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().history_len) else try std.testing.expect(encoder.snapshot().history_len != 0);
+            const rest = try complete(&encoder, input[1024..], 17, 5);
+            defer std.testing.allocator.free(rest);
+            try wire.appendSlice(std.testing.allocator, rest);
+            try decodedEqual(wire.items, &input);
+            var parsed = try inspect(wire.items, input.len);
+            defer parsed.deinit();
+            var cross_history = false;
+            for (parsed.matches.items) |match| {
+                if (match.position == 1024 and match.distance == 1024 and match.length == 1024) cross_history = true;
+            }
+            try std.testing.expectEqual(mode != .full, cross_history);
+            if (mode == .partial) try std.testing.expect(parsed.fixed_blocks >= (if (compression == .fixed) @as(usize, 3) else 1));
+            if (mode == .sync or mode == .full) try std.testing.expect(parsed.stored_blocks != 0);
         }
-        try drainFlush(&encoder, &wire);
-        const boundary_len = wire.items.len;
-        switch (mode) {
-            .block => encoder.blockFlush(),
-            .partial => encoder.partialFlush(),
-            .sync => encoder.flush(),
-            .full => encoder.fullFlush(),
-        }
-        try drainFlush(&encoder, &wire);
-        try std.testing.expectEqual(boundary_len, wire.items.len);
-        if (mode == .full) try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().history_len) else try std.testing.expect(encoder.snapshot().history_len != 0);
-        const rest = try complete(&encoder, input[1024..], 17, 5);
-        defer std.testing.allocator.free(rest);
-        try wire.appendSlice(std.testing.allocator, rest);
-        try decodedEqual(wire.items, &input);
-        var parsed = try inspect(wire.items, input.len);
+        var automatic = Encoder.initWithOptions(std.testing.allocator, .{ .compression = compression, .block_len = 1024 });
+        defer automatic.deinit();
+        const wire = try complete(&automatic, &input, input.len, 521);
+        defer std.testing.allocator.free(wire);
+        var parsed = try inspect(wire, input.len);
         defer parsed.deinit();
-        var cross_history = false;
-        for (parsed.matches.items) |match| {
-            if (match.output_offset == 1024 and match.distance == 1024 and match.length == 1024) cross_history = true;
-        }
-        try std.testing.expectEqual(mode != .full, cross_history);
-        if (mode == .partial) try std.testing.expect(parsed.fixed_blocks >= 3);
-        if (mode == .sync or mode == .full) try std.testing.expect(parsed.stored_blocks != 0);
+        try std.testing.expectEqual(@as(usize, 2), if (compression == .fixed) parsed.fixed_blocks else parsed.dynamic_blocks);
+        var shared = false;
+        for (parsed.matches.items) |match| if (match.position == 1024 and match.distance == 1024) {
+            shared = true;
+        };
+        try std.testing.expect(shared);
     }
-    var automatic = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .fixed, .block_len = 1024 });
-    defer automatic.deinit();
-    const wire = try complete(&automatic, &input, input.len, 521);
-    defer std.testing.allocator.free(wire);
-    var parsed = try inspect(wire, input.len);
-    defer parsed.deinit();
-    try std.testing.expectEqual(@as(usize, 2), parsed.fixed_blocks);
-    var shared = false;
-    for (parsed.matches.items) |match| if (match.output_offset == 1024 and match.distance == 1024) {
-        shared = true;
-    };
-    try std.testing.expect(shared);
+}
+fn dynamicModes(comptime Codec: type) !void {
+    const Encoder = Codec.Encoder;
+    const input = "A" ** 512;
+    // Each real non-final fixed block containing a single high literal is
+    // nineteen bits long. Its 3-bit residue visits every q0...q7 alignment.
+    for (0..8) |prefix_blocks| {
+        inline for (.{ .adaptive, .dynamic }) |compression| {
+            for ([_]bool{ false, true }) |final| {
+                var encoder = Encoder.initWithOptions(std.testing.allocator, .{ .block_len = 1024, .compression = .fixed, .max_chain = 0 });
+                defer encoder.deinit();
+                var wire: std.ArrayList(u8) = .empty;
+                defer wire.deinit(std.testing.allocator);
+                for (0..prefix_blocks) |_| {
+                    try feed(&encoder, "\xa5", 1, 5, &wire);
+                    encoder.blockFlush();
+                    try drainFlush(&encoder, &wire);
+                }
+                encoder.options.compression = compression;
+                try feed(&encoder, input, 17, 5, &wire);
+                if (!final) {
+                    encoder.blockFlush();
+                    try drainFlush(&encoder, &wire);
+                    encoder.options.compression = .fixed;
+                }
+                const tail = try complete(&encoder, "", 1, 5);
+                defer std.testing.allocator.free(tail);
+                try wire.appendSlice(std.testing.allocator, tail);
+                var expected: [input.len + 7]u8 = undefined;
+                @memset(expected[0..prefix_blocks], 0xa5);
+                @memcpy(expected[prefix_blocks..][0..input.len], input);
+                var parsed = try inspect(wire.items, prefix_blocks + input.len);
+                defer parsed.deinit();
+                try std.testing.expectEqualSlices(u8, expected[0 .. prefix_blocks + input.len], parsed.output);
+                const block = parsed.blocks.items[prefix_blocks];
+                try std.testing.expectEqual(@as(u2, 2), block.kind);
+                try std.testing.expectEqual(final, block.final);
+                try std.testing.expectEqual((prefix_blocks * 19) % 8, block.bit_start % 8);
+                const bits = block.bit_end - block.bit_start;
+                const q = block.bit_start % 8;
+                const fixed_bits = 10 + input.len * 8;
+                const stored_bits = 3 + (8 - (q + 3) % 8) % 8 + 32 + input.len * 8;
+                const own_cost = if (final) (q + bits + 7) / 8 else bits;
+                const fixed_cost = if (final) (q + fixed_bits + 7) / 8 else fixed_bits;
+                const stored_cost = if (final) (q + stored_bits + 7) / 8 else stored_bits;
+                try std.testing.expect(own_cost < fixed_cost and own_cost < stored_cost);
+                try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().dynamic_block_count);
+                try std.testing.expect(block.header.?.repeat_18 != 0);
+                try decodedEqual(wire.items, expected[0 .. prefix_blocks + input.len]);
+            }
+        }
+    }
+}
+
+fn dynamicLimits(comptime Codec: type) !void {
+    const Encoder = Codec.Encoder;
+    const input = "A" ** 513;
+    var baseline = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .dynamic, .max_chain = 0 });
+    defer baseline.deinit();
+    const expected = try complete(&baseline, input, 17, 5);
+    defer std.testing.allocator.free(expected);
+    var exact = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .dynamic, .max_chain = 0, .max_pending_output_len = expected.len });
+    defer exact.deinit();
+    const actual = try complete(&exact, input, 1, 1);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualSlices(u8, expected, actual);
+    var below = Encoder.initWithOptions(std.testing.allocator, .{ .compression = .dynamic, .max_chain = 0, .max_pending_output_len = expected.len - 1 });
+    defer below.deinit();
+    var discarded: std.ArrayList(u8) = .empty;
+    defer discarded.deinit(std.testing.allocator);
+    try feed(&below, input, 17, 5, &discarded);
+    below.finish();
+    var output: [128]u8 = undefined;
+    try checkSticky(&below, error.OutputLimitExceeded, "", &output);
+    try std.testing.expectEqual(@as(usize, 0), below.snapshot().dynamic_block_count);
+    try std.testing.expectEqual(input.len, below.snapshot().buffered_input);
+    below.resetWithOptions(.{ .compression = .dynamic, .max_chain = 0 });
+    const recovered = try complete(&below, input, 17, 5);
+    defer std.testing.allocator.free(recovered);
+    try std.testing.expectEqualSlices(u8, expected, recovered);
+
+    var heap = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var failing = Encoder.initWithOptions(heap.allocator(), .{ .compression = .dynamic, .max_chain = 0 });
+    defer failing.deinit();
+    var buffered: [1]u8 = undefined;
+    @memset(&buffered, 0xa5);
+    _ = try checkedStep(&failing, input, &buffered);
+    failing.finish();
+    heap.fail_index = heap.alloc_index;
+    try checkSticky(&failing, error.OutOfMemory, "", &output);
+    try std.testing.expectEqual(@as(usize, 0), failing.snapshot().dynamic_block_count);
+    try std.testing.expectEqual(input.len, failing.snapshot().buffered_input);
 }
 
 fn checkSticky(encoder: anytype, expected_error: anyerror, input: []const u8, output: []u8) !void {
@@ -569,6 +554,8 @@ fn boundedOwnership(comptime Codec: type) !void {
 pub fn contracts(comptime Codec: type) !void {
     try roundTrips(Codec);
     try extendedTokens(Codec);
+    try dynamicModes(Codec);
+    try dynamicLimits(Codec);
     try flushHistory(Codec);
     try limitsAndReset(Codec);
     try allocationFailures(Codec);

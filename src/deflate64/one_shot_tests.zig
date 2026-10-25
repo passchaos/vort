@@ -4,107 +4,11 @@ const decoder = @import("decoder.zig");
 const stream = @import("stream_encoder.zig");
 const candidate = @import("one_shot.zig");
 
-const Reader = struct {
-    input: []const u8,
-    position: usize = 0,
-    fn bits(self: *Reader, count: u6) !u32 {
-        if (@as(u128, self.position) + count > @as(u128, self.input.len) * 8) return error.TruncatedFrame;
-        var value: u32 = 0;
-        for (0..count) |index| {
-            const absolute = self.position + index;
-            const bit: u32 = (self.input[absolute / 8] >> @as(u3, @intCast(absolute % 8))) & 1;
-            value |= bit << @as(u5, @intCast(index));
-        }
-        self.position += count;
-        return value;
-    }
-    fn symbol(self: *Reader) !u16 {
-        var value: u16 = 0;
-        for (1..10) |width| {
-            value = (value << 1) | @as(u16, @intCast(try self.bits(1)));
-            if (width == 7 and value <= 23) return 256 + value;
-            if (width == 8) {
-                if (value >= 48 and value <= 191) return value - 48;
-                if (value >= 192 and value <= 199) return 280 + value - 192;
-            }
-            if (width == 9 and value >= 400 and value <= 511) return 144 + value - 400;
-        }
-        return error.InvalidHuffmanCode;
-    }
-};
-const Token = struct { position: usize, length_code: u16, length: usize, distance_code: u16, distance: usize };
-const Tokens = struct {
-    matches: std.ArrayList(Token) = .empty,
-    literals: usize = 0,
-    produced: usize = 0,
-    fixed_blocks: usize = 0,
-    stored_blocks: usize = 0,
-    fn deinit(self: *Tokens) void {
-        self.matches.deinit(std.testing.allocator);
-    }
-};
-
-fn inspect(input: []const u8) !Tokens {
-    var reader: Reader = .{ .input = input };
-    var result: Tokens = .{};
-    errdefer result.deinit();
-    while (true) {
-        const final = try reader.bits(1) != 0;
-        switch (try reader.bits(2)) {
-            0 => {
-                result.stored_blocks += 1;
-                reader.position += (8 - reader.position % 8) % 8;
-                const count: u16 = @intCast(try reader.bits(16));
-                const complement: u16 = @intCast(try reader.bits(16));
-                try std.testing.expectEqual(@as(u16, ~count), complement);
-                for (0..count) |_| _ = try reader.bits(8);
-                result.produced += count;
-            },
-            1 => {
-                result.fixed_blocks += 1;
-                while (true) {
-                    const code = try reader.symbol();
-                    if (code < 256) {
-                        result.literals += 1;
-                        result.produced += 1;
-                        continue;
-                    }
-                    if (code == 256) break;
-                    if (code > 285) return error.InvalidHuffmanCode;
-                    const length: usize = if (code <= 264)
-                        code - 254
-                    else if (code == 285)
-                        3 + @as(usize, try reader.bits(16))
-                    else blk: {
-                        const width: u6 = @intCast((code - 265) / 4 + 1);
-                        const slot: usize = (code - 265) % 4;
-                        const base = (@as(usize, 1) << @intCast(width + 2)) + 3 + slot * (@as(usize, 1) << @intCast(width));
-                        break :blk base + try reader.bits(width);
-                    };
-                    var distance_code: u16 = 0;
-                    for (0..5) |_| distance_code = (distance_code << 1) | @as(u16, @intCast(try reader.bits(1)));
-                    const distance: usize = if (distance_code < 4)
-                        distance_code + 1
-                    else blk: {
-                        const width: u6 = @intCast(distance_code / 2 - 1);
-                        const base = ((2 + @as(usize, distance_code & 1)) << @intCast(width)) + 1;
-                        break :blk base + try reader.bits(width);
-                    };
-                    try std.testing.expect(distance <= result.produced and distance <= 65536);
-                    try result.matches.append(std.testing.allocator, .{ .position = result.produced, .length_code = code, .length = length, .distance_code = distance_code, .distance = distance });
-                    result.produced += length;
-                }
-            },
-            else => return error.InvalidDeflateBlockType,
-        }
-        if (final) break;
-    }
-    try std.testing.expectEqual(input.len, reader.position / 8 + @intFromBool(reader.position % 8 != 0));
-    return result;
-}
+const test_wire = @import("test_wire.zig");
+const inspect = test_wire.inspect;
 
 fn roundTrip(wire: []const u8, input: []const u8) !void {
-    var tokens = try inspect(wire);
+    var tokens = try inspect(wire, input.len);
     defer tokens.deinit();
     try std.testing.expectEqual(input.len, tokens.produced);
     const output = try decoder.decodeAlloc(std.testing.allocator, wire);
@@ -112,8 +16,10 @@ fn roundTrip(wire: []const u8, input: []const u8) !void {
     try std.testing.expectEqualSlices(u8, input, output);
 }
 
-fn fixedStream(input: []const u8, options: anytype) ![]u8 {
-    var encoder = stream.Encoder.initExactSize(std.testing.allocator, .{ .compression = .fixed, .block_len = 131072, .max_chain = options.max_chain, .nice_length = options.nice_length }, input.len);
+// One-shot nice lengths zero through two stop at the first legal match.
+// Stream minimum three gives that same stop while preserving its validator.
+fn forcedStream(input: []const u8, options: anytype, compression: stream.Encoder.Compression) ![]u8 {
+    var encoder = stream.Encoder.initExactSize(std.testing.allocator, .{ .compression = compression, .block_len = 131072, .max_chain = options.max_chain, .nice_length = @max(options.nice_length, 3) }, input.len);
     defer encoder.deinit();
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(std.testing.allocator);
@@ -155,17 +61,46 @@ fn boundAndWire(comptime Codec: type, input: []const u8, options: Codec.EncodeOp
     try std.testing.expect(wire.len <= try Codec.encodedBound(input.len));
     try std.testing.expectEqualSlices(u8, before, input);
     try roundTrip(wire, input);
-    if (options.nice_length >= 3) {
-        const fixed = try fixedStream(input, options);
-        defer a.free(fixed);
-        if (fixed.len < try Codec.encodedBound(input.len)) {
-            try std.testing.expectEqualSlices(u8, fixed, wire);
-        } else {
-            const stored = try a.alloc(u8, try Codec.encodedBound(input.len));
-            defer a.free(stored);
-            _ = try Codec.encodeStoredInto(input, stored);
-            try std.testing.expectEqualSlices(u8, stored, wire);
-        }
+    // Independent selection oracle from the two actual forced format wires.
+    // Each 128 KiB block is selected by its exact bit cost, then the complete
+    // mixed candidate is compared strictly to the global stored byte bound.
+    const fixed = try forcedStream(input, options, .fixed);
+    defer a.free(fixed);
+    const dynamic = try forcedStream(input, options, .dynamic);
+    defer a.free(dynamic);
+    var fixed_tokens = try inspect(fixed, input.len);
+    defer fixed_tokens.deinit();
+    var dynamic_tokens = try inspect(dynamic, input.len);
+    defer dynamic_tokens.deinit();
+    try std.testing.expectEqual(fixed_tokens.blocks.items.len, dynamic_tokens.blocks.items.len);
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(a);
+    var selected_bits: usize = 0;
+    for (fixed_tokens.blocks.items, dynamic_tokens.blocks.items) |fixed_block, dynamic_block| {
+        try std.testing.expectEqual(fixed_block.output_start, dynamic_block.output_start);
+        try std.testing.expectEqual(fixed_block.output_end, dynamic_block.output_end);
+        const use_dynamic = dynamic_block.bit_end - dynamic_block.bit_start < fixed_block.bit_end - fixed_block.bit_start;
+        const block = if (use_dynamic) dynamic_block else fixed_block;
+        const source = if (use_dynamic) dynamic else fixed;
+        try appendBits(&selected, &selected_bits, source, block.bit_start, block.bit_end);
+    }
+    const stored_bound = try Codec.encodedBound(input.len);
+    if (selected.items.len < stored_bound) {
+        try std.testing.expectEqualSlices(u8, selected.items, wire);
+    } else {
+        const stored = try a.alloc(u8, stored_bound);
+        defer a.free(stored);
+        _ = try Codec.encodeStoredInto(input, stored);
+        try std.testing.expectEqualSlices(u8, stored, wire);
+    }
+}
+
+fn appendBits(output: *std.ArrayList(u8), position: *usize, source: []const u8, start: usize, end: usize) !void {
+    for (start..end) |bit| {
+        if (position.* % 8 == 0) try output.append(std.testing.allocator, 0);
+        const value = (source[bit / 8] >> @as(u3, @intCast(bit % 8))) & 1;
+        output.items[output.items.len - 1] |= value << @as(u3, @intCast(position.* % 8));
+        position.* += 1;
     }
 }
 
@@ -177,12 +112,21 @@ fn fullRange(comptime Codec: type) !void {
     defer a.free(input);
     fill(input, 0x243f6a88);
     try boundAndWire(Codec, input, .{});
-    try boundAndWire(Codec, input[0..4097], .{ .nice_length = 0 });
+    for ([_]u32{ 0, 1, 2 }) |nice| try boundAndWire(Codec, input[0..4097], .{ .nice_length = nice });
     @memset(input, 'R');
     try boundAndWire(Codec, input, .{ .nice_length = 65538 });
+    const first_match = "abcabcabcabcabcabcabcabcabcabcabc";
+    const three = try Codec.encodeAlloc(a, first_match, .{ .nice_length = 3 });
+    defer a.free(three);
+    for ([_]u32{ 0, 1, 2 }) |nice| {
+        const short_nice = try Codec.encodeAlloc(a, first_match, .{ .nice_length = nice });
+        defer a.free(short_nice);
+        try std.testing.expectEqualSlices(u8, three, short_nice);
+        try boundAndWire(Codec, first_match, .{ .nice_length = nice });
+    }
     const long = try Codec.encodeAlloc(a, input[0..65539], .{});
     defer a.free(long);
-    var tokens = try inspect(long);
+    var tokens = try inspect(long, 65539);
     defer tokens.deinit();
     try std.testing.expectEqual(@as(usize, 1), tokens.literals);
     try std.testing.expectEqual(@as(usize, 1), tokens.matches.items.len);
@@ -190,7 +134,7 @@ fn fullRange(comptime Codec: type) !void {
     try std.testing.expectEqual(@as(usize, 65538), tokens.matches.items[0].length);
     const short = try Codec.encodeAlloc(a, input[0..259], .{});
     defer a.free(short);
-    var short_tokens = try inspect(short);
+    var short_tokens = try inspect(short, 259);
     defer short_tokens.deinit();
     try std.testing.expectEqual(@as(usize, 1), short_tokens.matches.items.len);
     try std.testing.expectEqual(@as(u16, 284), short_tokens.matches.items[0].length_code);
@@ -199,7 +143,7 @@ fn fullRange(comptime Codec: type) !void {
     @memcpy(input[65536..131072], input[0..65536]);
     const distant = try Codec.encodeAlloc(a, input[0..131072], .{ .nice_length = 65538 });
     defer a.free(distant);
-    var distant_tokens = try inspect(distant);
+    var distant_tokens = try inspect(distant, 131072);
     defer distant_tokens.deinit();
     var saw_boundary = false;
     for (distant_tokens.matches.items) |token| if (token.distance == 65536) {
@@ -211,7 +155,7 @@ fn fullRange(comptime Codec: type) !void {
     @memset(input, 'R');
     const literal_only = try Codec.encodeAlloc(a, input, .{ .max_chain = 0 });
     defer a.free(literal_only);
-    var literal_tokens = try inspect(literal_only);
+    var literal_tokens = try inspect(literal_only, input.len);
     defer literal_tokens.deinit();
     try std.testing.expectEqual(@as(usize, 0), literal_tokens.matches.items.len);
     try roundTrip(literal_only, input);
@@ -225,6 +169,24 @@ fn fullRange(comptime Codec: type) !void {
     defer a.free(stored);
     _ = try Codec.encodeStoredInto(input, stored);
     try std.testing.expectEqualSlices(u8, stored, stored_fallback);
+}
+
+fn dynamicOneShot(comptime Codec: type) !void {
+    const input = "A" ** 8192;
+    const a = std.testing.allocator;
+    const wire = try Codec.encodeAlloc(a, input, .{ .max_chain = 0 });
+    defer a.free(wire);
+    var parsed = try inspect(wire, input.len);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.dynamic_blocks);
+    try std.testing.expectEqual(@as(usize, 0), parsed.fixed_blocks + parsed.stored_blocks);
+    try std.testing.expectEqual(input.len, parsed.literals);
+    try std.testing.expectEqual(@as(usize, 0), parsed.matches.items.len);
+    try std.testing.expect(wire.len < input.len / 4);
+    try std.testing.expect(parsed.blocks.items[0].header.?.repeat_18 != 0);
+    try std.testing.expectEqualSlices(u8, input, parsed.output);
+    try roundTrip(wire, input);
+    try boundAndWire(Codec, input, .{ .max_chain = 0 });
 }
 
 fn outputAliases(comptime Codec: type) !void {
@@ -361,6 +323,7 @@ pub fn contracts(comptime Codec: type) !void {
     try std.testing.expect(@TypeOf(@as(Codec.EncodeOptions, .{}).nice_length) == u32);
     try candidateGeometry();
     try fullRange(Codec);
+    try dynamicOneShot(Codec);
     try outputAliases(Codec);
     try failures(Codec);
 }

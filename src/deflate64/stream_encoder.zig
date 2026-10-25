@@ -1,18 +1,19 @@
-//! Incremental raw Deflate64 compression with fixed/stored block arbitration.
+//! Incremental raw Deflate64 compression with stored/fixed/dynamic arbitration.
 //! Each instance owns bounded, lazily allocated block/history/output/index
 //! storage. Bit packing and 64KiB history continue across calls and blocks;
-//! full flush starts an independent byte-aligned history segment. Dynamic
-//! Huffman blocks and preset dictionaries are outside this encoder's scope.
+//! full flush starts an independent byte-aligned history segment. Dynamic trees
+//! are planned before output admission. Preset dictionaries remain unsupported.
 const std = @import("std");
 const core = @import("../core.zig");
 const matching = @import("stream_match.zig");
 const blocks = @import("stream_blocks.zig");
+const choice = @import("block_choice.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const max_block_len: usize = 128 * 1024;
 pub const history_limit: usize = matching.window_len;
 pub const max_match_len: usize = matching.max_match_len;
-pub const Compression = enum { adaptive, fixed, stored };
+pub const Compression = enum { adaptive, fixed, stored, dynamic };
 
 pub const Encoder = struct {
     allocator: std.mem.Allocator,
@@ -36,6 +37,7 @@ pub const Encoder = struct {
     last_step_progress: core.Progress = .{},
     block_count: usize = 0,
     fixed_block_count: usize = 0,
+    dynamic_block_count: usize = 0,
     stored_block_count: usize = 0,
     match_count: usize = 0,
     max_match_length: usize = 0,
@@ -65,6 +67,7 @@ pub const Encoder = struct {
         history_len: usize,
         block_count: usize,
         fixed_block_count: usize,
+        dynamic_block_count: usize,
         stored_block_count: usize,
         match_count: usize,
         max_match_length: usize,
@@ -136,6 +139,7 @@ pub const Encoder = struct {
             .history_len = self.history.items.len,
             .block_count = self.block_count,
             .fixed_block_count = self.fixed_block_count,
+            .dynamic_block_count = self.dynamic_block_count,
             .stored_block_count = self.stored_block_count,
             .match_count = self.match_count,
             .max_match_length = self.max_match_length,
@@ -286,39 +290,59 @@ pub const Encoder = struct {
     fn writeDataBlock(self: *Self, final: bool) stream_encoder.Error!void {
         const block = self.plain.items;
         const stored_bits = blocks.storedBits(self.state, block.len);
-        var plan: blocks.Plan = .{ .bits = 10, .stats = .{} };
+        var fixed: blocks.Plan = .{ .bits = 10, .stats = .{} };
+        var dynamic: ?blocks.DynamicPlan = null;
         if (self.options.compression != .stored) {
             if (block.len != 0) try self.matcher.ensureForSize(self.allocator, self.history.items.len + block.len);
-            plan = blocks.fixedPlan(&self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length);
+            if (self.options.compression == .fixed or (block.len == 0 and self.options.compression == .adaptive)) {
+                fixed = blocks.fixedPlan(&self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length);
+            } else {
+                dynamic = try blocks.dynamicPlan(&self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length);
+                fixed = .{ .bits = dynamic.?.fixed_bits, .stats = dynamic.?.stats };
+            }
         }
-        // Non-final blocks compare exact continuous bit counts. Finish includes
-        // the last-byte padding, so a byte-size tie retains stored emission.
-        const use_fixed = self.options.compression == .fixed or (self.options.compression == .adaptive and
-            (if (final) blocks.pendingBytes(self.state, plan.bits, true) < blocks.pendingBytes(self.state, stored_bits, true) else plan.bits < stored_bits));
-        const emitted_blocks = if (use_fixed) 1 else blocks.storedBlockCount(block.len);
+        // Non-final blocks compare continuous bit costs. Final blocks compare
+        // padded bytes; ties preserve stored, then fixed, then dynamic.
+        const selected: choice.Kind = switch (self.options.compression) {
+            .stored => .stored,
+            .fixed => .fixed,
+            .dynamic => .dynamic,
+            .adaptive => choice.adaptive(self.state, stored_bits, fixed.bits, if (dynamic) |plan| plan.bits else fixed.bits, final),
+        };
+        const use_compressed = selected != .stored;
+        const emitted_blocks = if (use_compressed) 1 else blocks.storedBlockCount(block.len);
         const next_blocks = std.math.add(usize, self.block_count, emitted_blocks) catch return error.IntegerOverflow;
-        const next_fixed = std.math.add(usize, self.fixed_block_count, if (use_fixed) 1 else 0) catch return error.IntegerOverflow;
-        const next_stored = std.math.add(usize, self.stored_block_count, if (use_fixed) 0 else emitted_blocks) catch return error.IntegerOverflow;
-        const next_matches = std.math.add(usize, self.match_count, if (use_fixed) plan.stats.match_count else 0) catch return error.IntegerOverflow;
-        const required = blocks.pendingBytes(self.state, if (use_fixed) plan.bits else stored_bits, final);
+        const next_fixed = std.math.add(usize, self.fixed_block_count, @intFromBool(selected == .fixed)) catch return error.IntegerOverflow;
+        const next_dynamic = std.math.add(usize, self.dynamic_block_count, @intFromBool(selected == .dynamic)) catch return error.IntegerOverflow;
+        const next_stored = std.math.add(usize, self.stored_block_count, if (use_compressed) 0 else emitted_blocks) catch return error.IntegerOverflow;
+        const next_matches = std.math.add(usize, self.match_count, if (use_compressed) fixed.stats.match_count else 0) catch return error.IntegerOverflow;
+        const selected_bits = switch (selected) {
+            .stored => stored_bits,
+            .fixed => fixed.bits,
+            .dynamic => dynamic.?.bits,
+        };
+        const required = blocks.pendingBytes(self.state, selected_bits, final);
         try self.preparePending(required);
         if (block.len != 0) try self.history.ensureTotalCapacityPrecise(self.allocator, history_limit);
 
         var writer: blocks.Writer = .{ .state = self.state, .output = self.pending.allocatedSlice()[0..required] };
-        if (use_fixed) {
-            blocks.writeFixed(&writer, &self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length, final);
-        } else blocks.writeStored(&writer, block, final);
+        switch (selected) {
+            .fixed => blocks.writeFixed(&writer, &self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length, final),
+            .dynamic => blocks.writeDynamic(&writer, &self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length, final, &dynamic.?),
+            .stored => blocks.writeStored(&writer, block, final),
+        }
         if (final) writer.alignToByte();
         std.debug.assert(writer.len == required);
         self.pending.items.len = writer.len;
         self.state = writer.state;
         self.block_count = next_blocks;
         self.fixed_block_count = next_fixed;
+        self.dynamic_block_count = next_dynamic;
         self.stored_block_count = next_stored;
         self.match_count = next_matches;
-        if (use_fixed) {
-            self.max_match_length = @max(self.max_match_length, plan.stats.max_match_length);
-            self.max_match_distance = @max(self.max_match_distance, plan.stats.max_match_distance);
+        if (use_compressed) {
+            self.max_match_length = @max(self.max_match_length, fixed.stats.max_match_length);
+            self.max_match_distance = @max(self.max_match_distance, fixed.stats.max_match_distance);
         }
         self.retainHistory(block);
         self.matcher.reset();
