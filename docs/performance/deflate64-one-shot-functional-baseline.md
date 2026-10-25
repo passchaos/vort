@@ -150,6 +150,8 @@ entirely. Tiny-input index sizing/fast paths are future optimization work.
 The [evidence package](data/deflate64-one-shot-20261025/artifact-manifest.json)
 retains initial/final source epochs, numeric boundary
 finding and proof, exact independent tests, old/new sizes, reference identities
-and final handoff checks. Dynamic Huffman, preset dictionaries, match-profitability,
+and final handoff checks. After pulling with rebase, ReleaseFast
+Deflate6499/99 and focused ZIP44/44 pass again under unchanged full
+src/tools/build hashes. Dynamic Huffman, preset dictionaries, match-profitability,
 ratio/speed tuning and broad corpus/platform/streaming memory leadership remain
 open. Snapshot cloning or a new public resource quota is not introduced here.
