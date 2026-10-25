@@ -362,7 +362,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
         }),
-        .filters = &.{"ZIP Deflate64 stream"},
+        .filters = &.{ "ZIP Deflate64 stream", "ZIP Deflate64 one shot" },
     });
     zip_deflate64_stream_tests.root_module.addObject(br_record_optimal_obj);
     zip_deflate64_stream_tests.root_module.addObject(zstd_huffman_x2_obj);

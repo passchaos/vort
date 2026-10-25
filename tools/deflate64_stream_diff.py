@@ -21,8 +21,9 @@ import subprocess
 import zipfile
 
 
-SCHEMA = "vort.deflate64.stream-fixtures.v1"
-FIXED_CASES = ("empty", "tiny", "pattern", "binary", "runs", "long_length", "long_distance")
+SCHEMAS = ("vort.deflate64.stream-fixtures.v1", "vort.deflate64.stream-fixtures.v2")
+STREAM_V1_CASES = ("empty", "tiny", "pattern", "binary", "runs", "long_length", "long_distance")
+FIXED_CASES = STREAM_V1_CASES + ("multi_block",)
 LENGTH_BASE = (3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
                35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227)
 LENGTH_EXTRA = (0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
@@ -68,6 +69,9 @@ def expected_input(name: str) -> bytes:
     if name == "long_distance":
         history = deterministic_bytes(65_536, 0x65362026)
         return history + history
+    if name == "multi_block":
+        period = b"Deflate64 multi-block history continuity.\n"
+        return (period * ((300_000 + len(period) - 1) // len(period)))[:300_000]
     raise AssertionError(f"unknown deterministic case {name!r}")
 
 
@@ -299,8 +303,10 @@ def main() -> None:
         run(probe, directory)
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    require(manifest.get("schema") == SCHEMA, "unexpected fixture schema")
-    require(tuple(case["name"] for case in manifest["cases"]) == FIXED_CASES, "deterministic corpus case list")
+    require(manifest.get("schema") in SCHEMAS, "unexpected fixture schema")
+    one_shot_matrix = manifest["schema"].endswith(".v2")
+    expected_cases = FIXED_CASES if one_shot_matrix else STREAM_V1_CASES
+    require(tuple(case["name"] for case in manifest["cases"]) == expected_cases, "deterministic corpus case list")
     results = []
     for case in manifest["cases"]:
         expected = expected_input(case["name"])
@@ -310,52 +316,74 @@ def main() -> None:
         require(plaintext.read_bytes() == expected and len(expected) == case["input_bytes"] and
                 sha256(expected) == case["input_sha256"] and
                 binascii.crc32(expected) & 0xFFFFFFFF == case["crc32"], (case["name"], "deterministic input"))
-        require(len(case["artifacts"]) == 4 and
-                {(row["kind"], row["pattern"]) for row in case["artifacts"]} ==
-                {(kind, pattern) for kind in ("incremental_raw", "incremental_zip") for pattern in ("one", "mixed")},
+        expected_artifacts = {(kind, pattern) for kind in ("incremental_raw", "incremental_zip") for pattern in ("one", "mixed")}
+        if one_shot_matrix:
+            expected_artifacts |= {("one_shot_raw", None), ("one_shot_zip", None)}
+        require(len(case["artifacts"]) == len(expected_artifacts) and
+                {(row["kind"], row["pattern"]) for row in case["artifacts"]} == expected_artifacts,
                 (case["name"], "artifact pattern matrix"))
         wires: dict[str, bytes] = {}
         for artifact in case["artifacts"]:
             path, data = checked_artifact(directory, artifact)
-            progress = artifact["progress"]
-            expected_reads = len(expected) * (2 if artifact["kind"] == "incremental_zip" else 1)
-            require(progress["input_read"] == expected_reads and progress["output_written"] == len(data) and
-                    progress["caller_guards_verified"] is True and progress["steps"] > 0,
-                    (path.name, "caller progress accounting"))
-            if artifact["pattern"] == "mixed":
-                require(progress["zero_input_offers"] > 0 and progress["zero_output_offers"] > 0,
-                        (path.name, "missing zero-sized backpressure offers"))
-            if artifact["kind"] in wires:
-                require(wires[artifact["kind"]] == data, (case["name"], "chunk schedule changed deterministic wire"))
+            incremental = artifact["kind"].startswith("incremental_")
+            raw_bound = len(expected) + 5 * (max(1, (len(expected) + 65_534) // 65_535))
+            if incremental:
+                progress = artifact["progress"]
+                expected_reads = len(expected) * (2 if artifact["kind"] == "incremental_zip" else 1)
+                require(progress["input_read"] == expected_reads and progress["output_written"] == len(data) and
+                        progress["caller_guards_verified"] is True and progress["steps"] > 0,
+                        (path.name, "caller progress accounting"))
+                if artifact["pattern"] == "mixed":
+                    require(progress["zero_input_offers"] > 0 and progress["zero_output_offers"] > 0,
+                            (path.name, "missing zero-sized backpressure offers"))
+                if artifact["kind"] in wires:
+                    require(wires[artifact["kind"]] == data, (case["name"], "chunk schedule changed deterministic wire"))
+                else:
+                    wires[artifact["kind"]] = data
             else:
-                wires[artifact["kind"]] = data
-            if artifact["kind"] == "incremental_raw":
+                require(artifact["progress"] is None and artifact["pattern"] is None and
+                        artifact["raw_payload_bound"] == raw_bound, (path.name, "one-shot report/bound"))
+            if artifact["kind"] in ("incremental_raw", "one_shot_raw"):
+                if not incremental:
+                    require(len(data) <= raw_bound, (path.name, "one-shot encodedBound exceeded"))
                 raw = inspect_raw(data, expected)
                 if case["name"] in ("long_length", "long_distance"):
                     target = 65_538 if case["name"] == "long_length" else 65_536
                     field = "maximum_length" if case["name"] == "long_length" else "maximum_distance"
                     require(raw[field] == target, (case["name"], "missing encoded extended token"))
+                if case["name"] == "multi_block":
+                    require(raw["blocks"].count("fixed") >= 3 and raw["match_tokens"] > 0,
+                            (path.name, "missing actual multi-block compressed output"))
                 wrapped = directory / (path.stem + "-reference.zip")
                 wrapped.write_bytes(wrap_raw(expected, data, "raw.bin"))
                 require(run(unzip, "-p", wrapped, "raw.bin") == expected, (path.name, "unzip raw container output"))
                 records = inspect_zip(wrapped.read_bytes(), expected, ("raw.bin",))
-            elif artifact["kind"] == "incremental_zip":
-                records = inspect_zip(data, expected, ("known.bin", "unknown.bin"))
+            elif artifact["kind"] in ("incremental_zip", "one_shot_zip"):
+                names = ("known.bin", "unknown.bin") if incremental else ("oneshot.bin",)
+                records = inspect_zip(data, expected, names)
                 run(unzip, "-t", path)
-                for member in ("known.bin", "unknown.bin"):
+                for member in names:
                     require(run(unzip, "-p", path, member) == expected, (path.name, member, "unzip full output"))
                 for record in records:
-                    require(record["flags"] & 8, "streaming method9 entry must retain descriptor")
+                    if incremental:
+                        require(record["flags"] & 8, "streaming method9 entry must retain descriptor")
+                    else:
+                        require(not record["flags"] & 8 and record["compressed_bytes"] <= raw_bound,
+                                (path.name, "one-shot payload bound/local metadata"))
                     if case["name"] in ("long_length", "long_distance"):
                         field = "maximum_length" if case["name"] == "long_length" else "maximum_distance"
                         target = 65_538 if case["name"] == "long_length" else 65_536
                         require(record["raw"][field] == target, (path.name, record["name"], "missing extended token"))
+                    if case["name"] == "multi_block":
+                        require(record["raw"]["blocks"].count("fixed") >= 3 and record["raw"]["match_tokens"] > 0,
+                                (path.name, record["name"], "missing actual multi-block compressed output"))
             else:
                 raise AssertionError(f"unknown fixture artifact kind {artifact['kind']!r}")
             results.append({"case": case["name"], "artifact": path.name, "kind": artifact["kind"],
                             "wire_sha256": sha256(data), "wire_bytes": len(data), "members": records,
+                            "one_shot_raw_payload_bound": None if incremental else raw_bound,
                             "independent_unzip_full_contents_verified": True})
-    report = {"schema": "vort.deflate64.stream-differential.v1", "created_utc": datetime.now(timezone.utc).isoformat(),
+    report = {"schema": "vort.deflate64.stream-differential.v2", "created_utc": datetime.now(timezone.utc).isoformat(),
               "python": platform.python_version(), "probe": generator,
               "manifest_sha256": sha256(manifest_path.read_bytes()),
               "reference": {"path": str(unzip), "executable_sha256": sha256(unzip.read_bytes()), "version": version},

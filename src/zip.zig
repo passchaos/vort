@@ -41,6 +41,7 @@ pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig
 
 test {
     _ = @import("zip/deflate64_stream_writer_tests.zig").contracts(@This());
+    _ = @import("zip/deflate64_one_shot_writer_tests.zig").contracts(@This());
 }
 pub const incremental_reader = @import("zip/incremental_reader.zig");
 

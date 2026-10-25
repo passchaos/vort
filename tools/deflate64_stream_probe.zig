@@ -1,4 +1,4 @@
-//! Deterministic fixtures from the public incremental Deflate64 and ZIP APIs.
+//! Deterministic fixtures from public incremental and one-shot Deflate64/ZIP.
 //! Build this tool with the full `vort` module, then pass one output directory.
 //! The independent Python gate checks actual 65538/65536 encoded match tokens.
 const std = @import("std");
@@ -7,7 +7,7 @@ const vort = @import("vort");
 
 const block_len = 128 * 1024;
 const Pattern = enum { one, mixed };
-const case_names = [_][]const u8{ "empty", "tiny", "pattern", "binary", "runs", "long_length", "long_distance" };
+const case_names = [_][]const u8{ "empty", "tiny", "pattern", "binary", "runs", "long_length", "long_distance", "multi_block" };
 const input_chunks = [_]usize{ 0, 1, 2, 0, 3, 5, 7, 31 };
 const output_chunks = [_]usize{ 0, 1, 0, 2, 3, 7, 16 };
 
@@ -24,12 +24,14 @@ const Progress = struct {
 };
 const Artifact = struct {
     file: []const u8,
-    kind: enum { incremental_raw, incremental_zip },
-    pattern: Pattern,
+    kind: enum { incremental_raw, incremental_zip, one_shot_raw, one_shot_zip },
+    pattern: ?Pattern,
     bytes: usize,
     sha256: []const u8,
-    progress: Progress,
+    progress: ?Progress,
     self_decode_verified: bool,
+    /// One-shot raw payload bound; for ZIP this excludes container metadata.
+    raw_payload_bound: ?usize = null,
 };
 const Case = struct {
     name: []const u8,
@@ -37,7 +39,7 @@ const Case = struct {
     input_bytes: usize,
     input_sha256: []const u8,
     crc32: u32,
-    artifacts: [4]Artifact,
+    artifacts: [6]Artifact,
 };
 const Encoded = struct { bytes: []u8, progress: Progress };
 
@@ -72,7 +74,7 @@ pub fn main(init: std.process.Init) !void {
         errdefer init.gpa.free(input_sha);
         try directory.writeFile(init.io, .{ .sub_path = input_file, .data = input });
 
-        var artifacts: [4]Artifact = undefined;
+        var artifacts: [6]Artifact = undefined;
         var completed: usize = 0;
         errdefer for (artifacts[0..completed]) |artifact| {
             init.gpa.free(artifact.file);
@@ -92,6 +94,30 @@ pub fn main(init: std.process.Init) !void {
             artifacts[completed] = try saveArtifact(init, directory, name, pattern, .incremental_zip, zip, false);
             completed += 1;
         }
+        const raw_bound = try vort.deflate64EncodedBound(input.len);
+        const expected_bound = input.len + 5 * (if (input.len == 0) @as(usize, 1) else (input.len - 1) / 65_535 + 1);
+        if (raw_bound != expected_bound) return error.OneShotBoundMismatch;
+        const one_shot_raw = try vort.encodeDeflate64Alloc(init.gpa, input, .{ .max_chain = 128, .nice_length = 65_538 });
+        defer init.gpa.free(one_shot_raw);
+        if (one_shot_raw.len > raw_bound) return error.OneShotBoundExceeded;
+        const one_shot_decoded = try vort.decodeDeflate64AllocLimited(init.gpa, one_shot_raw, input.len);
+        defer init.gpa.free(one_shot_decoded);
+        if (!std.mem.eql(u8, one_shot_decoded, input)) return error.OneShotRoundTripMismatch;
+        artifacts[completed] = try saveOneShotArtifact(init, directory, name, .one_shot_raw, one_shot_raw, raw_bound, true);
+        completed += 1;
+
+        const one_shot_zip = try vort.zipEncodeAlloc(init.gpa, &.{vort.ZipEncodeEntry{
+            .name = "oneshot.bin",
+            .data = input,
+            .method = .deflate64,
+        }}, .{
+            .zip64 = .never,
+            .archive_comment = "vort Deflate64 one-shot fixture",
+            .deflate64_options = .{ .max_chain = 128, .nice_length = 65_538 },
+        });
+        defer init.gpa.free(one_shot_zip);
+        artifacts[completed] = try saveOneShotArtifact(init, directory, name, .one_shot_zip, one_shot_zip, raw_bound, false);
+        completed += 1;
         const after_sha = try digestAlloc(init.gpa, input);
         defer init.gpa.free(after_sha);
         if (!std.mem.eql(u8, input_sha, after_sha)) return error.InputModified;
@@ -105,11 +131,14 @@ pub fn main(init: std.process.Init) !void {
         });
     }
     const manifest = try std.json.Stringify.valueAlloc(init.gpa, .{
-        .schema = "vort.deflate64.stream-fixtures.v1",
-        .generator = "public Deflate64IncrementalEncoder and ZipIncrementalWriter",
+        .schema = "vort.deflate64.stream-fixtures.v2",
+        .generator = "public incremental and one-shot Deflate64 and ZIP method 9 encoders",
         .zig_version = builtin.zig_version_string,
         .optimize = @tagName(builtin.mode),
-        .compression = "fixed",
+        .incremental_compression = "fixed",
+        .one_shot_compression = "default adaptive fixed/stored size arbitration",
+        .one_shot_max_chain = 128,
+        .one_shot_nice_length = 65_538,
         .block_len = block_len,
         .known_unknown_zip_entries = .{ "known.bin", "unknown.bin" },
         .boundary_contract = "actual encoder output must contain length65538 and distance65536; Python token gate verifies presence",
@@ -118,7 +147,7 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(manifest);
     try directory.writeFile(init.io, .{ .sub_path = "manifest.json", .data = manifest });
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
-    try stdout.interface.print("{{\"schema\":\"vort.deflate64.stream-probe.v1\",\"cases\":{d},\"artifacts\":{d}}}\n", .{ cases.items.len, cases.items.len * 4 });
+    try stdout.interface.print("{{\"schema\":\"vort.deflate64.stream-probe.v2\",\"cases\":{d},\"artifacts\":{d}}}\n", .{ cases.items.len, cases.items.len * 6 });
     try stdout.interface.flush();
 }
 
@@ -129,6 +158,15 @@ fn saveArtifact(init: std.process.Init, directory: std.Io.Dir, name: []const u8,
     errdefer init.gpa.free(sha);
     try directory.writeFile(init.io, .{ .sub_path = file, .data = encoded.bytes });
     return .{ .file = file, .kind = kind, .pattern = pattern, .bytes = encoded.bytes.len, .sha256 = sha, .progress = encoded.progress, .self_decode_verified = verified };
+}
+
+fn saveOneShotArtifact(init: std.process.Init, directory: std.Io.Dir, name: []const u8, kind: @FieldType(Artifact, "kind"), encoded: []const u8, raw_bound: usize, verified: bool) !Artifact {
+    const file = try std.fmt.allocPrint(init.gpa, "{s}-one-shot.{s}", .{ name, if (kind == .one_shot_raw) "raw" else "zip" });
+    errdefer init.gpa.free(file);
+    const sha = try digestAlloc(init.gpa, encoded);
+    errdefer init.gpa.free(sha);
+    try directory.writeFile(init.io, .{ .sub_path = file, .data = encoded });
+    return .{ .file = file, .kind = kind, .pattern = null, .bytes = encoded.len, .sha256 = sha, .progress = null, .self_decode_verified = verified, .raw_payload_bound = raw_bound };
 }
 
 fn makeInput(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
@@ -150,6 +188,12 @@ fn makeInput(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
         const input = try allocator.alloc(u8, 128 * 1024);
         randomBytes(input[0..65_536], 0x6536_2026);
         @memcpy(input[65_536..], input[0..65_536]);
+        return input;
+    }
+    if (std.mem.eql(u8, name, "multi_block")) {
+        const input = try allocator.alloc(u8, 300_000);
+        const period = "Deflate64 multi-block history continuity.\n";
+        for (input, 0..) |*byte, index| byte.* = period[index % period.len];
         return input;
     }
     return error.UnknownCase;
