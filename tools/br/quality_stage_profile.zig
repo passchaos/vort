@@ -4,6 +4,7 @@
 const std = @import("std");
 const br = @import("vort_br");
 const provenance = @import("benchmark_provenance");
+const output_identity = @import("encode_samples.zig");
 
 const Options = struct {
     rounds: usize = 5,
@@ -32,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
     }
     if (options.rounds == 0 or options.rounds > 31 or options.paths.items.len == 0) return error.InvalidArguments;
     if (options.output) |out| for (options.paths.items) |path| {
-        if (std.mem.eql(u8, out, path)) return error.OutputAliasesInput;
+        try output_identity.requireDistinctOutputs(init.io, init.gpa, out, path);
     };
     const info = try provenance.capture(init.io, init.gpa, init.minimal.args, "single");
     defer info.deinit(init.gpa);
