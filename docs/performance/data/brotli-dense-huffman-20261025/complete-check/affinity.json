@@ -1,0 +1,26 @@
+{
+  "time_utc": "2026-10-25T10:32:50.815932+00:00",
+  "reason": "Use independent idle compilation CPUs for existing six-job check; compiler/timing phases remain separate.",
+  "results": [
+    {
+      "pid": 586080,
+      "exit_code": 0
+    },
+    {
+      "pid": 586083,
+      "exit_code": 0
+    },
+    {
+      "pid": 586096,
+      "exit_code": 0
+    },
+    {
+      "pid": 586101,
+      "exit_code": 0
+    },
+    {
+      "pid": 586120,
+      "exit_code": 0
+    }
+  ]
+}

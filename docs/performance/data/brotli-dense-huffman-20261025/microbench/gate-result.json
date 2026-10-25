@@ -1,0 +1,166 @@
+{
+  "valid": true,
+  "rows": [
+    {
+      "case": "dense_ties",
+      "input_sha256": "ca367fd1f0fbc0e09a6cbe85711fbdaaef0c76c2b4609b0499717496d63ac765",
+      "fallback_inputs": 0,
+      "reference_median_ns": 335480044,
+      "candidate_median_ns": 20530615,
+      "rounds": [
+        {
+          "reference_ns": 335480044,
+          "candidate_ns": 20368018,
+          "reference_first": true,
+          "mix": 4547836006
+        },
+        {
+          "reference_ns": 336953804,
+          "candidate_ns": 20530615,
+          "reference_first": false,
+          "mix": 4547836006
+        },
+        {
+          "reference_ns": 340574402,
+          "candidate_ns": 21643235,
+          "reference_first": true,
+          "mix": 4547836006
+        },
+        {
+          "reference_ns": 330139509,
+          "candidate_ns": 20971106,
+          "reference_first": false,
+          "mix": 4547836006
+        },
+        {
+          "reference_ns": 328166216,
+          "candidate_ns": 20308729,
+          "reference_first": true,
+          "mix": 4547836006
+        }
+      ],
+      "speedup": 16.34047708751053
+    },
+    {
+      "case": "dense_mixed",
+      "input_sha256": "d7d007b2a0c4c276b9fd766358ad6df92531597ae28cfc865a637686c38db7ca",
+      "fallback_inputs": 1,
+      "reference_median_ns": 396735592,
+      "candidate_median_ns": 46573628,
+      "rounds": [
+        {
+          "reference_ns": 396735592,
+          "candidate_ns": 45009124,
+          "reference_first": true,
+          "mix": 4667156386
+        },
+        {
+          "reference_ns": 398404506,
+          "candidate_ns": 46702787,
+          "reference_first": false,
+          "mix": 4667156386
+        },
+        {
+          "reference_ns": 401512393,
+          "candidate_ns": 46738661,
+          "reference_first": true,
+          "mix": 4667156386
+        },
+        {
+          "reference_ns": 394882350,
+          "candidate_ns": 46573628,
+          "reference_first": false,
+          "mix": 4667156386
+        },
+        {
+          "reference_ns": 393500570,
+          "candidate_ns": 45433282,
+          "reference_first": true,
+          "mix": 4667156386
+        }
+      ],
+      "speedup": 8.518460103644921
+    },
+    {
+      "case": "depth_fallback",
+      "input_sha256": "29209d2a26def872f302bb0dc6cecde6eb6922b022212920814b0961f745e31b",
+      "fallback_inputs": 32,
+      "reference_median_ns": 333804939,
+      "candidate_median_ns": 347926619,
+      "rounds": [
+        {
+          "reference_ns": 330550139,
+          "candidate_ns": 347926619,
+          "reference_first": true,
+          "mix": 7670313016
+        },
+        {
+          "reference_ns": 333550806,
+          "candidate_ns": 346998380,
+          "reference_first": false,
+          "mix": 7670313016
+        },
+        {
+          "reference_ns": 334347249,
+          "candidate_ns": 347280810,
+          "reference_first": true,
+          "mix": 7670313016
+        },
+        {
+          "reference_ns": 334937803,
+          "candidate_ns": 348005886,
+          "reference_first": false,
+          "mix": 7670313016
+        },
+        {
+          "reference_ns": 333804939,
+          "candidate_ns": 354787165,
+          "reference_first": true,
+          "mix": 7670313016
+        }
+      ],
+      "speedup": 0.9594119011629864
+    },
+    {
+      "case": "medium_control",
+      "input_sha256": "61d631c0225590a49694971e5068958dc490aeecd69609a2b8267394c434cfe1",
+      "fallback_inputs": 0,
+      "reference_median_ns": 13507651,
+      "candidate_median_ns": 13737251,
+      "rounds": [
+        {
+          "reference_ns": 13567009,
+          "candidate_ns": 13506167,
+          "reference_first": true,
+          "mix": 2318646149
+        },
+        {
+          "reference_ns": 13282707,
+          "candidate_ns": 13737251,
+          "reference_first": false,
+          "mix": 2318646149
+        },
+        {
+          "reference_ns": 13637035,
+          "candidate_ns": 14249586,
+          "reference_first": true,
+          "mix": 2318646149
+        },
+        {
+          "reference_ns": 13439622,
+          "candidate_ns": 14132597,
+          "reference_first": false,
+          "mix": 2318646149
+        },
+        {
+          "reference_ns": 13507651,
+          "candidate_ns": 13566447,
+          "reference_first": true,
+          "mix": 2318646149
+        }
+      ],
+      "speedup": 0.9832863212588894
+    }
+  ],
+  "scope": "All4families/32pools verified outside timers, sameprocess five alternating rounds complete PrefixAlphabet calls. Point comparison, not public encoder throughput."
+}

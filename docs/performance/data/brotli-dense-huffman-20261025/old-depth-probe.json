@@ -1,0 +1,17 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "run",
+    "-O",
+    "Debug",
+    "--dep",
+    "small",
+    "-Mroot=/tmp/vort-br-tree-cost-20261025/depth_probe.zig",
+    "-Msmall=/home/passchaos/project-z/vort/src/br/encoder/small_huffman.zig"
+  ],
+  "exit_code": 1,
+  "source_sha256": "bfca952ac6a54dd34bec36fce3f73c6c423749ee29730f4ae40ff09f1b7fa394",
+  "source_stable": true,
+  "end_utc": "2026-10-25T10:33:22.256633+00:00",
+  "scope": "Actual old f642d0d8 64-capacity sorted34Fibonacci debug reproducer; not performance evidence."
+}

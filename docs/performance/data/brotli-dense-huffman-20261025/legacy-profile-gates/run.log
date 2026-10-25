@@ -1,0 +1,18 @@
+br_literal_context_profile_gate_smoke=ok cases=21 positives=4
+br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_alphabet_ns/complex_prefix_rle_ns
+Build Summary: 10/10 steps succeeded
+run-br-literal-context-profile-gate success
++- run python3 success 41ms
+   +- compile exe vort-br-literal-context-profile ReleaseFast native cached 10ms MaxRSS:40M
+   |  +- WriteFile cached
+   |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 5ms MaxRSS:36M
+   |  +- WriteFile cached
+   |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 5ms MaxRSS:36M
+   |  +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+   |  +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+   +- run exe vort-br-literal-context-profile success 52ms
+      +- compile exe vort-br-literal-context-profile ReleaseFast native (+6 more reused dependencies)
+run-br-literal-context-profile-gate-smoke success
++- run python3 success 1s
+   +- run exe vort-br-literal-context-profile (+1 more reused dependencies)
+

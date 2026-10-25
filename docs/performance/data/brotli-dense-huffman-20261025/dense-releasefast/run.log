@@ -1,0 +1,22 @@
+1/21 br.test_0...OK
+2/21 br.incremental.stored.encoder.test_0...OK
+3/21 br.incremental.copy_decoder.test_0...OK
+4/21 br.incremental.owned_copy_decoder.test_0...OK
+5/21 br.encoder.command_plan.test.dense Huffman PrefixAlphabet exact arrays and fallback contracts...OK
+6/21 br.encoder.distance.test_0...OK
+7/21 br.encoder.small_huffman.test.dense Huffman exact tree lengths and bounded fallback contracts...OK
+8/21 br.encoder.hq_options.test_0...OK
+9/21 br.encoder.hq_types.test_0...OK
+10/21 br.encoder.hq_parser.test_0...OK
+11/21 br.encoder.total_budget.test_0...OK
+12/21 tests.br_total_memory_contracts.test_0...OK
+13/21 br.encoder.stored_memory_owner.test_0...OK
+14/21 br.encoder.stored_memory_reuse.test_0...OK
+15/21 br.encoder.hq_tree_oracle_tests.test_0...OK
+16/21 br.encoder.hq_dictionary.test_0...OK
+17/21 br.encoder.hq_codec.alias.test_0...OK
+18/21 br.encoder.static_dictionary_matcher.test_0...OK
+19/21 br.encoder.stored_bit_bound.test_0...OK
+20/21 br.encoder.total_budget.tests.test_0...OK
+21/21 br.encoder.hq_parser.tests.test_0...OK
+All 21 tests passed.

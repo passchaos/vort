@@ -23381,3 +23381,22 @@ reuse, so production keeps the simpler independently owned plans.
   retain candidate and restored epochs separately. Industry-best functionality
   and performance, broad streaming/quality/platform matrices and competitor
   memory comparisons remain incomplete.
+
+- 2026-10-25: dense Brotli PrefixAlphabet construction now tries a256-symbol
+  two-queue natural Huffman tree in the original frequency-rank order, then
+  retains the original15-bit package-merge fallback for deeper trees. Existing
+  64/128-capacity kernels now reject depth16 before unsafe propagation; an
+  exact old ordinary-function reproducer confirms the34-Fibonacci depth33 u5
+  overflow fixed by that guard. Complete rank-length and scatter/fallback
+  contracts pass21/21 in native Debug, native ReleaseFast and actual x86.
+  Full Brotli tests pass1423 with one skip, build checks174/174 and CLI7/7.
+  Compiler-free14-input q8 public sampling preserves every old wire/settings;
+  three alternating version process pairs give1.214583x geometric throughput
+  versus f642d0d8, with stronger Mozilla/SAO gains and small mixed point changes
+  recorded separately. Actual70-round context reports preserve all search/tree
+  requests and candidate decisions; Mozilla code-length medians fall from
+  20.440/22.244ms to2.193/2.416ms. [Evidence and limits](performance/brotli-dense-huffman-x86.md)
+  include slower forced fallback/medium microbench pools and do not establish
+  industry-best or all-level/platform/memory parity. Next optimize remaining
+  context/entropy coding cost through the ordinary API and extend the quality,
+  streaming and memory comparison matrix.

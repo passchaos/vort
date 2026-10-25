@@ -1,0 +1,16 @@
+thread 587144 panic: integer overflow
+/tmp/vort-br-tree-cost-20261025/old_small_huffman_core.zig:112:50: 0x11d9d9d in buildInternal__anon_33304 (old_small_huffman_core.zig)
+        depths[index] = depths[@intCast(parent)] + 1;
+                                                 ^
+/tmp/vort-br-tree-cost-20261025/old_small_huffman_core.zig:20:25: 0x11d8458 in build__anon_33280 (old_small_huffman_core.zig)
+    return buildInternal(capacity, false, frequencies, lengths, {}, {});
+                        ^
+/tmp/vort-br-tree-cost-20261025/depth_probe.zig:10:32: 0x11d8167 in main (depth_probe.zig)
+    const success = small.build(64, &frequencies, &lengths);
+                               ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:698:59: 0x11d77d1 in callMain (std.zig)
+    if (fn_info.params.len == 0) return wrapMain(root.main());
+                                                          ^
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/start.zig:190:5: 0x11d7201 in _start (std.zig)
+    asm volatile (switch (native_arch) {
+    ^

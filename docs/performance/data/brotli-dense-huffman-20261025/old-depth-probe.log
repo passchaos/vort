@@ -1,0 +1,3 @@
+src/br/encoder/small_huffman.zig:216:29: error: import of file outside module path
+    const huffman = @import("../../huffman.zig");
+                            ^~~~~~~~~~~~~~~~~~~

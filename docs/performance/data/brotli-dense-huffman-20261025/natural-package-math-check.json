@@ -1,0 +1,8 @@
+{
+  "scope": "independent arithmetic model, not project implementation execution",
+  "natural_under15_compared": 506,
+  "naturals_over15_excluded": 6,
+  "counterexamples": 0,
+  "fibonacci34_max_frequency": 5702887,
+  "fibonacci34_natural_depth": 33
+}

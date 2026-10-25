@@ -215,6 +215,35 @@ they must not be summed or interpreted as ordinary-code speed improvements.
 The finer profile adds clock reads and shape/count observations, so its
 overhead and the ordinary public comparison remain separate evidence.
 
+The [dense Brotli Huffman increment](brotli-dense-huffman-x86.md) extends exact
+two-queue length construction to 129...256 active symbols, preserving the old
+package-merge result and falling back when the natural tree exceeds fifteen
+bits. Its fourteen frozen 64 KiB ordinary q8/generic rows retain every wire
+identity and setting against `f642d0d8`. The first-screen version throughput
+geometric point ratio is 1.230502x: Mozilla's median changes from 100.170 to
+59.873ms and SAO's from 158.804 to 92.543ms. Three subsequent alternating
+old/new process pairs aggregate to 1.214583x, with stable inputs, reference
+files and source, and zero observed compiler processes. Webster's three point
+ratios are 0.982081x/0.991895x/1.028495x; the evidence does not imply every
+repeat wins or statistical significance. Reference throughput still wins all
+fourteen first-screen rows, with a Vort/reference geometric ratio of 0.032977x.
+
+Complete prefix-length microbenchmarks include frequency copies and scatter,
+with all 32 inputs per family checked against exact reference arrays before
+timing. Dense ties/mixed point ratios are 16.340x/8.518x, while depth-fallback
+and medium controls are 0.959412x/0.983286x; the slower controls remain part of
+the evidence. Seventy real q8 profiles preserve candidate/selection outcomes
+and tree/search work counts; only the construction dispatch changes. Mozilla's
+lazy/optimal tree-length medians change from 20.440/22.244 to 2.193/2.416ms,
+and their 796/830 dense package-merge calls become zero. The source control's
+length medians instead change from 0.505578/0.549230 to 0.529187/0.575979ms.
+These instrumented, independently computed nested medians are non-additive
+and cannot substitute for ordinary throughput measurements. Focused dense
+contracts pass 21/21 on native Debug, native ReleaseFast and x86; the complete
+Brotli family passes 1423 with one skip, and build checks pass 174/174 on stable
+source. This is a bounded encoder improvement, while all-quality, all-platform
+ratio/speed/memory leadership and the industry-best objective remain open.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

@@ -1,0 +1,10 @@
+{
+  "frozen_files": {
+    "src/br/encoder/small_huffman.zig": "b23a30082ccce63b785051b61831ab4a297e09c152db6825bd76eed787c99bf7",
+    "src/br/encoder/command_plan.zig": "173cf7e6bc7e784fab80201f5cb696b0f870f4843de35e5999179439e6d9d9f9"
+  },
+  "fallback_fillTreeLengths_byte_identical_to_f642d0d8": true,
+  "prefix_5to64_and65to128_routes_byte_identical": true,
+  "producer_early_reject_bounds": "stored depths<=15 then add at most1 before earlyfalse; all index parent types retain <=128 widths and widen only >128",
+  "no_compilation_or_timing": true
+}

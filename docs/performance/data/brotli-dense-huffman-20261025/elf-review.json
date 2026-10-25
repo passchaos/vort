@@ -1,0 +1,128 @@
+{
+  "schema": "vort.brotli.dense-tree-cost.elf-review.v1",
+  "created_utc": "2026-10-25T10:41:10.750120+00:00",
+  "created_asia_shanghai": "2026-10-25T18:41:10.750120+08:00",
+  "scope": "Bounded read-only pinned ReleaseFast ELF review. No compile, timing, test execution, source or Git mutation.",
+  "elf": {
+    "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/7cab685de62cdb93856431f8e3ddb813/vort-br-planned-encode-bench",
+    "sha256": "9f971543decb34eb391dda765341c28f28da0a8953d73bb8f455ac533942a3f5",
+    "source_binding": "Complete-check current build produced this executable; all source before/after final binding follows when check terminates."
+  },
+  "source_sha256_at_review": {
+    "src/br/encoder/small_huffman.zig": "b23a30082ccce63b785051b61831ab4a297e09c152db6825bd76eed787c99bf7",
+    "src/br/encoder/command_plan.zig": "173cf7e6bc7e784fab80201f5cb696b0f870f4843de35e5999179439e6d9d9f9",
+    "src/br/encoder/literal_context_split.zig": "bc8bc8bd60cfe72ba884167cb59ed67e83c217e9046452c7e4db47050abbd4ab",
+    "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3"
+  },
+  "source_binding_limit": "Kernel source matches provided frozen hashes. Full complete-check all-source binding and family/check completion are parent-owned; no comprehensive pass asserted.",
+  "ordinary_route": {
+    "tree_cost_symbol": "br.encoder.literal_context_split.treeBitCostProfiled__anon_46141",
+    "tree_cost_address": "0x120e0b0",
+    "code_lengths_call": "0x120e17d",
+    "prefix_symbol": "br.encoder.command_plan.PrefixAlphabetFor(256).codeLengths",
+    "prefix_address": "0x1175220",
+    "prefix_source_flags": "codeLengthsInternal(profiled=false,dense_fast=true)",
+    "dense_threshold": "0x11753e3 cmp active,129 / jae; 0x1175521 cmp active,257 / jae fallback; 129..256 uses builder256",
+    "dense_gather": "0x1175a70 bulk eight-way scalar u16 symbol-index load ->u32 frequency load ->u32 compact stack store; tail0x1175b30",
+    "compact_frequencies_base": "prefix rbp-0x6b0",
+    "compact_lengths_base": "prefix rbp-0x2b0",
+    "dense_builder_call": "0x1175b5f -> build__anon_35945",
+    "dense_scatter": "0x1175ce0 bulk/tail0x1175ddd read byte u4 compact lengths, mask0xf, store at original symbol index",
+    "caller_output_initialized": "lengths[256] zero initialization covers inactive symbols; scatter touches active symbols",
+    "gather_scatter_is_not_simd_gather": "Actual lowering is unrolled scalar loads/stores, not vpgather instruction."
+  },
+  "kernel256": {
+    "symbol": "br.encoder.small_huffman.build__anon_35945",
+    "address": "0x11ba7c0",
+    "size_bytes": 1205,
+    "abi": "rdi compact u32 frequency pointer; rsi active length; rdx compact output lengths pointer; bool returned in al",
+    "calls": 0,
+    "no_allocator_parameter": true,
+    "no_input_raw_block_pointer": true,
+    "input_copy_scope": "Kernel copies active u32 frequencies to local u64 weights and builds local indices/parents/depths; does not heap-copy raw input.",
+    "types": {
+      "weights": "u64",
+      "leaf_indices": "u16",
+      "parents": "u16",
+      "depths": "u5, byte-addressed in this lowering",
+      "lengths": "u4, byte-addressed output with0xf mask",
+      "capacity": 256,
+      "maximum_nodes": 511,
+      "largest_node_index": 510
+    },
+    "init_examples": [
+      "0x11ba824 u64 weight store",
+      "0x11ba82c u16 leaf-index store",
+      "0x11baab6/0x11baabe u16 parent stores",
+      "0x11baad8/0x11bab1c movzwl leaf-index loads",
+      "0x11bab60 movzwl parent load"
+    ],
+    "leaf_rank_order": "Equal-weight groups scanned from lowest weight toward highest; within group ascending compact rank (original deterministic symbol tie order) is preserved.",
+    "rank_compare": "Two queue heads compared by u64 weight; jbe at0x11baafa selects leaf on equality. Leaves precede appended parent nodes, so serial/rank tie rule is implicit in node order; no extra rank compare instruction claimed.",
+    "queue_loop": "0x11baa78\u20130x11bab4c two inline queue pops, u64 weight sum, parents stored, parent appended, remaining decremented",
+    "depth_guard": "0x11bab60 parent lookup; parent depth+1 encoded by shl3/add8/sar3; js at0x11bab79 ->0x11baba0 returnsfalse before depth store0x11bab7e or final output",
+    "depth_guard_domain": "Prior stored depths<=15; next1..16, sign test catches16. Static lowering evidence, not executed proof for every input.",
+    "output_after_success": "0x11babb0 bulk/tail0x11bac50 copies leaf depths to compact output only after all depth guards pass",
+    "zero_active_guard": "0x11ba7c0\u20130x11ba80b retains empty/last-zero rejection for256."
+  },
+  "fallback": {
+    "caller_false_branch": "0x1175b64 test al; 0x1175b66 je0x1175b81",
+    "fill_call": "0x1175b8e -> PrefixAlphabetFor(256).fillTreeLengths__anon_35943 at0x11bac80",
+    "fill_source": "Existing gather, huffman.treeCodeLengths(256,frequencies,15), scatter unchanged by this slice",
+    "generic_call": "0x11bacdc/0x11badd6 -> huffman.treeCodeLengths__anon_40857 at0x118aa40",
+    "generic_fallback_source": "treeCodeLengths in src/huffman.zig keeps compact/package-merge policies and backref package merge for larger support",
+    "range_limit": "Dense builder returnsfalse on over15 depth; caller retains bounded package-merge behavior, not truncating dense depth output."
+  },
+  "smaller_routes": {
+    "source_unchanged_record": "final-kernel-static-check.json records <=64 and65..128 source routes byte-identical; this audit reads but does not execute it",
+    "capacity64": {
+      "symbol": "br.encoder.small_huffman.build__anon_35926",
+      "address": "0x11bb460",
+      "caller": "0x11754ff",
+      "Index": "u8",
+      "Parent": "i8",
+      "node_bound": 127
+    },
+    "capacity128": {
+      "symbol": "br.encoder.small_huffman.build__anon_35942",
+      "address": "0x11baf80",
+      "caller": "0x117569f",
+      "Index": "u8",
+      "Parent": "u8",
+      "node_bound": 255,
+      "machine_examples": "0x11bb296 movzbl leaf,0x11bb276/27d byte parent stores,0x11bb320 byte parent load"
+    }
+  },
+  "local_stack": {
+    "prefix_codeLengths_sub_rsp_bytes": 1672,
+    "ordinary_tree_cost_sub_rsp_bytes": 1720,
+    "builder256_sub_rsp_bytes": 6016,
+    "builder128_sub_rsp_bytes": 2560,
+    "builder64_sub_rsp_bytes": 1224,
+    "builder256_saved_register_push_bytes": 48,
+    "builder256_leaf_redzone": "Parent array store base rbp-0x1826; stable post-prologue rsp=rbp-0x17a8; observed126 B belowrsp. Leaf has no calls; sub rsp alone is not all accessed stack.",
+    "limit": "Only explicit reservations and observed red-zone access. No complete frame/caller/descendant stack peak, heap/RSS or sizeof claim."
+  },
+  "limitations": [
+    "Static codegen/routing evidence, not exact-array correctness proof across all frequency inputs.",
+    "No target tests or benchmarks run by this audit; parent owns family/check and differential validation.",
+    "No speed ranking or cache/memory bandwidth/ISA-performance inference.",
+    "No no-allocation claim for whole encoder; kernel alone has no calls/allocator and local frequency state."
+  ],
+  "evidence": {
+    "command_plan.PrefixAlphabetFor(256).codeLengths.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/command_plan.PrefixAlphabetFor(256).codeLengths.asm",
+    "command_plan.PrefixAlphabetFor(256).fillTreeLengths__anon_35943.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/command_plan.PrefixAlphabetFor(256).fillTreeLengths__anon_35943.asm",
+    "command_plan.PrefixAlphabetFor(256).fillTreeLengths__anon_35946.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/command_plan.PrefixAlphabetFor(256).fillTreeLengths__anon_35946.asm",
+    "dense-fallback-to-package.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/dense-fallback-to-package.asm",
+    "dense-stack-weight-and-index-init.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/dense-stack-weight-and-index-init.asm",
+    "dense-threshold-gather-scatter-fallback.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/dense-threshold-gather-scatter-fallback.asm",
+    "dense-two-queue-rank-and-depth.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/dense-two-queue-rank-and-depth.asm",
+    "huffman.treeCodeLengths__anon_40857.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/huffman.treeCodeLengths__anon_40857.asm",
+    "literal_context_split.treeBitCostProfiled__anon_46141.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/literal_context_split.treeBitCostProfiled__anon_46141.asm",
+    "old-128-byte-index-path.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/old-128-byte-index-path.asm",
+    "small_huffman.build__anon_35926.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/small_huffman.build__anon_35926.asm",
+    "small_huffman.build__anon_35942.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/small_huffman.build__anon_35942.asm",
+    "small_huffman.build__anon_35945.asm": "/tmp/vort-br-tree-cost-20261025/focusedasm/small_huffman.build__anon_35945.asm",
+    "symbols.nm": "/tmp/vort-br-tree-cost-20261025/focusedasm/symbols.nm"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "rows": 14,
+  "rounds": 70,
+  "source_head": "f642d0d892658a11062832a7db41fe893adba3d6",
+  "source_tree": "/home/passchaos/project-z/vort",
+  "executable": "16ffb6c50977990036c204777423459eeaa7fe515d4f9410360c833f86e0a79d",
+  "scope": "Current production f642d0d8 baseline. No source edits/compilers during timing; frozen identical default q8/generic policy."
+}
