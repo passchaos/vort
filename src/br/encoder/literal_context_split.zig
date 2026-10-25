@@ -6,12 +6,18 @@ const context_map_encoder = @import("context_map.zig");
 const literal_context = @import("literal_context.zig");
 const literal_context_profile = @import("literal_context_profile.zig");
 const small_huffman = @import("small_huffman.zig");
+const literal_tree_score_cache = @import("literal_tree_score_cache.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
 pub const max_trees: usize = 64;
 pub const Profile = literal_context_profile.Profile;
 const ProfileTimer = literal_context_profile.Timer;
+const TreeScoreScope = literal_context_profile.TreeScoreScope;
+
+test "literal context original tree cache reference and profiling contracts" {
+    try @import("context_cache_tests.zig").contracts(@This());
+}
 
 /// One bounded multi-tree literal-context proposal. The complete Brotli writer
 /// still arbitrates this proposal by exact encoded byte length, so this module
@@ -127,55 +133,9 @@ const ScoredMapCache = struct {
         self.len += 1;
     }
 };
-const tree_score_cache_capacity: usize = 128;
-const tree_score_cache_words: usize = (tree_score_cache_capacity + 63) / 64;
-comptime {
-    std.debug.assert(std.math.isPowerOfTwo(tree_score_cache_capacity));
-}
-const TreeScoreEntry = struct {
-    hash: u64,
-    histogram: [256]u32,
-    bit_cost: u64,
-};
-const TreeScoreCache = struct {
-    entries: [tree_score_cache_capacity]TreeScoreEntry = undefined,
-    occupied: [tree_score_cache_words]u64 = @splat(0),
-    hits: usize = 0,
-    misses: usize = 0,
-    cold_misses: usize = 0,
-    conflict_misses: usize = 0,
-
-    fn get(self: *TreeScoreCache, comptime classify_misses: bool, histogram: *const [256]u32) ?u64 {
-        const hash = treeHistogramHash(histogram);
-        const slot: usize = @intCast(hash & (tree_score_cache_capacity - 1));
-        const word = slot >> 6;
-        const bit: u6 = @truncate(slot);
-        const mask = @as(u64, 1) << bit;
-        if (self.occupied[word] & mask != 0) {
-            const entry = &self.entries[slot];
-            if (entry.hash == hash and std.mem.eql(u32, &entry.histogram, histogram)) {
-                self.hits += 1;
-                return entry.bit_cost;
-            }
-            if (classify_misses) self.conflict_misses += 1;
-        } else if (classify_misses) self.cold_misses += 1;
-        self.misses += 1;
-        return null;
-    }
-
-    fn put(self: *TreeScoreCache, histogram: *const [256]u32, bit_cost: u64) void {
-        const hash = treeHistogramHash(histogram);
-        const slot: usize = @intCast(hash & (tree_score_cache_capacity - 1));
-        const word = slot >> 6;
-        const bit: u6 = @truncate(slot);
-        self.entries[slot] = .{
-            .hash = hash,
-            .histogram = histogram.*,
-            .bit_cost = bit_cost,
-        };
-        self.occupied[word] |= @as(u64, 1) << bit;
-    }
-};
+const tree_score_cache_capacity = literal_tree_score_cache.capacity;
+const TreeScoreCache = literal_tree_score_cache.Cache;
+const treeHistogramHash = literal_tree_score_cache.histogramHash;
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -205,15 +165,53 @@ pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, co
 }
 
 pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
-    const analysis = try collectAnalysis(allocator, input, commands) orelse return .{};
+    return chooseProposalsCore(false, allocator, input, commands, {});
+}
+
+/// The original per-mode memo and uncached suffix scores remain an exact
+/// reference policy; tree costs and proposal arbitration are shared.
+pub noinline fn chooseProposalsReference(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
+    return chooseProposalsCore(false, allocator, input, commands, {});
+}
+
+/// Profile and return this search's actual proposals, with one Analysis.
+pub noinline fn chooseProposalsProfiled(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: std.Io, profile: *Profile) !Proposals {
+    profile.* = .{ .input_bytes = input.len, .iterations = 1 };
+    var profiler = ProfileTimer{ .io = io, .profile = profile };
+    const total_start = profiler.now();
+    const proposals = try chooseProposalsCore(true, allocator, input, commands, &profiler);
+    profile.total_ns = profiler.elapsedNs(total_start);
+    setProfileShape(profile, proposals);
+    return proposals;
+}
+
+fn chooseProposalsCore(comptime profiled: bool, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, profiler: if (profiled) *ProfileTimer else void) !Proposals {
+    const analysis_start = if (profiled) profiler.now() else {};
+    const analysis = try collectAnalysis(allocator, input, commands) orelse {
+        if (profiled) profiler.profile.analysis_ns = profiler.elapsedNs(analysis_start);
+        return .{};
+    };
     defer allocator.destroy(analysis);
+    if (profiled) {
+        profiler.profile.analysis_ns = profiler.elapsedNs(analysis_start);
+        profiler.profile.literal_count = analysis.literal_count;
+    }
+    const baseline_start = if (profiled) profiler.now() else {};
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
-    const baseline_bits = try treeBitCostWithSupport(allocator, &analysis.total, &active_symbols);
+    const baseline_bits = if (profiled)
+        try treeBitCostUncached(true, allocator, &analysis.total, &active_symbols, .baseline, null, profiler)
+    else
+        try treeBitCostWithSupport(allocator, &analysis.total, &active_symbols);
+    if (profiled) {
+        profiler.profile.active_symbols = active_symbols.len;
+        profiler.profile.baseline_ns = profiler.elapsedNs(baseline_start);
+    }
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
+        const mode_start = if (profiled) profiler.now() else {};
         const mode_proposals = try chooseModeFromHistograms(
-            false,
+            profiled,
             allocator,
             @intCast(mode_value),
             by_context,
@@ -224,8 +222,9 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
             &precomputed_suffix_map_costs,
             true,
             max_trees,
-            {},
+            profiler,
         );
+        if (profiled) profiler.profile.mode_ns[mode_value] +%= profiler.elapsedNs(mode_start);
         retainBetter(&proposals.suffix, mode_proposals.suffix);
         retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
         retainBetter(&proposals.full, mode_proposals.full);
@@ -271,8 +270,8 @@ pub noinline fn chooseProposalsForModeWithPrefix(
     );
 }
 
-/// Profile the exact proposal search without adding clock reads or counters to
-/// the production `chooseProposals` specialization.
+/// Profile the exact proposal search without adding clock reads or Profile
+/// updates to the production `chooseProposals` specialization.
 pub fn profileSearch(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -285,7 +284,7 @@ pub fn profileSearch(
     var expected: ?Proposals = null;
     for (0..iterations) |_| {
         var sample: Profile = .{};
-        const proposals = try profileSearchOnce(allocator, input, commands, io, &sample);
+        const proposals = try chooseProposalsProfiled(allocator, input, commands, io, &sample);
         if (expected) |prior| {
             if (!proposalsEql(prior, proposals)) return error.InvalidBlockPlan;
         } else {
@@ -299,57 +298,6 @@ pub fn profileSearch(
     aggregate.iterations = iterations;
     setProfileShape(&aggregate, expected.?);
     return aggregate;
-}
-
-fn profileSearchOnce(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    commands: []const command_plan.Command,
-    io: std.Io,
-    profile: *Profile,
-) !Proposals {
-    profile.* = .{ .input_bytes = input.len };
-    var profiler = ProfileTimer{ .io = io, .profile = profile };
-    const total_start = profiler.now();
-    const analysis_start = profiler.now();
-    const analysis = try collectAnalysis(allocator, input, commands) orelse {
-        profile.analysis_ns = profiler.elapsedNs(analysis_start);
-        profile.total_ns = profiler.elapsedNs(total_start);
-        return .{};
-    };
-    defer allocator.destroy(analysis);
-    profile.analysis_ns = profiler.elapsedNs(analysis_start);
-    profile.literal_count = analysis.literal_count;
-
-    const baseline_start = profiler.now();
-    var active_symbols: ActiveSymbols = undefined;
-    buildActiveSymbols(&analysis.total, &active_symbols);
-    const baseline_bits = try treeBitCostWithSupport(allocator, &analysis.total, &active_symbols);
-    profile.active_symbols = active_symbols.len;
-    profile.baseline_ns = profiler.elapsedNs(baseline_start);
-
-    var proposals: Proposals = .{};
-    for (&analysis.by_mode, 0..) |*by_context, mode_value| {
-        const mode_proposals = try chooseModeFromHistograms(
-            true,
-            allocator,
-            @intCast(mode_value),
-            by_context,
-            &analysis.total,
-            analysis.literal_count,
-            baseline_bits,
-            &active_symbols,
-            &precomputed_suffix_map_costs,
-            true,
-            max_trees,
-            &profiler,
-        );
-        retainBetter(&proposals.suffix, mode_proposals.suffix);
-        retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
-        retainBetter(&proposals.full, mode_proposals.full);
-    }
-    profile.total_ns = profiler.elapsedNs(total_start);
-    return proposals;
 }
 
 fn proposalsEql(a: Proposals, b: Proposals) bool {
@@ -506,7 +454,10 @@ fn chooseModeFromHistograms(
         left_count += context_count;
         if (left_count == 0 or left_count == literal_count) continue;
         if (context_count != 0 or payload_bits == null) {
-            payload_bits = try suffixPayloadBitCost(allocator, total, &left, active_symbols);
+            payload_bits = if (profiled)
+                try suffixPayloadBitCostProfiled(allocator, total, &left, active_symbols, mode, profiler)
+            else
+                try suffixPayloadBitCost(allocator, total, &left, active_symbols);
             if (profiled) profiler.profile.suffix_payload_scores += 1;
         } else if (profiled) profiler.profile.suffix_payload_reuses += 1;
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
@@ -528,6 +479,7 @@ fn chooseModeFromHistograms(
     buildSparseContexts(by_context, &sparse_contexts);
     if (profiled) profiler.profile.sparse_ns +%= profiler.elapsedNs(sparse_start);
     var score_cache: ScoredMapCache = .{};
+    // Both caches are mode-local, with the original post-suffix lifetime.
     var tree_score_cache: TreeScoreCache = .{};
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
@@ -572,6 +524,24 @@ fn suffixPayloadBitCost(
     return left_bits + right_bits;
 }
 
+fn suffixPayloadBitCostProfiled(
+    allocator: std.mem.Allocator,
+    total: *const [256]u32,
+    left: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+    mode: u2,
+    profiler: *ProfileTimer,
+) !u64 {
+    // Keep the diagnostic scratch fully initialized. This path scores
+    // directly through the fixed support and performs no memo lookup.
+    var right: [256]u32 = @splat(0);
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol|
+        right[symbol] = total[symbol] - left[symbol];
+    const left_bits = try treeBitCostUncached(true, allocator, left, active_symbols, .suffix, mode, profiler);
+    const right_bits = try treeBitCostUncached(true, allocator, &right, active_symbols, .suffix, mode, profiler);
+    return left_bits + right_bits;
+}
+
 fn retainBetter(slot: *?Candidate, candidate: ?Candidate) void {
     const proposed = candidate orelse return;
     if (slot.* == null or proposed.savings_bits > slot.*.?.savings_bits or
@@ -583,13 +553,6 @@ fn contextMapHash(context_map: *const [64]u8, tree_count: usize) u64 {
     var hash: u64 = 0xcbf2_9ce4_8422_2325;
     hash = (hash ^ @as(u64, @intCast(tree_count))) *% 0x0000_0100_0000_01b3;
     for (context_map) |tree| hash = (hash ^ @as(u64, tree)) *% 0x0000_0100_0000_01b3;
-    return hash;
-}
-
-fn treeHistogramHash(histogram: *const [256]u32) u64 {
-    var hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for (histogram) |frequency|
-        hash = (hash ^ @as(u64, frequency)) *% 0x0000_0100_0000_01b3;
     return hash;
 }
 
@@ -706,18 +669,10 @@ fn clusterContexts(
 
     const score_start = if (profiled) profiler.now() else {};
     const prior_cache_hits = if (profiled) score_cache.hits else 0;
-    const prior_tree_hits = if (profiled) tree_score_cache.hits else 0;
-    const prior_tree_misses = if (profiled) tree_score_cache.misses else 0;
-    const prior_tree_cold_misses = if (profiled) tree_score_cache.cold_misses else 0;
-    const prior_tree_conflict_misses = if (profiled) tree_score_cache.conflict_misses else 0;
     const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
         var bits: u64 = 0;
         for (tree_histograms[0..tree_count]) |*histogram| {
-            const tree_bits = tree_score_cache.get(profiled, histogram) orelse score: {
-                const computed = try treeBitCostProfiled(profiled, allocator, histogram, active_symbols, profiler);
-                tree_score_cache.put(histogram, computed);
-                break :score computed;
-            };
+            const tree_bits = try treeBitCostCached(profiled, allocator, histogram, active_symbols, tree_score_cache, mode, profiler);
             bits += tree_bits;
         }
         const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
@@ -731,10 +686,6 @@ fn clusterContexts(
             profiler.profile.score_cache_hits += 1
         else
             profiler.profile.score_cache_misses += 1;
-        profiler.profile.tree_score_cache_hits += tree_score_cache.hits - prior_tree_hits;
-        profiler.profile.tree_score_cache_misses += tree_score_cache.misses - prior_tree_misses;
-        profiler.profile.tree_score_cache_cold_misses += tree_score_cache.cold_misses - prior_tree_cold_misses;
-        profiler.profile.tree_score_cache_conflict_misses += tree_score_cache.conflict_misses - prior_tree_conflict_misses;
     }
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
@@ -894,6 +845,53 @@ fn treeBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(frequencies, &active_symbols);
     return treeBitCostWithSupport(allocator, frequencies, &active_symbols);
+}
+
+/// Record a completed direct score without inventing a cache request/miss.
+/// Normal searches use the original unprofiled scorer directly.
+fn treeBitCostUncached(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+    scope: TreeScoreScope,
+    mode: ?u2,
+    profiler: if (profiled) *ProfileTimer else void,
+) !u64 {
+    const computed = try treeBitCostProfiled(profiled, allocator, frequencies, active_symbols, profiler);
+    if (profiled) profiler.profile.recordUncachedTree(scope, mode);
+    return computed;
+}
+
+/// Cluster memo entries have the original mode-local lifetime and one fixed
+/// parent support. A hit requires a complete matching frequency vector. Only
+/// successful scores are published; all origins are this same mode/scope.
+fn treeBitCostCached(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+    cache: *TreeScoreCache,
+    mode: u2,
+    profiler: if (profiled) *ProfileTimer else void,
+) !u64 {
+    const prior_cold = if (profiled) cache.cold_misses else 0;
+    const prior_conflict = if (profiled) cache.conflict_misses else 0;
+    const cached = cache.get(profiled, frequencies);
+    if (profiled) {
+        const counts: literal_context_profile.TreeCacheCounts = .{
+            .requests = 1,
+            .hits = @intFromBool(cached != null),
+            .misses = @intFromBool(cached == null),
+            .cold_misses = cache.cold_misses - prior_cold,
+            .conflict_misses = cache.conflict_misses - prior_conflict,
+        };
+        profiler.profile.recordTreeCache(.cluster, mode, counts);
+    }
+    if (cached) |cost| return cost;
+    const computed = try treeBitCostProfiled(profiled, allocator, frequencies, active_symbols, profiler);
+    cache.put(frequencies, computed);
+    return computed;
 }
 
 /// Score one tree through the sorted support of its parent literal histogram.
@@ -1161,7 +1159,7 @@ test "literal context profile reports stable stage accounting" {
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses > 0);
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses <= profile.cluster_trials);
     try std.testing.expect(profile.tree_score_cache_hits + profile.tree_score_cache_misses > 0);
-    try std.testing.expectEqual(profile.tree_score_cache_misses, profile.tree_score_calls);
+    try std.testing.expectEqual(profile.tree_score_cache_misses + profile.tree_score_uncached_calls, profile.tree_score_calls);
     try std.testing.expectEqual(
         profile.tree_score_calls,
         profile.tree_simple_scores + profile.tree_complex_scores,
@@ -1186,7 +1184,8 @@ test "literal context profile reports stable stage accounting" {
     );
     try std.testing.expect(profile.smallHuffmanStageNs() <= profile.tree_lengths_ns);
     try std.testing.expect(profile.complexPrefixStageNs() <= profile.tree_prefix_ns);
-    try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);
+    // Tree scoring now includes baseline and suffix misses as well as clusters.
+    try std.testing.expect(profile.treeScoreStageNs() <= profile.baseline_ns + profile.suffix_ns + profile.cluster_score_ns);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);
 }

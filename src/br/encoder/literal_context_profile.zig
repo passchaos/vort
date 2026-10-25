@@ -1,5 +1,22 @@
 const std = @import("std");
 
+pub const TreeScoreScope = enum(u2) { baseline, suffix, cluster };
+
+pub const TreeCacheCounts = struct {
+    requests: usize = 0,
+    hits: usize = 0,
+    misses: usize = 0,
+    cold_misses: usize = 0,
+    conflict_misses: usize = 0,
+    cross_scope_hits: usize = 0,
+    cross_mode_hits: usize = 0,
+
+    pub fn addSample(self: *TreeCacheCounts, sample: TreeCacheCounts) void {
+        inline for (.{ "requests", "hits", "misses", "cold_misses", "conflict_misses", "cross_scope_hits", "cross_mode_hits" }) |field|
+            @field(self, field) +%= @field(sample, field);
+    }
+};
+
 pub const Profile = struct {
     iterations: usize = 0,
     input_bytes: usize = 0,
@@ -28,6 +45,14 @@ pub const Profile = struct {
     tree_score_cache_misses: usize = 0,
     tree_score_cache_cold_misses: usize = 0,
     tree_score_cache_conflict_misses: usize = 0,
+    /// True memo lookups; baseline and suffix use direct scoring instead.
+    tree_score_scope_counts: [3]TreeCacheCounts = @splat(.{}),
+    tree_score_mode_counts: [4][3]TreeCacheCounts = @splat(@splat(.{})),
+    /// Completed direct scores, separate from cache lookups/misses. Baseline
+    /// has no RFC mode, so its per-mode column remains zero.
+    tree_score_uncached_calls: usize = 0,
+    tree_score_uncached_scope_calls: [3]usize = @splat(0),
+    tree_score_uncached_mode_calls: [4][3]usize = @splat(@splat(0)),
     tree_score_calls: usize = 0,
     tree_simple_scores: usize = 0,
     tree_complex_scores: usize = 0,
@@ -73,7 +98,24 @@ pub const Profile = struct {
     complex_prefix_encoder_ns: u64 = 0,
     complex_prefix_payload_ns: u64 = 0,
     complex_prefix_shape_ns: u64 = 0,
+    /// Inclusive mode search times; they are not added to stageNs().
+    mode_ns: [4]u64 = @splat(0),
     total_ns: u64 = 0,
+
+    pub fn recordTreeCache(self: *Profile, scope: TreeScoreScope, mode: ?u2, counts: TreeCacheCounts) void {
+        self.tree_score_scope_counts[@intFromEnum(scope)].addSample(counts);
+        if (mode) |value| self.tree_score_mode_counts[value][@intFromEnum(scope)].addSample(counts);
+        self.tree_score_cache_hits += counts.hits;
+        self.tree_score_cache_misses += counts.misses;
+        self.tree_score_cache_cold_misses += counts.cold_misses;
+        self.tree_score_cache_conflict_misses += counts.conflict_misses;
+    }
+
+    pub fn recordUncachedTree(self: *Profile, scope: TreeScoreScope, mode: ?u2) void {
+        self.tree_score_uncached_calls += 1;
+        self.tree_score_uncached_scope_calls[@intFromEnum(scope)] += 1;
+        if (mode) |value| self.tree_score_uncached_mode_calls[value][@intFromEnum(scope)] += 1;
+    }
 
     pub fn stageNs(self: Profile) u64 {
         return self.analysis_ns + self.baseline_ns + self.suffix_ns +
@@ -116,6 +158,7 @@ pub const Profile = struct {
             "tree_score_cache_misses",
             "tree_score_cache_cold_misses",
             "tree_score_cache_conflict_misses",
+            "tree_score_uncached_calls",
             "tree_score_calls",
             "tree_simple_scores",
             "tree_complex_scores",
@@ -164,6 +207,17 @@ pub const Profile = struct {
             total.* += count;
         for (&self.complex_prefix_repeat_chain_buckets, sample.complex_prefix_repeat_chain_buckets) |*total, count|
             total.* += count;
+        for (&self.tree_score_scope_counts, sample.tree_score_scope_counts) |*total, counts|
+            total.addSample(counts);
+        for (&self.tree_score_mode_counts, sample.tree_score_mode_counts) |*totals, counts| {
+            for (totals, counts) |*total, source_counts| total.addSample(source_counts);
+        }
+        for (&self.tree_score_uncached_scope_calls, sample.tree_score_uncached_scope_calls) |*total, calls|
+            total.* +%= calls;
+        for (&self.tree_score_uncached_mode_calls, sample.tree_score_uncached_mode_calls) |*totals, calls| {
+            for (totals, calls) |*total, source_calls| total.* +%= source_calls;
+        }
+        for (&self.mode_ns, sample.mode_ns) |*total, ns| total.* +%= ns;
     }
 };
 

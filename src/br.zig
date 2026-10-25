@@ -10186,13 +10186,19 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
 
     // Additional full wire candidates are worthwhile only on ratio-sized plans
     // already paying for recent-distance analysis.
-    const use_recent_distances = options.try_recent_distances and try countReusableRecentDistances(commands, .{
-        .large_window = options.large_window,
-        .window_bits = options.window_bits,
-        .compound_dictionary_size = options.compound_dictionary_size,
-        .initial_output_pos = options.initial_output_pos,
-        .starting_last_distances = options.starting_last_distances,
-    }) >= min_recent_distance_candidate_count;
+    const use_recent_distances = if (options.try_recent_distances) blk: {
+        var timer = trace.begin(.recent_distance_scan, input.len, commands.len);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        const count = try countReusableRecentDistances(commands, .{
+            .large_window = options.large_window,
+            .window_bits = options.window_bits,
+            .compound_dictionary_size = options.compound_dictionary_size,
+            .initial_output_pos = options.initial_output_pos,
+            .starting_last_distances = options.starting_last_distances,
+        });
+        break :blk count >= min_recent_distance_candidate_count;
+    } else false;
     const try_literal_contexts = options.try_literal_contexts orelse options.try_recent_distances;
     const explicit_literal_contexts = options.try_literal_contexts orelse false;
     const primary_context_enabled = explicit_literal_contexts or use_recent_distances;
@@ -10220,10 +10226,18 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
     var alternate_context_count: usize = 0;
     var alternate_plain = false;
     var literal_split_utf8_cutoff: ?u6 = if (primary_context) |candidate| candidate.suffixCutoff() else null;
-    const context_proposals = if (try_literal_contexts and options.try_clustered_literal_contexts)
-        try literal_context_split.chooseProposals(allocator, input, commands)
-    else
-        literal_context_split.Proposals{};
+    const context_proposals = if (try_literal_contexts and options.try_clustered_literal_contexts) blk: {
+        var timer = trace.begin(.context_proposals, input.len, commands.len);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        if (comptime trace_enabled) {
+            var detail: literal_context_split.Profile = .{};
+            const proposed = try literal_context_split.chooseProposalsProfiled(allocator, input, commands, trace.io, &detail);
+            trace.contextDetail(detail, commands.len);
+            break :blk proposed;
+        }
+        break :blk try literal_context_split.chooseProposals(allocator, input, commands);
+    } else literal_context_split.Proposals{};
     const adaptive_contexts = if (try_literal_contexts)
         [3]?literal_context_split.Candidate{
             context_proposals.suffix,

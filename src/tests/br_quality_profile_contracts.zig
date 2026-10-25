@@ -14,6 +14,94 @@ fn checkMemory(left: *const std.testing.FailingAllocator, right: *const std.test
     try std.testing.expectEqual(left.deallocations, right.deallocations);
 }
 
+fn contextCounts(stats: anytype) !void {
+    try std.testing.expect(stats.literal_count <= stats.input_bytes);
+    try std.testing.expect(stats.active_symbols <= 256);
+    try std.testing.expect(stats.suffix_tree_count == 0 or stats.suffix_tree_count == 2);
+    try std.testing.expect(stats.up_to_16_tree_count <= 16 and stats.full_tree_count <= 64);
+    var hits: usize = 0;
+    var misses: usize = 0;
+    var direct: usize = 0;
+    for (stats.tree_score_scope_counts, stats.tree_score_uncached_scope_calls, 0..) |counts, calls, scope| {
+        try std.testing.expectEqual(counts.requests, counts.hits + counts.misses);
+        try std.testing.expectEqual(counts.misses, counts.cold_misses + counts.conflict_misses);
+        try std.testing.expectEqual(@as(usize, 0), counts.cross_scope_hits);
+        try std.testing.expectEqual(@as(usize, 0), counts.cross_mode_hits);
+        if (scope < 2) try std.testing.expectEqual(@as(usize, 0), counts.requests);
+        hits += counts.hits;
+        misses += counts.misses;
+        direct += calls;
+    }
+    try std.testing.expectEqual(hits, stats.tree_score_cache_hits);
+    try std.testing.expectEqual(misses, stats.tree_score_cache_misses);
+    try std.testing.expectEqual(direct, stats.tree_score_uncached_calls);
+    try std.testing.expectEqual(misses + direct, stats.tree_score_calls);
+    try std.testing.expectEqual(@as(usize, @intFromBool(stats.literal_count >= 128)), stats.tree_score_uncached_scope_calls[0]);
+    try std.testing.expectEqual(stats.suffix_payload_scores * 2, stats.tree_score_uncached_scope_calls[1]);
+    try std.testing.expectEqual(@as(usize, 0), stats.tree_score_uncached_scope_calls[2]);
+    for (0..3) |scope| {
+        var mode_direct: usize = 0;
+        inline for (std.meta.fields(@TypeOf(stats.tree_score_scope_counts[scope]))) |field| {
+            var sum: usize = 0;
+            for (stats.tree_score_mode_counts) |mode| sum += @field(mode[scope], field.name);
+            try std.testing.expectEqual(@field(stats.tree_score_scope_counts[scope], field.name), sum);
+        }
+        for (stats.tree_score_uncached_mode_calls) |mode| mode_direct += mode[scope];
+        try std.testing.expectEqual(if (scope == 0) @as(usize, 0) else stats.tree_score_uncached_scope_calls[scope], mode_direct);
+    }
+}
+
+fn contextDetailsShape(profile: anytype, input_len: usize) !void {
+    try std.testing.expectEqual(@as(usize, 8), profile.context_details.len);
+    try std.testing.expect(profile.context_detail_count <= profile.context_details.len);
+    try std.testing.expectEqual(profile.context_detail_count, profile.recordedContextDetails().len);
+    for (profile.recordedContextDetails(), 0..) |detail, index| {
+        try std.testing.expectEqual(input_len, detail.profile.input_bytes);
+        try contextCounts(detail.profile);
+        if (detail.event_id) |identifier| {
+            var found = false;
+            for (profile.recordedEvents()) |event| if (event.id == identifier) {
+                try std.testing.expectEqual(@TypeOf(event.stage).context_proposals, event.stage);
+                try std.testing.expectEqualStrings("", event.error_name);
+                try std.testing.expectEqual(event.origin, detail.origin);
+                try std.testing.expectEqual(event.variant, detail.variant);
+                try std.testing.expectEqual(event.command_count, detail.command_count);
+                try std.testing.expectEqual(event.input_bytes, detail.profile.input_bytes);
+                found = true;
+                break;
+            };
+            try std.testing.expect(found);
+            for (profile.recordedContextDetails()[0..index]) |earlier| try std.testing.expect(earlier.event_id != detail.event_id);
+        } else try std.testing.expect(profile.events_truncated);
+    }
+    if (!profile.events_truncated and !profile.context_details_truncated) {
+        var successful_calls: usize = 0;
+        for (profile.recordedEvents()) |event| {
+            if (event.stage != .context_proposals or event.error_name.len != 0) continue;
+            successful_calls += 1;
+            var associated: usize = 0;
+            for (profile.recordedContextDetails()) |detail| associated += @intFromBool(detail.event_id == event.id);
+            try std.testing.expectEqual(@as(usize, 1), associated);
+        }
+        try std.testing.expectEqual(successful_calls, profile.context_detail_count);
+    }
+}
+
+fn deterministicContextDetails(first: anytype, second: anytype) !void {
+    try std.testing.expectEqual(first.context_detail_count, second.context_detail_count);
+    try std.testing.expectEqual(first.context_details_truncated, second.context_details_truncated);
+    for (first.recordedContextDetails(), second.recordedContextDetails()) |left, right| {
+        try std.testing.expectEqualDeep(left.event_id, right.event_id);
+        try std.testing.expectEqual(left.origin, right.origin);
+        try std.testing.expectEqual(left.variant, right.variant);
+        try std.testing.expectEqual(left.command_count, right.command_count);
+        inline for (std.meta.fields(@TypeOf(left.profile))) |field| {
+            if (comptime !std.mem.endsWith(u8, field.name, "_ns"))
+                try std.testing.expectEqualDeep(@field(left.profile, field.name), @field(right.profile, field.name));
+        }
+    }
+}
+
 fn profileShape(profile: anytype, input_len: usize, output_len: usize) !void {
     try std.testing.expect(profile.event_count <= profile.events.len);
     try std.testing.expect(profile.event_count <= profile.request.event_limit);
@@ -44,6 +132,8 @@ fn profileShape(profile: anytype, input_len: usize, output_len: usize) !void {
         }
     }
     try std.testing.expectEqual(@as(usize, 1), outer);
+    try std.testing.expect(!profile.context_details_truncated);
+    try contextDetailsShape(profile, input_len);
     if (profile.events_truncated or !profile.wire_attempt_coverage_complete) {
         try std.testing.expectEqual(@as(?usize, null), profile.returned_wire_event_id);
     } else {
@@ -70,6 +160,7 @@ fn deterministicShape(first: anytype, second: anytype) !void {
     try std.testing.expectEqual(first.wire_attempt_coverage_complete, second.wire_attempt_coverage_complete);
     try std.testing.expectEqual(first.wire_attempts, second.wire_attempts);
     try std.testing.expectEqualDeep(first.returned_wire_event_id, second.returned_wire_event_id);
+    try deterministicContextDetails(first, second);
     for (first.events[0..first.event_count], second.events[0..second.event_count]) |left, right| {
         try std.testing.expectEqual(left.id, right.id);
         try std.testing.expectEqualDeep(left.parent_id, right.parent_id);
@@ -138,6 +229,9 @@ fn eventCapacity(comptime Codec: type, input: []const u8) !void {
         try std.testing.expectEqual(@as(?usize, expected.len), profile.returned_wire_bytes);
         try std.testing.expectEqual(limit, profile.request.event_limit);
         try std.testing.expectEqual(@as(?usize, null), profile.returned_wire_event_id);
+        try contextDetailsShape(profile, input.len);
+        try std.testing.expectEqual(expected_profile.context_detail_count, profile.context_detail_count);
+        for (profile.recordedContextDetails()) |detail| try std.testing.expectEqual(@as(?usize, null), detail.event_id);
         if (limit == 0) try std.testing.expectEqual(@as(usize, 0), profile.recordedEvents().len);
     }
 }

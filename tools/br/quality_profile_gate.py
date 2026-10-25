@@ -90,6 +90,54 @@ def validate(report: dict, executable: Path | None = None) -> dict:
             require(len(outer_events) == 1 and outer_events[0]["inclusive_ns"] == outer, "outer event")
             require(by_stage == exclusive, "stage totals differ from events")
             require(len(wires) == profile["wire_attempts"], "wire attempt count")
+            if "context_details" in profile:
+                require(not profile.get("context_details_truncated", False), "context detail truncated")
+                details = profile["context_details"]
+                require(len(details) <= 8, "context detail capacity")
+                proposal_events = [e for e in events if e["stage"] == "context_proposals" and e["error_name"] == ""]
+                require(len(details) == len(proposal_events), "context calls/details mismatch")
+                require({d["event_id"] for d in details} == {e["id"] for e in proposal_events}, "context detail event coverage")
+                for detail in details:
+                    identifier = detail["event_id"]
+                    event = by_id.get(identifier)
+                    require(event is not None and event["stage"] == "context_proposals", "context event missing")
+                    require(event["origin"] == detail["origin"] and event["variant"] == detail["variant"] and event["command_count"] == detail["command_count"], "context attribution mismatch")
+                    stats = detail["profile"]
+                    if "tree_score_scope_counts" in stats:
+                        scopes = stats["tree_score_scope_counts"]
+                        require(len(scopes) == 3, "score scopes")
+                        for counts in scopes:
+                            require(counts["requests"] == counts["hits"] + counts["misses"], "score request conservation")
+                            require(counts["misses"] == counts["cold_misses"] + counts["conflict_misses"], "score miss conservation")
+                            require(counts["cross_scope_hits"] <= counts["hits"] and counts["cross_mode_hits"] <= counts["hits"], "score cross hits")
+                        require(sum(s["hits"] for s in scopes) == stats["tree_score_cache_hits"] and sum(s["misses"] for s in scopes) == stats["tree_score_cache_misses"], "score totals")
+                        uncached = stats.get("tree_score_uncached_calls", 0)
+                        require(sum(s["misses"] for s in scopes) + uncached == stats["tree_score_calls"], "actual scorer calls")
+                        if "tree_score_uncached_calls" in stats:
+                            direct_scopes = stats["tree_score_uncached_scope_calls"]
+                            direct_modes = stats["tree_score_uncached_mode_calls"]
+                            require(len(direct_scopes) == 3 and len(direct_modes) == 4 and all(len(m) == 3 for m in direct_modes), "uncached shape")
+                            require(all(n >= 0 for n in direct_scopes) and all(n >= 0 for m in direct_modes for n in m), "negative uncached count")
+                            require(sum(direct_scopes) == uncached, "uncached scope sum")
+                            require(all(m[0] == 0 for m in direct_modes), "uncached baseline counted by mode")
+                            for scope in range(1, 3):
+                                require(sum(m[scope] for m in direct_modes) == direct_scopes[scope], "uncached mode sum")
+                            active = stats["literal_count"] >= 128
+                            require(direct_scopes[0] == int(active), "uncached baseline calls")
+                            require(direct_scopes[1] == 2 * stats["suffix_payload_scores"] and direct_scopes[2] == 0, "uncached suffix calls")
+                            require(all(s["requests"] == 0 for s in scopes[:2]), "default cached baseline or suffix")
+                            require(all(s["cross_scope_hits"] == 0 and s["cross_mode_hits"] == 0 for s in scopes), "default cross-scope cache")
+                        modes = stats["tree_score_mode_counts"]
+                        require(len(modes) == 4 and all(len(m) == 3 for m in modes), "score mode scopes")
+                        require(all(m[0]["requests"] == 0 for m in modes), "baseline counted by mode")
+                        for mode in modes:
+                            for counts in mode:
+                                require(counts["requests"] == counts["hits"] + counts["misses"], "mode request conservation")
+                                require(counts["misses"] == counts["cold_misses"] + counts["conflict_misses"], "mode miss conservation")
+                                require(counts["cross_scope_hits"] <= counts["hits"] and counts["cross_mode_hits"] <= counts["hits"], "mode cross hits")
+                        for scope in range(1, 3):
+                            for field in scopes[scope]:
+                                require(sum(m[scope][field] for m in modes) == scopes[scope][field], "mode score sum")
             for identifier, descendants in children.items():
                 # Instant selection records have zero duration. Only direct
                 # children's inclusive time is subtracted by the parent.

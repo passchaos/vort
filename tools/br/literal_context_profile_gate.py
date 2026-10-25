@@ -20,6 +20,7 @@ COLUMNS = [
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
     "tree_score_cache_hits", "tree_score_cache_misses",
     "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
+    "tree_score_uncached_calls",
     "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries", "tree_active_buckets",
     "small_huffman_calls", "small_huffman_failures", "package_merge_calls",
     "complex_prefix_calls", "complex_prefix_rle_tokens", "complex_prefix_code_length_active",
@@ -43,6 +44,8 @@ CLUSTER_STAGES = [
     "cluster_finalize_ns", "cluster_score_ns",
 ]
 TREE_SCORE_STAGES = ["tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns"]
+# Pure scores cover uncached baseline/suffix calls and cached cluster misses.
+TREE_SCORE_PARENTS = ["baseline_ns", "suffix_ns", "cluster_score_ns"]
 SMALL_HUFFMAN_STAGES = [
     "small_huffman_leaf_order_ns", "small_huffman_merge_ns",
     "small_huffman_depth_ns", "small_huffman_output_ns",
@@ -79,10 +82,29 @@ def validate_candidate(row: dict[str, str], prefix: str) -> None:
         assert savings >= 128, (prefix, row)
 
 
+def validate_historical_dominance(row: dict[str, str]) -> None:
+    # These ratios describe the earlier source32k profile, rather than timing
+    # conservation. Preserve them for explicit historical comparisons while
+    # allowing a correct optimization to change the default profile's hotspot.
+    cluster_score = integer(row, "cluster_score_ns")
+    assert cluster_score == max(integer(row, key) for key in CLUSTER_STAGES), row
+    assert cluster_score * 2 > integer(row, "cluster_ns"), row
+    tree_major = [integer(row, key) for key in ("tree_alphabet_ns", "tree_lengths_ns", "tree_prefix_ns")]
+    assert min(tree_major) * 5 > max(tree_major) * 4, row
+    assert min(tree_major) > integer(row, "tree_weighted_ns") * 8, row
+    prefix_rle = integer(row, "complex_prefix_rle_ns")
+    assert prefix_rle == max(integer(row, key) for key in COMPLEX_PREFIX_STAGES), row
+    assert prefix_rle * 3 > integer(row, "complex_prefix_stage_ns"), row
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--executable", type=Path)
+    parser.add_argument(
+        "--require-historical-dominance", action="store_true",
+        help="also require the earlier source32k hotspot ratios",
+    )
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
@@ -120,7 +142,14 @@ def main() -> int:
             integer(row, "tree_score_cache_cold_misses") +
             integer(row, "tree_score_cache_conflict_misses")
         ), row
-        assert integer(row, "tree_score_calls") == integer(row, "tree_score_cache_misses"), row
+        uncached_calls = integer(row, "tree_score_uncached_calls")
+        assert uncached_calls >= 0, row
+        # These focused rows require valid Analysis above, so every iteration
+        # scores one global baseline and two nonempty trees per suffix payload.
+        # Only cluster scores use the memo; generic early-return profiles do
+        # not satisfy this baseline-per-iteration relation.
+        assert uncached_calls == iterations + 2 * integer(row, "suffix_payload_scores"), row
+        assert integer(row, "tree_score_calls") == integer(row, "tree_score_cache_misses") + uncached_calls, row
         assert integer(row, "tree_simple_scores") + integer(row, "tree_complex_scores") == integer(row, "tree_score_calls"), row
         assert integer(row, "tree_active_entries") >= integer(row, "tree_score_calls"), row
         active_buckets = histogram(row, "tree_active_buckets", 6)
@@ -148,12 +177,14 @@ def main() -> int:
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
         assert integer(row, "cluster_stage_ns") == sum(integer(row, key) for key in CLUSTER_STAGES), row
         assert integer(row, "tree_score_stage_ns") == sum(integer(row, key) for key in TREE_SCORE_STAGES), row
-        assert integer(row, "tree_score_stage_ns") <= integer(row, "cluster_score_ns"), row
+        assert integer(row, "tree_score_stage_ns") <= sum(integer(row, key) for key in TREE_SCORE_PARENTS), row
         assert integer(row, "small_huffman_stage_ns") == sum(integer(row, key) for key in SMALL_HUFFMAN_STAGES), row
         assert integer(row, "small_huffman_stage_ns") <= integer(row, "tree_lengths_ns"), row
         assert integer(row, "complex_prefix_stage_ns") == sum(integer(row, key) for key in COMPLEX_PREFIX_STAGES), row
         assert integer(row, "complex_prefix_stage_ns") <= integer(row, "tree_prefix_ns"), row
         assert integer(row, "complex_prefix_shape_ns") > 0, row
+        assert integer(row, "unattributed_ns") >= 0, row
+        assert integer(row, "cluster_unattributed_ns") >= 0, row
         assert integer(row, "stage_ns") + integer(row, "unattributed_ns") == integer(row, "total_ns"), row
         assert integer(row, "cluster_stage_ns") + integer(row, "cluster_unattributed_ns") == integer(row, "cluster_ns"), row
 
@@ -161,16 +192,13 @@ def main() -> int:
     assert integer(source32, "suffix_tree_count") >= 2, source32
     assert integer(source32, "full_tree_count") >= integer(source32, "suffix_tree_count"), source32
     assert integer(source32, "tree_score_cache_hits") > 0, source32
-    cluster_score = integer(source32, "cluster_score_ns")
-    assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
-    assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
-    tree_major = [integer(source32, key) for key in ("tree_alphabet_ns", "tree_lengths_ns", "tree_prefix_ns")]
-    assert min(tree_major) * 5 > max(tree_major) * 4, source32
-    assert min(tree_major) > integer(source32, "tree_weighted_ns") * 8, source32
-    prefix_rle = integer(source32, "complex_prefix_rle_ns")
-    assert prefix_rle == max(integer(source32, key) for key in COMPLEX_PREFIX_STAGES), source32
-    assert prefix_rle * 3 > integer(source32, "complex_prefix_stage_ns"), source32
-    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_major_ns/prefix_rle_ns")
+    if args.require_historical_dominance:
+        validate_historical_dominance(source32)
+    dominant = "/".join(
+        max(stages, key=lambda key: integer(source32, key))
+        for stages in (CLUSTER_STAGES, TREE_SCORE_STAGES, COMPLEX_PREFIX_STAGES)
+    )
+    print(f"br_literal_context_profile_gate=ok rows=3 dominant={dominant}")
     return 0
 
 

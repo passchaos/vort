@@ -12,14 +12,12 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "single");
     defer provenance.deinit(init.gpa);
-    const source = try std.Io.Dir.cwd().readFileAlloc(
-        init.io,
-        "src/br.zig",
-        init.gpa,
-        .limited(2 * 1024 * 1024),
-    );
+    const source_file = try std.Io.Dir.cwd().openFile(init.io, "src/br.zig", .{});
+    defer source_file.close(init.io);
+    const source = try init.gpa.alloc(u8, 32 * 1024);
     defer init.gpa.free(source);
-    if (source.len < 32 * 1024) return error.InputTooSmall;
+    var source_reader = source_file.reader(init.io, &.{});
+    if (try source_reader.interface.readSliceShort(source) != source.len) return error.InputTooSmall;
     const cases = [_]Case{
         .{ .name = "source4k", .payload = source[0 .. 4 * 1024] },
         .{ .name = "source16k", .payload = source[0 .. 16 * 1024] },
@@ -37,6 +35,7 @@ pub fn main(init: std.process.Init) !void {
             "assignment_contexts,assignment_comparisons,score_cache_hits,score_cache_misses," ++
             "tree_score_cache_hits,tree_score_cache_misses," ++
             "tree_score_cache_cold_misses,tree_score_cache_conflict_misses," ++
+            "tree_score_uncached_calls," ++
             "tree_score_calls,tree_simple_scores,tree_complex_scores,tree_active_entries,tree_active_buckets," ++
             "small_huffman_calls,small_huffman_failures,package_merge_calls," ++
             "complex_prefix_calls,complex_prefix_rle_tokens,complex_prefix_code_length_active," ++
@@ -65,16 +64,18 @@ pub fn main(init: std.process.Init) !void {
         const stage_ns = profile.stageNs();
         const cluster_stage_ns = profile.clusterStageNs();
         const tree_score_stage_ns = profile.treeScoreStageNs();
+        // Pure scores include uncached baseline/suffix calls and cluster misses.
+        const tree_score_parent_ns = profile.baseline_ns + profile.suffix_ns + profile.cluster_score_ns;
         const small_huffman_stage_ns = profile.smallHuffmanStageNs();
         const complex_prefix_stage_ns = profile.complexPrefixStageNs();
         if (stage_ns > profile.total_ns or cluster_stage_ns > profile.cluster_ns or
-            tree_score_stage_ns > profile.cluster_score_ns or
+            tree_score_stage_ns > tree_score_parent_ns or
             small_huffman_stage_ns > profile.tree_lengths_ns or
             complex_prefix_stage_ns > profile.tree_prefix_ns)
             return error.InvalidBlockPlan;
         try csv.writer.print(
             "{s},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}," ++
-                "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+                "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 case.name,
                 profile.input_bytes,
@@ -103,6 +104,7 @@ pub fn main(init: std.process.Init) !void {
                 profile.tree_score_cache_misses,
                 profile.tree_score_cache_cold_misses,
                 profile.tree_score_cache_conflict_misses,
+                profile.tree_score_uncached_calls,
                 profile.tree_score_calls,
                 profile.tree_simple_scores,
                 profile.tree_complex_scores,

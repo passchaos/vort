@@ -65,6 +65,82 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(self.report)
 
+    def context_report(self):
+        report = copy.deepcopy(self.report)
+        p = self.profile(report)
+        p["exclusive_ns"]["context_proposals"] = 20
+        p["unaccounted_ns"] = 40
+        p["events"][0]["exclusive_ns"] = 40
+        p["events"].append(dict(p["events"][1], id=2, stage="context_proposals", inclusive_ns=20,
+                                exclusive_ns=20, origin="lazy", variant=False, command_count=1, error_name=""))
+        p["event_count"] = p["events_total"] = 3
+        zero = dict(requests=0, hits=0, misses=0, cold_misses=0, conflict_misses=0, cross_scope_hits=0, cross_mode_hits=0)
+        baseline = dict(zero, requests=1, misses=1, cold_misses=1)
+        p["context_details_truncated"] = False
+        p["context_details"] = [dict(event_id=2, origin="lazy", variant=False, command_count=1,
+                                      profile=dict(tree_score_scope_counts=[baseline, zero, zero],
+                                                   tree_score_mode_counts=[[zero, zero, zero] for _ in range(4)],
+                                                   tree_score_cache_hits=0, tree_score_cache_misses=1,
+                                                   tree_score_calls=1))]
+        return report
+
+    def test_context_detail(self):
+        self.assertEqual(1, validate(self.context_report())["validated_runs"])
+
+    def test_wrong_context_attribution(self):
+        report = self.context_report()
+        self.profile(report)["context_details"][0]["event_id"] = 1
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def test_wrong_score_conservation(self):
+        report = self.context_report()
+        self.profile(report)["context_details"][0]["profile"]["tree_score_calls"] = 0
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def test_duplicate_context_detail(self):
+        report = self.context_report()
+        p = self.profile(report)
+        p["events"].append(dict(p["events"][-1], id=3, inclusive_ns=0, exclusive_ns=0))
+        p["event_count"] = p["events_total"] = 4
+        p["context_details"].append(copy.deepcopy(p["context_details"][0]))
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def test_wrong_mode_score_conservation(self):
+        report = self.context_report()
+        p = self.profile(report)["context_details"][0]["profile"]
+        p["tree_score_mode_counts"] = copy.deepcopy(p["tree_score_mode_counts"])
+        p["tree_score_mode_counts"][0][1]["hits"] = 1
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def restored_context_report(self):
+        report = self.context_report()
+        stats = self.profile(report)["context_details"][0]["profile"]
+        stats["tree_score_scope_counts"][0] = dict(stats["tree_score_scope_counts"][1])
+        stats.update(tree_score_cache_misses=0, tree_score_uncached_calls=3,
+                     tree_score_uncached_scope_calls=[1, 2, 0],
+                     tree_score_uncached_mode_calls=[[0, 2, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                     tree_score_calls=3, literal_count=128, suffix_payload_scores=1)
+        return report
+
+    def test_restored_uncached_counts(self):
+        self.assertEqual(1, validate(self.restored_context_report())["validated_runs"])
+
+    def test_wrong_uncached_counts(self):
+        report = self.restored_context_report()
+        self.profile(report)["context_details"][0]["profile"]["tree_score_uncached_calls"] = 2
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def test_wrong_uncached_mode(self):
+        report = self.restored_context_report()
+        self.profile(report)["context_details"][0]["profile"]["tree_score_uncached_mode_calls"][0][1] = 1
+        with self.assertRaises(ValueError):
+            validate(report)
+
 
 if __name__ == "__main__":
     unittest.main()

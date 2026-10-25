@@ -2,10 +2,11 @@
 //! Storage is fixed and reporting truncation never changes codec selection.
 const std = @import("std");
 const total = @import("total_budget.zig");
+const context_profile = @import("literal_context_profile.zig");
 pub const event_capacity = 512;
 const stack_capacity = 32;
 
-pub const Stage = enum { outer, lazy_parse, lazy_commands, optimal_parse, optimal_commands, preferred_context, split_planning, wire, distance_parameters, selection, other };
+pub const Stage = enum { outer, lazy_parse, lazy_commands, optimal_parse, optimal_commands, preferred_context, recent_distance_scan, context_proposals, split_planning, wire, distance_parameters, selection, other };
 pub const Origin = enum { other, lazy, optimal };
 pub const Request = struct {
     max_total_working_memory: ?usize = null,
@@ -18,6 +19,8 @@ pub const Exclusive = struct {
     optimal_parse: u64 = 0,
     optimal_commands: u64 = 0,
     preferred_context: u64 = 0,
+    recent_distance_scan: u64 = 0,
+    context_proposals: u64 = 0,
     split_planning: u64 = 0,
     wire: u64 = 0,
     distance_parameters: u64 = 0,
@@ -110,6 +113,14 @@ pub const Event = struct {
     config: Config = .{},
 };
 const Frame = struct { id: usize, child_ns: u64 = 0 };
+pub const ContextDetail = struct {
+    event_id: ?usize,
+    origin: Origin,
+    variant: bool,
+    command_count: usize,
+    profile: context_profile.Profile,
+};
+pub const context_detail_capacity = 8;
 pub const Profile = struct {
     request: Request = .{},
     events: [event_capacity]Event = undefined,
@@ -134,6 +145,9 @@ pub const Profile = struct {
     depth: usize = 0,
     wire_addresses: [event_capacity]usize = @splat(0),
     wire_live: [event_capacity]bool = @splat(false),
+    context_details: [context_detail_capacity]ContextDetail = undefined,
+    context_detail_count: usize = 0,
+    context_details_truncated: bool = false,
 
     pub fn reset(self: *Profile) void {
         const request = self.request;
@@ -141,6 +155,9 @@ pub const Profile = struct {
     }
     pub fn recordedEvents(self: *const Profile) []const Event {
         return self.events[0..self.event_count];
+    }
+    pub fn recordedContextDetails(self: *const Profile) []const ContextDetail {
+        return self.context_details[0..self.context_detail_count];
     }
     pub fn jsonStringify(self: *const Profile, writer: anytype) !void {
         try writer.write(.{
@@ -159,6 +176,8 @@ pub const Profile = struct {
             .error_name = self.error_name,
             .returned_wire_bytes = self.returned_wire_bytes,
             .returned_wire_event_id = self.returned_wire_event_id,
+            .context_details = self.recordedContextDetails(),
+            .context_details_truncated = self.context_details_truncated,
         });
     }
 };
@@ -182,6 +201,7 @@ pub const Disabled = struct {
     pub fn incompleteWires(_: Disabled) void {}
     pub fn returned(_: Disabled, _: []const u8) void {}
     pub fn forgetWire(_: Disabled, _: []const u8) void {}
+    pub fn contextDetail(_: Disabled, _: anytype, _: usize) void {}
 };
 pub const EmptyScope = struct {
     pub fn finish(_: *EmptyScope) void {}
@@ -195,6 +215,21 @@ pub const Active = struct {
     profile: *Profile,
     origin: Origin = .other,
     is_variant: bool = false,
+    pub fn contextDetail(self: Active, detail: context_profile.Profile, commands: usize) void {
+        const p = self.profile;
+        if (p.context_detail_count == context_detail_capacity) {
+            p.context_details_truncated = true;
+            return;
+        }
+        const context_id: ?usize = if (p.depth == 0) null else blk: {
+            const id = p.stack[p.depth - 1].id;
+            // Event slots form an ID prefix. A truncated scope still has a
+            // timing frame, but it cannot provide a recorded event link.
+            break :blk if (id < p.event_count and p.events[id].stage == .context_proposals) id else null;
+        };
+        p.context_details[p.context_detail_count] = .{ .event_id = context_id, .origin = self.origin, .variant = self.is_variant, .command_count = commands, .profile = detail };
+        p.context_detail_count += 1;
+    }
     pub fn withOrigin(self: Active, origin: Origin) Active {
         var result = self;
         result.origin = origin;

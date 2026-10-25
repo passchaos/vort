@@ -90,6 +90,8 @@ pub fn main(init: std.process.Init) !void {
                 .error_name = profile.error_name,
                 .returned_wire_bytes = profile.returned_wire_bytes,
                 .returned_wire_event_id = profile.returned_wire_event_id,
+                .context_details = profile.recordedContextDetails(),
+                .context_details_truncated = profile.context_details_truncated,
                 .events = profile.recordedEvents(),
             }, .{}, &json.writer);
             try json.writer.writeByte('}');
