@@ -1,0 +1,7 @@
+{
+  "source_commit": "cbef5071fe7209cd412be983e87603150f1bc75f",
+  "source_manifest_sha256": "945b711f37a33d2a8d6900678e98e9ee10d3ae3f2d617649897f81ad3c4a9e67",
+  "files_verified": 1998,
+  "mismatches": [],
+  "scope": "Final source snapshot matches feature commit files; probe/campaign identities remain their separately recorded epochs."
+}

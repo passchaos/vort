@@ -1,0 +1,85 @@
+{
+  "schema": "vort.evidence-manifest.v1",
+  "files": [
+    {
+      "path": "archive-verification.json",
+      "bytes": 560,
+      "sha256": "a02f9194c3c44e2f5ee158c187472418a72a4de8a5c3ff479db8c5d9c4cbf9e2"
+    },
+    {
+      "path": "cross-target.json",
+      "bytes": 25420,
+      "sha256": "f71033f641c6a7748021614be659ebd27734723042dd206b302f08cfa700c368"
+    },
+    {
+      "path": "environment.json",
+      "bytes": 293,
+      "sha256": "ac9ba21be98bf9219bf04e8b8e62d6c93f72e693f6ddf049fce8d42a6d192f9d"
+    },
+    {
+      "path": "final-source-manifest.json",
+      "bytes": 334961,
+      "sha256": "945b711f37a33d2a8d6900678e98e9ee10d3ae3f2d617649897f81ad3c4a9e67"
+    },
+    {
+      "path": "final-source-verification.json",
+      "bytes": 341,
+      "sha256": "3838095789c214ef84352520622c17303acf71f11aafc0d6a2fc7755943cd101"
+    },
+    {
+      "path": "legacy-parity.tar.xz",
+      "bytes": 1907052,
+      "sha256": "a06e12cf18aceb9701d35921c861626e704a5342b9d932a088d4e87a2b20bbb2"
+    },
+    {
+      "path": "liblzma-reference.tar.xz",
+      "bytes": 156952,
+      "sha256": "6a4c08471b2fec69031e066593f13baa48254df35c8e128c6511629048a795af"
+    },
+    {
+      "path": "logs.tar.xz",
+      "bytes": 16136,
+      "sha256": "b3347041d14942a92fccc5e6232e99f66a2c2518b2c57f206dcf39f980d41223"
+    },
+    {
+      "path": "native.tar.xz",
+      "bytes": 138664,
+      "sha256": "aaec63fa6262108875792835553fdea4ec46a30b281a6018b45e42a806ea8443"
+    },
+    {
+      "path": "probes.tar.xz",
+      "bytes": 2235212,
+      "sha256": "239cfae2bc49687e6ff9e6d304f2a26f782792d3a9c89e548139386cebe45411"
+    },
+    {
+      "path": "reference-archive-manifest.json",
+      "bytes": 3610,
+      "sha256": "44ca4ad0480fc783e8795ee4f045973ac14b2897de9b885111f8b0e913ad7226"
+    },
+    {
+      "path": "validation-summary.json",
+      "bytes": 2680,
+      "sha256": "08d759035b66ea53f51d8af136477f76c6e0c282997d7514ef6a36dfbd62eb09"
+    },
+    {
+      "path": "verification-commands.json",
+      "bytes": 1885,
+      "sha256": "405953a9e82bfa6bf07b961ba53e6132a255fe6337ce7136e794642fc644ba13"
+    },
+    {
+      "path": "wasm-report.json",
+      "bytes": 2167,
+      "sha256": "65b78f742030b0353685dd59564e38e752bbf54eacccfee7f9a357b44b61b154"
+    },
+    {
+      "path": "wasm.tar.xz",
+      "bytes": 222432,
+      "sha256": "001beec9266c6a876b10e1c45a48f77db244fd26aa2ee9ebc0e2859542a9fecc"
+    },
+    {
+      "path": "x86.tar.xz",
+      "bytes": 138648,
+      "sha256": "9598c6bbadaf408588a98a43110627c0b11d1222bb405b7c3da05b3a519b28ef"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "version": "5.8.4",
+  "scope": "Exact previously used reference shared library, API headers and bundled license files; no recompilation or benchmark.",
+  "files": [
+    {
+      "path": "lib/liblzma.so.5.8.4",
+      "bytes": 223896,
+      "sha256": "03a333e8fd35e4c771c04ce93ab08dc0b8bbfa7615900179c53e1dd92a4d9ec0"
+    },
+    {
+      "path": "include/Makefile.am",
+      "bytes": 885,
+      "sha256": "deec5bef0c470bae19670a0f8110e8ea68ad8a5831b8f2b0e3de4f574a0dde1d"
+    },
+    {
+      "path": "include/lzma/base.h",
+      "bytes": 28223,
+      "sha256": "e6de2ae8c447f98dfb12d7fbdd7510ed2c5c0d9a7a52ba2fabab10b638b3171d"
+    },
+    {
+      "path": "include/lzma/bcj.h",
+      "bytes": 6105,
+      "sha256": "7420ecbd1bd0e7ed726ccb4b771c92c5e99366fd98f725b57055ddd90cd6384b"
+    },
+    {
+      "path": "include/lzma/block.h",
+      "bytes": 25964,
+      "sha256": "c99bf801dc0d771196f318f0eb2db454c8ba007fb516c1e83ece91ac079e3440"
+    },
+    {
+      "path": "include/lzma/check.h",
+      "bytes": 4840,
+      "sha256": "a6954d5e59c87c09e000f6df9b61615125a4fb20b5014ce8cb3eea762999acff"
+    },
+    {
+      "path": "include/lzma/container.h",
+      "bytes": 42082,
+      "sha256": "1cc1586e26307154822c50c477807cba245e5813a30d828eeb8fe6edfe551ee7"
+    },
+    {
+      "path": "include/lzma/delta.h",
+      "bytes": 2187,
+      "sha256": "ff69bb02c2beb169284a50f68962006dde746e1859c31d47be0bc8e56db7a7b1"
+    },
+    {
+      "path": "include/lzma/filter.h",
+      "bytes": 31746,
+      "sha256": "bdc89d83271fd6cfc6e345913d6c6882c4c0f9093c71ea576c64ba562233ca6b"
+    },
+    {
+      "path": "include/lzma/hardware.h",
+      "bytes": 2369,
+      "sha256": "2e74cb51a6ac7e062d291124cef1d101e0df30cccaff1415a31810556fedba1b"
+    },
+    {
+      "path": "include/lzma/index.h",
+      "bytes": 31090,
+      "sha256": "f87c272b613742f18177186990144fa2c70f0800656c8b1a4142c3d9f0e94c9a"
+    },
+    {
+      "path": "include/lzma/index_hash.h",
+      "bytes": 4671,
+      "sha256": "b10127b60fedb010dad8d9c07635e73da9e995b287e823ae1838bbd302a8b260"
+    },
+    {
+      "path": "include/lzma/lzma12.h",
+      "bytes": 20818,
+      "sha256": "863e8c4b64472c5bca2246f17e2208af6dac9a07a34386a6e0af707708abdb50"
+    },
+    {
+      "path": "include/lzma/stream_flags.h",
+      "bytes": 9239,
+      "sha256": "192f8e6fdedcc26fabf2751128eab1f41fd6fbf976eea0d3d225a1d57b6a459c"
+    },
+    {
+      "path": "include/lzma/version.h",
+      "bytes": 3872,
+      "sha256": "9dec302470df2f505474cad90065a12eed8f65a7944e44ae1844499e72a4bb9f"
+    },
+    {
+      "path": "include/lzma/vli.h",
+      "bytes": 6590,
+      "sha256": "16a498e75b0f5136de11e205e36ce9641277cfddad538fff5b22b6991f4110f7"
+    },
+    {
+      "path": "include/lzma.h",
+      "bytes": 9790,
+      "sha256": "6829350ef1ee35fae25481cc87a4f4b17c4b6c2a3df26f2b34dc1804df75c0d9"
+    },
+    {
+      "path": "licenses/COPYING.0BSD",
+      "bytes": 607,
+      "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1"
+    },
+    {
+      "path": "licenses/COPYING.GPLv2",
+      "bytes": 17984,
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    },
+    {
+      "path": "licenses/COPYING.LGPLv2.1",
+      "bytes": 26419,
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95"
+    },
+    {
+      "path": "licenses/COPYING",
+      "bytes": 3119,
+      "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8"
+    },
+    {
+      "path": "licenses/COPYING.GPLv3",
+      "bytes": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    }
+  ]
+}

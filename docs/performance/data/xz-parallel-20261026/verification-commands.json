@@ -1,0 +1,84 @@
+{
+  "zig_executable": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+  "working_directory": "/home/passchaos/project-z/vort",
+  "commands": {
+    "debug-final": [
+      "zig",
+      "build",
+      "test-xz-parallel",
+      "-Doptimize=Debug",
+      "--summary",
+      "all"
+    ],
+    "releasefast-final": [
+      "zig",
+      "build",
+      "test-xz-parallel",
+      "test-xz-parallel-single",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ],
+    "x86-initial": [
+      "zig",
+      "build",
+      "test-xz-parallel",
+      "build-xz-parallel-probe",
+      "-Dtarget=x86-linux-gnu",
+      "-Doptimize=ReleaseFast",
+      "--prefix",
+      "/tmp/vort-xz-parallel-20261026/x86",
+      "--summary",
+      "all"
+    ],
+    "x86-presets-final": [
+      "zig",
+      "test",
+      "src/xz.zig",
+      "-O",
+      "ReleaseFast",
+      "-target",
+      "x86-linux-gnu",
+      "--test-filter",
+      "XZ parallel all twenty"
+    ],
+    "wasm-check": [
+      "zig",
+      "build",
+      "check-wasm",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ],
+    "wasm-run": [
+      "zig",
+      "build",
+      "test-xz-parallel-wasm",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ],
+    "family-check-help": [
+      "zig",
+      "build",
+      "test-xz",
+      "test-xz-consumers",
+      "check",
+      "run",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all",
+      "--",
+      "--help"
+    ],
+    "check-final": [
+      "zig",
+      "build",
+      "check",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ]
+  },
+  "scope": "Build/run commands are distinct from compiler-internal commands preserved in logs. The first family/check/help command started before the final Wasm check hook was added; check-final validates the final build graph. Differential reports retain complete probe invocations."
+}

@@ -1,0 +1,71 @@
+{
+  "schema": "vort.xz.parallel-validation.v1",
+  "feature_commit": "cbef5071fe7209cd412be983e87603150f1bc75f",
+  "scope": "Functional and compile gates only. Aggregate test counts include imports; no timing/throughput/RSS leadership claim. Earlier probes retain separate identities.",
+  "results": {
+    "debug-consumers.log": {
+      "log": "debug-consumers.log",
+      "sha256": "69063e3722ac1b66a2e948aaad0e1a802bc80da8c95aa6513e845c838f561fbd",
+      "build_summary": "9/9 steps succeeded; 138/138 tests passed"
+    },
+    "releasefast-final.log": {
+      "log": "releasefast-final.log",
+      "sha256": "f4f3212c389c4531dbabf5329d4fda458798a30c52e76b0f5870d0c9aac2162b",
+      "build_summary": "12/12 steps succeeded; 163/165 tests passed (2 skipped)"
+    },
+    "x86-initial.log": {
+      "log": "x86-initial.log",
+      "sha256": "f427e8dddb5cca55cba70f114e69c5b74a7d2621e7745984f7e6f4f63dad0e6e",
+      "build_summary": "12/12 steps succeeded; 137/137 tests passed"
+    },
+    "wasm-final.log": {
+      "log": "wasm-final.log",
+      "sha256": "3983ffb973d54dff87d0cb77576b47a97bd6c6ccc8212368aba032545c848147",
+      "build_summary": "6/6 steps succeeded"
+    },
+    "wasm-run.log": {
+      "log": "wasm-run.log",
+      "sha256": "55adc766d6e4bae77935000e33789ddc181bbcb3c0a4f555c35aa01269d26def",
+      "build_summary": "3/3 steps succeeded"
+    },
+    "family-check-help.log": {
+      "log": "family-check-help.log",
+      "sha256": "99fd8613e402c84ab6dcc0433b42aede0b3c7429aabeac9ba4d63fb776fe0022",
+      "build_summary": "197/197 steps succeeded; 264/264 tests passed"
+    },
+    "check-final.log": {
+      "log": "check-final.log",
+      "sha256": "98c141d1d04d6deb2480dfd31531ed73a2bc2cf959a9d3f6e0b1aac771370d06",
+      "build_summary": "190/190 steps succeeded"
+    },
+    "native-differential": {
+      "counts": {
+        "cases": 121,
+        "passed": 121,
+        "failed": 0,
+        "encode_cases": 106,
+        "reference_decode_cases": 13,
+        "exact_memory_boundary_cases": 2,
+        "observed_peak_active_workers": 3
+      },
+      "sha256": "05fd35b2f53678f4139b0283d0756f32571b869b572584f6000a1a8b1eb396bc"
+    },
+    "x86-differential": {
+      "counts": {
+        "cases": 121,
+        "passed": 121,
+        "failed": 0,
+        "encode_cases": 106,
+        "reference_decode_cases": 13,
+        "exact_memory_boundary_cases": 2,
+        "observed_peak_active_workers": 3
+      },
+      "sha256": "963930ab6cc1cba718c230395fcaac088c83e9f5ab82e0db1f56b2d6c5ae1048"
+    },
+    "legacy-parity": {
+      "cases": 72,
+      "reference_decodes": 144,
+      "sha256": "04169fc1d16fe14657e42ea335aae4326fee7eb1a64e48d8a7117541ff6c366f"
+    }
+  }
+}

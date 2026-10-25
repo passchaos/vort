@@ -1,0 +1,8 @@
+{
+  "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "python": "3.10.12",
+  "node": "v26.10.0",
+  "zig": "0.16.0",
+  "measurement_scope": "Functional compatibility only; no throughput measurement or encoder RSS claim"
+}

@@ -1,6 +1,6 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-25. The window/resource increment starts at `fa35a843`; the
+Date: 2026-10-26. The window/resource increment starts at `fa35a843`; the
 subsequent [stream-count increment](stream-counts-functional-baseline.md) starts
 at `dacd500a`. Their functional evidence is separate from the dated performance
 rows and competitor provenance below.
@@ -26,7 +26,7 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching remains fragment-local. Explicit Large Window q2+ and legacy non-fragment history grows to the advertised bound, while shared near matching retains its 65535-byte suffix. Far matching still uses bounded chain/stride candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
-| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups, and broad encoder speed/ratio/memory parity remains unproven. |
+| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding; optional bounded persistent workers for one-shot XZ encoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups. Incremental encoding remains serial; headers without declared block sizes make liblzma 5.8.4 MT decoding use serial direct mode. Broad encoder speed/ratio/memory parity remains unproven. |
 
 The [Brotli metadata increment](brotli-metadata-functional-baseline.md) implements
 the complete RFC single-block range 0...16 MiB, shared exact header bounds and
@@ -113,8 +113,35 @@ were repaired without changing production semantics. A bounded old-public-API
 standard parity harness matches 96/96 wires and 192 independent full-content
 decodes without format backport. Final build checks pass 185/185 on stable
 feature source. No throughput/RSS gain is assigned, and earlier Zstd/ZFS
-evidence keeps its epoch. Bounded XZ parallel encoding is the next functional
-slice; its ownership and compatibility need separate verification before tuning.
+evidence keeps its epoch. The subsequent bounded XZ parallel increment has
+separate ownership and compatibility evidence below.
+
+The [parallel XZ increment](xz-parallel-functional-baseline.md) adds persistent
+bounded block workers through existing one-shot APIs, with caller I/O that safely
+coordinates OS workers, logical in-flight limits and a shared operation heap
+quota. Native Debug and ReleaseFast each pass 138/138 executions (27 core plus
+111 root/consumer), while single-thread ReleaseFast passes 25 with two genuine
+thread-dependent skips out of 27. The earlier x86 full run passes 137/137;
+a separate later preset subset passes 11/11 including imports and exercises all
+20 presets. Each native/x86 liblzma 5.8.4 matrix passes 121/121, and 109/109
+cross-target artifacts agree, including 13 upstream-generated streams. The old
+public-API default/null gate matches 72/72 old/new wires with 144 independent
+full-content and exact-consumption checks. A real Wasm runtime gate verifies two
+multi-block fallback calls and two quota rejections with `std.Io.failing` and no
+coordination imports. Complete XZ/consumer suites pass 264/264 executions
+(161 plus 103), and the combined family/check/help command succeeds with
+197/197 build steps and actual CLI help execution. A separate final check
+passes 190/190 cached steps including the later Wasm hook; its unfiltered root
+test binary is compiled, not executed by `check`. Output/Index staging remains
+complete until caller publication; Into
+uses that budget-owned staging directly. Worker stacks, caller output and Io
+runtime private overhead are outside the heap ledger. Target/small-call serial
+fallbacks obey the same quotas, and spawned workers join on failures. Headers
+still omit declared block sizes, so liblzma 5.8.4's MT decoder uses serial direct
+mode for these valid streams; full MT feature parity is not established.
+Incremental XZ remains serial; no encoder timing, RSS or throughput/memory-lead
+result is assigned, and past performance epochs
+remain unchanged.
 
 The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes

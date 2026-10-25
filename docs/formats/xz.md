@@ -109,6 +109,23 @@ decode with snapshots and phase diagnostics.
 The compressed and stored writers provide alloc, transactional append, and
 caller-owned output APIs.
 
+The [parallel block encoder](xz-parallel.md) adds persistent bounded workers to
+one-shot Alloc/Append/Into, including stored and lazy entrypoints.
+`XzEncodeOptions.parallel` optionally supplies caller I/O, worker and in-flight
+limits, and an operation heap quota; null retains serial behavior. Caller I/O
+must safely coordinate the OS workers, with borrowed inputs/options/profiles
+valid until return. Independent block boundaries and ordered output/Index
+publication preserve serial wire behavior. Into publishes directly from the
+single budget-owned complete staging buffer. OS stacks, caller destination and
+Io runtime private overhead are separate from requested heap, and complete
+staging grows with total output. Defined small-call/unsupported-target fallbacks
+obey the same quotas. [Functional evidence](../performance/xz-parallel-functional-baseline.md)
+records native/x86 reference checks, real Wasm fallback, complete XZ/consumer
+264/264 executions and final build/help checks. Block headers still omit
+declared compressed and uncompressed sizes, so liblzma 5.8.4's MT decoder uses
+serial direct mode for these streams. Incremental XZ remains serial, and this increment establishes no
+throughput or memory lead.
+
 One-shot caller-buffer decoding, decoded-size queries and inspection use a
 reusable bounded workspace rather than complete plaintext storage. A count
 pass validates all block checks, Index/Footer records, stream padding and

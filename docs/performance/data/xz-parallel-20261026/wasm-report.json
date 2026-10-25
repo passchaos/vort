@@ -1,0 +1,61 @@
+{
+  "schema": "vort-xz-parallel-wasm-v1",
+  "status": "ok",
+  "utc": "2026-10-25T18:37:08.164Z",
+  "node_version": "v26.10.0",
+  "wasm_path": "/home/passchaos/project-z/vort/.zig-cache/o/316fca99201074781756b076dbdb729e/vort-xz-parallel-wasm.wasm",
+  "wasm_sha256": "6b93ae5a7f7c4f7a8c24bb31b92ff62d769c3f018fbb0486fb3bad417dbf7208",
+  "consumer_source_sha256": "fc1728f0654f713a48f0547e437eced9132e5e1455bb825c6c2b8cc78069437e",
+  "node_gate_sha256": "add018f6a9a8b8cf0e67192027bcf2768589d57475d1374aa2fa3fcccb475527",
+  "imports": [],
+  "wasi_host": null,
+  "pointer_bits": "32",
+  "allocator": "FixedBufferAllocator",
+  "fixed_capacity": "4194304",
+  "parallel_io": "std.Io.failing; unsupported Wasm target must choose fallback before touching coordination IO",
+  "block_bytes": "1024",
+  "requested_workers": "3",
+  "max_inflight_blocks": "2",
+  "max_inflight_bytes": "2048",
+  "cases": [
+    {
+      "payload": "stored",
+      "input_bytes": "8192",
+      "wire_bytes": "8448",
+      "completed_blocks": "8",
+      "published_blocks": "8",
+      "peak_inflight_blocks": "1",
+      "peak_inflight_bytes": "1024",
+      "heap_peak": "19288",
+      "heap_live": "0",
+      "serial_fallback": true,
+      "workers_started": "0",
+      "serial_wire_equal": true,
+      "public_decode_equal": true,
+      "caller_into_alias_checked": false
+    },
+    {
+      "payload": "fast_compressed",
+      "input_bytes": "2048",
+      "wire_bytes": "212",
+      "completed_blocks": "2",
+      "published_blocks": "2",
+      "peak_inflight_blocks": "1",
+      "peak_inflight_bytes": "1024",
+      "heap_peak": "807294",
+      "heap_live": "0",
+      "serial_fallback": true,
+      "workers_started": "0",
+      "serial_wire_equal": true,
+      "public_decode_equal": true,
+      "caller_into_alias_checked": true
+    }
+  ],
+  "refused_cases": [
+    "max_working_memory=0",
+    "max_inflight_bytes=1023 < actual block length 1024"
+  ],
+  "refusal_count": "2",
+  "caller_bytes_and_fixed_allocator_position_preserved": true,
+  "scope": "Real small multi-block XZ stored and compressed calls; unsupported-target serial fallback, no worker startup or large-input/performance claim."
+}

@@ -1,0 +1,23 @@
+{
+  "native": {
+    "archive_files_verified": 605
+  },
+  "x86": {
+    "archive_files_verified": 605
+  },
+  "legacy-parity": {
+    "manifest_files_verified": 749
+  },
+  "saved_probe_executables": {
+    "files_verified": 2,
+    "scope": "ELF bytes match respective differential reports"
+  },
+  "saved_wasm_executable": {
+    "files_verified": 1,
+    "scope": "Wasm bytes match runtime report"
+  },
+  "reference": {
+    "manifest_files_verified": 22,
+    "scope": "Previously loaded liblzma 5.8.4 ELF, headers and license files match the archived manifest"
+  }
+}

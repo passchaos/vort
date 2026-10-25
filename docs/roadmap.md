@@ -23524,10 +23524,10 @@ reuse, so production keeps the simpler independently owned plans.
   the skipped namedgate passes independently in actualx86ReleaseFast20/20
   executions includingimports, outside metadata130. Finalbuild180/180 completes
   the b502testrevision, while codec/runtime evidence retains e49sourceidentity.
-  No throughput improvement or constant-memory claim is assigned. Next
-  functional slices are non-HQ Large Window retained history, core Zstd
-  magicless APIs and bounded XZ worker encoding, before broader performance
-  optimization and best-library claims.
+  No throughput improvement or constant-memory claim is assigned. Subsequent
+  non-HQ Large Window retained history, core Zstd magicless APIs and bounded
+  XZ worker increments are recorded below with their own evidence epochs;
+  broader performance optimization and best-library claims remain open.
 
 - 2026-10-26: non-HQ Brotli Large Window
   q2+ and legacy non-fragment streams grow history from actual accepted data up to
@@ -23569,7 +23569,8 @@ reuse, so production keeps the simpler independently owned plans.
   unchanged1901-file codec/reference manifests, without relabeling runtime runs.
   No exhaustive candidate or
   throughput/memory-lead claim is assigned.
-  Zstd magicless core APIs and bounded XZ workers remain subsequent slices.
+  Subsequent Zstd magicless core APIs and bounded XZ workers are recorded below
+  with separate validation epochs.
 
 - 2026-10-26: explicit Zstd FrameFormat standard/magicless keeps
   standard defaults and omits only the four-byte data-frame magic. Decode
@@ -23590,6 +23591,35 @@ reuse, so production keeps the simpler independently owned plans.
   wrong-dictionary error expectation were corrected without changing codecs.
   No throughput/RSS-lead claim is assigned.
   Old codec/reference timing epochs remain separate, and broader functionality
-  and industry-best performance remain incomplete. Next implement bounded XZ
-  parallel encoding with explicit workers/in-flight ownership, verify its
-  compatibility/resource contracts, then optimize performance.
+  and industry-best performance remain incomplete. The subsequent bounded XZ
+  worker increment and its compatibility/resource contracts are recorded below.
+
+- 2026-10-26: XZ one-shot APIs gain optional persistent block
+  workers with caller std.Io and worker/in-flight/requested-heap limits. Blocks
+  keep their original boundaries and publish in order; plaintext in-flight
+  accounting includes completed blocks waiting for order. Temporary output,
+  Index, filter, ring, worker and codec allocations share the operation quota;
+  final caller output, OS stacks and Io runtime private overhead are separate.
+  Caller Io must safely coordinate multiple OS workers; borrowed storage and
+  profile destinations remain valid until return. Into directly publishes the
+  single budget-owned staging buffer. Complete output staging is
+  not constant-memory as total input grows. Target/one-worker/single-block
+  fallbacks use the same quotas; spawn errors join started workers and propagate
+  without implicit fallback. [Functional evidence](performance/xz-parallel-functional-baseline.md)
+  records native Debug/ReleaseFast 138/138, single-thread 25 passed/two genuine
+  thread skips, earlier x86 137/137 plus a later 11/11 preset subset, native/x86
+  reference matrices each 121/121 and 109/109 artifact agreement including
+  13 upstream streams. The old-API default/null gate matches 72/72 wires and
+  144 independent content/exact-consumption checks. Real Wasm execution verifies
+  two multi-block fallback calls and two quota refusals. Complete XZ/consumer
+  suites pass 264/264 executions (161+103); the combined family/check/help
+  command passes 197/197 build steps with actual help execution. A separate
+  final check passes 190/190 cached steps including the later Wasm hook;
+  unfiltered root tests are compiled by check, not executed. Final feature
+  source is cbef5071 with a 1998-file verified manifest; earlier probe epochs
+  remain unchanged. Headers still omit declared compressed/
+  uncompressed sizes, so liblzma 5.8.4's MT decoder uses serial direct mode.
+  Incremental XZ remains serial, and no speed/RSS/memory-lead claim is assigned.
+  Next review explicit opt-in Block Header sizes to meet a necessary liblzma MT
+  decoding condition while preserving default wire. Parallel incremental output
+  or specific ratio/matcher quality improvements also need a fresh scope review.
