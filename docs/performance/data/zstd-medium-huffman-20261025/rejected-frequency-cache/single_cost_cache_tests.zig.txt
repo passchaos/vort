@@ -1,0 +1,294 @@
+const std = @import("std");
+const cache_mod = @import("single_cost_cache.zig");
+
+fn VerifiedCodec(comptime Codec: type) type {
+    return struct {
+        pub const Error = Codec.CostCodec.Error;
+        pub const literalHeaderLen = Codec.CostCodec.literalHeaderLen;
+        pub const huffmanHeaderLen = Codec.CostCodec.huffmanHeaderLen;
+        pub const planFromFrequencies = Codec.CostCodec.planFromFrequencies;
+        pub const treeLen = Codec.CostCodec.treeLen;
+        pub const rlePayloadLen = Codec.CostCodec.rlePayloadLen;
+        pub const predefinedPayloadLen = Codec.CostCodec.predefinedPayloadLen;
+        pub const referenceCost = Codec.referenceCost;
+    };
+}
+
+fn fill(bytes: []u8, seed: u32, pattern: u2) void {
+    var state = seed;
+    for (bytes, 0..) |*byte, i| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = switch (pattern) {
+            0 => @truncate(state >> 24),
+            1 => @intCast((i * 17 + i / 257) % 97),
+            2 => 0xff,
+            3 => if (i % 16 < 12) 'a' else @intCast('b' + i % 7),
+        };
+    }
+}
+
+pub fn costs(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(VerifiedCodec(Codec));
+    try std.testing.expect(@sizeOf(Cache) <= 8 * 1024);
+    var storage: [131072]u8 = undefined;
+    for (0..4) |pattern| {
+        fill(&storage, 0x243f6a88, @intCast(pattern));
+        for ([_]usize{ 0, 1, 7, 8, 63, 64, 65, 1022, 1023, 1024, 1025, 4096, 65535, 65536, 65537, storage.len }) |length| {
+            const block = storage[0..length];
+            var cache = try Cache.init(block);
+            const cuts = [_][2]usize{
+                .{ 0, length },                  .{ 0, 0 },                   .{ length, length },
+                .{ length / 4, length * 3 / 4 }, .{ length / 2, length / 2 }, .{ @min(length, 1023), length },
+                .{ @min(length, 1024), length },
+            };
+            for (cuts) |cut| {
+                const match_len = @max(@as(usize, 3), cut[1] - cut[0]);
+                for ([_]usize{ 1, 8, 65537 }) |offset| {
+                    const actual = cache.payloadLen(cut[0], offset, match_len, cut[1]);
+                    const expected = Codec.referenceCost(block, cut[0], offset, match_len, cut[1]);
+                    if (expected) |cost| {
+                        try std.testing.expectEqual(cost, try actual);
+                    } else |err| {
+                        try std.testing.expectError(err, actual);
+                    }
+                }
+            }
+            try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
+            try std.testing.expect(cache.work.reference_checks != 0);
+        }
+    }
+}
+
+pub fn errors(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(Codec.CostCodec);
+    var block: [131073]u8 = @splat('a');
+    try std.testing.expectError(error.CorruptFrame, Cache.init(&block));
+    var cache = try Cache.init(block[0..1024]);
+    try std.testing.expectError(error.CorruptFrame, cache.payloadLen(1025, 1, 3, 1024));
+    try std.testing.expectError(error.CorruptFrame, cache.payloadLen(5, 1, 3, 4));
+    try std.testing.expectError(error.CorruptFrame, cache.payloadLen(0, 1, 3, 1025));
+    try std.testing.expectError(error.CorruptFrame, cache.payloadLen(0, 1, 2, 1024));
+    try std.testing.expectEqual(try Codec.referenceCost(block[0..1024], 16, 8, 64, 80), try cache.payloadLen(16, 8, 64, 80));
+    var empty = try Cache.init("");
+    try std.testing.expectEqual(try Codec.referenceCost("", 0, 1, 3, 0), try empty.payloadLen(0, 1, 3, 0));
+
+    // A complete flat high-byte alphabet has no profitable serialized weight
+    // tree. Cache this real codec's successful null, rather than only a mock.
+    var flat: [1024]u8 = undefined;
+    for (&flat, 0..) |*byte, i| byte.* = @truncate(i);
+    const frequencies: [256]u32 = @splat(4);
+    const plan = Codec.CostCodec.planFromFrequencies(&frequencies) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(?usize, null), try Codec.CostCodec.treeLen(&plan));
+    var flat_cache = try Cache.init(&flat);
+    try std.testing.expectEqual(try Codec.referenceCost(&flat, 0, 1, 3, 0), try flat_cache.payloadLen(0, 1, 3, 0));
+    try std.testing.expectEqual(try Codec.referenceCost(&flat, 0, 8, 3, 0), try flat_cache.payloadLen(0, 8, 3, 0));
+    try std.testing.expectEqual(@as(u64, 1), flat_cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), flat_cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 1), flat_cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 0), flat_cache.work.tree_cache_hits);
+}
+
+pub fn legacyPrefix(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(VerifiedCodec(Codec));
+    var block: [256]u8 = @splat('a');
+    for (block[64..128], 0..) |*byte, i| byte.* = @intCast(33 + i);
+    var cache = try Cache.init(&block);
+    const prefix_len = 128 - 64; // second_start minus finder start_min.
+    const old_cost = try Codec.referenceCost(&block, prefix_len, 64, 8, 136);
+    try std.testing.expectEqual(old_cost, try cache.payloadLen(prefix_len, 64, 8, 136));
+    var actual_suffix_view = block;
+    @memcpy(actual_suffix_view[0..64], block[64..128]);
+    try std.testing.expect(old_cost != try Codec.referenceCost(&actual_suffix_view, prefix_len, 64, 8, 136));
+    try std.testing.expectEqual(@as(u32, 184), cache.histogram.stream_frequencies[0]['a']);
+}
+
+pub fn deltaWork(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(VerifiedCodec(Codec));
+    var block: [65536]u8 = undefined;
+    fill(&block, 17, 1);
+    var cache = try Cache.init(&block);
+    _ = try cache.payloadLen(16384, 8, 16384, 32768);
+    const scanned_before = cache.histogram.scanned_bytes;
+    for (1..129) |step| _ = try cache.payloadLen(16384 + step, 8, 16384, 32768 + step);
+    try std.testing.expectEqual(@as(u64, 49152), scanned_before);
+    try std.testing.expectEqual(@as(u64, 256), cache.histogram.scanned_bytes - scanned_before);
+    try std.testing.expectEqual(@as(u64, 129), cache.histogram.update_count);
+    try std.testing.expectEqual(@as(u64, 129), cache.work.cost_queries);
+    try std.testing.expectEqual(@as(u64, 129), cache.work.reference_checks);
+    try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
+    try std.testing.expect(cache.work.stream_symbol_products != 0);
+    try std.testing.expect(cache.work.stream_symbol_products <= 129 * 4 * 256);
+
+    // Frequency counts and cuts may change independently of the dense tree
+    // key. A stable three-symbol tree must serialize once while stream prices
+    // continue to use the current four frequency vectors on every query.
+    for (&block, 0..) |*byte, i| byte.* = if (i % 4 < 2) 'a' else if (i % 4 == 2) 'b' else 'c';
+    var stable = try Cache.init(&block);
+    for (0..129) |step| _ = try stable.payloadLen(16384 + step, 8, 16384, 32768);
+    try std.testing.expectEqual(@as(u64, 1), stable.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 128), stable.work.tree_cache_hits);
+    try std.testing.expectEqual(@as(u64, 129), stable.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 0), stable.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 129), stable.work.reference_checks);
+    try std.testing.expectEqual(@as(u64, 0), stable.work.reference_mismatches);
+    try std.testing.expectEqual(@as(u64, 129 * 4 * 3), stable.work.stream_symbol_products);
+}
+
+const LiteralOracle = struct {
+    cost: usize,
+    frequencies: [256]u32,
+    stream_frequencies: [4][256]u32,
+    bit_counts: [256]u8,
+    stream_bytes: usize,
+};
+
+/// Build a separate literal byte array and price each byte with a fresh real
+/// codec plan. Neither histogram ranges nor cache entries supply this oracle.
+fn literalOracle(comptime Codec: type, block: []const u8, prefix: usize, tail: usize) !LiteralOracle {
+    const literal_len = prefix + block.len - tail;
+    const literals = try std.testing.allocator.alloc(u8, literal_len);
+    defer std.testing.allocator.free(literals);
+    @memcpy(literals[0..prefix], block[0..prefix]);
+    @memcpy(literals[prefix..], block[tail..]);
+    var frequencies: [256]u32 = @splat(0);
+    var stream_frequencies: [4][256]u32 = @splat(@splat(0));
+    for (literals) |byte| frequencies[byte] += 1;
+    var unique: usize = 0;
+    for (frequencies) |frequency| unique += @intFromBool(frequency != 0);
+    var cost = try Codec.CostCodec.literalHeaderLen(literal_len) + (if (unique == 1) @as(usize, 1) else literal_len);
+    const plan = Codec.CostCodec.planFromFrequencies(&frequencies) orelse return error.TestUnexpectedResult;
+    const streams: usize = if (literal_len < 1024) 1 else 4;
+    const quota = literal_len / streams + @intFromBool(literal_len % streams != 0);
+    var offset: usize = 0;
+    var stream_bytes: usize = if (streams == 4) 6 else 0;
+    for (stream_frequencies[0..streams]) |*stream| {
+        const end = @min(literals.len, offset + quota);
+        var bit_len: usize = 1; // Huffman end marker before zero padding.
+        for (literals[offset..end]) |byte| {
+            stream[byte] += 1;
+            bit_len += plan.bit_counts[byte];
+        }
+        stream_bytes += bit_len / 8 + @intFromBool(bit_len % 8 != 0);
+        offset = end;
+    }
+    if (try Codec.CostCodec.treeLen(&plan)) |tree_bytes| {
+        const compressed = tree_bytes + stream_bytes;
+        cost = @min(cost, compressed + try Codec.CostCodec.huffmanHeaderLen(literal_len, compressed));
+    }
+    return .{ .cost = cost, .frequencies = frequencies, .stream_frequencies = stream_frequencies, .bit_counts = plan.bit_counts, .stream_bytes = stream_bytes };
+}
+
+fn checkPayload(comptime Codec: type, cache: anytype, block: []const u8, prefix: usize, offset: usize, match_len: usize, tail: usize) !void {
+    const expected = Codec.referenceCost(block, prefix, offset, match_len, tail);
+    const actual = cache.payloadLen(prefix, offset, match_len, tail);
+    if (expected) |value| {
+        try std.testing.expectEqual(value, try actual);
+    } else |err| try std.testing.expectError(err, actual);
+}
+
+pub fn frequencyPlans(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(VerifiedCodec(Codec));
+    try std.testing.expect(@sizeOf(Cache) < 8 * 1024);
+    // A two-byte cut moves across the first quarter boundary. The substituted
+    // literals are "ba" and "ab": total frequencies stay exact, while the
+    // first two streams trade a symbol of a different Huffman bit width.
+    var block: [2050]u8 = @splat('a');
+    @memset(block[0..7], 'c');
+    block[512] = 'b';
+    block[513] = 'b';
+    const first = try literalOracle(Codec, &block, 511, 513);
+    const second = try literalOracle(Codec, &block, 513, 515);
+    try std.testing.expectEqualSlices(u32, &first.frequencies, &second.frequencies);
+    try std.testing.expect(first.bit_counts['a'] != first.bit_counts['b']);
+    try std.testing.expect(!std.mem.eql(u32, &first.stream_frequencies[0], &second.stream_frequencies[0]));
+    try std.testing.expect(!std.mem.eql(u32, &first.stream_frequencies[1], &second.stream_frequencies[1]));
+    try std.testing.expect(first.stream_bytes != second.stream_bytes);
+    try std.testing.expect(first.cost != second.cost);
+
+    var cache = try Cache.init(&block);
+    try std.testing.expectEqual(first.cost, try cache.literalSectionLen(511, 513));
+    const products_before = cache.work.stream_symbol_products;
+    try std.testing.expectEqual(second.cost, try cache.literalSectionLen(513, 515));
+    try std.testing.expectEqual(@as(u64, 1), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_serializations);
+    try std.testing.expect(cache.work.stream_symbol_products > products_before);
+    try std.testing.expectEqualDeep(second.stream_frequencies, cache.histogram.stream_frequencies);
+
+    // Offset and match length cannot invalidate an exact-frequency plan, but
+    // every candidate's sequence cost and error still come from the old scorer.
+    for ([_]usize{ 1, 8, 65537 }) |offset| {
+        for ([_]usize{ 2, 3, 127, 256, 65536 }) |match_len|
+            try checkPayload(Codec, &cache, &block, 513, offset, match_len, 515);
+    }
+    try std.testing.expectEqual(@as(u64, 1), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 16), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 15), cache.work.reference_checks);
+    try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
+
+    // Publishing another frequency vector replaces the sole previous plan.
+    // Returning to the first vector must plan again even when its tree matches.
+    const changed = try literalOracle(Codec, &block, 514, 515);
+    try std.testing.expect(!std.mem.eql(u32, &second.frequencies, &changed.frequencies));
+    try std.testing.expectEqual(changed.cost, try cache.literalSectionLen(514, 515));
+    try std.testing.expectEqual(@as(u64, 2), cache.work.huffman_plans);
+    try std.testing.expectEqual(first.cost, try cache.literalSectionLen(511, 513));
+    try std.testing.expectEqual(@as(u64, 3), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 16), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(first.cost, try cache.literalSectionLen(511, 513));
+    try std.testing.expectEqual(@as(u64, 17), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectError(error.CorruptFrame, cache.literalSectionLen(2, 1));
+    try std.testing.expectEqual(first.cost, try cache.literalSectionLen(511, 513));
+    try std.testing.expectEqual(@as(u64, 18), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 3), cache.work.huffman_plans);
+}
+
+pub fn finders(comptime Codec: type) !void {
+    const Cache = cache_mod.Cache(VerifiedCodec(Codec));
+    var storage: [131072]u8 = undefined;
+    for ([_]usize{ 4097, 65535, 65536, 65537, storage.len }) |length| {
+        fill(storage[0..length], 0xa4093822, 0);
+        const fragment = storage[512..768].*;
+        @memcpy(storage[length / 2 ..][0..256], &fragment);
+        @memcpy(storage[length - 512 ..][0..256], &fragment);
+        const block = storage[0..length];
+        var cache = try Cache.init(block);
+        for ([_]usize{ 0, 17, length / 4, length / 2 + 100, length - 16 }) |start| {
+            const expected = try Codec.referenceFinder(block, start);
+            const actual = try Codec.cachedFinder(block, start, &cache);
+            try std.testing.expectEqualDeep(expected, actual);
+        }
+        try std.testing.expect(cache.work.reference_checks != 0);
+        try std.testing.expectEqual(@as(u64, 0), cache.work.reference_mismatches);
+    }
+}
+
+pub fn wireAndAllocations(comptime Codec: type) !void {
+    var storage: [65537]u8 = undefined;
+    var successful: usize = 0;
+    for ([_]usize{ 1023, 1024, 4096, 4097, 65535, 65536, storage.len }) |length| {
+        fill(storage[0..length], 0x13198a2e, 0);
+        // The first accepted match is longer, and the second pair is wholly
+        // after its end. A suffix query therefore retains two real sequences.
+        const first_fragment = storage[16..208].*;
+        const second_fragment = storage[480..608].*;
+        @memcpy(storage[256..448], &first_fragment);
+        @memcpy(storage[736..864], &second_fragment);
+        const block = storage[0..length];
+        var reference_heap = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        var cached_heap = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        var reference: std.ArrayList(u8) = .empty;
+        var cached: std.ArrayList(u8) = .empty;
+        defer reference.deinit(reference_heap.allocator());
+        defer cached.deinit(cached_heap.allocator());
+        const expected = try Codec.multi(false, reference_heap.allocator(), &reference, block);
+        const actual = try Codec.multi(true, cached_heap.allocator(), &cached, block);
+        successful += @intFromBool(actual);
+        try std.testing.expectEqual(expected, actual);
+        try std.testing.expectEqualSlices(u8, reference.items, cached.items);
+        try std.testing.expectEqual(reference_heap.alloc_index, cached_heap.alloc_index);
+        try std.testing.expectEqual(reference_heap.allocated_bytes, cached_heap.allocated_bytes);
+        try std.testing.expectEqual(reference_heap.freed_bytes, cached_heap.freed_bytes);
+    }
+    try std.testing.expect(successful != 0);
+}

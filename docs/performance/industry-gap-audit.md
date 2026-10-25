@@ -68,6 +68,23 @@ significance, and the slowest rows remain seconds long. Independent XML
 requested-heap event sequences and peak bytes are unchanged. Current throughput
 leadership, broader repeated runs and competitor memory parity remain open.
 
+The subsequent [multi-duplicate work profile](zstd-medium-huffman-profile.md)
+records 1,473,017 XML and 1,039,932 MR Huffman plans despite very high
+tree-serialization cache hit rates. An exact-frequency reuse experiment was
+withdrawn after it avoided only 65 and 665 plans. Its passing functional tests
+and instrumented timings are retained as experimental evidence, rather than
+presenting that cache as a production speed improvement.
+The production medium-alphabet increment instead retains the original
+back-reference tie order and halves the declared core workspace capacity.
+Independent ReleaseFast ELF inspection reduces the named local Huffman call
+chain's static stack allocation from 75,112 to 39,240 bytes. Five-round public
+controls give modest version throughput point improvements of 1.01379x XML
+and 1.02820x source, while all fourteen frozen frames retain their old hashes.
+XML is still 11838.393ms versus 0.142591ms reference in its new control.
+This is a bounded workspace improvement, not current industry-best throughput
+or whole-process memory evidence. Final tests pass 1088/1088 and build checks
+169/169; the fourteen-row one-round screen is retained as a wire check.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

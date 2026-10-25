@@ -1,0 +1,7 @@
+{
+  "decision": "Rejected for performance work: exact-frequency reuse eliminates only 65/1473017 XML and 665/1039932 MR builder calls. Single profiler timings are insufficient for stable ranking; the counts show insufficient reuse. Production cache and external tests restored to baseline c56c8255.",
+  "saved_source": {
+    "single_cost_cache.zig": "febc4c652af67f6a0a0f3fdd5a4c7f38e18612a6373ed1eced3347022b4294fa",
+    "single_cost_cache_tests.zig": "d3318902b4b8440938e4f5d4eddfbf8c733948866bf284b99545619f53d903b2"
+  }
+}

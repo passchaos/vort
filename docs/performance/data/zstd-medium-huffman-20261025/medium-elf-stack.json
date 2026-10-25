@@ -1,0 +1,735 @@
+{
+  "artifacts": {
+    "new": {
+      "elf_class": 64,
+      "path": "/home/passchaos/project-z/vort-zstd-duplicate-profile/.zig-cache/o/e896d85b31c33819f34a4488826cd334/vort-zstd-encode-bench",
+      "sha256": "fc6723c9409244bc88ea1ae9fefa95cde76fcfd33559c439e5461bc6a585718d",
+      "symbols": {
+        "finalizer": {
+          "address": 17935008,
+          "address_hex": "0x111aaa0",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17935021,
+              "mnemonic": "sub",
+              "operands": "$0x5c8,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17935198,
+              "mnemonic": "call",
+              "operands": "119d4a0 <compiler_rt.memset>"
+            },
+            {
+              "address": 17935216,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17936261,
+              "mnemonic": "call",
+              "operands": "111c260 <huffman.treeCodeLengthsKnownActive__anon_38967>"
+            },
+            {
+              "address": 17936663,
+              "mnemonic": "call",
+              "operands": "111cd00 <huffman.packageMergeCodeLengths__anon_39023>"
+            },
+            {
+              "address": 17936830,
+              "mnemonic": "call",
+              "operands": "1130000 <huffman.packageMergeCodeLengths__anon_39220>"
+            },
+            {
+              "address": 17938950,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17939284,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            }
+          ],
+          "code_size_bytes": 6065,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/new-finalizer.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 1528,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 1480,
+          "sub_rsp_bytes": 1480,
+          "sub_rsp_hex": "0x5c8",
+          "symbol": "zstd.finalizeSmallHuffmanLiteralPlan"
+        },
+        "known_active": {
+          "address": 17941088,
+          "address_hex": "0x111c260",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17941106,
+              "mnemonic": "sub",
+              "operands": "$0x6c8,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17941937,
+              "mnemonic": "call",
+              "operands": "111cd00 <huffman.packageMergeCodeLengths__anon_39023>"
+            },
+            {
+              "address": 17942704,
+              "mnemonic": "call",
+              "operands": "1141640 <huffman.treeCodeLengthsMediumKnownActive__anon_38997>"
+            },
+            {
+              "address": 17943100,
+              "mnemonic": "call",
+              "operands": "1130000 <huffman.packageMergeCodeLengths__anon_39220>"
+            },
+            {
+              "address": 17943664,
+              "mnemonic": "call",
+              "operands": "11bf390 <huffman.treeCodeLengthsDenseKnownActive__anon_39007>"
+            }
+          ],
+          "code_size_bytes": 2713,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/new-known_active.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 1768,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 4,
+          "push_bytes": 32,
+          "push_count": 4,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 1736,
+          "sub_rsp_bytes": 1736,
+          "sub_rsp_hex": "0x6c8",
+          "symbol": "huffman.treeCodeLengthsKnownActive__anon_38967"
+        },
+        "medium": {
+          "address": 18093632,
+          "address_hex": "0x1141640",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 18093645,
+              "mnemonic": "sub",
+              "operands": "$0x8c28,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 18094004,
+              "mnemonic": "call",
+              "operands": "111d340 <sort.block.block__anon_39129>"
+            },
+            {
+              "address": 18094029,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 18094855,
+              "mnemonic": "call",
+              "operands": "119d4a0 <compiler_rt.memset>"
+            }
+          ],
+          "code_size_bytes": 2108,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/new-medium.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 35928,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 35880,
+          "sub_rsp_bytes": 35880,
+          "sub_rsp_hex": "0x8c28",
+          "symbol": "huffman.treeCodeLengthsMediumKnownActive__anon_38997"
+        },
+        "sort": {
+          "address": 17945408,
+          "address_hex": "0x111d340",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17945421,
+              "mnemonic": "sub",
+              "operands": "$0x628,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17953219,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17953238,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17953249,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17953537,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17953731,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17954310,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17954792,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17954843,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17954876,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17954997,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955428,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955465,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955514,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955620,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955936,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955992,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17964873,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17964892,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17964903,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17965562,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17966212,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17966231,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17966243,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17970660,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17970729,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17977345,
+              "mnemonic": "call",
+              "operands": "119d8c0 <compiler_rt.memcpy.memcpyFast>"
+            }
+          ],
+          "code_size_bytes": 38498,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/new-sort.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 1624,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 1576,
+          "sub_rsp_bytes": 1576,
+          "sub_rsp_hex": "0x628",
+          "symbol": "sort.block.block__anon_39129"
+        }
+      }
+    },
+    "old": {
+      "elf_class": 64,
+      "path": "/home/passchaos/project-z/vort/.zig-cache/o/ed94ec1c4a213c549af1a1d632f56d71/vort-zstd-encode-bench",
+      "sha256": "cae7982a8dd399aa1b78b7b96877601ce60809b33269d408e26d6fcedc5a487b",
+      "symbols": {
+        "finalizer": {
+          "address": 17935008,
+          "address_hex": "0x111aaa0",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17935021,
+              "mnemonic": "sub",
+              "operands": "$0x5c8,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17935198,
+              "mnemonic": "call",
+              "operands": "119d440 <compiler_rt.memset>"
+            },
+            {
+              "address": 17935216,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17936261,
+              "mnemonic": "call",
+              "operands": "111c260 <huffman.treeCodeLengthsKnownActive__anon_38967>"
+            },
+            {
+              "address": 17936663,
+              "mnemonic": "call",
+              "operands": "111d4e0 <huffman.packageMergeCodeLengths__anon_39019>"
+            },
+            {
+              "address": 17936830,
+              "mnemonic": "call",
+              "operands": "1130280 <huffman.packageMergeCodeLengths__anon_39186>"
+            },
+            {
+              "address": 17938950,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17939284,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            }
+          ],
+          "code_size_bytes": 6065,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/old-finalizer.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 1528,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 1480,
+          "sub_rsp_bytes": 1480,
+          "sub_rsp_hex": "0x5c8",
+          "symbol": "zstd.finalizeSmallHuffmanLiteralPlan"
+        },
+        "known_active": {
+          "address": 17941088,
+          "address_hex": "0x111c260",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17941110,
+              "mnemonic": "sub",
+              "operands": "$0x11f38,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17941735,
+              "mnemonic": "call",
+              "operands": "11bf290 <huffman.treeCodeLengthsDenseKnownActive__anon_39003>"
+            },
+            {
+              "address": 17942156,
+              "mnemonic": "call",
+              "operands": "1130280 <huffman.packageMergeCodeLengths__anon_39186>"
+            },
+            {
+              "address": 17942988,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17943452,
+              "mnemonic": "call",
+              "operands": "111d4e0 <huffman.packageMergeCodeLengths__anon_39019>"
+            },
+            {
+              "address": 17943582,
+              "mnemonic": "call",
+              "operands": "111db20 <sort.block.block__anon_39113>"
+            },
+            {
+              "address": 17943611,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17944901,
+              "mnemonic": "call",
+              "operands": "119d440 <compiler_rt.memset>"
+            }
+          ],
+          "code_size_bytes": 4732,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/old-known_active.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 73576,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 73528,
+          "sub_rsp_bytes": 73528,
+          "sub_rsp_hex": "0x11f38",
+          "symbol": "huffman.treeCodeLengthsKnownActive__anon_38967"
+        },
+        "sort": {
+          "address": 17947424,
+          "address_hex": "0x111db20",
+          "all_stack_allocation_instructions": [
+            {
+              "address": 17947437,
+              "mnemonic": "sub",
+              "operands": "$0x628,%rsp"
+            }
+          ],
+          "calls": [
+            {
+              "address": 17955235,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17955254,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17955265,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17955553,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17955747,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17956326,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17956808,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17956859,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17956892,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957013,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957444,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957481,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957530,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957636,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17957952,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17958008,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17966889,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17966908,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17966919,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17967578,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17968228,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17968247,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17968259,
+              "mnemonic": "call",
+              "operands": "10fd040 <mem.reverse__anon_36385>"
+            },
+            {
+              "address": 17972676,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17972745,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            },
+            {
+              "address": 17979361,
+              "mnemonic": "call",
+              "operands": "119d860 <compiler_rt.memcpy.memcpyFast>"
+            }
+          ],
+          "code_size_bytes": 38498,
+          "disassembly_path": "/tmp/vort-zstd-duplicate-profile-20261025/medium-elf-stack-evidence/old-sort.asm",
+          "other_rsp_adjustments": [],
+          "own_rsp_descent_excluding_incoming_return_address": 1624,
+          "page_probe_or_chkstk_calls": [],
+          "pop_count": 6,
+          "push_bytes": 48,
+          "push_count": 6,
+          "pushed_registers": [
+            "%rbp",
+            "%r15",
+            "%r14",
+            "%r13",
+            "%r12",
+            "%rbx"
+          ],
+          "restored_rsp_bytes": 1576,
+          "sub_rsp_bytes": 1576,
+          "sub_rsp_hex": "0x628",
+          "symbol": "sort.block.block__anon_39113"
+        }
+      }
+    }
+  },
+  "claims_excluded": [
+    "heap allocation reduction",
+    "RSS reduction",
+    "whole-process stack reduction",
+    "complete recursive call high-water mark",
+    "throughput or compression-ratio improvement"
+  ],
+  "compiled_or_executed_benchmark": false,
+  "created_utc": "2026-10-25T05:35:31.465564+00:00",
+  "declared_source_workspace_capacity": {
+    "max_code_bits": 15,
+    "new_components": {
+      "current": 512,
+      "leaves": 256,
+      "multiplicities": 3840,
+      "next": 256,
+      "nodes": 30720
+    },
+    "new_sum_bytes": 35584,
+    "new_workspace_n": 128,
+    "node_bytes": 16,
+    "old_components": {
+      "current": 1024,
+      "leaves": 512,
+      "multiplicities": 7680,
+      "next": 512,
+      "nodes": 61440
+    },
+    "old_sum_bytes": 71168,
+    "old_workspace_n": 256,
+    "output_array_entries": 256,
+    "scope": "Only source-declared nodes/leaves/current/next/multiplicities capacity. Not the emitted frame allocation."
+  },
+  "direct_sort_callee": {
+    "new_finalizer_known_medium_sort_prefix_bytes": 40872,
+    "new_own_frame_bytes": 1624,
+    "old_finalizer_known_sort_prefix_bytes": 76744,
+    "old_own_frame_bytes": 1624,
+    "scope": "Prefix totals at sorting-callee prologue only; its deeper calls are not claimed as global maximum."
+  },
+  "frame_convention": "Own frame is sum of prologue pushes (8bytes each) and explicit sub-rsp allocations, relative to function-entry RSP; the incoming return address is already present and excluded. Local chain adds 8bytes for each call made within the measured chain. No page probes or additional RSP adjustments occurred in the audited functions.",
+  "large_caller_frame_retained_in_this_elf": false,
+  "local_chain": {
+    "finalizer_chain_reduction_bytes": 35872,
+    "finalizer_chain_reduction_fraction": 0.4775801469805091,
+    "known_chain_reduction_bytes": 35872,
+    "known_chain_reduction_fraction": 0.48755028813743617,
+    "new_finalizer_plus_known_plus_medium_and_call_returns_bytes": 39240,
+    "new_known_active_own_frame_bytes": 1768,
+    "new_known_active_plus_medium_and_internal_call_return_bytes": 37704,
+    "new_medium_own_frame_bytes": 35928,
+    "old_finalizer_plus_known_and_call_return_bytes": 75112,
+    "old_known_active_own_frame_bytes": 73576,
+    "point_measured_statically": "Immediately after Medium prologue in the new ELF, before its own subordinate calls; old comparison is the corresponding inlined medium-width branch after KnownActive prologue. Not a complete recursive-call high-water mark."
+  },
+  "new_huffman_source_path": "/home/passchaos/project-z/vort-zstd-duplicate-profile/src/huffman.zig",
+  "new_huffman_source_sha256": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3",
+  "operations": [
+    "sha256sum/nm/objdump/read source/write /tmp reports"
+  ],
+  "recommendation": "No additional outlining is required to achieve the measured medium-path local stack reduction in this specific ELF. Other instantiations, n/max_bits selections and full recursive paths need separate evidence.",
+  "routing": {
+    "finalizer_call_address": "0x111af85",
+    "known_active_address": "0x111c260",
+    "known_active_specialization": {
+      "active_symbol_count_range": [
+        65,
+        127
+      ],
+      "max_bits": 11,
+      "n": 256
+    },
+    "new_guard_sequence": [
+      "0x111c3a6 cmp $0x40,%rcx",
+      "0x111c3aa ja 0x111c89c",
+      "0x111c89f cmp $0x7f,%rcx",
+      "0x111c8a3 ja 0x111cc66 (dense path)",
+      "0x111c8b0 call 0x1141640 (Medium)"
+    ],
+    "new_medium_is_real_call_not_tail_jump": true,
+    "old_guard_sequence": [
+      "0x111c4d0 cmp $0x80,%rcx",
+      "0x111c4d7 jb 0x111c9bc (inlined full-width back-reference path)"
+    ],
+    "source_selection": "n==256 && max_bits==11 &&65<=active_symbols.len<=127 uses noinlineMedium; actual ELF shows the same branch routing."
+  },
+  "source_or_git_modified": false,
+  "status": "completed_read_only"
+}

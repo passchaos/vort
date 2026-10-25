@@ -1,0 +1,184 @@
+{
+  "code_head": "1764f21d",
+  "baseline_head": "c56c8255",
+  "focus": [
+    {
+      "label": "silesia-xml",
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "old_median_ns": 12001651707,
+      "new_median_ns": 11838392840,
+      "reference_median_ns": 142591,
+      "version_speedup": 1.0137906275967101,
+      "new_over_reference_throughput": 1.204479374245871e-05,
+      "old_rounds_ns": [
+        12003725732,
+        11927912180,
+        11945522838,
+        12062655111,
+        12001651707
+      ],
+      "new_rounds_ns": [
+        11811892158,
+        11816175928,
+        11838392840,
+        11846249303,
+        11880758943
+      ],
+      "wires": {
+        "vort_bytes": 5078,
+        "reference_bytes": 6099,
+        "vort_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+        "reference_sha256": "6a3778c6c1f8eb76779401da99625c17dc551eddcb141c99de3a523eb88ef50a"
+      }
+    },
+    {
+      "label": "brotli-source",
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "old_median_ns": 5187551404,
+      "new_median_ns": 5045271662,
+      "reference_median_ns": 188274,
+      "version_speedup": 1.0282006106968675,
+      "new_over_reference_throughput": 3.731692020036165e-05,
+      "old_rounds_ns": [
+        5214166486,
+        5136660158,
+        5161962902,
+        5204469149,
+        5187551404
+      ],
+      "new_rounds_ns": [
+        5069763716,
+        5092472967,
+        5042298149,
+        5045271662,
+        5034301607
+      ],
+      "wires": {
+        "vort_bytes": 12111,
+        "reference_bytes": 13601,
+        "vort_sha256": "3bd29ebe873467c7e8315ef08fcd18a1eb52efe565dcffa0517235a058f4c39b",
+        "reference_sha256": "d144949ae7a1c6cc5e0c562c39bf11b13132d97de35fa625dbecaef7bb75cd97"
+      }
+    }
+  ],
+  "wire14": [
+    {
+      "label": "silesia-dickens",
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "vort_bytes": 25898,
+      "reference_bytes": 27128,
+      "vort_sha256": "a328271b5bb433085e122823df9d7d4b889430ac16b88162f8ab206b2b4a3ca6",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-mozilla",
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "vort_bytes": 17118,
+      "reference_bytes": 15921,
+      "vort_sha256": "8f3ea07a7caf0d5a8a774502da25de8102f3611d19494eb9669e475fce6aeab0",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-mr",
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "vort_bytes": 16806,
+      "reference_bytes": 17527,
+      "vort_sha256": "7356497b53214b64aaef17cf1687ee292d1314b5dfefc7baed860cafe398edb4",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-nci",
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "vort_bytes": 4728,
+      "reference_bytes": 5230,
+      "vort_sha256": "194c8804913d0ec5124cfe3fa7a204a57f1100010b5a04c201219c99b8398754",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-ooffice",
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "vort_bytes": 32276,
+      "reference_bytes": 34220,
+      "vort_sha256": "f3e1843d5605bdc28764485db3c656a6770b1b614640aebfd1ab2b79e4b68d90",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-osdb",
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "vort_bytes": 26901,
+      "reference_bytes": 27292,
+      "vort_sha256": "15799eef225a77d83b87c347223795bbf8de18c2833f7c07763f38507fc5b514",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-reymont",
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "vort_bytes": 18720,
+      "reference_bytes": 20511,
+      "vort_sha256": "a5501c137b7091ecad9dff404a537e75391070eeded161ab83b3175844be6669",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-samba",
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "vort_bytes": 22048,
+      "reference_bytes": 23265,
+      "vort_sha256": "d5f12b4cf38ef9d8c88bfc8dfc660a58b710436f980a4a29086437d79e22f3c9",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-sao",
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "vort_bytes": 49140,
+      "reference_bytes": 53272,
+      "vort_sha256": "c697913a53bdb6467464cdeafafb2af4718836d6a616c7396bcc1f40230c33df",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-webster",
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "vort_bytes": 22669,
+      "reference_bytes": 24393,
+      "vort_sha256": "fa42b04f75cebc6accea7585b2a7fae001493abdb0a83be26ddfdd12a792bcf1",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-xml",
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "vort_bytes": 5078,
+      "reference_bytes": 6099,
+      "vort_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-x-ray",
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "vort_bytes": 50370,
+      "reference_bytes": 51729,
+      "vort_sha256": "5b17830a66eab8fe762a9953e22fdb14b4d3a85d7edca7f9868234748a214a77",
+      "wire_unchanged": true
+    },
+    {
+      "label": "brotli-source",
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "vort_bytes": 12111,
+      "reference_bytes": 13601,
+      "vort_sha256": "3bd29ebe873467c7e8315ef08fcd18a1eb52efe565dcffa0517235a058f4c39b",
+      "wire_unchanged": true
+    },
+    {
+      "label": "validation-schema-json",
+      "input_sha256": "71e74329ab6dc2852d3c187f73935c6dcf59804ae9547b1be14f711d560ca0d0",
+      "vort_bytes": 6574,
+      "reference_bytes": 8053,
+      "vort_sha256": "767efe5683c87987c6988f2a84caeae0da383e105dbd59681d490afc1055ae97",
+      "wire_unchanged": true
+    }
+  ],
+  "all14_wires_unchanged": true,
+  "wire14_vort_total_bytes": 310437,
+  "wire14_reference_total_bytes": 328241,
+  "reference_identity": "requested libzstd1.6.0 file SHA; loader dependencies unverified",
+  "scope": "Two 64KiB public-level3 workloads, five alternating Vort/reference rounds per executable in separate processes; version runs separated by completed checks. One-round 14-row run is a wire/correctness screen, not a stable ranking. No statistical significance or all-platform/memory claim.",
+  "reference_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+}

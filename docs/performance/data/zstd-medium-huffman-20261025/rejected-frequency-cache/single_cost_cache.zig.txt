@@ -1,0 +1,319 @@
+//! Exact costs for the legacy single-sequence prefix/tail literal view.
+//! A cache borrows one immutable block and owns only fixed-size histogram state.
+const std = @import("std");
+const CutHistogram = @import("cut_histogram.zig").CutHistogram;
+
+pub const Work = struct {
+    cost_queries: u64 = 0,
+    huffman_plans: u64 = 0,
+    huffman_plan_cache_hits: u64 = 0,
+    tree_serializations: u64 = 0,
+    tree_cache_hits: u64 = 0,
+    stream_symbol_products: u64 = 0,
+    reference_checks: u64 = 0,
+    reference_mismatches: u64 = 0,
+};
+
+/// Complete conservative input to the codec's read-only tree-length estimator.
+/// Ordered byte-symbol bit counts determine the dense FSE weight sequence.
+/// Frequencies, literal cuts, sorted symbols, and codewords are not tree inputs.
+const TreeKey = struct {
+    max_symbol: u8,
+    max_bit_count: u8,
+    bit_counts: [256]u8,
+
+    fn fromPlan(plan: anytype) TreeKey {
+        return .{ .max_symbol = plan.max_symbol, .max_bit_count = plan.max_bit_count, .bit_counts = plan.bit_counts };
+    }
+
+    fn matches(self: *const TreeKey, other: *const TreeKey) bool {
+        return self.max_symbol == other.max_symbol and self.max_bit_count == other.max_bit_count and
+            std.mem.eql(u8, &self.bit_counts, &other.bit_counts);
+    }
+};
+
+const TreeEntry = struct {
+    key: TreeKey,
+    serialized_len: ?usize,
+};
+
+/// Codec delegates the existing Huffman tree, header, and sequence-table rules.
+/// `prefix_len` deliberately means block[0..prefix_len], even for a finder
+/// query whose start_min is nonzero. This preserves the legacy cost view.
+pub fn Cache(comptime Codec: type) type {
+    return struct {
+        histogram: CutHistogram,
+        block: []const u8,
+        work: Work = .{},
+        tree_entry: ?TreeEntry = null,
+        /// Exact full-frequency input bound to the current successful tree
+        /// entry. Stream partition frequencies remain independent and current.
+        last_frequencies: ?[256]u32 = null,
+
+        const Self = @This();
+
+        pub fn init(block: []const u8) Codec.Error!Self {
+            return .{ .histogram = try CutHistogram.init(block), .block = block };
+        }
+
+        pub fn payloadLen(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!usize {
+            self.work.cost_queries +|= 1;
+            const actual = self.calculatePayloadLen(prefix_len, offset, match_len, tail_start);
+            // Test codecs compare every query, including rejected and losing
+            // candidates. Production codecs retain no reference callback.
+            if (@hasDecl(Codec, "referenceCost")) {
+                self.work.reference_checks +|= 1;
+                const reference = Codec.referenceCost(self.block, prefix_len, offset, match_len, tail_start);
+                const equal = if (reference) |expected|
+                    if (actual) |value| value == expected else |_| false
+                else |expected_error| if (actual) |_| false else |actual_error| actual_error == expected_error;
+                self.work.reference_mismatches +|= @intFromBool(!equal);
+            }
+            return actual;
+        }
+
+        fn calculatePayloadLen(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!usize {
+            const literals_len = try self.literalSectionLen(prefix_len, tail_start);
+            var best: ?usize = null;
+            if (Codec.rlePayloadLen(prefix_len, offset, match_len, literals_len)) |len| {
+                best = len;
+            } else |err| switch (err) {
+                error.CorruptFrame => {},
+                else => return err,
+            }
+            if (Codec.predefinedPayloadLen(prefix_len, offset, match_len, literals_len)) |len| {
+                if (best == null or len < best.?) best = len;
+            } else |err| switch (err) {
+                error.CorruptFrame => {},
+                else => return err,
+            }
+            return best orelse error.CorruptFrame;
+        }
+
+        pub fn literalSectionLen(self: *Self, prefix_len: usize, tail_start: usize) Codec.Error!usize {
+            try self.histogram.update(prefix_len, tail_start);
+            var frequencies: [256]u32 = undefined;
+            self.histogram.totalFrequencies(&frequencies);
+            var unique: usize = 0;
+            for (frequencies) |frequency| unique += @intFromBool(frequency != 0);
+            const regenerated = self.histogram.regenerated_len;
+            const raw_len = if (unique == 1) 1 else regenerated;
+            var best = std.math.add(usize, try Codec.literalHeaderLen(regenerated), raw_len) catch return error.IntegerOverflow;
+            if (unique < 2 or regenerated < 64) return best;
+
+            const entry = try self.planEntry(&frequencies) orelse return best;
+            const tree_len = entry.serialized_len orelse return best;
+            const streams_len = try self.streamsLen(&entry.key.bit_counts) orelse return best;
+            const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
+            const header_len = Codec.huffmanHeaderLen(regenerated, compressed_size) catch |err| switch (err) {
+                error.UnsupportedZstdFeature => return best,
+                else => return err,
+            };
+            const compressed = std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
+            if (compressed < best) best = compressed;
+            return best;
+        }
+
+        /// Reuse only an exact 256-symbol frequency vector. The successful
+        /// tree entry contains every field consumed by tree/stream cost sizing,
+        /// so codes and sorted symbol/weight lists need not remain resident.
+        fn planEntry(self: *Self, frequencies: *const [256]u32) Codec.Error!?*const TreeEntry {
+            if (self.tree_entry) |*entry| {
+                if (self.last_frequencies) |*previous| {
+                    if (std.mem.eql(u32, previous, frequencies)) {
+                        self.work.huffman_plan_cache_hits +|= 1;
+                        return entry;
+                    }
+                }
+            }
+            self.work.huffman_plans +|= 1;
+            const plan = Codec.planFromFrequencies(frequencies) orelse return null;
+            _ = try self.cachedTreeLen(&plan);
+            // An error or an absent plan must leave the prior binding intact.
+            // Successful null tree length is still a valid planning result.
+            self.last_frequencies = frequencies.*;
+            return if (self.tree_entry) |*entry| entry else unreachable;
+        }
+
+        /// One finalized plan at a time, scoped to this fixed compiled codec.
+        /// Publish successful null as a value; retain the prior entry on error.
+        fn cachedTreeLen(self: *Self, plan: anytype) Codec.Error!?usize {
+            const key = TreeKey.fromPlan(plan);
+            if (self.tree_entry) |*entry| {
+                if (entry.key.matches(&key)) {
+                    self.work.tree_cache_hits +|= 1;
+                    return entry.serialized_len;
+                }
+            }
+            self.work.tree_serializations +|= 1;
+            const serialized_len = try Codec.treeLen(plan);
+            self.tree_entry = .{ .key = key, .serialized_len = serialized_len };
+            // A caller may publish the new frequency binding only after this
+            // succeeds. Direct tree lookups cannot retain a stale frequency key.
+            self.last_frequencies = null;
+            return serialized_len;
+        }
+
+        /// The histogram already divides the regenerated prefix/tail view into
+        /// the canonical one or four streams. Count bits without scanning bytes.
+        fn streamsLen(self: *Self, bit_counts: *const [256]u8) Codec.Error!?usize {
+            var total: usize = if (self.histogram.stream_count == 1) 0 else 6;
+            for (self.histogram.stream_frequencies[0..self.histogram.stream_count]) |*frequencies| {
+                var stream_bits: usize = 0;
+                for (frequencies, bit_counts) |frequency, bits| {
+                    if (frequency == 0) continue;
+                    if (bits == 0) return error.CorruptFrame;
+                    self.work.stream_symbol_products +|= 1;
+                    const product = std.math.mul(usize, frequency, bits) catch return error.IntegerOverflow;
+                    stream_bits = std.math.add(usize, stream_bits, product) catch return error.IntegerOverflow;
+                }
+                const rounded = std.math.add(usize, stream_bits, 8) catch return error.IntegerOverflow;
+                const stream_len = rounded / 8; // One end bit followed by padding.
+                if (self.histogram.stream_count != 1 and stream_len > std.math.maxInt(u16)) return null;
+                total = std.math.add(usize, total, stream_len) catch return error.IntegerOverflow;
+            }
+            return total;
+        }
+    };
+}
+
+const TreeProbePlan = struct {
+    max_symbol: u8 = 2,
+    max_bit_count: u8 = 2,
+    bit_counts: [256]u8 = .{ 0, 1, 2 } ++ @as([253]u8, @splat(0)),
+    irrelevant_frequency: u32 = 1,
+    null_result: bool = false,
+    fail: bool = false,
+};
+const TreeProbeCodec = struct {
+    pub const Error = error{ CorruptFrame, IntegerOverflow };
+    pub fn treeLen(plan: *const TreeProbePlan) Error!?usize {
+        if (plan.fail) return error.CorruptFrame;
+        if (plan.null_result) return null;
+        return @as(usize, plan.max_symbol) * 300 + @as(usize, plan.max_bit_count) * 10 +
+            @as(usize, plan.bit_counts[1]) * 3 + plan.bit_counts[2];
+    }
+};
+
+test "zstd single literal cost tree key compares ordered bits and both metadata fields" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    var plan: TreeProbePlan = .{};
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.irrelevant_frequency = 9_999;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    std.mem.swap(u8, &plan.bit_counts[1], &plan.bit_counts[2]);
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.bit_counts[2] = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.max_symbol = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    plan.max_bit_count = 3;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&plan), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(@as(u64, 5), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 2), cache.work.tree_cache_hits);
+    try std.testing.expect(@sizeOf(@TypeOf(cache)) < 8 * 1024);
+}
+
+test "zstd single literal cost tree cache retains successful null" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    const plan: TreeProbePlan = .{ .null_result = true };
+    try std.testing.expectEqual(@as(?usize, null), try cache.cachedTreeLen(&plan));
+    try std.testing.expectEqual(@as(?usize, null), try cache.cachedTreeLen(&plan));
+    try std.testing.expect(cache.tree_entry != null);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_cache_hits);
+}
+
+test "zstd single literal cost tree errors do not publish and retain the prior entry" {
+    var cache = try Cache(TreeProbeCodec).init("ab");
+    var new_plan: TreeProbePlan = .{ .fail = true };
+    try std.testing.expectError(error.CorruptFrame, cache.cachedTreeLen(&new_plan));
+    try std.testing.expect(cache.tree_entry == null);
+    new_plan.fail = false;
+    const previous = try cache.cachedTreeLen(&new_plan);
+    const previous_key = cache.tree_entry.?.key;
+    new_plan.max_symbol += 1;
+    new_plan.fail = true;
+    try std.testing.expectError(error.CorruptFrame, cache.cachedTreeLen(&new_plan));
+    try std.testing.expect(cache.tree_entry.?.key.matches(&previous_key));
+    try std.testing.expectEqual(previous, cache.tree_entry.?.serialized_len);
+    var old_plan: TreeProbePlan = .{};
+    try std.testing.expectEqual(previous, try cache.cachedTreeLen(&old_plan));
+    new_plan.fail = false;
+    try std.testing.expectEqual(try TreeProbeCodec.treeLen(&new_plan), try cache.cachedTreeLen(&new_plan));
+    try std.testing.expectEqual(@as(u64, 4), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_cache_hits);
+}
+
+const FrequencyProbeCodec = struct {
+    pub const Error = TreeProbeCodec.Error;
+    pub const treeLen = TreeProbeCodec.treeLen;
+    pub fn planFromFrequencies(frequencies: *const [256]u32) ?TreeProbePlan {
+        if (frequencies[0] == 35) return null;
+        return .{
+            .max_symbol = @intCast(frequencies[0]),
+            .null_result = frequencies[0] == 32,
+            .fail = frequencies[0] == 33,
+        };
+    }
+};
+
+test "zstd single literal cost frequency plan cache uses the complete vector and only last entry" {
+    var cache = try Cache(FrequencyProbeCodec).init("ab");
+    var frequencies: [256]u32 = @splat(0);
+    frequencies[0] = 31;
+    frequencies[1] = 33;
+    const first = (try cache.planEntry(&frequencies)).?.serialized_len;
+    try std.testing.expectEqual(first, (try cache.planEntry(&frequencies)).?.serialized_len);
+    frequencies[1] -= 1;
+    frequencies[255] += 1; // Same total, different complete vector.
+    try std.testing.expectEqual(first, (try cache.planEntry(&frequencies)).?.serialized_len);
+    frequencies[1] += 1;
+    frequencies[255] -= 1;
+    try std.testing.expectEqual(first, (try cache.planEntry(&frequencies)).?.serialized_len);
+    try std.testing.expectEqual(@as(u64, 3), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_serializations);
+    try std.testing.expectEqual(@as(u64, 2), cache.work.tree_cache_hits);
+    try std.testing.expect(@sizeOf(@TypeOf(cache)) < 8 * 1024);
+}
+
+test "zstd single literal cost frequency plan null and errors preserve the successful binding" {
+    var cache = try Cache(FrequencyProbeCodec).init("ab");
+    var frequencies: [256]u32 = @splat(0);
+    frequencies[0] = 32;
+    try std.testing.expectEqual(@as(?usize, null), (try cache.planEntry(&frequencies)).?.serialized_len);
+    const previous_entry = cache.tree_entry.?;
+    const previous_frequencies = cache.last_frequencies.?;
+    frequencies[0] = 33;
+    try std.testing.expectError(error.CorruptFrame, cache.planEntry(&frequencies));
+    try std.testing.expectError(error.CorruptFrame, cache.planEntry(&frequencies));
+    try std.testing.expect(cache.tree_entry.?.key.matches(&previous_entry.key));
+    try std.testing.expectEqual(previous_entry.serialized_len, cache.tree_entry.?.serialized_len);
+    try std.testing.expectEqual(previous_frequencies, cache.last_frequencies.?);
+    frequencies[0] = 32;
+    try std.testing.expectEqual(@as(?usize, null), (try cache.planEntry(&frequencies)).?.serialized_len);
+    frequencies[0] = 34;
+    try std.testing.expect((try cache.planEntry(&frequencies)).?.serialized_len != null);
+    try std.testing.expectEqual(frequencies, cache.last_frequencies.?);
+    try std.testing.expectEqual(@as(u64, 4), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.huffman_plan_cache_hits);
+    try std.testing.expectEqual(@as(u64, 4), cache.work.tree_serializations);
+}
+
+test "zstd single literal cost absent frequency plan is never published" {
+    var cache = try Cache(FrequencyProbeCodec).init("ab");
+    var frequencies: [256]u32 = @splat(0);
+    frequencies[0] = 31;
+    _ = try cache.planEntry(&frequencies);
+    const previous_frequencies = cache.last_frequencies.?;
+    const previous_key = cache.tree_entry.?.key;
+    frequencies[0] = 35;
+    try std.testing.expectEqual(@as(?*const TreeEntry, null), try cache.planEntry(&frequencies));
+    try std.testing.expectEqual(@as(?*const TreeEntry, null), try cache.planEntry(&frequencies));
+    try std.testing.expectEqual(previous_frequencies, cache.last_frequencies.?);
+    try std.testing.expect(cache.tree_entry.?.key.matches(&previous_key));
+    try std.testing.expectEqual(@as(u64, 3), cache.work.huffman_plans);
+    try std.testing.expectEqual(@as(u64, 1), cache.work.tree_serializations);
+}

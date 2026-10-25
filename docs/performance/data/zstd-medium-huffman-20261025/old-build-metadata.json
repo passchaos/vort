@@ -1,0 +1,31 @@
+{
+  "head": "c56c825591983a61c84994ff55b9e8bc8835a3c5",
+  "source": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+    "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb",
+    "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d"
+  },
+  "command": [
+    "taskset",
+    "-c",
+    "2-7,10-15",
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "run-zstd-encode-bench",
+    "-j2",
+    "--summary",
+    "all",
+    "--",
+    "--help"
+  ],
+  "cwd": "/home/passchaos/project-z/vort",
+  "recorded_utc": "2026-10-25T05:16:39.611363+00:00",
+  "exit_code": 0,
+  "executable": "/home/passchaos/project-z/vort/.zig-cache/o/ed94ec1c4a213c549af1a1d632f56d71/vort-zstd-encode-bench",
+  "executable_sha256": "cae7982a8dd399aa1b78b7b96877601ce60809b33269d408e26d6fcedc5a487b",
+  "log_sha256": "5daaaecf84e2f3c4f788c59def5c1b0303a1b62c1da525b8ea26b82b5a8bca93",
+  "source_stable": true
+}

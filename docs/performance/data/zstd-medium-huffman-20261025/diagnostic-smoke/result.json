@@ -1,0 +1,27 @@
+{
+  "executable": "/home/passchaos/project-z/vort-zstd-duplicate-profile/.zig-cache/o/1afd6a48f64e227cc67dc2290e6d8237/vort-zstd-multi-duplicate-profile",
+  "executable_sha256": "6f0d5bf9b76200b64254aef41feb1c7f8ba071dffa57097c519eda1216d19f26",
+  "cases": [
+    {
+      "input_bytes": 65535,
+      "accepted": false,
+      "exit_code": 1
+    },
+    {
+      "input_bytes": 65536,
+      "accepted": true,
+      "exit_code": 0
+    },
+    {
+      "input_bytes": 131072,
+      "accepted": true,
+      "exit_code": 0
+    },
+    {
+      "input_bytes": 131073,
+      "accepted": false,
+      "exit_code": 1
+    }
+  ],
+  "scope": "JSON schema, exact input/empty wire identity, zero work and file-size admission; elapsed values are not benchmark evidence"
+}

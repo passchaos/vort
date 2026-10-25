@@ -1,0 +1,24 @@
+1/23 zstd.test_0...OK
+2/23 zstd.test.zstd single literal cost cache matches every reference cut and stream boundary...OK
+3/23 zstd.test.zstd single literal cost cache preserves errors empty and retry transitions...OK
+4/23 zstd.test.zstd single literal cost cache retains the legacy byte zero prefix...OK
+5/23 zstd.test.zstd single literal cost cache records exact delta work without stream byte scans...OK
+6/23 zstd.test.zstd single literal cost cache verifies every candidate and complete finder winner...OK
+7/23 zstd.test.zstd single literal cost cache preserves multi wire and allocator requests...OK
+8/23 zstd.test.zstd single literal cost cache reuses exact frequencies and reprices four streams...OK
+9/23 zstd.literals.single_cost_cache.test.zstd single literal cost tree key compares ordered bits and both metadata fields...OK
+10/23 zstd.literals.single_cost_cache.test.zstd single literal cost tree cache retains successful null...OK
+11/23 zstd.literals.single_cost_cache.test.zstd single literal cost tree errors do not publish and retain the prior entry...OK
+12/23 zstd.literals.single_cost_cache.test.zstd single literal cost frequency plan cache uses the complete vector and only last entry...OK
+13/23 zstd.literals.single_cost_cache.test.zstd single literal cost frequency plan null and errors preserve the successful binding...OK
+14/23 zstd.literals.single_cost_cache.test.zstd single literal cost absent frequency plan is never published...OK
+15/23 zstd.literals.cut_histogram.test_0...OK
+16/23 tests.zstd_stream_counter_contracts.test_0...OK
+17/23 tests.zstd_large_history_contracts.test_0...OK
+18/23 zstd.incremental.encoder.frame.test_0...OK
+19/23 tests.zstd_hq_search_contracts.test_0...OK
+20/23 zstd.match.hq_tree.test_0...OK
+21/23 zstd.match.hq_parser.test_0...OK
+22/23 zstd.match.lazy2.test_0...OK
+23/23 zstd.match.hq_parser.tests.test_0...OK
+All 23 tests passed.

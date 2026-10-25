@@ -1,0 +1,24 @@
+{
+  "command": [
+    "python3",
+    "tools/codec_bench/sample_gate.py",
+    "--samples-json",
+    "/tmp/vort-zstd-duplicate-profile-20261025/public-new/samples.json",
+    "--manifest",
+    "/tmp/vort-zstd-duplicate-profile-20261025/input-manifest.json",
+    "--csv",
+    "/tmp/vort-zstd-duplicate-profile-20261025/public-new/samples.csv",
+    "--executable",
+    "/home/passchaos/project-z/vort-zstd-duplicate-profile/.zig-cache/o/e896d85b31c33819f34a4488826cd334/vort-zstd-encode-bench",
+    "--require-explicit-references"
+  ],
+  "exit_code": 0,
+  "gate_sha256": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece",
+  "result": {
+    "codec": "zstd",
+    "input_identity": "verified frozen length and SHA-256",
+    "reference_scope": "requested files only; loaded dependency identities unverified",
+    "rounds": 10,
+    "rows": 2
+  }
+}
