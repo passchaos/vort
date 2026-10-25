@@ -1,0 +1,9 @@
+{
+  "schema": "vort.handoff-source.v1",
+  "head": "555eb29031c6cb7af786accc81ab9d38079d69b1",
+  "test_source_commit": "b502fc50d81be96dc622ab4ba3998a53403c618c",
+  "source_hashes_match": true,
+  "source_files": 1895,
+  "evidence_files": 47,
+  "evidence_hashes_match": true
+}

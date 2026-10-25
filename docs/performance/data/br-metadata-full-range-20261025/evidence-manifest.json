@@ -192,9 +192,29 @@
       "sha256": "0af2a051e7d9b2cf4db294e564b8d0d88990858104aa826e41664dbf0e8ab339"
     },
     {
+      "path": "post-rebase-boundary.log",
+      "bytes": 388,
+      "sha256": "b981be1b200ac1a700fb421284d69b41f286919698693d6d42ea8bd537e25a19"
+    },
+    {
+      "path": "post-rebase-hashes.json",
+      "bytes": 275,
+      "sha256": "d94cbb13352fddd14f32201467e03777fed6fd73566d1a2ceb7424ba265a202f"
+    },
+    {
+      "path": "post-rebase-metadata.log",
+      "bytes": 885,
+      "sha256": "4ab98ccbd5dc64aeab1500c666dfeb3d3f47e22b5f01887daaa29b78b445f28f"
+    },
+    {
       "path": "probe-build.log",
       "bytes": 345,
       "sha256": "35bc30b454ea66dd25f100bacb6965c0d981e536ff156146fe6a94d7cc0206be"
+    },
+    {
+      "path": "rebase.log",
+      "bytes": 146,
+      "sha256": "d59e4c34f47462685a5d50b31cae76535b8559bcd83084245153ff51dba80e85"
     },
     {
       "path": "test-source-delta.json",
@@ -203,8 +223,8 @@
     },
     {
       "path": "validation.json",
-      "bytes": 2487,
-      "sha256": "a35256d9a234573f2c22ef4aefa9c93aefd3c3978c49483e00faeeda39b8539e"
+      "bytes": 2779,
+      "sha256": "0c3c4af59568304231e30993a29b355851515387a364e571d61278b5ba081b73"
     },
     {
       "path": "wide-resource-fix-native.log",

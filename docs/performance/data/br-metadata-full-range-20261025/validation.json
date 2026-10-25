@@ -85,5 +85,18 @@
     "total": 20,
     "filter": "Brotli general large window encoded bounds detect host integer overflow",
     "note": "20 aggregate executions include the actual 32-bit-only named test; full native family retains its single skip."
+  },
+  "post_rebase": {
+    "metadata_and_public_root": {
+      "passed": 130,
+      "total": 130
+    },
+    "wide_geometry_native": {
+      "passed": 20,
+      "total": 20
+    },
+    "source_files_checked": 1895,
+    "evidence_files_checked_before_handoff": 47,
+    "source_unchanged": true
   }
 }
