@@ -1,0 +1,15 @@
+1/13 cut_histogram.test_0...OK
+2/13 cut_histogram.test.zstd frequency merge real cut histogram contracts...OK
+3/13 frequency_merge.test.zstd frequency merge complete scalar oracle contracts...OK
+4/13 cut_histogram_tests.test.Zstd cut histogram fixed state initializes without scanning and rejects oversized blocks...OK
+5/13 cut_histogram_tests.test.Zstd cut histogram exhaustive tiny cut pairs and reverse transitions match concatenation oracle...OK
+6/13 cut_histogram_tests.test.Zstd cut histogram randomized forward backward and empty transitions match independent quarters...OK
+7/13 cut_histogram_tests.test.Zstd cut histogram stream transitions around 1023 and 1024 retain exact seam symbols...OK
+8/13 cut_histogram_tests.test.Zstd cut histogram unequal quarter tails and moving seams assign each literal once...OK
+9/13 cut_histogram_tests.test.Zstd cut histogram 65535 65536 and 65537 byte inputs retain full u32 frequencies...OK
+10/13 cut_histogram_tests.test.Zstd cut histogram 128 KiB repeated symbols and new input binding preserve ownership...OK
+11/13 cut_histogram_tests.test.Zstd cut histogram identical cuts scan zero and adjacent moving cuts visit only differences...cut-histogram state-bytes=4208 initial-scan=49152 adjacent128-scan=256
+OK
+12/13 cut_histogram_tests.test.Zstd cut histogram invalid cuts and counter overflow leave the complete state unchanged...OK
+13/13 cut_histogram_tests.test.Zstd cut histogram physical symmetric differences equal its work counter for tiny transitions...OK
+All 13 tests passed.

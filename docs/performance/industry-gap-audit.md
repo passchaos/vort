@@ -129,6 +129,15 @@ but excluded. Complete Zstd tests pass 1096/1096 and build checks 171/171;
 independent XML requested heap and all 282 allocator events remain unchanged.
 This increment also safely rejects extreme offsets before numeric bias overflow.
 
+The [frequency-merge increment](zstd-frequency-merge.md) combines four-stream
+frequency output and active-symbol counting in one traversal. A matched
+fourteen-row five-round production control preserves all frame identities
+and gives a 1.15165x geometric version speedup: XML/source/MR medians become
+586.070/224.770/499.548ms. Samba/SAO point ratios are 0.97209x/0.97323x, with
+no statistical-significance claim. Throughput still loses on every reference
+row (geometric ratio 0.00396409x). All XML/MR candidate work fields remain
+unchanged. Complete native Zstd tests pass 1098/1098 and build checks 172/172.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

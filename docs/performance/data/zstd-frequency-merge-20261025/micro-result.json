@@ -1,0 +1,23 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-frequency-merge-20261025/micro-bench",
+    "250000"
+  ],
+  "source_before": {
+    "src/zstd/literals/frequency_merge.zig": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+    "tools/zstd/frequency_merge_bench.zig": "340a5651ac6868688aa65fb58a9a5aa01f660268d93c4ab7a98a3a7a17e0d75f"
+  },
+  "exe_sha256": "219978e0cef521e0fa683e718e838d2ebf7ef0bbaad807a919fb564ab2210947",
+  "start_utc": "2026-10-25T07:13:49.803494+00:00",
+  "exit_code": 0,
+  "source_after": {
+    "src/zstd/literals/frequency_merge.zig": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+    "tools/zstd/frequency_merge_bench.zig": "340a5651ac6868688aa65fb58a9a5aa01f660268d93c4ab7a98a3a7a17e0d75f"
+  },
+  "source_stable": true,
+  "compiler_observations": 17,
+  "compiler_observations_with_process": 0
+}

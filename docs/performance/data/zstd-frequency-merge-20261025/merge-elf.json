@@ -1,0 +1,292 @@
+{
+  "schema": "vort.zstd.frequency-merge.elf-audit.v1",
+  "created_utc": "2026-10-25T07:20:25.107577+00:00",
+  "worktree": "/home/passchaos/project-z/vort-zstd-frequency-merge",
+  "scope": "read-only micro and pinned public encoder ELF audit; no compilation, benchmark execution, source or Git mutation",
+  "artifacts": {
+    "micro_elf": "/tmp/vort-zstd-frequency-merge-20261025/micro-bench",
+    "module": "/home/passchaos/project-z/vort-zstd-frequency-merge/src/zstd/literals/frequency_merge.zig",
+    "bench": "/home/passchaos/project-z/vort-zstd-frequency-merge/tools/zstd/frequency_merge_bench.zig"
+  },
+  "sha256": {
+    "micro_elf": "219978e0cef521e0fa683e718e838d2ebf7ef0bbaad807a919fb564ab2210947",
+    "module": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+    "bench": "340a5651ac6868688aa65fb58a9a5aa01f660268d93c4ab7a98a3a7a17e0d75f"
+  },
+  "build_provenance": {
+    "command": [
+      "taskset",
+      "-c",
+      "13-15",
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build-exe",
+      "-O",
+      "ReleaseFast",
+      "--dep",
+      "frequency_merge",
+      "--dep",
+      "benchmark_provenance",
+      "-Mroot=tools/zstd/frequency_merge_bench.zig",
+      "-O",
+      "ReleaseFast",
+      "-Mfrequency_merge=src/zstd/literals/frequency_merge.zig",
+      "-O",
+      "ReleaseFast",
+      "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+      "-femit-bin=/tmp/vort-zstd-frequency-merge-20261025/micro-bench"
+    ],
+    "cwd": "/home/passchaos/project-z/vort-zstd-frequency-merge",
+    "start_utc": "2026-10-25T07:13:22.763962+00:00",
+    "end_utc": "2026-10-25T07:13:35.672152+00:00",
+    "exit_code": 0,
+    "source_stable": true
+  },
+  "runtime_provenance_only": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "8",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "219978e0cef521e0fa683e718e838d2ebf7ef0bbaad807a919fb564ab2210947",
+    "command": "/tmp/vort-zstd-frequency-merge-20261025/micro-bench 250000"
+  },
+  "symbols": {
+    "scalar": {
+      "symbol": "frequency_merge_bench.query__anon_2966",
+      "address": "0x10bc430",
+      "size_bytes": 246,
+      "merge_loop_iterations": 64,
+      "count_loop_iterations": 32,
+      "addition_machine_order": "((row1 + row0) + row2) + row3",
+      "count_method": "unsigned cmpl frequency,1 followed by sbb -1 to 64-bit accumulator",
+      "complete_output_stores_retained": true,
+      "calls_in_query": 0,
+      "local_stack_reservation_bytes": 0
+    },
+    "merged": {
+      "symbol": "frequency_merge_bench.query__anon_2967",
+      "address": "0x10bc270",
+      "size_bytes": 173,
+      "machine_loop_iterations": 16,
+      "symbols_per_loop": 16,
+      "vector_bits": 256,
+      "lane_type": "u32",
+      "lanes": 8,
+      "addition_machine_order": "((row1 + row0) + row2) + row3",
+      "count_method": "vpcmpeqd zero; vmovmskps 8 bits; XOR 0xff; POPCNT; accumulate in rax via rdx",
+      "complete_output_stores_retained": true,
+      "calls_in_query": 0,
+      "local_stack_reservation_bytes": 0,
+      "unaligned_load_store": "vmovdqu",
+      "alignment_check_or_tail": false
+    }
+  },
+  "coverage": {
+    "scalar": {
+      "input_loads": {
+        "instruction_memory_operands": 1024,
+        "operand_bytes": 4096,
+        "logical_span_bytes": 4096,
+        "effective_byte_min": 0,
+        "effective_byte_max_inclusive": 4095,
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "output_stores": {
+        "instruction_memory_operands": 256,
+        "operand_bytes": 1024,
+        "logical_span_bytes": 1024,
+        "effective_byte_min": 0,
+        "effective_byte_max_inclusive": 1023,
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "active_output_reads": {
+        "instruction_memory_operands": 256,
+        "operand_bytes": 1024,
+        "logical_span_bytes": 1024,
+        "effective_byte_min": 0,
+        "effective_byte_max_inclusive": 1023,
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      }
+    },
+    "merged": {
+      "input_loads": {
+        "instruction_memory_operands": 128,
+        "operand_bytes": 4096,
+        "logical_span_bytes": 4096,
+        "effective_byte_min": 0,
+        "effective_byte_max_inclusive": 4095,
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "output_stores": {
+        "instruction_memory_operands": 32,
+        "operand_bytes": 1024,
+        "logical_span_bytes": 1024,
+        "effective_byte_min": 0,
+        "effective_byte_max_inclusive": 1023,
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "active_output_reads": {
+        "instruction_memory_operands": 0,
+        "operand_bytes": 0,
+        "logical_span_bytes": 0
+      }
+    }
+  },
+  "numerical_domain": {
+    "ordinary_u32_addition": true,
+    "widening": false,
+    "source_expression": "((row0 + row1) + row2) + row3",
+    "first_add_operand_swap": true,
+    "higher_additions_reassociated": false,
+    "valid_CutHistogram_per_symbol_total_max": 131072,
+    "valid_partial_sum_overflow": false,
+    "arbitrary_external_histogram_validation": false
+  },
+  "dce": {
+    "timed_caller_uses_same_noinline_query_symbols": true,
+    "full_output_stores_present_in_exact_query_assembly": true,
+    "preflight_full_output_equality_is_not_timed_dce_proof": true,
+    "timed_checksum_reads_one_output_element_per_call": true
+  },
+  "limitations": [
+    "Instruction operand traffic is not cache, DRAM, bandwidth or cycle measurement.",
+    "Local query push/pop does not establish process total stack, heap, RSS or caller frame usage.",
+    "No performance ranking inferred from ELF.",
+    "Public entire candidate path still copies and traverses prepared frequencies for certificate/planner consumers; one-pass claim applies to merge+active count only."
+  ],
+  "evidence": {
+    "micro-address-enumeration.json": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/micro-address-enumeration.json",
+    "micro-merged.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/micro-merged.asm",
+    "micro-query-call-sites.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/micro-query-call-sites.asm",
+    "micro-scalar.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/micro-scalar.asm",
+    "micro-symbols.nm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/micro-symbols.nm",
+    "public-address-enumeration.json": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/public-address-enumeration.json",
+    "public-emit-call-sites.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/public-emit-call-sites.asm",
+    "public-emit-multi-duplicate.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/public-emit-multi-duplicate.asm",
+    "public-emit-symbols.nm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/public-emit-symbols.nm",
+    "public-merge-and-consumers.asm": "/tmp/vort-zstd-frequency-merge-20261025/merge-elf-evidence/public-merge-and-consumers.asm"
+  },
+  "public_encoder": {
+    "elf": "/home/passchaos/project-z/vort-zstd-frequency-merge/.zig-cache/o/01eb2d7a175dc1b159e6dfc0b899550d/vort-zstd-encode-bench",
+    "sha256": "c07deeea37166a672abde8d32f897ddcb1dec006a826c46e546f8e9e76ca19d6",
+    "source_hashes_current_and_parent_recorded": {
+      "src/zstd/literals/frequency_merge.zig": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+      "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+      "src/zstd/literals/single_cost_cache.zig": "1fde928e6f6133328dbdf09f9af4b30d8fdf60b162e1968f744327b6825d29e7",
+      "src/zstd.zig": "72cbede8fd4f4770e1cbaab26f7f375e43c3d335729ab4bee8fe6413692116ca"
+    },
+    "symbol": "zstd.emitMultiDuplicateMatchCompressedBlockWithFirst",
+    "address": "0x115a9a0",
+    "size_bytes": 11263,
+    "merge_loop_start": "0x115bfd0",
+    "merge_backedge": "0x115c060",
+    "loop_iterations": 16,
+    "symbols_per_loop": 16,
+    "coverage": {
+      "input_loads": {
+        "logical_span_bytes": 4096,
+        "instruction_memory_operands": 128,
+        "operand_bytes": 4096,
+        "rsp_byte_min_hex": "0xd00",
+        "rsp_byte_max_inclusive_hex": "0x1cff",
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "output_stores": {
+        "logical_span_bytes": 1024,
+        "instruction_memory_operands": 32,
+        "operand_bytes": 1024,
+        "rsp_byte_min_hex": "0x3c0",
+        "rsp_byte_max_inclusive_hex": "0x7bf",
+        "every_byte_touched_once": true,
+        "overread_or_overwrite": false
+      },
+      "active_count_output_reads": {
+        "operand_bytes": 0,
+        "instruction_memory_operands": 0
+      }
+    },
+    "source_route": [
+      "normal frame serial beam calls emitMultiDuplicateMatchCompressedBlockWithFirst",
+      "WithFirstImpl(true) -> Profiled(cache_costs=true,profile_work=false) -> ProfiledMode(.prune)",
+      "cost cache admission requires duplicate_index == null and 4096 < block.len <= 131072",
+      "findBestDuplicateMatchHashedImpl(true) calls payloadForWinner",
+      "winner Cache -> inner.prepareLiterals -> CutHistogram.totalFrequenciesAndCount -> mergeActive"
+    ],
+    "public_static_call_sites": [
+      "0x115a3fa",
+      "0x116a59b",
+      "0x116cb2a",
+      "0x1171131"
+    ],
+    "addition_machine_order": "((row1 + row0) + row2) + row3; both row1 vector groups are preloaded before group 0 arithmetic",
+    "active_register_lifetime": "rbx starts at zero; ecx carries group0 count plus prior rbx; edx supplies group1 mask; popcnt edx,ebx then add ecx,rbx; survives loop, raw-cost branch and memcpy as callee-saved register",
+    "zero_compare_setup": "vpxor xmm4,xmm4,xmm4 at 0x115ae52; no intervening xmm4/ymm4 definitions or calls on the forward preparation region before merge",
+    "active_consumers": [
+      {
+        "address": "0x115c0c0",
+        "operation": "cmp rbx,1 + cmove rbx,r13 selects one-byte RLE raw length"
+      },
+      {
+        "address": "0x115c124",
+        "operation": "cmp rbx,2 gates bound consideration"
+      },
+      {
+        "address": "0x115c0eb",
+        "operation": "store active/unique to rsp+0x2468"
+      },
+      {
+        "address": "0x115c333",
+        "operation": "cmp rbx,2 gates Huffman planner"
+      }
+    ],
+    "output_lifetime": [
+      {
+        "address": "0x115bffd/0x115c036",
+        "operation": "all 256 totals stored to rsp+[0x3c0,0x7c0)"
+      },
+      {
+        "address": "0x115c0e6",
+        "operation": "memcpy length1024, rsp+0x3c0 to prepared rsp+0x2480"
+      },
+      {
+        "address": "0x115c380",
+        "operation": "eligible Huffman branch memcpy length1024, prepared rsp+0x2480 to plan rsp+0x3c8"
+      },
+      {
+        "address": "0x115c46f\u20130x115c50c",
+        "operation": "eligible Huffman branch scans 256 prepared frequencies and builds ordered active-symbol list"
+      },
+      {
+        "address": "0x115c53d",
+        "operation": "calls finalizeSmallHuffmanLiteralPlan on plan rsp+0x3c0"
+      }
+    ],
+    "dce": {
+      "merge_count_retained": true,
+      "full_frequency_stores_retained": true,
+      "subsequent_frequency_consumers_retained": true
+    },
+    "alignment": {
+      "function_rsp_aligned_bytes": 32,
+      "input_base_rsp_offset": "0xd00",
+      "output_base_rsp_offset": "0x3c0",
+      "emitted_load_store": "vmovdqu",
+      "library_required_alignment_bytes": 4
+    },
+    "comparison_limit": "Only supplied new public ELF audited. Micro scalar two-pass lowering is not evidence for old public encoder lowering; no old/new public speed inference."
+  },
+  "created_asia_shanghai": "2026-10-25T15:20:25.107577+08:00"
+}

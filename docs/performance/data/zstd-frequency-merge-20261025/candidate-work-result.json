@@ -1,0 +1,35 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/home/passchaos/project-z/vort-zstd-frequency-merge/.zig-cache/o/b3f94b3dfb2c425f273cd6dc7d3b909d/vort-zstd-multi-duplicate-profile",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+  ],
+  "exe_sha256": "5a60bfcdcd0bd18d7b514900b7fc908e00f0ccaf5781624a6ff359922551e170",
+  "source_before": {
+    "src/zstd/literals/frequency_merge.zig": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+    "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+    "src/zstd/literals/single_cost_cache.zig": "1fde928e6f6133328dbdf09f9af4b30d8fdf60b162e1968f744327b6825d29e7"
+  },
+  "source_after": {
+    "src/zstd/literals/frequency_merge.zig": "6f5eb4b44e85485d5de3a1e51a2c454689826fa65668cd6910793bdd0fce096c",
+    "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+    "src/zstd/literals/single_cost_cache.zig": "1fde928e6f6133328dbdf09f9af4b30d8fdf60b162e1968f744327b6825d29e7"
+  },
+  "source_stable": true,
+  "checks": [
+    {
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "wire_unchanged": true,
+      "all_work_fields_unchanged": true
+    },
+    {
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "wire_unchanged": true,
+      "all_work_fields_unchanged": true
+    }
+  ],
+  "scope": "Work/output differential executed during unrelated builds; durations excluded from throughput evidence."
+}

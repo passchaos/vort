@@ -1,0 +1,24 @@
+{
+  "command": [
+    "python3",
+    "tools/codec_bench/sample_gate.py",
+    "--samples-json",
+    "/tmp/vort-zstd-frequency-merge-20261025/candidate14/samples.json",
+    "--manifest",
+    "/tmp/vort-zstd-frequency-merge-20261025/input-manifest.json",
+    "--csv",
+    "/tmp/vort-zstd-frequency-merge-20261025/candidate14/samples.csv",
+    "--executable",
+    "/home/passchaos/project-z/vort-zstd-frequency-merge/.zig-cache/o/01eb2d7a175dc1b159e6dfc0b899550d/vort-zstd-encode-bench",
+    "--require-explicit-references"
+  ],
+  "exit_code": 0,
+  "output": {
+    "codec": "zstd",
+    "input_identity": "verified frozen length and SHA-256",
+    "reference_scope": "requested files only; loaded dependency identities unverified",
+    "rounds": 70,
+    "rows": 14
+  },
+  "gate_sha256": "e6550c03aedc9f027a1bef06456ee7db896b2a0548139c8c4ac51d866cffbece"
+}

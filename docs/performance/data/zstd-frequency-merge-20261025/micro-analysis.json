@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "case": "medium_four_streams",
+      "scalar_ns_per_query": 193.830152,
+      "merged_ns_per_query": 50.784368,
+      "speedup": 3.8167286437432875
+    },
+    {
+      "case": "dense_four_streams",
+      "scalar_ns_per_query": 196.15788,
+      "merged_ns_per_query": 44.9113,
+      "speedup": 4.367673169113341
+    },
+    {
+      "case": "single_stream",
+      "scalar_ns_per_query": 197.165164,
+      "merged_ns_per_query": 51.919872,
+      "speedup": 3.797489408294381
+    }
+  ],
+  "samples_sha256": "02a6b7f4e60dd33f41b7fdf7144e052552e23098060548f6c9ab83d1c3889c8b",
+  "exe_sha256": "219978e0cef521e0fa683e718e838d2ebf7ef0bbaad807a919fb564ab2210947",
+  "scope": "Three warm input pools, five alternating rounds. Original two-pass scalar reference and merged vector read/write/count. Complete output equality checked before timing; selection/call/checksum included."
+}
