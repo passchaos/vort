@@ -1,0 +1,23 @@
+test-zstd
++- run test vort-zstd-tests w
+four-byte optimal frame audit: changed=0 larger=0 total=590165/590165 worst_extra=0
+fastest optimal budget audit: changed=3 larger=0 smaller=3 total=230779/230784 worst_extra=0
+single beam audit: changed=1 larger=0 smaller=1 total=658597/658600 worst_extra=0
+single beam JSON audit: changed=20 total=12581/12534 worst_extra=3
+level three single beam audit: changed=0 larger=0 smaller=0 total=1574138/1574138 worst_extra=0 absolute_selected=0 absolute_larger=0 absolute_worst_extra=0 proxy_selected=0 proxy_larger=0 proxy_worst_extra=0
+level three single beam JSON audit: changed=0 larger=0 total=10104/10104 worst_extra=0
+level three large single beam audit: selected=20 changed=20 larger=20 total=19576/19524 worst_extra=4 absolute_selected=24 absolute_larger=20 absolute_total=19576 absolute_worst_extra=4 proxy_selected=24 proxy_larger=20 proxy_total=19576 proxy_worst_extra=4
+level three structured-family audit: screened=16 eligible=0 changed=0 larger=0 smaller=0 total=100138/100138 worst_extra=0 proxy_eligible=0 proxy_larger=0 proxy_smaller=0 proxy_total=100138 proxy_worst_extra=0
+four-byte optimal plan audit: improved=2 total=30487549/30487553
+cut-histogram state-bytes=4208 initial-scan=49152 adjacent128-scan=256
+validated RLE prefix model=4294967296 actual-final-input=7 wire-tail=4 bytes
+failed command: ./.zig-cache/o/aa67d4ee9fbfd225df9bafda1aa68fae/vort-zstd-tests --cache-dir=./.zig-cache --seed=0x16f3160a --listen=-
+
+Build Summary: 5/5 steps succeeded; 1092/1092 tests passed
+test-zstd success
++- run test vort-zstd-tests 1092 pass (1092 total) 1m MaxRSS:214M
+   +- compile test vort-zstd-tests ReleaseFast native success 2m MaxRSS:2G
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native success 555ms MaxRSS:120M
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)
+

@@ -1,0 +1,21 @@
+Usage: vort-zstd-encode-bench [options]
+  --level N                    Choose a level from -131072 through 22.
+  --strategy NAME              Choose one of the strategies listed below.
+  --fast-acceleration N        Choose acceleration from 1 through 131072.
+  --native-selection fast_compressed
+  --case NAME --path FILE --limit BYTES
+  --iterations N --rounds N --csv FILE --libzstd FILE
+  --samples-json FILE          Save raw alternating rounds and JSON provenance.
+  --level=N, --strategy=NAME and --fast-acceleration=N are also accepted.
+  Defaults: levels 1, 3, 9 and 22; one iteration; three rounds.
+  Negative level -N selects fast acceleration N.
+  Acceleration is supported by fast and double_fast strategies.
+  Strategies: auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
+Build Summary: 5/5 steps succeeded
+run-zstd-encode-bench success
++- run exe vort-zstd-encode-bench success 1ms
+   +- compile exe vort-zstd-encode-bench ReleaseFast native success 38s MaxRSS:873M
+      +- WriteFile success
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native success 398ms MaxRSS:115M
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+

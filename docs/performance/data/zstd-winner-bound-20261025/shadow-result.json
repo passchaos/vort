@@ -1,0 +1,34 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/tmp/vort-zstd-cost-bound-20261025/shadow-profile",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+  ],
+  "source_before": {
+    "src/zstd.zig": "5162ff8dcbaf4c2313ae41b1145537afaad7c8cd96868a621dc6a8df1f4ce2d0",
+    "src/zstd/literals/single_cost_cache.zig": "22977817985349f0bea87f4c5699e5b6666c0ddb80dc29ae9e39754243168ab9",
+    "src/zstd/literals/winner_cost_cache.zig": "bb0fa6fcdfb3fedb2c5fb2140e2f63e3eda37ed66b29cb3ee49af8f3f0ed723c",
+    "src/zstd/literals/weighted_bound.zig": "52ed8c0e99c7ea827c904ac87957315f690a1774fba20ed05410c7f5f6474313",
+    "src/zstd/literals/weighted_bound_tests.zig": "421c810ec5c32b08bb9bd0c43dfcc29847a012c54878600cf3dae2b0987e0ff9",
+    "src/zstd/match/multi_duplicate_profile.zig": "d210d1e70910d2b31dff62b173bb75ca5bc8657fda2275112b408fc1525272e1",
+    "tools/zstd/multi_duplicate_profile.zig": "5bbeab012330feb53cd9dd14d3ead4c1211debc2d154c525931737d0268fdd45"
+  },
+  "executable_sha256": "250241e79ee0ad6d8c12db89bcfb0a262c8425eb419fae5f5e481e8d656f0b25",
+  "start_utc": "2026-10-25T06:06:45.945779+00:00",
+  "scope": "shadow counts, exact-cost violations and old block wire identities; instrumented duration is not a pruning/public-API speed claim",
+  "exit_code": 0,
+  "end_utc": "2026-10-25T06:07:19.132425+00:00",
+  "source_after": {
+    "src/zstd.zig": "5162ff8dcbaf4c2313ae41b1145537afaad7c8cd96868a621dc6a8df1f4ce2d0",
+    "src/zstd/literals/single_cost_cache.zig": "22977817985349f0bea87f4c5699e5b6666c0ddb80dc29ae9e39754243168ab9",
+    "src/zstd/literals/winner_cost_cache.zig": "bb0fa6fcdfb3fedb2c5fb2140e2f63e3eda37ed66b29cb3ee49af8f3f0ed723c",
+    "src/zstd/literals/weighted_bound.zig": "52ed8c0e99c7ea827c904ac87957315f690a1774fba20ed05410c7f5f6474313",
+    "src/zstd/literals/weighted_bound_tests.zig": "421c810ec5c32b08bb9bd0c43dfcc29847a012c54878600cf3dae2b0987e0ff9",
+    "src/zstd/match/multi_duplicate_profile.zig": "d210d1e70910d2b31dff62b173bb75ca5bc8657fda2275112b408fc1525272e1",
+    "tools/zstd/multi_duplicate_profile.zig": "5bbeab012330feb53cd9dd14d3ead4c1211debc2d154c525931737d0268fdd45"
+  },
+  "source_stable": true
+}

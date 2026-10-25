@@ -1,0 +1,139 @@
+{
+  "scope": "Untimed Vort oldmain/candidate caller allocator verification only; no RSS collection, no C encoder, no performance conclusions",
+  "requested_heap_scope": "Requests through public caller page_allocator wrapper, including returned output until explicit caller free; excludes embedded input, codec/tracker stack, code mappings and allocator bookkeeping/page rounding.",
+  "compile_cpus": "13-15",
+  "execution_cpu": "8",
+  "rss_collected": false,
+  "timing_collected": false,
+  "same_output": true,
+  "same_allocation_events": true,
+  "same_requested_heap_peak": true,
+  "all_cleanup_zero": true,
+  "all_small_oom": true,
+  "sources_stable": true,
+  "prepared_files_stable": true,
+  "old_main_head": "27dcca4562c3098b2cd6c71760d421366ea1627c",
+  "results": {
+    "old": {
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-zstd-cost-bound-20261025/memory/probe-old"
+      ],
+      "exit": 0,
+      "source_stable": true,
+      "source_sha256": "ef5497a1db44d130f8eae02ab5c8337055126866b26a765f44eb7de3eabb4984",
+      "executable_sha256": "b43fc79eb73b8c94092f208426ade8ef0876c5d88ceb67d9434f800290246fad",
+      "object_sha256": "1e07b6aff90dc6498853262c4bbe00e858b97576335fcf91f521104feeafcc14",
+      "returned": {
+        "input_bytes": 65536,
+        "output_bytes": 5078,
+        "output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+        "peak_requested": 2561185,
+        "live_after_return": 5078,
+        "alloc_attempts": 115,
+        "successful_allocations": 115,
+        "resize_attempts": 0,
+        "remap_attempts": 51,
+        "successful_resizes": 0,
+        "successful_remaps": 51,
+        "increased_bytes": 4462540,
+        "released_bytes": 4457462,
+        "tracker_size": 16528
+      },
+      "cleanup": {
+        "live_after_caller_free": 0,
+        "increased_bytes": 4462540,
+        "released_bytes": 4462540,
+        "free_calls": 115
+      },
+      "optional_small_oom": {
+        "result": "OutOfMemory",
+        "live": 0,
+        "alloc_attempts": 1
+      },
+      "request_event_count": 282,
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "scope": "Untimed Vort oldmain/candidate caller allocator verification only; no RSS collection, no C encoder, no performance conclusions",
+      "shared_build_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8"
+    },
+    "new": {
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-zstd-cost-bound-20261025/memory/probe-new"
+      ],
+      "exit": 0,
+      "source_stable": true,
+      "source_sha256": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc",
+      "executable_sha256": "72a43c6a0da58d06f4c31b410ba463aecf9aca28b38d382da2313538d4b9a03c",
+      "object_sha256": "35bbbf8a27e7ade5b67b61cc7c87d7eddcfe6a9fef5f019a139ed0944a6bc575",
+      "returned": {
+        "input_bytes": 65536,
+        "output_bytes": 5078,
+        "output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+        "peak_requested": 2561185,
+        "live_after_return": 5078,
+        "alloc_attempts": 115,
+        "successful_allocations": 115,
+        "resize_attempts": 0,
+        "remap_attempts": 51,
+        "successful_resizes": 0,
+        "successful_remaps": 51,
+        "increased_bytes": 4462540,
+        "released_bytes": 4457462,
+        "tracker_size": 16528
+      },
+      "cleanup": {
+        "live_after_caller_free": 0,
+        "increased_bytes": 4462540,
+        "released_bytes": 4462540,
+        "free_calls": 115
+      },
+      "optional_small_oom": {
+        "result": "OutOfMemory",
+        "live": 0,
+        "alloc_attempts": 1
+      },
+      "request_event_count": 282,
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "scope": "Untimed Vort oldmain/candidate caller allocator verification only; no RSS collection, no C encoder, no performance conclusions",
+      "shared_build_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8"
+    }
+  },
+  "artifact_sha256": {
+    "old.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-old": "b43fc79eb73b8c94092f208426ade8ef0876c5d88ceb67d9434f800290246fad",
+    "new-source-after.json": "068d431d176db13b8eed78948cbc60906903ba6959df22b9a976a02e0af98768",
+    "new-x2.o": "35bbbf8a27e7ade5b67b61cc7c87d7eddcfe6a9fef5f019a139ed0944a6bc575",
+    "setup.json": "6510a8f81977cf2a315fa4210cf66ee2a8271ed14369b5a05fa1bddbe790af81",
+    "old-execution.json": "d469e9c479372bb8b7a2412ae02e972706920dd25ff2c3d6ca67648b0dac8a4f",
+    "new-allocation-events.json": "bb4e3e13b919217e8df17510cba2a7f4b20c6629b7806f6839d884d39953e0f3",
+    "prepared-sha256.json": "c46f0d140c068b86b5b1c5035dcd7299c38f9494d5979a132b9cbb5a73e08ed8",
+    "new.log": "039d5ebf8033231b019699573315df977501bfa7dc54b31b182365d3b720e5bd",
+    "old-source-after.json": "772f99a3a34c04e6f3a8a4ba14194ce995ac7ecea0bd374fd7bd89314c9b9654",
+    "probe.zig": "21987580e7fa5ceaca64917f773e0f15d58c42451843d6d2783cf0435a96080d",
+    "new-execution.json": "578628a641a2030edd964d4b3883ab56d1002af6ccca57d7f9e4274bf340d0a8",
+    "build_probe.py": "817533d758ac3cf577253d6287ad6cc3ad587a695499197a5e95c70862f814f1",
+    "new-build.json": "6d71f66ecc48b1e6e5962b864c97fc06dee9b6a7815d83e450b940dedce0cb57",
+    "old-build.json": "1e9ab8497cee84cad9d1c16821aaad409bcbe3fbec24b2ebe7cb1d3ceec8e124",
+    "new-source-before.json": "068d431d176db13b8eed78948cbc60906903ba6959df22b9a976a02e0af98768",
+    "old-x2.o": "1e07b6aff90dc6498853262c4bbe00e858b97576335fcf91f521104feeafcc14",
+    "input.bin": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+    "run_resource.py": "39ea69a2d0a8a34e2a7326c3b8223fd17e4bccc35120933eda89515636956544",
+    "old-source-before.json": "772f99a3a34c04e6f3a8a4ba14194ce995ac7ecea0bd374fd7bd89314c9b9654",
+    "new.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-new": "72a43c6a0da58d06f4c31b410ba463aecf9aca28b38d382da2313538d4b9a03c",
+    "tracking_allocator.zig": "1d13b89f918a22e10fdf6cb3f49fed81e3592caffcf98be91d2f91036bfa50ba",
+    "old.log": "039d5ebf8033231b019699573315df977501bfa7dc54b31b182365d3b720e5bd",
+    "old-allocation-events.json": "bb4e3e13b919217e8df17510cba2a7f4b20c6629b7806f6839d884d39953e0f3"
+  },
+  "binaries": [
+    "/tmp/vort-zstd-cost-bound-20261025/memory/probe-old: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, with debug_info, not stripped",
+    "/tmp/vort-zstd-cost-bound-20261025/memory/probe-new: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, with debug_info, not stripped"
+  ]
+}

@@ -1,0 +1,2540 @@
+[
+  {
+    "phase": "xml",
+    "index": 0,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 134,
+    "success": true,
+    "live": 134
+  },
+  {
+    "phase": "xml",
+    "index": 1,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 204,
+    "success": true,
+    "live": 338
+  },
+  {
+    "phase": "xml",
+    "index": 2,
+    "op": "remap",
+    "old_bytes": 204,
+    "requested_bytes": 630,
+    "success": true,
+    "live": 764
+  },
+  {
+    "phase": "xml",
+    "index": 3,
+    "op": "remap",
+    "old_bytes": 630,
+    "requested_bytes": 1248,
+    "success": true,
+    "live": 1382
+  },
+  {
+    "phase": "xml",
+    "index": 4,
+    "op": "remap",
+    "old_bytes": 1248,
+    "requested_bytes": 2202,
+    "success": true,
+    "live": 2336
+  },
+  {
+    "phase": "xml",
+    "index": 5,
+    "op": "remap",
+    "old_bytes": 2202,
+    "requested_bytes": 3546,
+    "success": true,
+    "live": 3680
+  },
+  {
+    "phase": "xml",
+    "index": 6,
+    "op": "remap",
+    "old_bytes": 3546,
+    "requested_bytes": 5460,
+    "success": true,
+    "live": 5594
+  },
+  {
+    "phase": "xml",
+    "index": 7,
+    "op": "remap",
+    "old_bytes": 5460,
+    "requested_bytes": 8322,
+    "success": true,
+    "live": 8456
+  },
+  {
+    "phase": "xml",
+    "index": 8,
+    "op": "remap",
+    "old_bytes": 8322,
+    "requested_bytes": 12618,
+    "success": true,
+    "live": 12752
+  },
+  {
+    "phase": "xml",
+    "index": 9,
+    "op": "remap",
+    "old_bytes": 12618,
+    "requested_bytes": 19062,
+    "success": true,
+    "live": 19196
+  },
+  {
+    "phase": "xml",
+    "index": 10,
+    "op": "remap",
+    "old_bytes": 19062,
+    "requested_bytes": 28728,
+    "success": true,
+    "live": 28862
+  },
+  {
+    "phase": "xml",
+    "index": 11,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 81488,
+    "success": true,
+    "live": 110350
+  },
+  {
+    "phase": "xml",
+    "index": 12,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 4541,
+    "success": true,
+    "live": 114891
+  },
+  {
+    "phase": "xml",
+    "index": 13,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 115020
+  },
+  {
+    "phase": "xml",
+    "index": 14,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 115149
+  },
+  {
+    "phase": "xml",
+    "index": 15,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 115346
+  },
+  {
+    "phase": "xml",
+    "index": 16,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 115475
+  },
+  {
+    "phase": "xml",
+    "index": 17,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 115346
+  },
+  {
+    "phase": "xml",
+    "index": 18,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 115149
+  },
+  {
+    "phase": "xml",
+    "index": 19,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 115347
+  },
+  {
+    "phase": "xml",
+    "index": 20,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 115218
+  },
+  {
+    "phase": "xml",
+    "index": 21,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 115089
+  },
+  {
+    "phase": "xml",
+    "index": 22,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1647,
+    "success": true,
+    "live": 116736
+  },
+  {
+    "phase": "xml",
+    "index": 23,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1647,
+    "success": true,
+    "live": 118383
+  },
+  {
+    "phase": "xml",
+    "index": 24,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1647,
+    "success": true,
+    "live": 120030
+  },
+  {
+    "phase": "xml",
+    "index": 25,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1643,
+    "success": true,
+    "live": 121673
+  },
+  {
+    "phase": "xml",
+    "index": 26,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 121802
+  },
+  {
+    "phase": "xml",
+    "index": 27,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 1073,
+    "success": true,
+    "live": 122746
+  },
+  {
+    "phase": "xml",
+    "index": 28,
+    "op": "remap",
+    "old_bytes": 1073,
+    "requested_bytes": 2409,
+    "success": true,
+    "live": 124082
+  },
+  {
+    "phase": "xml",
+    "index": 29,
+    "op": "free",
+    "old_bytes": 1647,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 122435
+  },
+  {
+    "phase": "xml",
+    "index": 30,
+    "op": "free",
+    "old_bytes": 1647,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 120788
+  },
+  {
+    "phase": "xml",
+    "index": 31,
+    "op": "free",
+    "old_bytes": 1647,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 119141
+  },
+  {
+    "phase": "xml",
+    "index": 32,
+    "op": "free",
+    "old_bytes": 1643,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 117498
+  },
+  {
+    "phase": "xml",
+    "index": 33,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 3074,
+    "success": true,
+    "live": 120572
+  },
+  {
+    "phase": "xml",
+    "index": 34,
+    "op": "free",
+    "old_bytes": 2409,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 118163
+  },
+  {
+    "phase": "xml",
+    "index": 35,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 117965
+  },
+  {
+    "phase": "xml",
+    "index": 36,
+    "op": "free",
+    "old_bytes": 4541,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 113424
+  },
+  {
+    "phase": "xml",
+    "index": 37,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 121179
+  },
+  {
+    "phase": "xml",
+    "index": 38,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 20464,
+    "success": true,
+    "live": 141643
+  },
+  {
+    "phase": "xml",
+    "index": 39,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 149398
+  },
+  {
+    "phase": "xml",
+    "index": 40,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 157153
+  },
+  {
+    "phase": "xml",
+    "index": 41,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 164908
+  },
+  {
+    "phase": "xml",
+    "index": 42,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 172663
+  },
+  {
+    "phase": "xml",
+    "index": 43,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7755,
+    "success": true,
+    "live": 180418
+  },
+  {
+    "phase": "xml",
+    "index": 44,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 20464,
+    "success": true,
+    "live": 200882
+  },
+  {
+    "phase": "xml",
+    "index": 45,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 3074,
+    "success": true,
+    "live": 203956
+  },
+  {
+    "phase": "xml",
+    "index": 46,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 204085
+  },
+  {
+    "phase": "xml",
+    "index": 47,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 323,
+    "success": true,
+    "live": 204279
+  },
+  {
+    "phase": "xml",
+    "index": 48,
+    "op": "remap",
+    "old_bytes": 323,
+    "requested_bytes": 614,
+    "success": true,
+    "live": 204570
+  },
+  {
+    "phase": "xml",
+    "index": 49,
+    "op": "remap",
+    "old_bytes": 614,
+    "requested_bytes": 1050,
+    "success": true,
+    "live": 205006
+  },
+  {
+    "phase": "xml",
+    "index": 50,
+    "op": "remap",
+    "old_bytes": 1050,
+    "requested_bytes": 1704,
+    "success": true,
+    "live": 205660
+  },
+  {
+    "phase": "xml",
+    "index": 51,
+    "op": "remap",
+    "old_bytes": 1704,
+    "requested_bytes": 2685,
+    "success": true,
+    "live": 206641
+  },
+  {
+    "phase": "xml",
+    "index": 52,
+    "op": "remap",
+    "old_bytes": 2685,
+    "requested_bytes": 4157,
+    "success": true,
+    "live": 208113
+  },
+  {
+    "phase": "xml",
+    "index": 53,
+    "op": "remap",
+    "old_bytes": 4157,
+    "requested_bytes": 6365,
+    "success": true,
+    "live": 210321
+  },
+  {
+    "phase": "xml",
+    "index": 54,
+    "op": "remap",
+    "old_bytes": 3074,
+    "requested_bytes": 9578,
+    "success": true,
+    "live": 216825
+  },
+  {
+    "phase": "xml",
+    "index": 55,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 132,
+    "success": true,
+    "live": 216957
+  },
+  {
+    "phase": "xml",
+    "index": 56,
+    "op": "remap",
+    "old_bytes": 132,
+    "requested_bytes": 9582,
+    "success": true,
+    "live": 226407
+  },
+  {
+    "phase": "xml",
+    "index": 57,
+    "op": "free",
+    "old_bytes": 28728,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 197679
+  },
+  {
+    "phase": "xml",
+    "index": 58,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 131072,
+    "success": true,
+    "live": 328751
+  },
+  {
+    "phase": "xml",
+    "index": 59,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 262144,
+    "success": true,
+    "live": 590895
+  },
+  {
+    "phase": "xml",
+    "index": 60,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 24576,
+    "success": true,
+    "live": 615471
+  },
+  {
+    "phase": "xml",
+    "index": 61,
+    "op": "remap",
+    "old_bytes": 24576,
+    "requested_bytes": 22086,
+    "success": true,
+    "live": 612981
+  },
+  {
+    "phase": "xml",
+    "index": 62,
+    "op": "free",
+    "old_bytes": 262144,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 350837
+  },
+  {
+    "phase": "xml",
+    "index": 63,
+    "op": "free",
+    "old_bytes": 131072,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 219765
+  },
+  {
+    "phase": "xml",
+    "index": 64,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 3225,
+    "success": true,
+    "live": 222990
+  },
+  {
+    "phase": "xml",
+    "index": 65,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 223119
+  },
+  {
+    "phase": "xml",
+    "index": 66,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 223248
+  },
+  {
+    "phase": "xml",
+    "index": 67,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 223446
+  },
+  {
+    "phase": "xml",
+    "index": 68,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 223575
+  },
+  {
+    "phase": "xml",
+    "index": 69,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 223446
+  },
+  {
+    "phase": "xml",
+    "index": 70,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 223248
+  },
+  {
+    "phase": "xml",
+    "index": 71,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 200,
+    "success": true,
+    "live": 223448
+  },
+  {
+    "phase": "xml",
+    "index": 72,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 223319
+  },
+  {
+    "phase": "xml",
+    "index": 73,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 223190
+  },
+  {
+    "phase": "xml",
+    "index": 74,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1194,
+    "success": true,
+    "live": 224384
+  },
+  {
+    "phase": "xml",
+    "index": 75,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1194,
+    "success": true,
+    "live": 225578
+  },
+  {
+    "phase": "xml",
+    "index": 76,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1194,
+    "success": true,
+    "live": 226772
+  },
+  {
+    "phase": "xml",
+    "index": 77,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1188,
+    "success": true,
+    "live": 227960
+  },
+  {
+    "phase": "xml",
+    "index": 78,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 228089
+  },
+  {
+    "phase": "xml",
+    "index": 79,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 830,
+    "success": true,
+    "live": 228790
+  },
+  {
+    "phase": "xml",
+    "index": 80,
+    "op": "remap",
+    "old_bytes": 830,
+    "requested_bytes": 1802,
+    "success": true,
+    "live": 229762
+  },
+  {
+    "phase": "xml",
+    "index": 81,
+    "op": "free",
+    "old_bytes": 1194,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 228568
+  },
+  {
+    "phase": "xml",
+    "index": 82,
+    "op": "free",
+    "old_bytes": 1194,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 227374
+  },
+  {
+    "phase": "xml",
+    "index": 83,
+    "op": "free",
+    "old_bytes": 1194,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 226180
+  },
+  {
+    "phase": "xml",
+    "index": 84,
+    "op": "free",
+    "old_bytes": 1188,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 224992
+  },
+  {
+    "phase": "xml",
+    "index": 85,
+    "op": "free",
+    "old_bytes": 1802,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 223190
+  },
+  {
+    "phase": "xml",
+    "index": 86,
+    "op": "free",
+    "old_bytes": 200,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 222990
+  },
+  {
+    "phase": "xml",
+    "index": 87,
+    "op": "free",
+    "old_bytes": 3225,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 219765
+  },
+  {
+    "phase": "xml",
+    "index": 88,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 132,
+    "success": true,
+    "live": 219897
+  },
+  {
+    "phase": "xml",
+    "index": 89,
+    "op": "remap",
+    "old_bytes": 132,
+    "requested_bytes": 9228,
+    "success": true,
+    "live": 228993
+  },
+  {
+    "phase": "xml",
+    "index": 90,
+    "op": "free",
+    "old_bytes": 22086,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 206907
+  },
+  {
+    "phase": "xml",
+    "index": 91,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 9228,
+    "success": true,
+    "live": 216135
+  },
+  {
+    "phase": "xml",
+    "index": 92,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 131072,
+    "success": true,
+    "live": 347207
+  },
+  {
+    "phase": "xml",
+    "index": 93,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 262144,
+    "success": true,
+    "live": 609351
+  },
+  {
+    "phase": "xml",
+    "index": 94,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 24576,
+    "success": true,
+    "live": 633927
+  },
+  {
+    "phase": "xml",
+    "index": 95,
+    "op": "remap",
+    "old_bytes": 24576,
+    "requested_bytes": 21000,
+    "success": true,
+    "live": 630351
+  },
+  {
+    "phase": "xml",
+    "index": 96,
+    "op": "free",
+    "old_bytes": 262144,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 368207
+  },
+  {
+    "phase": "xml",
+    "index": 97,
+    "op": "free",
+    "old_bytes": 131072,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 237135
+  },
+  {
+    "phase": "xml",
+    "index": 98,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 3557,
+    "success": true,
+    "live": 240692
+  },
+  {
+    "phase": "xml",
+    "index": 99,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 240821
+  },
+  {
+    "phase": "xml",
+    "index": 100,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 240950
+  },
+  {
+    "phase": "xml",
+    "index": 101,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 241147
+  },
+  {
+    "phase": "xml",
+    "index": 102,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 241276
+  },
+  {
+    "phase": "xml",
+    "index": 103,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 241147
+  },
+  {
+    "phase": "xml",
+    "index": 104,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 240950
+  },
+  {
+    "phase": "xml",
+    "index": 105,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 241148
+  },
+  {
+    "phase": "xml",
+    "index": 106,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 241019
+  },
+  {
+    "phase": "xml",
+    "index": 107,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 240890
+  },
+  {
+    "phase": "xml",
+    "index": 108,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1308,
+    "success": true,
+    "live": 242198
+  },
+  {
+    "phase": "xml",
+    "index": 109,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1308,
+    "success": true,
+    "live": 243506
+  },
+  {
+    "phase": "xml",
+    "index": 110,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1308,
+    "success": true,
+    "live": 244814
+  },
+  {
+    "phase": "xml",
+    "index": 111,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1304,
+    "success": true,
+    "live": 246118
+  },
+  {
+    "phase": "xml",
+    "index": 112,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 246247
+  },
+  {
+    "phase": "xml",
+    "index": 113,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 903,
+    "success": true,
+    "live": 247021
+  },
+  {
+    "phase": "xml",
+    "index": 114,
+    "op": "remap",
+    "old_bytes": 903,
+    "requested_bytes": 1922,
+    "success": true,
+    "live": 248040
+  },
+  {
+    "phase": "xml",
+    "index": 115,
+    "op": "free",
+    "old_bytes": 1308,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 246732
+  },
+  {
+    "phase": "xml",
+    "index": 116,
+    "op": "free",
+    "old_bytes": 1308,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 245424
+  },
+  {
+    "phase": "xml",
+    "index": 117,
+    "op": "free",
+    "old_bytes": 1308,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 244116
+  },
+  {
+    "phase": "xml",
+    "index": 118,
+    "op": "free",
+    "old_bytes": 1304,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 242812
+  },
+  {
+    "phase": "xml",
+    "index": 119,
+    "op": "free",
+    "old_bytes": 1922,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 240890
+  },
+  {
+    "phase": "xml",
+    "index": 120,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 240692
+  },
+  {
+    "phase": "xml",
+    "index": 121,
+    "op": "free",
+    "old_bytes": 3557,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 237135
+  },
+  {
+    "phase": "xml",
+    "index": 122,
+    "op": "free",
+    "old_bytes": 21000,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 216135
+  },
+  {
+    "phase": "xml",
+    "index": 123,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 384,
+    "success": true,
+    "live": 216519
+  },
+  {
+    "phase": "xml",
+    "index": 124,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 786568,
+    "success": true,
+    "live": 1003087
+  },
+  {
+    "phase": "xml",
+    "index": 125,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 589950,
+    "success": true,
+    "live": 1593037
+  },
+  {
+    "phase": "xml",
+    "index": 126,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 196736,
+    "success": true,
+    "live": 1789773
+  },
+  {
+    "phase": "xml",
+    "index": 127,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 393344,
+    "success": true,
+    "live": 2183117
+  },
+  {
+    "phase": "xml",
+    "index": 128,
+    "op": "remap",
+    "old_bytes": 384,
+    "requested_bytes": 708,
+    "success": true,
+    "live": 2183441
+  },
+  {
+    "phase": "xml",
+    "index": 129,
+    "op": "remap",
+    "old_bytes": 708,
+    "requested_bytes": 1194,
+    "success": true,
+    "live": 2183927
+  },
+  {
+    "phase": "xml",
+    "index": 130,
+    "op": "remap",
+    "old_bytes": 1194,
+    "requested_bytes": 1926,
+    "success": true,
+    "live": 2184659
+  },
+  {
+    "phase": "xml",
+    "index": 131,
+    "op": "remap",
+    "old_bytes": 1926,
+    "requested_bytes": 3024,
+    "success": true,
+    "live": 2185757
+  },
+  {
+    "phase": "xml",
+    "index": 132,
+    "op": "remap",
+    "old_bytes": 3024,
+    "requested_bytes": 4668,
+    "success": true,
+    "live": 2187401
+  },
+  {
+    "phase": "xml",
+    "index": 133,
+    "op": "remap",
+    "old_bytes": 4668,
+    "requested_bytes": 7134,
+    "success": true,
+    "live": 2189867
+  },
+  {
+    "phase": "xml",
+    "index": 134,
+    "op": "remap",
+    "old_bytes": 7134,
+    "requested_bytes": 10836,
+    "success": true,
+    "live": 2193569
+  },
+  {
+    "phase": "xml",
+    "index": 135,
+    "op": "remap",
+    "old_bytes": 10836,
+    "requested_bytes": 16386,
+    "success": true,
+    "live": 2199119
+  },
+  {
+    "phase": "xml",
+    "index": 136,
+    "op": "remap",
+    "old_bytes": 16386,
+    "requested_bytes": 24714,
+    "success": true,
+    "live": 2207447
+  },
+  {
+    "phase": "xml",
+    "index": 137,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 3588,
+    "success": true,
+    "live": 2211035
+  },
+  {
+    "phase": "xml",
+    "index": 138,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2211164
+  },
+  {
+    "phase": "xml",
+    "index": 139,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2211293
+  },
+  {
+    "phase": "xml",
+    "index": 140,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 195,
+    "success": true,
+    "live": 2211488
+  },
+  {
+    "phase": "xml",
+    "index": 141,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2211617
+  },
+  {
+    "phase": "xml",
+    "index": 142,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211488
+  },
+  {
+    "phase": "xml",
+    "index": 143,
+    "op": "free",
+    "old_bytes": 195,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211293
+  },
+  {
+    "phase": "xml",
+    "index": 144,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 2211490
+  },
+  {
+    "phase": "xml",
+    "index": 145,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211361
+  },
+  {
+    "phase": "xml",
+    "index": 146,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211232
+  },
+  {
+    "phase": "xml",
+    "index": 147,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1319,
+    "success": true,
+    "live": 2212551
+  },
+  {
+    "phase": "xml",
+    "index": 148,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1319,
+    "success": true,
+    "live": 2213870
+  },
+  {
+    "phase": "xml",
+    "index": 149,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1319,
+    "success": true,
+    "live": 2215189
+  },
+  {
+    "phase": "xml",
+    "index": 150,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 1317,
+    "success": true,
+    "live": 2216506
+  },
+  {
+    "phase": "xml",
+    "index": 151,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2216635
+  },
+  {
+    "phase": "xml",
+    "index": 152,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 915,
+    "success": true,
+    "live": 2217421
+  },
+  {
+    "phase": "xml",
+    "index": 153,
+    "op": "remap",
+    "old_bytes": 915,
+    "requested_bytes": 1925,
+    "success": true,
+    "live": 2218431
+  },
+  {
+    "phase": "xml",
+    "index": 154,
+    "op": "free",
+    "old_bytes": 1319,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2217112
+  },
+  {
+    "phase": "xml",
+    "index": 155,
+    "op": "free",
+    "old_bytes": 1319,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2215793
+  },
+  {
+    "phase": "xml",
+    "index": 156,
+    "op": "free",
+    "old_bytes": 1319,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2214474
+  },
+  {
+    "phase": "xml",
+    "index": 157,
+    "op": "free",
+    "old_bytes": 1317,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2213157
+  },
+  {
+    "phase": "xml",
+    "index": 158,
+    "op": "free",
+    "old_bytes": 1925,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211232
+  },
+  {
+    "phase": "xml",
+    "index": 159,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2211035
+  },
+  {
+    "phase": "xml",
+    "index": 160,
+    "op": "free",
+    "old_bytes": 3588,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2207447
+  },
+  {
+    "phase": "xml",
+    "index": 161,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 98277,
+    "success": true,
+    "live": 2305724
+  },
+  {
+    "phase": "xml",
+    "index": 162,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2305853
+  },
+  {
+    "phase": "xml",
+    "index": 163,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2305982
+  },
+  {
+    "phase": "xml",
+    "index": 164,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 2306179
+  },
+  {
+    "phase": "xml",
+    "index": 165,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2306308
+  },
+  {
+    "phase": "xml",
+    "index": 166,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2306179
+  },
+  {
+    "phase": "xml",
+    "index": 167,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2305982
+  },
+  {
+    "phase": "xml",
+    "index": 168,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 2306180
+  },
+  {
+    "phase": "xml",
+    "index": 169,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2306051
+  },
+  {
+    "phase": "xml",
+    "index": 170,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2305922
+  },
+  {
+    "phase": "xml",
+    "index": 171,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33869,
+    "success": true,
+    "live": 2339791
+  },
+  {
+    "phase": "xml",
+    "index": 172,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33869,
+    "success": true,
+    "live": 2373660
+  },
+  {
+    "phase": "xml",
+    "index": 173,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33869,
+    "success": true,
+    "live": 2407529
+  },
+  {
+    "phase": "xml",
+    "index": 174,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33863,
+    "success": true,
+    "live": 2441392
+  },
+  {
+    "phase": "xml",
+    "index": 175,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2441521
+  },
+  {
+    "phase": "xml",
+    "index": 176,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 16451,
+    "success": true,
+    "live": 2457843
+  },
+  {
+    "phase": "xml",
+    "index": 177,
+    "op": "remap",
+    "old_bytes": 16451,
+    "requested_bytes": 32543,
+    "success": true,
+    "live": 2473935
+  },
+  {
+    "phase": "xml",
+    "index": 178,
+    "op": "remap",
+    "old_bytes": 32543,
+    "requested_bytes": 64769,
+    "success": true,
+    "live": 2506161
+  },
+  {
+    "phase": "xml",
+    "index": 179,
+    "op": "free",
+    "old_bytes": 33869,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2472292
+  },
+  {
+    "phase": "xml",
+    "index": 180,
+    "op": "free",
+    "old_bytes": 33869,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2438423
+  },
+  {
+    "phase": "xml",
+    "index": 181,
+    "op": "free",
+    "old_bytes": 33869,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2404554
+  },
+  {
+    "phase": "xml",
+    "index": 182,
+    "op": "free",
+    "old_bytes": 33863,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2370691
+  },
+  {
+    "phase": "xml",
+    "index": 183,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 64769,
+    "success": true,
+    "live": 2435460
+  },
+  {
+    "phase": "xml",
+    "index": 184,
+    "op": "free",
+    "old_bytes": 64769,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2370691
+  },
+  {
+    "phase": "xml",
+    "index": 185,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2370493
+  },
+  {
+    "phase": "xml",
+    "index": 186,
+    "op": "free",
+    "old_bytes": 98277,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2272216
+  },
+  {
+    "phase": "xml",
+    "index": 187,
+    "op": "remap",
+    "old_bytes": 9228,
+    "requested_bytes": 64785,
+    "success": true,
+    "live": 2327773
+  },
+  {
+    "phase": "xml",
+    "index": 188,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 64769,
+    "success": true,
+    "live": 2392542
+  },
+  {
+    "phase": "xml",
+    "index": 189,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2392671
+  },
+  {
+    "phase": "xml",
+    "index": 190,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2392542
+  },
+  {
+    "phase": "xml",
+    "index": 191,
+    "op": "free",
+    "old_bytes": 64769,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2327773
+  },
+  {
+    "phase": "xml",
+    "index": 192,
+    "op": "free",
+    "old_bytes": 64769,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2263004
+  },
+  {
+    "phase": "xml",
+    "index": 193,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 94979,
+    "success": true,
+    "live": 2357983
+  },
+  {
+    "phase": "xml",
+    "index": 194,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2358112
+  },
+  {
+    "phase": "xml",
+    "index": 195,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2358241
+  },
+  {
+    "phase": "xml",
+    "index": 196,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 2358438
+  },
+  {
+    "phase": "xml",
+    "index": 197,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2358567
+  },
+  {
+    "phase": "xml",
+    "index": 198,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2358438
+  },
+  {
+    "phase": "xml",
+    "index": 199,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2358241
+  },
+  {
+    "phase": "xml",
+    "index": 200,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 2358439
+  },
+  {
+    "phase": "xml",
+    "index": 201,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2358310
+  },
+  {
+    "phase": "xml",
+    "index": 202,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2358181
+  },
+  {
+    "phase": "xml",
+    "index": 203,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 32735,
+    "success": true,
+    "live": 2390916
+  },
+  {
+    "phase": "xml",
+    "index": 204,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 32735,
+    "success": true,
+    "live": 2423651
+  },
+  {
+    "phase": "xml",
+    "index": 205,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 32735,
+    "success": true,
+    "live": 2456386
+  },
+  {
+    "phase": "xml",
+    "index": 206,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 32730,
+    "success": true,
+    "live": 2489116
+  },
+  {
+    "phase": "xml",
+    "index": 207,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2489245
+  },
+  {
+    "phase": "xml",
+    "index": 208,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 15947,
+    "success": true,
+    "live": 2505063
+  },
+  {
+    "phase": "xml",
+    "index": 209,
+    "op": "remap",
+    "old_bytes": 15947,
+    "requested_bytes": 31478,
+    "success": true,
+    "live": 2520594
+  },
+  {
+    "phase": "xml",
+    "index": 210,
+    "op": "remap",
+    "old_bytes": 31478,
+    "requested_bytes": 62607,
+    "success": true,
+    "live": 2551723
+  },
+  {
+    "phase": "xml",
+    "index": 211,
+    "op": "free",
+    "old_bytes": 32735,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2518988
+  },
+  {
+    "phase": "xml",
+    "index": 212,
+    "op": "free",
+    "old_bytes": 32735,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2486253
+  },
+  {
+    "phase": "xml",
+    "index": 213,
+    "op": "free",
+    "old_bytes": 32735,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2453518
+  },
+  {
+    "phase": "xml",
+    "index": 214,
+    "op": "free",
+    "old_bytes": 32730,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2420788
+  },
+  {
+    "phase": "xml",
+    "index": 215,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 62607,
+    "success": true,
+    "live": 2483395
+  },
+  {
+    "phase": "xml",
+    "index": 216,
+    "op": "free",
+    "old_bytes": 62607,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2420788
+  },
+  {
+    "phase": "xml",
+    "index": 217,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2420590
+  },
+  {
+    "phase": "xml",
+    "index": 218,
+    "op": "free",
+    "old_bytes": 94979,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2325611
+  },
+  {
+    "phase": "xml",
+    "index": 219,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 62607,
+    "success": true,
+    "live": 2388218
+  },
+  {
+    "phase": "xml",
+    "index": 220,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2388347
+  },
+  {
+    "phase": "xml",
+    "index": 221,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 323,
+    "success": true,
+    "live": 2388541
+  },
+  {
+    "phase": "xml",
+    "index": 222,
+    "op": "free",
+    "old_bytes": 323,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2388218
+  },
+  {
+    "phase": "xml",
+    "index": 223,
+    "op": "free",
+    "old_bytes": 62607,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2325611
+  },
+  {
+    "phase": "xml",
+    "index": 224,
+    "op": "free",
+    "old_bytes": 62607,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2263004
+  },
+  {
+    "phase": "xml",
+    "index": 225,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 98121,
+    "success": true,
+    "live": 2361125
+  },
+  {
+    "phase": "xml",
+    "index": 226,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2361254
+  },
+  {
+    "phase": "xml",
+    "index": 227,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2361383
+  },
+  {
+    "phase": "xml",
+    "index": 228,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 197,
+    "success": true,
+    "live": 2361580
+  },
+  {
+    "phase": "xml",
+    "index": 229,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2361709
+  },
+  {
+    "phase": "xml",
+    "index": 230,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2361580
+  },
+  {
+    "phase": "xml",
+    "index": 231,
+    "op": "free",
+    "old_bytes": 197,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2361383
+  },
+  {
+    "phase": "xml",
+    "index": 232,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 198,
+    "success": true,
+    "live": 2361581
+  },
+  {
+    "phase": "xml",
+    "index": 233,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2361452
+  },
+  {
+    "phase": "xml",
+    "index": 234,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2361323
+  },
+  {
+    "phase": "xml",
+    "index": 235,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33815,
+    "success": true,
+    "live": 2395138
+  },
+  {
+    "phase": "xml",
+    "index": 236,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33815,
+    "success": true,
+    "live": 2428953
+  },
+  {
+    "phase": "xml",
+    "index": 237,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33815,
+    "success": true,
+    "live": 2462768
+  },
+  {
+    "phase": "xml",
+    "index": 238,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 33809,
+    "success": true,
+    "live": 2496577
+  },
+  {
+    "phase": "xml",
+    "index": 239,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2496706
+  },
+  {
+    "phase": "xml",
+    "index": 240,
+    "op": "remap",
+    "old_bytes": 129,
+    "requested_bytes": 16409,
+    "success": true,
+    "live": 2512986
+  },
+  {
+    "phase": "xml",
+    "index": 241,
+    "op": "remap",
+    "old_bytes": 16409,
+    "requested_bytes": 32466,
+    "success": true,
+    "live": 2529043
+  },
+  {
+    "phase": "xml",
+    "index": 242,
+    "op": "remap",
+    "old_bytes": 32466,
+    "requested_bytes": 64608,
+    "success": true,
+    "live": 2561185
+  },
+  {
+    "phase": "xml",
+    "index": 243,
+    "op": "free",
+    "old_bytes": 33815,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2527370
+  },
+  {
+    "phase": "xml",
+    "index": 244,
+    "op": "free",
+    "old_bytes": 33815,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2493555
+  },
+  {
+    "phase": "xml",
+    "index": 245,
+    "op": "free",
+    "old_bytes": 33815,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2459740
+  },
+  {
+    "phase": "xml",
+    "index": 246,
+    "op": "free",
+    "old_bytes": 33809,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2425931
+  },
+  {
+    "phase": "xml",
+    "index": 247,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 64608,
+    "success": true,
+    "live": 2490539
+  },
+  {
+    "phase": "xml",
+    "index": 248,
+    "op": "free",
+    "old_bytes": 64608,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2425931
+  },
+  {
+    "phase": "xml",
+    "index": 249,
+    "op": "free",
+    "old_bytes": 198,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2425733
+  },
+  {
+    "phase": "xml",
+    "index": 250,
+    "op": "free",
+    "old_bytes": 98121,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2327612
+  },
+  {
+    "phase": "xml",
+    "index": 251,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 64608,
+    "success": true,
+    "live": 2392220
+  },
+  {
+    "phase": "xml",
+    "index": 252,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 129,
+    "success": true,
+    "live": 2392349
+  },
+  {
+    "phase": "xml",
+    "index": 253,
+    "op": "free",
+    "old_bytes": 129,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2392220
+  },
+  {
+    "phase": "xml",
+    "index": 254,
+    "op": "free",
+    "old_bytes": 64608,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2327612
+  },
+  {
+    "phase": "xml",
+    "index": 255,
+    "op": "free",
+    "old_bytes": 64608,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 2263004
+  },
+  {
+    "phase": "xml",
+    "index": 256,
+    "op": "free",
+    "old_bytes": 786568,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 1476436
+  },
+  {
+    "phase": "xml",
+    "index": 257,
+    "op": "free",
+    "old_bytes": 589950,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 886486
+  },
+  {
+    "phase": "xml",
+    "index": 258,
+    "op": "free",
+    "old_bytes": 196736,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 689750
+  },
+  {
+    "phase": "xml",
+    "index": 259,
+    "op": "free",
+    "old_bytes": 393344,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 296406
+  },
+  {
+    "phase": "xml",
+    "index": 260,
+    "op": "free",
+    "old_bytes": 24714,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 271692
+  },
+  {
+    "phase": "xml",
+    "index": 261,
+    "op": "free",
+    "old_bytes": 9228,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 262464
+  },
+  {
+    "phase": "xml",
+    "index": 262,
+    "op": "free",
+    "old_bytes": 64785,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 197679
+  },
+  {
+    "phase": "xml",
+    "index": 263,
+    "op": "remap",
+    "old_bytes": 134,
+    "requested_bytes": 7745,
+    "success": true,
+    "live": 205290
+  },
+  {
+    "phase": "xml",
+    "index": 264,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 7745,
+    "success": true,
+    "live": 213035
+  },
+  {
+    "phase": "xml",
+    "index": 265,
+    "op": "remap",
+    "old_bytes": 7745,
+    "requested_bytes": 5078,
+    "success": true,
+    "live": 210368
+  },
+  {
+    "phase": "xml",
+    "index": 266,
+    "op": "free",
+    "old_bytes": 9582,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 200786
+  },
+  {
+    "phase": "xml",
+    "index": 267,
+    "op": "free",
+    "old_bytes": 6365,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 194421
+  },
+  {
+    "phase": "xml",
+    "index": 268,
+    "op": "free",
+    "old_bytes": 9578,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 184843
+  },
+  {
+    "phase": "xml",
+    "index": 269,
+    "op": "free",
+    "old_bytes": 3074,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 181769
+  },
+  {
+    "phase": "xml",
+    "index": 270,
+    "op": "free",
+    "old_bytes": 20464,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 161305
+  },
+  {
+    "phase": "xml",
+    "index": 271,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 153550
+  },
+  {
+    "phase": "xml",
+    "index": 272,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 145795
+  },
+  {
+    "phase": "xml",
+    "index": 273,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 138040
+  },
+  {
+    "phase": "xml",
+    "index": 274,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 130285
+  },
+  {
+    "phase": "xml",
+    "index": 275,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 122530
+  },
+  {
+    "phase": "xml",
+    "index": 276,
+    "op": "free",
+    "old_bytes": 20464,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 102066
+  },
+  {
+    "phase": "xml",
+    "index": 277,
+    "op": "free",
+    "old_bytes": 7755,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 94311
+  },
+  {
+    "phase": "xml",
+    "index": 278,
+    "op": "free",
+    "old_bytes": 81488,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 12823
+  },
+  {
+    "phase": "xml",
+    "index": 279,
+    "op": "free",
+    "old_bytes": 7745,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 5078
+  },
+  {
+    "phase": "xml",
+    "index": 280,
+    "op": "free",
+    "old_bytes": 5078,
+    "requested_bytes": 0,
+    "success": true,
+    "live": 0
+  },
+  {
+    "phase": "small_oom",
+    "index": 0,
+    "op": "alloc",
+    "old_bytes": 0,
+    "requested_bytes": 134,
+    "success": false,
+    "live": 0
+  }
+]

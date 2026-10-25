@@ -1,0 +1,23 @@
+{
+  "command": [
+    "python3",
+    "tools/codec_bench/sample_gate.py",
+    "--samples-json",
+    "/tmp/vort-zstd-cost-bound-20261025/current14/samples.json",
+    "--manifest",
+    "/tmp/vort-zstd-cost-bound-20261025/input-manifest.json",
+    "--csv",
+    "/tmp/vort-zstd-cost-bound-20261025/current14/samples.csv",
+    "--executable",
+    "/home/passchaos/project-z/vort-zstd-cost-bound/.zig-cache/o/79d0082657fb22c06fb5b1239315cddf/vort-zstd-encode-bench",
+    "--require-explicit-references"
+  ],
+  "exit_code": 0,
+  "output": {
+    "codec": "zstd",
+    "input_identity": "verified frozen length and SHA-256",
+    "reference_scope": "requested files only; loaded dependency identities unverified",
+    "rounds": 70,
+    "rows": 14
+  }
+}

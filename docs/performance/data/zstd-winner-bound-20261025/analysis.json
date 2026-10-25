@@ -1,0 +1,255 @@
+{
+  "baseline_head": "27dcca45",
+  "code_head": "e54066d5",
+  "rows": [
+    {
+      "label": "silesia-dickens",
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "median_ns": 162624051,
+      "reference_median_ns": 316255,
+      "throughput_over_reference": 0.0019447000493180433,
+      "vort_bytes": 25898,
+      "reference_bytes": 27128,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        162406850,
+        162206231,
+        162624051,
+        171285601,
+        164824422
+      ]
+    },
+    {
+      "label": "silesia-mozilla",
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "median_ns": 15226701,
+      "reference_median_ns": 240817,
+      "throughput_over_reference": 0.01581544157201222,
+      "vort_bytes": 17118,
+      "reference_bytes": 15921,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        15424279,
+        14967046,
+        14678231,
+        15312607,
+        15226701
+      ]
+    },
+    {
+      "label": "silesia-mr",
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "median_ns": 971940792,
+      "reference_median_ns": 269758,
+      "throughput_over_reference": 0.0002775457128874163,
+      "vort_bytes": 16806,
+      "reference_bytes": 17527,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        978452198,
+        968751548,
+        976238725,
+        969276361,
+        971940792
+      ]
+    },
+    {
+      "label": "silesia-nci",
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "median_ns": 35186346,
+      "reference_median_ns": 80732,
+      "throughput_over_reference": 0.002294412724754085,
+      "vort_bytes": 4728,
+      "reference_bytes": 5230,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        35447263,
+        34654980,
+        36234538,
+        35186346,
+        35028768
+      ]
+    },
+    {
+      "label": "silesia-ooffice",
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "median_ns": 16034536,
+      "reference_median_ns": 264003,
+      "throughput_over_reference": 0.016464648556091675,
+      "vort_bytes": 32276,
+      "reference_bytes": 34220,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        16214054,
+        16185439,
+        15781911,
+        16034536,
+        15828964
+      ]
+    },
+    {
+      "label": "silesia-osdb",
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "median_ns": 11275828,
+      "reference_median_ns": 218516,
+      "throughput_over_reference": 0.019379153353527565,
+      "vort_bytes": 26901,
+      "reference_bytes": 27292,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        11644207,
+        11275828,
+        11128570,
+        11335500,
+        11260829
+      ]
+    },
+    {
+      "label": "silesia-reymont",
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "median_ns": 275050604,
+      "reference_median_ns": 259651,
+      "throughput_over_reference": 0.0009440117426537264,
+      "vort_bytes": 18720,
+      "reference_bytes": 20511,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        275192008,
+        275050604,
+        272238008,
+        273794951,
+        275740832
+      ]
+    },
+    {
+      "label": "silesia-samba",
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "median_ns": 17265081,
+      "reference_median_ns": 257004,
+      "throughput_over_reference": 0.014885768563726982,
+      "vort_bytes": 22048,
+      "reference_bytes": 23265,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        17141873,
+        17200628,
+        17280165,
+        17265081,
+        17407395
+      ]
+    },
+    {
+      "label": "silesia-sao",
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "median_ns": 14906982,
+      "reference_median_ns": 339222,
+      "throughput_over_reference": 0.02275591397373392,
+      "vort_bytes": 49140,
+      "reference_bytes": 53272,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        14906982,
+        14436113,
+        15440356,
+        15254055,
+        14589789
+      ]
+    },
+    {
+      "label": "silesia-webster",
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "median_ns": 415767264,
+      "reference_median_ns": 277807,
+      "throughput_over_reference": 0.0006681791089738128,
+      "vort_bytes": 22669,
+      "reference_bytes": 24393,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        415767264,
+        416099648,
+        414637696,
+        414549297,
+        417890537
+      ]
+    },
+    {
+      "label": "silesia-xml",
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "median_ns": 1292706850,
+      "reference_median_ns": 93915,
+      "throughput_over_reference": 7.264988191251559e-05,
+      "vort_bytes": 5078,
+      "reference_bytes": 6099,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        1288242446,
+        1313971336,
+        1353909799,
+        1292706850,
+        1284597616
+      ],
+      "previous_production_median_ns": 11838392840,
+      "version_point_speedup": 9.157832527923867
+    },
+    {
+      "label": "silesia-x-ray",
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "median_ns": 9535522,
+      "reference_median_ns": 295808,
+      "throughput_over_reference": 0.031021689216384797,
+      "vort_bytes": 50370,
+      "reference_bytes": 51729,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        9433099,
+        9535522,
+        9654842,
+        9570142,
+        9333773
+      ]
+    },
+    {
+      "label": "brotli-source",
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "median_ns": 500746302,
+      "reference_median_ns": 172252,
+      "throughput_over_reference": 0.0003439905583166943,
+      "vort_bytes": 12111,
+      "reference_bytes": 13601,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        500746302,
+        502297734,
+        502083364,
+        498668746,
+        500660544
+      ],
+      "previous_production_median_ns": 5045271662,
+      "version_point_speedup": 10.075504585553585
+    },
+    {
+      "label": "validation-schema-json",
+      "input_sha256": "71e74329ab6dc2852d3c187f73935c6dcf59804ae9547b1be14f711d560ca0d0",
+      "median_ns": 29813233,
+      "reference_median_ns": 107768,
+      "throughput_over_reference": 0.0036147706624102124,
+      "vort_bytes": 6574,
+      "reference_bytes": 8053,
+      "wire_unchanged": true,
+      "rounds_ns": [
+        29813233,
+        30395890,
+        30263225,
+        28964081,
+        29490557
+      ]
+    }
+  ],
+  "all14_wires_unchanged": true,
+  "vort_total_bytes": 310437,
+  "reference_total_bytes": 328241,
+  "size_wins": 13,
+  "throughput_wins": 0,
+  "throughput_ratio_geomean": 0.0029478574701022075,
+  "scope": "Five alternating rounds per row in one current executable process; previous production controls exist for XML/source only. No stable all-platform ranking or significance claim."
+}

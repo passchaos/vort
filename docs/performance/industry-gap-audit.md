@@ -85,6 +85,20 @@ This is a bounded workspace improvement, not current industry-best throughput
 or whole-process memory evidence. Final tests pass 1088/1088 and build checks
 169/169; the fourteen-row one-round screen is retained as a wire check.
 
+The subsequent [winner cost bound](zstd-winner-cost-bound.md) uses a trusted
+eleven-bit optimum certificate to avoid exact pricing of candidates that
+cannot update the existing finder winner. Source-bound shadow evidence has
+zero bound violations or false refusals, and actual pruning reproduces its
+1,443,518 XML / 1,023,531 MR refusals with unchanged block hashes. Current
+five-round public measurements retain all fourteen frame identities, reducing
+XML/source medians to 1292.707/500.746ms (9.1578x/10.0755x versus the preceding
+production controls). MR measures 971.941ms without a matched five-round
+production control. The new fourteen-row throughput geometric ratio is
+0.00294786x reference, with zero throughput wins. Complete native Zstd tests
+pass 1092/1092. Independent old/new XML requested-heap peaks and all 282
+allocator events remain identical. This advances performance while preserving
+the old choices; it does not establish industry-best throughput or RSS.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

@@ -1,0 +1,17 @@
+{
+  "worktrees": {
+    "old": "/home/passchaos/project-z/vort",
+    "new": "/home/passchaos/project-z/vort-zstd-cost-bound"
+  },
+  "source_expected": {
+    "old": "ef5497a1db44d130f8eae02ab5c8337055126866b26a765f44eb7de3eabb4984",
+    "new": "490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc"
+  },
+  "input_bytes": 65536,
+  "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+  "expected_output_bytes": 5078,
+  "expected_output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+  "scope": "Untimed Vort oldmain/candidate caller allocator verification only; no RSS collection, no C encoder, no performance conclusions",
+  "concurrent_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8",
+  "requested_heap_scope": "Requests through public caller page_allocator wrapper, including returned output until explicit caller free; excludes embedded input, codec/tracker stack, code mappings and allocator bookkeeping/page rounding."
+}
