@@ -107,3 +107,7 @@ The complete native ReleaseFast Zstd family passes 1093/1093 and all build
 checks pass 170/170. Narrow native/x86 oracle checks and the public sample gate
 are recorded alongside source hashes and raw rounds in the
 [evidence package](data/zstd-wide-reduction-20261025/artifact-manifest.json).
+CLI help passes its seven-step build/run check, and the new kernel benchmark
+build route passes a three-step one-query smoke. After pulling with rebase,
+the complete weighted-reduction oracle test passes again with unchanged source
+manifests. Smoke durations are not used as performance evidence.

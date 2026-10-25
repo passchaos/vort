@@ -5,7 +5,7 @@ names=['input-manifest.json','candidate-executable.json','analysis.json','kernel
 for name in names:
  p=base/name
  if p.is_file():shutil.copy2(p,out/name)
-for group in ['baseline14','candidate14','reduction-debug','reduction-releasefast','reduction-x86','kernel-build','encoder-build','complete-family','complete-check','cli-help','post-rebase']:
+for group in ['baseline14','candidate14','reduction-debug','reduction-releasefast','reduction-x86','kernel-build','encoder-build','complete-family','complete-check','cli-help','kernel-route-smoke','post-rebase']:
  source=base/group
  if source.exists():
   target=out/group;target.mkdir(exist_ok=True)
