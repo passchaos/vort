@@ -23,6 +23,8 @@ const sequence_normalized_counts = @import("zstd/sequence/normalized_counts.zig"
 const sequence_decode_cache = @import("zstd/sequence/decode_cache.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
+const frame_format = @import("zstd/frame/format.zig");
+const formatted_decode = @import("zstd/frame/formatted_decode.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman_reservoir = @import("zstd/literals/huffman_reservoir.zig");
 const huffman_x2_abi = @import("zstd/literals/huffman_x2_abi.zig");
@@ -104,6 +106,26 @@ const small_sequence_stack_input_max = 1024;
 const small_sequence_stack_scratch_len = 4096;
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+pub const FrameFormat = frame_format.FrameFormat;
+
+pub const FrameDecodeOptions = struct {
+    format: FrameFormat = .standard,
+    dictionary: ?NativeDictionary = null,
+    dictionary_set: ?NativeDictionarySet = null,
+    max_output_len: usize = std.math.maxInt(usize),
+    expected_output_len: ?usize = null,
+
+    pub fn validate(self: FrameDecodeOptions) Error!void {
+        if (self.dictionary != null and self.dictionary_set != null) return error.InvalidBlockPlan;
+        if (self.expected_output_len) |expected|
+            if (expected > self.max_output_len) return error.InvalidBlockPlan;
+    }
+
+    fn isDefault(self: FrameDecodeOptions) bool {
+        return self.format == .standard and self.dictionary == null and self.dictionary_set == null and
+            self.max_output_len == std.math.maxInt(usize) and self.expected_output_len == null;
+    }
+};
 
 pub const default_compression_level: c_int = 1;
 pub const min_compression_level: c_int = encode_controls.min_level;
@@ -493,6 +515,7 @@ extern fn vortZstdHuffmanX2Decode(request: *const huffman_x2_abi.Request) callco
 extern fn vortZstdHuffmanWideX2Decode(request: *const huffman_x2_abi.Request) callconv(.c) c_int;
 
 pub const FrameOptions = struct {
+    format: FrameFormat = .standard,
     include_content_size: bool = true,
     content_checksum: bool = false,
     /// Optional standard Zstd Window_Log (10...41). When known content is
@@ -525,6 +548,7 @@ pub const NativeFrameSelection = enum {
 };
 
 pub const NativeFrameOptions = struct {
+    format: FrameFormat = .standard,
     content_checksum: bool = true,
     include_content_size: bool = true,
     /// Optional standard Zstd Window_Log (10...41). It caps block size,
@@ -605,7 +629,7 @@ const IncrementalEncoderCodec = struct {
         const original_len = out.items.len;
         errdefer out.items.len = original_len;
         if (expected_input_len) |len| return emitFrameHeader(allocator, out, @intCast(len), options);
-        try out.appendSlice(allocator, &frame_magic);
+        if (options.format == .standard) try out.appendSlice(allocator, &frame_magic);
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
         try out.append(allocator, checksum_flag | nativeDictionaryIdFlag(dictionary_id orelse 0));
         // A no-size stream cannot tighten the window from content length. Use
@@ -826,6 +850,10 @@ const ControlledEncoderCodec = struct {
 const ControlledFrameEncoder = controlled_encoder.Encoder(ControlledEncoderCodec);
 
 const zstd = @This();
+
+test "Zstd magicless public contracts" {
+    try @import("zstd_magicless_tests.zig").contracts(@This());
+}
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
 
 test "Zstd HQ exact offset wire retains direct value when a repeat has the same distance" {
@@ -3331,7 +3359,7 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
 }
 
 fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usize {
-    var len: usize = 4 + 1; // magic number plus frame descriptor.
+    var len: usize = frame_format.magicLen(options.format) + 1;
     if (!try nativeFrameUsesSingleSegment(content_len, options)) {
         // Non-single-segment frames without Frame_Content_Size must carry the
         // Window_Descriptor byte. A configured window also needs this form
@@ -3427,6 +3455,40 @@ fn nativeContentSizeFieldLen(content_len: u64) usize {
 /// for runtime support.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     return try decodeFrameAllocWithLimit(allocator, frame, null);
+}
+
+const FormattedFrameDecoder = struct {
+    pub const Error = zstd.Error;
+    pub const Options = FrameDecodeOptions;
+
+    pub fn size(frame: []const u8, options: Options) zstd.Error!usize {
+        try options.validate();
+        const decoded_len = try rawOrRleDecodedSizeWithOptions(frame, options);
+        if (options.expected_output_len) |expected| if (decoded_len != expected) return error.SizeMismatch;
+        return decoded_len;
+    }
+
+    pub fn decode(frame: []const u8, output: []u8, options: Options) zstd.Error!usize {
+        return decodeRawOrRleFrameIntoWithOptionsInternal(frame, output, options);
+    }
+};
+
+pub fn decodeFrameAllocWithOptions(allocator: std.mem.Allocator, frame: []const u8, options: FrameDecodeOptions) Error![]u8 {
+    return formatted_decode.owned(FormattedFrameDecoder, allocator, frame, options);
+}
+
+/// Decode and verify the complete stream before publishing into caller-owned
+/// output. The supplied allocator owns temporary decoded staging storage.
+pub fn decodeFrameIntoWithOptions(allocator: std.mem.Allocator, frame: []const u8, output: []u8, options: FrameDecodeOptions) Error!usize {
+    return formatted_decode.into(FormattedFrameDecoder, allocator, frame, output, options);
+}
+
+pub fn decodeFrameAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, options: FrameDecodeOptions) Error!usize {
+    return formatted_decode.append(FormattedFrameDecoder, allocator, out, frame, options);
+}
+
+pub fn decodedFrameSizeWithOptions(frame: []const u8, options: FrameDecodeOptions) Error!usize {
+    return FormattedFrameDecoder.size(frame, options);
 }
 
 pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, max_output_len: usize) Error![]u8 {
@@ -4570,22 +4632,39 @@ fn decodeRawOrRleFrameIntoWithDictionaryInternal(
     output: []u8,
     dictionary: ?NativeDictionary,
 ) Error!usize {
+    return decodeRawOrRleFrameIntoWithOptionsInternal(frame, output, .{ .dictionary = dictionary });
+}
+
+fn resolveFrameDecodeDictionary(header: NativeFrameHeader, options: FrameDecodeOptions) Error!?NativeDictionary {
+    if (options.dictionary_set) |set| {
+        if (header.dictionary_id == 0) return null;
+        return set.find(header.dictionary_id) orelse error.NeedDictionary;
+    }
+    return options.dictionary;
+}
+
+fn decodeRawOrRleFrameIntoWithOptionsInternal(
+    frame: []const u8,
+    output: []u8,
+    options: FrameDecodeOptions,
+) Error!usize {
     var offset: usize = 0;
     var written: usize = 0;
     while (offset < frame.len) {
-        if (frame.len - offset < 4) return error.TruncatedFrame;
-        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
-        offset += 4;
-        if (magic == frame_magic_u32) {
+        const prefix = try frame_format.consumePrefix(frame, &offset, options.format);
+        if (prefix == .data) {
+            const dictionary = if (options.dictionary_set != null) blk: {
+                var header_offset = offset;
+                const header = try parseRawOrRleFrameHeaderWithOptions(frame, &header_offset, true);
+                break :blk try resolveFrameDecodeDictionary(header, options);
+            } else options.dictionary;
             try decodeRawOrRleZstandardFrameIntoBuffer(frame, &offset, output, &written, dictionary);
-        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+        } else {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
             offset += 4;
             if (frame.len - offset < skip_len) return error.TruncatedFrame;
             offset += skip_len;
-        } else {
-            return error.InvalidMagic;
         }
     }
     return written;
@@ -4845,6 +4924,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     const BlockStreamStage = enum { block_header, raw_payload, rle_payload, rle_output, compressed_payload, compressed_literals, compressed_sequences, checksum, finished };
 
     pub const Options = struct {
+        format: FrameFormat = .standard,
         /// Default block streaming bounds retained input and emits blocks before
         /// the complete frame arrives. `prevalidated_frame` retains complete
         /// frames for preflight when they fit the compressed-input limit.
@@ -6082,6 +6162,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn beginSkippableStreamIfHeaderAvailable(self: *NativeIncrementalFrameDecoder) Error!bool {
+        if (self.options.format != .standard) return false;
         if (self.frame_scratch.items.len < 8) return false;
         const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
         if (magic < skippable_magic_min or magic > skippable_magic_max) return false;
@@ -6120,9 +6201,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn beginBlockStreamIfSupported(self: *NativeIncrementalFrameDecoder) Error!bool {
-        if (self.frame_scratch.items.len < 4) return false;
-        if (std.mem.readInt(u32, self.frame_scratch.items[0..4], .little) != frame_magic_u32) return false;
-        const header = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
+        if (!frame_format.hasDataPrefix(self.frame_scratch.items, self.options.format)) return false;
+        const header = inspectNativeFrameHeaderWithFormat(self.frame_scratch.items, self.options.format) catch |err| switch (err) {
             error.TruncatedFrame => return false,
             else => return err,
         };
@@ -6371,12 +6451,12 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn appendFrameInput(self: *NativeIncrementalFrameDecoder, input: []const u8, input_read: *usize) Error!void {
-        if (self.frame_scratch.items.len < 4) {
-            try self.appendFramePrefix(input, input_read, 4);
+        const minimum_prefix = frame_format.minimumPrefixLen(self.options.format);
+        if (self.frame_scratch.items.len < minimum_prefix) {
+            try self.appendFramePrefix(input, input_read, minimum_prefix);
         }
-        if (self.frame_scratch.items.len < 4 or input_read.* == input.len) return;
-        const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
-        if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+        if (self.frame_scratch.items.len < minimum_prefix or input_read.* == input.len) return;
+        if (frame_format.skippableMagic(self.frame_scratch.items, self.options.format) != null) {
             try self.appendFramePrefix(input, input_read, 8);
             return;
         }
@@ -6384,7 +6464,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         // input mode. A missing dictionary can be supplied without accepting
         // frame payload or re-reading previously accepted header bytes.
         while (true) {
-            _ = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
+            _ = inspectNativeFrameHeaderWithFormat(self.frame_scratch.items, self.options.format) catch |err| switch (err) {
                 error.TruncatedFrame => {
                     const previous_len = self.frame_scratch.items.len;
                     try self.appendFramePrefix(input, input_read, previous_len + 1);
@@ -6426,9 +6506,8 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!?usize {
         while (true) {
-            if (self.frame_scratch.items.len < 4) return null;
-            const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
-            if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (self.frame_scratch.items.len < frame_format.minimumPrefixLen(self.options.format)) return null;
+            if (frame_format.skippableMagic(self.frame_scratch.items, self.options.format)) |magic| {
                 if (self.frame_scratch.items.len < 8) return null;
                 const skip_len: usize = @intCast(std.mem.readInt(u32, self.frame_scratch.items[4..8], .little));
                 const total = checkedAdd(8, skip_len) catch |err| {
@@ -6442,7 +6521,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             }
             break;
         }
-        const end = findNativeFrameEnd(self.frame_scratch.items, 0) catch |err| switch (err) {
+        const end = findNativeFrameEndWithFormat(self.frame_scratch.items, 0, self.options.format) catch |err| switch (err) {
             error.TruncatedFrame => return null,
             else => {
                 self.recordError(.frame, err);
@@ -6457,6 +6536,15 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.decoded_offset = 0;
         const remaining_output = self.options.max_output_len -| self.output_written;
         const frame_limit = stream_count.bounded(@min(self.options.max_decoded_buffer_len, remaining_output), std.math.maxInt(usize));
+        if (self.options.format == .magicless) {
+            _ = try decodeFrameAppendWithOptions(self.budget.allocator(), &self.decoded_scratch, frame, .{
+                .format = self.options.format,
+                .dictionary = if (self.frame_dictionary) |dictionary| dictionary else if (self.dictionary_set == null) self.dictionary else null,
+                .dictionary_set = if (self.frame_dictionary == null) self.dictionary_set else null,
+                .max_output_len = frame_limit,
+            });
+            return;
+        }
         if (self.frame_dictionary) |dictionary| {
             _ = try decodeRawOrRleFrameAppendLimitedWithDictionary(self.budget.allocator(), &self.decoded_scratch, frame, frame_limit, dictionary);
         } else if (self.dictionary_set) |dictionary_set| {
@@ -6483,7 +6571,7 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
         const frame = self.frame_scratch.items[0..frame_end];
-        const header = try inspectNativeFrameHeader(frame);
+        const header = try inspectNativeFrameHeaderWithFormat(frame, self.options.format);
         const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
         const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
@@ -6644,8 +6732,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn checkFrameDictionaryIfHeaderAvailable(self: *NativeIncrementalFrameDecoder) Error!void {
-        if (self.frame_scratch.items.len < 4 or std.mem.readInt(u32, self.frame_scratch.items[0..4], .little) != frame_magic_u32) return;
-        const header = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
+        if (!frame_format.hasDataPrefix(self.frame_scratch.items, self.options.format)) return;
+        const header = inspectNativeFrameHeaderWithFormat(self.frame_scratch.items, self.options.format) catch |err| switch (err) {
             error.TruncatedFrame => return,
             else => return err,
         };
@@ -6730,11 +6818,64 @@ pub const IncrementalFrameDecoder = NativeIncrementalFrameDecoder;
 
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
+    options: FrameDecodeOptions = .{},
     scratch: std.ArrayList(u8) = .empty,
     sequence_workspace: ?*SequenceDecodeWorkspace = null,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
         return .{ .allocator = allocator };
+    }
+
+    pub fn initWithOptions(allocator: std.mem.Allocator, options: FrameDecodeOptions) NativeFrameDecoder {
+        return .{ .allocator = allocator, .options = options };
+    }
+
+    const DecodeOverrides = struct {
+        dictionary: ?NativeDictionary = null,
+        dictionary_set: ?NativeDictionarySet = null,
+        max_output_len: ?usize = null,
+        expected_output_len: ?usize = null,
+    };
+
+    fn configuredOptions(self: *const NativeFrameDecoder, overrides: DecodeOverrides) FrameDecodeOptions {
+        var options = self.options;
+        if (overrides.dictionary) |dictionary| {
+            options.dictionary = dictionary;
+            options.dictionary_set = null;
+        }
+        if (overrides.dictionary_set) |set| {
+            options.dictionary_set = set;
+            options.dictionary = null;
+        }
+        if (overrides.max_output_len) |limit| options.max_output_len = limit;
+        if (overrides.expected_output_len) |expected| options.expected_output_len = expected;
+        return options;
+    }
+
+    pub fn decodeAllocWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error![]u8 {
+        return decodeFrameAllocWithOptions(self.allocator, frame, options);
+    }
+
+    pub fn decodeAppendWithOptions(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, options: FrameDecodeOptions) Error!usize {
+        return decodeFrameAppendWithOptions(self.allocator, out, frame, options);
+    }
+
+    pub fn decodeIntoSliceWithOptions(self: *NativeFrameDecoder, frame: []const u8, output: []u8, options: FrameDecodeOptions) Error!usize {
+        return decodeFrameIntoWithOptions(self.allocator, frame, output, options);
+    }
+
+    pub fn decodeScratchWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error![]const u8 {
+        const decoded = try self.decodeAllocWithOptions(frame, options);
+        defer self.allocator.free(decoded);
+        try self.scratch.ensureTotalCapacity(self.allocator, decoded.len);
+        self.scratch.clearRetainingCapacity();
+        self.scratch.appendSliceAssumeCapacity(decoded);
+        return self.scratch.items;
+    }
+
+    pub fn decodedSizeWithOptions(self: *NativeFrameDecoder, frame: []const u8, options: FrameDecodeOptions) Error!usize {
+        _ = self;
+        return decodedFrameSizeWithOptions(frame, options);
     }
 
     pub fn deinit(self: *NativeFrameDecoder) void {
@@ -6746,102 +6887,124 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeAlloc(self: *NativeFrameDecoder, frame: []const u8) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{}));
         return try decodeRawOrRleFrameAlloc(self.allocator, frame);
     }
 
     pub fn decodeAllocExactSize(self: *NativeFrameDecoder, frame: []const u8, expected_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAllocExactSize(self.allocator, frame, expected_output_len);
     }
 
     pub fn decodeAllocWithDictionary(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameAllocWithDictionary(self.allocator, frame, dictionary);
     }
 
     pub fn decodeAllocWithDictionaryExactSize(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAllocWithDictionaryExactSize(self.allocator, frame, dictionary, expected_output_len);
     }
 
     pub fn decodeAllocWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameAllocWithDictionarySet(self.allocator, frame, dictionary_set);
     }
 
     pub fn decodeAllocWithDictionarySetExactSize(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAllocWithDictionarySetExactSize(self.allocator, frame, dictionary_set, expected_output_len);
     }
 
     pub fn decodeAllocLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAllocLimited(self.allocator, frame, max_output_len);
     }
 
     pub fn decodeAllocLimitedWithDictionary(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAllocLimitedWithDictionary(self.allocator, frame, max_output_len, dictionary);
     }
 
     pub fn decodeAllocLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAllocLimitedWithDictionarySet(self.allocator, frame, max_output_len, dictionary_set);
     }
 
     pub fn decodeScratch(self: *NativeFrameDecoder, frame: []const u8) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{}));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppend(&self.scratch, frame);
         return self.scratch.items;
     }
 
     pub fn decodeScratchWithDictionary(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendWithDictionary(&self.scratch, frame, dictionary);
         return self.scratch.items;
     }
 
     pub fn decodeScratchWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendWithDictionarySet(&self.scratch, frame, dictionary_set);
         return self.scratch.items;
     }
 
     pub fn decodeScratchLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{ .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendLimited(&self.scratch, frame, max_output_len);
         return self.scratch.items;
     }
 
     pub fn decodeScratchLimitedWithDictionary(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendLimitedWithDictionary(&self.scratch, frame, max_output_len, dictionary);
         return self.scratch.items;
     }
 
     pub fn decodeScratchLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendLimitedWithDictionarySet(&self.scratch, frame, max_output_len, dictionary_set);
         return self.scratch.items;
     }
 
     pub fn decodeAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{}));
         return try decodeRawOrRleFrameAppend(self.allocator, out, frame);
     }
 
     pub fn decodeAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAppendExactSize(self.allocator, out, frame, expected_output_len);
     }
 
     pub fn decodeAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameAppendWithDictionary(self.allocator, out, frame, dictionary);
     }
 
     pub fn decodeAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAppendExactSizeWithDictionary(self.allocator, out, frame, dictionary, expected_output_len);
     }
 
     pub fn decodeAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameAppendWithDictionarySet(self.allocator, out, frame, dictionary_set);
     }
 
     pub fn decodeAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameAppendExactSizeWithDictionarySet(self.allocator, out, frame, dictionary_set, expected_output_len);
     }
 
     pub fn decodeAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAppendLimited(self.allocator, out, frame, max_output_len);
     }
 
@@ -6852,6 +7015,7 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAppendLimitedWithDictionary(self.allocator, out, frame, max_output_len, dictionary);
     }
 
@@ -6862,10 +7026,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameAppendLimitedWithDictionarySet(self.allocator, out, frame, max_output_len, dictionary_set);
     }
 
     pub fn decodeIntoSlice(self: *NativeFrameDecoder, frame: []const u8, output: []u8) Error!usize {
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{}));
         if (try raw_frame.tryDecode(frame, output)) |written| return written;
         return try decodeRawOrRleFrameIntoWithReusableDecoder(frame, output, self);
     }
@@ -6880,72 +7046,72 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeIntoSliceLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameIntoLimited(frame, output, max_output_len);
     }
 
     pub fn decodeIntoSliceExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameIntoExactSize(frame, output, expected_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionary(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameIntoWithDictionary(frame, output, dictionary);
     }
 
     pub fn decodeIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameIntoWithDictionaryLimited(frame, output, dictionary, max_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameIntoWithDictionaryExactSize(frame, output, dictionary, expected_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameIntoWithDictionarySet(frame, output, dictionary_set);
     }
 
     pub fn decodeIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameIntoWithDictionarySetLimited(frame, output, dictionary_set, max_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(frame, output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameIntoWithDictionarySetExactSize(frame, output, dictionary_set, expected_output_len);
     }
 
     pub fn decodedSize(self: *NativeFrameDecoder, frame: []const u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{}));
         return try decodedRawOrRleFrameSize(frame);
     }
 
     pub fn decodedSizeLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try rawOrRleDecodedSizeLimited(frame, max_output_len);
     }
 
     pub fn decodedSizeWithDictionary(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodedRawOrRleFrameSizeWithDictionary(frame, dictionary);
     }
 
     pub fn decodedSizeLimitedWithDictionary(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameSizeLimitedWithDictionary(frame, max_output_len, dictionary);
     }
 
     pub fn decodedSizeWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodedRawOrRleFrameSizeWithDictionarySet(frame, dictionary_set);
     }
 
     pub fn decodedSizeLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frame, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
     }
 
@@ -6963,67 +7129,76 @@ pub const NativeFrameDecoder = struct {
     }
 
     pub fn decodeChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         return try decodeRawOrRleFrameChunksAlloc(self.allocator, chunks, compressed_scratch);
     }
 
     pub fn decodeChunksAllocExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocExactSize(self.allocator, chunks, compressed_scratch, expected_output_len);
     }
 
     pub fn decodeChunksAllocLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocLimited(self.allocator, chunks, compressed_scratch, max_output_len);
     }
 
     pub fn decodeChunksScratch(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppend(&self.scratch, chunks, compressed_scratch);
         return self.scratch.items;
     }
 
     pub fn decodeChunksScratchLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppendLimited(&self.scratch, chunks, compressed_scratch, max_output_len);
         return self.scratch.items;
     }
 
     pub fn decodeChunksAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         return try decodeRawOrRleFrameChunksAppend(self.allocator, out, chunks, compressed_scratch);
     }
 
     pub fn decodeChunksAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAppendExactSize(self.allocator, out, chunks, compressed_scratch, expected_output_len);
     }
 
     pub fn decodeChunksAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAppendLimited(self.allocator, out, chunks, compressed_scratch, max_output_len);
     }
 
     pub fn decodeChunksIntoSlice(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{}));
         return try decodeRawOrRleFrameChunksInto(chunks, compressed_scratch, output);
     }
 
     pub fn decodeChunksIntoSliceLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoLimited(chunks, compressed_scratch, output, max_output_len);
     }
 
     pub fn decodeChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
     }
 
     pub fn decodedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         return try decodedRawOrRleFrameChunksSize(chunks, compressed_scratch);
     }
 
     pub fn decodedChunksSizeLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
     }
 
     pub fn decodeChunksAllocWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameChunksAllocWithDictionary(self.allocator, chunks, compressed_scratch, dictionary);
     }
 
@@ -7034,6 +7209,7 @@ pub const NativeFrameDecoder = struct {
         dictionary: NativeDictionary,
         expected_output_len: usize,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionaryExactSize(self.allocator, chunks, compressed_scratch, dictionary, expected_output_len);
     }
 
@@ -7044,10 +7220,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionaryLimited(self.allocator, chunks, compressed_scratch, dictionary, max_output_len);
     }
 
     pub fn decodeChunksScratchWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppendWithDictionary(&self.scratch, chunks, compressed_scratch, dictionary);
         return self.scratch.items;
@@ -7060,16 +7238,19 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppendLimitedWithDictionary(&self.scratch, chunks, compressed_scratch, max_output_len, dictionary);
         return self.scratch.items;
     }
 
     pub fn decodeChunksAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameChunksAppendWithDictionary(self.allocator, out, chunks, compressed_scratch, dictionary);
     }
 
     pub fn decodeChunksAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAppendExactSizeWithDictionary(self.allocator, out, chunks, compressed_scratch, dictionary, expected_output_len);
     }
 
@@ -7081,26 +7262,27 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAppendLimitedWithDictionary(self.allocator, out, chunks, compressed_scratch, max_output_len, dictionary);
     }
 
     pub fn decodeChunksIntoSliceWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
     }
 
     pub fn decodeChunksIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoWithDictionaryLimited(chunks, compressed_scratch, output, dictionary, max_output_len);
     }
 
     pub fn decodeChunksIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionary(chunks, compressed_scratch, output, dictionary, expected_output_len);
     }
 
     pub fn decodedChunksSizeWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodedRawOrRleFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
     }
 
@@ -7111,11 +7293,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimitedWithDictionary(chunks, compressed_scratch, max_output_len, dictionary);
     }
 
     pub fn decodeChunksAllocWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySet(self.allocator, chunks, compressed_scratch, dictionary_set);
     }
 
@@ -7126,6 +7309,7 @@ pub const NativeFrameDecoder = struct {
         dictionary_set: NativeDictionarySet,
         expected_output_len: usize,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySetExactSize(self.allocator, chunks, compressed_scratch, dictionary_set, expected_output_len);
     }
 
@@ -7136,10 +7320,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySetLimited(self.allocator, chunks, compressed_scratch, dictionary_set, max_output_len);
     }
 
     pub fn decodeChunksScratchWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppendWithDictionarySet(&self.scratch, chunks, compressed_scratch, dictionary_set);
         return self.scratch.items;
@@ -7152,16 +7338,19 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeChunksAppendLimitedWithDictionarySet(&self.scratch, chunks, compressed_scratch, max_output_len, dictionary_set);
         return self.scratch.items;
     }
 
     pub fn decodeChunksAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameChunksAppendWithDictionarySet(self.allocator, out, chunks, compressed_scratch, dictionary_set);
     }
 
     pub fn decodeChunksAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet(self.allocator, out, chunks, compressed_scratch, dictionary_set, expected_output_len);
     }
 
@@ -7173,26 +7362,27 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet(self.allocator, out, chunks, compressed_scratch, max_output_len, dictionary_set);
     }
 
     pub fn decodeChunksIntoSliceWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
     }
 
     pub fn decodeChunksIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoWithDictionarySetLimited(chunks, compressed_scratch, output, dictionary_set, max_output_len);
     }
 
     pub fn decodeChunksIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
     }
 
     pub fn decodedChunksSizeWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodedRawOrRleFrameChunksSizeWithDictionarySet(chunks, compressed_scratch, dictionary_set);
     }
 
@@ -7203,7 +7393,7 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimitedWithDictionarySet(chunks, compressed_scratch, max_output_len, dictionary_set);
     }
 
@@ -7242,90 +7432,99 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedIntoSliceWithDictionarySetExactSize = decodeIntoSliceWithDictionarySetExactSize;
 
     pub fn decodedConcatenatedSize(self: *NativeFrameDecoder, frames: []const u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{}));
         return try decodedRawOrRleFrameSize(frames);
     }
 
     pub fn decodedConcatenatedSizeLimited(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try rawOrRleDecodedSizeLimited(frames, max_output_len);
     }
 
     pub fn decodedConcatenatedSizeWithDictionary(self: *NativeFrameDecoder, frames: []const u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodedRawOrRleFrameSizeWithDictionary(frames, dictionary);
     }
 
     pub fn decodedConcatenatedSizeLimitedWithDictionary(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameSizeLimitedWithDictionary(frames, max_output_len, dictionary);
     }
 
     pub fn decodedConcatenatedSizeWithDictionarySet(self: *NativeFrameDecoder, frames: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodedRawOrRleFrameSizeWithDictionarySet(frames, dictionary_set);
     }
 
     pub fn decodedConcatenatedSizeLimitedWithDictionarySet(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(frames, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frames, max_output_len, dictionary_set);
     }
 
     pub fn decodeConcatenatedChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         return try decodeRawOrRleFrameChunksAlloc(self.allocator, chunks, compressed_scratch);
     }
 
     pub fn decodeConcatenatedChunksAllocExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocExactSize(self.allocator, chunks, compressed_scratch, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAllocLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocLimited(self.allocator, chunks, compressed_scratch, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksScratch(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppend(&self.scratch, chunks, compressed_scratch);
         return self.scratch.items;
     }
 
     pub fn decodeConcatenatedChunksScratchLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppendLimited(&self.scratch, chunks, compressed_scratch, max_output_len);
         return self.scratch.items;
     }
 
     pub fn decodeConcatenatedChunksAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppend(out, joined);
     }
 
     pub fn decodeConcatenatedChunksAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendExactSize(out, joined, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendLimited(out, joined, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksIntoSlice(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{}));
         return try decodeRawOrRleFrameChunksInto(chunks, compressed_scratch, output);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoLimited(chunks, compressed_scratch, output, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAllocWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameChunksAllocWithDictionary(self.allocator, chunks, compressed_scratch, dictionary);
     }
 
@@ -7336,6 +7535,7 @@ pub const NativeFrameDecoder = struct {
         dictionary: NativeDictionary,
         expected_output_len: usize,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionaryExactSize(self.allocator, chunks, compressed_scratch, dictionary, expected_output_len);
     }
 
@@ -7346,10 +7546,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionaryLimited(self.allocator, chunks, compressed_scratch, dictionary, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksScratchWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppendWithDictionary(&self.scratch, chunks, compressed_scratch, dictionary);
         return self.scratch.items;
@@ -7362,17 +7564,20 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppendLimitedWithDictionary(&self.scratch, chunks, compressed_scratch, max_output_len, dictionary);
         return self.scratch.items;
     }
 
     pub fn decodeConcatenatedChunksAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendWithDictionary(out, joined, dictionary);
     }
 
     pub fn decodeConcatenatedChunksAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendExactSizeWithDictionary(out, joined, dictionary, expected_output_len);
     }
@@ -7385,26 +7590,28 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendLimitedWithDictionary(out, joined, max_output_len, dictionary);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodeRawOrRleFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoWithDictionaryLimited(chunks, compressed_scratch, output, dictionary, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary = dictionary, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionary(chunks, compressed_scratch, output, dictionary, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAllocWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySet(self.allocator, chunks, compressed_scratch, dictionary_set);
     }
 
@@ -7415,6 +7622,7 @@ pub const NativeFrameDecoder = struct {
         dictionary_set: NativeDictionarySet,
         expected_output_len: usize,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySetExactSize(self.allocator, chunks, compressed_scratch, dictionary_set, expected_output_len);
     }
 
@@ -7425,10 +7633,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error![]u8 {
+        if (!self.options.isDefault()) return self.decodeAllocWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksAllocWithDictionarySetLimited(self.allocator, chunks, compressed_scratch, dictionary_set, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksScratchWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppendWithDictionarySet(&self.scratch, chunks, compressed_scratch, dictionary_set);
         return self.scratch.items;
@@ -7441,17 +7651,20 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error![]const u8 {
+        if (!self.options.isDefault()) return self.decodeScratchWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&self.scratch, chunks, compressed_scratch, max_output_len, dictionary_set);
         return self.scratch.items;
     }
 
     pub fn decodeConcatenatedChunksAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendWithDictionarySet(out, joined, dictionary_set);
     }
 
     pub fn decodeConcatenatedChunksAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendExactSizeWithDictionarySet(out, joined, dictionary_set, expected_output_len);
     }
@@ -7464,37 +7677,38 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error!usize {
+        if (!self.options.isDefault()) return self.decodeAppendWithOptions(out, try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendLimitedWithDictionarySet(out, joined, max_output_len, dictionary_set);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodeRawOrRleFrameChunksIntoWithDictionarySetLimited(chunks, compressed_scratch, output, dictionary_set, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodeIntoSliceWithOptions(try joinChunks(chunks, compressed_scratch), output, self.configuredOptions(.{ .dictionary_set = dictionary_set, .expected_output_len = expected_output_len }));
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
     }
 
     pub fn decodedConcatenatedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{}));
         return try decodedRawOrRleFrameChunksSize(chunks, compressed_scratch);
     }
 
     pub fn decodedConcatenatedChunksSizeLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
     }
 
     pub fn decodedConcatenatedChunksSizeWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary }));
         return try decodedRawOrRleFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
     }
 
@@ -7505,12 +7719,12 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary: NativeDictionary,
     ) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary = dictionary, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimitedWithDictionary(chunks, compressed_scratch, max_output_len, dictionary);
     }
 
     pub fn decodedConcatenatedChunksSizeWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set }));
         return try decodedRawOrRleFrameChunksSizeWithDictionarySet(chunks, compressed_scratch, dictionary_set);
     }
 
@@ -7521,7 +7735,7 @@ pub const NativeFrameDecoder = struct {
         max_output_len: usize,
         dictionary_set: NativeDictionarySet,
     ) Error!usize {
-        _ = self;
+        if (!self.options.isDefault()) return self.decodedSizeWithOptions(try joinChunks(chunks, compressed_scratch), self.configuredOptions(.{ .dictionary_set = dictionary_set, .max_output_len = max_output_len }));
         return try decodedRawOrRleFrameChunksSizeLimitedWithDictionarySet(chunks, compressed_scratch, max_output_len, dictionary_set);
     }
 };
@@ -8172,7 +8386,8 @@ pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator: std.me
 }
 
 pub fn resolveFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeFrameOptions {
-    const native_options = try encode_controls.resolve(NativeFrameOptions, level, options);
+    var native_options = try encode_controls.resolve(NativeFrameOptions, level, options);
+    native_options.format = options.format;
     try native_options.validate();
     return native_options;
 }
@@ -9215,7 +9430,7 @@ fn emitFrameHeader(
     options: NativeFrameOptions,
 ) Error!void {
     const single_segment = try nativeFrameUsesSingleSegment(content_len, options);
-    try out.appendSlice(allocator, &frame_magic);
+    if (options.format == .standard) try out.appendSlice(allocator, &frame_magic);
     const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
     const dictionary_flag: u8 = nativeDictionaryIdFlag(options.dictionary_id);
 
@@ -11854,16 +12069,34 @@ const SequenceFrameState = struct {
 };
 
 // Four entries retain every compressed block in the common 512 KiB frame. The
-// public decoder owns this workspace out of line so its stack-facing handle
-// stays compact and raw/RLE-only workloads never pay for it.
+// public decoder owns this workspace out of line. Format, borrowed dictionary
+// selection and output limits stay inline without an options allocation;
+// raw/RLE-only workloads still never allocate this entropy workspace.
 const SequenceDecodeWorkspace = struct {
     sequence: sequence_decode_cache.Cache(SequenceModeSpec) = .{},
     huffman: huffman_tree_cache.Cache(CachedHuffmanTree) = .{},
 };
 
 comptime {
-    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
+    const option_fields = @sizeOf(FrameFormat) + @sizeOf(?NativeDictionary) +
+        @sizeOf(?NativeDictionarySet) + @sizeOf(usize) + @sizeOf(?usize);
+    std.debug.assert(@sizeOf(FrameDecodeOptions) <= std.mem.alignForward(usize, option_fields, @alignOf(FrameDecodeOptions)));
+    // Keep the original 64-byte handle budget, plus only the actual inline
+    // public options size on this target. Large coding tables remain external.
+    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64 + @sizeOf(FrameDecodeOptions));
     std.debug.assert(@sizeOf(SequenceDecodeWorkspace) <= 64 * 1024);
+}
+
+test "Zstd decoder handle layout contains inline options and an external entropy pointer" {
+    const field_bytes = @sizeOf(std.mem.Allocator) + @sizeOf(FrameDecodeOptions) +
+        @sizeOf(std.ArrayList(u8)) + @sizeOf(?*SequenceDecodeWorkspace);
+    const expected_handle_bytes = std.mem.alignForward(usize, field_bytes, @alignOf(NativeFrameDecoder));
+    try std.testing.expectEqual(expected_handle_bytes, @sizeOf(NativeFrameDecoder));
+    try std.testing.expectEqual(@sizeOf(FrameDecodeOptions), @sizeOf(@FieldType(NativeFrameDecoder, "options")));
+    var decoder = NativeFrameDecoder.initWithOptions(std.testing.allocator, .{ .format = .magicless });
+    defer decoder.deinit();
+    try std.testing.expect(decoder.sequence_workspace == null);
+    try std.testing.expectEqual(@as(usize, 0), decoder.scratch.capacity);
 }
 
 const ResolvedSymbolTable = struct {
@@ -15735,14 +15968,18 @@ fn rawOrRleDecodedSizeLimitedWithDictionary(
     max_output_len: usize,
     dictionary: ?NativeDictionary,
 ) Error!usize {
+    return rawOrRleDecodedSizeWithOptions(frame, .{ .max_output_len = max_output_len, .dictionary = dictionary });
+}
+
+fn rawOrRleDecodedSizeWithOptions(frame: []const u8, options: FrameDecodeOptions) Error!usize {
+    const max_output_len = options.max_output_len;
     var offset: usize = 0;
     var total: usize = 0;
     while (offset < frame.len) {
-        if (frame.len - offset < 4) return error.TruncatedFrame;
-        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
-        offset += 4;
-        if (magic == frame_magic_u32) {
+        const prefix = try frame_format.consumePrefix(frame, &offset, options.format);
+        if (prefix == .data) {
             const header = try parseRawOrRleFrameHeaderWithOptions(frame, &offset, true);
+            const dictionary = try resolveFrameDecodeDictionary(header, options);
             const dictionary_history = try validateNativeDictionary(header, dictionary);
             const frame_start = total;
             var frame_state = try initialSequenceFrameState(dictionary);
@@ -15787,14 +16024,12 @@ fn rawOrRleDecodedSizeLimitedWithDictionary(
                 if (frame.len - offset < 4) return error.TruncatedFrame;
                 offset += 4;
             }
-        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+        } else {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
             offset += 4;
             if (frame.len - offset < skip_len) return error.TruncatedFrame;
             offset += skip_len;
-        } else {
-            return error.InvalidMagic;
         }
     }
     return total;
@@ -15874,16 +16109,24 @@ fn parseRawOrRleFrameHeader(frame: []const u8, offset: *usize) Error!RawOrRleFra
 }
 
 pub fn inspectNativeFrameHeader(frame: []const u8) Error!NativeFrameHeader {
-    if (frame.len < 4) return error.TruncatedFrame;
-    const magic = std.mem.readInt(u32, frame[0..4], .little);
-    if (magic != frame_magic_u32) return error.InvalidMagic;
-    var offset: usize = 4;
+    return inspectNativeFrameHeaderWithFormat(frame, .standard);
+}
+
+pub fn inspectNativeFrameHeaderWithFormat(frame: []const u8, format: FrameFormat) Error!NativeFrameHeader {
+    var offset: usize = 0;
+    const prefix = try frame_format.consumePrefix(frame, &offset, format);
+    if (prefix != .data) return error.InvalidMagic;
     return try parseRawOrRleFrameHeaderWithOptions(frame, &offset, true);
 }
 
 pub fn inspectNativeFrameBlockAt(frame: []const u8, header_offset: usize) Error!NativeFrameBlockHeader {
-    const header = try inspectNativeFrameHeader(frame);
+    return inspectNativeFrameBlockAtWithFormat(frame, header_offset, .standard);
+}
+
+pub fn inspectNativeFrameBlockAtWithFormat(frame: []const u8, header_offset: usize, format: FrameFormat) Error!NativeFrameBlockHeader {
+    const header = try inspectNativeFrameHeaderWithFormat(frame, format);
     if (header_offset < header.payload_offset) return error.CorruptFrame;
+    if (header_offset > frame.len) return error.TruncatedFrame;
     if (frame.len - header_offset < 3) return error.TruncatedFrame;
     const block_header = std.mem.readInt(u24, frame[header_offset..][0..3], .little);
     const block_type_raw = (block_header >> 1) & 0x03;
@@ -15909,8 +16152,12 @@ pub fn inspectNativeFrameBlockAt(frame: []const u8, header_offset: usize) Error!
 }
 
 pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHeader {
-    const header = try inspectNativeFrameHeader(frame);
-    return try inspectNativeFrameBlockAt(frame, header.payload_offset);
+    return inspectNativeFrameFirstBlockWithFormat(frame, .standard);
+}
+
+pub fn inspectNativeFrameFirstBlockWithFormat(frame: []const u8, format: FrameFormat) Error!NativeFrameBlockHeader {
+    const header = try inspectNativeFrameHeaderWithFormat(frame, format);
+    return try inspectNativeFrameBlockAtWithFormat(frame, header.payload_offset, format);
 }
 
 pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFrameBlockHeader) Error!NativeSequenceModeSummary {
@@ -16950,6 +17197,7 @@ pub fn encodeNativeSeekableStreamIntoSliceWithDictionarySet(allocator: std.mem.A
 }
 
 fn validateNativeSeekableOptions(options: NativeSeekableOptions) Error!void {
+    if (options.frame_options.format != .standard) return error.InvalidBlockPlan;
     if (options.frame_size == 0 or options.frame_size > seekable.max_frame_decompressed_size or options.frame_options.dictionary_id != 0) return error.InvalidBlockPlan;
     try options.frame_options.validate();
 }
@@ -17789,14 +18037,17 @@ fn nativeSummaryFrameErrorPhase(err: anyerror) NativeStreamSummaryErrorPhase {
 }
 
 fn findNativeFrameEnd(frames: []const u8, frame_start: usize) Error!usize {
-    if (frame_start > frames.len) return error.TruncatedFrame;
-    if (frames.len - frame_start < 4) return error.TruncatedFrame;
-    if (std.mem.readInt(u32, frames[frame_start..][0..4], .little) != frame_magic_u32) return error.InvalidMagic;
+    return findNativeFrameEndWithFormat(frames, frame_start, .standard);
+}
 
-    var offset = frame_start + 4;
+fn findNativeFrameEndWithFormat(frames: []const u8, frame_start: usize, format: FrameFormat) Error!usize {
+    if (frame_start > frames.len) return error.TruncatedFrame;
+    var offset = frame_start;
+    const prefix = try frame_format.consumePrefix(frames, &offset, format);
+    if (prefix != .data) return error.InvalidMagic;
     const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
     while (true) {
-        const block = try inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start);
+        const block = try inspectNativeFrameBlockAtWithFormat(frames[frame_start..], offset - frame_start, format);
         offset = frame_start + block.next_header_offset;
         if (block.last) break;
     }

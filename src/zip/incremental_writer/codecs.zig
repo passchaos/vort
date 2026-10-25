@@ -337,6 +337,7 @@ pub fn validate(
 
 fn resolvedZstdOptions(options: Options) Error!ZstdOptions {
     var resolved = options.zstd;
+    if (resolved.format != .standard) return error.InvalidBlockPlan;
     if (options.zstd_dictionary) |dictionary| {
         if (resolved.dictionary_id != 0 and
             resolved.dictionary_id != dictionary.id)

@@ -90,6 +90,8 @@ pub fn encodeAlloc(
     entries: []const writer.EncodeEntry,
     options: EncodeOptions,
 ) ![]u8 {
+    if (options.compression == .zstandard and options.zstd_options.format != .standard)
+        return error.InvalidBlockPlan;
     const cpio_bytes = try writer.encodeAlloc(allocator, entries, options.archive_options);
     if (options.compression == .none) return cpio_bytes;
     defer allocator.free(cpio_bytes);

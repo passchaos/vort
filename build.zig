@@ -582,6 +582,34 @@ pub fn build(b: *std.Build) void {
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_magicless_tests = b.addTest(.{
+        .name = "vort-zstd-magicless-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd magicless", "Zstd decoder handle layout" },
+    });
+    const zstd_magicless_root_tests = b.addTest(.{
+        .name = "vort-zstd-magicless-root-tests",
+        .root_module = tests_mod,
+        .filters = &.{"root Zstd magicless consumer contracts"},
+    });
+    const zstd_magicless_step = b.step("test-zstd-magicless", "Run explicit Zstandard magicless format and state contracts");
+    zstd_magicless_step.dependOn(&b.addRunArtifact(zstd_magicless_tests).step);
+    zstd_magicless_step.dependOn(&b.addRunArtifact(zstd_magicless_root_tests).step);
+    const zstd_magicless_probe = b.addExecutable(.{
+        .name = "vort-zstd-magicless-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/magicless_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "zstd", .module = zstd_encode_bench_mod }},
+        }),
+    });
+    b.step("build-zstd-magicless-probe", "Compile the explicit Zstd format compatibility probe").dependOn(&zstd_magicless_probe.step);
+    const zstd_magicless_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/magicless_diff.py", "--probe" });
+    zstd_magicless_diff.addArtifactArg(zstd_magicless_probe);
+    zstd_magicless_diff.addArgs(&.{ "--directory", "zig-out/zstd-magicless" });
+    if (b.args) |args| zstd_magicless_diff.addArgs(args);
+    b.step("run-zstd-magicless-diff", "Validate Zstd magicless wire and state behavior against libzstd").dependOn(&zstd_magicless_diff.step);
     const zstd_large_history_tests = b.addTest(.{
         .name = "vort-zstd-large-history-tests",
         .root_module = zstd_tests_mod,
@@ -7190,6 +7218,9 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(&zstd_magicless_tests.step);
+    check_step.dependOn(&zstd_magicless_root_tests.step);
+    check_step.dependOn(&zstd_magicless_probe.step);
     check_step.dependOn(&br_large_history_tests.step);
     check_step.dependOn(&br_large_history_probe.step);
     check_step.dependOn(&br_metadata_tests.step);

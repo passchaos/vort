@@ -5,8 +5,6 @@ const zstd = @import("../zstd.zig");
 const lzjb = @import("lzjb.zig");
 const zle = @import("zle.zig");
 
-const zstd_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
-
 pub const Error = deflate.Error || lz4.Error || zstd.Error || lzjb.Error ||
     zle.Error || std.mem.Allocator.Error || error{
     InvalidZfsBlock,
@@ -186,16 +184,14 @@ fn encodeZstdAlloc(
     const wire_level = zstdWireLevel(options.zstd_level) orelse
         return error.InvalidZfsBlock;
     if (options.zstd_version > 0x00ff_ffff) return error.InvalidZfsBlock;
-    const frame = try zstd.encodeFrameWithLevelAndOptionsAlloc(
+    const payload = try zstd.encodeFrameWithLevelAndOptionsAlloc(
         allocator,
         input,
         options.zstd_level,
-        .{ .include_content_size = false, .content_checksum = false },
+        .{ .format = .magicless, .include_content_size = false, .content_checksum = false },
     );
-    defer allocator.free(frame);
-    if (frame.len < 4 or !std.mem.eql(u8, frame[0..4], &zstd_magic))
-        return error.InvalidZfsBlock;
-    const compressed_size = frame.len - 4;
+    defer allocator.free(payload);
+    const compressed_size = payload.len;
     const output = try allocator.alloc(u8, 8 + compressed_size);
     errdefer allocator.free(output);
     std.mem.writeInt(
@@ -207,7 +203,7 @@ fn encodeZstdAlloc(
     const version_level = (@as(u32, wire_level) << 24) |
         options.zstd_version;
     std.mem.writeInt(u32, output[4..8], version_level, .big);
-    @memcpy(output[8..], frame[4..]);
+    @memcpy(output[8..], payload);
     return output;
 }
 
@@ -217,11 +213,11 @@ fn decodeZstdAlloc(
     expected_size: usize,
 ) Error![]u8 {
     const metadata = try parseZstdMetadata(input);
-    const frame = try allocator.alloc(u8, 4 + metadata.compressed_size);
-    defer allocator.free(frame);
-    @memcpy(frame[0..4], &zstd_magic);
-    @memcpy(frame[4..], input[8..][0..metadata.compressed_size]);
-    return zstd.decodeFrameAllocExactSize(allocator, frame, expected_size);
+    return zstd.decodeFrameAllocWithOptions(allocator, input[8..][0..metadata.compressed_size], .{
+        .format = .magicless,
+        .expected_output_len = expected_size,
+        .max_output_len = expected_size,
+    });
 }
 
 fn decodeZstdVersionLevel(raw: u32) struct { level: u8, version: u32 } {

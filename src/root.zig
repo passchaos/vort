@@ -2415,6 +2415,19 @@ pub const lz4SummarizeBlockWithPrefixLimited = lz4.summarizeBlockWithPrefixLimit
 pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
 pub const ZstdError = zstd.Error;
+pub const ZstdFrameFormat = zstd.FrameFormat;
+pub const ZstdFrameDecodeOptions = zstd.FrameDecodeOptions;
+pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
+pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
+pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;
+pub const zstdDecodedFrameSizeWithOptions = zstd.decodedFrameSizeWithOptions;
+pub const zstdInspectNativeFrameHeaderWithFormat = zstd.inspectNativeFrameHeaderWithFormat;
+pub const zstdInspectNativeFrameBlockAtWithFormat = zstd.inspectNativeFrameBlockAtWithFormat;
+pub const zstdInspectNativeFrameFirstBlockWithFormat = zstd.inspectNativeFrameFirstBlockWithFormat;
+
+test "root Zstd magicless consumer contracts" {
+    try @import("tests/zstd_magicless_consumers.zig").contracts(@This());
+}
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
 pub const zstdMinCompressionLevel = zstd.min_compression_level;
 pub const zstdMaxCompressionLevel = zstd.max_compression_level;

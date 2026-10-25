@@ -198,6 +198,9 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         /// Queue a standard Zstd skippable frame after a drained data frame.
         /// Start the next data frame with `nextFrame` after this drains.
         pub fn writeSkippable(self: *Self, skippable_id: u4, payload: []const u8) Error!void {
+            if (@hasField(Codec.Options, "format")) {
+                if (self.options.format == .magicless) return error.InvalidBlockPlan;
+            }
             if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             try self.bindAllocator(self.options);

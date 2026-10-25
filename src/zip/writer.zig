@@ -340,6 +340,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
     if (options.archive_extra_data.len > std.math.maxInt(u32))
         return error.Zip32LimitExceeded;
     for (entries) |entry| {
+        if ((entry.method == .zstandard or entry.method == .zstandard_legacy) and
+            options.zstd_options.format != .standard) return error.InvalidBlockPlan;
         if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
         if (entry.extended_timestamp) |timestamp|
             if (!timestamp.isValid()) return error.InvalidZipTimestamp;

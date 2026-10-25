@@ -93,6 +93,8 @@ pub fn encodeAlloc(
     entries: []const writer.EncodeEntry,
     options: EncodeOptions,
 ) ![]u8 {
+    if (options.compression == .zstandard and options.zstd_options.format != .standard)
+        return error.InvalidBlockPlan;
     const tar_bytes = try writer.encodeAlloc(allocator, entries);
     if (options.compression == .none) return tar_bytes;
     defer allocator.free(tar_bytes);
