@@ -23363,3 +23363,21 @@ reuse, so production keeps the simpler independently owned plans.
   Continue auditing practical API parity and comprehensive real-corpus
   compression-ratio, throughput and memory tradeoffs before the broad goal can
   be considered achieved.
+
+- 2026-10-25: actual native Brotli q8 diagnostics now separate recent-distance
+  scanning and context proposals and return the same observed proposals used
+  by the encoder. Fixed caller-owned detail storage links each successful
+  context event and separates uncached baseline/suffix scores from per-mode
+  cluster memo traffic. A shared 128-entry exact-frequency cache experiment
+  passed correctness but showed no public speed benefit (0.995366x across
+  three alternating process pairs), so the original default cache policy was
+  restored. Final ordinary/profile wires and candidate decisions remain
+  unchanged. Full Brotli tests pass 1421 with one skip and build checks pass
+  173/173; Debug/x86 context and q8 contracts pass 76/76. The retained diagnostic
+  increment's restored public point ratio is 0.986497x, recorded as a negative
+  difference without a speedup or statistical-significance claim. Inspect
+  normal helper call overhead and exact tree-length scoring next, then repeat
+  ordinary API comparisons. [Evidence and boundaries](performance/brotli-context-score-experiment.md)
+  retain candidate and restored epochs separately. Industry-best functionality
+  and performance, broad streaming/quality/platform matrices and competitor
+  memory comparisons remain incomplete.

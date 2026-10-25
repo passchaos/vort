@@ -152,7 +152,10 @@ All fourteen ordinary wires/settings and seventy actual profiled wires retain
 the old identities and pass the independent report gate. Ordered common wire
 candidates and decisions also match the earlier seventy rounds.
 A separate pinned restored ELF review confirms direct baseline/suffix scoring,
-mode-local cluster memo initialization and absent normal profile clocks. The [evidence package](data/brotli-context-score-20261025/artifact-manifest.json)
+mode-local cluster memo initialization and absent normal profile clocks.
+After pulling with rebase, combined native ReleaseFast context/q8 contracts
+pass 76/76 again and all five file-alias/report smoke cases pass. Full
+src/tools/build hashes remain unchanged through these handoff checks. The [evidence package](data/brotli-context-score-20261025/artifact-manifest.json)
 preserves both source epochs, failed
 QA/tool attempts and their fixes, full-frequency invariants, actual wire and
 candidate decisions, raw ordinary/profile/process-pair rounds, source and
