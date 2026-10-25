@@ -163,6 +163,7 @@ pub fn Encoder(comptime Codec: type) type {
         /// `need_input`; content can then continue in the same Brotli stream.
         pub fn writeMetadata(self: *Self, metadata: []const u8) Error!void {
             if (self.finishing or self.done or self.metadata_requested) return error.InvalidBlockPlan;
+            if (@hasDecl(Codec, "validateMetadata")) try Codec.validateMetadata(metadata.len);
             self.pending_metadata = metadata;
             self.metadata_requested = true;
             self.flush_requested = true;

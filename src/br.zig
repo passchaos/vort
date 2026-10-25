@@ -7,6 +7,7 @@ const stream_count = core.stream_count;
 const bit_count_math = @import("io/bit_count.zig");
 pub const BitCount = bit_count_math.BitCount;
 const stored_bit_bound = @import("br/encoder/stored_bit_bound.zig");
+const metadata_header = @import("br/encoder/metadata_header.zig");
 const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
@@ -1588,7 +1589,10 @@ const IncrementalStoredEncoderCodec = struct {
 
     pub fn validateStreamOptions(options: StreamOptions) br.Error!void {
         try encoder_window_format.validate(options.window_bits, options.large_window);
-        if (options.metadata.len > 0x1_0000) return error.InvalidBlockPlan;
+        try validateMetadata(options.metadata.len);
+    }
+    pub fn validateMetadata(metadata_len: usize) br.Error!void {
+        _ = try metadata_header.plan(metadata_len);
     }
     pub fn extractMemoryConfig(options: StreamOptions) @import("br/incremental/stored/allocator_adapter.zig").Config {
         return .{ .limit = options.max_total_working_memory, .profile = options.memory_profile };
@@ -1610,6 +1614,7 @@ const IncrementalStoredEncoderCodec = struct {
     }
 
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        try validateStreamOptions(options);
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
@@ -1639,6 +1644,13 @@ const IncrementalPlannedEncoderCodec = struct {
     pub const Error = br.Error;
     pub const StreamOptions = br.PlannedStreamChunksOptions;
     pub const max_block_len = hq_options.max_block_len;
+
+    pub fn validateStreamOptions(options: StreamOptions) br.Error!void {
+        try validatePlannedStreamChunksOptions(options);
+    }
+    pub fn validateMetadata(metadata_len: usize) br.Error!void {
+        _ = try metadata_header.plan(metadata_len);
+    }
     /// Zero asks the shared stream policy to select the level/quality default.
     pub const default_block_len: usize = 0;
     pub const State = struct {
@@ -1925,6 +1937,8 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
     pub const max_block_len = br.max_uncompressed_meta_block_len;
     pub const default_block_len = planner_max_backward_distance;
     pub const defer_full_block_until_more_input = true;
+    pub const validateStreamOptions = IncrementalStoredEncoderCodec.validateStreamOptions;
+    pub const validateMetadata = IncrementalStoredEncoderCodec.validateMetadata;
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
@@ -1967,7 +1981,7 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
         state: *State,
         options: StreamOptions,
     ) br.Error!void {
-        try encoder_window_format.validate(options.window_bits, options.large_window);
+        try IncrementalStoredEncoderCodec.validateStreamOptions(options);
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writePlannedWindowBits(allocator, &writer, options.window_bits, options.large_window);
         if (options.metadata.len != 0)
@@ -2094,6 +2108,24 @@ pub const StaticDictionaryStreamEncoder = struct {
         chunks: []const []const u8,
         options: StaticDictionaryStreamOptions,
     ) Error![]const u8 {
+        try static_dictionary_stream.validateChunks(
+            IncrementalStaticDictionaryStreamEncoder,
+            max_uncompressed_meta_block_len,
+            chunks,
+            options,
+        );
+        var protected = try @import("br/encoder/stored_alias.zig").protect(
+            self.allocator,
+            self.output.allocatedSlice(),
+            chunks,
+            options.stream.metadata,
+        );
+        defer {
+            self.incremental.options.stream.metadata = &.{};
+            protected.deinit();
+        }
+        var inner_options = options;
+        inner_options.stream.metadata = protected.metadata();
         self.output.clearRetainingCapacity();
         try static_dictionary_stream.encodeChunksWithOptionsAppendReuse(
             IncrementalStaticDictionaryStreamEncoder,
@@ -2101,8 +2133,8 @@ pub const StaticDictionaryStreamEncoder = struct {
             &self.incremental,
             self.allocator,
             &self.output,
-            chunks,
-            options,
+            protected.input(),
+            inner_options,
         );
         return self.output.items;
     }
@@ -3207,6 +3239,7 @@ pub const IncrementalTestSupport = struct {
     }
 
     pub fn encodeCompressedHelloThenMetadataAndStoredBlocks(allocator: std.mem.Allocator, metadata: []const u8, stored_blocks: []const []const u8) Error![]u8 {
+        _ = try metadata_header.plan(metadata.len);
         if (stored_blocks.len == 0) return error.InvalidBlockPlan;
         for (stored_blocks) |stored| if (stored.len == 0 or stored.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
         var encoded: std.ArrayList(u8) = .empty;
@@ -3231,6 +3264,7 @@ pub const IncrementalTestSupport = struct {
     }
 
     pub fn encodeCompressedAlternatingThenMetadataAndStored(allocator: std.mem.Allocator, metadata: []const u8, stored: []const u8) Error![]u8 {
+        _ = try metadata_header.plan(metadata.len);
         if (metadata.len == 0 or stored.len == 0) return error.InvalidBlockPlan;
         var encoded: std.ArrayList(u8) = .empty;
         errdefer encoded.deinit(allocator);
@@ -3322,6 +3356,7 @@ pub const IncrementalTestSupport = struct {
     }
 
     pub fn encodeMetadataThenCompressedHello(allocator: std.mem.Allocator, metadata: []const u8) Error![]u8 {
+        _ = try metadata_header.plan(metadata.len);
         var encoded: std.ArrayList(u8) = .empty;
         errdefer encoded.deinit(allocator);
         var writer = BitWriter{ .out = &encoded };
@@ -3507,6 +3542,11 @@ pub const IncrementalTestSupport = struct {
 };
 
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
+pub const max_metadata_meta_block_len = metadata_header.max_metadata_meta_block_len;
+
+test "Brotli metadata full-range public contracts" {
+    try @import("br_metadata_tests.zig").contracts(@This());
+}
 
 pub const default_window_bits: u5 = 16;
 const planned_chunk_max_input_len: usize = 64 * 1024;
@@ -3565,6 +3605,7 @@ pub const PlannedStreamChunksOptions = struct {
 };
 
 fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error!void {
+    _ = try metadata_header.plan(options.metadata.len);
     if (options.hq) |hq| try hq.validate(options.quality orelse return error.InvalidBlockPlan);
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
     if (options.window_bits < 10 or options.window_bits > (if (options.large_window) @as(u5, 30) else 24))
@@ -3876,7 +3917,7 @@ const BitWriter = struct {
         }
     }
 
-    fn alignToByte(self: *BitWriter) void {
+    pub fn alignToByte(self: *BitWriter) void {
         self.bit_index = 0;
     }
 
@@ -6415,6 +6456,7 @@ const ratio_extended_static_dictionary_max_input_len: usize = 4096;
 const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBoundWithOptions(ratio_static_dictionary_max_input_len, .{ .window_bits = 10, .large_window = true }) catch unreachable;
 
 fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions) Error!void {
+    _ = try metadata_header.plan(options.metadata.len);
     if (options.large_window) {
         _ = try resolvedPlannedWindowBits(options);
     }
@@ -9323,6 +9365,7 @@ pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
     chunks: []const []const u8,
     options: StaticDictionaryStreamOptions,
 ) Error![]u8 {
+    try IncrementalStoredEncoderCodec.validateStreamOptions(options.stream);
     return static_dictionary_stream.encodeChunksWithOptionsAlloc(
         IncrementalStaticDictionaryStreamEncoder,
         max_uncompressed_meta_block_len,
@@ -9351,6 +9394,7 @@ pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
     chunks: []const []const u8,
     options: StaticDictionaryStreamOptions,
 ) Error!void {
+    try IncrementalStoredEncoderCodec.validateStreamOptions(options.stream);
     return static_dictionary_stream.encodeChunksWithOptionsAppend(
         IncrementalStaticDictionaryStreamEncoder,
         max_uncompressed_meta_block_len,
@@ -9377,6 +9421,7 @@ pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
     output: []u8,
     options: StaticDictionaryStreamOptions,
 ) Error!usize {
+    try IncrementalStoredEncoderCodec.validateStreamOptions(options.stream);
     return static_dictionary_stream.encodeChunksWithOptionsInto(
         IncrementalStaticDictionaryStreamEncoder,
         max_uncompressed_meta_block_len,
@@ -11223,6 +11268,7 @@ fn encodeCommandPlanWithOptionsAllocRecorded(comptime trace_enabled: bool, trace
     errdefer |err| profile_scope.failure(err);
     profile_scope.config(options);
 
+    _ = try metadata_header.plan(options.metadata.len);
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     var out = try std.ArrayList(u8).initCapacity(allocator, commandPlanInitialCapacity(input.len));
     errdefer out.deinit(allocator);
@@ -11251,6 +11297,7 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 }
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    _ = try metadata_header.plan(options.metadata.len);
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     if (options.large_window)
         return encodeCommandPlanWithLargeWindowWrite(allocator, writer, input, commands, io, stats, options);
@@ -12498,6 +12545,7 @@ fn hqWorkingError(err: anyerror, budget: *const hq_codec.Budget) Error {
 }
 
 fn encodeHqStoredCandidate(allocator: std.mem.Allocator, source: hq_types.Source, context: hq_codec.wire.Context) Error!hq_codec.wire.Artifact {
+    _ = try metadata_header.plan(context.metadata.len);
     var result: hq_codec.wire.Artifact = .{ .last_distances = source.recent, .frame_offset = std.math.add(u64, source.frame_offset, source.input.len) catch return error.IntegerOverflow, .stored = true };
     errdefer result.deinit(allocator);
     if (context.start_bit_index != 0) try result.bytes.append(allocator, context.start_byte);
@@ -12765,19 +12813,8 @@ fn addStoredUncompressedMetaBlockBitsLen(bit_count: BitCount, block_len: usize) 
 }
 
 fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, metadata: []const u8) Error!void {
-    if (metadata.len > 0x1_0000) return error.InvalidBlockPlan;
-    try writer.writeBits(allocator, 0, 1); // ISLAST = false.
-    try writer.writeBits(allocator, 0b11, 2); // MNIBBLES = 0.
-    try writer.writeBits(allocator, 0, 1); // reserved.
-    if (metadata.len == 0) {
-        try writer.writeBits(allocator, 0, 2); // MSKIPBYTES = 0.
-    } else {
-        const len_minus_one = metadata.len - 1;
-        const mskipbytes: usize = if (len_minus_one <= 0xff) 1 else 2;
-        try writer.writeBits(allocator, @intCast(mskipbytes), 2);
-        try writer.writeBits(allocator, @intCast(len_minus_one), @intCast(mskipbytes * 8));
-    }
-    writer.alignToByte();
+    const header = try metadata_header.plan(metadata.len);
+    try header.write(allocator, writer);
     try writer.writeAlignedBytes(allocator, metadata);
 }
 
@@ -22962,7 +22999,7 @@ test "br one-shot planned metadata covers every level and output form" {
     defer std.testing.allocator.free(long_decoded);
     try std.testing.expectEqualSlices(u8, long_payload, long_decoded);
 
-    const oversized_metadata = "x" ** 65_537;
+    const oversized_metadata: []const u8 = @as([*]const u8, @ptrFromInt(1))[0 .. max_metadata_meta_block_len + 1];
     try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(payload.len, .{ .metadata = oversized_metadata }));
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .metadata = oversized_metadata }));
 }

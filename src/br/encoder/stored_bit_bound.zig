@@ -3,6 +3,7 @@
 //! identical byte-aligned cost, so large bounds take constant work per chunk.
 const std = @import("std");
 const bit_count = @import("../../io/bit_count.zig");
+const metadata_header = @import("metadata_header.zig");
 pub const BitCount = bit_count.BitCount;
 pub const Error = bit_count.Error || error{InvalidBlockPlan};
 pub const max_block_len: usize = 1 << 24;
@@ -25,11 +26,7 @@ pub fn uncompressed(bits: BitCount, block_len: usize) Error!BitCount {
 }
 
 pub fn metadata(bits: BitCount, metadata_len: usize) Error!BitCount {
-    if (metadata_len > 0x1_0000) return error.InvalidBlockPlan;
-    const length_bits: BitCount = if (metadata_len == 0) 0 else if (metadata_len - 1 <= 0xff) 8 else 16;
-    // ISLAST + MNIBBLES + reserved + MSKIPBYTES + optional length.
-    const payload_start = try alignToByte(try add(bits, 1 + 2 + 1 + 2 + length_bits));
-    return add(payload_start, try bit_count.fromBytes(metadata_len));
+    return metadata_header.addBits(bits, metadata_len);
 }
 
 pub fn blocks(bits: BitCount, input_len: usize, block_len: usize) Error!BitCount {

@@ -883,6 +883,7 @@ pub const encodeSevenZipStoredAppend = seven_zip.encodeStoredAppend;
 pub const encodeSevenZipStoredInto = seven_zip.encodeStoredInto;
 
 pub const BrotliError = br.Error;
+pub const BrotliMaxMetadataMetaBlockLen = br.max_metadata_meta_block_len;
 pub const BrotliDecodeOptions = br.DecodeOptions;
 pub const brotliMaxUncompressedMetaBlockLen = br.max_uncompressed_meta_block_len;
 pub const brotliDefaultWindowBits = br.default_window_bits;
@@ -5408,6 +5409,7 @@ test "root exports lz4 and zstd codec helpers" {
 }
 
 test "root brotli stream helpers expose exact and chunked decode variants" {
+    try std.testing.expectEqual(@as(usize, 1 << 24), BrotliMaxMetadataMetaBlockLen);
     const payload = "root brotli stream helper payload" ** 3;
     const options: BrotliStoredStreamOptions = .{
         .metadata = "root-br-metadata",
@@ -5425,7 +5427,8 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqualSlices(u8, encoded, into_encoded[0..encoded.len]);
     try std.testing.expectError(error.OutOfMemory, brEncodeStoredStreamWithOptionsInto(payload, into_encoded[0 .. encoded.len - 1], options));
     try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .window_bits = 9 }));
-    try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .metadata = &([_]u8{0} ** 0x1_0001) }));
+    const oversized_metadata: []const u8 = @as([*]const u8, @ptrFromInt(1))[0 .. BrotliMaxMetadataMetaBlockLen + 1];
+    try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .metadata = oversized_metadata }));
 
     const input_chunks = [_][]const u8{
         payload[0..11],

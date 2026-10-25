@@ -1,5 +1,7 @@
 const std = @import("std");
 const allocator_dispatch = @import("../allocator_dispatch.zig");
+const window_format = @import("window_format.zig");
+const metadata_header = @import("metadata_header.zig");
 
 const ChunksInfo = struct {
     input_len: usize,
@@ -94,15 +96,27 @@ pub fn encodeChunksWithOptionsInto(
     return encoded.len;
 }
 
+/// Complete format and input admission before a caller clears reusable output
+/// or snapshots aliases. Metadata validation reads only its borrowed length.
+pub fn validateChunks(
+    comptime Encoder: type,
+    comptime max_block_len: usize,
+    chunks: []const []const u8,
+    options: Encoder.Options,
+) Encoder.Error!void {
+    _ = try preflightChunks(Encoder, max_block_len, chunks, options);
+}
+
 fn preflightChunks(
     comptime Encoder: type,
     comptime max_block_len: usize,
     chunks: []const []const u8,
     options: Encoder.Options,
 ) Encoder.Error!ChunksInfo {
-    if (options.block_len == 0 or options.block_len > max_block_len or
-        options.stream.window_bits < 10 or options.stream.window_bits > 24)
+    if (options.block_len == 0 or options.block_len > max_block_len)
         return error.InvalidBlockPlan;
+    try window_format.validate(options.stream.window_bits, options.stream.large_window);
+    _ = try metadata_header.plan(options.stream.metadata.len);
     var info: ChunksInfo = .{ .input_len = 0, .last_non_empty = null };
     for (chunks, 0..) |chunk, index| {
         info.input_len = std.math.add(usize, info.input_len, chunk.len) catch

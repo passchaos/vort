@@ -38,7 +38,7 @@ test "Brotli wide bit addressing stored bounds cross 512 MiB and reject unrepres
     }
     try std.testing.expectError(error.InvalidBlockPlan, bound.blocks(0, 1, 0));
     try std.testing.expectError(error.InvalidBlockPlan, bound.uncompressed(std.math.maxInt(BitCount), 0));
-    try std.testing.expectError(error.InvalidBlockPlan, bound.metadata(std.math.maxInt(BitCount), 0x1_0001));
+    try std.testing.expectError(error.InvalidBlockPlan, bound.metadata(std.math.maxInt(BitCount), (1 << 24) + 1));
     try std.testing.expectError(error.IntegerOverflow, bound.uncompressed(std.math.maxInt(BitCount) - 7, 1));
     try std.testing.expectError(error.IntegerOverflow, bound.metadata(std.math.maxInt(BitCount) - 7, 1));
     if (@bitSizeOf(usize) >= 64) {

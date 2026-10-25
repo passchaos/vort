@@ -407,6 +407,34 @@ pub fn build(b: *std.Build) void {
     const run_br_tests = b.addRunArtifact(br_tests);
     const br_test_step = b.step("test-br", "Run focused Brotli codec tests");
     br_test_step.dependOn(&run_br_tests.step);
+    const br_metadata_tests = b.addTest(.{
+        .name = "vort-br-metadata-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{"Brotli metadata"},
+    });
+    const br_metadata_root_tests = b.addTest(.{
+        .name = "vort-br-metadata-root-tests",
+        .root_module = tests_mod,
+        .filters = &.{"root brotli stream helpers expose exact and chunked decode variants"},
+    });
+    const br_metadata_step = b.step("test-br-metadata", "Run complete Brotli metadata length, ownership and resource contracts");
+    br_metadata_step.dependOn(&b.addRunArtifact(br_metadata_tests).step);
+    br_metadata_step.dependOn(&b.addRunArtifact(br_metadata_root_tests).step);
+    const br_metadata_probe = b.addExecutable(.{
+        .name = "vort-br-metadata-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/metadata_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "br", .module = br_encode_bench_mod }},
+        }),
+    });
+    b.step("build-br-metadata-probe", "Compile the public Brotli metadata compatibility probe").dependOn(&br_metadata_probe.step);
+    const br_metadata_diff = b.addSystemCommand(&.{ "python3", "tools/br/metadata_diff.py", "--probe" });
+    br_metadata_diff.addArtifactArg(br_metadata_probe);
+    br_metadata_diff.addArgs(&.{ "--directory", "zig-out/br-metadata" });
+    if (b.args) |args| br_metadata_diff.addArgs(args);
+    b.step("run-br-metadata-diff", "Validate complete Brotli metadata blocks against libbrotli").dependOn(&br_metadata_diff.step);
     const br_hq_tests = b.addTest(.{
         .name = "vort-br-hq-tests",
         .root_module = br_tests_mod,
@@ -7141,6 +7169,9 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(&br_metadata_tests.step);
+    check_step.dependOn(&br_metadata_root_tests.step);
+    check_step.dependOn(&br_metadata_probe.step);
     check_step.dependOn(&tests.step);
     check_step.dependOn(&br_record_classifier_tests.step);
     check_step.dependOn(&br_record_optimal_object_tests.step);
