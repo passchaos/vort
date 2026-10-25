@@ -1,0 +1,63 @@
+{
+  "results": {
+    "state-native": {
+      "state": {
+        "tracked_bytes": 6032,
+        "untracked_bytes": 5568
+      },
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "run",
+        "-O",
+        "ReleaseFast",
+        "--dep",
+        "vort_zstd",
+        "-Mroot=/tmp/vort-zstd-work-accounting-20261025/state_probe.zig",
+        "-O",
+        "ReleaseFast",
+        "-Mvort_zstd=src/zstd.zig"
+      ],
+      "source": {
+        "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51",
+        "src/zstd/literals/winner_cost_cache.zig": "584446c9c72555c2c9ad71dd0f43c7fe2a5119b2475b5dc0f31d3bc6b0040f78",
+        "src/zstd/literals/work_accounting_tests.zig": "74fa21f76d28662bfd0afcf21f8fd713d0f4162d649d53ec8800f9a253ccb204",
+        "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59"
+      }
+    },
+    "state-x86-final": {
+      "state": {
+        "tracked_bytes": 5980,
+        "untracked_bytes": 5516
+      },
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "run",
+        "-O",
+        "ReleaseFast",
+        "-target",
+        "x86-linux-musl",
+        "--dep",
+        "vort_zstd",
+        "-Mroot=/tmp/vort-zstd-work-accounting-20261025/state_probe.zig",
+        "-O",
+        "ReleaseFast",
+        "-target",
+        "x86-linux-musl",
+        "-Mvort_zstd=src/zstd.zig"
+      ],
+      "source": {
+        "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51",
+        "src/zstd/literals/winner_cost_cache.zig": "584446c9c72555c2c9ad71dd0f43c7fe2a5119b2475b5dc0f31d3bc6b0040f78",
+        "src/zstd/literals/work_accounting_tests.zig": "74fa21f76d28662bfd0afcf21f8fd713d0f4162d649d53ec8800f9a253ccb204",
+        "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59"
+      }
+    }
+  },
+  "scope": "Compiled object sizeof only; no heap/RSS/total-stack ranking. Initial wrong mixed-target probe excluded."
+}

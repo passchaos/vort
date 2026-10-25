@@ -1,0 +1,31 @@
+{
+  "scope": "default emit exact symbol only; static site count, no dynamic execution count",
+  "stats": {
+    "lzcnt_instructions": 2,
+    "inc_followed_by_saturation_cmove_sites": 21,
+    "inc_instructions": 43
+  },
+  "saturation_cmove_addresses": [
+    "115ae88",
+    "115aea9",
+    "115b3dd",
+    "115c2ab",
+    "115c2cb",
+    "115c2e4",
+    "115c327",
+    "115c35c",
+    "115c70d",
+    "115c89a",
+    "115c8f4",
+    "115cc22",
+    "115cd9b",
+    "115cecc",
+    "115cfc0",
+    "115d004",
+    "115d159",
+    "115d1f6",
+    "115d236",
+    "115d24d",
+    "115d264"
+  ]
+}

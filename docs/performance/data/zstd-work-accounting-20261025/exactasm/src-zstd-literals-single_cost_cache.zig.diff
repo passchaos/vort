@@ -1,0 +1,103 @@
+--- old/src/zstd/literals/single_cost_cache.zig
++++ new/src/zstd/literals/single_cost_cache.zig
+@@ -57,10 +57,17 @@
+ /// `prefix_len` deliberately means block[0..prefix_len], even for a finder
+ /// query whose start_min is nonzero. This preserves the legacy cost view.
+ pub fn Cache(comptime Codec: type) type {
++    return CacheWithAccounting(Codec, true);
++}
++
++/// Compile-time accounting selection leaves codec state and checked histogram
++/// admission intact. Reference callbacks still run when supplied by Codec;
++/// only their statistical feedback is omitted by the untracked instance.
++pub fn CacheWithAccounting(comptime Codec: type, comptime track_work: bool) type {
+     return struct {
+         histogram: CutHistogram,
+         block: []const u8,
+-        work: Work = .{},
++        work: if (track_work) Work else void = if (track_work) .{} else {},
+         tree_entry: ?TreeEntry = null,
+ 
+         const Self = @This();
+@@ -75,14 +82,14 @@
+         }
+ 
+         fn payloadCost(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize) Codec.Error!PayloadCost {
+-            self.work.cost_queries +|= 1;
++            if (comptime track_work) self.work.cost_queries +|= 1;
+             const actual = self.calculatePayloadLen(prefix_len, offset, match_len, tail_start);
+             self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+             return actual;
+         }
+ 
+         pub fn failedPreparation(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize, err: Codec.Error) Codec.Error!PayloadCost {
+-            self.work.cost_queries +|= 1;
++            if (comptime track_work) self.work.cost_queries +|= 1;
+             const actual: Codec.Error!PayloadCost = err;
+             self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+             return err;
+@@ -93,7 +100,7 @@
+         /// The caller must not update this cache's cut between preparation and
+         /// pricing: frequencies and stream histograms must describe one view.
+         pub fn payloadCostPrepared(self: *Self, prefix_len: usize, offset: usize, match_len: usize, tail_start: usize, prepared: *const PreparedLiterals) Codec.Error!PayloadCost {
+-            self.work.cost_queries +|= 1;
++            if (comptime track_work) self.work.cost_queries +|= 1;
+             const actual = self.calculatePayloadPrepared(prefix_len, offset, match_len, prepared);
+             self.checkReference(prefix_len, offset, match_len, tail_start, actual);
+             return actual;
+@@ -103,12 +110,18 @@
+             // Test codecs compare every query, including rejected and losing
+             // candidates. Production codecs retain no reference callback.
+             if (@hasDecl(Codec, "referenceCost")) {
+-                self.work.reference_checks +|= 1;
++                if (comptime track_work) self.work.reference_checks +|= 1;
+                 const reference = Codec.referenceCost(self.block, prefix_len, offset, match_len, tail_start);
+-                const equal = if (reference) |expected|
+-                    if (actual) |value| value.len == expected else |_| false
+-                else |expected_error| if (actual) |_| false else |actual_error| actual_error == expected_error;
+-                self.work.reference_mismatches +|= @intFromBool(!equal);
++                if (comptime track_work) {
++                    const equal = if (reference) |expected|
++                        if (actual) |value| value.len == expected else |_| false
++                    else |expected_error| if (actual) |_| false else |actual_error| actual_error == expected_error;
++                    self.work.reference_mismatches +|= @intFromBool(!equal);
++                } else {
++                    // Keep the callback and consume either result without
++                    // statistical comparisons or retained feedback.
++                    if (reference) |_| {} else |_| {}
++                }
+             }
+         }
+ 
+@@ -156,7 +169,7 @@
+             const regenerated = prepared.regenerated;
+             if (prepared.unique < 2 or regenerated < 64) return .{ .len = best };
+ 
+-            self.work.huffman_plans +|= 1;
++            if (comptime track_work) self.work.huffman_plans +|= 1;
+             const plan = Codec.planFromFrequencies(&prepared.frequencies) orelse return .{ .len = best };
+             const tree_len = try self.cachedTreeLen(&plan) orelse return .{ .len = best };
+             const streams = try self.streamsLen(&plan.bit_counts) orelse return .{ .len = best };
+@@ -176,11 +189,11 @@
+             const key = TreeKey.fromPlan(plan);
+             if (self.tree_entry) |*entry| {
+                 if (entry.key.matches(&key)) {
+-                    self.work.tree_cache_hits +|= 1;
++                    if (comptime track_work) self.work.tree_cache_hits +|= 1;
+                     return entry.serialized_len;
+                 }
+             }
+-            self.work.tree_serializations +|= 1;
++            if (comptime track_work) self.work.tree_serializations +|= 1;
+             const serialized_len = try Codec.treeLen(plan);
+             self.tree_entry = .{ .key = key, .serialized_len = serialized_len };
+             return serialized_len;
+@@ -196,7 +209,7 @@
+                 for (frequencies, bit_counts) |frequency, bits| {
+                     if (frequency == 0) continue;
+                     if (bits == 0) return error.CorruptFrame;
+-                    self.work.stream_symbol_products +|= 1;
++                    if (comptime track_work) self.work.stream_symbol_products +|= 1;
+                     const product = std.math.mul(usize, frequency, bits) catch return error.IntegerOverflow;
+                     stream_bits = std.math.add(usize, stream_bits, product) catch return error.IntegerOverflow;
+                 }

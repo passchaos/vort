@@ -1,0 +1,320 @@
+{
+  "schema": "vort.zstd.work-accounting.production-elf-diff.v1",
+  "created_utc": "2026-10-25T07:56:42.556602+00:00",
+  "created_asia_shanghai": "2026-10-25T15:56:42.556602+08:00",
+  "scope": "Read-only pinned production ELF differential audit of default unindexed multi candidate path. No compilation, benchmark execution, source or Git mutation.",
+  "elfs": {
+    "old": {
+      "path": "/home/passchaos/project-z/vort-zstd-anchor-cache/.zig-cache/o/cb65c150ad435ec3299a71a1ad71caff/vort-zstd-encode-bench",
+      "sha256": "5d14ea6817ac59176c0ee38b8f1331d627569e534f8a1cc7fcd08b46b5380b0b"
+    },
+    "new": {
+      "path": "/home/passchaos/project-z/vort-zstd-work-accounting/.zig-cache/o/cb5827954aa0d116f6d48f2b2bf9daeb/vort-zstd-encode-bench",
+      "sha256": "d32df6453d43fb7f2c8b64eacb55a271e1d662806eb5577fd3803d1e2bd8ebfa"
+    }
+  },
+  "source_sha256": {
+    "old": {
+      "src/zstd.zig": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+      "src/zstd/literals/single_cost_cache.zig": "1fde928e6f6133328dbdf09f9af4b30d8fdf60b162e1968f744327b6825d29e7",
+      "src/zstd/literals/winner_cost_cache.zig": "f8319362c42e785234dbc961004da5e9258c9caeb5410586414d68a1ead1ddc5",
+      "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+      "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890"
+    },
+    "new": {
+      "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59",
+      "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51",
+      "src/zstd/literals/winner_cost_cache.zig": "584446c9c72555c2c9ad71dd0f43c7fe2a5119b2475b5dc0f31d3bc6b0040f78",
+      "src/zstd/literals/cut_histogram.zig": "6a9d7e4545f2ee075cfef1c1497b5609987820a9d6401848ca2268865711f9ad",
+      "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890"
+    }
+  },
+  "new_build_record": {
+    "command": [
+      "taskset",
+      "-c",
+      "2-7,10-12",
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build",
+      "run-zstd-encode-bench",
+      "-j2",
+      "--summary",
+      "all",
+      "--",
+      "--help"
+    ],
+    "cwd": "/home/passchaos/project-z/vort-zstd-work-accounting",
+    "start_utc": "2026-10-25T07:51:37.668820+00:00",
+    "end_utc": "2026-10-25T07:52:46.902648+00:00",
+    "wall_seconds": 69.23382714600302,
+    "exit_code": 0,
+    "source_stable": true,
+    "passed_test_counts": [],
+    "build_summary": [
+      "5/5 steps succeeded"
+    ],
+    "log_sha256": "f5f6b4067202020ff08f2e139012b1cad4f6a410daa23bc2ea76bb5663fc6e2c"
+  },
+  "default_source_route": [
+    "emitNativeMatchCompressedBlockSerialWithBeamImpl -> emitMultiDuplicateMatchCompressedBlockWithFirst",
+    "WithFirstImpl(true) -> Profiled(cache_costs=true,profile_work=false) -> ProfiledMode(.prune)",
+    "ProfiledMode -> WithAnchors(reuse_anchors=false,anchors=null)",
+    "cache admission: duplicate_index=null and 4096 < N <= 131072, after rleByte/small-block filter",
+    "new ActiveCostCache=winner.CacheWithAccounting(SingleLiteralCostCodec,.prune,false)",
+    "new inner=exact.CacheWithAccounting(SingleLiteralCostCodec,false)",
+    "hashed finder -> cost_cache.payloadForWinner -> prepare/lower-bound/prune/exact pricing/certificate refresh"
+  ],
+  "symbols": {
+    "old": {
+      "default_emit": "zstd.emitMultiDuplicateMatchCompressedBlockWithFirst",
+      "address": "0x115a9a0",
+      "size_bytes": 11263,
+      "payloadForWinner": "inlined into default emit; no separate nm symbol",
+      "sequenceBase": "zstd.literals.winner_cost_cache.Cache(zstd.SingleLiteralCostCodec,.prune).sequenceBase",
+      "sequenceBase_address": "0x115df20",
+      "sequenceBase_size_bytes": 694,
+      "call_sites": [
+        "0x115a3fa",
+        "0x116a59b",
+        "0x116cb2a",
+        "0x1171131"
+      ],
+      "inner_work_rsp_base": "0x1d50",
+      "certificate_age_rsp_offset": "0x22c8",
+      "bound_work_rsp_base": "0x22d0"
+    },
+    "new": {
+      "default_emit": "zstd.emitMultiDuplicateMatchCompressedBlockWithFirst",
+      "address": "0x115a9a0",
+      "size_bytes": 10263,
+      "payloadForWinner": "inlined into default emit; no separate nm symbol",
+      "sequenceBase": "zstd.literals.winner_cost_cache.CacheWithAccounting(zstd.SingleLiteralCostCodec,.prune,false).sequenceBase",
+      "sequenceBase_address": "0x115db40",
+      "sequenceBase_size_bytes": 694,
+      "call_sites": [
+        "0x115a3fa",
+        "0x116a1bb",
+        "0x116c74a",
+        "0x1170d51"
+      ],
+      "inner_work_type": "void",
+      "certificate_age_type": "void",
+      "bound_work_type": "void",
+      "default_cache_rsp_base": "0x1a08"
+    }
+  },
+  "work_removal": {
+    "old_examples": [
+      {
+        "field": "bound_work.queries",
+        "rsp_offset": "0x22d0",
+        "instruction_range": "0x115ae76\u20130x115ae8c"
+      },
+      {
+        "field": "certificate_age",
+        "rsp_offset": "0x22c8",
+        "instruction_range": "0x115ae9e\u20130x115aead"
+      },
+      {
+        "field": "inner.work.cost_queries",
+        "rsp_offset": "0x1d50",
+        "instruction_range": "0x115c315\u20130x115c32b"
+      },
+      {
+        "field": "inner.work.huffman_plans",
+        "rsp_offset": "0x1d58",
+        "instruction_range": "0x115c351\u20130x115c360"
+      },
+      {
+        "field": "inner.work.tree_serializations",
+        "rsp_offset": "0x1d60",
+        "instruction_range": "0x115c6fb\u20130x115c711"
+      },
+      {
+        "field": "inner.work.tree_cache_hits",
+        "rsp_offset": "0x1d68",
+        "instruction_range": "0x115d147\u20130x115d15d"
+      },
+      {
+        "field": "inner.work.stream_symbol_products",
+        "rsp_offset": "0x1d70",
+        "instruction_range": "0x115c890\u20130x115c89e and 0x115c8ea\u20130x115c8f8"
+      },
+      {
+        "field": "bound_work.negative_delta_histogram",
+        "rsp_offset": "0x2350 + bucket*8",
+        "instruction_range": "0x115cf26 LZCNT; 0x115cfb5\u20130x115cfc4 update"
+      },
+      {
+        "field": "bound_work.certificate_age_histogram",
+        "rsp_offset": "0x23e0 + bucket*8",
+        "instruction_range": "0x115cfd1 LZCNT; 0x115cff2\u20130x115d008 update"
+      }
+    ],
+    "new_corresponding_Work_or_age_storage_and_updates": false,
+    "new_accounting_bucket_or_log2_computation": false,
+    "static_default_function_pattern_scan": {
+      "old": {
+        "scope": "default emit exact symbol only; static site count, no dynamic execution count",
+        "stats": {
+          "lzcnt_instructions": 2,
+          "inc_followed_by_saturation_cmove_sites": 21,
+          "inc_instructions": 43
+        },
+        "saturation_cmove_addresses": [
+          "115ae88",
+          "115aea9",
+          "115b3dd",
+          "115c2ab",
+          "115c2cb",
+          "115c2e4",
+          "115c327",
+          "115c35c",
+          "115c70d",
+          "115c89a",
+          "115c8f4",
+          "115cc22",
+          "115cd9b",
+          "115cecc",
+          "115cfc0",
+          "115d004",
+          "115d159",
+          "115d1f6",
+          "115d236",
+          "115d24d",
+          "115d264"
+        ]
+      },
+      "new": {
+        "scope": "default emit exact symbol only; static site count, no dynamic execution count",
+        "stats": {
+          "lzcnt_instructions": 0,
+          "inc_followed_by_saturation_cmove_sites": 0,
+          "inc_instructions": 20
+        },
+        "saturation_cmove_addresses": []
+      }
+    },
+    "code_size_reduction_bytes": 1000,
+    "claim_limit": "These are default-route structural/codegen facts, not cycle/throughput/zero-overhead measurements; helpers elsewhere can still perform format/Huffman bit operations."
+  },
+  "checked_histogram_retained": {
+    "module_sha_equal": true,
+    "source_checks": "std.math.add(u64,scanned_bytes,work) and std.math.add(u64,update_count,1) before frequency/range mutation; errors remain observable",
+    "old": {
+      "scanned_bytes_rsp_offset": "0xcf0",
+      "scanned_add": "0x115b283",
+      "scanned_carry_gate": "0x115b293 jae success",
+      "update_count_rsp_offset": "0xcf8",
+      "update_increment": "0x115b3b2",
+      "update_success_gate": "0x115b3c9 jne success",
+      "scanned_commit": "0x115bf9a",
+      "update_commit": "0x115bfaa"
+    },
+    "new": {
+      "scanned_bytes_rsp_offset": "0x1a28",
+      "scanned_add": "0x115b2e8",
+      "scanned_carry_gate": "0x115b2f8 jae success",
+      "update_count_rsp_offset": "0x1a30",
+      "update_increment": "0x115b426",
+      "update_overflow_gate": "0x115b43d je failure",
+      "scanned_commit": "0x115bfea",
+      "update_commit": "0x115bffa"
+    },
+    "distinction": "Checked histogram counters are retained semantic admission state, not removed saturating statistical Work."
+  },
+  "codec_state_retained": {
+    "source_certificate_update": "winner_cost_cache.zig:108 self.certificate=replacement",
+    "new_certificate_stores": [
+      {
+        "address": "0x115cd3e",
+        "field": "active_symbols",
+        "rsp_offset": "0x2ba8"
+      },
+      {
+        "address": "0x115cd4b",
+        "field": "trusted_lower_bits",
+        "rsp_offset": "0x2bb0"
+      },
+      {
+        "address": "0x115cd68",
+        "field": "frequencies",
+        "operation": "memcpy 1024 B to certificate rsp+0x2bb8"
+      },
+      {
+        "address": "0x115cd90",
+        "field": "total_frequency",
+        "rsp_offset": "0x2fb8"
+      },
+      {
+        "address": "0x115cd98",
+        "field": "optional certificate valid flag",
+        "rsp_offset": "0x2fc0"
+      }
+    ],
+    "new_bound_analysis_loop": "0x115c19c\u20130x115c269, followed by checked scalar bound/pruning",
+    "new_stream_product_loop": "0x115c985\u20130x115ca02; frequency/bit validity, imul and checked sum retained",
+    "new_candidate_emitter_call": "0x115d190 -> zstd.emitBestSequenceCompressedBlockWithScratch",
+    "old_candidate_emitter_call": "0x115d55e -> same emitter API",
+    "ordinary_inc_store_not_rejected": true
+  },
+  "cache_type_sizes": {
+    "provenance": "Existing independent parent probe records only; not compiled or executed by this audit.",
+    "native": {
+      "tracked_bytes": 6032,
+      "untracked_bytes": 5568,
+      "record": "/tmp/vort-zstd-work-accounting-20261025/state-native/result.json",
+      "log": "/tmp/vort-zstd-work-accounting-20261025/state-native/run.log"
+    },
+    "x86_linux_musl": {
+      "tracked_bytes": 5980,
+      "untracked_bytes": 5516,
+      "record": "/tmp/vort-zstd-work-accounting-20261025/state-x86-final/result.json",
+      "log": "/tmp/vort-zstd-work-accounting-20261025/state-x86-final/run.log"
+    },
+    "reduction_bytes": 464,
+    "limit": "SizeOf particular cache types only; not full stack-frame, heap, RSS or process total memory."
+  },
+  "diagnostic_scope": {
+    "source_Cache_default_track_work": true,
+    "explicit_diagnostics_profile_work": true,
+    "named_profile_or_tracked_specialization_symbols_in_supplied_encoder_nm": [],
+    "absence_of_names_does_not_prove_no_inlined_diagnostics": true,
+    "claim": "Only default production route audited; no assertion that all library instantiations or ELF functions have no Work."
+  },
+  "limitations": [
+    "No performance ranking or zero-overhead claim from assembly.",
+    "No heap, RSS, full-frame or process total-stack measurement.",
+    "Static code audit does not replace parent family/check or compatibility execution.",
+    "Work removal is limited to new default CacheWithAccounting(...,false) route; diagnostics remain track_work=true by source."
+  ],
+  "evidence": {
+    "new-bound-without-accounting.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-bound-without-accounting.asm",
+    "new-cache-admission.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-cache-admission.asm",
+    "new-certificate-publication.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-certificate-publication.asm",
+    "new-checked-histogram.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-checked-histogram.asm",
+    "new-cost-symbols.nm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-cost-symbols.nm",
+    "new-default-call-sites.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-default-call-sites.asm",
+    "new-default-emit.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-default-emit.asm",
+    "new-diagnostic-symbol-query.txt": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-diagnostic-symbol-query.txt",
+    "new-ordinary-stream-products.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-ordinary-stream-products.asm",
+    "new-pattern-scan.json": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-pattern-scan.json",
+    "new-sequence-base.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/new-sequence-base.asm",
+    "old-certificate-publication.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-certificate-publication.asm",
+    "old-checked-histogram.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-checked-histogram.asm",
+    "old-cost-symbols.nm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-cost-symbols.nm",
+    "old-default-call-sites.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-default-call-sites.asm",
+    "old-default-emit.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-default-emit.asm",
+    "old-diagnostic-symbol-query.txt": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-diagnostic-symbol-query.txt",
+    "old-pattern-scan.json": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-pattern-scan.json",
+    "old-sequence-base.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-sequence-base.asm",
+    "old-work-costs.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-work-costs.asm",
+    "old-work-histogram-buckets.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-work-histogram-buckets.asm",
+    "old-work-queries-age.asm": "/tmp/vort-zstd-work-accounting-20261025/exactasm/old-work-queries-age.asm",
+    "src-zstd-literals-cut_histogram.zig.diff": "/tmp/vort-zstd-work-accounting-20261025/exactasm/src-zstd-literals-cut_histogram.zig.diff",
+    "src-zstd-literals-single_cost_cache.zig.diff": "/tmp/vort-zstd-work-accounting-20261025/exactasm/src-zstd-literals-single_cost_cache.zig.diff",
+    "src-zstd-literals-weighted_bound.zig.diff": "/tmp/vort-zstd-work-accounting-20261025/exactasm/src-zstd-literals-weighted_bound.zig.diff",
+    "src-zstd-literals-winner_cost_cache.zig.diff": "/tmp/vort-zstd-work-accounting-20261025/exactasm/src-zstd-literals-winner_cost_cache.zig.diff",
+    "src-zstd.zig.diff": "/tmp/vort-zstd-work-accounting-20261025/exactasm/src-zstd.zig.diff"
+  }
+}

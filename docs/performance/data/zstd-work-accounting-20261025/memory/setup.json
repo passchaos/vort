@@ -1,0 +1,29 @@
+{
+  "worktrees": {
+    "old": "/home/passchaos/project-z/vort",
+    "new": "/home/passchaos/project-z/vort-zstd-work-accounting"
+  },
+  "source_expected": {
+    "old": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+    "new": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59"
+  },
+  "input_bytes": 65536,
+  "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+  "expected_output_bytes": 5078,
+  "expected_output_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+  "scope": "Untimed Vort work-accounting caller allocator verification only; no wall or RSS data, no C/reference encoder",
+  "concurrent_environment": "Parent family/check on CPUs2-7,10-12; probe compilation CPUs13-15 and encoding CPU8",
+  "requested_heap_scope": "Requests through public caller page_allocator wrapper, including returned output until explicit caller free; excludes embedded input, codec/tracker stack, code mappings and allocator bookkeeping/page rounding.",
+  "heads": {
+    "old": "e4bfdd638980d62fb4dc878158994d1471d8f29d",
+    "new": "a8defd42e541421a475aab3c6488606ccfc75662"
+  },
+  "limits": "One public level3 XML64KiB encode per binary plus one tiny forced first-allocation OOM; page_allocator requested byte ledger includes returned output until caller free and excludes input/stack/code/page rounding. No 14-sample repetition.",
+  "commit_only_head_transition": {
+    "build_head_before": "e4bfdd638980d62fb4dc878158994d1471d8f29d",
+    "build_head_after": "a8defd42e541421a475aab3c6488606ccfc75662",
+    "execution_head": "a8defd42e541421a475aab3c6488606ccfc75662",
+    "all_src_sha256_unchanged": true,
+    "build_wrapper_head_audit_assertion": "HEAD moved during successful compile; source_stable remained true; existing executable reused without recompilation"
+  }
+}

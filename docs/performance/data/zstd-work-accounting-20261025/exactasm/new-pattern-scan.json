@@ -1,0 +1,9 @@
+{
+  "scope": "default emit exact symbol only; static site count, no dynamic execution count",
+  "stats": {
+    "lzcnt_instructions": 0,
+    "inc_followed_by_saturation_cmove_sites": 0,
+    "inc_instructions": 20
+  },
+  "saturation_cmove_addresses": []
+}

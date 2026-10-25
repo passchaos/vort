@@ -1,0 +1,33 @@
+--- old/src/zstd.zig
++++ new/src/zstd.zig
+@@ -23314,7 +23314,7 @@
+ fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, comptime reuse_anchors: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, anchors: ?*paired_anchor_cache.Cache) Error!bool {
+     first_match.* = null;
+     if (rleByte(block) != null or block.len < 32) return false;
+-    const ActiveCostCache = if (mode == .shadow) SingleLiteralShadowCache else SingleLiteralWinnerCache;
++    const ActiveCostCache = winner_literal_cost.CacheWithAccounting(SingleLiteralCostCodec, mode, profile_work);
+     var cost_cache: ?ActiveCostCache = if (cache_costs and duplicate_index == null and
+         block.len > duplicate_exact_hash_input_max and block.len <= std.compress.zstd.block_size_max)
+         try ActiveCostCache.init(block)
+@@ -31163,6 +31163,10 @@
+ const SingleLiteralShadowCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .shadow);
+ const SingleLiteralWinnerCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .prune);
+ 
++pub fn benchmarkLiteralCostStateBytes(comptime tracked: bool) usize {
++    return @sizeOf(winner_literal_cost.CacheWithAccounting(SingleLiteralCostCodec, .prune, tracked));
++}
++
+ const PairedAnchorFinderTestCodec = struct {
+     pub const CostCodec = SingleLiteralCostCodec;
+     pub const referenceCost = singleBestSequencePayloadLen;
+@@ -31304,6 +31308,10 @@
+ 
+ test "zstd winner cost cache preserves every bounded candidate and tie" {
+     try @import("zstd/literals/winner_cost_cache_tests.zig").contracts(SingleLiteralCostTestCodec);
++}
++
++test "zstd work accounting preserves exact costs callbacks and checked admission" {
++    try @import("zstd/literals/work_accounting_tests.zig").contracts(SingleLiteralCostTestCodec);
+ }
+ 
+ test "zstd multi duplicate profile preserves candidate wire and reports real cache work" {

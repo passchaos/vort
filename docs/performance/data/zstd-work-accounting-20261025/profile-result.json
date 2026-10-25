@@ -1,0 +1,35 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/home/passchaos/project-z/vort-zstd-work-accounting/.zig-cache/o/42dba0c9e137947dfe1bf8b30ef44400/vort-zstd-multi-duplicate-profile",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+  ],
+  "source_before": {
+    "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59",
+    "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51",
+    "src/zstd/literals/winner_cost_cache.zig": "584446c9c72555c2c9ad71dd0f43c7fe2a5119b2475b5dc0f31d3bc6b0040f78"
+  },
+  "source_after": {
+    "src/zstd.zig": "cc29696a1fca71cf134210a12a197071fc2bad25801f528ad8b7140e29028a59",
+    "src/zstd/literals/single_cost_cache.zig": "0a81c9834f9dd8006f2cab125fba230533b9eb8ff0f8720b39a70b6e29435f51",
+    "src/zstd/literals/winner_cost_cache.zig": "584446c9c72555c2c9ad71dd0f43c7fe2a5119b2475b5dc0f31d3bc6b0040f78"
+  },
+  "source_stable": true,
+  "exe_sha256": "55b24dfecc7af7a59ecdf093ac45fb83cf163f037873b48461b4dbd87dc1e7ed",
+  "checks": [
+    {
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "candidate_identity_unchanged": true,
+      "all_work_fields_unchanged": true
+    },
+    {
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "candidate_identity_unchanged": true,
+      "all_work_fields_unchanged": true
+    }
+  ],
+  "scope": "Tracked diagnostic output/work comparison. Default public path is untracked; profile durations are excluded from speed claims."
+}

@@ -1,0 +1,49 @@
+{
+  "head_before": "e4bfdd638980d62fb4dc878158994d1471d8f29d",
+  "head_after": "e4bfdd638980d62fb4dc878158994d1471d8f29d",
+  "kind": "old",
+  "commands": [
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build-obj",
+        "/home/passchaos/project-z/vort/src/zstd_huffman_x2_object.zig",
+        "-O",
+        "ReleaseFast",
+        "-mcpu=native",
+        "-femit-bin=/tmp/vort-zstd-work-accounting-20261025/memory/old-x2.o"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "taskset",
+        "-c",
+        "13-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build-exe",
+        "/tmp/vort-zstd-work-accounting-20261025/memory/old-x2.o",
+        "-O",
+        "ReleaseFast",
+        "-mcpu=native",
+        "--dep",
+        "vort_zstd",
+        "-Mroot=/tmp/vort-zstd-work-accounting-20261025/memory/probe.zig",
+        "-O",
+        "ReleaseFast",
+        "-mcpu=native",
+        "-Mvort_zstd=/home/passchaos/project-z/vort/src/zstd.zig",
+        "-femit-bin=/tmp/vort-zstd-work-accounting-20261025/memory/probe-old"
+      ],
+      "exit": 0,
+      "output": ""
+    }
+  ],
+  "source_stable": true,
+  "source_sha256": "08ad02b510a0cc83bc667b56a00b339f3e55fdac1daaff142d3b6de8f044f8b5",
+  "object_source_sha256": "f790abf886ee861be9ef9657ed1264da3bf162fa3c722c62f962f23388d1903f"
+}

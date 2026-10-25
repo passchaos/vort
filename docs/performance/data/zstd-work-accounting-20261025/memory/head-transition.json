@@ -1,0 +1,7 @@
+{
+  "build_head_before": "e4bfdd638980d62fb4dc878158994d1471d8f29d",
+  "build_head_after": "a8defd42e541421a475aab3c6488606ccfc75662",
+  "execution_head": "a8defd42e541421a475aab3c6488606ccfc75662",
+  "all_src_sha256_unchanged": true,
+  "build_wrapper_head_audit_assertion": "HEAD moved during successful compile; source_stable remained true; existing executable reused without recompilation"
+}

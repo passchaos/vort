@@ -148,6 +148,18 @@ default encoding remains uncached and all fourteen default frame identities
 stay unchanged. Complete native Zstd tests pass 1101/1101 and build checks
 172/172. This experiment does not establish a new production throughput lead.
 
+The following [work-accounting separation](zstd-work-accounting.md) gives
+normal internal pricing a comptime untracked type while preserving all
+histogram checked admission and public diagnostic fields. Native/x86 cost
+objects shrink by 464 bytes. The fourteen-row five-round version speedup point
+is 1.01083x, including an initial MR slowdown of 0.96985x. Three supplemental
+alternating process pairs give MR/XML/source point ratios of
+1.01230x/1.02875x/1.02236x; no significance or broad ranking is assigned.
+All fourteen frame identities and every tracked XML/MR work field remain
+unchanged. Throughput still loses on every reference row (geometric ratio
+0.00393447x). Independent requested-heap/event sequences are unchanged;
+complete Zstd tests pass 1102/1102 and build checks pass 172/172.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE
