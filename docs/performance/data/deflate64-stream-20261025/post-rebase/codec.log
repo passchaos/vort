@@ -1,0 +1,184 @@
+1/183 deflate64.test_0...OK
+2/183 deflate64.decoder.test.Deflate64 fixed block decodes extended length code 285...OK
+3/183 deflate64.decoder.test.Deflate64 fixed block reaches the 64 KiB distance boundary...OK
+4/183 deflate64.decoder.test.Deflate64 decoder enforces corruption and output limits...OK
+5/183 deflate64.encoder.test.Deflate64 fixed codes cover extended length and distance boundaries...OK
+6/183 deflate64.encoder.test.Deflate64 encoder round trips empty, stored, and fixed streams...OK
+7/183 deflate64.encoder.test.Deflate64 encoder emits matches beyond the Deflate window...OK
+8/183 deflate64.encoder.test.Deflate64 stored encoder splits blocks and preserves caller buffers...OK
+9/183 deflate64.incremental_tests.test.Deflate64 incremental decoder streams extended distances and leaves suffix...OK
+10/183 deflate64.incremental_tests.test.Deflate64 incremental decoder handles backpressure limits and truncation...OK
+11/183 deflate64.incremental_tests.test.Deflate64 incremental decoder accepts a 7-Zip reference stream...OK
+12/183 deflate64.incremental_tests.test.Deflate64 incremental decoder requires the complete history ring...OK
+13/183 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder is split independent...OK
+14/183 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder handles empty backpressure and limits...OK
+15/183 deflate64.stream_encoder.test.Deflate64 incremental compressed encoder complete contracts...OK
+16/183 core.test.streaming diagnostics keep cumulative counts wide and caller progress local...OK
+17/183 core.test.Progress add checks overflow...OK
+18/183 bitstream.test.buffered bit reader matches scalar reader across mixed operations...OK
+19/183 bitstream.test.buffered bit reader word prefetch preserves logical offsets and tail reads...OK
+20/183 bitstream.test.buffered bit reader aligned reads discard prefetched bytes without skipping input...OK
+21/183 bitstream.test.buffered bit reader word prefetch keeps padded peeks strict on truncation...OK
+22/183 bitstream.test.BitReader consumes LSB-first deflate bits...OK
+23/183 bitstream.test.BitReader exact bit length rejects high padding bits...OK
+24/183 bitstream.test.BitWriter bulk packing matches scalar bit packing...OK
+25/183 bitstream.test.BitWriter reserved-capacity packing matches checked packing...OK
+26/183 bitstream.test.BitReader skipBits advances without reading values...OK
+27/183 bitstream.test.BitReader hasBits and unchecked advance match skipBits...OK
+28/183 bitstream.test.BitReader peekBitsPadded uses zero padding past input...OK
+29/183 bitstream.test.ChunkedBitReader skips empty chunks and keeps a forward cursor...OK
+30/183 bitstream.test.ChunkedBitReader matches contiguous bit and aligned-byte reads...OK
+31/183 bitstream.test.ChunkedBitReader known-total initializer matches initAt...OK
+32/183 bitstream.test.ChunkedSpanBitReader matches ChunkedBitReader across chunk boundaries...OK
+33/183 bitstream.test.ChunkedBitReader hasBits and unchecked advance match skipBits...OK
+34/183 bitstream.test.BitWriter emits LSB-first bytes readable by BitReader...OK
+35/183 bitstream.test_0...OK
+36/183 io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input...OK
+37/183 io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries...OK
+38/183 huffman.test.sparse trusted encoder matches dense canonical codes...OK
+39/183 huffman.test.sparse trusted decoder matches dense canonical table...OK
+40/183 huffman.test.explicit-symbol decoder matches dense simple trees...OK
+41/183 huffman.test.explicit-symbol decoder rejects malformed lists...OK
+42/183 huffman.test.sparse trusted decoder rejects invalid active sets...OK
+43/183 huffman.test.sparse trusted decoder matches dense randomized tables...OK
+44/183 huffman.test.sparse trusted encoder matches dense randomized alphabets...OK
+45/183 huffman.test.sparse trusted encoder rejects invalid active sets...OK
+46/183 huffman.test.mapped packed lookups preserve fixed-width symbols and slots...OK
+47/183 huffman.test.Zstd medium known-active back-reference workspace preserves exact lengths...OK
+48/183 huffman.test.fixed Huffman tables expose expected boundary code lengths...OK
+49/183 huffman.test.canonical Huffman decoder handles a small RFC-style tree...OK
+50/183 huffman.test.tail lookup decoder matches compact decoder...OK
+51/183 huffman.test.external packed lookup covers dense tables and long-code fallback...OK
+52/183 huffman.test.fast Huffman decoder falls back for long codes...OK
+53/183 huffman.test.fast Huffman decoder checks staged bits after padded lookup...OK
+54/183 huffman.test.fast Huffman decoder reports lookup coverage...OK
+55/183 huffman.test.Huffman table records maximum active code length...OK
+56/183 huffman.test.canonical Huffman decoder rejects oversubscribed trees...OK
+57/183 huffman.test.fixed literal table decodes end-of-block code...OK
+58/183 huffman.test.dynamic header parser reads RFC1951 fields...OK
+59/183 huffman.test.dynamic length parser expands repeat symbols...OK
+60/183 huffman.test.dynamic length parser rejects invalid repeat symbols...OK
+61/183 huffman.test.fixed Huffman encoder writes symbols decoded by fixed table...OK
+62/183 huffman.test.dynamic parser rejects non-dynamic block type and truncated header...OK
+63/183 huffman.test.simple Huffman length builder creates decodable table...OK
+64/183 huffman.test.weighted Huffman length builder favors frequent symbols...OK
+65/183 huffman.test.tree Huffman length builder favors frequent symbols and decodes...OK
+66/183 huffman.test.package-merge Huffman length builder preserves canonical code space...OK
+67/183 huffman.test.package-merge naturally ordered pairs match sorted reference...OK
+68/183 huffman.test.compact sparse package-merge matches full-width reference...OK
+69/183 huffman.test.known-active package-merge matches scanned builder...OK
+70/183 huffman.test.dense back-reference package-merge preserves optimal weighted cost...OK
+71/183 huffman.test.dense Deflate unbounded tree matches package-merge cost...OK
+72/183 huffman.test.dense Deflate leaf ordering matches generic total order...OK
+73/183 huffman.test.linear back-reference recovery matches root traversal...OK
+74/183 huffman.test.dense known-active fast paths match comparison sort...OK
+75/183 huffman.test.package-merge Huffman lengths match small optimal costs...OK
+76/183 huffman.test.package-merge Huffman length builder covers deflate alphabet sizes...OK
+77/183 huffman.test.direct Huffman encoder matches canonical decoder table entries...OK
+78/183 huffman.test.tree Huffman length limiter preserves skewed short codes...OK
+79/183 huffman.test.fast decoder sparse-clears long prefixes...OK
+80/183 huffman.test.fixed literal fast lookup matches table decoder...OK
+81/183 huffman.test.fixed distance fast lookup decodes all symbols...OK
+82/183 br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries...OK
+83/183 br.fast_bit_reader.test.Brotli fast bit reader matches scalar mixed reads and cursors...OK
+84/183 br.fast_bit_reader.test.Brotli fast bit reader preserves truncated bit length...OK
+85/183 br.fast_bit_reader.test.Brotli fast bit reader loads complete short tails...OK
+86/183 br.fast_bit_reader.test.Brotli fast bit reader specialized fixed-width peeks match generic reads...OK
+87/183 br.fast_bit_reader.test.Brotli fast bit reader full-word refills honor every logical tail...OK
+88/183 br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle...OK
+89/183 bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment...OK
+90/183 bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries...OK
+91/183 bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width...OK
+92/183 bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged...OK
+93/183 bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors...OK
+94/183 bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain...OK
+95/183 bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation...OK
+96/183 io.stream_count.test.stream count preserves native types and crosses the 32-bit byte boundary...OK
+97/183 io.stream_count.test.stream count overflow refuses an advance without changing state...OK
+98/183 io.stream_count.test.stream count narrows only after checking a physical bound...OK
+99/183 lz77.test_0...OK
+100/183 lz77.test.dictionary greedy scratch ignores stale head entries...OK
+101/183 lz77.test.reusable dictionary lazy planner preserves allocating plans...OK
+102/183 lz77.test.reusable dictionary lazy planner ignores stale head entries...OK
+103/183 lz77.test.reusable dictionary lazy planner retains all capacity...OK
+104/183 lz77.test.reusable dictionary lazy planner recovers after allocation failure...OK
+105/183 lz77.test.optimal length extension buckets cover exact boundaries...OK
+106/183 lz77.test.optimal length prefix choices match descending reference...OK
+107/183 lz77.test.repeat beam keeps stable distance across local length gain...OK
+108/183 lz77.test.compile-time fixed length costs match scalar range...OK
+109/183 lz77.test.rep beam keeps near-cost alternate recent-offset state...OK
+110/183 lz77.test.rep beam known-valid transition matches guarded reference...OK
+111/183 lz77.test.rep beam recent-offset prefix guard matches scalar acceptance...OK
+112/183 lz77.test.rep beam materializes the initial recent offset...OK
+113/183 lz77.test.rep beam reusable scratch preserves tokens and capacity...OK
+114/183 lz77.test.Zstd-specialized rep beam matches generic plans...OK
+115/183 lz77.test.rep beam compact index matches reference beyond u16 positions...OK
+116/183 lz77.test.Zstd rep beam prefix filter preserves scalar compact-index matches...OK
+117/183 lz77.test.rep beam compact index initializes the four-byte tail...OK
+118/183 lz77.test.rep beam emits literal tail shorter than minimum match...OK
+119/183 lz77.test.rep beam deduplicates indexed recent offset matches...OK
+120/183 lz77.test.compile-time fixed distance costs match scalar range...OK
+121/183 lz77.test.shared match length vector path matches byte reference...OK
+122/183 lz77.test.combined dictionary/input match length uses word and tail paths...OK
+123/183 lz77.test.lazy parser scan preference separates repetitive from source-like blocks...OK
+124/183 lz77.test.tiny lazy hash planner round trips source-like blocks...OK
+125/183 lz77.test.literal-only LZ77 planner emits no matches...OK
+126/183 lz77.test.filtered LZ77 planner suppresses short low-value matches...OK
+127/183 lz77.test.run-length LZ77 planner limits matches to byte runs...OK
+128/183 lz77.test.greedy LZ77 planner round trips literals and matches...OK
+129/183 lz77.test.greedy LZ77 planner respects incompressible input...OK
+130/183 lz77.test.replay rejects invalid match distance...OK
+131/183 lz77.test.lazy LZ77 planner round trips and keeps token count bounded...OK
+132/183 lz77.test.lazy parser honors minimum gain threshold...OK
+133/183 lz77.test.parser honors configurable minimum match length...OK
+134/183 lz77.test.parser honors minimum savings threshold...OK
+135/183 lz77.test.parser honors configurable maximum match length...OK
+136/183 lz77.test.optimal LZ77 prototype round trips and is no worse by fixed bit cost...OK
+137/183 lz77.test.modeled optimal parser follows caller entropy costs...OK
+138/183 lz77.test.modeled optimal parser validates complete nonzero costs...OK
+139/183 lz77.test.reusable optimal parser preserves tokens and capacities...OK
+140/183 lz77.test.optimal prefix bound preserves reference tokens...OK
+141/183 lz77.test.profiled optimal parser preserves tokens and search accounting...OK
+142/183 lz77.test.compact optimal hash index matches reference beyond u16 positions...OK
+143/183 lz77.test.reusable optimal parser recovers after compact-index allocation failure...OK
+144/183 lz77.test.optimal fourth-byte rejection preserves exact four-byte matches...OK
+145/183 lz77.test.reusable hash index exposes deterministic position matches...OK
+146/183 lz77.test.hash index candidate distances preserve validated match order...OK
+147/183 lz77.test.optimal LZ77 considers multiple match distances...OK
+148/183 lz77.test.optimal parser token count is bounded by candidate limit...OK
+149/183 lz77.test.best optimal parser budget leaves room for custom deep searches...OK
+150/183 lz77.test.fixed bit cost accounts for literals matches and end marker...OK
+151/183 lz77.test.hash greedy planner round trips repeated data...OK
+152/183 lz77.test.hash planner skips non-viable prefixes before spending match budget...OK
+153/183 lz77.test.hash planner with zero chain budget emits only literals...OK
+154/183 lz77.test.tiny hash greedy planner round trips small repeated data...OK
+155/183 lz77.test.automatic hash anchor preserves three-byte match configurations...OK
+156/183 lz77.test.reusable tiny hash planner preserves tokens and capacity...OK
+157/183 lz77.test.reusable tiny hash scratch preserves tokens across inputs...OK
+158/183 lz77.test.reusable tiny hash scratch covers maximum input position...OK
+159/183 lz77.test.one-shot tiny hash planner covers maximum three-byte position...OK
+160/183 lz77.test.reusable tiny lazy hash planner preserves tokens and capacity...OK
+161/183 lz77.test.reusable lazy planner preserves production scan and hash policies...OK
+162/183 lz77.test.automatic hash anchor selects four-byte planner and round trips...OK
+163/183 lz77.test.hash greedy table variants share token and stats accounting...OK
+164/183 lz77.test.hash greedy compact position boundary...OK
+165/183 lz77.test.64 KiB lazy hash u16 positions match i32 reference...OK
+166/183 lz77.test.lazy hash compact positions match isize reference...OK
+167/183 lz77.test.hash greedy predecessor ring matches full-table reference...OK
+168/183 lz77.test.dictionary-backed hash and lazy planners can emit preset-history matches...OK
+169/183 lz77.test.dictionary-backed planners cover the complete 16-bit distance range...OK
+170/183 lz77.test.scan dictionary planner emits preset-history matches...OK
+171/183 lz77.test.dictionary hash planner skips non-viable prefix collisions...OK
+172/183 lz77.test.matchLength compares word chunks and tails...OK
+173/183 lz77.test.hash search returns the insertion bucket...OK
+174/183 lz77.test.hash match fast acceptance is a sufficient condition...OK
+175/183 lz77.test.constant-time hash match acceptance matches exhaustive length scan...OK
+176/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal rollback restores exact arrays and retry equals unlogged baseline...OK
+177/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal committed batch continues with the same history and tokens...OK
+178/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal repeated bucket and ring slot writes undo in reverse order...OK
+179/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal capacity failure never writes an unlogged insertion...OK
+180/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal owners move and reservation failure preserve reusable capacity...OK
+181/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal inactive nested and zero allocation lifecycle contracts...OK
+182/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal keeps full i64 positions and the largest ring slot...OK
+183/183 lz77.streaming_hash_journal_tests.test.Streaming hash journal releases all state log token and rollback allocation failures...OK
+All 183 tests passed.

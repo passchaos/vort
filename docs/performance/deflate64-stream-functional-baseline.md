@@ -148,7 +148,9 @@ functional fixtures and encoded sizes, not competitor throughput/ratio leadershi
 The [evidence package](data/deflate64-stream-20261025/artifact-manifest.json)
 records both targets, exact token/cap/ownership contracts,
 source snapshots, failed attempts and fixes, ZIP encryption/progress tests,
-reference identities and final handoff checks. Broader dynamic planning,
+reference identities and final handoff checks. After pulling with rebase,
+ReleaseFast Deflate64183/183 and ZIP method9 contracts41/41 pass again under
+an unchanged full src/tools/build snapshot. Broader dynamic planning,
 dictionaries, match-parser quality and full speed/ratio/memory comparisons remain
 open. The new greedy parser can admit a far-distance three-byte match that costs
 more than three low-byte literals; complete adaptive block arbitration remains
