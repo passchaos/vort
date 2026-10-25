@@ -102,3 +102,10 @@ builds. The complete build check passes 172/172. Compression settings, search
 limits and mode selection are unchanged.
 Broader platforms, all levels, streaming, 1 MiB and symmetric competitor memory
 measurements remain separate work.
+
+After pulling with rebase, the histogram/merge suite passes 13/13 again with
+unchanged source manifests. CLI help passes its seven-step check and the new
+benchmark route passes a three-step one-query smoke. Smoke durations are not
+used as performance evidence. Commands, source/input/reference identities,
+raw rounds and independent source/ELF reviews are retained in the
+[evidence package](data/zstd-frequency-merge-20261025/artifact-manifest.json).
