@@ -49,6 +49,7 @@ const stored_memory_owner = @import("br/encoder/stored_memory_owner.zig");
 const stored_memory_reuse = @import("br/encoder/stored_memory_reuse.zig");
 const encoder_window_format = @import("br/encoder/window_format.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
+const quality_profile = @import("br/encoder/quality_profile.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const static_dictionary_stream = @import("br/encoder/static_dictionary_stream.zig");
@@ -123,6 +124,11 @@ pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
+pub const QualityQ8Profile = quality_profile.Profile;
+
+test "Brotli q8 quality profile complete wire and bounded diagnostic contracts" {
+    try @import("tests/br_quality_profile_contracts.zig").contracts(@This());
+}
 pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedMode = quality_schedule.Mode;
@@ -5050,15 +5056,91 @@ fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncod
     };
 }
 
+/// Profile the existing native q8/generic/default-window candidate pipeline.
+/// Input and caller-owned event storage are borrowed. The returned wire belongs
+/// to allocator. The request may add a total-heap cap/profile, never a fallback.
+/// Detailed lazy/optimal/context/split wire attempts are traced. Dictionary
+/// auxiliaries on short inputs keep their original implementation and expose
+/// wire_attempt_coverage_complete=false; their time remains in `other`.
+pub fn benchmarkQualityQ8ProfileAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    io: std.Io,
+    profile: *QualityQ8Profile,
+) Error![]u8 {
+    profile.reset();
+    const trace: quality_profile.Recorder(true) = .{ .io = io, .profile = profile };
+    var outer = trace.begin(.outer, input.len, 0);
+    defer outer.finish();
+    errdefer |err| {
+        profile.error_name = @errorName(err);
+        outer.failure(err);
+    }
+    if (input.len > 65536) return error.InvalidBlockPlan;
+    const options: PlannedEncodeOptions = .{ .quality = 8, .mode = .generic };
+    try validatePlannedEncodeOptions(input.len, options);
+    var lease = try total_budget.Lease.init(allocator, profile.request.max_total_working_memory, profile.request.memory_profile, 0);
+    defer lease.deinit();
+    const wire = encodePlannedStreamQualityWithOptionsAllocRecorded(true, trace, lease.allocator(), input, options) catch |err| {
+        if (err == error.OutOfMemory) return @as(Error![]u8, lease.translateError(error.OutOfMemory));
+        return @as(Error![]u8, err);
+    };
+    errdefer lease.allocator().free(wire);
+    try lease.releaseToCaller(allocator, wire.len);
+    trace.returned(wire);
+    return wire;
+}
+
+fn freeQualityRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, memory: anytype) void {
+    if (comptime @typeInfo(@TypeOf(memory)).pointer.child == u8) trace.forgetWire(memory);
+    allocator.free(memory);
+}
+
+fn retainSmallerOwnedWireRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    best: *[]u8,
+    candidate: []u8,
+) void {
+    if (trace.prefer(candidate, best.*)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, best.*);
+        best.* = candidate;
+    } else freeQualityRecorded(trace_enabled, trace, allocator, candidate);
+}
+
+fn encodeStoredStreamRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: StoredStreamOptions,
+) Error![]u8 {
+    var timer = trace.begin(.wire, input.len, 0);
+    defer timer.finish();
+    errdefer |err| timer.failure(err);
+    const wire = try encodeStoredStreamWithOptionsAlloc(allocator, input, options);
+    timer.wire(wire);
+    return wire;
+}
+
 fn encodePlannedStreamQualityWithOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: PlannedEncodeOptions,
 ) Error![]u8 {
+    return encodePlannedStreamQualityWithOptionsAllocRecorded(false, .{}, allocator, input, options);
+}
+
+fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+    var profile_scope = trace.begin(.other, input.len, 0);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     const schedule = try resolvedQualitySchedule(options);
     const window_bits = try resolvedPlannedWindowBits(options);
     const stream_options = StoredStreamOptions{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata };
-    if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+    if (input.len < 5) return encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, stream_options);
     std.debug.assert(input.len <= max_uncompressed_meta_block_len);
 
     // Resolve q10 first so its planner scratch is gone before q11 constructs
@@ -5068,51 +5150,61 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
     if (schedule.quality == .q11) {
         var q10_options = options;
         q10_options.quality = @intFromEnum(quality_schedule.Quality.q10);
-        inherited_q10 = try encodePlannedStreamQualityWithOptionsAlloc(allocator, input, q10_options);
+        inherited_q10 = try encodePlannedStreamQualityWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, q10_options);
     }
-    errdefer if (inherited_q10) |wire| allocator.free(wire);
+    errdefer if (inherited_q10) |wire| freeQualityRecorded(trace_enabled, trace, allocator, wire);
 
     const search_window = @min(
         input.len,
         @min((@as(usize, 1) << window_bits) - 16, lz77.max_window_len),
     );
-    const lz_plan = switch (schedule.family) {
-        .fast => try lz77.hashGreedyPlanAlloc(allocator, input, .{
-            .window_len = search_window,
-            .max_chain = schedule.lazy.max_chain,
-            .nice_len = schedule.lazy.nice_len,
-            .max_candidates = 1,
-            .lazy_min_gain = schedule.lazy.min_gain,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        }),
-        .balanced, .ratio => try lz77.lazyGreedyPlanAlloc(allocator, input, .{
-            .window_len = search_window,
-            .max_chain = schedule.lazy.max_chain,
-            .nice_len = schedule.lazy.nice_len,
-            .max_candidates = 1,
-            .lazy_min_gain = schedule.lazy.min_gain,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        }),
+    const lz_plan = blk: {
+        var timer = trace.withOrigin(.lazy).begin(.lazy_parse, input.len, 0);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        break :blk switch (schedule.family) {
+            .fast => try lz77.hashGreedyPlanAlloc(allocator, input, .{
+                .window_len = search_window,
+                .max_chain = schedule.lazy.max_chain,
+                .nice_len = schedule.lazy.nice_len,
+                .max_candidates = 1,
+                .lazy_min_gain = schedule.lazy.min_gain,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .balanced, .ratio => try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+                .window_len = search_window,
+                .max_chain = schedule.lazy.max_chain,
+                .nice_len = schedule.lazy.nice_len,
+                .max_candidates = 1,
+                .lazy_min_gain = schedule.lazy.min_gain,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+        };
     };
     defer lz_plan.deinit(allocator);
-    const command_stream = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    const command_stream = blk: {
+        var timer = trace.withOrigin(.lazy).begin(.lazy_commands, input.len, 0);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        break :blk try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    };
     defer command_stream.deinit(allocator);
     const wire_options = qualityWireOptions(schedule, options, window_bits);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     var best = if (lz_plan.stats.matches == 0)
-        try encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options)
+        try encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, stream_options)
     else
-        try encodeLazyCommandPlanAlloc(allocator, input, command_stream.commands, &stats, wire_options);
+        try encodeLazyCommandPlanAllocRecorded(trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &stats, wire_options);
     var best_owned = true;
-    errdefer if (best_owned) allocator.free(best);
+    errdefer if (best_owned) freeQualityRecorded(trace_enabled, trace, allocator, best);
 
     // q11 is additive: retain the complete q10 winner, not merely q10's parser
     // proposal. This makes the public size contract independent of proxy costs,
     // context/split choices, dictionaries, and font distance shaping.
     if (inherited_q10) |q10| {
-        retainSmallerOwnedWire(allocator, &best, q10);
+        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, q10);
         inherited_q10 = null;
     }
 
@@ -5137,23 +5229,27 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
                 max_backward_distance,
                 encoder_window_format.format(options.large_window),
             ) orelse continue;
-            defer allocator.free(long_commands);
+            defer freeQualityRecorded(trace_enabled, trace, allocator, long_commands);
             var long_stats: encoder_stats.PlannedEncodeStats = .{};
-            const long_candidate = try encodeLazyCommandPlanAlloc(
+            const long_candidate = try encodeLazyCommandPlanAllocRecorded(
+                trace_enabled,
+                trace.withOrigin(.lazy),
                 allocator,
                 input,
                 long_commands,
                 &long_stats,
                 wire_options,
             );
-            retainSmallerOwnedWire(allocator, &best, long_candidate);
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, long_candidate);
         }
     }
 
     const search_distance_parameters = options.distance_parameter_search orelse schedule.search_distance_parameters;
     if (search_distance_parameters and schedule.use_recent_distances and lz_plan.stats.matches != 0) {
         var distance_stats: encoder_stats.PlannedEncodeStats = .{};
-        const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAlloc(
+        const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAllocRecorded(
+            trace_enabled,
+            trace.withOrigin(.lazy),
             allocator,
             input,
             command_stream.commands,
@@ -5167,12 +5263,12 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
                 .metadata = options.metadata,
             },
         );
-        retainSmallerOwnedWire(allocator, &best, distance_candidate);
+        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
     }
 
     if (schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
-        if (try encodeQualityOptimalCandidateAlloc(allocator, input, schedule.optimal, wire_options)) |candidate|
-            retainSmallerOwnedWire(allocator, &best, candidate);
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options)) |candidate|
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     }
 
     if (schedule.quality.int() >= 10 and window_bits >= default_window_bits and
@@ -5188,12 +5284,14 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             options.metadata,
             search_distance_parameters,
             &record_stats,
-        )) |record| retainSmallerOwnedWire(allocator, &best, record);
+        )) |record| retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, record);
     }
 
     if (schedule.mode == .font and schedule.quality.int() >= 4) {
         var font_stats: encoder_stats.PlannedEncodeStats = .{};
-        const font_candidate = encodeCommandPlanWithOptionsAlloc(
+        const font_candidate = encodeCommandPlanWithOptionsAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             command_stream.commands,
@@ -5209,12 +5307,13 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
             },
         ) catch |err| switch (err) {
             error.InvalidBlockPlan => null,
-            else => return err,
+            else => return @as(Error![]u8, err),
         };
-        if (font_candidate) |candidate| retainSmallerOwnedWire(allocator, &best, candidate);
+        if (font_candidate) |candidate| retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     }
 
     if (schedule.dictionary.static_dictionary and input.len <= ratio_static_dictionary_max_input_len) {
+        trace.incompleteWires();
         // The selector consumes `best` on both success and error.
         best_owned = false;
         best = try selectRatioStaticDictionaryAlloc(
@@ -5228,6 +5327,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
         );
         best_owned = true;
     } else if (schedule.dictionary.extended_search and input.len <= ratio_extended_static_dictionary_max_input_len) {
+        trace.incompleteWires();
         const probes = if (options.extended_dictionary_probes != 0)
             options.extended_dictionary_probes
         else
@@ -5246,7 +5346,12 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
     }
     // Final arbitration likewise consumes the compressed candidate.
     best_owned = false;
-    return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
+    var selection = trace.begin(.selection, input.len, 0);
+    defer selection.finish();
+    errdefer |err| selection.failure(err);
+    const final_wire = try chooseStoredIfSmallerWithOptionsRecorded(trace_enabled, trace, allocator, input, best, stream_options);
+    selection.wire(final_wire);
+    return final_wire;
 }
 
 fn encodeQualityOptimalCandidateAlloc(
@@ -5255,26 +5360,44 @@ fn encodeQualityOptimalCandidateAlloc(
     budget: quality_schedule.OptimalBudget,
     wire_options: LazyWireOptions,
 ) Error!?[]u8 {
+    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options);
+}
+
+fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions) Error!?[]u8 {
+    var profile_scope = trace.begin(.other, input.len, 0);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     if (!budget.enabled) return null;
     const search_window = @min(
         input.len,
         @min((@as(usize, 1) << wire_options.window_bits) - 16, lz77.default_window_len),
     );
-    const optimal = try lz77.optimalPlanAlloc(allocator, input, .{
-        .window_len = search_window,
-        .max_chain = budget.max_chain,
-        .nice_len = budget.nice_len,
-        .max_candidates = budget.max_candidates,
-        .min_match = 4,
-        .max_match = lz77.max_match_len,
-    });
+    const optimal = blk: {
+        var timer = trace.begin(.optimal_parse, input.len, 0);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        break :blk try lz77.optimalPlanAlloc(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = budget.max_chain,
+            .nice_len = budget.nice_len,
+            .max_candidates = budget.max_candidates,
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        });
+    };
     defer optimal.deinit(allocator);
     if (optimal.stats.matches == 0) return null;
-    const commands = try command_plan.buildAlloc(allocator, input, optimal.tokens);
+    const commands = blk: {
+        var timer = trace.begin(.optimal_commands, input.len, 0);
+        defer timer.finish();
+        errdefer |err| timer.failure(err);
+        break :blk try command_plan.buildAlloc(allocator, input, optimal.tokens);
+    };
     defer commands.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    var best = try encodeLazyCommandPlanAlloc(allocator, input, commands.commands, &stats, wire_options);
-    errdefer allocator.free(best);
+    var best = try encodeLazyCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands.commands, &stats, wire_options);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, best);
     if (!budget.entropy_feedback) return best;
 
     var model = try entropy_feedback.build(allocator, input, commands.commands, search_window);
@@ -5292,14 +5415,16 @@ fn encodeQualityOptimalCandidateAlloc(
     const modeled_commands = try command_plan.buildAlloc(allocator, input, modeled.tokens);
     defer modeled_commands.deinit(allocator);
     var modeled_stats: encoder_stats.PlannedEncodeStats = .{};
-    const candidate = try encodeLazyCommandPlanAlloc(
+    const candidate = try encodeLazyCommandPlanAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         modeled_commands.commands,
         &modeled_stats,
         wire_options,
     );
-    retainSmallerOwnedWire(allocator, &best, candidate);
+    retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
 
     if (budget.command_state_max_input_len != 0 and
         input.len <= budget.command_state_max_input_len)
@@ -6097,6 +6222,14 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
     stats: *encoder_stats.PlannedEncodeStats,
     options: CommandPlanEncodeOptions,
 ) Error![]u8 {
+    return encodeCommandPlanWithDistanceParameterSearchAllocRecorded(false, .{}, allocator, input, commands, enable_search, stats, options);
+}
+
+fn encodeCommandPlanWithDistanceParameterSearchAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, enable_search: bool, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    var profile_scope = trace.begin(.distance_parameters, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     if (options.distance_parameters.npostfix != 0 or
         options.distance_parameters.ndirect_high != 0 or
         !options.use_recent_distances or options.distance_split != null or
@@ -6104,7 +6237,9 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
         return error.InvalidBlockPlan;
 
     if (!enable_search)
-        return encodeCommandPlanWithOptionsAlloc(
+        return encodeCommandPlanWithOptionsAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -6115,7 +6250,9 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
 
     const initial_stats = stats.*;
     var baseline_stats = initial_stats;
-    const baseline = try encodeCommandPlanWithOptionsAlloc(
+    const baseline = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -6123,7 +6260,7 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
         &baseline_stats,
         options,
     );
-    errdefer allocator.free(baseline);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
 
     const alternative_parameters = try chooseDistanceParameterAlternativeAlloc(
         allocator,
@@ -6137,7 +6274,9 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
     alternative_options.distance_parameters = alternative_parameters;
     alternative_options.optimize_same_last_distance = false;
     var alternative_stats = initial_stats;
-    const alternative = try encodeCommandPlanWithOptionsAlloc(
+    const alternative = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -6145,12 +6284,12 @@ fn encodeCommandPlanWithDistanceParameterSearchAlloc(
         &alternative_stats,
         alternative_options,
     );
-    if (alternative.len < baseline.len) {
-        allocator.free(baseline);
+    if (trace.prefer(alternative, baseline)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline);
         stats.* = alternative_stats;
         return alternative;
     }
-    allocator.free(alternative);
+    freeQualityRecorded(trace_enabled, trace, allocator, alternative);
     stats.* = baseline_stats;
     return baseline;
 }
@@ -6255,11 +6394,15 @@ fn chooseStoredIfSmallerWithWindow(allocator: std.mem.Allocator, input: []const 
 }
 
 fn chooseStoredIfSmallerWithOptions(allocator: std.mem.Allocator, input: []const u8, compressed: []u8, options: StoredStreamOptions) Error![]u8 {
-    errdefer allocator.free(compressed);
+    return chooseStoredIfSmallerWithOptionsRecorded(false, .{}, allocator, input, compressed, options);
+}
+
+fn chooseStoredIfSmallerWithOptionsRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, compressed: []u8, options: StoredStreamOptions) Error![]u8 {
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, compressed);
     const stored_len = try encodedStoredStreamBoundWithOptions(input.len, options);
     if (compressed.len <= stored_len) return compressed;
-    const stored = try encodeStoredStreamWithOptionsAlloc(allocator, input, options);
-    allocator.free(compressed);
+    const stored = try encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, options);
+    freeQualityRecorded(trace_enabled, trace, allocator, compressed);
     return stored;
 }
 
@@ -9034,37 +9177,45 @@ fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, inp
 }
 
 fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+    return encodeLazyCommandPlanAllocRecorded(false, .{}, allocator, input, commands, stats, wire_options);
+}
+
+fn encodeLazyCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+    var profile_scope = trace.begin(.other, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     // A leading three-byte match followed by exactly one remaining command is
     // often a net loss after its unique command/distance symbols are included.
     // Evaluate the one exact alternative instead of relying on DEFLATE's local
     // fixed-bit profitability model, which cannot see Brotli tree overhead.
     if (commands.len == 2 and commands[0].has_copy and commands[0].isLz77() and commands[0].copy_len == 3) {
-        const baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
-        errdefer allocator.free(baseline.encoded);
+        const baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, wire_options);
+        errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
         var candidate_storage: [2]command_plan.Command = undefined;
         const candidate_commands = try command_plan.withoutCopyInto(&candidate_storage, input.len, commands, 0);
-        const candidate = try encodePreferredCommandPlanAlloc(allocator, input, candidate_commands, null, stats, wire_options);
-        if (candidate.encoded.len < baseline.encoded.len) {
-            const split_candidate = encodeEntropySplitCandidateAlloc(allocator, input, candidate_commands, stats, wire_options, candidate) catch |err| {
-                allocator.free(candidate.encoded);
-                return err;
+        const candidate = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace.variant(), allocator, input, candidate_commands, null, stats, wire_options);
+        if (trace.prefer(candidate.encoded, baseline.encoded)) {
+            const split_candidate = encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace.variant(), allocator, input, candidate_commands, stats, wire_options, candidate) catch |err| {
+                freeQualityRecorded(trace_enabled, trace, allocator, candidate.encoded);
+                return @as(Error![]u8, err);
             };
             const selected = split_candidate orelse candidate.encoded;
-            if (split_candidate != null) allocator.free(candidate.encoded);
-            allocator.free(baseline.encoded);
+            if (split_candidate != null) freeQualityRecorded(trace_enabled, trace, allocator, candidate.encoded);
+            freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
             return selected;
         }
-        allocator.free(candidate.encoded);
-        if (try encodeEntropySplitCandidateAlloc(allocator, input, commands, stats, wire_options, baseline)) |split_candidate| {
-            allocator.free(baseline.encoded);
+        freeQualityRecorded(trace_enabled, trace, allocator, candidate.encoded);
+        if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, wire_options, baseline)) |split_candidate| {
+            freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
             return split_candidate;
         }
         return baseline.encoded;
     }
     const short_match_alternatives = short_match_candidates.collect(commands);
     if (short_match_alternatives.len != 0) {
-        var baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
-        errdefer allocator.free(baseline.encoded);
+        var baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, wire_options);
+        errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
         var best_commands = commands;
         var best_command_storage: [16]command_plan.Command = undefined;
         var drop_storage: [4]usize = undefined;
@@ -9077,24 +9228,24 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
                 drop_count += 1;
             }
             const alternative = try command_plan.withoutCopiesInto(&command_storage, input.len, commands, drop_storage[0..drop_count]);
-            const candidate = try encodePreferredCommandPlanAlloc(allocator, input, alternative, null, stats, wire_options);
-            if (candidate.encoded.len < baseline.encoded.len) {
-                allocator.free(baseline.encoded);
+            const candidate = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace.variant(), allocator, input, alternative, null, stats, wire_options);
+            if (trace.prefer(candidate.encoded, baseline.encoded)) {
+                freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
                 baseline = candidate;
                 @memcpy(best_command_storage[0..alternative.len], alternative);
                 best_commands = best_command_storage[0..alternative.len];
-            } else allocator.free(candidate.encoded);
+            } else freeQualityRecorded(trace_enabled, trace, allocator, candidate.encoded);
         }
-        if (try encodeEntropySplitCandidateAlloc(allocator, input, best_commands, stats, wire_options, baseline)) |split_candidate| {
-            allocator.free(baseline.encoded);
+        if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, best_commands, stats, wire_options, baseline)) |split_candidate| {
+            freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
             return split_candidate;
         }
         return baseline.encoded;
     }
-    const baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
-    errdefer allocator.free(baseline.encoded);
-    if (try encodeEntropySplitCandidateAlloc(allocator, input, commands, stats, wire_options, baseline)) |split_candidate| {
-        allocator.free(baseline.encoded);
+    const baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, wire_options);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
+    if (try encodeEntropySplitCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, stats, wire_options, baseline)) |split_candidate| {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
         return split_candidate;
     }
     return baseline.encoded;
@@ -10025,6 +10176,14 @@ const PreferredCommandPlan = struct {
 /// changes can occasionally outweigh saved distance bits, so ratio mode keeps
 /// the candidate only when the final byte length is smaller.
 fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
+    return encodePreferredCommandPlanAllocRecorded(false, .{}, allocator, input, commands, io, stats, options);
+}
+
+fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
+    var profile_scope = trace.begin(.preferred_context, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     // Additional full wire candidates are worthwhile only on ratio-sized plans
     // already paying for recent-distance analysis.
     const use_recent_distances = options.try_recent_distances and try countReusableRecentDistances(commands, .{
@@ -10053,8 +10212,8 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     };
     const initial_stats = stats.*;
     var primary_stats = initial_stats;
-    var selected = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &primary_stats, primary_options);
-    errdefer allocator.free(selected);
+    var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &primary_stats, primary_options);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
     var selected_stats = primary_stats;
     var selected_context = primary_context;
     var alternate_contexts: [3]literal_context_split.Candidate = undefined;
@@ -10080,7 +10239,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
                 duplicate = duplicate or literal_context_split.Candidate.eql(adaptive_context, alternate);
             if (!duplicate) {
                 var adaptive_stats = initial_stats;
-                const adaptive = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &adaptive_stats, .{
+                const adaptive = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &adaptive_stats, .{
                     .use_recent_distances = use_recent_distances,
                     .literal_context_candidate = adaptive_context,
                     .large_window = options.large_window,
@@ -10090,8 +10249,8 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
                     .initial_output_pos = options.initial_output_pos,
                     .starting_last_distances = options.starting_last_distances,
                 });
-                if (adaptive.len < selected.len) {
-                    allocator.free(selected);
+                if (trace.prefer(adaptive, selected)) {
+                    freeQualityRecorded(trace_enabled, trace, allocator, selected);
                     selected = adaptive;
                     selected_stats = adaptive_stats;
                     if (selected_context) |previous_context| {
@@ -10103,7 +10262,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
                     }
                     selected_context = adaptive_context;
                 } else {
-                    allocator.free(adaptive);
+                    freeQualityRecorded(trace_enabled, trace, allocator, adaptive);
                     if (alternate_context_count >= alternate_contexts.len) return error.InvalidBlockPlan;
                     alternate_contexts[alternate_context_count] = adaptive_context;
                     alternate_context_count += 1;
@@ -10144,7 +10303,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
         };
     }
     var baseline_stats = initial_stats;
-    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &baseline_stats, .{
+    const baseline = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &baseline_stats, .{
         .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
@@ -10152,8 +10311,8 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
     });
-    if (selected.len < baseline.len) {
-        allocator.free(baseline);
+    if (trace.prefer(selected, baseline)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline);
         stats.* = selected_stats;
         return .{
             .encoded = selected,
@@ -10165,7 +10324,7 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
             .literal_split_utf8_cutoff = literal_split_utf8_cutoff,
         };
     }
-    allocator.free(selected);
+    freeQualityRecorded(trace_enabled, trace, allocator, selected);
     stats.* = baseline_stats;
     return .{ .encoded = baseline, .use_recent_distances = false };
 }
@@ -10176,6 +10335,14 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
 /// chooses the two- or three-command-type proposal before one full-wire trial
 /// and strict size arbitration against the chosen unsplit stream.
 fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
+    return encodeEntropySplitCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline);
+}
+
+fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
+    var profile_scope = trace.begin(.split_planning, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     const literal_splits = if (options.try_literal_split)
         literal_block_split.chooseProposals(input, commands, baseline.literal_split_utf8_cutoff)
     else
@@ -10221,9 +10388,11 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
     const candidate = if (has_legacy_split)
-        try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
+        try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
     else if (adaptive_literal) |*split|
-        try encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
+        try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10233,7 +10402,9 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             split,
         )
     else if (symbol_splits.adaptive_command) |*adaptive_command|
-        try encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
+        try encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10243,7 +10414,9 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             adaptive_command,
         )
     else
-        try encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+        try encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10254,64 +10427,66 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
         );
     var best = candidate;
     var best_stats = candidate_stats;
-    errdefer allocator.free(best);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, best);
     if (literal_splits.three != null) if (literal_splits.two) |two_literal| {
         var two_literal_stats = baseline_stats;
-        const two_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_literal_stats, options, baseline, two_literal, command_split, distance_split);
-        if (two_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const two_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &two_literal_stats, options, baseline, two_literal, command_split, distance_split);
+        if (trace.prefer(two_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = two_literal_candidate;
             best_stats = two_literal_stats;
-        } else allocator.free(two_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, two_literal_candidate);
     };
     if (literal_splits.clustered) |clustered_literal| {
         var clustered_literal_stats = baseline_stats;
-        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_literal_stats, options, baseline, clustered_literal, command_split, distance_split);
-        if (clustered_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_literal_stats, options, baseline, clustered_literal, command_split, distance_split);
+        if (trace.prefer(clustered_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = clustered_literal_candidate;
             best_stats = clustered_literal_stats;
-        } else allocator.free(clustered_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_literal_candidate);
     }
     if (literal_splits.alternating_four) |alternating_literal| {
         var alternating_literal_stats = baseline_stats;
-        const alternating_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_literal_stats, options, baseline, alternating_literal, command_split, distance_split);
-        if (alternating_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const alternating_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_literal_stats, options, baseline, alternating_literal, command_split, distance_split);
+        if (trace.prefer(alternating_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = alternating_literal_candidate;
             best_stats = alternating_literal_stats;
-        } else allocator.free(alternating_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_literal_candidate);
     }
     if (literal_splits.reuse_first_four) |reused_literal| {
         var reused_literal_stats = baseline_stats;
-        const reused_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_literal_stats, options, baseline, reused_literal, command_split, distance_split);
-        if (reused_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const reused_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_literal_stats, options, baseline, reused_literal, command_split, distance_split);
+        if (trace.prefer(reused_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = reused_literal_candidate;
             best_stats = reused_literal_stats;
-        } else allocator.free(reused_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_literal_candidate);
     }
     if (literal_splits.four) |four_literal| {
         var four_literal_stats = baseline_stats;
-        const four_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_literal_stats, options, baseline, four_literal, command_split, distance_split);
-        if (four_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const four_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_literal_stats, options, baseline, four_literal, command_split, distance_split);
+        if (trace.prefer(four_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = four_literal_candidate;
             best_stats = four_literal_stats;
-        } else allocator.free(four_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, four_literal_candidate);
     }
     if (literal_splits.dynamic) |dynamic_literal| {
         var dynamic_literal_stats = baseline_stats;
-        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_literal_stats, options, baseline, dynamic_literal, command_split, distance_split);
-        if (dynamic_literal_candidate.len < best.len) {
-            allocator.free(best);
+        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_literal_stats, options, baseline, dynamic_literal, command_split, distance_split);
+        if (trace.prefer(dynamic_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = dynamic_literal_candidate;
             best_stats = dynamic_literal_stats;
-        } else allocator.free(dynamic_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_literal_candidate);
     }
     if (has_legacy_split) if (adaptive_literal) |*split| {
         var adaptive_literal_stats = baseline_stats;
-        const adaptive_literal_candidate = try encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
+        const adaptive_literal_candidate = try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10320,15 +10495,17 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             baseline,
             split,
         );
-        if (adaptive_literal_candidate.len < best.len) {
-            allocator.free(best);
+        if (trace.prefer(adaptive_literal_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = adaptive_literal_candidate;
             best_stats = adaptive_literal_stats;
-        } else allocator.free(adaptive_literal_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_literal_candidate);
     };
     if (joint_literal) |*joint| {
         var joint_stats = baseline_stats;
-        const joint_candidate = try encodeEntropyAdaptiveLiteralContextWireCandidateAlloc(
+        const joint_candidate = try encodeEntropyAdaptiveLiteralContextWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10337,114 +10514,116 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             baseline,
             joint,
         );
-        if (joint_candidate.len < best.len) {
-            allocator.free(best);
+        if (trace.prefer(joint_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = joint_candidate;
             best_stats = joint_stats;
-        } else allocator.free(joint_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, joint_candidate);
     }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
-        const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline, literal_split, clustered, distance_split);
-        if (clustered_candidate.len < best.len) {
-            allocator.free(best);
+        const clustered_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_stats, options, baseline, literal_split, clustered, distance_split);
+        if (trace.prefer(clustered_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = clustered_candidate;
             best_stats = clustered_stats;
-        } else allocator.free(clustered_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_candidate);
     }
     if (symbol_splits.command.alternating_four) |alternating| {
         var alternating_stats = baseline_stats;
-        const alternating_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_stats, options, baseline, literal_split, alternating, distance_split);
-        if (alternating_candidate.len < best.len) {
-            allocator.free(best);
+        const alternating_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_stats, options, baseline, literal_split, alternating, distance_split);
+        if (trace.prefer(alternating_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = alternating_candidate;
             best_stats = alternating_stats;
-        } else allocator.free(alternating_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_candidate);
     }
     if (symbol_splits.command.reuse_first_four) |reused| {
         var reused_stats = baseline_stats;
-        const reused_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_stats, options, baseline, literal_split, reused, distance_split);
-        if (reused_candidate.len < best.len) {
-            allocator.free(best);
+        const reused_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_stats, options, baseline, literal_split, reused, distance_split);
+        if (trace.prefer(reused_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = reused_candidate;
             best_stats = reused_stats;
-        } else allocator.free(reused_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_candidate);
     }
     if (symbol_splits.command.four) |four| {
         var four_stats = baseline_stats;
-        const four_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_stats, options, baseline, literal_split, four, distance_split);
-        if (four_candidate.len < best.len) {
-            allocator.free(best);
+        const four_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_stats, options, baseline, literal_split, four, distance_split);
+        if (trace.prefer(four_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = four_candidate;
             best_stats = four_stats;
-        } else allocator.free(four_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, four_candidate);
     }
     if (symbol_splits.command.dynamic) |dynamic| {
         var dynamic_stats = baseline_stats;
-        const dynamic_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_stats, options, baseline, literal_split, dynamic, distance_split);
-        if (dynamic_candidate.len < best.len) {
-            allocator.free(best);
+        const dynamic_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_stats, options, baseline, literal_split, dynamic, distance_split);
+        if (trace.prefer(dynamic_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = dynamic_candidate;
             best_stats = dynamic_stats;
-        } else allocator.free(dynamic_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_candidate);
     }
     if (distance_splits.three != null) if (distance_splits.two) |two_distance| {
         var two_distance_stats = baseline_stats;
-        const two_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_distance_stats, options, baseline, literal_split, command_split, two_distance);
-        if (two_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const two_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &two_distance_stats, options, baseline, literal_split, command_split, two_distance);
+        if (trace.prefer(two_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = two_distance_candidate;
             best_stats = two_distance_stats;
-        } else allocator.free(two_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, two_distance_candidate);
     };
     if (distance_splits.clustered) |clustered_distance| {
         var clustered_distance_stats = baseline_stats;
-        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_distance_stats, options, baseline, literal_split, command_split, clustered_distance);
-        if (clustered_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_distance_stats, options, baseline, literal_split, command_split, clustered_distance);
+        if (trace.prefer(clustered_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = clustered_distance_candidate;
             best_stats = clustered_distance_stats;
-        } else allocator.free(clustered_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_distance_candidate);
     }
     if (distance_splits.alternating_four) |alternating_distance| {
         var alternating_distance_stats = baseline_stats;
-        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_distance_stats, options, baseline, literal_split, command_split, alternating_distance);
-        if (alternating_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_distance_stats, options, baseline, literal_split, command_split, alternating_distance);
+        if (trace.prefer(alternating_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = alternating_distance_candidate;
             best_stats = alternating_distance_stats;
-        } else allocator.free(alternating_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_distance_candidate);
     }
     if (distance_splits.reuse_first_four) |reused_distance| {
         var reused_distance_stats = baseline_stats;
-        const reused_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_distance_stats, options, baseline, literal_split, command_split, reused_distance);
-        if (reused_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const reused_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_distance_stats, options, baseline, literal_split, command_split, reused_distance);
+        if (trace.prefer(reused_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = reused_distance_candidate;
             best_stats = reused_distance_stats;
-        } else allocator.free(reused_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_distance_candidate);
     }
     if (distance_splits.four) |four_distance| {
         var four_distance_stats = baseline_stats;
-        const four_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_distance_stats, options, baseline, literal_split, command_split, four_distance);
-        if (four_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const four_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_distance_stats, options, baseline, literal_split, command_split, four_distance);
+        if (trace.prefer(four_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = four_distance_candidate;
             best_stats = four_distance_stats;
-        } else allocator.free(four_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, four_distance_candidate);
     }
     if (distance_splits.dynamic) |dynamic_distance| {
         var dynamic_distance_stats = baseline_stats;
-        const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
-        if (dynamic_distance_candidate.len < best.len) {
-            allocator.free(best);
+        const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
+        if (trace.prefer(dynamic_distance_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = dynamic_distance_candidate;
             best_stats = dynamic_distance_stats;
-        } else allocator.free(dynamic_distance_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_distance_candidate);
     }
     if (has_legacy_split or adaptive_literal != null) if (symbol_splits.adaptive_command) |*adaptive_command| {
         var adaptive_stats = baseline_stats;
-        const adaptive_candidate = try encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
+        const adaptive_candidate = try encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10453,15 +10632,17 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             baseline,
             adaptive_command,
         );
-        if (adaptive_candidate.len < best.len) {
-            allocator.free(best);
+        if (trace.prefer(adaptive_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = adaptive_candidate;
             best_stats = adaptive_stats;
-        } else allocator.free(adaptive_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_candidate);
     };
     if (has_legacy_split or adaptive_literal != null or symbol_splits.adaptive_command != null) if (symbol_splits.adaptive_distance) |*adaptive_distance| {
         var adaptive_stats = baseline_stats;
-        const adaptive_candidate = try encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+        const adaptive_candidate = try encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10470,15 +10651,17 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             baseline,
             adaptive_distance,
         );
-        if (adaptive_candidate.len < best.len) {
-            allocator.free(best);
+        if (trace.prefer(adaptive_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = adaptive_candidate;
             best_stats = adaptive_stats;
-        } else allocator.free(adaptive_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_candidate);
     };
     if (symbol_splits.adaptive_command) |*adaptive_command| if (symbol_splits.adaptive_distance) |*adaptive_distance| {
         var combined_stats = baseline_stats;
-        const combined_candidate = try encodeEntropyAdaptiveCombinedSplitWireCandidateAlloc(
+        const combined_candidate = try encodeEntropyAdaptiveCombinedSplitWireCandidateAllocRecorded(
+            trace_enabled,
+            trace,
             allocator,
             input,
             commands,
@@ -10488,17 +10671,17 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             adaptive_command,
             adaptive_distance,
         );
-        if (combined_candidate.len < best.len) {
-            allocator.free(best);
+        if (trace.prefer(combined_candidate, best)) {
+            freeQualityRecorded(trace_enabled, trace, allocator, best);
             best = combined_candidate;
             best_stats = combined_stats;
-        } else allocator.free(combined_candidate);
+        } else freeQualityRecorded(trace_enabled, trace, allocator, combined_candidate);
     };
-    if (best.len < baseline.encoded.len) {
+    if (trace.prefer(best, baseline.encoded)) {
         stats.* = best_stats;
         return best;
     }
-    allocator.free(best);
+    freeQualityRecorded(trace_enabled, trace, allocator, best);
     return null;
 }
 
@@ -10541,7 +10724,13 @@ fn chooseAdaptiveLiteralSplitAlloc(
 }
 
 fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropySplitWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, literal_split, command_split, distance_split);
+}
+
+fn encodeEntropySplitWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10567,7 +10756,13 @@ fn encodeEntropyAdaptiveCommandSplitWireCandidateAlloc(
     baseline: PreferredCommandPlan,
     adaptive_command_split: *const block_split_plan.Plan,
 ) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, adaptive_command_split);
+}
+
+fn encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, adaptive_command_split: *const block_split_plan.Plan) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10593,7 +10788,13 @@ fn encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
     baseline: PreferredCommandPlan,
     adaptive_distance_split: *const block_split_plan.Plan,
 ) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, adaptive_distance_split);
+}
+
+fn encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, adaptive_distance_split: *const block_split_plan.Plan) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10620,7 +10821,13 @@ fn encodeEntropyAdaptiveCombinedSplitWireCandidateAlloc(
     adaptive_command_split: *const block_split_plan.Plan,
     adaptive_distance_split: *const block_split_plan.Plan,
 ) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropyAdaptiveCombinedSplitWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, adaptive_command_split, adaptive_distance_split);
+}
+
+fn encodeEntropyAdaptiveCombinedSplitWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, adaptive_command_split: *const block_split_plan.Plan, adaptive_distance_split: *const block_split_plan.Plan) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10646,7 +10853,13 @@ fn encodeEntropyAdaptiveLiteralSplitWireCandidateAlloc(
     baseline: PreferredCommandPlan,
     adaptive_literal_split: *const block_split_plan.Plan,
 ) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, adaptive_literal_split);
+}
+
+fn encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, adaptive_literal_split: *const block_split_plan.Plan) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10672,7 +10885,13 @@ fn encodeEntropyAdaptiveLiteralContextWireCandidateAlloc(
     baseline: PreferredCommandPlan,
     joint: *const literal_entropy_plan.Plan,
 ) Error![]u8 {
-    return encodeEntropySplitWireCandidateInternalAlloc(
+    return encodeEntropyAdaptiveLiteralContextWireCandidateAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, joint);
+}
+
+fn encodeEntropyAdaptiveLiteralContextWireCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, joint: *const literal_entropy_plan.Plan) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(
+        trace_enabled,
+        trace,
         allocator,
         input,
         commands,
@@ -10704,9 +10923,17 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
     distance_split: ?distance_block_split.Result,
     adaptive_distance_split: ?*const block_split_plan.Plan,
 ) Error![]u8 {
+    return encodeEntropySplitWireCandidateInternalAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, literal_split, adaptive_literal_split, joint_literal, command_split, adaptive_command_split, distance_split, adaptive_distance_split);
+}
+
+fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, adaptive_literal_split: ?*const block_split_plan.Plan, joint_literal: ?*const literal_entropy_plan.Plan, command_split: ?command_block_split.Result, adaptive_command_split: ?*const block_split_plan.Plan, distance_split: ?distance_block_split.Result, adaptive_distance_split: ?*const block_split_plan.Plan) Error![]u8 {
+    var profile_scope = trace.begin(.other, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+
     const initial_stats = stats.*;
     var selected_stats = initial_stats;
-    var selected = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &selected_stats, .{
+    var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, .{
         // Literal block splitting disables context trees, while command and
         // distance splitting retain the winning context candidate.
         .use_recent_distances = baseline.use_recent_distances,
@@ -10725,11 +10952,11 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
     });
-    errdefer allocator.free(selected);
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
     if (literal_split == null and adaptive_literal_split == null) {
         for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
             var alternate_stats = initial_stats;
-            const alternate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &alternate_stats, .{
+            const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{
                 .use_recent_distances = baseline.use_recent_distances,
                 .literal_context_candidate = alternate_context,
                 .command_split = command_split,
@@ -10743,15 +10970,15 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
                 .initial_output_pos = options.initial_output_pos,
                 .starting_last_distances = options.starting_last_distances,
             });
-            if (alternate.len < selected.len) {
-                allocator.free(selected);
+            if (trace.prefer(alternate, selected)) {
+                freeQualityRecorded(trace_enabled, trace, allocator, selected);
                 selected = alternate;
                 selected_stats = alternate_stats;
-            } else allocator.free(alternate);
+            } else freeQualityRecorded(trace_enabled, trace, allocator, alternate);
         }
         if (baseline.alternate_plain_literals) {
             var plain_stats = initial_stats;
-            const plain = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &plain_stats, .{
+            const plain = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &plain_stats, .{
                 .use_recent_distances = baseline.use_recent_distances,
                 .command_split = command_split,
                 .adaptive_command_split = adaptive_command_split,
@@ -10764,11 +10991,11 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
                 .initial_output_pos = options.initial_output_pos,
                 .starting_last_distances = options.starting_last_distances,
             });
-            if (plain.len < selected.len) {
-                allocator.free(selected);
+            if (trace.prefer(plain, selected)) {
+                freeQualityRecorded(trace_enabled, trace, allocator, selected);
                 selected = plain;
                 selected_stats = plain_stats;
-            } else allocator.free(plain);
+            } else freeQualityRecorded(trace_enabled, trace, allocator, plain);
         }
     }
     stats.* = selected_stats;
@@ -10973,11 +11200,22 @@ fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceSta
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    return encodeCommandPlanWithOptionsAllocRecorded(false, .{}, allocator, input, commands, io, stats, options);
+}
+
+fn encodeCommandPlanWithOptionsAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    var profile_scope = trace.begin(.wire, input.len, commands.len);
+    defer profile_scope.finish();
+    errdefer |err| profile_scope.failure(err);
+    profile_scope.config(options);
+
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     var out = try std.ArrayList(u8).initCapacity(allocator, commandPlanInitialCapacity(input.len));
     errdefer out.deinit(allocator);
     try encodeCommandPlanWithOptionsAppend(allocator, &out, input, commands, io, stats, options);
-    return out.toOwnedSlice(allocator);
+    const encoded = try out.toOwnedSlice(allocator);
+    profile_scope.wire(encoded);
+    return encoded;
 }
 
 fn encodeCommandPlanWithOptionsInto(allocator: std.mem.Allocator, output: []u8, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!usize {
