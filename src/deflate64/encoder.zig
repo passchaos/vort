@@ -1,20 +1,19 @@
 const std = @import("std");
 const bitstream = @import("../bitstream.zig");
 const core = @import("../core.zig");
-const huffman = @import("../huffman.zig");
-const lz77 = @import("../lz77.zig");
+const one_shot = @import("one_shot.zig");
 
 pub const Error = core.Error;
 
 pub const EncodeOptions = struct {
     /// Maximum hash-chain candidates examined at each input position.
     max_chain: usize = 128,
-    /// Stop searching once a match reaches this length.
-    nice_length: u16 = 128,
+    /// Stop searching once a match reaches this length. Zero retains the
+    /// established first-match stopping behavior; the maximum is 65538.
+    nice_length: u32 = 128,
 };
 
 const max_stored_block_len: usize = std.math.maxInt(u16);
-const max_encoder_distance: usize = std.math.maxInt(u16);
 
 /// Return a conservative bound for the adaptive encoder.
 ///
@@ -28,20 +27,26 @@ pub fn encodedBound(input_len: usize) Error!usize {
 
 /// Encode one raw Deflate64 stream, choosing between a fixed-Huffman stream
 /// and stored blocks. The fixed encoder uses Deflate64's extended distance
-/// alphabet and its distinct code-285 semantics.
+/// alphabet through distance 65536 and code-285 lengths through 65538. Fixed
+/// blocks use borrowed 128KiB chunks with continuous bit packing and preceding
+/// 64KiB history. The whole fixed candidate must beat the original global
+/// stored representation; ties preserve stored output and encodedBound.
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: EncodeOptions,
 ) ![]u8 {
+    if (options.nice_length > 65_538) return error.InvalidBlockPlan;
     const stored_size = try encodedBound(input.len);
-    const plan = try planAlloc(allocator, input, options);
-    defer plan.deinit(allocator);
+    var matcher: one_shot.Matcher = .{};
+    defer matcher.deinit(allocator);
+    const plan = try one_shot.plan(allocator, &matcher, input, options.max_chain, options.nice_length);
+    const fixed_size = one_shot.candidateSize(plan.bit_len, stored_size) orelse return encodeStoredAlloc(allocator, input);
 
-    const fixed = try encodeFixedPlanAlloc(allocator, plan.tokens);
-    if (fixed.len < stored_size) return fixed;
-    allocator.free(fixed);
-    return encodeStoredAlloc(allocator, input);
+    const output = try allocator.alloc(u8, fixed_size);
+    const written = one_shot.emit(&matcher, input, output, options.max_chain, options.nice_length);
+    std.debug.assert(written == fixed_size);
+    return output;
 }
 
 /// Append one raw Deflate64 stream transactionally.
@@ -116,96 +121,49 @@ pub fn encodeStoredInto(input: []const u8, output: []u8) Error!usize {
     return output_offset;
 }
 
-fn planAlloc(
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    options: EncodeOptions,
-) !lz77.GreedyPlan {
-    return lz77.hashGreedyPlanAlloc(allocator, input, .{
-        .window_len = max_encoder_distance,
-        .max_chain = options.max_chain,
-        .nice_len = options.nice_length,
-        .max_match = lz77.max_match_len,
-    });
-}
-
-fn encodeFixedPlanAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
-    var writer: bitstream.BitWriter = .{};
-    errdefer writer.deinit(allocator);
-
-    // BFINAL=1 followed by fixed-Huffman BTYPE=01 in LSB-first order.
-    try writer.writeBits(allocator, 0b011, 3);
-    for (tokens) |token| switch (token) {
-        .literal => |byte| try huffman.fixed_literal_encoder.writeSymbol(&writer, allocator, byte),
-        .match => |match| {
-            const length = lengthCode(match.length);
-            try huffman.fixed_literal_encoder.writeSymbol(&writer, allocator, length.symbol);
-            try writer.writeBits(allocator, length.extra_value, length.extra_bits);
-
-            const distance = distanceCode(match.distance);
-            try huffman.fixed_distance_encoder.writeSymbol(&writer, allocator, distance.symbol);
-            try writer.writeBits(allocator, distance.extra_value, distance.extra_bits);
-        },
-    };
-    try huffman.fixed_literal_encoder.writeSymbol(&writer, allocator, 256);
-    return writer.toOwnedSlice(allocator);
-}
-
-const CodeExtra = struct {
-    symbol: u16,
-    extra_bits: u6,
-    extra_value: u16,
-};
-
-fn lengthCode(length: u16) CodeExtra {
-    std.debug.assert(length >= lz77.min_match_len and length <= lz77.max_match_len);
-    if (length <= 10) return .{ .symbol = length + 254, .extra_bits = 0, .extra_value = 0 };
-
-    // Unlike ordinary Deflate, Deflate64 reserves symbol 285 for a 16-bit
-    // length extension. Length 258 therefore uses symbol 284 plus value 31.
-    const extra_bits: u6 = @intCast(std.math.log2_int(u16, length - 3) - 2);
-    const span: u16 = @as(u16, 1) << @intCast(extra_bits);
-    const group_base: u16 = (@as(u16, 1) << @intCast(extra_bits + 2)) + 3;
-    const offset = length - group_base;
-    const slot = offset / span;
-    return .{
-        .symbol = 261 + @as(u16, extra_bits) * 4 + slot,
-        .extra_bits = extra_bits,
-        .extra_value = offset & (span - 1),
-    };
-}
-
-fn distanceCode(distance: u16) CodeExtra {
-    std.debug.assert(distance >= 1);
-    if (distance <= 4) return .{ .symbol = distance - 1, .extra_bits = 0, .extra_value = 0 };
-
-    const extra_bits: u6 = @intCast(std.math.log2_int(u16, distance - 1) - 1);
-    const span: u16 = @as(u16, 1) << @intCast(extra_bits);
-    const group_base: u16 = (@as(u16, 1) << @intCast(extra_bits + 1)) + 1;
-    const offset = distance - group_base;
-    const slot = offset / span;
-    return .{
-        .symbol = 2 + @as(u16, extra_bits) * 2 + slot,
-        .extra_bits = extra_bits,
-        .extra_value = offset & (span - 1),
-    };
-}
-
 test "Deflate64 fixed codes cover extended length and distance boundaries" {
-    const length = lengthCode(258);
-    try std.testing.expectEqual(@as(u16, 284), length.symbol);
-    try std.testing.expectEqual(@as(u6, 5), length.extra_bits);
-    try std.testing.expectEqual(@as(u16, 31), length.extra_value);
+    const huffman = @import("../huffman.zig");
+    const literal_table = try huffman.fixedLiteralTable();
+    const distance_table = try huffman.fixedDistanceTable();
+    const encoded = try encodeAlloc(std.testing.allocator, "R" ** 259, .{});
+    defer std.testing.allocator.free(encoded);
+    var reader = bitstream.BitReader.init(encoded);
+    try std.testing.expectEqual(@as(u3, 0b011), try reader.readBits(u3, 3));
+    try std.testing.expectEqual(@as(u16, 'R'), try literal_table.decodeValue(&reader));
+    try std.testing.expectEqual(@as(u16, 284), try literal_table.decodeValue(&reader));
+    try std.testing.expectEqual(@as(u16, 31), try reader.readBits(u16, 5));
+    try std.testing.expectEqual(@as(u16, 0), try distance_table.decodeValue(&reader));
+    try std.testing.expectEqual(@as(u16, 256), try literal_table.decodeValue(&reader));
 
-    const code_30 = distanceCode(32 * 1024 + 1);
-    try std.testing.expectEqual(@as(u16, 30), code_30.symbol);
-    try std.testing.expectEqual(@as(u6, 14), code_30.extra_bits);
-    try std.testing.expectEqual(@as(u16, 0), code_30.extra_value);
-
-    const code_31 = distanceCode(std.math.maxInt(u16));
-    try std.testing.expectEqual(@as(u16, 31), code_31.symbol);
-    try std.testing.expectEqual(@as(u6, 14), code_31.extra_bits);
-    try std.testing.expectEqual(@as(u16, 16_382), code_31.extra_value);
+    // Shared helper emission is driven by a real match against borrowed
+    // history, then its fields are decoded without reusing code classifiers.
+    const blocks = @import("stream_blocks.zig");
+    var matcher: one_shot.Matcher = .{};
+    defer matcher.deinit(std.testing.allocator);
+    try matcher.ensure(std.testing.allocator);
+    const history = try std.testing.allocator.alloc(u8, 65_536);
+    defer std.testing.allocator.free(history);
+    @memset(history, 0);
+    @memcpy(history[0..3], "abc");
+    for ([_]struct { distance: usize, symbol: u16, extra: u16 }{
+        .{ .distance = 32_769, .symbol = 30, .extra = 0 },
+        .{ .distance = 65_535, .symbol = 31, .extra = 16_382 },
+        .{ .distance = 65_536, .symbol = 31, .extra = 16_383 },
+    }) |boundary| {
+        const plan = blocks.fixedPlan(&matcher, history[0..boundary.distance], "abc", 128, 3);
+        try std.testing.expectEqual(@as(usize, 1), plan.stats.match_count);
+        try std.testing.expectEqual(boundary.distance, plan.stats.max_match_distance);
+        var bytes: [8]u8 = undefined;
+        var writer: blocks.Writer = .{ .state = .{}, .output = &bytes };
+        blocks.writeFixed(&writer, &matcher, history[0..boundary.distance], "abc", 128, 3, true);
+        writer.alignToByte();
+        var fields = bitstream.BitReader.init(bytes[0..writer.len]);
+        try std.testing.expectEqual(@as(u3, 0b011), try fields.readBits(u3, 3));
+        try std.testing.expectEqual(@as(u16, 257), try literal_table.decodeValue(&fields));
+        try std.testing.expectEqual(boundary.symbol, try distance_table.decodeValue(&fields));
+        try std.testing.expectEqual(boundary.extra, try fields.readBits(u16, 14));
+        try std.testing.expectEqual(@as(u16, 256), try literal_table.decodeValue(&fields));
+    }
 }
 
 test "Deflate64 encoder round trips empty, stored, and fixed streams" {
@@ -269,17 +227,10 @@ test "Deflate64 encoder emits matches beyond the Deflate window" {
     @memcpy(input[prefix_len..][0..separator.len], separator);
     @memcpy(input[prefix_len + separator.len ..], input[0..prefix_len]);
 
-    const plan = try planAlloc(allocator, input, .{});
-    defer plan.deinit(allocator);
-    var saw_extended_distance = false;
-    for (plan.tokens) |token| switch (token) {
-        .match => |match| if (match.distance > 49_152) {
-            saw_extended_distance = true;
-            break;
-        },
-        else => {},
-    };
-    try std.testing.expect(saw_extended_distance);
+    var matcher: one_shot.Matcher = .{};
+    defer matcher.deinit(allocator);
+    const plan = try one_shot.plan(allocator, &matcher, input, 128, 128);
+    try std.testing.expect(plan.stats.max_match_distance > 49_152);
 
     const encoded = try encodeAlloc(allocator, input, .{});
     defer allocator.free(encoded);
@@ -316,4 +267,8 @@ test "Deflate64 stored encoder splits blocks and preserves caller buffers" {
     try std.testing.expectEqual(required, try encodeStoredAppend(allocator, &appended, input));
     try std.testing.expectEqualStrings("prefix:", appended.items[0.."prefix:".len]);
     try std.testing.expectEqualSlices(u8, output, appended.items["prefix:".len..]);
+}
+
+test "Deflate64 one-shot full range and transactional output contracts" {
+    try @import("one_shot_tests.zig").contracts(@This());
 }
