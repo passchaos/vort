@@ -1,0 +1,53 @@
+{
+  "schema": "vort.zstd.standard-parity-seal.v1",
+  "created_utc": "2026-10-25T18:11:19.762856+00:00",
+  "parity_report": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/standard-parity.json",
+    "bytes": 1091100,
+    "sha256": "9335ec07628d30d49951188797883dda631e8aa6a48a042c13463c4531615583"
+  },
+  "compilation_manifest": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/compilations.json",
+    "bytes": 8049,
+    "sha256": "67d9f6dceebf13848e25a8f315fca47f49311704cf8dbb1cf782a91b33b01d11"
+  },
+  "helper": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+    "bytes": 8395,
+    "sha256": "b6b58c3928959b7759f6febcf18499e4e928f69f11baef98e3237bd8488797fe"
+  },
+  "old_source": {
+    "manifest": {
+      "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/old-source-manifest-pinned.json",
+      "bytes": 278806,
+      "sha256": "f558b67373d187c67bb3e5c2facf706142f98c41f99adc16a7d553491f5d5797"
+    },
+    "files_verified": 1902,
+    "all_files_match": true,
+    "differences": [],
+    "epoch": "89fae5d6cf5b98facf9b899a79eea93e60fb4e0f"
+  },
+  "new_source": {
+    "manifest": {
+      "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/new-runtime-source-pinned.json",
+      "bytes": 25622,
+      "sha256": "755be3e13ea886e598d5026448abe107bdb4af0e25a86527cb272fd1e84f9964"
+    },
+    "files_verified": 160,
+    "all_files_match": true,
+    "differences": [],
+    "epoch": "root-60d15178-probe-527fd1e5"
+  },
+  "counts": {
+    "comparisons": 96,
+    "matched": 96,
+    "wire_mismatches": 0,
+    "old_failures": 0,
+    "new_failures": 0,
+    "independent_full_decodes": 192
+  },
+  "same_helper_uses_only_old_public_apis": true,
+  "bridge_changes": [],
+  "sources_preserved": true,
+  "scope": "Bounded default-standard legacy wire and decoder parity; no format feature backport, no performance claim."
+}

@@ -1,0 +1,57 @@
+test-zstd-magicless
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+error: 'zstd.test.Zstd magicless public contracts' failed:
+       magicless QA raw header width: min_type=u18 length=131072 old_shift=0 widened_header=0x100000 bytes=0,0,10
+       magicless QA raw header width: min_type=u18 length=131072 old_shift=0 widened_header=0x100000 bytes=0,0,10
+       expected error.DictionaryMismatch, found error.NeedDictionary
+       magicless dictionary id=1 kind=raw_content
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:9942:42: 0x15a2df5 in validateNativeDictionary (zstd.zig)
+           if (dict.id != header.dictionary_id) return error.NeedDictionary;
+                                                ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:15983:40: 0x1540418 in rawOrRleDecodedSizeWithOptions (zstd.zig)
+                   const dictionary_history = try validateNativeDictionary(header, dictionary);
+                                              ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:3466:29: 0x1614ab3 in size (zstd.zig)
+               const decoded_len = try rawOrRleDecodedSizeWithOptions(frame, options);
+                                   ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd/frame/formatted_decode.zig:7:18: 0x1613dca in owned__anon_224480 (zstd.zig)
+           const size = try Codec.size(frame, options);
+                        ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:3477:5: 0x16186f6 in decodeFrameAllocWithOptions (zstd.zig)
+           return formatted_decode.owned(FormattedFrameDecoder, allocator, frame, options);
+           ^
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:72:13: 0x12906a1 in expectError__anon_44056 (std.zig)
+                   return error.TestUnexpectedError;
+                   ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/tests/zstd_magicless_dictionaries.zig:47:13: 0x12a6a44 in dictionary (zstd.zig)
+                   try std.testing.expectError(error.DictionaryMismatch, Z.decodeFrameAllocWithOptions(a, encoded.frame, .{ .format = .magicless, .dictionary = wrong }));
+                   ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/tests/zstd_magicless_dictionaries.zig:10:9: 0x12abffa in contracts__anon_44787 (zstd.zig)
+               try Cases.dictionary(Z.NativeDictionary.init(id, h.plain));
+               ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd_magicless_tests.zig:12:5: 0x12b297b in contracts__anon_43148 (zstd.zig)
+           try @import("tests/zstd_magicless_dictionaries.zig").contracts(Z);
+           ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:855:5: 0x12b2ad7 in test.Zstd magicless public contracts (zstd.zig)
+           try @import("zstd_magicless_tests.zig").contracts(@This());
+           ^
+failed command: ./.zig-cache/o/ac6ffe936da5bb29d391d4065d946e2f/vort-zstd-magicless-tests --cache-dir=./.zig-cache --seed=0xadee1f6c --listen=-
+
+Build Summary: 7/9 steps succeeded (1 failed); 128/129 tests passed (1 failed)
+test-zstd-magicless transitive failure
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+|  +- compile test vort-zstd-magicless-tests Debug native success 2s MaxRSS:216M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 Debug native cached 7ms MaxRSS:40M
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-zstd-magicless-root-tests 111 pass (111 total) 33ms MaxRSS:14M
+   +- compile test vort-zstd-magicless-root-tests Debug native success 4s MaxRSS:328M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 6ms MaxRSS:40M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xadee1f6c -Zfed4970b2bb1df35 test-zstd-magicless -j3 --summary all

@@ -1,0 +1,57 @@
+test-zstd-magicless
++- run test vort-zstd-magicless-tests
+   +- compile test vort-zstd-magicless-tests Debug native 2 errors
+src/zstd.zig:3466:15: error: local constant shadows declaration of 'size'
+        const size = try rawOrRleDecodedSizeWithOptions(frame, options);
+              ^~~~
+src/zstd.zig:3464:9: note: declared here
+    pub fn size(frame: []const u8, options: Options) zstd.Error!usize {
+    ~~~~^~
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/debug.zig:420:14: error: reached unreachable code
+    if (!ok) unreachable; // assertion failure
+             ^~~~~~~~~~~
+src/zstd.zig:12080:21: note: called at comptime here
+    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
+    ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+error: 2 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/d5037e170b7cab0e7d7bdc7c26ae6ce6/vort-zstd-huffman-x2.o -ODebug -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig --test-filter "Zstd magicless" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zstd-magicless-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+test-zstd-magicless
++- run test vort-zstd-magicless-root-tests
+   +- compile test vort-zstd-magicless-root-tests Debug native 2 errors
+src/zstd.zig:3466:15: error: local constant shadows declaration of 'size'
+        const size = try rawOrRleDecodedSizeWithOptions(frame, options);
+              ^~~~
+src/zstd.zig:3464:9: note: declared here
+    pub fn size(frame: []const u8, options: Options) zstd.Error!usize {
+    ~~~~^~
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/debug.zig:420:14: error: reached unreachable code
+    if (!ok) unreachable; // assertion failure
+             ^~~~~~~~~~~
+src/zstd.zig:12080:21: note: called at comptime here
+    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
+    ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    zstd: src/root.zig:71:26
+    test_0: src/root.zig:3952:9
+error: 2 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/b0d047ba2b114a510a29fad6255d7eaf/vort-br-record-optimal.o .zig-cache/o/d5037e170b7cab0e7d7bdc7c26ae6ce6/vort-zstd-huffman-x2.o -ODebug -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d --dep vail_archive_crypto -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/root.zig -ODebug -Mvail_archive_crypto=/home/passchaos/project-z/vail/archive_crypto/src/root.zig --test-filter "root Zstd magicless consumer contracts" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zstd-magicless-root-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 4/9 steps succeeded (2 failed)
+test-zstd-magicless transitive failure
++- run test vort-zstd-magicless-tests transitive failure
+|  +- compile test vort-zstd-magicless-tests Debug native 2 errors
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:36M
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-zstd-magicless-root-tests transitive failure
+   +- compile test vort-zstd-magicless-root-tests Debug native 2 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:36M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x11ad6369 -Z8173ad6a59963aa6 test-zstd-magicless -j3 --summary all

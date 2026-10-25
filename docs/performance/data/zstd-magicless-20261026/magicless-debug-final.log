@@ -1,0 +1,16 @@
+Build Summary: 9/9 steps succeeded; 130/130 tests passed
+test-zstd-magicless success
++- run test vort-zstd-magicless-tests 19 pass (19 total) 3s MaxRSS:18M
+|  +- compile test vort-zstd-magicless-tests Debug native success 4s MaxRSS:220M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 Debug native cached 4ms MaxRSS:40M
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-zstd-magicless-root-tests 111 pass (111 total) 53ms MaxRSS:14M
+   +- compile test vort-zstd-magicless-root-tests Debug native success 7s MaxRSS:331M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 4ms MaxRSS:40M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+

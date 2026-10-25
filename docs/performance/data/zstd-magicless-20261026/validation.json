@@ -1,0 +1,64 @@
+{
+  "schema": "vort.zstd.magicless.validation.v1",
+  "source_commit": "eb6cb40d35d4ba73fcab2ee3e245aaf8be7c22a5",
+  "source_manifest_sha256": "927fb9e04fb7e6bad386b64107cb2ebe5cadf32f4d32fe8073f6c6a9f3ea582f",
+  "source_files": 1912,
+  "zig": "0.16.0",
+  "focused_native_debug": {
+    "core_layout": 19,
+    "root_consumers": 111,
+    "total": 130
+  },
+  "focused_native_releasefast": {
+    "core_layout": 19,
+    "root_consumers": 111,
+    "total": 130
+  },
+  "focused_x86_releasefast": {
+    "core_layout": 19,
+    "root_consumers": 111,
+    "total": 130
+  },
+  "full_zstd_releasefast": {
+    "passed": 1104,
+    "total": 1104
+  },
+  "zip_regression": {
+    "passed": 44,
+    "total": 44
+  },
+  "cli_help": {
+    "steps": 7
+  },
+  "external_each": {
+    "cases": 609,
+    "passed": 609,
+    "target_encodes": 284,
+    "encoded_pairs": 142,
+    "reference_streams": 45,
+    "reference_decoder_routes": 270,
+    "malformed": 36,
+    "standard_default": 5,
+    "prevalidated_concat": 6,
+    "quota_dictionary": 8,
+    "commands": 609
+  },
+  "build_check": {
+    "steps": 185,
+    "source_commit": "eb6cb40d35d4ba73fcab2ee3e245aaf8be7c22a5"
+  },
+  "standard_parity": {
+    "comparisons": 96,
+    "matched": 96,
+    "independent_reference_decodes": 192,
+    "old_public_decode_paths_per_wire": 3,
+    "counterexamples": 0,
+    "note": "Same harness uses only existing public standard APIs, with no format or decode-options bridge."
+  },
+  "timing_performed": false,
+  "notes": [
+    "Size queries validate structure/entropy/size, not content checksum.",
+    "WithOptions Into/Append stage decoded output with an explicit allocator; they do not clone the compressed frame.",
+    "Default standard APIs and raw/known-size fast paths retain their prior behavior."
+  ]
+}

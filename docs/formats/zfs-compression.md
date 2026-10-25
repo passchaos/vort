@@ -48,6 +48,23 @@ rejected. The level/version header and physical-padding rules are preserved.
 Fixed-tag mapping and bidirectional evidence are recorded in
 [the Zstd controls baseline](../performance/zstd-encode-controls-functional-baseline.md).
 
+The [explicit magicless core increment](zstd-magicless.md) routes ZFS-Zstd
+encoding directly through magicless data framing,
+with content-size and checksum disabled as before. Decoding borrows only the
+true compressed payload selected by the ZFS header and applies exact/max decoded
+size limits, removing the former whole-payload temporary copy used to prepend
+four magic bytes. The eight-byte big-endian length/level/version header and
+physical padding rules are unchanged. Allocating decode still returns an owned
+complete plaintext buffer; this change is not a zero-allocation or RSS claim.
+The completed consumer aggregate includes allocation-prohibition checks for
+that compressed-copy removal. Final three-target core/consumer checks and
+native/x86 reference evidence are recorded with their exact scopes in the
+[magicless baseline](../performance/zstd-magicless-functional-baseline.md),
+without refreshing earlier benchmark epochs.
+Final feature build checks pass 185/185 on stable source. The separate
+default-standard parity harness matches 96 old/new wires and does
+not turn those cases into a universal ZFS or compression-performance guarantee.
+
 The writer emits only the selected algorithm's compressed representation. If a
 compressed result would not be smaller than the logical block it returns
 `error.IncompressibleZfsBlock`; it never labels raw bytes as a compressed ZFS

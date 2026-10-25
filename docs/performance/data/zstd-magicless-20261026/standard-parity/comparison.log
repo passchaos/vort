@@ -1,0 +1,3 @@
+{"target_finished": "native", "rows": 48, "matched": 48}
+{"target_finished": "x86", "rows": 48, "matched": 48}
+{"report": "/tmp/vort-zstd-magicless-20261026/standard-parity/standard-parity.json", "sha256": "9335ec07628d30d49951188797883dda631e8aa6a48a042c13463c4531615583", "comparisons": 96, "matched": 96, "wire_mismatches": 0, "old_failures": 0, "new_failures": 0, "independent_full_decodes": 192, "sources_preserved": true}

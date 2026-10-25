@@ -1,0 +1,24 @@
+run-zstd-magicless-diff
++- run python3
+   +- compile exe vort-zstd-magicless-probe ReleaseFast x86-linux-gnu 1 errors
+tools/zstd/magicless_probe.zig:252:148: error: expected type '?u64', found '?usize'
+    const options: zstd.NativeIncrementalFrameDecoder.Options = .{ .format = c.format, .max_output_len = c.max_output_len, .expected_output_len = c.expected_output_len, .input_policy = @enumFromInt(@intFromEnum(c.input_policy)) };
+                                                                                                                                                  ~^~~~~~~~~~~~~~~~~~~~
+tools/zstd/magicless_probe.zig:252:148: note: optional type child 'usize' cannot cast into optional type child 'u64'
+referenced by:
+    decode: tools/zstd/magicless_probe.zig:168:56
+    operation: tools/zstd/magicless_probe.zig:122:46
+    6 reference(s) hidden; use '-freference-trace=8' to see all references
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseFast -target x86-linux-gnu -mcpu baseline --dep zstd -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/tools/zstd/magicless_probe.zig .zig-cache/o/d4e3f7d5e4df68349b39c68fe7936c3c/vort-zstd-huffman-x2-releasefast.o -OReleaseFast -target x86-linux-gnu -mcpu baseline -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mzstd=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zstd-magicless-probe --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/5 steps succeeded (1 failed)
+run-zstd-magicless-diff transitive failure
++- run python3 transitive failure
+   +- compile exe vort-zstd-magicless-probe ReleaseFast x86-linux-gnu 1 errors
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast x86-linux-gnu cached 9ms MaxRSS:41M
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast x86-linux-gnu (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xfc74691d -Z471554ad8e875640 run-zstd-magicless-diff -Dtarget=x86-linux-gnu -j3 --summary all -- --directory /tmp/vort-zstd-magicless-20261026/x86 --source-epoch root-60d15178 --reference /home/passchaos/Work/zstd/lib/libzstd.so.1.6.0 --reference-header /home/passchaos/Work/zstd/lib/zstd.h

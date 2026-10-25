@@ -1,0 +1,116 @@
+{
+  "schema": "vort.zstd.magicless.cross-target.v1",
+  "source_commit": "eb6cb40d35d4ba73fcab2ee3e245aaf8be7c22a5",
+  "source_manifest_sha256": "927fb9e04fb7e6bad386b64107cb2ebe5cadf32f4d32fe8073f6c6a9f3ea582f",
+  "source_equal": true,
+  "all_output_headers_and_progress_equal": true,
+  "normalized_fields": [
+    "config.dictionary_path compared basename and full dictionary_sha256"
+  ],
+  "excluded_target_fields": [
+    "cpu_model",
+    "target",
+    "decoder_snapshot.working_bytes",
+    "decoder_snapshot.peak_working_bytes"
+  ],
+  "targets": [
+    {
+      "target": "native-final",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/ebb3afacb597b32c52729c170be14acc/vort-zstd-magicless-probe",
+        "bytes": 10004160,
+        "sha256": "9145ecd3d8254b354ee441e9ecf2fc97f400143da3ead7bc3c5bc504dc50e326"
+      },
+      "report_sha256": "70aa6209da1dff420094fc15db93925886864249f78d218f75af246dba062fc8",
+      "counts": {
+        "cases": 609,
+        "passed": 609,
+        "failed": 0,
+        "encode_pairs": 142,
+        "target_encodes": 284,
+        "native_reference_streams": 45,
+        "native_reference_decode_routes": 270,
+        "malformed_checks": 36,
+        "default_standard_checks": 5,
+        "prevalidated_concat_checks": 6,
+        "quota_and_dictionary_checks": 8
+      },
+      "commands": 609,
+      "sources_preserved": true,
+      "reference": {
+        "library": {
+          "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+          "bytes": 896992,
+          "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+        },
+        "version": "1.6.0",
+        "version_number": 10600,
+        "header": {
+          "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+          "bytes": 182200,
+          "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+        },
+        "resolved_parameters": {
+          "ZSTD_c_format": 10,
+          "ZSTD_d_format": 1000,
+          "ZSTD_c_compressionLevel": 100,
+          "ZSTD_c_windowLog": 101,
+          "ZSTD_c_contentSizeFlag": 200,
+          "ZSTD_c_checksumFlag": 201,
+          "ZSTD_c_dictIDFlag": 202,
+          "ZSTD_f_zstd1_magicless": 1
+        },
+        "parameter_scope": "experimental format aliases resolved from this exact local header"
+      }
+    },
+    {
+      "target": "x86-final",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/9b278176e4e348b083fb7aff862ca751/vort-zstd-magicless-probe",
+        "bytes": 7825888,
+        "sha256": "cd295403a9400d5264db9b427c823523155261eff51d784435e82af813b260cc"
+      },
+      "report_sha256": "b03cd2889a06d790277589f88f6c737e9515e5bee6e02966e6ec32f17df219c9",
+      "counts": {
+        "cases": 609,
+        "passed": 609,
+        "failed": 0,
+        "encode_pairs": 142,
+        "target_encodes": 284,
+        "native_reference_streams": 45,
+        "native_reference_decode_routes": 270,
+        "malformed_checks": 36,
+        "default_standard_checks": 5,
+        "prevalidated_concat_checks": 6,
+        "quota_and_dictionary_checks": 8
+      },
+      "commands": 609,
+      "sources_preserved": true,
+      "reference": {
+        "library": {
+          "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+          "bytes": 896992,
+          "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+        },
+        "version": "1.6.0",
+        "version_number": 10600,
+        "header": {
+          "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+          "bytes": 182200,
+          "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+        },
+        "resolved_parameters": {
+          "ZSTD_c_format": 10,
+          "ZSTD_d_format": 1000,
+          "ZSTD_c_compressionLevel": 100,
+          "ZSTD_c_windowLog": 101,
+          "ZSTD_c_contentSizeFlag": 200,
+          "ZSTD_c_checksumFlag": 201,
+          "ZSTD_c_dictIDFlag": 202,
+          "ZSTD_f_zstd1_magicless": 1
+        },
+        "parameter_scope": "experimental format aliases resolved from this exact local header"
+      }
+    }
+  ]
+}

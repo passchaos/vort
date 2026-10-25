@@ -1,0 +1,30 @@
+build-zstd-magicless-probe
++- compile exe vort-zstd-magicless-probe ReleaseFast native 2 errors
+src/zstd.zig:3466:15: error: local constant shadows declaration of 'size'
+        const size = try rawOrRleDecodedSizeWithOptions(frame, options);
+              ^~~~
+src/zstd.zig:3464:9: note: declared here
+    pub fn size(frame: []const u8, options: Options) zstd.Error!usize {
+    ~~~~^~
+/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/debug.zig:420:14: error: reached unreachable code
+    if (!ok) unreachable; // assertion failure
+             ^~~~~~~~~~~
+src/zstd.zig:12080:21: note: called at comptime here
+    std.debug.assert(@sizeOf(NativeFrameDecoder) <= 64);
+    ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    zstd: tools/zstd/magicless_probe.zig:4:22
+    main: tools/zstd/magicless_probe.zig:64:28
+    5 reference(s) hidden; use '-freference-trace=7' to see all references
+error: 2 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseFast --dep zstd -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/tools/zstd/magicless_probe.zig .zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o -OReleaseFast -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mzstd=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zstd-magicless-probe --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed)
+build-zstd-magicless-probe transitive failure
++- compile exe vort-zstd-magicless-probe ReleaseFast native 2 errors
+   +- WriteFile cached
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xa593c285 -Zd572de9dabb91a2c build-zstd-magicless-probe -j3 --summary all

@@ -1,0 +1,1562 @@
+{
+  "schema": "vort.evidence-archive.v1",
+  "archive": "standard-parity.tar.xz",
+  "sha256": "17d9385f9f0c391520ae5e770bc836fd97dd8f56514eed99ef49a93942bd800d",
+  "files": [
+    {
+      "path": "comparison.log",
+      "bytes": 428,
+      "sha256": "f79a9167e125ccf97369ef4dc0b865119f8b4b79b92a21b4ec0af6e6fb1f873b"
+    },
+    {
+      "path": "compilations.json",
+      "bytes": 8049,
+      "sha256": "67d9f6dceebf13848e25a8f315fca47f49311704cf8dbb1cf782a91b33b01d11"
+    },
+    {
+      "path": "compile-all.log",
+      "bytes": 1694,
+      "sha256": "25f78ee3bae947d6435f87627112969d62ce04205629cfeb6a907d04fe402720"
+    },
+    {
+      "path": "compile-new-native.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "compile-new-x86.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "compile-old-native.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "compile-old-x86.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "compile_probes.py",
+      "bytes": 2886,
+      "sha256": "2248948c8a443cc0749e8909cf44afe0b97ca3acb8eb5f5f76684fabba016d0f"
+    },
+    {
+      "path": "dict-full.input",
+      "bytes": 1248,
+      "sha256": "b2475edeb2851eb1d1eca050afbcd1893e509ac8cdad82ea00469f4c36ded34f"
+    },
+    {
+      "path": "dict-raw.input",
+      "bytes": 1408,
+      "sha256": "5974faaf97d1e54c7509706e3dc4e1ab329032ee5b157649aa43a39027b2e047"
+    },
+    {
+      "path": "dictionary-full.bin",
+      "bytes": 4096,
+      "sha256": "953c38e96a839f1d1d1f83a371f78b23f7c3c96e68de41e1c6fc773f0d325982"
+    },
+    {
+      "path": "dictionary-raw.bin",
+      "bytes": 8192,
+      "sha256": "42e941c9b98c9b997e9d2e376e2b482208b556e8856ff321a8029119ed453246"
+    },
+    {
+      "path": "json.input",
+      "bytes": 2554,
+      "sha256": "4b50cad6bd5ea5a2c039678a40de71c576652207fa712caaaf3bf9acdfd1c1ff"
+    },
+    {
+      "path": "native/dictionary-full-incremental-new.zst",
+      "bytes": 77,
+      "sha256": "c9dcff82fb8c58702b8cc70c946ea29b1013e4cc4d33e6a9d9e39a619bb2c46c"
+    },
+    {
+      "path": "native/dictionary-full-incremental-old.zst",
+      "bytes": 77,
+      "sha256": "c9dcff82fb8c58702b8cc70c946ea29b1013e4cc4d33e6a9d9e39a619bb2c46c"
+    },
+    {
+      "path": "native/dictionary-full-incremental.config.json",
+      "bytes": 236,
+      "sha256": "e75f05b68cc376d34fdd4368c89ab7ca17f9b627f506150aceb50a290e447360"
+    },
+    {
+      "path": "native/dictionary-full-into-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-into-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-into.config.json",
+      "bytes": 228,
+      "sha256": "9930029bb006f06bdfce491b8e5e4edde04e793fdb040245586eab3e4004af57"
+    },
+    {
+      "path": "native/dictionary-full-one_shot-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-one_shot-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-one_shot.config.json",
+      "bytes": 232,
+      "sha256": "618e45589ba6f3ad12e95bfad348eefcdf1f26973b5831dfe8677bd175f2d525"
+    },
+    {
+      "path": "native/dictionary-full-reuse-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-reuse-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "native/dictionary-full-reuse.config.json",
+      "bytes": 229,
+      "sha256": "f6eed23eebe3515856a458a3ee2ca72cce3be1b26fdd028d081254e0ac80dd95"
+    },
+    {
+      "path": "native/dictionary-raw-incremental-new.zst",
+      "bytes": 25,
+      "sha256": "f8463052bd8fc512f1aee6013626c979c0b5e647eb80e6752020b8484ac6711b"
+    },
+    {
+      "path": "native/dictionary-raw-incremental-old.zst",
+      "bytes": 25,
+      "sha256": "f8463052bd8fc512f1aee6013626c979c0b5e647eb80e6752020b8484ac6711b"
+    },
+    {
+      "path": "native/dictionary-raw-incremental.config.json",
+      "bytes": 236,
+      "sha256": "eabc97b6eb320ff3de65e2207c1dc4c160ecfdd382547bebbedf37c59c0ed10f"
+    },
+    {
+      "path": "native/dictionary-raw-into-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-into-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-into.config.json",
+      "bytes": 228,
+      "sha256": "a45433752c253b5c38fcd3ccca3a61e1588521db0df8360b077167f38243abef"
+    },
+    {
+      "path": "native/dictionary-raw-one_shot-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-one_shot-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-one_shot.config.json",
+      "bytes": 232,
+      "sha256": "0f436db601267e92520ea48057f51324a893789e406d475234f2156cc2eb80f0"
+    },
+    {
+      "path": "native/dictionary-raw-reuse-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-reuse-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "native/dictionary-raw-reuse.config.json",
+      "bytes": 229,
+      "sha256": "327946f152f0e13c4c662b8c149a2edd7c95f33d2342794b32674239e284016d"
+    },
+    {
+      "path": "native/json-fast_compressed-0-new.zst",
+      "bytes": 199,
+      "sha256": "fa638d3a113b4226797b230f6b809cc74842e187875de94f68cebe7c8bb52480"
+    },
+    {
+      "path": "native/json-fast_compressed-0-old.zst",
+      "bytes": 199,
+      "sha256": "fa638d3a113b4226797b230f6b809cc74842e187875de94f68cebe7c8bb52480"
+    },
+    {
+      "path": "native/json-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "native/json-fast_compressed-1-new.zst",
+      "bytes": 204,
+      "sha256": "761256a7253a84958461f15dfcfaeae98fa7cce93fb55565f2fd6aba31efa69b"
+    },
+    {
+      "path": "native/json-fast_compressed-1-old.zst",
+      "bytes": 204,
+      "sha256": "761256a7253a84958461f15dfcfaeae98fa7cce93fb55565f2fd6aba31efa69b"
+    },
+    {
+      "path": "native/json-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "native/json-literal_only-0-new.zst",
+      "bytes": 214,
+      "sha256": "fc245d2a8be963ec195e8c759f450d62801b565435fed85e8fdf62536bdb8a79"
+    },
+    {
+      "path": "native/json-literal_only-0-old.zst",
+      "bytes": 214,
+      "sha256": "fc245d2a8be963ec195e8c759f450d62801b565435fed85e8fdf62536bdb8a79"
+    },
+    {
+      "path": "native/json-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "native/json-literal_only-1-new.zst",
+      "bytes": 219,
+      "sha256": "739410f0845ee9cebb8f1f9c20587aa30681d96047dcf60651326adada806d1e"
+    },
+    {
+      "path": "native/json-literal_only-1-old.zst",
+      "bytes": 219,
+      "sha256": "739410f0845ee9cebb8f1f9c20587aa30681d96047dcf60651326adada806d1e"
+    },
+    {
+      "path": "native/json-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "native/json-raw_or_rle-0-new.zst",
+      "bytes": 2563,
+      "sha256": "c18b5384f068f3b1aba37a2a50e8ac525fd9bd4dc45ed97887979cd5ba5907af"
+    },
+    {
+      "path": "native/json-raw_or_rle-0-old.zst",
+      "bytes": 2563,
+      "sha256": "c18b5384f068f3b1aba37a2a50e8ac525fd9bd4dc45ed97887979cd5ba5907af"
+    },
+    {
+      "path": "native/json-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "native/json-raw_or_rle-1-new.zst",
+      "bytes": 2568,
+      "sha256": "1abe976ae98a610c74ccdcf3f15fed50fb9c4bbc19af1b664af017f4fd438918"
+    },
+    {
+      "path": "native/json-raw_or_rle-1-old.zst",
+      "bytes": 2568,
+      "sha256": "1abe976ae98a610c74ccdcf3f15fed50fb9c4bbc19af1b664af017f4fd438918"
+    },
+    {
+      "path": "native/json-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "native/random-fast_compressed-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-fast_compressed-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "native/random-fast_compressed-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-fast_compressed-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "native/random-literal_only-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-literal_only-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "native/random-literal_only-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-literal_only-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "native/random-raw_or_rle-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-raw_or_rle-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "native/random-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "native/random-raw_or_rle-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-raw_or_rle-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "native/random-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "native/repeat-fast_compressed-0-new.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "native/repeat-fast_compressed-0-old.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "native/repeat-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "native/repeat-fast_compressed-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-fast_compressed-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "native/repeat-level-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level-1.config.json",
+      "bytes": 102,
+      "sha256": "32f993c7b997bc2ca4da100722f27ded75999667c38d840ce75f45a8c5ce29b5"
+    },
+    {
+      "path": "native/repeat-level0-new.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "native/repeat-level0-old.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "native/repeat-level0.config.json",
+      "bytes": 101,
+      "sha256": "73709f60906c6e9c7110719fd3ad890d4795c3c8efda9d2fd69cebacbfa2d993"
+    },
+    {
+      "path": "native/repeat-level1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level1.config.json",
+      "bytes": 101,
+      "sha256": "0ea1923a8be172583ae1e7a0f4aa07070682b61d3ca7a6f53d4163c8a48a4a47"
+    },
+    {
+      "path": "native/repeat-level19-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level19-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level19.config.json",
+      "bytes": 102,
+      "sha256": "f3c24c84f5cbab385168f590e18c337821f769be459068f0d08c126280c64dbc"
+    },
+    {
+      "path": "native/repeat-level3-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level3-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-level3.config.json",
+      "bytes": 101,
+      "sha256": "9d5320ec7e4baa4494d678d4e25a264d703ee2d2f2de1ca2b03686ebe2dcf351"
+    },
+    {
+      "path": "native/repeat-literal_only-0-new.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "native/repeat-literal_only-0-old.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "native/repeat-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "native/repeat-literal_only-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-literal_only-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "native/repeat-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-0-new.zst",
+      "bytes": 4361,
+      "sha256": "5c7b645b198d084e0f893200592c5b9ef47195ead1f0f6d0d3757a2253e745f5"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-0-old.zst",
+      "bytes": 4361,
+      "sha256": "5c7b645b198d084e0f893200592c5b9ef47195ead1f0f6d0d3757a2253e745f5"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-1-new.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-1-old.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "native/repeat-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "native/source-fast_compressed-0-new.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "native/source-fast_compressed-0-old.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "native/source-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "native/source-fast_compressed-1-new.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "native/source-fast_compressed-1-old.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "native/source-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "native/source-literal_only-0-new.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "native/source-literal_only-0-old.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "native/source-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "native/source-literal_only-1-new.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "native/source-literal_only-1-old.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "native/source-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "native/source-raw_or_rle-0-new.zst",
+      "bytes": 4617,
+      "sha256": "ec8e945c853c77043097947da93fa5a10aa4cf8690d78eda215260a1da98eefa"
+    },
+    {
+      "path": "native/source-raw_or_rle-0-old.zst",
+      "bytes": 4617,
+      "sha256": "ec8e945c853c77043097947da93fa5a10aa4cf8690d78eda215260a1da98eefa"
+    },
+    {
+      "path": "native/source-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "native/source-raw_or_rle-1-new.zst",
+      "bytes": 4622,
+      "sha256": "9d09d22988b61aa576564e9238392ab0d97ea3eef7dfc1cb69ad32ac942b5af6"
+    },
+    {
+      "path": "native/source-raw_or_rle-1-old.zst",
+      "bytes": 4622,
+      "sha256": "9d09d22988b61aa576564e9238392ab0d97ea3eef7dfc1cb69ad32ac942b5af6"
+    },
+    {
+      "path": "native/source-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "native/tiny-fast_compressed-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-fast_compressed-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "native/tiny-fast_compressed-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-fast_compressed-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "native/tiny-level-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level-1.config.json",
+      "bytes": 102,
+      "sha256": "32f993c7b997bc2ca4da100722f27ded75999667c38d840ce75f45a8c5ce29b5"
+    },
+    {
+      "path": "native/tiny-level0-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level0-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level0.config.json",
+      "bytes": 101,
+      "sha256": "73709f60906c6e9c7110719fd3ad890d4795c3c8efda9d2fd69cebacbfa2d993"
+    },
+    {
+      "path": "native/tiny-level1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level1.config.json",
+      "bytes": 101,
+      "sha256": "0ea1923a8be172583ae1e7a0f4aa07070682b61d3ca7a6f53d4163c8a48a4a47"
+    },
+    {
+      "path": "native/tiny-level19-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level19-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level19.config.json",
+      "bytes": 102,
+      "sha256": "f3c24c84f5cbab385168f590e18c337821f769be459068f0d08c126280c64dbc"
+    },
+    {
+      "path": "native/tiny-level3-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level3-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-level3.config.json",
+      "bytes": 101,
+      "sha256": "9d5320ec7e4baa4494d678d4e25a264d703ee2d2f2de1ca2b03686ebe2dcf351"
+    },
+    {
+      "path": "native/tiny-literal_only-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-literal_only-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "native/tiny-literal_only-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-literal_only-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "native/tiny-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "new-runtime-source-pinned.json",
+      "bytes": 25622,
+      "sha256": "755be3e13ea886e598d5026448abe107bdb4af0e25a86527cb272fd1e84f9964"
+    },
+    {
+      "path": "old-source-manifest-pinned.json",
+      "bytes": 278806,
+      "sha256": "f558b67373d187c67bb3e5c2facf706142f98c41f99adc16a7d553491f5d5797"
+    },
+    {
+      "path": "random.input",
+      "bytes": 4097,
+      "sha256": "6ba96798bef8e8776a35f3d138e4a94f90e2608bcda0cf6ff51d919d8b9c7446"
+    },
+    {
+      "path": "repeat.input",
+      "bytes": 4352,
+      "sha256": "fee02bfedd35f94fc46c7569e651daff867485f8f923459da7d023c0c23d5c3a"
+    },
+    {
+      "path": "run_parity.py",
+      "bytes": 9319,
+      "sha256": "3436301729b23ba4855790fbff3c419a56e2661f4b6f985845c171adeff9dfb2"
+    },
+    {
+      "path": "source.input",
+      "bytes": 4608,
+      "sha256": "b43d539c3c4f7b36ebafacb8736a347439a10b840bd5b6da600751ed2194137e"
+    },
+    {
+      "path": "standard-parity-seal.json",
+      "bytes": 1894,
+      "sha256": "d426f5c48bc46631b6ae584f807b412af1d98d225f38819a3e611212735f9597"
+    },
+    {
+      "path": "standard-parity.json",
+      "bytes": 1091100,
+      "sha256": "9335ec07628d30d49951188797883dda631e8aa6a48a042c13463c4531615583"
+    },
+    {
+      "path": "standard_probe.zig",
+      "bytes": 8395,
+      "sha256": "b6b58c3928959b7759f6febcf18499e4e928f69f11baef98e3237bd8488797fe"
+    },
+    {
+      "path": "tiny.input",
+      "bytes": 17,
+      "sha256": "17d2c372ce1cbf7de047f0a1db69367c9b68eac072403a220a04b47b3539f495"
+    },
+    {
+      "path": "x86/dictionary-full-incremental-new.zst",
+      "bytes": 77,
+      "sha256": "c9dcff82fb8c58702b8cc70c946ea29b1013e4cc4d33e6a9d9e39a619bb2c46c"
+    },
+    {
+      "path": "x86/dictionary-full-incremental-old.zst",
+      "bytes": 77,
+      "sha256": "c9dcff82fb8c58702b8cc70c946ea29b1013e4cc4d33e6a9d9e39a619bb2c46c"
+    },
+    {
+      "path": "x86/dictionary-full-incremental.config.json",
+      "bytes": 236,
+      "sha256": "e75f05b68cc376d34fdd4368c89ab7ca17f9b627f506150aceb50a290e447360"
+    },
+    {
+      "path": "x86/dictionary-full-into-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-into-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-into.config.json",
+      "bytes": 228,
+      "sha256": "9930029bb006f06bdfce491b8e5e4edde04e793fdb040245586eab3e4004af57"
+    },
+    {
+      "path": "x86/dictionary-full-one_shot-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-one_shot-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-one_shot.config.json",
+      "bytes": 232,
+      "sha256": "618e45589ba6f3ad12e95bfad348eefcdf1f26973b5831dfe8677bd175f2d525"
+    },
+    {
+      "path": "x86/dictionary-full-reuse-new.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-reuse-old.zst",
+      "bytes": 78,
+      "sha256": "3175ff252b346b01f191b0663719e69119c85743510baad088a901ac825aabe5"
+    },
+    {
+      "path": "x86/dictionary-full-reuse.config.json",
+      "bytes": 229,
+      "sha256": "f6eed23eebe3515856a458a3ee2ca72cce3be1b26fdd028d081254e0ac80dd95"
+    },
+    {
+      "path": "x86/dictionary-raw-incremental-new.zst",
+      "bytes": 25,
+      "sha256": "f8463052bd8fc512f1aee6013626c979c0b5e647eb80e6752020b8484ac6711b"
+    },
+    {
+      "path": "x86/dictionary-raw-incremental-old.zst",
+      "bytes": 25,
+      "sha256": "f8463052bd8fc512f1aee6013626c979c0b5e647eb80e6752020b8484ac6711b"
+    },
+    {
+      "path": "x86/dictionary-raw-incremental.config.json",
+      "bytes": 236,
+      "sha256": "eabc97b6eb320ff3de65e2207c1dc4c160ecfdd382547bebbedf37c59c0ed10f"
+    },
+    {
+      "path": "x86/dictionary-raw-into-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-into-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-into.config.json",
+      "bytes": 228,
+      "sha256": "a45433752c253b5c38fcd3ccca3a61e1588521db0df8360b077167f38243abef"
+    },
+    {
+      "path": "x86/dictionary-raw-one_shot-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-one_shot-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-one_shot.config.json",
+      "bytes": 232,
+      "sha256": "0f436db601267e92520ea48057f51324a893789e406d475234f2156cc2eb80f0"
+    },
+    {
+      "path": "x86/dictionary-raw-reuse-new.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-reuse-old.zst",
+      "bytes": 26,
+      "sha256": "bc5cadfe6ad6725ac5aba213314d4928c641bc5afe93f3e7027e764a8cefd6e4"
+    },
+    {
+      "path": "x86/dictionary-raw-reuse.config.json",
+      "bytes": 229,
+      "sha256": "327946f152f0e13c4c662b8c149a2edd7c95f33d2342794b32674239e284016d"
+    },
+    {
+      "path": "x86/json-fast_compressed-0-new.zst",
+      "bytes": 199,
+      "sha256": "fa638d3a113b4226797b230f6b809cc74842e187875de94f68cebe7c8bb52480"
+    },
+    {
+      "path": "x86/json-fast_compressed-0-old.zst",
+      "bytes": 199,
+      "sha256": "fa638d3a113b4226797b230f6b809cc74842e187875de94f68cebe7c8bb52480"
+    },
+    {
+      "path": "x86/json-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "x86/json-fast_compressed-1-new.zst",
+      "bytes": 204,
+      "sha256": "761256a7253a84958461f15dfcfaeae98fa7cce93fb55565f2fd6aba31efa69b"
+    },
+    {
+      "path": "x86/json-fast_compressed-1-old.zst",
+      "bytes": 204,
+      "sha256": "761256a7253a84958461f15dfcfaeae98fa7cce93fb55565f2fd6aba31efa69b"
+    },
+    {
+      "path": "x86/json-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "x86/json-literal_only-0-new.zst",
+      "bytes": 214,
+      "sha256": "fc245d2a8be963ec195e8c759f450d62801b565435fed85e8fdf62536bdb8a79"
+    },
+    {
+      "path": "x86/json-literal_only-0-old.zst",
+      "bytes": 214,
+      "sha256": "fc245d2a8be963ec195e8c759f450d62801b565435fed85e8fdf62536bdb8a79"
+    },
+    {
+      "path": "x86/json-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "x86/json-literal_only-1-new.zst",
+      "bytes": 219,
+      "sha256": "739410f0845ee9cebb8f1f9c20587aa30681d96047dcf60651326adada806d1e"
+    },
+    {
+      "path": "x86/json-literal_only-1-old.zst",
+      "bytes": 219,
+      "sha256": "739410f0845ee9cebb8f1f9c20587aa30681d96047dcf60651326adada806d1e"
+    },
+    {
+      "path": "x86/json-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "x86/json-raw_or_rle-0-new.zst",
+      "bytes": 2563,
+      "sha256": "c18b5384f068f3b1aba37a2a50e8ac525fd9bd4dc45ed97887979cd5ba5907af"
+    },
+    {
+      "path": "x86/json-raw_or_rle-0-old.zst",
+      "bytes": 2563,
+      "sha256": "c18b5384f068f3b1aba37a2a50e8ac525fd9bd4dc45ed97887979cd5ba5907af"
+    },
+    {
+      "path": "x86/json-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "x86/json-raw_or_rle-1-new.zst",
+      "bytes": 2568,
+      "sha256": "1abe976ae98a610c74ccdcf3f15fed50fb9c4bbc19af1b664af017f4fd438918"
+    },
+    {
+      "path": "x86/json-raw_or_rle-1-old.zst",
+      "bytes": 2568,
+      "sha256": "1abe976ae98a610c74ccdcf3f15fed50fb9c4bbc19af1b664af017f4fd438918"
+    },
+    {
+      "path": "x86/json-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "x86/random-fast_compressed-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-fast_compressed-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "x86/random-fast_compressed-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-fast_compressed-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "x86/random-literal_only-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-literal_only-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "x86/random-literal_only-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-literal_only-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "x86/random-raw_or_rle-0-new.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-raw_or_rle-0-old.zst",
+      "bytes": 4106,
+      "sha256": "3322e4eab8f23c7c33c20c40f4d80751261293ee2d92d5a5029d343a8b00ccad"
+    },
+    {
+      "path": "x86/random-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "x86/random-raw_or_rle-1-new.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-raw_or_rle-1-old.zst",
+      "bytes": 4111,
+      "sha256": "66006d9d98ce187c5c28ea8ab5e403b16b06548c46ca1511a50bcb706b04820d"
+    },
+    {
+      "path": "x86/random-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-0-new.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-0-old.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "x86/repeat-level-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level-1.config.json",
+      "bytes": 102,
+      "sha256": "32f993c7b997bc2ca4da100722f27ded75999667c38d840ce75f45a8c5ce29b5"
+    },
+    {
+      "path": "x86/repeat-level0-new.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "x86/repeat-level0-old.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "x86/repeat-level0.config.json",
+      "bytes": 101,
+      "sha256": "73709f60906c6e9c7110719fd3ad890d4795c3c8efda9d2fd69cebacbfa2d993"
+    },
+    {
+      "path": "x86/repeat-level1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level1.config.json",
+      "bytes": 101,
+      "sha256": "0ea1923a8be172583ae1e7a0f4aa07070682b61d3ca7a6f53d4163c8a48a4a47"
+    },
+    {
+      "path": "x86/repeat-level19-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level19-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level19.config.json",
+      "bytes": 102,
+      "sha256": "f3c24c84f5cbab385168f590e18c337821f769be459068f0d08c126280c64dbc"
+    },
+    {
+      "path": "x86/repeat-level3-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level3-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-level3.config.json",
+      "bytes": 101,
+      "sha256": "9d5320ec7e4baa4494d678d4e25a264d703ee2d2f2de1ca2b03686ebe2dcf351"
+    },
+    {
+      "path": "x86/repeat-literal_only-0-new.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "x86/repeat-literal_only-0-old.zst",
+      "bytes": 52,
+      "sha256": "e5e3a0da58860c9712210a1609c794c71a463a99373ba682bc7d88c57ed535ea"
+    },
+    {
+      "path": "x86/repeat-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "x86/repeat-literal_only-1-new.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-literal_only-1-old.zst",
+      "bytes": 57,
+      "sha256": "ceed18f9d28658f0252459b5237d5ca51755607ef2b6c0eec268468ec39bea07"
+    },
+    {
+      "path": "x86/repeat-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-0-new.zst",
+      "bytes": 4361,
+      "sha256": "5c7b645b198d084e0f893200592c5b9ef47195ead1f0f6d0d3757a2253e745f5"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-0-old.zst",
+      "bytes": 4361,
+      "sha256": "5c7b645b198d084e0f893200592c5b9ef47195ead1f0f6d0d3757a2253e745f5"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-1-new.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-1-old.zst",
+      "bytes": 4366,
+      "sha256": "2d2e4c0be53ceb64e659a8f5bcd22ff29ee9171e12be9439d3862e2b747fcb90"
+    },
+    {
+      "path": "x86/repeat-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "x86/source-fast_compressed-0-new.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "x86/source-fast_compressed-0-old.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "x86/source-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "x86/source-fast_compressed-1-new.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "x86/source-fast_compressed-1-old.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "x86/source-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "x86/source-literal_only-0-new.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "x86/source-literal_only-0-old.zst",
+      "bytes": 86,
+      "sha256": "40df39d9adb0f3882735cfd700b30b8209ab1d49146ea188211e051bef8beac4"
+    },
+    {
+      "path": "x86/source-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "x86/source-literal_only-1-new.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "x86/source-literal_only-1-old.zst",
+      "bytes": 91,
+      "sha256": "8c17f676dd423dd1669594c6431aff4537a7f9905785207afafe61e0c8e9da2a"
+    },
+    {
+      "path": "x86/source-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "x86/source-raw_or_rle-0-new.zst",
+      "bytes": 4617,
+      "sha256": "ec8e945c853c77043097947da93fa5a10aa4cf8690d78eda215260a1da98eefa"
+    },
+    {
+      "path": "x86/source-raw_or_rle-0-old.zst",
+      "bytes": 4617,
+      "sha256": "ec8e945c853c77043097947da93fa5a10aa4cf8690d78eda215260a1da98eefa"
+    },
+    {
+      "path": "x86/source-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "x86/source-raw_or_rle-1-new.zst",
+      "bytes": 4622,
+      "sha256": "9d09d22988b61aa576564e9238392ab0d97ea3eef7dfc1cb69ad32ac942b5af6"
+    },
+    {
+      "path": "x86/source-raw_or_rle-1-old.zst",
+      "bytes": 4622,
+      "sha256": "9d09d22988b61aa576564e9238392ab0d97ea3eef7dfc1cb69ad32ac942b5af6"
+    },
+    {
+      "path": "x86/source-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-0.config.json",
+      "bytes": 124,
+      "sha256": "a90b8a7cc0ed83d79b0c806e9ff96bec19072b0fa4f1570f60d26bea5f9cab3f"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-fast_compressed-1.config.json",
+      "bytes": 122,
+      "sha256": "a969acbc68d71e248a9780fa069131e1f7b7bc656e0b41608e2d64235791ffab"
+    },
+    {
+      "path": "x86/tiny-level-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level-1.config.json",
+      "bytes": 102,
+      "sha256": "32f993c7b997bc2ca4da100722f27ded75999667c38d840ce75f45a8c5ce29b5"
+    },
+    {
+      "path": "x86/tiny-level0-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level0-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level0.config.json",
+      "bytes": 101,
+      "sha256": "73709f60906c6e9c7110719fd3ad890d4795c3c8efda9d2fd69cebacbfa2d993"
+    },
+    {
+      "path": "x86/tiny-level1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level1.config.json",
+      "bytes": 101,
+      "sha256": "0ea1923a8be172583ae1e7a0f4aa07070682b61d3ca7a6f53d4163c8a48a4a47"
+    },
+    {
+      "path": "x86/tiny-level19-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level19-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level19.config.json",
+      "bytes": 102,
+      "sha256": "f3c24c84f5cbab385168f590e18c337821f769be459068f0d08c126280c64dbc"
+    },
+    {
+      "path": "x86/tiny-level3-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level3-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-level3.config.json",
+      "bytes": 101,
+      "sha256": "9d5320ec7e4baa4494d678d4e25a264d703ee2d2f2de1ca2b03686ebe2dcf351"
+    },
+    {
+      "path": "x86/tiny-literal_only-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-literal_only-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-literal_only-0.config.json",
+      "bytes": 121,
+      "sha256": "921d122662319b7750ad794b8596f1d4053287d7ba41fcbd41dd1018d942cd3d"
+    },
+    {
+      "path": "x86/tiny-literal_only-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-literal_only-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-literal_only-1.config.json",
+      "bytes": 119,
+      "sha256": "e9732c444ebb16400b3c83e43e199138abbd16ffff34b0a73233142e0e67e5c4"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-0-new.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-0-old.zst",
+      "bytes": 26,
+      "sha256": "1458e3b1e202550a2d127a2da4c9014f797634fb9a03fe90ab53d72eb0831727"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-0.config.json",
+      "bytes": 119,
+      "sha256": "359e591d00dc7cd522298647e142b34612ec68739d854f125ad59091bec8f713"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-1-new.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-1-old.zst",
+      "bytes": 30,
+      "sha256": "a624f0f40c87fbe8cd09bee512f6b8186161b000654d1620ebe451a4c077b695"
+    },
+    {
+      "path": "x86/tiny-raw_or_rle-1.config.json",
+      "bytes": 117,
+      "sha256": "4d74ac1ffc688ccb88abecfe9ba5888cff78139abb8080352dc130a3f7b84a1f"
+    }
+  ]
+}

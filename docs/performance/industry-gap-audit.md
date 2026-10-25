@@ -96,6 +96,26 @@ old-block matches. Geometric capacities may exceed logical history/window
 lengths, with all real allocations charged. Ordinary no-shared-dictionary
 q11/q10 inheritance remains scoped separately from prepared dictionary routes.
 
+The [Zstd magicless core increment](zstd-magicless-functional-baseline.md) adds
+explicit data-frame format selection,
+options-aware decoding/inspection and incremental/reusable support, preserving
+standard defaults. Magicless data concatenation retains ordinary frame fields;
+skippable, seekable and ZIP/TAR/CPIO special formats remain standard-only.
+ZFS directly borrows its declared magicless payload, removing compressed staging
+without removing decoded-output allocation. Final three-target checks pass
+130/130 (19 core/layout plus 111 public-consumer/root), two reference matrices
+each pass 609/609 and the complete ReleaseFast Zstd family passes 1104/1104.
+Focused ZIP checks pass 44/44 and CLI help 7/7. Final source is `eb6cb40d`;
+cross-target outputs/headers/progress agree, while working peaks and target paths
+retain their own scopes. A malformed
+u18-shift raw fixture and an incorrect one-shot dictionary-error expectation
+were repaired without changing production semantics. A bounded old-public-API
+standard parity harness matches 96/96 wires and 192 independent full-content
+decodes without format backport. Final build checks pass 185/185 on stable
+feature source. No throughput/RSS gain is assigned, and earlier Zstd/ZFS
+evidence keeps its epoch. Bounded XZ parallel encoding is the next functional
+slice; its ownership and compatibility need separate verification before tuning.
+
 The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes
 the owned split writer's whole-archive staging requirement. These container

@@ -1,0 +1,47 @@
+test-zstd-magicless
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+error: 'zstd.test.Zstd magicless public contracts' failed:
+       slices differ. first difference occurs at index 7 (0x7)
+       
+       ============ expected this output: =============  len: 8 (0x8)
+       
+       A4 03 00 02 00 00 00 10                           ........
+       
+       ============= instead found this: ==============  len: 8 (0x8)
+       
+       A4 03 00 02 00 00 00 00                           ........
+       
+       ================================================
+       
+       /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/testing.zig:379:5: 0x128786d in expectEqualSlices__anon_43437 (std.zig)
+           return error.TestExpectedEqual;
+           ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd_magicless_tests.zig:100:13: 0x128ee7c in encoders (zstd.zig)
+                   try std.testing.expectEqualSlices(u8, &.{ 0xa4, 3, 0, 2, 0, 0, 0, 0x10 }, wire[0..8]);
+                   ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd_magicless_tests.zig:9:5: 0x12b2758 in contracts__anon_43156 (zstd.zig)
+           try Cases.encoders();
+           ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:855:5: 0x12b29a7 in test.Zstd magicless public contracts (zstd.zig)
+           try @import("zstd_magicless_tests.zig").contracts(@This());
+           ^
+failed command: ./.zig-cache/o/1b2df501e0491f142de1722f63f79b34/vort-zstd-magicless-tests --cache-dir=./.zig-cache --seed=0xd50f50ea --listen=-
+
+Build Summary: 7/9 steps succeeded (1 failed); 128/129 tests passed (1 failed)
+test-zstd-magicless transitive failure
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+|  +- compile test vort-zstd-magicless-tests Debug native success 2s MaxRSS:220M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:36M
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-zstd-magicless-root-tests 111 pass (111 total) 30ms MaxRSS:14M
+   +- compile test vort-zstd-magicless-root-tests Debug native success 3s MaxRSS:331M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:37M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xd50f50ea -Z29638f59a3707184 test-zstd-magicless -j3 --summary all

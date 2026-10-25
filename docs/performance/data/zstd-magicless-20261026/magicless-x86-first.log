@@ -1,0 +1,27 @@
+test-zstd-magicless
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+error: 'zstd.test.Zstd magicless public contracts' failed:
+       magicless QA raw header width: min_type=u18 length=131072 old_shift=0 widened_header=0x100000 bytes=0,0,10
+       magicless QA raw header width: min_type=u18 length=131072 old_shift=0 widened_header=0x100000 bytes=0,0,10
+       expected error.DictionaryMismatch, found error.NeedDictionary
+       magicless dictionary id=1 kind=raw_content
+failed command: ./.zig-cache/o/0a72bdefb7069f3e4a15d4cb9955fca7/vort-zstd-magicless-tests --cache-dir=./.zig-cache --seed=0x73fcdc0e --listen=-
+
+Build Summary: 7/9 steps succeeded (1 failed); 128/129 tests passed (1 failed)
+test-zstd-magicless transitive failure
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+|  +- compile test vort-zstd-magicless-tests ReleaseFast x86-linux-gnu success 38s MaxRSS:787M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 ReleaseFast x86-linux-gnu cached 5ms MaxRSS:38M
+|     +- compile obj vort-zstd-huffman-x2 ReleaseFast x86-linux-gnu (reused)
++- run test vort-zstd-magicless-root-tests 111 pass (111 total) 6ms MaxRSS:9M
+   +- compile test vort-zstd-magicless-root-tests ReleaseFast x86-linux-gnu success 1m MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu cached 5ms MaxRSS:39M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast x86-linux-gnu (reused)
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast x86-linux-gnu (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x73fcdc0e -Za917b91638831318 test-zstd-magicless -Dtarget=x86-linux-gnu -Doptimize=ReleaseFast -j3 --summary all

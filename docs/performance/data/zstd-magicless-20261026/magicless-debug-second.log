@@ -1,0 +1,35 @@
+test-zstd-magicless
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+error: 'zstd.test.Zstd magicless public contracts' failed:
+       /home/passchaos/project-z/vort-brotli-context-cache/src/tests/zstd_magicless_helpers.zig:67:24: 0x1289ff8 in scan (zstd.zig)
+               if (kind == 3) return error.CorruptFrame;
+                              ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd_magicless_tests.zig:97:57: 0x128dc00 in encoders (zstd.zig)
+                   try std.testing.expectEqual(@as(usize, 2), (try h.scan(wire, true)).blocks);
+                                                               ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd_magicless_tests.zig:9:5: 0x12b0808 in contracts__anon_43156 (zstd.zig)
+           try Cases.encoders();
+           ^
+       /home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig:855:5: 0x12b0a57 in test.Zstd magicless public contracts (zstd.zig)
+           try @import("zstd_magicless_tests.zig").contracts(@This());
+           ^
+failed command: ./.zig-cache/o/805e6db9f96fd8b7946efe643d4688c3/vort-zstd-magicless-tests --cache-dir=./.zig-cache --seed=0x947dd2a4 --listen=-
+
+Build Summary: 7/9 steps succeeded (1 failed); 128/129 tests passed (1 failed)
+test-zstd-magicless transitive failure
++- run test vort-zstd-magicless-tests 17 pass, 1 fail (18 total)
+|  +- compile test vort-zstd-magicless-tests Debug native success 2s MaxRSS:224M
+|     +- WriteFile cached
+|     +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:37M
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-zstd-magicless-root-tests 111 pass (111 total) 31ms MaxRSS:14M
+   +- compile test vort-zstd-magicless-root-tests Debug native success 3s MaxRSS:335M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:37M
+      +- WriteFile (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x947dd2a4 -Z05261c5be97e723a test-zstd-magicless -j3 --summary all

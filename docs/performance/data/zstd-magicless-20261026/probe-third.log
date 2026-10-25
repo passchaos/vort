@@ -1,0 +1,7 @@
+Build Summary: 4/4 steps succeeded
+build-zstd-magicless-probe success
++- compile exe vort-zstd-magicless-probe ReleaseFast native success 37s MaxRSS:852M
+   +- WriteFile cached
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 6ms MaxRSS:41M
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+

@@ -23570,3 +23570,26 @@ reuse, so production keeps the simpler independently owned plans.
   No exhaustive candidate or
   throughput/memory-lead claim is assigned.
   Zstd magicless core APIs and bounded XZ workers remain subsequent slices.
+
+- 2026-10-26: explicit Zstd FrameFormat standard/magicless keeps
+  standard defaults and omits only the four-byte data-frame magic. Decode
+  options, allocator-first atomic Into, physical-offset inspection and reusable/
+  incremental paths carry format, dictionaries and output limits without
+  compressed-input cloning. Magicless concatenated data is supported, while
+  skippable writing and seekable/ZIP/TAR/CPIO Zstd
+  options reject magicless before publication. ZFS retains its eight-byte
+  length/version header but calls core magicless directly, removing its prior
+  compressed copy without a zero-allocation claim. [Functional evidence](performance/zstd-magicless-functional-baseline.md)
+  records threeconfigurations130/130 (core/layout19+consumerroot111), final
+  native/x86external609cases/609commands each, fullZstdRF1104/1104, ZIP44 and
+  CLI7. Sourceeb6cb40d/1912files binds both final probes; cross-target outputs
+  agree but workingpeak/layout is not RSS. Old-public-API standard parity
+  matches96/96 (48pertarget) with192 independent fullcontents/consumption
+  decodes and noformatbridge; its bounded matrix is not all levels/inputs.
+  Finalchecks185/185 bind stablefeaturesource. A QA u18-shift rawheader and one-shot
+  wrong-dictionary error expectation were corrected without changing codecs.
+  No throughput/RSS-lead claim is assigned.
+  Old codec/reference timing epochs remain separate, and broader functionality
+  and industry-best performance remain incomplete. Next implement bounded XZ
+  parallel encoding with explicit workers/in-flight ownership, verify its
+  compatibility/resource contracts, then optimize performance.

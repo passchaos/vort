@@ -1,0 +1,9 @@
+{"report": "/tmp/vort-zstd-magicless-20261026/native-final/differential.json", "cases": 609, "passed": 609, "failed": 0, "encode_pairs": 142, "target_encodes": 284, "native_reference_streams": 45, "native_reference_decode_routes": 270, "malformed_checks": 36, "default_standard_checks": 5, "prevalidated_concat_checks": 6, "quota_and_dictionary_checks": 8, "sources_preserved": true}
+Build Summary: 5/5 steps succeeded
+run-zstd-magicless-diff success
++- run python3 success 1m
+   +- compile exe vort-zstd-magicless-probe ReleaseFast native cached 9ms MaxRSS:41M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+

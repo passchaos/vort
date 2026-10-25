@@ -1,0 +1,36 @@
+build-zstd-magicless-probe
++- compile exe vort-zstd-magicless-probe ReleaseFast native 3 errors
+src/zstd.zig:3464:54: error: ambiguous reference
+    pub fn size(frame: []const u8, options: Options) Error!usize {
+                                                     ^~~~~
+src/zstd.zig:3461:9: note: declared here
+    pub const Error = zstd.Error;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:108:5: note: also declared here
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:3471:70: error: ambiguous reference
+    pub fn decode(frame: []const u8, output: []u8, options: Options) Error!usize {
+                                                                     ^~~~~
+src/zstd.zig:3461:9: note: declared here
+    pub const Error = zstd.Error;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd.zig:108:5: note: also declared here
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zstd_magicless_tests.zig:1:1: error: unable to load 'zstd_magicless_tests.zig': FileNotFound
+src/zstd.zig:855:17: note: file imported here
+    try @import("zstd_magicless_tests.zig").contracts(@This());
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~
+error: 3 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig build-exe -OReleaseFast --dep zstd -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/tools/zstd/magicless_probe.zig .zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o -OReleaseFast -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mzstd=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zstd-magicless-probe --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/4 steps succeeded (1 failed)
+build-zstd-magicless-probe transitive failure
++- compile exe vort-zstd-magicless-probe ReleaseFast native 3 errors
+   +- WriteFile cached
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+   +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/6efae051d5769508c199e3f26b7a5c78/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x9705e03a -Z01777bec08c09979 build-zstd-magicless-probe -j3 --summary all

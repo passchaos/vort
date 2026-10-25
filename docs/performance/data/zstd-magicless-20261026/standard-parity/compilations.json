@@ -1,0 +1,212 @@
+{
+  "same_helper": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+    "bytes": 8395,
+    "sha256": "b6b58c3928959b7759f6febcf18499e4e928f69f11baef98e3237bd8488797fe"
+  },
+  "helper_has_no_new_format_api_or_bridge": true,
+  "compiler": {
+    "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "bytes": 172641672,
+    "sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c"
+  },
+  "cpu_affinity": "10-15",
+  "concurrent_compiles": 4,
+  "jobs_per_compile": 1,
+  "old_source": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/old-source-manifest-pinned.json",
+    "bytes": 278806,
+    "sha256": "f558b67373d187c67bb3e5c2facf706142f98c41f99adc16a7d553491f5d5797"
+  },
+  "new_source": {
+    "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/new-runtime-source-pinned.json",
+    "bytes": 25622,
+    "sha256": "755be3e13ea886e598d5026448abe107bdb4af0e25a86527cb272fd1e84f9964"
+  },
+  "compilations": [
+    {
+      "version": "old",
+      "target": "native",
+      "command": [
+        "taskset",
+        "-c",
+        "10-15",
+        "zig",
+        "build-exe",
+        "-j1",
+        "-OReleaseFast",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+        "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o",
+        "-OReleaseFast",
+        "-Mzstd=/home/passchaos/project-z/vort/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/cache-old-native",
+        "--global-cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/global-cache",
+        "--name",
+        "vort-standard-parity-old-native",
+        "-femit-bin=/tmp/vort-zstd-magicless-20261026/standard-parity/probe-old-native"
+      ],
+      "object": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o",
+        "bytes": 159832,
+        "sha256": "7610d0081077c863a79612df14d253648f47116b14130734fc59e012d8b5ee14"
+      },
+      "exit_code": 0,
+      "log": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/compile-old-native.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "executable": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/probe-old-native",
+        "bytes": 9663592,
+        "sha256": "0e7226e215da4bed51ccdeb7cb73b585dec076e7125ee5d643fb7596ae3f9f5c"
+      }
+    },
+    {
+      "version": "old",
+      "target": "x86",
+      "command": [
+        "taskset",
+        "-c",
+        "10-15",
+        "zig",
+        "build-exe",
+        "-j1",
+        "-OReleaseFast",
+        "-target",
+        "x86-linux-gnu",
+        "-mcpu",
+        "baseline",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+        "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/d4e3f7d5e4df68349b39c68fe7936c3c/vort-zstd-huffman-x2-releasefast.o",
+        "-OReleaseFast",
+        "-target",
+        "x86-linux-gnu",
+        "-mcpu",
+        "baseline",
+        "-Mzstd=/home/passchaos/project-z/vort/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/cache-old-x86",
+        "--global-cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/global-cache",
+        "--name",
+        "vort-standard-parity-old-x86",
+        "-femit-bin=/tmp/vort-zstd-magicless-20261026/standard-parity/probe-old-x86"
+      ],
+      "object": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/d4e3f7d5e4df68349b39c68fe7936c3c/vort-zstd-huffman-x2-releasefast.o",
+        "bytes": 97740,
+        "sha256": "dbd8570e97c813ef37c2c74fcc906ef34450b33ac172d55bc1896107bad1e1f3"
+      },
+      "exit_code": 0,
+      "log": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/compile-old-x86.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "executable": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/probe-old-x86",
+        "bytes": 7554032,
+        "sha256": "3e56c9c35b5d7613c4192a92dd5f50ddda4dbc691a86a540c3e22ed64178e8f5"
+      }
+    },
+    {
+      "version": "new",
+      "target": "native",
+      "command": [
+        "taskset",
+        "-c",
+        "10-15",
+        "zig",
+        "build-exe",
+        "-j1",
+        "-OReleaseFast",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+        "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o",
+        "-OReleaseFast",
+        "-Mzstd=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/cache-new-native",
+        "--global-cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/global-cache",
+        "--name",
+        "vort-standard-parity-new-native",
+        "-femit-bin=/tmp/vort-zstd-magicless-20261026/standard-parity/probe-new-native"
+      ],
+      "object": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/33e32ed78a23709c26493c240025d76d/vort-zstd-huffman-x2-releasefast.o",
+        "bytes": 159832,
+        "sha256": "7610d0081077c863a79612df14d253648f47116b14130734fc59e012d8b5ee14"
+      },
+      "exit_code": 0,
+      "log": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/compile-new-native.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "executable": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/probe-new-native",
+        "bytes": 9691704,
+        "sha256": "8e7bbb5f5fd8065faa19ee5ca264813445dd2220b2d68a879e4f2d8c079b3162"
+      }
+    },
+    {
+      "version": "new",
+      "target": "x86",
+      "command": [
+        "taskset",
+        "-c",
+        "10-15",
+        "zig",
+        "build-exe",
+        "-j1",
+        "-OReleaseFast",
+        "-target",
+        "x86-linux-gnu",
+        "-mcpu",
+        "baseline",
+        "--dep",
+        "zstd",
+        "-Mroot=/tmp/vort-zstd-magicless-20261026/standard-parity/standard_probe.zig",
+        "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/d4e3f7d5e4df68349b39c68fe7936c3c/vort-zstd-huffman-x2-releasefast.o",
+        "-OReleaseFast",
+        "-target",
+        "x86-linux-gnu",
+        "-mcpu",
+        "baseline",
+        "-Mzstd=/home/passchaos/project-z/vort-brotli-context-cache/src/zstd.zig",
+        "--cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/cache-new-x86",
+        "--global-cache-dir",
+        "/tmp/vort-zstd-magicless-20261026/standard-parity/global-cache",
+        "--name",
+        "vort-standard-parity-new-x86",
+        "-femit-bin=/tmp/vort-zstd-magicless-20261026/standard-parity/probe-new-x86"
+      ],
+      "object": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/d4e3f7d5e4df68349b39c68fe7936c3c/vort-zstd-huffman-x2-releasefast.o",
+        "bytes": 97740,
+        "sha256": "dbd8570e97c813ef37c2c74fcc906ef34450b33ac172d55bc1896107bad1e1f3"
+      },
+      "exit_code": 0,
+      "log": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/compile-new-x86.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "executable": {
+        "path": "/tmp/vort-zstd-magicless-20261026/standard-parity/probe-new-x86",
+        "bytes": 7573168,
+        "sha256": "3c4684516c17d7f6f755ffa421d1d6b4399d4b124361053ba301c128f37dadc3"
+      }
+    }
+  ]
+}
