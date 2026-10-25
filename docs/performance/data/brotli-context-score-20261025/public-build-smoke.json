@@ -1,0 +1,164 @@
+{
+  "schema": "vort.codec_encode_samples",
+  "version": 1,
+  "codec": "brotli",
+  "round_count": 5,
+  "timing": {
+    "clock": "awake",
+    "unit": "nanoseconds",
+    "round_order": "vort_first_on_even_zero_based_rounds",
+    "csv_statistic": "minimum",
+    "median_statistic": "integer_floor",
+    "mix": "sum_of_encoded_lengths_wrapping_target_usize",
+    "vort_warmup": "one_untimed_encode_before_each_primary_vort_round",
+    "reference_warmup": "none",
+    "timed_work": "encoding_allocation_and_free",
+    "metadata_outside_timing": true
+  },
+  "reference_version": 16777225,
+  "reference_decoder_version": 16777225,
+  "references": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlienc.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlidec.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlicommon.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    }
+  ],
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "6-7;14-15",
+    "affinity_cpu_count": 4,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "734570819d2d2c996c492b4bdc1f7f0271bcd6b77db0ec96d1ebe5044af4f0be",
+    "command": "./.zig-cache/o/78f0aed58c7f51384364cb890565eb73/vort-br-planned-encode-bench --iterations 1 --case json --planned-quality 8 --quality 8 --planned-mode generic --samples-json /tmp/vort-brotli-context-cache-20261025/public-build-smoke.json --csv /tmp/vort-brotli-context-cache-20261025/public-build-smoke.csv"
+  },
+  "rows": [
+    {
+      "case": "json",
+      "input_bytes": 2640,
+      "input_sha256": "0d6239d44e1f465d045e5179cc2a5bf0997a95bdd8ad70a11eb2f3d3f4796941",
+      "iterations": 1,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 212097,
+          "reference_ns": 71138,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 208468,
+          "reference_ns": 13327,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 209288,
+          "reference_ns": 19668,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 206467,
+          "reference_ns": 12041,
+          "vort_mix": 57,
+          "reference_mix": 59
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 207718,
+          "reference_ns": 17403,
+          "vort_mix": 57,
+          "reference_mix": 59
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 206467,
+        "reference_min_ns": 12041,
+        "vort_median_ns": 208468,
+        "reference_median_ns": 17403
+      },
+      "wires": {
+        "vort_bytes": 57,
+        "reference_bytes": 59,
+        "vort_sha256": "dbec693fe4de82a0d90580ebb30af74266f4e7ba28df0ae63b6233d141a096ed",
+        "reference_sha256": "344482a00571be0fca8a613409645bf66356c4e32c110bdcd3d10162ccb155ec"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 8,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 8,
+        "reference_quality_override_requested": 8,
+        "reference_case_quality": null,
+        "reference_lgwin": 22,
+        "reference_mode": 0,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    }
+  ]
+}

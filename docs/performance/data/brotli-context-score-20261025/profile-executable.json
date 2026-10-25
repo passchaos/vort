@@ -1,0 +1,5 @@
+{
+  "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/978387628730a1bfc85d2dc9e5e329fa/vort-br-quality-stage-profile",
+  "sha256": "b2e54f0a0d6533e985d6f81423a2aa8eff255d21d6374e4d661548611a85f8a3",
+  "source_binding": "tool-build/result.json source_before/source_after stable; tools both compile successful, planned-encode smoke had incompatible forwarded profile-only flags and is retained as failure"
+}

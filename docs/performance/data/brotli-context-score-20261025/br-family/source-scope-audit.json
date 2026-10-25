@@ -1,0 +1,11 @@
+{
+  "codec_src_and_build_stable": true,
+  "tool_source_stable": false,
+  "changed_tool_paths": [
+    "tools/br/literal_context_profile_gate_smoke.py",
+    "tools/br/literal_context_profile_gate.py",
+    "tools/br/literal_context_profile.zig"
+  ],
+  "codec_result": "1421 passed; 1 skipped; 0 failed.",
+  "boundary": "Full runner sentinel exit arose from known independent legacy-profile tool edits after compilation; codec source/build manifests are unchanged."
+}

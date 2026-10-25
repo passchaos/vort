@@ -1,0 +1,38 @@
+{
+  "time_utc": "2026-10-25T10:01:38.065974+00:00",
+  "reason": "Use available compilation CPUs for existing final check; no benchmark timing during validation.",
+  "results": [
+    {
+      "pid": 566639,
+      "exit_code": 0
+    },
+    {
+      "pid": 566642,
+      "exit_code": 0
+    },
+    {
+      "pid": 566656,
+      "exit_code": 0
+    },
+    {
+      "pid": 566662,
+      "exit_code": 0
+    },
+    {
+      "pid": 566666,
+      "exit_code": 0
+    },
+    {
+      "pid": 566768,
+      "exit_code": 0
+    },
+    {
+      "pid": 566780,
+      "exit_code": 0
+    },
+    {
+      "pid": 566794,
+      "exit_code": 0
+    }
+  ]
+}

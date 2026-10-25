@@ -1,0 +1,11 @@
+{
+  "tools/br/literal_context_profile_gate_smoke.py": "847bbf2b6a98270b68a5777a96356535d5e1681680c58269f3218dec6f9032f6",
+  "tools/br/quality_stage_profile.zig": "a80e469945a0429dcf13537b046b24b48ec8deb373417191a058cd0edf1117cd",
+  "tools/br/quality_profile_gate.py": "ac6f8c709d3d5bf05b0d926e8d81e4ddf47f349bdbec1987d9285549c1906487",
+  "tools/br/quality_profile_gate_smoke.py": "c21d3fe2cecbc4a4d7d2e522313ed7bfa31f1cbc9bedd31512d8547805acae0d",
+  "tools/br/literal_context_profile.zig": "6149bdcb6321240f5bd35335259772ae45335dfbc3f439736fdf7f40a209fe8d",
+  "tools/br/literal_context_profile_gate.py": "3177058af2b4732ced40f07e5d5e359c69cc12e3eb0b195cc222673debfa162e",
+  "src/br.zig": "9405cddaa1c6742a7008b98a22f69fb868db70ae6e64b90c534b265e4a7b528d",
+  "src/br/encoder/context_cache_tests.zig": "060042e1a5fed6c351a3827fdfc79f01e7dfd37c10a5c9eb8a371f244950b178",
+  "src/br/encoder/quality_profile.zig": "3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b"
+}

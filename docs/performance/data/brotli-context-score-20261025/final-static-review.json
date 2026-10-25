@@ -1,0 +1,38 @@
+{
+  "baseline": "4098b386269dd9a6e3c9364e89666e84d0ea09d5",
+  "static_unchanged_scoring_functions_and_dependencies": {
+    "collectAnalysis": true,
+    "treeBitCostProfiled": true,
+    "buildTreeAlphabet": true,
+    "weightedBitsSparse": true,
+    "retainBetter": true,
+    "suffixPayloadBitCost": true,
+    "prepareAssignmentCosts": true,
+    "assignmentCostSparse": true,
+    "moveContextSparse": true,
+    "buildSparseContexts": true,
+    "buildActiveSymbols": true,
+    "command_plan.zig": true,
+    "small_huffman.zig": true,
+    "complex_prefix.zig": true,
+    "context_map.zig": true,
+    "code_length_rle.zig": true,
+    "code_length_huffman.zig": true
+  },
+  "final_review_source_sha256": {
+    "src/br/encoder/literal_tree_score_cache.zig": "f2b16b331850d6bebcce486a75327648aafd8513b47cdffc7313ad42fa6497b6",
+    "src/br/encoder/literal_context_split.zig": "5e0f139d1a30601e5824bdaade4c23fad1af4de0632fdfe6ed31e79f68a8c458",
+    "src/br/encoder/literal_context_profile.zig": "b6292a1e6427e65a7aeed3433821384cbf57c7400cb89e3ee1a9195b68f770d3",
+    "src/br/encoder/context_cache_tests.zig": "f43d0721e1eb5671290978151d3372e88463a9cdab3985d6d29fc97688f5e897"
+  },
+  "read_only": true,
+  "compiled_or_timed": false,
+  "corrected_qa_sha256": "060042e1a5fed6c351a3827fdfc79f01e7dfd37c10a5c9eb8a371f244950b178",
+  "corrected_qa_static_review": "Each reference/default/profiled route measures actual nonzero request count and replays only its real allocation indices; no compiled or timed verification by this audit.",
+  "updated_utc": "2026-10-25T09:25:17.028048+00:00",
+  "parent_validation_update": {
+    "corrected_debug": "75/75 passed as reported by parent",
+    "x86_and_full_releasefast": "pending parent compilation",
+    "first_debug_failure_preserved": true
+  }
+}

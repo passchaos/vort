@@ -182,6 +182,39 @@ smaller and total bytes remain 288,091/296,445. This is a diagnostic milestone,
 not an encoder performance lead. Three-target contracts pass 25/25; the full
 Brotli family reports 1420/1421 with one skip, and build checks pass 173/173.
 
+The following [shared context-score experiment](brotli-context-score-experiment.md)
+tested a 128-entry full-frequency tree memo shared across one immutable
+analysis. Its fourteen-row public screen gives a version throughput point ratio
+of 0.992884x; three alternating old/new process pairs give 0.995366x. These
+observations do not establish a public speed benefit, statistical significance
+or a stable regression. All fourteen candidate output identities/settings and
+all seventy profiles' common wire candidates and selection outcomes remain
+unchanged. The shared cache has been withdrawn from default entrypoints,
+restoring the original mode-local cluster memo and uncached baseline/suffix
+policy. Restored-default Debug and x86 context/q8 contracts pass 76/76; complete native
+Brotli tests pass 1421 with one skip, and final build checks pass 173/173.
+Fourteen restored ordinary wires/settings and seventy profiled wires/candidate
+decisions retain their previous identities with zero compiler observations.
+Candidate measurements and earlier published reference results retain their
+own revisions; they are not refreshed performance evidence for the restored
+runtime. The restored ordinary screen is 0.988794x versus the old executable,
+and three supplemental alternating pairs aggregate to 0.986497x. The negative
+point differences are retained without statistical-significance claims or a
+claim of acceleration; compiler overhead from the extracted normal helper
+remains a bounded follow-up. Its first-screen throughput/reference geometric
+ratio is 0.0271625x with zero wins. The industry-best functionality/performance
+objective remains open.
+
+Actual recent-distance and context-proposal diagnostics are retained. In the
+experiment's instrumented Mozilla run, their separate medians are 0.109829ms
+and 73.876ms, respectively, within a 105.606ms outer call. The lazy/optimal
+proposal searches record baseline medians of 0.074856/0.075876ms, suffix
+medians of 17.061/18.228ms and cluster medians of 17.856/19.835ms. These are
+independently computed stage medians with nested tree/Huffman/prefix scopes;
+they must not be summed or interpreted as ordinary-code speed improvements.
+The finer profile adds clock reads and shape/count observations, so its
+overhead and the ordinary public comparison remain separate evidence.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

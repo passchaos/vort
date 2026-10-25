@@ -1,0 +1,40 @@
+{
+  "status": "analysis_recomputed_from_raw_files",
+  "public_inputs": 14,
+  "rounds_each": 5,
+  "input_case_settings_wire_identical": true,
+  "semantic_candidate_comparisons": 70,
+  "wire_selection_fields": [
+    "stage",
+    "origin",
+    "variant",
+    "input_bytes",
+    "command_count",
+    "wire_bytes",
+    "error_name",
+    "accepted",
+    "gain_bytes",
+    "incumbent_bytes",
+    "config"
+  ],
+  "version_speedup_geomean": 0.9928840589745787,
+  "new_time_factor": 1.00716694055172,
+  "source_files_readonly": true,
+  "no_benchmark_or_analysis_script_executed": true,
+  "files_sha256": {
+    "/tmp/vort-brotli-context-cache-20261025/analysis.json": "bb70ed1c8b0e5c640c02d9b69e341a22355afd39133e3cd6951d0b0d98df1487",
+    "/tmp/vort-brotli-context-cache-20261025/analyze.py": "289011c635ad4eae432916aea318309071565b89c5282fd7aafd426f1f014cb6",
+    "/tmp/vort-brotli-context-cache-20261025/baseline14/samples.json": "033997fd1a9bbc81daba19dc01512dfed7798e91fcc004abd4817de55b84f02b",
+    "/tmp/vort-brotli-context-cache-20261025/public14/samples.json": "cb55222f66104ee85d7060cf0876fbc6944bb2b7a19f75ea7c6bf621e21a1389",
+    "/tmp/vort-brotli-context-cache-20261025/profile14/samples.json": "4d0b9a3d5016e769af03da8e6433b886e1346100271303e65e3fb43a0a0f555a",
+    "/tmp/vort-brotli-q8-profile-20261025/profile14/samples.json": "63c44448359f0245e7c9ee167cfc335d53fb7c8cabfd59b770624c937c6bdb38"
+  },
+  "analysis_script_gaps": [
+    "No explicit public row count/set uniqueness checks; input_sha dictionary could overwrite duplicates.",
+    "No input_bytes/case equality assertion alongside hash; this audit added it.",
+    "zip comparison does not explicitly require equal round lengths; this audit verified5/5.",
+    "Candidate comparison excludes id/parent/link fields and timestamps; appropriate for added diagnostic nesting but not full execution identity.",
+    "Per-round candidate wire SHA absent; top-level returned wire hash verifies final output only.",
+    "Cross-scope/mode intersection is not recorded; those counts are not disjoint."
+  ]
+}

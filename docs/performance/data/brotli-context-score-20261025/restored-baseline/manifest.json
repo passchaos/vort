@@ -1,0 +1,37 @@
+{
+  "baseline": "4098b386269dd9a6e3c9364e89666e84d0ea09d5",
+  "files": {
+    "src/br/encoder/literal_context_split.zig": {
+      "sha256": "a131382cf3cf0d8c9a801dc766b59440467cfac526509655d7ec38af5e2f2d34",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/literal_context_split.zig"
+    },
+    "src/br/encoder/literal_context_profile.zig": {
+      "sha256": "02990823ef0ca0d781d7843bc5e82fa1bbeb3fc0401e9d29bdac8dcec704778a",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/literal_context_profile.zig"
+    },
+    "src/br/encoder/command_plan.zig": {
+      "sha256": "9b833b8d6616409fd703f557b22a9f6430d7aa5117ea40bccf70b60790a9d7c3",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/command_plan.zig"
+    },
+    "src/br/encoder/complex_prefix.zig": {
+      "sha256": "eadb870f72133d75069d80c2269009cb367ff3a240650542da11c2866d6a758a",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/complex_prefix.zig"
+    },
+    "src/br/encoder/context_map.zig": {
+      "sha256": "2196fc90b4dbc073a32a964229b102115ad39d954cb82eefe1c0a2f8dce34775",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/context_map.zig"
+    },
+    "src/br/encoder/small_huffman.zig": {
+      "sha256": "bfca952ac6a54dd34bec36fce3f73c6c423749ee29730f4ae40ff09f1b7fa394",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/small_huffman.zig"
+    },
+    "src/br/encoder/code_length_rle.zig": {
+      "sha256": "1174a7aa83ebc410ef60294727dccf2500e9957612637f783fb25d0c6e28f0f8",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/code_length_rle.zig"
+    },
+    "src/br/encoder/code_length_huffman.zig": {
+      "sha256": "0d32345ed9d49a33e5b380bab11032ad125db9b1ec39cd249c3392fbcff51fe2",
+      "path": "/tmp/vort-brotli-context-cache-20261025/restored-baseline/code_length_huffman.zig"
+    }
+  }
+}

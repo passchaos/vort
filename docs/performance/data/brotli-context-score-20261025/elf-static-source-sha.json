@@ -1,0 +1,12 @@
+{
+  "created_utc": "2026-10-25T09:23:07.264385+00:00",
+  "workspace": "/home/passchaos/project-z/vort-brotli-context-cache",
+  "source_sha256": {
+    "src/br.zig": "9405cddaa1c6742a7008b98a22f69fb868db70ae6e64b90c534b265e4a7b528d",
+    "src/br/encoder/literal_context_split.zig": "5e0f139d1a30601e5824bdaade4c23fad1af4de0632fdfe6ed31e79f68a8c458",
+    "src/br/encoder/literal_context_profile.zig": "b6292a1e6427e65a7aeed3433821384cbf57c7400cb89e3ee1a9195b68f770d3",
+    "src/br/encoder/literal_tree_score_cache.zig": "f2b16b331850d6bebcce486a75327648aafd8513b47cdffc7313ad42fa6497b6",
+    "src/br/encoder/quality_profile.zig": "3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b"
+  },
+  "elf_status": "awaiting parent-supplied executable identity; no discovery/build/run attempted"
+}

@@ -1,0 +1,111 @@
+{
+  "schema": "vort.brotli.context-cache.restored-elf-review.v1",
+  "created_utc": "2026-10-25T10:06:05.896981+00:00",
+  "created_asia_shanghai": "2026-10-25T18:06:05.896981+08:00",
+  "scope": "Bounded read-only restored public routing review. No compile, timing, test execution, source or Git mutation.",
+  "elf": {
+    "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/ee59b567d9fa359fa365d21c6dd4ba7f/vort-br-planned-encode-bench",
+    "sha256": "16ffb6c50977990036c204777423459eeaa7fe515d4f9410360c833f86e0a79d",
+    "source_binding": "Restored check compile produced this executable; final full source binding recorded when restored-check finishes."
+  },
+  "source_sha256_at_review": {
+    "src/br.zig": "9405cddaa1c6742a7008b98a22f69fb868db70ae6e64b90c534b265e4a7b528d",
+    "src/br/encoder/literal_context_split.zig": "72cb7349697453c172686b8acba87484f99a4b4a9da775d93fc77383d21fa79b",
+    "src/br/encoder/literal_context_profile.zig": "fc19a207d99db5ed5118ce5153968b8cf7c246d4dc8af43ac46c3075d8d7ae83",
+    "src/br/encoder/literal_tree_score_cache.zig": "a14ea8a7d6e5cf047e0c3d46c1dbf17f4df7ec64b143ef1e751c4f8b666138b7",
+    "src/br/encoder/quality_profile.zig": "8b8fcaf9465ef87d197bf73db2142124aa20823be7947a3fd76969a6bd506bba"
+  },
+  "source_binding_limit": "Pinned executable identity verified; current core source SHA inspected. Final full restored-check source binding and complete family/check result remain parent-owned and are not claimed passed here.",
+  "restored_route": {
+    "preferred_call": "0x12105a1 -> ordinary chooseProposals0x120ee50",
+    "ordinary_source": "chooseProposalsCore(false,allocator,input,commands,{})",
+    "baseline_direct_call": "0x120f472 -> treeBitCostProfiled__anon_46128 at0x120c670",
+    "suffix_direct_calls": [
+      "0x120cf0e",
+      "0x120cf42"
+    ],
+    "direct_scorer_actual_abi": "rdi result/error-u64 storage; rsi frequencies; rdx parent active support. No memo/origin/timer parameter.",
+    "mode_calls": [
+      "0x120f502",
+      "0x120f6a1",
+      "0x120f8f0",
+      "0x120faf2"
+    ],
+    "memo_creation": "inside mode helper0x120cc80, initialized after suffix section; no shared memo parameter in chooser->mode ABI",
+    "cluster_memo_base": "mode callee rbp-0x4ddf8",
+    "memo_init": "0x120d1cd memset length0x20830=133168",
+    "cluster_lookup": "0x120e505 mask127; stride0x410; hash+full histogram comparison",
+    "cluster_miss_direct_scorer_call": "0x120e890",
+    "cluster_publish": "0x120e948 hash, 0x120e963 histogram memcpy1024, 0x120e968 cost, occupied bitmap update",
+    "both_memos_mode_local": true,
+    "four_simultaneous_tree_memos": false,
+    "stack_note": "Modes are called sequentially; each reserves its whole frame at entry, while memo initialization/logical post-suffix lifetime begins later."
+  },
+  "origin_and_timer": {
+    "source_Cache_origins_field_or_methods": false,
+    "ordinary_profiler_type": "void",
+    "normal_clock_and_profile_call_scan": [
+      {
+        "assembly": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/chooseModeFromHistograms__anon_46191.asm",
+        "profile_calls": [],
+        "clock_calls": []
+      },
+      {
+        "assembly": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/chooseProposals.asm",
+        "profile_calls": [],
+        "clock_calls": []
+      },
+      {
+        "assembly": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+        "profile_calls": [],
+        "clock_calls": []
+      },
+      {
+        "assembly": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/treeBitCostProfiled__anon_46128.asm",
+        "profile_calls": [],
+        "clock_calls": []
+      }
+    ],
+    "named_Profiled_scorer_does_not_mean_profile_enabled": "The actual compiled instance is false; no profile or clock calls and ABI has no timer argument.",
+    "claim_scope": "Core chooser/mode/scorer and preferred normal branch only, not all ELF clocks or profiler APIs."
+  },
+  "cache_size": {
+    "native_bytes": 133168,
+    "source_record": "/tmp/vort-brotli-context-cache-20261025/restored-cache-layout.json",
+    "native_probe_output": "pointer_bytes=8 legacy_cache_bytes=133168 shared_cache_bytes=133168 profile_bytes=1584 quality_profile_bytes=161648\n",
+    "cache_source_sha_matches_probe": true,
+    "probe_not_rerun_by_this_audit": true,
+    "not_full_stack_heap_or_RSS": true
+  },
+  "local_explicit_stack_reservations": {
+    "chooseProposals": {
+      "address": "0x120ee50",
+      "sub_rsp_bytes": 1208
+    },
+    "mode": {
+      "address": "0x120cc80",
+      "sub_rsp_bytes": 318936
+    },
+    "direct_scorer": {
+      "address": "0x120c670",
+      "sub_rsp_bytes": 1720
+    },
+    "limit": "Only concrete local sub instructions recorded; not complete frame/call-chain peak or process stack."
+  },
+  "limitations": [
+    "No full family/check or final all-source binding pass claim.",
+    "No throughput, zero-overhead, ISA, heap/RSS or complete stack claim.",
+    "Prior cross-mode memo report described superseded ELF734570..., not this restored16ff... executable."
+  ],
+  "evidence": {
+    "baseline-direct-and-four-mode-route.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/baseline-direct-and-four-mode-route.asm",
+    "chooseModeFromHistograms__anon_46191.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/chooseModeFromHistograms__anon_46191.asm",
+    "chooseProposals.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/chooseProposals.asm",
+    "cluster-memo-key-and-miss.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/cluster-memo-key-and-miss.asm",
+    "encodePreferredCommandPlanAllocRecorded__anon_43479.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+    "preferred-ordinary-chooser-call.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/preferred-ordinary-chooser-call.asm",
+    "suffix-direct-and-mode-memo-init.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/suffix-direct-and-mode-memo-init.asm",
+    "symbols.nm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/symbols.nm",
+    "treeBitCostProfiled__anon_46128.asm": "/tmp/vort-brotli-context-cache-20261025/restored-elf-evidence/treeBitCostProfiled__anon_46128.asm"
+  }
+}

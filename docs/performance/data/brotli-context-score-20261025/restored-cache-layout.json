@@ -1,0 +1,65 @@
+{
+  "rows": [
+    {
+      "target": "native",
+      "command": [
+        "taskset",
+        "-c",
+        "6-7,14-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build-exe",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-brotli-context-cache-20261025/restored-cache-layout-native",
+        "--dep",
+        "cache",
+        "--dep",
+        "quality",
+        "-Mroot=/tmp/vort-brotli-context-cache-20261025/cache_layout.zig",
+        "-Mcache=src/br/encoder/literal_tree_score_cache.zig",
+        "-Mquality=src/br/encoder/quality_profile.zig"
+      ],
+      "executable_sha256": "3f8df60c504ae80f7eace2ca889bef4eececf047253ce63e4ab53666722fa89d",
+      "output": "pointer_bytes=8 legacy_cache_bytes=133168 shared_cache_bytes=133168 profile_bytes=1584 quality_profile_bytes=161648\n"
+    },
+    {
+      "target": "x86-linux-gnu",
+      "command": [
+        "taskset",
+        "-c",
+        "6-7,14-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build-exe",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-brotli-context-cache-20261025/restored-cache-layout-x86-linux-gnu",
+        "-target",
+        "x86-linux-gnu",
+        "--dep",
+        "cache",
+        "--dep",
+        "quality",
+        "-Mroot=/tmp/vort-brotli-context-cache-20261025/cache_layout.zig",
+        "-Mcache=src/br/encoder/literal_tree_score_cache.zig",
+        "-Mquality=src/br/encoder/quality_profile.zig"
+      ],
+      "executable_sha256": "cf98232cf5152964f15d5725456fc866d64bb62c82cd44b8e5ca9448f911f61b",
+      "output": "pointer_bytes=4 legacy_cache_bytes=133152 shared_cache_bytes=133152 profile_bytes=924 quality_profile_bytes=108944\n"
+    }
+  ],
+  "source_before": {
+    "/tmp/vort-brotli-context-cache-20261025/cache_layout.zig": "bab3c75670be99429a0341b6ddbf29071c32d12e23060b3216352d0244fe7ae8",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/literal_tree_score_cache.zig": "a14ea8a7d6e5cf047e0c3d46c1dbf17f4df7ec64b143ef1e751c4f8b666138b7",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/literal_context_profile.zig": "fc19a207d99db5ed5118ce5153968b8cf7c246d4dc8af43ac46c3075d8d7ae83",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/quality_profile.zig": "3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b"
+  },
+  "source_after": {
+    "/tmp/vort-brotli-context-cache-20261025/cache_layout.zig": "bab3c75670be99429a0341b6ddbf29071c32d12e23060b3216352d0244fe7ae8",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/literal_tree_score_cache.zig": "a14ea8a7d6e5cf047e0c3d46c1dbf17f4df7ec64b143ef1e751c4f8b666138b7",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/literal_context_profile.zig": "fc19a207d99db5ed5118ce5153968b8cf7c246d4dc8af43ac46c3075d8d7ae83",
+    "/home/passchaos/project-z/vort-brotli-context-cache/src/br/encoder/quality_profile.zig": "3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b"
+  },
+  "source_stable": true,
+  "end_utc": "2026-10-25T09:55:44.221930+00:00",
+  "scope": "ABI sizes only; not complete stack, heap, or RSS."
+}

@@ -1,0 +1,5 @@
+{
+  "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/78f0aed58c7f51384364cb890565eb73/vort-br-planned-encode-bench",
+  "sha256": "734570819d2d2c996c492b4bdc1f7f0271bcd6b77db0ec96d1ebe5044af4f0be",
+  "source_binding": "tool-build/result.json source_before/source_after stable; tools both compile successful, planned-encode smoke had incompatible forwarded profile-only flags and is retained as failure"
+}

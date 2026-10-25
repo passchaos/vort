@@ -1,0 +1,9 @@
+{
+  "time_utc": "2026-10-25T09:49:36.601055+00:00",
+  "decision": "withdraw shared exact-tree cache from all default entrypoints; preserve real q8 diagnostic subdivision and reference policy",
+  "first_screen_version_geomean": 0.9928840589745787,
+  "three_process_pairs_version_geomean": 0.995366206422921,
+  "ordinary_cache_abi_addition_bytes": 384,
+  "reason": "No reproducible positive public API point benefit in three alternating pairs, sparse cross-mode reuse and new overhead; no statistical-significance claim.",
+  "candidate_evidence": "public14, profile14, paired14, analysis.json, ELF/source reviews retain candidate epoch and are not attributed to final restored runtime."
+}

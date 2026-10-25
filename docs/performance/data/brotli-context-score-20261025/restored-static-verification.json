@@ -1,0 +1,41 @@
+{
+  "baseline": "4098b386269dd9a6e3c9364e89666e84d0ea09d5",
+  "checks": {
+    "choose": true,
+    "chooseUpTo": true,
+    "chooseSuffix": true,
+    "chooseProposalsForMode": true,
+    "chooseProposalsForModeWithPrefix": true,
+    "chooseWithClusters": true,
+    "chooseMode": true,
+    "chooseModeProposals": true,
+    "collectAnalysis": true,
+    "treeBitCostProfiled": true,
+    "buildTreeAlphabet": true,
+    "weightedBitsSparse": true,
+    "suffixPayloadBitCost": true,
+    "retainBetter": true,
+    "prepareAssignmentCosts": true,
+    "assignmentCostSparse": true,
+    "moveContextSparse": true,
+    "buildSparseContexts": true,
+    "buildActiveSymbols": true,
+    "command_plan.zig": true,
+    "complex_prefix.zig": true,
+    "context_map.zig": true,
+    "small_huffman.zig": true,
+    "code_length_rle.zig": true,
+    "code_length_huffman.zig": true
+  },
+  "default_reference_same_core_not_independent": true,
+  "core_has_no_outer_cache": true,
+  "permode_postsuffix_cache": true,
+  "origins_storage_and_api_removed": true,
+  "direct_counts_record_after_success": true,
+  "source_sha256": {
+    "src/br/encoder/literal_context_split.zig": "72cb7349697453c172686b8acba87484f99a4b4a9da775d93fc77383d21fa79b",
+    "src/br/encoder/literal_context_profile.zig": "fc19a207d99db5ed5118ce5153968b8cf7c246d4dc8af43ac46c3075d8d7ae83",
+    "src/br/encoder/literal_tree_score_cache.zig": "a14ea8a7d6e5cf047e0c3d46c1dbf17f4df7ec64b143ef1e751c4f8b666138b7"
+  },
+  "no_compile_or_timing": true
+}

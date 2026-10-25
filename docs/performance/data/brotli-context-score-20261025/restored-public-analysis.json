@@ -1,0 +1,121 @@
+{
+  "rows": [
+    {
+      "case": "file0_silesia_dickens_65536_bin",
+      "old_median_ns": 56164929,
+      "restored_median_ns": 56002879,
+      "reference_median_ns": 2241582,
+      "version_point_speedup": 1.0028936012378935,
+      "throughput_reference": 0.040026192224867585
+    },
+    {
+      "case": "file1_silesia_mozilla_65536_bin",
+      "old_median_ns": 100251017,
+      "restored_median_ns": 100415675,
+      "reference_median_ns": 1661177,
+      "version_point_speedup": 0.9983602360886386,
+      "throughput_reference": 0.01654300486452937
+    },
+    {
+      "case": "file2_silesia_mr_65536_bin",
+      "old_median_ns": 79243279,
+      "restored_median_ns": 79812633,
+      "reference_median_ns": 1986996,
+      "version_point_speedup": 0.9928663674082774,
+      "throughput_reference": 0.024895758043717214
+    },
+    {
+      "case": "file3_silesia_nci_65536_bin",
+      "old_median_ns": 26376736,
+      "restored_median_ns": 27327848,
+      "reference_median_ns": 677287,
+      "version_point_speedup": 0.9651962349907683,
+      "throughput_reference": 0.02478376636169815
+    },
+    {
+      "case": "file4_silesia_ooffice_65536_bin",
+      "old_median_ns": 132215940,
+      "restored_median_ns": 132269913,
+      "reference_median_ns": 2300630,
+      "version_point_speedup": 0.9995919480191992,
+      "throughput_reference": 0.017393449105844654
+    },
+    {
+      "case": "file5_silesia_osdb_65536_bin",
+      "old_median_ns": 108053281,
+      "restored_median_ns": 107479905,
+      "reference_median_ns": 1688214,
+      "version_point_speedup": 1.0053347274544018,
+      "throughput_reference": 0.01570725243942112
+    },
+    {
+      "case": "file6_silesia_reymont_65536_bin",
+      "old_median_ns": 51120150,
+      "restored_median_ns": 51143149,
+      "reference_median_ns": 1940803,
+      "version_point_speedup": 0.999550301448978,
+      "throughput_reference": 0.03794844545063113
+    },
+    {
+      "case": "file7_silesia_samba_65536_bin",
+      "old_median_ns": 47399783,
+      "restored_median_ns": 47370040,
+      "reference_median_ns": 1900510,
+      "version_point_speedup": 1.0006278863180187,
+      "throughput_reference": 0.04012050654802065
+    },
+    {
+      "case": "file8_silesia_sao_65536_bin",
+      "old_median_ns": 158130533,
+      "restored_median_ns": 158126232,
+      "reference_median_ns": 3022512,
+      "version_point_speedup": 1.000027199788078,
+      "throughput_reference": 0.01911455146796896
+    },
+    {
+      "case": "file9_silesia_webster_65536_bin",
+      "old_median_ns": 45703260,
+      "restored_median_ns": 45604651,
+      "reference_median_ns": 2011888,
+      "version_point_speedup": 1.002162257529391,
+      "throughput_reference": 0.04411585125385566
+    },
+    {
+      "case": "file10_silesia_xml_65536_bin",
+      "old_median_ns": 26272154,
+      "restored_median_ns": 26692108,
+      "reference_median_ns": 635758,
+      "version_point_speedup": 0.9842667353211668,
+      "throughput_reference": 0.02381820124510211
+    },
+    {
+      "case": "file11_silesia_x_ray_65536_bin",
+      "old_median_ns": 78461624,
+      "restored_median_ns": 80939321,
+      "reference_median_ns": 2908551,
+      "version_point_speedup": 0.9693882161428066,
+      "throughput_reference": 0.035934956756061745
+    },
+    {
+      "case": "file12_brotli_source_65536_bin",
+      "old_median_ns": 36656041,
+      "restored_median_ns": 38603987,
+      "reference_median_ns": 1300840,
+      "version_point_speedup": 0.9495402897115264,
+      "throughput_reference": 0.033697037562467315
+    },
+    {
+      "case": "file13_validation_schema_json_65536_bin",
+      "old_median_ns": 25370370,
+      "restored_median_ns": 26012182,
+      "reference_median_ns": 748992,
+      "version_point_speedup": 0.9753264835683527,
+      "throughput_reference": 0.028793893568790193
+    }
+  ],
+  "version_point_geomean": 0.9887942509695583,
+  "reference_throughput_geomean": 0.027162492385268362,
+  "reference_wins": 0,
+  "wire_and_settings_unchanged": true,
+  "scope": "Restored default policy validation; one process per version, five raw rounds/input. No codec speed optimization or statistical significance claim."
+}

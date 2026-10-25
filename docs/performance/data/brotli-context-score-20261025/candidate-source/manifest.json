@@ -1,0 +1,8 @@
+{
+  "scope": "Frozen shared-cache candidate before default withdrawal",
+  "files": {
+    "src/br/encoder/literal_context_split.zig": "5e0f139d1a30601e5824bdaade4c23fad1af4de0632fdfe6ed31e79f68a8c458",
+    "src/br/encoder/literal_context_profile.zig": "b6292a1e6427e65a7aeed3433821384cbf57c7400cb89e3ee1a9195b68f770d3",
+    "src/br/encoder/literal_tree_score_cache.zig": "f2b16b331850d6bebcce486a75327648aafd8513b47cdffc7313ad42fa6497b6"
+  }
+}

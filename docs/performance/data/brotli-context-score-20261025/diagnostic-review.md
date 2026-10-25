@@ -1,0 +1,99 @@
+# q8外层新增阶段与context细统计诊断接线审查
+
+- 工作树：`/home/passchaos/project-z/vort-brotli-context-cache`
+- 基线：`4098b386269dd9a6e3c9364e89666e84d0ea09d5`
+- 审查时间：2026-10-25 17:24:05（Asia/Shanghai）；包含最新gate及当时QA源码补查。
+- 范围：只读父q8新增Stage接线、writer返回实际proposal的profile API、固定detail存储、scope/mode次数与时间概念、schema/gate与QA；不编译、执行test/编码/基准、计时或修改源码/Git。唯一写入本报告。父代理与其他审计负责优化core/实测，不能将本静态审核写成运行成功或性能证明。
+
+## 结论
+
+落盘接线满足“同一次实际proposal用于编码选择”的条件：true仅调用一次chooseProposalsProfiled，所返回proposed进入原adaptive候选数组；false仍调用一次普通chooseProposals。两者通过同一个Core、一个Analysis、相同sharedcache策略执行；没有额外profileSearch/repeatedsearch来制造统计或替换选优输入。
+
+recent_distance_scan/context_proposals是q8外层真实childscope，其inclusive从preferred_context父范围扣除。ContextDetail中内部mode/cluster/tree/Huffman等细时间只复制保存，**没有另加q8Exclusive或outer**。scope/mode计数按cache请求分类，不是墙钟时间。Fixed8details有event_id，容量截断不反馈codec/proposed/wire；普通DisabledRecorder仍无clock/detailstorage。
+
+既有q8字节候选配置/strictwire比较和资源lease不因diagnostic新增改变。旧新Profile字段和parent/eventID自然不同，不能deep-equal全Profile作为wire输出证明；应比较完整proposal语义、编码settings/wire，再对每个版本自身gate核对时间分解。优化本身是否收益由独立public/profiling证据决定。
+
+## 同一次调用与触发顺序
+
+`src/br.zig:10182 encodePreferredCommandPlanAllocRecorded`仍在原位置评估recentdistance：only options.try_recent_distances为true时调用原countReusableRecentDistances一次，传原largewindow/window/compoundsize/outputpos/startingdistance参数，用同一count>=minthreshold结果决定实际use_recent。新begin/deferfinish/errdefer只包围该调用（约10189..10201），没有前后重复扫描或异步统计。
+
+primarycontext和initialwire随后按原配置构造，contextproposal仍在原位置primarywire之后。options.try_literal_contexts及try_clustered条件为true时进入context_proposals timer；comptime trace_enabled分支：
+
+```
+detail: Profile = .{}
+proposed = try chooseProposalsProfiled(...trace.io,&detail)
+trace.contextDetail(detail,commands.len)
+break proposed
+```
+
+否则break普通chooseProposals；后面adaptive_contexts直接读取context_proposals.suffix/up_to16/full用于原去重/编码/选优。无第二次choose/no discardedproposal；profilecall错误会进入原errorcleanup+scope.failure，不再调用普通函数回退。detail只在成功返回后存，失败scope有error但没有假装完整detail。
+
+`literal_context_split.zig:177`chooseProposalsProfiled将callerProfile reset为该input/iterations1，执行`chooseProposalsCore(true,true)`一次，填total和提案形状并返回Proposals。ordinary`chooseProposals`是Core(false,true)，reference是Core(false,false)；profileSearch是独立多次统计入口，父q8没有使用它。Core只collectAnalysis一次，析构该Analysis在返回时完成，不重复collect为诊断构造另一套候选。
+
+## 内外两套时间与次数
+
+q8Exclusive新增recent_distance_scan/context_proposals字段（quality_profile.zig:9/:22/:23）；父Frame.child_ns包括它们的直接inclusive，因此preferred_context.exclusive现在排除这两类范围和原wirechildren。两个Stage没有新增q8childwire调用，wireattempt数原则上不因计时层级增加。
+
+ContextProfile由writer原细统计加scope/modecounts：
+
+- Profile.total_ns是一次proposal search内inclusive时间，位于父context_proposals scope内部。父还包括函数调用/shape和contextDetail拷贝/trace开销，两者不要求精确相等。
+- mode_ns[4]是各RFC模式完整搜索inclusive，注释明确不纳stageNs；suffix/sparse/cluster时间也在它们内部。不能mode_ns+suffix_ns+cluster_ns求总。
+- stageNs=analysis+baseline+suffix+sparse+cluster是一套较粗互斥分段；clusterStageNs是cluster内部init/prepare/assignment/finalize/score，treeScoreStageNs是baseline/suffix/cluster-score内部的treealphabet/lengths/weighted/prefix；smallHuffman和complexPrefix又嵌套于lengths/prefix。
+- tree级时间不能再加contextProfile.total，不能addq8Exclusive.context_proposals或outer。当前代码没有该路径，contextDetail只复制Profile字段。
+- tree_score_scope_counts/modecounts是requests/hits/misses等次数，既不是exclusive时段也不是wireattemptcount。globalbaseline只调用一次mode=null，不往四个mode列重复归因。
+
+新增counts在treeBitCostCached（literal_context_split.zig约865）每次request记1、hit/miss互补，cold/conflict从cache delta记录；profilehit查最后成功publicationorigin分crossscope/crossmode，computed miss通过try实际scorer后才put+setOrigin。baseline/sharedsuffix/cluster允许跨同Analysis复用，fullfrequencykey+固定parent support确保分数domain相同；map-scorecache仍mode-local，因为mapbitcost取决该mode histograms。
+
+对完成成功Detail应满足scopedrequests=hits+misses、misses=cold+conflict、crosshits<=hits，全scopehits/misses=原总计；globalbaseline在modecounts中为0，suffix/cluster的mode requests和=该scope requests。tree_score_calls包含baseline/suffix/cluster实际miss评分，不能拿它仅与clusterrequests比或误以为一request一treebuild。失败request可能在actualtreecall完成前停止，所以只对成功details宣称该完整守恒（父不保存失败detail）。
+
+ContextProfile原Timer沿用u64 elapsed和部分wrapping accumulators；没有自动把每个内部细profile数值异常传递q8timing_complete。当前bounded输入正常计时不接近溢出，仍不能用outertiming_complete作为所有细时间永久数学保证。细time/计数是现有诊断范围，非新增codecerrorpolicy。
+
+## Caller存储、层级ID、schema与gate
+
+quality_profile.ContextDetail存event_id/origin/variant/commandcount/Profile，Profile有固定8slots（约quality_profile.zig:116..150）。contextDetail在子scope尚未finish时读取currentFrame.id，即对应context_proposals event，解决同origin/commandcount多调用的歧义。entry写当前countslot、再increment；满8只markcontext_details_truncated并return，不改变实际proposed/clockscope/候选选择。没有newarraylist/heap或retainedinput/commandpointer；细Profile全值copy，寿命到owner下一reset。
+
+eventlimit和detailcapacity独立；eventstruncated仍可能保存detail指向未保存event，当前完整gate拒绝eventstruncated/detailstruncated，不伪造完整链接。stack>32时timingfalse且currentFrame.id可能不再对应未push的子scope，消费者不应使用完整层级断言；这延续q8既有明示限额，不改变codec。
+
+Profile.jsonStringify和工具手工输出增加details/truncated。外层q8Schema.v1新增字段是additive扩展，旧字段的类型/quality/wire合同不变；preferred_context.exclusive因新增children范围而缩小。细ContextProfile的tree_score_calls/hits/misses现在还包含baseline/suffix，统计scope较旧cluster-only观察扩大，不能把旧值当相同scope直接比；Exclusive结构新增字段也导致旧baseline的summary/eventparentids不相同。消费者可忽略新增字段，要求硬编码exactkeys的外部消费者需更新。in-repo gate采用exclusive dict建立by_stage，故能接受两新Stage，不因为旧枚举列表拒绝。
+
+新gate在详情存在时要求非truncated、len<=8、成功context_proposals event数=detail数；detail/event ID集合覆盖配合数量相等拒绝重复详情与遗漏，按event_id检查stage/origin/variant/commandcount，核count conservation和globalbaseline不按mode计。仍对每version自身所有event的directchildinclusive subtraction及by-stage summary核验，不把ContextProfile细time纳outer。oldProfile没有details字段时仍允许旧scope；不能因新增Stage将旧完整Profiledeepcompare称为错误。
+
+最新gate计数检查与源码范围吻合：quality_profile_gate.py:118..125逐mode校验requests=hits+misses、misses=cold+conflict与crosshits上界，并将suffix/cluster各mode全部7字段汇总到scope；不再保留旧版仅检查requests和的审计问题。quality_profile_gate_smoke.py:102/:111新增重复detail和错误mode守恒拒绝案例；父代理告知该smoke为11/11，本审计只读源码、未执行复跑。gate不验证proposal具体ctxmaps，正确性仍需semanticproposal+wireoracle独立提供。
+
+## 错误/资源/普通路径
+
+主q8entry依旧固定quality8/generic/window16/input<=65536，以原total_budget.Lease传callerallocator、handoffoutput和sameErrorunion。上下文函数使用同allocator，Analysis/caches生命周期同一search，新增detail固定储存在callerProfile，不用另一heap绕预算。
+
+profiled树scorer与普通scorer具有相同cost math与referenceComparison路径，但clock细节和元数据观察不作为candidate价格。preferredprimarywire在contextproposal之前创建，若proposalsearch失败原errdefer释放selected；timers记录failure而不返回新的成功proposal、截断不fallback。延续falseDisabled无时钟/无detail存储，normalq8仍ordinarychoose。
+
+这里共享tree缓存策略会改变重复scorer实际次数，可能减少部分allocator调用；不能要求整个新/旧workflow的allocationevent完全相同来“证明”优化，也不能无条件说profiled与旧referenceOOM在每个同allocationindex相同。预算拒绝不得被profiler吞为storedsuccess，cleanup和semanticproposal仍需实际tests。
+
+## QA源码与当前静态验收
+
+context_cache_tests已注册literal_context_split模块。它比较reference/ordinary/profiled完整三proposal的null、mode、treecount、contextmap、savings，并核合法mapentries；输入/commands保持及各allocatorcleanup，literalphysicalcounts和profile统计一致。阈值0/1/63/64/127/128/129、stationary/predictive/random/highbytes、四mode构造同map不同fullhistograms/scatteredcommands覆盖当前核心。最新allocationFailures源码为reference/cached/profiled各自取得成功基线，遍历各自alloc_index；失败检查OutOfMemory或同基线proposal的可恢复成功、实际诱发failure与分配释放守恒，不再假定三路径有相同allocation index。父代理仍在完成该QA验证，本静态审计不替代运行结果。
+
+真实q8 existingcontracts源码继续验证normal/profilewire/decode、fixedevent截断、资源cap/profile/peakonebelow、同error返回和ownership。新contextdetails字段与parentID已由最新eventgate源码检查；不能拿旧ProfilefullDeepEqual作为输出证明。current父recorded调用返回真实proposed已静态证明，不意味着实际运行已验证。父baselineoldprofile/public保留原epoch，新metadata/Stage改变统计定义，应记录各自source/exe。
+
+本次静态可接受diagnosticplumbing和统计范围，尚无current运行/速度claim。后续父代理需要确认三targetsourcefreeze、fullwire/referenceproposal及newprofilegate实际通过，并单独比较public性能。若以后在细profile加入exclusive子时段，仍需避免嵌套重复sum；不使用高比例stage或cachehit计数直接推断CPU性能因果。
+
+## 本轮内容哈希
+
+- `src/br.zig`: `9405cddaa1c6742a7008b98a22f69fb868db70ae6e64b90c534b265e4a7b528d`
+- `src/br/encoder/quality_profile.zig`: `3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b`
+- `src/br/encoder/literal_context_split.zig`: `5e0f139d1a30601e5824bdaade4c23fad1af4de0632fdfe6ed31e79f68a8c458`
+- `src/br/encoder/literal_context_profile.zig`: `b6292a1e6427e65a7aeed3433821384cbf57c7400cb89e3ee1a9195b68f770d3`
+- `src/br/encoder/literal_tree_score_cache.zig`: `f2b16b331850d6bebcce486a75327648aafd8513b47cdffc7313ad42fa6497b6`
+- `src/br/encoder/context_cache_tests.zig`: `060042e1a5fed6c351a3827fdfc79f01e7dfd37c10a5c9eb8a371f244950b178`（补查快照，父代理QA工作仍在进行）
+- `tools/br/quality_stage_profile.zig`: `a80e469945a0429dcf13537b046b24b48ec8deb373417191a058cd0edf1117cd`
+- `tools/br/quality_profile_gate.py`: `ac6f8c709d3d5bf05b0d926e8d81e4ddf47f349bdbec1987d9285549c1906487`
+
+## 已发表行业地位与功能缺口补查
+
+补查时间：2026-10-25 17:25:02（Asia/Shanghai）。以下仅引用现有文档，不新增基准；当前context缓存候选不沿用旧文档的版本点比作为自身收益。
+
+- 总体尚不能声称功能/性能全面行业最强：`docs/performance/industry-gap-audit.md:8..11`明确目标未完成，格式互通、API覆盖、encoder质量与吞吐是不同主张。
+- Brotli现有q8公开对比：`industry-gap-audit.md:171..183`记录14个冻结64KiB、每行5轮；吞吐/reference几何比0.0282557，14/14无吞吐胜；9/14输出更小，总bytes288091/296445。`brotli-q8-candidate-profile.md:122..130`给出实验libbrotli1.2.0-dev `558fc647`、Vort window16/ref lgwin22及未确认完整loader closure的边界。这是限定样本/设置的证据，不能推广全部质量、平台或解压。
+- Zstd现有level3公开对比：`zstd-work-accounting.md:74..88`给出libzstd1.6.0 `01b7154f`、14个64KiB、每行5轮、i7-10700K/ReleaseFast；吞吐/reference几何比0.00393447，14/14无吞吐胜；13/14输出更小，总bytes310437/328241。内部版本1.01083及补充焦点点比均未赋予统计显著/全面排名；完整loader closure同样未确认。
+- Brotli功能/质量仍缺口：`industry-gap-audit.md:21`，完整reference HQ/Zopfli算法与质量一致未证实，q0/q1 fragment-local，普通nonHQ history<=65535；完整length只覆盖已准入match，有限beam/matcher/entropy model仍可能漏全局更低cost，complete-stream peak与全面ratio/speed/memory领先未完成。`brotli-quality-presets.md:29..37`也明确q0..11编号不等于reference算法/bytes/ratio/memory/speed一致。
+- Zstd功能/质量仍缺口：`industry-gap-audit.md:18`，reference算法/质量/吞吐一致未证实，HQ有限8/16-state与自有priors，canonical hash/chain logs仅query metadata；64MiB+8 actual distance通过不等于最大合法大小的匹配基准；32bit物理allocation/oneshot界限、标准dictionary finalization延迟与广泛ratio/speed/memory一致仍开放。
+- 下一步现有文档建议：`industry-gap-audit.md:185..197/:219..231`补当前Zstd压缩/解压完整reference矩阵和统一跨库requested-memory/RSS，先x86-64公开oneshot/incremental64KiB/1MiB，再ARM64，记录ratio/吞吐/内存/coldwarm与版本CPU；优先已测最弱行和Zstd字典finalization。已有内部budget或当前未找到可复现decoder缺口不替代这些证据。

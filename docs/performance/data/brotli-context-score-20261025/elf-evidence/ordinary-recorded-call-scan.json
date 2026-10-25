@@ -1,0 +1,47 @@
+[
+  {
+    "symbol": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_35219",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77146",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253629",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  },
+  {
+    "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253653",
+    "quality_profile_calls": [],
+    "clock_now_calls": []
+  }
+]

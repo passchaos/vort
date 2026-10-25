@@ -1,0 +1,296 @@
+{
+  "schema": "vort.brotli.context-cache.ordinary-elf-review.v1",
+  "created_utc": "2026-10-25T09:30:38.824038+00:00",
+  "created_asia_shanghai": "2026-10-25T17:30:38.824038+08:00",
+  "scope": "Read-only source and pinned ReleaseFast public ELF ABI/stack audit. No compile, timing, test execution, source or Git mutation.",
+  "elf": {
+    "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/78f0aed58c7f51384364cb890565eb73/vort-br-planned-encode-bench",
+    "sha256": "734570819d2d2c996c492b4bdc1f7f0271bcd6b77db0ec96d1ebe5044af4f0be",
+    "source_binding": "tool-build/result.json source_before/source_after stable; tools both compile successful, planned-encode smoke had incompatible forwarded profile-only flags and is retained as failure"
+  },
+  "source_sha256": {
+    "src/br.zig": "9405cddaa1c6742a7008b98a22f69fb868db70ae6e64b90c534b265e4a7b528d",
+    "src/br/encoder/literal_context_split.zig": "5e0f139d1a30601e5824bdaade4c23fad1af4de0632fdfe6ed31e79f68a8c458",
+    "src/br/encoder/literal_context_profile.zig": "b6292a1e6427e65a7aeed3433821384cbf57c7400cb89e3ee1a9195b68f770d3",
+    "src/br/encoder/literal_tree_score_cache.zig": "f2b16b331850d6bebcce486a75327648aafd8513b47cdffc7313ad42fa6497b6",
+    "src/br/encoder/quality_profile.zig": "3c9c6b32c3a015d8e3438c464e1bb46b3a52a5bce5a98ca85d1d6fe0e3bf2e8b"
+  },
+  "build_record": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "build",
+      "run-br-quality-stage-profile",
+      "run-br-planned-encode-bench",
+      "-j2",
+      "--summary",
+      "all",
+      "--",
+      "--rounds",
+      "1",
+      "--path",
+      "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin",
+      "--json",
+      "/tmp/vort-brotli-context-cache-20261025/tool-build-smoke.json"
+    ],
+    "cwd": "/home/passchaos/project-z/vort-brotli-context-cache",
+    "start_utc": "2026-10-25T09:25:20.734830+00:00",
+    "end_utc": "2026-10-25T09:26:17.473542+00:00",
+    "exit_code": 1,
+    "source_stable": true,
+    "build_summary": [
+      "6/8 steps succeeded (1 failed)"
+    ]
+  },
+  "build_interpretation": "Both ReleaseFast compile steps succeeded; combined command exit1 was public smoke UnknownArgument from forwarding diagnostic-only flags. This audit does not claim smoke passed.",
+  "ordinary_route": {
+    "source": "quality Recorded(false,Disabled) -> preferred false branch -> chooseProposals Core(false,true)",
+    "public_api_caller": "0x1283bd2",
+    "quality_to_lazy_call": "0x128a1f0",
+    "preferred_to_chooser_call": "0x1210551",
+    "ordinary_chooser": "0x120ee00",
+    "frames": {
+      "quality_root": {
+        "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253629",
+        "address": "0x1289a50",
+        "code_size_bytes": 6270,
+        "sub_rsp_bytes": 3048,
+        "saved_register_push_bytes": 48,
+        "dynamic_alignment": false,
+        "stack_limit": "Local explicit reservation/push accounting only. Does not include descendants, caller frames, return-address8B, temporary outgoing args unless listed, or process total stack."
+      },
+      "preferred": {
+        "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+        "address": "0x120fdc0",
+        "code_size_bytes": 6435,
+        "sub_rsp_bytes": 4288,
+        "saved_register_push_bytes": 48,
+        "dynamic_alignment": "and rsp,-32 before sub",
+        "stack_limit": "Local explicit reservation/push accounting only. Does not include descendants, caller frames, return-address8B, temporary outgoing args unless listed, or process total stack."
+      },
+      "chooseProposals": {
+        "symbol": "br.encoder.literal_context_split.chooseProposals",
+        "address": "0x120ee00",
+        "code_size_bytes": 4028,
+        "sub_rsp_bytes": 134776,
+        "saved_register_push_bytes": 48,
+        "dynamic_alignment": false,
+        "outgoing_mode_argument_push_bytes": 16,
+        "stack_limit": "Local explicit reservation/push accounting only. Does not include descendants, caller frames, return-address8B, temporary outgoing args unless listed, or process total stack."
+      },
+      "chooseModeFromHistograms": {
+        "symbol": "br.encoder.literal_context_split.chooseModeFromHistograms__anon_46230",
+        "address": "0x120d1b0",
+        "code_size_bytes": 7242,
+        "sub_rsp_bytes": 185768,
+        "saved_register_push_bytes": 48,
+        "dynamic_alignment": false,
+        "stack_limit": "Local explicit reservation/push accounting only. Does not include descendants, caller frames, return-address8B, temporary outgoing args unless listed, or process total stack."
+      },
+      "treeBitCostCached": {
+        "symbol": "br.encoder.literal_context_split.treeBitCostCached__anon_46145",
+        "address": "0x120c670",
+        "code_size_bytes": 2875,
+        "sub_rsp_bytes": 1752,
+        "saved_register_push_bytes": 48,
+        "dynamic_alignment": false,
+        "stack_limit": "Local explicit reservation/push accounting only. Does not include descendants, caller frames, return-address8B, temporary outgoing args unless listed, or process total stack."
+      }
+    }
+  },
+  "actual_internal_abi": {
+    "chooseProposals": {
+      "rdi": "caller result storage/error union Proposals",
+      "rsi": "allocator context",
+      "rdx": "allocator vtable",
+      "rcx": "input pointer",
+      "r8": "input length",
+      "r9": "commands pointer",
+      "callee_rbp_plus_0x10": "commands length",
+      "scope": "Observed optimized internal ABI for this ELF, not stable external Zig ABI. Caller actual result slice is consumed after return."
+    },
+    "treeBitCostCached": {
+      "rdi": "result/error-union u64 storage",
+      "rsi": "frequencies pointer",
+      "rdx": "active-symbol parent support pointer",
+      "rcx": "shared TreeScoreCache pointer",
+      "eliminated_params": "allocator, profile scope/mode and profiler arguments omitted by optimization in this specialized helper",
+      "no_profile_or_origin_argument": true
+    },
+    "chooseModeFromHistograms": {
+      "rdi": "result/error-union Proposals storage",
+      "esi": "mode value0..3",
+      "rdx": "per-mode ContextHistograms pointer",
+      "rcx": "total histogram pointer",
+      "r8": "literal count",
+      "r9": "baseline bits",
+      "callee_rbp_plus_0x10": "active-symbol support pointer",
+      "callee_rbp_plus_0x18": "shared memo pointer",
+      "eliminated_params": "allocator, precomputed map table pointer, compile-time fixed cluster limits and profiler omitted/constant in this specialization"
+    }
+  },
+  "shared_memo": {
+    "entries": 128,
+    "created_once_per_ordinary_four_mode_search": true,
+    "base": "chooseProposals rbp-0x20e98",
+    "relative_to_stable_rsp": "stable rsp+8 after saved-register pushes and sub0x20e78",
+    "initializer": "0x120f41f memset length0x209b0=133552 B",
+    "initialized_range_relative_rbp": "[-0x20e98,-0x4e8)",
+    "initializer_count_in_chooser": 1,
+    "baseline_call": "0x120f43b uses rcx=r15 at same memo base",
+    "mode_calls": [
+      {
+        "mode": 0,
+        "call": "0x120f4ce",
+        "cache_argument": "push r15, established rbp-0x20e98"
+      },
+      {
+        "mode": 1,
+        "call": "0x120f672",
+        "cache_argument": "lea rbp-0x20e98; push pointer"
+      },
+      {
+        "mode": 2,
+        "call": "0x120f8b5",
+        "cache_argument": "lea rbp-0x20e98; push pointer"
+      },
+      {
+        "mode": 3,
+        "call": "0x120fab5",
+        "cache_argument": "lea rbp-0x20e98; push pointer"
+      }
+    ],
+    "mode_execution": "Four machine call sites execute sequentially with same memo pointer; mode function has no local TreeScoreCache allocation for shared specialization.",
+    "suffix_consumers": [
+      "0x120d456",
+      "0x120d487"
+    ],
+    "cluster_consumer": "0x120e961 uses the same pointer from callee rbp+0x18",
+    "four_simultaneous_memos": false,
+    "per_mode_map_cache": "ScoredMapCache remains local; separate key/domain from tree memo",
+    "logical_entry_field_payload_bytes": 133120,
+    "initialized_range_is_not_sizeof_or_full_stack": true
+  },
+  "cache_machine_layout": {
+    "entry_stride_bytes": 1040,
+    "hash_offset": 0,
+    "bit_cost_offset": 8,
+    "histogram_offset": 16,
+    "histogram_bytes": 1024,
+    "occupied_words_offset": 133120,
+    "hits_offset": 133136,
+    "misses_offset": 133144,
+    "hit_increment": "0x120d194 incq",
+    "miss_increment": "0x120ca91 incq",
+    "hit_miss_counters_dce": false,
+    "cold_conflict_classification_updates_present": false,
+    "origin_query_set_operations_present": false,
+    "origin_storage_removed_claim": false,
+    "origin_limit": "Whole initialized memo range includes origin metadata, but ordinary helper has no origin lookup or setOrigin operations. Do not claim no writes to the origin region because object memset covers it.",
+    "lookup_key": "hash plus complete1024B histogram equality; comparisons can early-exit on mismatch",
+    "put": "hash store, full histogram memmove1024 at0x120cdc5, bit_cost store0x120cdca, occupied bitmap OR after successful score"
+  },
+  "profiling_absence": {
+    "choose_proposals_profiler_type": "void",
+    "cache_score_profiler_type": "void",
+    "ordinary_recorded_call_scan": [
+      {
+        "symbol": "br.chooseStoredIfSmallerWithOptionsRecorded__anon_35219",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeCommandPlanWithOptionsAllocRecorded__anon_35307",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeLazyCommandPlanAllocRecorded__anon_43465",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeEntropySplitCandidateAllocRecorded__anon_43527",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodePreferredCommandPlanAllocRecorded__anon_43479",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77146",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253629",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      },
+      {
+        "symbol": "br.encodeQualityOptimalCandidateAllocRecorded__anon_253653",
+        "quality_profile_calls": [],
+        "clock_now_calls": []
+      }
+    ],
+    "profile_timer_clock_calls_in_core_and_score": false,
+    "quality_Active_begin_finish_calls": false,
+    "limit": "Only normal specialized candidate functions and context chooser audited. Other ELF/benchmark clocks, allocator operations and format costs remain."
+  },
+  "analysis": {
+    "one_analysis_alloc": "0x120ee54 allocator alloc length0x40408=263176/alignment8",
+    "zero_init": "0x120ee6c memset full Analysis length0x40408",
+    "caller_owned_borrowed_input_and_commands": true,
+    "all_four_modes_have_histograms": "Analysis contains four[64][256]u32 mode arrays, not four memos",
+    "analysis_heap_not_cache": "Analysis allocation is separate from memo stack storage; no process heap/RSS claim"
+  },
+  "baseline_reference": {
+    "path": "/home/passchaos/project-z/vort-brotli-q8-profile/.zig-cache/o/d54ab236499589e8c9225c90450b9b10/vort-br-planned-encode-bench",
+    "sha256": "a6f1f0bb5d4d403605b9989e6006f64b3f44d86fedb87d9215140b9cf216b725",
+    "old_choose_proposals_sub_rsp_bytes": 984,
+    "old_mode_sub_rsp_bytes": 318936,
+    "new_choose_proposals_sub_rsp_bytes": 134776,
+    "new_mode_sub_rsp_bytes": 185768,
+    "interpretation": "Memo lifetime moves storage from per-mode callee into chooser. This is not evidence that total active call-chain stack decreased; no summed peak/stack/RSS claim made."
+  },
+  "limits": [
+    "No independent sizeof compile or runtime stack probe performed.",
+    "Memo initialized byte range is distinct from Cache type sizeof and from full stack usage.",
+    "Source exact cached scorer correctness is left to parent tests; this audit is not test execution.",
+    "No speed, ISA throughput, heap/RSS or process total-stack conclusions."
+  ],
+  "evidence": {
+    "chooseModeFromHistograms__anon_46230.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/chooseModeFromHistograms__anon_46230.asm",
+    "chooseModeProposals.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/chooseModeProposals.asm",
+    "chooseProposals.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/chooseProposals.asm",
+    "chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/chooseStoredIfSmallerWithOptionsRecorded__anon_35219.asm",
+    "encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77146.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeCommandPlanWithDistanceParameterSearchAllocRecorded__anon_77146.asm",
+    "encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeCommandPlanWithOptionsAllocRecorded__anon_35307.asm",
+    "encodeEntropySplitCandidateAllocRecorded__anon_43527.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeEntropySplitCandidateAllocRecorded__anon_43527.asm",
+    "encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeEntropySplitWireCandidateInternalAllocRecorded__anon_43678.asm",
+    "encodeLazyCommandPlanAllocRecorded__anon_43465.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeLazyCommandPlanAllocRecorded__anon_43465.asm",
+    "encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253629.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodePlannedStreamQualityWithOptionsAllocRecorded__anon_253629.asm",
+    "encodePreferredCommandPlanAllocRecorded__anon_43479.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodePreferredCommandPlanAllocRecorded__anon_43479.asm",
+    "encodeQualityOptimalCandidateAllocRecorded__anon_253653.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/encodeQualityOptimalCandidateAllocRecorded__anon_253653.asm",
+    "mode-shared-memo-consumers.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/mode-shared-memo-consumers.asm",
+    "old-chooseModeFromHistograms__anon_46179.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-chooseModeFromHistograms__anon_46179.asm",
+    "old-chooseProposals.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-chooseProposals.asm",
+    "old-chooseProposalsForMode.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-chooseProposalsForMode.asm",
+    "old-chooseProposalsForModeWithPrefix.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-chooseProposalsForModeWithPrefix.asm",
+    "old-symbols.nm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-symbols.nm",
+    "old-treeBitCostProfiled__anon_46116.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/old-treeBitCostProfiled__anon_46116.asm",
+    "ordinary-recorded-call-scan.json": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/ordinary-recorded-call-scan.json",
+    "ordinary-route-call-sites.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/ordinary-route-call-sites.asm",
+    "preferred-ordinary-chooser-call.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/preferred-ordinary-chooser-call.asm",
+    "public-symbols.nm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/public-symbols.nm",
+    "shared-memo-base-and-four-mode-calls.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/shared-memo-base-and-four-mode-calls.asm",
+    "tree-memo-layout-hit-miss-publication.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/tree-memo-layout-hit-miss-publication.asm",
+    "treeBitCostCached__anon_46145.asm": "/tmp/vort-brotli-context-cache-20261025/elf-evidence/treeBitCostCached__anon_46145.asm"
+  }
+}

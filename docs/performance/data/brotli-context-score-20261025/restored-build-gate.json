@@ -1,0 +1,29 @@
+{
+  "validated_runs": 1,
+  "rows": [
+    {
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin",
+      "round": 0,
+      "outer_ns": 105072025,
+      "wire_attempts": 18,
+      "exclusive_ns": {
+        "lazy_parse": 1203642,
+        "lazy_commands": 179594,
+        "optimal_parse": 7622499,
+        "optimal_commands": 179851,
+        "preferred_context": 6400,
+        "recent_distance_scan": 109741,
+        "context_proposals": 74018131,
+        "split_planning": 1710782,
+        "wire": 18169036,
+        "distance_parameters": 1810491,
+        "selection": 171,
+        "other": 60761
+      },
+      "unaccounted_ns": 926,
+      "classified_fraction": 0.9994129074794171,
+      "wire_coverage_complete": true
+    }
+  ],
+  "scope": "Exact wire equality/roundtrip asserted by producer; local input and optional executable identity, event topology and non-overlapping timing independently checked. No competitor throughput claim."
+}

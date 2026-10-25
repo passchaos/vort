@@ -1,0 +1,36 @@
+{
+  "time_utc": "2026-10-25T09:36:05.406446+00:00",
+  "reason": "Other parent validations finished; expand existing check and descendants to all allowed compilation CPUs without restarting or benchmark overlap.",
+  "results": [
+    {
+      "pid": 551454,
+      "exit_code": 0,
+      "output": "pid 551454's current affinity list: 6,7,14,15\npid 551454's new affinity list: 2-7,10-15\npid 551455's current affinity list: 6,7,14,15\npid 551455's new affinity list: 2-7,10-15\npid 551456's current affinity list: 6,7,14,15\npid 551456's new affinity list: 2-7,10-15\n"
+    },
+    {
+      "pid": 551457,
+      "exit_code": 0,
+      "output": "pid 551457's current affinity list: 6,7,14,15\npid 551457's new affinity list: 2-7,10-15\npid 551465's current affinity list: 6,7,14,15\npid 551465's new affinity list: 2-7,10-15\npid 551466's current affinity list: 6,7,14,15\npid 551466's new affinity list: 2-7,10-15\npid 551467's current affinity list: 6,7,14,15\npid 551467's new affinity list: 2-7,10-15\npid 551468's current affinity list: 6,7,14,15\npid 551468's new affinity list: 2-7,10-15\n"
+    },
+    {
+      "pid": 553959,
+      "exit_code": 0,
+      "output": "pid 553959's current affinity list: 6,7,14,15\npid 553959's new affinity list: 2-7,10-15\npid 553975's current affinity list: 6,7,14,15\npid 553975's new affinity list: 2-7,10-15\npid 553977's current affinity list: 6,7,14,15\npid 553977's new affinity list: 2-7,10-15\npid 553979's current affinity list: 6,7,14,15\npid 553979's new affinity list: 2-7,10-15\n"
+    },
+    {
+      "pid": 553960,
+      "exit_code": 0,
+      "output": "pid 553960's current affinity list: 6,7,14,15\npid 553960's new affinity list: 2-7,10-15\npid 553966's current affinity list: 6,7,14,15\npid 553966's new affinity list: 2-7,10-15\npid 553967's current affinity list: 6,7,14,15\npid 553967's new affinity list: 2-7,10-15\npid 553968's current affinity list: 6,7,14,15\npid 553968's new affinity list: 2-7,10-15\n"
+    },
+    {
+      "pid": 553961,
+      "exit_code": 0,
+      "output": "pid 553961's current affinity list: 6,7,14,15\npid 553961's new affinity list: 2-7,10-15\npid 553976's current affinity list: 6,7,14,15\npid 553976's new affinity list: 2-7,10-15\npid 553978's current affinity list: 6,7,14,15\npid 553978's new affinity list: 2-7,10-15\npid 553980's current affinity list: 6,7,14,15\npid 553980's new affinity list: 2-7,10-15\n"
+    },
+    {
+      "pid": 553962,
+      "exit_code": 0,
+      "output": "pid 553962's current affinity list: 6,7,14,15\npid 553962's new affinity list: 2-7,10-15\npid 553981's current affinity list: 6,7,14,15\npid 553981's new affinity list: 2-7,10-15\npid 553982's current affinity list: 6,7,14,15\npid 553982's new affinity list: 2-7,10-15\npid 553983's current affinity list: 6,7,14,15\npid 553983's new affinity list: 2-7,10-15\n"
+    }
+  ]
+}

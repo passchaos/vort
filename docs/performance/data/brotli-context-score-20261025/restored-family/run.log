@@ -1,0 +1,1442 @@
+1/1422 br.test.Brotli q8 quality profile complete wire and bounded diagnostic contracts...OK
+2/1422 br.test_0...OK
+3/1422 br.test.Brotli wide bit addressing writer positions and public encoding bounds cross 512 MiB...OK
+4/1422 br.test.Brotli bit writer uses reserved and bounded capacity...OK
+5/1422 br.test.Brotli narrow Huffman bit writer matches the general writer...OK
+6/1422 br.test.Brotli narrow Huffman bit writer preserves bounded overflow...OK
+7/1422 br.test.br summary context needs two literals after unknown history...OK
+8/1422 br.test.br summary history appends slices across ring boundaries...OK
+9/1422 br.test.br summary history copy matches forward overlap oracle...OK
+10/1422 br.test.Brotli encode counters preserve wide fragment command and history contexts...OK
+11/1422 br.test.Brotli encode counters reject plaintext overflow before stream publication...OK
+12/1422 br.test.command-state full-wire slack keeps near candidates only...OK
+13/1422 br.test.br allocating summary history hint is bounded and conservative...OK
+14/1422 br.test.br stream summary aggregates command and LZ77 copy shapes...OK
+15/1422 br.test.br stream summary classifies distance coding paths...OK
+16/1422 br.test.br both wide literal tiers use fixed nine-bit auxiliary peeks...OK
+17/1422 br.test.br all-UTF8 literal context classifier covers mixed modes...OK
+18/1422 br.test.br context-independent literal maps require a uniform tree per block type...OK
+19/1422 br.test.br code-length-code-length prefix lookup covers every padded nibble...OK
+20/1422 br.test.br large window decode is explicit and covers one-shot chunked and incremental APIs...OK
+21/1422 br.test.br large window header preserves extension identity for all supported widths...OK
+22/1422 br.test.Br general large window quality legacy and tiny fallback candidates retain extension identity...OK
+23/1422 br.test.Br general large window null legacy reusable APIs and actual ratio long copies keep format...OK
+24/1422 br.test.Br general large window static stored codecs and non HQ history keep explicit bounded state...OK
+25/1422 br.test.br stored stream encodes RFC-valid empty stream...OK
+26/1422 br.test.br stored stream round trips hello with known bytes...OK
+27/1422 br.test.br single uncompressed stream fast path validates complete canonical wire...OK
+28/1422 br.test.br single uncompressed stream fast path rejects other legal shapes...OK
+29/1422 br.test.br default stored caller output matches allocating wire at length boundaries...OK
+30/1422 br.test.br stored caller output preserves general options path...OK
+31/1422 br.test.br default stored chunked caller output matches append wire...OK
+32/1422 br.test.br stored allocating paths match independent append writers...OK
+33/1422 br.test.br reusable stored encoder uses exact owned and retained output...OK
+34/1422 br.test.br stored stream supports all RFC window bits...OK
+35/1422 br.test.br stored stream skips metadata meta-blocks...OK
+36/1422 br.test.br stored stream decodes multiple uncompressed meta-blocks...OK
+37/1422 br.test.br allocator decode enforces limits while decoding meta-blocks...OK
+38/1422 br.test.br minimal compressed stream decodes literal-only final metablock...OK
+39/1422 br.test.br minimal compressed stream decodes trivial context maps...OK
+40/1422 br.test.br minimal compressed stream can precede stored metablocks...OK
+41/1422 br.test.br stored metablock history feeds following compressed literal context...OK
+42/1422 br.test.br minimal compressed stream decodes direct-distance copy...OK
+43/1422 br.test.br RLE encoder emits compressed runs...OK
+44/1422 br.test.br proven ababa encoder slice round trips...OK
+45/1422 br.test.br repeated prefix encoder emits multiple commands...OK
+46/1422 br.test.br explicit command index matches exhaustive LUT search...OK
+47/1422 br.test.br compact command table preserves every upstream field...OK
+48/1422 br.test.br command index exposes implicit last-distance forms when legal...OK
+49/1422 br.test.br same-last distance cost choice is strict and stable...OK
+50/1422 br.test.br same-last distance eligibility excludes non-copy and dictionary commands...OK
+51/1422 br.test.br same-last distance recoding is byte-monotonic and preserves the ring...OK
+52/1422 br.test.br same-last distance recoding keeps an unprofitable wire unchanged...OK
+53/1422 br.test.br recent-distance candidate tracks the RFC distance ring...OK
+54/1422 br.test.br ratio threshold comparison rejects integer overflow...OK
+55/1422 br.test.br direct length-code mapping matches reference scan...OK
+56/1422 br.test.br planner-backed encoder emits mixed literal and match commands...OK
+57/1422 br.test.br planned command symbol cache boundary preserves wire output...OK
+58/1422 br.test.br planner compression levels select fast and balanced streams...OK
+59/1422 br.test.br stable planner levels accept incompressible inputs within stored size...OK
+60/1422 br.test.br stable planner levels accept tiny inputs...OK
+61/1422 br.test.br stable planner levels honor explicit 10 through 16 bit windows...OK
+62/1422 br.test.br omitted planned window preserves legacy level wires...OK
+63/1422 br.test.br one-shot planned metadata covers every level and output form...OK
+64/1422 br.test.br explicit planned window bounds backward matches...OK
+65/1422 br.test.br ratio planner spends more search budget without regressing size...OK
+66/1422 br.test.br planned wire encodes a two-type literal entropy split...OK
+67/1422 br.test.br planned wire clusters literal tree types in A-B-A order...OK
+68/1422 br.test.br clustered literal candidate cleans up allocation failures...OK
+69/1422 br.test.br planned wire emits three literal tree types in A-B-C order...OK
+70/1422 br.test.br three literal tree candidate cleans up allocation failures...OK
+71/1422 br.test.br planned wire alternates literal tree types in A-B-A-B order...OK
+72/1422 br.test.br alternating literal candidate cleans up allocation failures...OK
+73/1422 br.test.br planned wire reuses the first of three literal types in region four...OK
+74/1422 br.test.br four-region three-type literal candidate cleans up allocation failures...OK
+75/1422 br.test.br planned wire emits four literal tree types in A-B-C-D order...OK
+76/1422 br.test.br four literal tree candidate cleans up allocation failures...OK
+77/1422 br.test.br planned wire supports five and six literal regions...OK
+78/1422 br.test.br six-region literal candidate cleans up allocation failures...OK
+79/1422 br.test.br adaptive literal split writes off-grid non-cyclic types...OK
+80/1422 br.test.br adaptive literal split writes all 256 types and context trees...OK
+81/1422 br.test.br joint literal plan writes dynamic 256-type context map...OK
+82/1422 br.test.br adaptive literal writer cleans up allocation failures...OK
+83/1422 br.test.br joint literal context writer cleans up allocation failures...OK
+84/1422 br.test.br literal block length code rejects invalid four-way splits...OK
+85/1422 br.test.br adaptive command split writes off-grid non-cyclic types...OK
+86/1422 br.test.br adaptive command split cleans up writer allocation failures...OK
+87/1422 br.test.br adaptive distance split writes off-grid non-cyclic types...OK
+88/1422 br.test.br adaptive distance split cleans up writer allocation failures...OK
+89/1422 br.test.br adaptive distance split writes all 256 types and context trees...OK
+90/1422 br.test.br planned writer emits nonzero distance postfix parameters...OK
+91/1422 br.test.br wide distance writer rejects unsupported split and same-last combinations...OK
+92/1422 br.test.br ratio distance parameter search selects a nonzero postfix complete wire...OK
+93/1422 br.test.br ratio distance parameter search unwinds allocation failures...OK
+94/1422 br.test.br planned wire uses three and four distinct distance types...OK
+95/1422 br.test.br planned wire clusters repeated distance tree types...OK
+96/1422 br.test.br clustered distance candidate cleans up allocation failures...OK
+97/1422 br.test.br planned wire supports five and six distance regions...OK
+98/1422 br.test.br six-region distance candidate cleans up allocation failures...OK
+99/1422 br.test.br four-type distance candidate cleans up allocation failures...OK
+100/1422 br.test.br distance block length code rejects invalid multi-type splits...OK
+101/1422 br.test.br planned wire combines literal command and distance entropy splits...OK
+102/1422 br.test.br planned wire reuses the first command type after a middle region...OK
+103/1422 br.test.br clustered command candidate cleans up allocation failures...OK
+104/1422 br.test.br planned wire alternates two command types across four regions...OK
+105/1422 br.test.br four-region command candidate cleans up allocation failures...OK
+106/1422 br.test.br planned wire reuses the first of three command types in region four...OK
+107/1422 br.test.br four-region three-type command candidate cleans up allocation failures...OK
+108/1422 br.test.br planned wire uses four distinct command types across four regions...OK
+109/1422 br.test.br four-type command candidate cleans up allocation failures...OK
+110/1422 br.test.br planned wire supports five and six command regions...OK
+111/1422 br.test.br six-region command candidate cleans up allocation failures...OK
+112/1422 br.test.br command block length code rejects invalid three-way splits...OK
+113/1422 br.test.br three-type command candidate cleans up allocation failures...OK
+114/1422 br.test.br literal block length encoder covers every RFC range boundary...OK
+115/1422 br.test.br ratio planner selects a profitable literal entropy split...OK
+116/1422 br.test.br large single-tree stream selects the specialized decoder...OK
+117/1422 br.test.br ratio planner selects a profitable six-type command entropy split...OK
+118/1422 br.test.br ratio planner keeps an exact optimal candidate for source blocks...OK
+119/1422 br.test.br record optimal object returns caller-owned replayable tokens...OK
+120/1422 br.test.br record ratio uses one literal context tree...OK
+121/1422 br.test.br record literal tree optimization never raises exact local bit cost...OK
+122/1422 br.test.br record optimal object respects advertised small windows...OK
+123/1422 br.test.br ratio block profile reproduces the production wire...OK
+124/1422 br.test.br ratio block profile preserves stored fallback without optimal search...OK
+125/1422 br.test.br ratio UTF8 context split round trips beyond summary history...OK
+126/1422 br.test.br allocating summary follows ratio matches beyond fixed history...OK
+127/1422 br.test.br summary history covers the full encoder backward window...OK
+128/1422 br.test.br allocator summary avoids unused advertised window allocation...OK
+129/1422 br.test.br ratio planner uses the full 16-bit stream window...OK
+130/1422 br.test.br ratio planner adds matches beyond the 16-bit stream window...OK
+131/1422 br.test.br explicit ratio window reaches the 18-bit distance band...OK
+132/1422 br.test.br explicit ratio window reaches the 19-bit distance band...OK
+133/1422 br.test.br explicit ratio window reaches the 20-bit distance band...OK
+134/1422 br.test.br explicit ratio window reaches the 21-bit sparse distance band...OK
+135/1422 br.test.br explicit ratio window reaches the 22-bit sparse distance band...OK
+136/1422 br.test.br explicit ratio window reaches the 23-bit sparse distance band...OK
+137/1422 br.test.br explicit ratio window reaches the 24-bit sparse distance band...OK
+138/1422 br.test.br balanced planner prunes a dense tiny-copy prefix...OK
+139/1422 br.test.br lazy planner accepts bounded search options...OK
+140/1422 br.test.br planner emits built-in static dictionary commands...OK
+141/1422 br.test.br exhaustive static dictionary encoder emits omit-first transforms...OK
+142/1422 br.test.br exhaustive static dictionary encoder releases allocation failures...OK
+143/1422 br.test.br ratio planner selects short static dictionary streams by final size...OK
+144/1422 br.test.br ratio extended dictionary probes are bounded and size monotonic...OK
+145/1422 br.test.br planned quality options validate selector mode level and window contracts...OK
+146/1422 br.test.br planned quality and mode matrix is deterministic bounded and reusable...OK
+147/1422 br.test.br q1 compact two-pass writer crosses the 64-symbol literal boundary...OK
+148/1422 br.test.br q0 one-pass writer learns command trees across fragments...OK
+149/1422 br.test.br q2 static and q3 trivial writers drive public quality paths...OK
+150/1422 br.test.br q2 dynamic fast writer covers more than 128 commands...OK
+151/1422 br.test.br planned quality releases every candidate on allocation failure...OK
+152/1422 br.test.br quality eleven retains the complete quality ten winner...OK
+153/1422 br.test.br q10 entropy feedback candidate is complete-wire monotonic...OK
+154/1422 br.test.br q10 entropy feedback releases every candidate on allocation failure...OK
+155/1422 br.test.br q10 command-state candidate improves complete wire...OK
+156/1422 br.test.br q10 command-state work limit preserves larger entropy feedback...OK
+157/1422 br.test.br q10 command-state work override extends one-shot and reusable search...OK
+158/1422 br.test.br command-state override reaches q10 and q11 input ceilings...OK
+159/1422 br.test.br quality optimal candidate honors the advertised small window...OK
+160/1422 br.test.br quality record candidate honors the advertised small window...OK
+161/1422 br.test.br adaptive command split option is ratio-only and size monotonic...OK
+162/1422 br.test.br adaptive literal split option is ratio-only and size monotonic...OK
+163/1422 br.test.br adaptive distance split is automatic ratio policy with explicit override...OK
+164/1422 br.test.br distance parameter search exposes ratio auto force and disable policy...OK
+165/1422 br.test.br ratio extended dictionary probes can start from a literal-only plan...OK
+166/1422 br.test.br ratio planner encodes a dictionary word without LZ77 matches...OK
+167/1422 br.test.br ratio planner never exceeds the stored stream...OK
+168/1422 br.test.br bounded command candidate reports overflow at a strict byte budget...OK
+169/1422 br.test.br ratio planner mixes LZ77 and static dictionary commands...OK
+170/1422 br.test.br static dictionary direct transformed comparison is exhaustive over transform shapes...OK
+171/1422 br.test.br retained static dictionary coverage matches the complete transformer...OK
+172/1422 br.test.br planner-backed encoder emits regular distances...OK
+173/1422 br.test.br planner-backed encoder emits complex literal prefix...OK
+174/1422 br.test.br planner-backed encoder covers wider literal alphabet...OK
+175/1422 br.test.br planner-backed encoder covers full byte literal alphabet...OK
+176/1422 br.test.br planner-backed encoder accepts caller scratch...OK
+177/1422 br.test.br planner-backed encoder retains reusable arena capacity...OK
+178/1422 br.test.br reusable fast allocations are independent of retained output...OK
+179/1422 br.test.br reusable planner retains encoded output scratch...OK
+180/1422 br.test.br reusable planner exposes borrowed output for every level...OK
+181/1422 br.test.br reusable planner encodes fast streams into caller storage...OK
+182/1422 br.test.br planned levels encode into caller storage...OK
+183/1422 br.test.br balanced caller storage retains reusable planner state...OK
+184/1422 br.test.br reusable planner exposes stable levels and stored fallback...OK
+185/1422 br.test.br reusable planner retains balanced token and command capacity...OK
+186/1422 br.test.br reusable planner matches stable API at size boundaries...OK
+187/1422 br.test.br planned chunked encoder emits one multi-meta-block stream...OK
+188/1422 br.test.br planned chunked options honor windows metadata and output forms...OK
+189/1422 br.test.br planned chunked window bounds intra-block matches...OK
+190/1422 br.test.br planned chunked encoder handles empty and generated mixed blocks...OK
+191/1422 br.test.br planned chunked encoder splits large input and streams byte progressively...OK
+192/1422 br.test.br ratio encoder splits input beyond one meta-block...OK
+193/1422 br.test.br simple encoder selects RLE or stored streams...OK
+194/1422 br.test.br minimal compressed stream reuses last distance...OK
+195/1422 br.test.br minimal compressed stream decodes short-distance copy...OK
+196/1422 br.test.br minimal compressed stream keeps short distances across metablocks...OK
+197/1422 br.test.br minimal compressed stream decodes regular-distance copy...OK
+198/1422 br.test.br minimal compressed stream selects distance context tree...OK
+199/1422 br.test.br minimal compressed stream selects distance context tree through complex context map...OK
+200/1422 br.test.br minimal compressed stream decodes complex distance prefix tree...OK
+201/1422 br.test.br minimal compressed stream selects fifth distance context tree...OK
+202/1422 br.test.br minimal compressed stream selects ninth distance context tree...OK
+203/1422 br.test.br minimal compressed stream selects seventeenth distance context tree...OK
+204/1422 br.test.br minimal compressed stream selects literal context tree...OK
+205/1422 br.test.br minimal compressed stream decodes complex literal prefix tree...OK
+206/1422 br.test.br minimal compressed stream decodes complex command prefix tree...OK
+207/1422 br.test.br minimal compressed stream selects literal context tree through IMTF map...OK
+208/1422 br.test.br minimal compressed stream selects literal context tree through UTF8 mode...OK
+209/1422 br.test.br minimal compressed stream selects literal context tree through RLE context map...OK
+210/1422 br.test.br minimal compressed stream selects literal context tree through complex context map...OK
+211/1422 br.test.br minimal compressed stream selects fifth literal context tree...OK
+212/1422 br.test.br minimal compressed stream selects ninth literal context tree...OK
+213/1422 br.test.br minimal compressed stream selects seventeenth literal context tree...OK
+214/1422 br.test.br minimal compressed stream keeps UTF8 literal context after distance-three copy...OK
+215/1422 br.test.br minimal compressed stream keeps literal context after distance-thirty-three copy...OK
+216/1422 br.test.br minimal compressed stream keeps literal context after distance-sixty-five copy...OK
+217/1422 br.test.br minimal compressed stream keeps literal context after distance-one-twenty-nine copy...OK
+218/1422 br.test.br minimal compressed stream keeps literal context after distance-two-fifty-seven copy...OK
+219/1422 br.test.br minimal compressed stream keeps literal context after distance-five-thirteen copy...OK
+220/1422 br.test.br minimal compressed stream handles context-independent literal after unknown copy...OK
+221/1422 br.test.br minimal static dictionary word decodes Node quality-five frame...OK
+222/1422 br.test.br minimal static dictionary quick word decodes Node quality-five frame...OK
+223/1422 br.test.br minimal static dictionary dolor word decodes Node quality-five frame...OK
+224/1422 br.test.br minimal static dictionary about word decodes Node quality-five frame...OK
+225/1422 br.test.br minimal static dictionary information word decodes Node quality-five frame...OK
+226/1422 br.test.br minimal static dictionary dictionary word decodes Node quality-five frame...OK
+227/1422 br.test.br minimal static dictionary press stem decodes Node quality-five frame...OK
+228/1422 br.test.br minimal static dictionary release word decodes Node quality-five frame...OK
+229/1422 br.test.br minimal static dictionary expression word decodes Node quality-five frame...OK
+230/1422 br.test.br minimal static dictionary depression word decodes Node quality-five frame...OK
+231/1422 br.test.br minimal static dictionary omit-last-one transform decodes Node quality-five frame...OK
+232/1422 br.test.br minimal static dictionary identity words entry decodes Node-accepted frame...OK
+233/1422 br.test.br minimal static dictionary identity games entry decodes Node-accepted frame...OK
+234/1422 br.test.br minimal static dictionary omit-last-one games transform decodes Node-accepted frame...OK
+235/1422 br.test.br minimal static dictionary leading-space words transform decodes Node-accepted frame...OK
+236/1422 br.test.br minimal static dictionary leading-space games transform decodes Node-accepted frame...OK
+237/1422 br.test.br minimal static dictionary leading-space release transform decodes Node-accepted frame...OK
+238/1422 br.test.br minimal static dictionary trailing-space words transform decodes Node-accepted frame...OK
+239/1422 br.test.br minimal static dictionary trailing-space games transform decodes Node-accepted frame...OK
+240/1422 br.test.br minimal static dictionary trailing-space release transform decodes Node-accepted frame...OK
+241/1422 br.test.br minimal static dictionary trailing-space history transform decodes synthetic frame...OK
+242/1422 br.test.br minimal static dictionary trailing-space dictionary transform decodes Node-accepted frame...OK
+243/1422 br.test.br minimal static dictionary trailing-space information transform decodes Node-accepted frame...OK
+244/1422 br.test.br minimal static dictionary uppercase dictionary identity decodes Node quality-five frame...OK
+245/1422 br.test.br minimal static dictionary uppercase information identity decodes Node quality-five frame...OK
+246/1422 br.test.br minimal static dictionary common phrase batch decodes Node quality-five frames...OK
+247/1422 br.test.br minimal static dictionary candidate batch decodes Node quality-five frames...OK
+248/1422 br.test.br minimal static dictionary candidate identity batch decodes Node quality-five frames...OK
+249/1422 br.test.br minimal static dictionary numbers identity decodes Node quality-five frames...OK
+250/1422 br.test.br minimal static dictionary size winners decode Node quality-five frames...OK
+251/1422 br.test.br minimal static dictionary upstream1024 identity words decode leading-space Node frames...OK
+252/1422 br.test.br minimal static dictionary upstream2048 identity money decodes leading-space Node frame...OK
+253/1422 br.test.br minimal static dictionary upstream2048 identity five-byte tail decodes leading-space Node frames...OK
+254/1422 br.test.br minimal static dictionary upstream2048 identity six-byte tail decodes Node frames...OK
+255/1422 br.test.br minimal static dictionary upstream4096 identity six-byte first window decodes Node frames...OK
+256/1422 br.test.br minimal static dictionary upstream4096 identity second window decodes Node frames...OK
+257/1422 br.test.br minimal static dictionary upstream4096 identity third window decodes Node frames...OK
+258/1422 br.test.br minimal static dictionary upstream4096 identity fourth window decodes Node frames...OK
+259/1422 br.test.br minimal static dictionary upstream4096 identity fifth window decodes Node frames...OK
+260/1422 br.test.br minimal static dictionary upstream4096 identity sixth window decodes Node frames...OK
+261/1422 br.test.br minimal static dictionary upstream4096 identity seventh window decodes Node frames...OK
+262/1422 br.test.br minimal static dictionary upstream4096 identity eighth window decodes Node frames...OK
+263/1422 br.test.br minimal static dictionary upstream4096 identity ninth window decodes Node frames...OK
+264/1422 br.test.br minimal static dictionary upstream4096 identity tenth window decodes Node frames...OK
+265/1422 br.test.br minimal static dictionary upstream4096 identity eleventh window decodes Node frames...OK
+266/1422 br.test.br minimal static dictionary upstream8192 identity first window decodes Node frames...OK
+267/1422 br.test.br minimal static dictionary upstream8192 identity second window decodes Node frames...OK
+268/1422 br.test.br minimal static dictionary upstream8192 identity third window decodes Node frames...OK
+269/1422 br.test.br minimal static dictionary upstream8192 identity fourth window decodes Node frames...OK
+270/1422 br.test.br minimal static dictionary upstream8192 identity fifth window decodes Node frames...OK
+271/1422 br.test.br minimal static dictionary upstream8192 identity sixth window decodes Node frames...OK
+272/1422 br.test.br minimal static dictionary upstream8192 identity seventh window decodes Node frames...OK
+273/1422 br.test.br minimal static dictionary upstream8192 identity eighth window decodes Node frames...OK
+274/1422 br.test.br minimal static dictionary upstream8192 identity ninth window decodes Node frames...OK
+275/1422 br.test.br minimal static dictionary upstream8192 identity tenth window decodes Node frames...OK
+276/1422 br.test.br minimal static dictionary upstream8192 identity eleventh window decodes Node frames...OK
+277/1422 br.test.br minimal static dictionary upstream8192 identity twelfth window decodes Node frames...OK
+278/1422 br.test.br minimal compressed stream selects literal context tree through signed mode...OK
+279/1422 br.test.br minimal compressed stream selects third literal context tree...OK
+280/1422 br.test.br minimal compressed stream switches command block tree...OK
+281/1422 br.test.br minimal compressed stream switches third command block tree...OK
+282/1422 br.test.br minimal compressed stream switches fifth command block tree...OK
+283/1422 br.test.br minimal compressed stream switches ninth command block tree...OK
+284/1422 br.test.br minimal compressed stream switches seventeenth command block tree...OK
+285/1422 br.test.br minimal compressed stream switches final RFC command block type...OK
+286/1422 br.test.br packed prefix preserves literal command and distance trees...OK
+287/1422 br.test.br packed literal lookup expands and caches the cold tree...OK
+288/1422 br.test.br full wide auxiliary executor matches prior transitions and boundaries...OK
+289/1422 br.test.br paired wide literals preserve long fallback and truncated progress...OK
+290/1422 br.test.br full wide auxiliary roots route public tier boundaries...OK
+291/1422 br.test.br wide external literal lookups cover packed fast and canonical paths...OK
+292/1422 br.test.br minimal compressed stream switches literal block tree...OK
+293/1422 br.test.br minimal compressed stream switches literal block with complex length tree...OK
+294/1422 br.test.br minimal compressed stream switches third literal block tree...OK
+295/1422 br.test.br minimal compressed stream switches fifth literal block tree...OK
+296/1422 br.test.br minimal compressed stream switches ninth literal block tree...OK
+297/1422 br.test.br minimal compressed stream switches seventeenth literal block tree...OK
+298/1422 br.test.br minimal compressed stream switches thirty-third literal block type...OK
+299/1422 br.test.br minimal compressed stream switches final RFC literal block type...OK
+300/1422 br.test.br literal block-type RFC maximum preserves truncation classification...OK
+301/1422 br.test.br minimal compressed stream switches distance block tree...OK
+302/1422 br.test.br minimal compressed stream switches third distance block tree...OK
+303/1422 br.test.br minimal compressed stream switches fifth distance block tree...OK
+304/1422 br.test.br minimal compressed stream switches ninth distance block tree...OK
+305/1422 br.test.br minimal compressed stream switches seventeenth distance block tree...OK
+306/1422 br.test.br stored stream rejects unsupported compressed blocks and trailing data...OK
+307/1422 br.test.br stored stream rejects malformed metadata meta-blocks...OK
+308/1422 br.test.br simple prefix code decodes single symbol without consuming data bits...OK
+309/1422 br.test.br block type count reader covers RFC boundaries...OK
+310/1422 br.test.br minimal compressed header parser reads single-tree shape...OK
+311/1422 br.test.br minimal compressed header parser accepts ninth literal context tree...OK
+312/1422 br.test.br minimal compressed header parser accepts ndirect boundary...OK
+313/1422 br.test.br context map reader applies inverse move-to-front maps...OK
+314/1422 br.test.br literal tail lookup preparation is atomic on dense groups...OK
+315/1422 br.test.br auxiliary tail lookup preparation is atomic and decodes both families...OK
+316/1422 br.test.br adaptive auxiliary lookup builds ten command bits atomically...OK
+317/1422 br.test.br fast bit reader preserves tail lookup symbols and positions...OK
+318/1422 br.test.br zero context map reader accepts plain and RLE all-zero maps...OK
+319/1422 br.test.br UTF8 text context map uses compact zero-run coding...OK
+320/1422 br.test.br UTF8 suffix context maps round trip candidate cutoffs...OK
+321/1422 br.test.br literal context suffix maps cover complete cutoff range...OK
+322/1422 br.test.br planned writer emits every RFC literal context mode...OK
+323/1422 br.test.br planned writer emits arbitrary four eight sixteen and sixty-four tree literal context maps...OK
+324/1422 br.test.br ratio candidate selects a smaller adaptive literal context wire...OK
+325/1422 br.test.br distance context map reader preserves nonzero tree indexes...OK
+326/1422 br.test.br literal context helpers cover LSB6 and MSB6 modes...OK
+327/1422 br.test.br insert-copy length decoder covers basic and extra-bit ranges...OK
+328/1422 br.test.br multi-tree zero-insert lookup preserves command progress...OK
+329/1422 br.test.br insert-copy length decoder handles high range extra bits...OK
+330/1422 br.test.br short distance resolver covers RFC table...OK
+331/1422 br.test.br tail distance decoder writes implicit short and regular results...OK
+332/1422 br.test.br cached distance context three preserves alternate contexts...OK
+333/1422 br.test.br direct cached distance context matches canonical contexts...OK
+334/1422 br.test.br regular distance resolver covers postfix and extra bits...OK
+335/1422 br.test.br prepared distance lookup matches RFC resolver...OK
+336/1422 br.test.br prepared distance readers match RFC values and every truncated suffix...OK
+337/1422 br.test.br regular distance resolver remains bounded at RFC maxima...OK
+338/1422 br.test.br large window distance alphabet matches upstream safe limits...OK
+339/1422 br.test.br large window distance decoder reads extended extra bits...OK
+340/1422 br.test.br large window simple distance tree uses wire width and safe limit...OK
+341/1422 br.test.br RAW shared dictionary decodes upstream compound fixture across public APIs...OK
+342/1422 br.test.br RAW shared dictionary progressive decoder resumes across prefix and output boundaries...OK
+343/1422 br.test.br serialized shared dictionary decodes contextual static references across public APIs...OK
+344/1422 br.test.br serialized shared dictionary selects custom words from output context...OK
+345/1422 br.test.br serialized shared dictionary encodes across planned ownership models...OK
+346/1422 br.test.br serialized encoder retains every dictionary context mode across q0 blocks...OK
+347/1422 br.test.br serialized encoder arbitrates every RFC dictionary context mode...OK
+348/1422 br.test.br serialized dictionary commands jointly select literal context trees...OK
+349/1422 br.test.br serialized dictionary trainer retains held-out complete-wire wins...OK
+350/1422 br.test.br serialized dictionary trainer selects smaller word bucket profiles and uncharged ties...OK
+351/1422 br.test.br serialized dictionary trainer rejects non-wins and invalid evaluation...OK
+352/1422 br.test.br serialized dictionary trainer retains identity when transforms cannot win...OK
+353/1422 br.test.br serialized dictionary trainer selects profitable context maps...OK
+354/1422 br.test.br serialized dictionary trainer selects non-contiguous context clusters...OK
+355/1422 br.test.br serialized dictionary trainer clusters transform lists by context dictionary...OK
+356/1422 br.test.br serialized dictionary trainer selects case transforms on held-out wire...OK
+357/1422 br.test.br serialized dictionary trainer selects omit transforms on held-out wire...OK
+358/1422 br.test.br serialized dictionary trainer learns UTF-8 shift transforms...OK
+359/1422 br.test.br serialized dictionary trainer learns prefix suffix stringlets...OK
+360/1422 br.test.br RAW shared dictionary rejects invalid descriptors before output mutation...OK
+361/1422 br.test.br static dictionary addresses use the active window distance...OK
+362/1422 br.test.br RAW shared dictionary shifts static dictionary addresses after compound region...OK
+363/1422 br.test.br planned RAW shared dictionary encodes every one-shot quality and level...OK
+364/1422 br.test.br planned large-input bounds follow every chunked fallback...OK
+365/1422 br.test.br planned RAW shared dictionary covers reusable chunked and incremental encoders...OK
+366/1422 br.test.br planned empty shared dictionary preserves legacy wire and invalid descriptors fail early...OK
+367/1422 br.test.br planned static dictionary wire addresses shift past RAW shared bytes...OK
+368/1422 br.test.br simple prefix code decodes three-symbol canonical tree...OK
+369/1422 br.test.br simple prefix code decodes four-symbol tree variants...OK
+370/1422 br.test.br simple prefix code rejects invalid symbol lists...OK
+371/1422 br.test.br complex prefix code decodes direct length sequence...OK
+372/1422 br.test.br complex prefix code supports zero repeats...OK
+373/1422 br.test.br complex prefix code supports repeat previous length...OK
+374/1422 br.test.br complex prefix code supports chained zero repeats...OK
+375/1422 br.test.br complex prefix code supports chained previous-length repeats...OK
+376/1422 core.test.streaming diagnostics keep cumulative counts wide and caller progress local...OK
+377/1422 core.test.Progress add checks overflow...OK
+378/1422 br.code_length_decoder.test.direct code-length decoder matches generic canonical lookup...OK
+379/1422 bitstream.test.buffered bit reader matches scalar reader across mixed operations...OK
+380/1422 bitstream.test.buffered bit reader word prefetch preserves logical offsets and tail reads...OK
+381/1422 bitstream.test.buffered bit reader aligned reads discard prefetched bytes without skipping input...OK
+382/1422 bitstream.test.buffered bit reader word prefetch keeps padded peeks strict on truncation...OK
+383/1422 bitstream.test.BitReader consumes LSB-first deflate bits...OK
+384/1422 bitstream.test.BitReader exact bit length rejects high padding bits...OK
+385/1422 bitstream.test.BitWriter bulk packing matches scalar bit packing...OK
+386/1422 bitstream.test.BitWriter reserved-capacity packing matches checked packing...OK
+387/1422 bitstream.test.BitReader skipBits advances without reading values...OK
+388/1422 bitstream.test.BitReader hasBits and unchecked advance match skipBits...OK
+389/1422 bitstream.test.BitReader peekBitsPadded uses zero padding past input...OK
+390/1422 bitstream.test.ChunkedBitReader skips empty chunks and keeps a forward cursor...OK
+391/1422 bitstream.test.ChunkedBitReader matches contiguous bit and aligned-byte reads...OK
+392/1422 bitstream.test.ChunkedBitReader known-total initializer matches initAt...OK
+393/1422 bitstream.test.ChunkedSpanBitReader matches ChunkedBitReader across chunk boundaries...OK
+394/1422 bitstream.test.ChunkedBitReader hasBits and unchecked advance match skipBits...OK
+395/1422 bitstream.test.BitWriter emits LSB-first bytes readable by BitReader...OK
+396/1422 bitstream.test_0...OK
+397/1422 io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input...OK
+398/1422 io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries...OK
+399/1422 huffman.test.sparse trusted encoder matches dense canonical codes...OK
+400/1422 huffman.test.sparse trusted decoder matches dense canonical table...OK
+401/1422 huffman.test.explicit-symbol decoder matches dense simple trees...OK
+402/1422 huffman.test.explicit-symbol decoder rejects malformed lists...OK
+403/1422 huffman.test.sparse trusted decoder rejects invalid active sets...OK
+404/1422 huffman.test.sparse trusted decoder matches dense randomized tables...OK
+405/1422 huffman.test.sparse trusted encoder matches dense randomized alphabets...OK
+406/1422 huffman.test.sparse trusted encoder rejects invalid active sets...OK
+407/1422 huffman.test.mapped packed lookups preserve fixed-width symbols and slots...OK
+408/1422 huffman.test.Zstd medium known-active back-reference workspace preserves exact lengths...OK
+409/1422 huffman.test.fixed Huffman tables expose expected boundary code lengths...OK
+410/1422 huffman.test.canonical Huffman decoder handles a small RFC-style tree...OK
+411/1422 huffman.test.tail lookup decoder matches compact decoder...OK
+412/1422 huffman.test.external packed lookup covers dense tables and long-code fallback...OK
+413/1422 huffman.test.fast Huffman decoder falls back for long codes...OK
+414/1422 huffman.test.fast Huffman decoder checks staged bits after padded lookup...OK
+415/1422 huffman.test.fast Huffman decoder reports lookup coverage...OK
+416/1422 huffman.test.Huffman table records maximum active code length...OK
+417/1422 huffman.test.canonical Huffman decoder rejects oversubscribed trees...OK
+418/1422 huffman.test.fixed literal table decodes end-of-block code...OK
+419/1422 huffman.test.dynamic header parser reads RFC1951 fields...OK
+420/1422 huffman.test.dynamic length parser expands repeat symbols...OK
+421/1422 huffman.test.dynamic length parser rejects invalid repeat symbols...OK
+422/1422 huffman.test.fixed Huffman encoder writes symbols decoded by fixed table...OK
+423/1422 huffman.test.dynamic parser rejects non-dynamic block type and truncated header...OK
+424/1422 huffman.test.simple Huffman length builder creates decodable table...OK
+425/1422 huffman.test.weighted Huffman length builder favors frequent symbols...OK
+426/1422 huffman.test.tree Huffman length builder favors frequent symbols and decodes...OK
+427/1422 huffman.test.package-merge Huffman length builder preserves canonical code space...OK
+428/1422 huffman.test.package-merge naturally ordered pairs match sorted reference...OK
+429/1422 huffman.test.compact sparse package-merge matches full-width reference...OK
+430/1422 huffman.test.known-active package-merge matches scanned builder...OK
+431/1422 huffman.test.dense back-reference package-merge preserves optimal weighted cost...OK
+432/1422 huffman.test.dense Deflate unbounded tree matches package-merge cost...OK
+433/1422 huffman.test.dense Deflate leaf ordering matches generic total order...OK
+434/1422 huffman.test.linear back-reference recovery matches root traversal...OK
+435/1422 huffman.test.dense known-active fast paths match comparison sort...OK
+436/1422 huffman.test.package-merge Huffman lengths match small optimal costs...OK
+437/1422 huffman.test.package-merge Huffman length builder covers deflate alphabet sizes...OK
+438/1422 huffman.test.direct Huffman encoder matches canonical decoder table entries...OK
+439/1422 huffman.test.tree Huffman length limiter preserves skewed short codes...OK
+440/1422 huffman.test.fast decoder sparse-clears long prefixes...OK
+441/1422 huffman.test.fixed literal fast lookup matches table decoder...OK
+442/1422 huffman.test.fixed distance fast lookup decodes all symbols...OK
+443/1422 br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries...OK
+444/1422 br.fast_bit_reader.test.Brotli fast bit reader matches scalar mixed reads and cursors...OK
+445/1422 br.fast_bit_reader.test.Brotli fast bit reader preserves truncated bit length...OK
+446/1422 br.fast_bit_reader.test.Brotli fast bit reader loads complete short tails...OK
+447/1422 br.fast_bit_reader.test.Brotli fast bit reader specialized fixed-width peeks match generic reads...OK
+448/1422 br.fast_bit_reader.test.Brotli fast bit reader full-word refills honor every logical tail...OK
+449/1422 br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle...OK
+450/1422 bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment...OK
+451/1422 bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries...OK
+452/1422 bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width...OK
+453/1422 bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged...OK
+454/1422 bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors...OK
+455/1422 bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain...OK
+456/1422 bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation...OK
+457/1422 io.stream_count.test.stream count preserves native types and crosses the 32-bit byte boundary...OK
+458/1422 io.stream_count.test.stream count overflow refuses an advance without changing state...OK
+459/1422 io.stream_count.test.stream count narrows only after checking a physical bound...OK
+460/1422 br.shared_dictionary.test.RAW compound dictionary validates one, two, and fifteen attachments...OK
+461/1422 br.shared_dictionary.test.empty RAW prefixes add no bytes but consume attachment slots...OK
+462/1422 br.shared_dictionary.test.RAW compound dictionary rejects sixteen chunks, excessive size, and overflow...OK
+463/1422 br.shared_dictionary.test.cursor resumes a copy across prefix and empty-prefix boundaries...OK
+464/1422 br.shared_dictionary.test.serialized RAW prefix follows explicit attachments without flattening...OK
+465/1422 br.shared_dictionary.test.one-shot copies accept first, last, and empty end addresses...OK
+466/1422 br.shared_dictionary.test.cursor rejects addresses past the end, crossing copies, and arithmetic overflow...OK
+467/1422 br.shared_dictionary.test.distance classification prioritizes compound then shifts static addresses...OK
+468/1422 br.shared_dictionary.test.dictionary distance helper validates and handles integer boundaries...OK
+469/1422 br.serialized_dictionary.test.serialized contextual dictionary parses and selects custom words...OK
+470/1422 br.serialized_dictionary.test.serialized dictionary rejects malformed maps and trailing data...OK
+471/1422 br.serialized_dictionary.test.serialized dictionary accepts the complete stringlet id domain...OK
+472/1422 br.serialized_dictionary.test.reference matcher considers source words longer than transformed output...OK
+473/1422 br.serialized_dictionary.test.complete resolver mixes custom and built-in words and transforms...OK
+474/1422 br.serialized_dictionary.test.custom transform replay covers every transform family...OK
+475/1422 br.serialized_dictionary.test.custom transforms preserve prefix and suffix stringlets...OK
+476/1422 br.encoder.command_plan.test.prefix alphabet capacity controls scratch footprint...OK
+477/1422 br.encoder.command_plan.test.command sources centralize copy semantics...OK
+478/1422 br.encoder.command_plan.test.compound dictionary mixer replaces literal runs and preserves LZ77 copies...OK
+479/1422 br.encoder.command_plan.test.serialized dictionary mixer uses the emitted literal context mode...OK
+480/1422 br.encoder.command_plan.test.legacy command initializers default to LZ77...OK
+481/1422 br.encoder.command_plan.test.coalesces literals around LZ77 matches...OK
+482/1422 br.encoder.command_plan.test.dictionary-seeded command construction validates combined history...OK
+483/1422 br.encoder.command_plan.test.coalesces adjacent copies at the same distance...OK
+484/1422 br.encoder.command_plan.test.validated command builder rejects corrupt parser matches...OK
+485/1422 br.encoder.command_plan.test.replaces one short copy with literals without shifting later commands...OK
+486/1422 br.encoder.command_plan.test.rejects invalid short-copy replacement requests...OK
+487/1422 br.encoder.command_plan.test.replaces multiple short copies using original indexes...OK
+488/1422 br.encoder.command_plan.test.static dictionary plan preserves transformed and copy lengths...OK
+489/1422 br.encoder.command_plan.test.static dictionary mixes only inside literal runs...OK
+490/1422 br.encoder.command_plan.test.static dictionary mixed planner honors literal probe limit...OK
+491/1422 br.encoder.command_plan.test.static dictionary cache preserves mixed and dictionary-only plans...OK
+492/1422 br.encoder.command_plan.test.complete static dictionary planner reaches omit-first transforms...OK
+493/1422 br.encoder.command_plan.test.simple alphabet orders hot symbols first...OK
+494/1422 br.encoder.command_plan.test.fused alphabet collection preserves frequency and symbol ordering...OK
+495/1422 br.encoder.command_plan.test.fused alphabet collection initializes undefined scratch...OK
+496/1422 br.encoder.command_plan.test.sparse frequency collection matches dense alphabet ordering...OK
+497/1422 br.encoder.command_plan.test.bitmap byte frequency collection matches dense alphabet ordering...OK
+498/1422 br.encoder.command_plan.test.simple alphabet direct codes match canonical encoder...OK
+499/1422 br.encoder.command_plan.test.complex alphabet produces a complete balanced tree...OK
+500/1422 br.encoder.hq_types.test_0...OK
+501/1422 br.encoder.distance.test_0...OK
+502/1422 br.encoder.distance.test.regular distance inversion covers direct-count candidates...OK
+503/1422 br.encoder.distance.test.planned ndirect alphabet covers the complete Brotli meta-block...OK
+504/1422 br.encoder.distance.test.distance parameters represent all legal RFC wire shapes...OK
+505/1422 br.encoder.distance.test.general distance inversion covers every RFC bucket boundary...OK
+506/1422 br.encoder.distance.test.general distance inversion covers meta-block and alphabet maxima...OK
+507/1422 br.encoder.literal_context_split.test.literal context original tree cache reference and profiling contracts...OK
+508/1422 br.encoder.literal_context_split.test.literal context split finds a predictive RFC mode...OK
+509/1422 br.encoder.literal_context_split.test.literal context split reports exact tree and map savings...OK
+510/1422 br.encoder.literal_context_split.test.literal context proposals match independent stage selection...OK
+511/1422 br.encoder.literal_context_split.test.literal context single-pass analysis cleans up allocation failures...OK
+512/1422 br.encoder.literal_context_split.test.literal context profile reports stable stage accounting...OK
+513/1422 br.encoder.literal_context_split.test.literal context prepared assignment costs match reference...OK
+514/1422 br.encoder.literal_context_split.test.literal context assignment log table matches direct Q8 logs...OK
+515/1422 br.encoder.literal_context_split.test.literal context active alphabet covers all byte symbols...OK
+516/1422 br.encoder.literal_context_split.test.literal context sparse tree support matches dense scoring...OK
+517/1422 br.encoder.literal_context_split.test.literal context suffix map costs match independent planning...OK
+518/1422 br.encoder.literal_context_split.test.literal context suffix payload reuse matches independent scoring...OK
+519/1422 br.encoder.literal_context_split.test.literal context scored map cache hits and rejects collisions...OK
+520/1422 br.encoder.literal_context_split.test.literal context tree score cache hits and rejects collisions...OK
+521/1422 br.encoder.literal_context_split.test.literal context sparse tree aggregation matches dense reference...OK
+522/1422 br.encoder.literal_context_split.test.literal context incremental tree moves match full aggregation...OK
+523/1422 br.encoder.literal_context_split.test.literal context tree workspace clears only requested prefix...OK
+524/1422 br.encoder.literal_context_split.test.literal context split rejects stationary literals...OK
+525/1422 br.encoder.literal_context_split.test.literal context split builds candidates for every RFC mode...OK
+526/1422 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into four trees...OK
+527/1422 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into eight trees...OK
+528/1422 br.encoder.literal_context_split.test.literal context split clusters interleaved contexts into sixteen trees...OK
+529/1422 br.encoder.literal_context_split.test.literal context split clusters every literal context independently...OK
+530/1422 br.encoder.literal_block_split.test.literal block split selects a strong distribution boundary...OK
+531/1422 br.encoder.literal_block_split.test.literal block split rejects stationary distributions...OK
+532/1422 br.encoder.literal_block_split.test.literal block split keeps proposal work bounded...OK
+533/1422 br.encoder.literal_block_split.test.literal block split avoids work already explained by UTF8 contexts...OK
+534/1422 br.encoder.literal_block_split.test.literal block split clusters matching outer regions...OK
+535/1422 br.encoder.literal_block_split.test.literal block split selects three distinct regions...OK
+536/1422 br.encoder.literal_block_split.test.literal block split clusters four alternating regions...OK
+537/1422 br.encoder.literal_block_split.test.literal block split reuses the first of three types in region four...OK
+538/1422 br.encoder.literal_block_split.test.literal block split selects four distinct regions...OK
+539/1422 br.encoder.literal_block_split.test.literal block split selects five independent regions...OK
+540/1422 br.encoder.literal_block_split.test.literal block split cycles three trees across six regions...OK
+541/1422 br.encoder.literal_block_split.test.literal block split fixed-point logarithm tracks powers and mantissas...OK
+542/1422 br.encoder.literal_block_split.test.adaptive literal block split finds an arbitrary off-grid boundary...OK
+543/1422 br.encoder.literal_block_split.test.adaptive literal block split preserves non-cyclic type reuse...OK
+544/1422 br.encoder.literal_block_split.test.adaptive literal block split rejects stationary input and invalid options...OK
+545/1422 br.encoder.literal_block_split.test.adaptive literal block split propagates and unwinds all allocator failures...OK
+546/1422 br.encoder.block_split_plan.test.block split plan copies owned storage and preserves metadata...OK
+547/1422 br.encoder.block_split_plan.test.block split plan accepts one block and u32 boundary length...OK
+548/1422 br.encoder.block_split_plan.test.block split plan supports all 256 type values...OK
+549/1422 br.encoder.block_split_plan.test.block split plan rejects invalid structures...OK
+550/1422 br.encoder.block_split_plan.test.block split plan checks total and cursor arithmetic overflow...OK
+551/1422 br.encoder.block_split_plan.test.block split plan cursor traverses payload exactly once...OK
+552/1422 br.encoder.literal_entropy_plan.test.literal entropy plan owns a single-type mapping...OK
+553/1422 br.encoder.literal_entropy_plan.test.literal entropy plan supports multiple block types and cloning...OK
+554/1422 br.encoder.literal_entropy_plan.test.literal entropy plan covers 256 block and tree values...OK
+555/1422 br.encoder.literal_entropy_plan.test.literal entropy plan rejects malformed combinations...OK
+556/1422 br.encoder.literal_entropy_plan.test.literal entropy plan accessor validates both dimensions...OK
+557/1422 br.encoder.literal_entropy_plan.test.literal entropy plan releases every partial allocation failure...OK
+558/1422 br.encoder.command_block_split.test.command block split finds distinct symbol regions...OK
+559/1422 br.encoder.command_block_split.test.command block split finds three distinct symbol regions...OK
+560/1422 br.encoder.command_block_split.test.command block split clusters matching outer regions...OK
+561/1422 br.encoder.command_block_split.test.command block split clusters four alternating regions...OK
+562/1422 br.encoder.command_block_split.test.command block split reuses the first of three types in region four...OK
+563/1422 br.encoder.command_block_split.test.command block split selects four distinct symbol regions...OK
+564/1422 br.encoder.command_block_split.test.command block split selects five independent regions...OK
+565/1422 br.encoder.command_block_split.test.command block split cycles three trees across six regions...OK
+566/1422 br.encoder.command_block_split.test.command block split rejects stationary and small streams...OK
+567/1422 br.encoder.command_block_split.test.command block split compact prefixes cover the maximum command count...OK
+568/1422 br.encoder.command_block_split.test.command block split fixed-point logarithm stays within two q8 units...OK
+569/1422 br.encoder.distance_block_split.test.Br general large window adaptive distance discovery accepts the whole active alphabet...OK
+570/1422 br.encoder.distance_block_split.test.distance block split finds distinct symbol regions...OK
+571/1422 br.encoder.distance_block_split.test.distance block split finds three distinct symbol regions...OK
+572/1422 br.encoder.distance_block_split.test.distance block split finds four distinct symbol regions...OK
+573/1422 br.encoder.distance_block_split.test.distance block split clusters matching outer regions...OK
+574/1422 br.encoder.distance_block_split.test.distance block split clusters four alternating regions...OK
+575/1422 br.encoder.distance_block_split.test.distance block split reuses the first of three types in region four...OK
+576/1422 br.encoder.distance_block_split.test.distance block split selects five independent regions...OK
+577/1422 br.encoder.distance_block_split.test.distance block split cycles three trees across six regions...OK
+578/1422 br.encoder.distance_block_split.test.distance block split rejects stationary and small streams...OK
+579/1422 br.encoder.distance_block_split.test.distance block split fixed-point logarithm stays within two q8 units...OK
+580/1422 br.encoder.distance_block_split.test.adaptive distance block split finds an arbitrary off-grid boundary...OK
+581/1422 br.encoder.distance_block_split.test.adaptive distance block split preserves non-cyclic type reuse...OK
+582/1422 br.encoder.distance_block_split.test.adaptive distance block split rejects stationary input symbols and options...OK
+583/1422 br.encoder.distance_block_split.test.adaptive distance block split propagates and unwinds allocator failures...OK
+584/1422 br.encoder.literal_context.test.utf8 text tree selects lowercase letter contexts...OK
+585/1422 br.encoder.literal_context.test.utf8 suffix tree honors boundary cutoffs...OK
+586/1422 br.encoder.literal_context.test.utf8 context separates two-byte and four-byte lead history...OK
+587/1422 br.encoder.literal_context.test.clustered context lookup matches every byte pair and mode...OK
+588/1422 br.encoder.literal_context.test.dedicated clustered UTF8 lookup matches every byte pair...OK
+589/1422 br.decoder.distance_history.test.Brotli distance history resolves short symbols and pushes recent values...OK
+590/1422 br.match_copy.test.Brotli match copy preserves overlapping period...OK
+591/1422 br.match_copy.test.Brotli match copy handles non-overlap...OK
+592/1422 br.match_copy.test.Brotli match copy bounds speculative short copy to the meta-block...OK
+593/1422 br.match_copy.test.Brotli match copy matches scalar replay across short widths and boundaries...OK
+594/1422 br.match_copy.test.Brotli wide match copy matches scalar replay across fixed tiers...OK
+595/1422 br.static_dictionary.test.full Brotli dictionary resolves quality-four omit transforms...OK
+596/1422 br.static_dictionary.test.static dictionary identity transform borrows embedded word slice...OK
+597/1422 br.static_dictionary.test.static dictionary reference matcher returns copy length and address...OK
+598/1422 br.static_dictionary.test.static dictionary reference matcher covers every transform family...OK
+599/1422 br.static_dictionary.test.static dictionary transform metadata agrees with materialization...OK
+600/1422 br.static_dictionary.test.static dictionary resolved-word transform agrees with address transform...OK
+601/1422 br.static_dictionary.test.static dictionary direct transformed comparison agrees with materialization...OK
+602/1422 br.length.test.length codes cover every insert and copy range...OK
+603/1422 br.command_lut.test.upstream Brotli command table matches formula...OK
+604/1422 br.command_lut.test.fused lookup slots preserve every command or encode complete lengths...OK
+605/1422 br.single_command_lookup.test.single-tree command lookup embeds zero-insert metadata...OK
+606/1422 br.paired_literal_lookup.test.paired literal roots match ten-bit roots at every truncated symbol...OK
+607/1422 br.dictionary_copy.test.Brotli dictionary copy preserves every short length and output suffix...OK
+608/1422 br.encoder.hq_codec.exact.test.Brotli HQ exact selectors preserve duplicate repeat choices and direct distances...OK
+609/1422 br.encoder.hq_codec.exact.test.Brotli HQ exact selectors reject inconsistent fields and preserve static cache...OK
+610/1422 br.encoder.hq_codec.exact.test.Brotli HQ Large Window exact regular selection preserves the last active prefix and extras...OK
+611/1422 br.encoder.hq_codec.exact.test.Brotli HQ Large Window exact short aliases obey the global safety limit independently of regular shape...OK
+612/1422 br.encoder.command_encoding.test.command encoding covers every LUT length pair...OK
+613/1422 br.encoder.compound_wire.test.compound wire distances map every command source...OK
+614/1422 br.encoder.compound_wire.test.compound wire distances reject zero and out-of-range logical values...OK
+615/1422 br.encoder.compound_wire.test.compound wire arithmetic preserves usize boundaries and reports overflow...OK
+616/1422 br.encoder.compound_wire.test.dictionary wire distances retain the saturated active window base...OK
+617/1422 br.encoder.compound_wire.test.recent ring eligibility distinguishes compound static and rep0...OK
+618/1422 br.encoder.small_huffman.test.small Huffman builds complete tree...OK
+619/1422 br.encoder.small_huffman.test.small Huffman writes only the active length prefix...OK
+620/1422 br.encoder.small_huffman.test.small Huffman ordered frequencies match package merge weighted cost...OK
+621/1422 br.encoder.small_huffman.test.small Huffman two-queue builder matches heap reference lengths...OK
+622/1422 br.encoder.small_huffman.test.small Huffman 128-symbol builder matches heap reference lengths...OK
+623/1422 br.encoder.adaptive_block_code.test.adaptive block code emits every switch and length...OK
+624/1422 br.encoder.adaptive_block_code.test.adaptive block code allocation failures clean up...OK
+625/1422 br.encoder.block_switch_model.test.block switch model handles A-B-A-C-A precedence...OK
+626/1422 br.encoder.block_switch_model.test.block switch model applies successor wrap and direct symbols...OK
+627/1422 br.encoder.block_switch_model.test.block switch model supports 256 types and symbol 257...OK
+628/1422 br.encoder.block_switch_model.test.single block has no transitions...OK
+629/1422 br.encoder.block_switch_model.test.block switch model rejects invalid plans and transition inputs...OK
+630/1422 br.encoder.block_switch_model.test.block switch model reports allocation failure...OK
+631/1422 br.encoder.identity_context_map.test.identity context map bit cost matches emitted wire...OK
+632/1422 br.encoder.identity_context_map.test.identity context map validates dimensions...OK
+633/1422 br.encoder.dynamic_context_map.test.dynamic context map bit cost matches emitted bits...OK
+634/1422 br.encoder.dynamic_context_map.test.dynamic context map supports 256 trees and 16384 identity entries...OK
+635/1422 br.encoder.dynamic_context_map.test.dynamic context map selects MTF zero-run coding for clustered ranges...OK
+636/1422 br.encoder.dynamic_context_map.test.dynamic context map retains plain coding when MTF does not improve it...OK
+637/1422 br.encoder.dynamic_context_map.test.dynamic context map rejects invalid dimensions entries and unused trees...OK
+638/1422 br.encoder.dynamic_context_map.test.dynamic context map unwinds every allocation failure...OK
+639/1422 br.encoder.complex_prefix.test.bit cost matches emitted complex prefix...OK
+640/1422 br.encoder.complex_prefix.test.summary bit cost matches emitted mixed prefix shapes...OK
+641/1422 br.encoder.complex_prefix.test.sparse bit cost preserves byte-alphabet boundaries...OK
+642/1422 br.encoder.complex_prefix.test.precomputed complex prefix stop index is validated...OK
+643/1422 br.encoder.complex_prefix.test.small code-length alphabet matches package-merge weighted cost...OK
+644/1422 br.encoder.complex_prefix.test.direct code-length builder exactly matches previous implementation...OK
+645/1422 br.encoder.code_length_rle.test.repeat inverse step reconstructs every bounded run...OK
+646/1422 br.encoder.code_length_rle.test.zero run chaining covers Brotli alphabet gaps...OK
+647/1422 br.encoder.code_length_rle.test.nonzero run chaining uses symbol sixteen...OK
+648/1422 br.encoder.code_length_rle.test.bounded RLE matches allocating encoder...OK
+649/1422 br.encoder.code_length_rle.test.bounded RLE frequency fusion matches token scan...OK
+650/1422 br.encoder.code_length_rle.test.sparse summary matches dense boundary shapes...OK
+651/1422 br.encoder.code_length_rle.test.sparse summary rejects invalid local metadata...OK
+652/1422 br.encoder.code_length_rle.test.sparse summary matches dense randomized alphabets...OK
+653/1422 br.encoder.code_length_rle.test.code-length zero scan matches scalar boundaries...OK
+654/1422 br.encoder.hq_codec.huffman_model.test.Brotli HQ literal prices use actual simple tree bit widths...OK
+655/1422 br.encoder.hq_codec.huffman_model.test.Brotli HQ model ignores inactive sparse frequency slots...OK
+656/1422 br.encoder.context_map.test.context map planner selects MTF zero-run coding for clustered ranges...OK
+657/1422 br.encoder.context_map.test.context map planned bit cost matches emitted wire...OK
+658/1422 br.encoder.context_map.test.context map move-to-front indices invert to the original map...OK
+659/1422 br.encoder.code_length_huffman.test.direct code-length Huffman handles empty and singleton alphabets...OK
+660/1422 br.encoder.code_length_huffman.test.direct code-length Huffman uses deterministic tie order...OK
+661/1422 br.encoder.code_length_huffman.test.direct code-length Huffman returns complete bounded trees...OK
+662/1422 br.encoder.code_length_huffman.test.direct code-length Huffman rejects an over-depth tree...OK
+663/1422 br.encoder.huffman_rle_counts.test.smoothing is deterministic and preserves active symbols...OK
+664/1422 br.encoder.huffman_rle_counts.test.small alphabets remain exact...OK
+665/1422 br.encoder.window_format.test.Br general large window distinguishes advertised distance from bounded match history...OK
+666/1422 br.encoder.total_budget.test_0...OK
+667/1422 br.encoder.hq_options.test_0...OK
+668/1422 br.encoder.quality_schedule.test.quality rejects values outside zero through eleven...OK
+669/1422 br.encoder.quality_schedule.test.quality stream block sizes follow latency and optimal-search policy...OK
+670/1422 br.encoder.quality_schedule.test.quality schedule covers the deterministic twelve by three matrix...OK
+671/1422 br.encoder.quality_schedule.test.quality schedules increase budgets and never retract enabled work...OK
+672/1422 br.encoder.quality_schedule.test.quality ten and eleven use distinct bounded optimal searches...OK
+673/1422 br.encoder.quality_schedule.test.quality window policy preserves current planned limits...OK
+674/1422 br.encoder.quality_schedule.test.quality schedule validator rejects inconsistent policies...OK
+675/1422 br.incremental.stored.encoder.test_0...OK
+676/1422 lz77.test_0...OK
+677/1422 lz77.test.dictionary greedy scratch ignores stale head entries...OK
+678/1422 lz77.test.reusable dictionary lazy planner preserves allocating plans...OK
+679/1422 lz77.test.reusable dictionary lazy planner ignores stale head entries...OK
+680/1422 lz77.test.reusable dictionary lazy planner retains all capacity...OK
+681/1422 lz77.test.reusable dictionary lazy planner recovers after allocation failure...OK
+682/1422 lz77.test.optimal length extension buckets cover exact boundaries...OK
+683/1422 lz77.test.optimal length prefix choices match descending reference...OK
+684/1422 lz77.test.repeat beam keeps stable distance across local length gain...OK
+685/1422 lz77.test.compile-time fixed length costs match scalar range...OK
+686/1422 lz77.test.rep beam keeps near-cost alternate recent-offset state...OK
+687/1422 lz77.test.rep beam known-valid transition matches guarded reference...OK
+688/1422 lz77.test.rep beam recent-offset prefix guard matches scalar acceptance...OK
+689/1422 lz77.test.rep beam materializes the initial recent offset...OK
+690/1422 lz77.test.rep beam reusable scratch preserves tokens and capacity...OK
+691/1422 lz77.test.Zstd-specialized rep beam matches generic plans...OK
+692/1422 lz77.test.rep beam compact index matches reference beyond u16 positions...OK
+693/1422 lz77.test.Zstd rep beam prefix filter preserves scalar compact-index matches...OK
+694/1422 lz77.test.rep beam compact index initializes the four-byte tail...OK
+695/1422 lz77.test.rep beam emits literal tail shorter than minimum match...OK
+696/1422 lz77.test.rep beam deduplicates indexed recent offset matches...OK
+697/1422 lz77.test.compile-time fixed distance costs match scalar range...OK
+698/1422 lz77.test.shared match length vector path matches byte reference...OK
+699/1422 lz77.test.combined dictionary/input match length uses word and tail paths...OK
+700/1422 lz77.test.lazy parser scan preference separates repetitive from source-like blocks...OK
+701/1422 lz77.test.tiny lazy hash planner round trips source-like blocks...OK
+702/1422 lz77.test.literal-only LZ77 planner emits no matches...OK
+703/1422 lz77.test.filtered LZ77 planner suppresses short low-value matches...OK
+704/1422 lz77.test.run-length LZ77 planner limits matches to byte runs...OK
+705/1422 lz77.test.greedy LZ77 planner round trips literals and matches...OK
+706/1422 lz77.test.greedy LZ77 planner respects incompressible input...OK
+707/1422 lz77.test.replay rejects invalid match distance...OK
+708/1422 lz77.test.lazy LZ77 planner round trips and keeps token count bounded...OK
+709/1422 lz77.test.lazy parser honors minimum gain threshold...OK
+710/1422 lz77.test.parser honors configurable minimum match length...OK
+711/1422 lz77.test.parser honors minimum savings threshold...OK
+712/1422 lz77.test.parser honors configurable maximum match length...OK
+713/1422 lz77.test.optimal LZ77 prototype round trips and is no worse by fixed bit cost...OK
+714/1422 lz77.test.modeled optimal parser follows caller entropy costs...OK
+715/1422 lz77.test.modeled optimal parser validates complete nonzero costs...OK
+716/1422 lz77.test.reusable optimal parser preserves tokens and capacities...OK
+717/1422 lz77.test.optimal prefix bound preserves reference tokens...OK
+718/1422 lz77.test.profiled optimal parser preserves tokens and search accounting...OK
+719/1422 lz77.test.compact optimal hash index matches reference beyond u16 positions...OK
+720/1422 lz77.test.reusable optimal parser recovers after compact-index allocation failure...OK
+721/1422 lz77.test.optimal fourth-byte rejection preserves exact four-byte matches...OK
+722/1422 lz77.test.reusable hash index exposes deterministic position matches...OK
+723/1422 lz77.test.hash index candidate distances preserve validated match order...OK
+724/1422 lz77.test.optimal LZ77 considers multiple match distances...OK
+725/1422 lz77.test.optimal parser token count is bounded by candidate limit...OK
+726/1422 lz77.test.best optimal parser budget leaves room for custom deep searches...OK
+727/1422 lz77.test.fixed bit cost accounts for literals matches and end marker...OK
+728/1422 lz77.test.hash greedy planner round trips repeated data...OK
+729/1422 lz77.test.hash planner skips non-viable prefixes before spending match budget...OK
+730/1422 lz77.test.hash planner with zero chain budget emits only literals...OK
+731/1422 lz77.test.tiny hash greedy planner round trips small repeated data...OK
+732/1422 lz77.test.automatic hash anchor preserves three-byte match configurations...OK
+733/1422 lz77.test.reusable tiny hash planner preserves tokens and capacity...OK
+734/1422 lz77.test.reusable tiny hash scratch preserves tokens across inputs...OK
+735/1422 lz77.test.reusable tiny hash scratch covers maximum input position...OK
+736/1422 lz77.test.one-shot tiny hash planner covers maximum three-byte position...OK
+737/1422 lz77.test.reusable tiny lazy hash planner preserves tokens and capacity...OK
+738/1422 lz77.test.reusable lazy planner preserves production scan and hash policies...OK
+739/1422 lz77.test.automatic hash anchor selects four-byte planner and round trips...OK
+740/1422 lz77.test.hash greedy table variants share token and stats accounting...OK
+741/1422 lz77.test.hash greedy compact position boundary...OK
+742/1422 lz77.test.64 KiB lazy hash u16 positions match i32 reference...OK
+743/1422 lz77.test.lazy hash compact positions match isize reference...OK
+744/1422 lz77.test.hash greedy predecessor ring matches full-table reference...OK
+745/1422 lz77.test.dictionary-backed hash and lazy planners can emit preset-history matches...OK
+746/1422 lz77.test.dictionary-backed planners cover the complete 16-bit distance range...OK
+747/1422 lz77.test.scan dictionary planner emits preset-history matches...OK
+748/1422 lz77.test.dictionary hash planner skips non-viable prefix collisions...OK
+749/1422 lz77.test.matchLength compares word chunks and tails...OK
+750/1422 lz77.test.hash search returns the insertion bucket...OK
+751/1422 lz77.test.hash match fast acceptance is a sufficient condition...OK
+752/1422 lz77.test.constant-time hash match acceptance matches exhaustive length scan...OK
+753/1422 br.encoder.fast_fragment.test.fast fragment variants replay block-local commands...OK
+754/1422 br.encoder.fast_fragment.test.q1 finds four-byte fragments that q0 leaves literal...OK
+755/1422 br.encoder.fast_fragment.test.fast fragment respects narrow Brotli windows...OK
+756/1422 br.encoder.fast_fragment.test.fast fragment preserves reusable capacity...OK
+757/1422 br.encoder.fast_fragment_one_pass.test.q0 compact mappings reconstruct every fast-fragment length...OK
+758/1422 br.encoder.fast_fragment_one_pass.test.q0 compact distances match the standard Brotli encoder...OK
+759/1422 br.encoder.fast_fragment_one_pass.test.q0 learned state retains seeded complete trees...OK
+760/1422 br.encoder.fast_fragment_one_pass.test.q0 literal model samples long fragments and keeps every byte reachable...OK
+761/1422 br.encoder.compound_dictionary_matcher.test.compound matcher finds anchors and continuations across fifteen chunks...OK
+762/1422 br.encoder.compound_dictionary_matcher.test.compound matcher keeps four recent hash collisions and honors probe limit...OK
+763/1422 br.encoder.compound_dictionary_matcher.test.compound matcher bounds matches and resolves length then suffix-distance ties...OK
+764/1422 br.encoder.compound_dictionary_matcher.test.compound matcher reset retains capacity and rebuilds for new attachments...OK
+765/1422 br.encoder.compound_dictionary_matcher.test.compound matcher rejects huge fake dictionaries before indexing and keeps usize addresses...OK
+766/1422 br.encoder.compound_dictionary_matcher.test.compound matcher allocation failure is clean and retryable...OK
+767/1422 br.encoder.serialized_dictionary_matcher.test.serialized index matches exhaustive contextual addresses...OK
+768/1422 br.encoder.serialized_dictionary_matcher.test.serialized index preparation is atomic and descriptor-identical reuse allocates nothing...OK
+769/1422 br.encoder.serialized_dictionary_matcher.test.oversized serialized candidate spaces retain exhaustive fallback...OK
+770/1422 br.encoder.hq_dictionary.test_0...OK
+771/1422 io.working_allocator.test.working allocator tracks growth shrink and allocation limits...OK
+772/1422 io.working_allocator.test.working allocator remap accounts only successful changes...OK
+773/1422 io.working_allocator.test.working allocator distinguishes a later backing failure from budget denial...OK
+774/1422 br.encoder.hq_tree.test_0...OK
+775/1422 br.encoder.hq_codec.alias.test_0...OK
+776/1422 br.encoder.static_dictionary_matcher.test_0...OK
+777/1422 br.encoder.static_dictionary_matcher.test.indexed static dictionary matcher agrees with exhaustive reference...OK
+778/1422 br.encoder.static_dictionary_matcher.test.indexed static dictionary matcher ignores non-advancing omit transforms...OK
+779/1422 br.encoder.static_dictionary_matcher.test.indexed static dictionary matcher finds uppercase transforms without a second index...OK
+780/1422 br.encoder.static_dictionary_matcher.test.indexed static dictionary matcher reaches every canonical transformed word...OK
+781/1422 br.encoder.static_dictionary_matcher.test.complete static dictionary index matches every transform family...OK
+782/1422 br.encoder.static_dictionary_matcher.test.complete static dictionary index releases allocation failures...OK
+783/1422 br.encoder.static_dictionary_matcher.test.shared static dictionary index is safe under concurrent first access...OK
+784/1422 br.encoder.stored_bit_bound.test_0...OK
+785/1422 br.encoder.short_match_candidates.test.collects short-match subsets and one wider tiny prefix...OK
+786/1422 br.encoder.short_match_candidates.test.does not add a duplicate all-three-byte prefix...OK
+787/1422 br.encoder.short_match_candidates.test.rejects unbounded short-match plans...OK
+788/1422 br.encoder.short_match_candidates.test.only LZ77 copies become short-match candidates...OK
+789/1422 br.encoder.literal_joint_context_split.test.joint literal clustering selects multiple global context trees...OK
+790/1422 br.encoder.literal_joint_context_split.test.joint literal clustering is deterministic and cleans allocation failures...OK
+791/1422 br.encoder.adaptive_block_split.test.adaptive splitter Viterbi cost matches a small exhaustive oracle...OK
+792/1422 br.encoder.adaptive_block_split.test.adaptive splitter is deterministic and finds an off-grid boundary...OK
+793/1422 br.encoder.adaptive_block_split.test.adaptive splitter preserves a non-cyclic reused type...OK
+794/1422 br.encoder.adaptive_block_split.test.adaptive splitter rejects invalid symbols and stationary input...OK
+795/1422 br.encoder.adaptive_block_split.test.adaptive splitter enforces its scratch budget and allocator failures...OK
+796/1422 br.encoder.histogram_model.test.histogram integer costs match scalar power-of-two reference...OK
+797/1422 br.encoder.histogram_model.test.histogram builds clears and merges transactionally...OK
+798/1422 br.encoder.histogram_model.test.identical scaled distributions have identical active symbol costs...OK
+799/1422 br.encoder.histogram_model.test.skewed distribution favors the frequent symbol...OK
+800/1422 br.encoder.histogram_model.test.empty single-symbol and overflow boundaries are explicit...OK
+801/1422 br.encoder.histogram_model.test.command alphabet histograms remain compact...OK
+802/1422 br.encoder.long_distance.test.augments literal runs with Brotli-only long matches...OK
+803/1422 br.encoder.long_distance.test.long-distance augmentation preserves dictionary command sources...OK
+804/1422 br.encoder.long_distance.test.long-distance augmentation reaches retained stream history...OK
+805/1422 br.encoder.long_distance.test.long-distance history matcher ignores bytes outside the window...OK
+806/1422 br.encoder.long_distance.test.long-distance history hashes matches across the block boundary...OK
+807/1422 br.encoder.long_distance.test.near hash collisions do not hide eligible long matches...OK
+808/1422 br.encoder.long_distance.test.configurable matcher covers exact 18 through 24-bit distance limits...OK
+809/1422 br.encoder.long_distance.test.sparse matcher advances to the sampled source phase...OK
+810/1422 br.encoder.long_distance.test.stride-four matcher advances through the worst source phase...OK
+811/1422 br.encoder.long_distance.test.stride-eight matcher advances through the worst source phase...OK
+812/1422 br.encoder.long_distance.test.stride-sixteen matcher advances through the worst source phase...OK
+813/1422 br.encoder.entropy_feedback.test.entropy feedback learns literal length and distance shapes...OK
+814/1422 br.encoder.entropy_feedback.test.entropy feedback rejects incomplete and non-lz77 plans...OK
+815/1422 br.encoder.entropy_feedback.test.entropy feedback inherits the caller recent-distance ring...OK
+816/1422 br.encoder.hq_command_parser.test.HQ command parser round trips and visits stateful matches...OK
+817/1422 br.encoder.hq_command_parser.test.beam cost bound rejects only candidates that cannot enter...OK
+818/1422 br.encoder.hq_command_parser.test.beam worst slot cache tracks updates and replacements...OK
+819/1422 br.encoder.hq_command_parser.test.recent candidate table preserves first-symbol RFC mapping...OK
+820/1422 br.encoder.distance_parameter_search.test.distance parameter scores match an independent tree-writing oracle...OK
+821/1422 br.encoder.distance_parameter_search.test.distance parameter search selects a stable nonzero postfix winner...OK
+822/1422 br.encoder.distance_parameter_search.test.distance parameter search retains baseline on an exact tie...OK
+823/1422 br.encoder.distance_parameter_search.test.distance parameter search rejects empty and invalid streams...OK
+824/1422 br.encoder.distance_parameter_search.test.distance parameter search propagates allocation failures...OK
+825/1422 br.encoder.distance_parameter_search.test.Br general large window distance scoring uses safe active shapes and wire tree costs...OK
+826/1422 br.encoder.scoped_static_dictionary.test_0...OK
+827/1422 br.encoder.stream_block_split.test.stream block split keeps homogeneous distributions together...OK
+828/1422 br.encoder.stream_block_split.test.stream block split detects a strong midpoint distribution change...OK
+829/1422 br.encoder.stream_block_split.test.stream block split detects alternating quarter distributions...OK
+830/1422 br.encoder.stream_block_split.test.stream block split detects a non-quarter grid boundary...OK
+831/1422 br.encoder.stream_block_split.test.stream block split detects a boundary outside the 8 KiB grid...OK
+832/1422 br.encoder.stream_block_split.test.stream block split retains a multi-depth proxy frontier...OK
+833/1422 br.encoder.hq_codec.transaction.test.Brotli HQ meta-block publication preserves the mutable tail on allocation failure...OK
+834/1422 br.encoder.hq_codec.transaction.test.Brotli HQ meta-block publication handles aligned output and rejects missing shared tails...OK
+835/1422 br.encoder.fast_fragment_two_pass.test.q1 compact command mapping reconstructs insert and copy lengths...OK
+836/1422 br.encoder.fast_fragment_two_pass.test.q1 last-distance continuation reconstructs copy length minus two...OK
+837/1422 br.encoder.fast_fragment_two_pass.test.q1 compact distances match the standard Brotli distance encoder...OK
+838/1422 br.encoder.fast_fragment_two_pass.test.q1 two-pass histograms cover terminal inserts and repeated distances...OK
+839/1422 br.encoder.hq_codec.native.test.Brotli HQ normal history base saturates long stream offsets without truncation...OK
+840/1422 br.encoder.hq_parser.test_0...OK
+841/1422 br.encoder.hq_parser.command_storage.test_0...OK
+842/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage empty ownership is allocation free...OK
+843/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage tiny final allocation is exact and preserves traceback order...OK
+844/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage geometric growth keeps 8192 commands and returns its full allocation...OK
+845/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage successful shrinking remap transfers exact live bytes...OK
+846/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage every allocation failure preserves all accepted commands...OK
+847/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage nested budgets charge fallback growth and keep the old sequence on denial...OK
+848/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage final exact fallback is budgeted and retryable...OK
+849/1422 br.encoder.hq_parser.command_storage_tests.test.Brotli HQ command storage checks byte overflow and zero budget before allocating...OK
+850/1422 tests.br_total_memory_helpers.test.Brotli total memory independent tracker observes in place growth shrink and overlapping live requests...OK
+851/1422 tests.br_total_memory_helpers.test.Brotli total memory independent tracker charges old and new buffers during moving fallback growth...OK
+852/1422 tests.br_total_memory_helpers.test.Brotli total memory independent failed allocation resize and remap preserve live bytes and old content...OK
+853/1422 tests.br_total_memory_helpers.test.Brotli total memory independent tracker excludes one borrowed identity but counts its moving replacement...OK
+854/1422 br.encoder.hq_parser.tests.test_0...OK
+855/1422 br.encoder.hq_parser.tests.test.Brotli HQ complete command price covers every one of 704 encodings...OK
+856/1422 br.encoder.hq_parser.tests.test.Brotli HQ all sixteen aliases preserve semantic zero and all 64 distance shapes...OK
+857/1422 br.encoder.hq_parser.tests.test.Brotli HQ tiny command parse keeps exact encoding and logical offsets beyond four GiB...OK
+858/1422 br.encoder.hq_parser.oracle_tests.test.BrHQ core independent complete scalar path matches frozen command costs...OK
+859/1422 br.encoder.hq_parser.oracle_tests.test.BrHQ core implicit and explicit zero have separate prices and identical nonpush state...OK
+860/1422 br.encoder.hq_parser.dictionary_tests.test.BrHQ core atomic static command spills beyond the 4096 artificial window...OK
+861/1422 br.encoder.hq_parser.dictionary_tests.test.BrHQ core static output one two three and compound semantic zero preserve raw lengths...OK
+862/1422 br.encoder.hq_parser.resource_tests.test.BrHQ core exact below budget and all OOM sites release without model or source mutation...OK
+863/1422 br.encoder.hq_parser.resource_tests.test.BrHQ core refined statistics actually update all alphabets and empty input does no work...OK
+864/1422 br.encoder.hq_parser.resource_tests.test.BrHQ core full 256 KiB meta preserves wide lengths at window twenty four...OK
+865/1422 br.encoder.hq_parser.resource_tests.test.BrHQ core failed borrowed checkpoint parse preserves entering owner and shared budget...OK
+866/1422 br.encoder.hq_parser.resource_tests.test.BrHQ core hostile length metadata and invalid settings reject before allocation...OK
+867/1422 br.encoder.hq_parser.extension_tests.test.BrHQ core extension prices command and literal terminal witness across 4096...OK
+868/1422 br.encoder.hq_parser.extension_tests.test.BrHQ core extension charges explicit zero when the implicit command range ends...OK
+869/1422 br.encoder.hq_parser.large_window_tests.test.BrHQ LargeWindow models price every active shape and preserve standard defaults...OK
+870/1422 br.encoder.hq_parser.large_window_tests.test.BrHQ LargeWindow cache accepts safe aliases above regular shape and rejects excess...OK
+871/1422 br.encoder.hq_parser.large_window_tests.test.BrHQ LargeWindow actual static plan selects near one GiB distance with tiny workspace...OK
+872/1422 br.encoder.hq_parser.whole_block_tests.test.BrHQ whole block known 4098 oracle reaches cheaper later copy and preserves bounded result...OK
+873/1422 br.encoder.hq_parser.whole_block_tests.test.BrHQ whole block dense budget exact below and large metadata refuse before allocation...OK
+874/1422 br.encoder.hq_parser.whole_block_tests.test.BrHQ whole block small model set agrees with independent exhaustive paths...OK
+875/1422 br.encoder.hq_parser.whole_block_tests.test.BrHQ whole block actual predecessor beyond sixty four KiB stays wide...OK
+876/1422 br.encoder.hq_parser.whole_block_tests.test.BrHQ whole block static commands cross small four KiB and sixty four KiB positions...OK
+877/1422 br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command storage keeps fifty exact commands and measured growth peak...OK
+878/1422 br.encoder.hq_parser.command_storage_integration_tests.test.BrHQ dynamic command lower bound grows with literal workspace rather than input commands...OK
+879/1422 br.encoder.hq_parser.complete_length_tests.test.BrHQ complete lengths metadata remains unpriced before zero edge admission...OK
+880/1422 br.encoder.hq_parser.complete_length_tests.test.BrHQ complete lengths per plan cap is exact and independent of accumulated profile...OK
+881/1422 br.encoder.hq_parser.complete_length_tests.test.BrHQ complete lengths q10 reaches two interior fifty byte implicit commands...OK
+882/1422 br.serialized_dictionary_builder.test.serialized builder emits canonical default and contextual dictionaries...OK
+883/1422 br.serialized_dictionary_builder.test.serialized builder round trips strict parsed views deterministically...OK
+884/1422 br.serialized_dictionary_builder.test.serialized builder emits canonical prefix varint boundaries...OK
+885/1422 br.serialized_dictionary_builder.test.serialized builder rejects invalid specifications before mutation...OK
+886/1422 br.serialized_dictionary_builder.test.serialized builder allocation failures are clean...OK
+887/1422 br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked cold zero exact and below count all legacy index storage...OK
+888/1422 br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary owned legacy lookup matches original indexes and survives move...OK
+889/1422 br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only preserves compact complete mixed and cached command plans...OK
+890/1422 br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary tracked backing OOM frees each legacy construction allocation...OK
+891/1422 br.encoder.scoped_static_dictionary_tests.test.Brotli total static dictionary profile only retains independently frozen complete wire...OK
+892/1422 br.encoder.stored_bit_bound_tests.test.Brotli wide bit addressing repeated stored blocks match scalar geometry...OK
+893/1422 br.encoder.stored_bit_bound_tests.test.Brotli wide bit addressing stored bounds cross 512 MiB and reject unrepresentable geometry...OK
+894/1422 br.encoder.dictionary_visitor_tests.test.Brotli dictionary visitors static full tuples agree with exhaustive transformations and exact quota...OK
+895/1422 br.encoder.dictionary_visitor_tests.test.Brotli dictionary visitors static index allocation failures release each completed allocation...OK
+896/1422 br.encoder.dictionary_visitor_tests.test.Brotli dictionary visitors serialized preserve same spelling addresses raw lengths and short outputs...OK
+897/1422 br.encoder.dictionary_visitor_tests.test.Brotli dictionary visitors compound enumerate every address beyond four ways and chunk boundaries...OK
+898/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot leaves unaliased borrows allocation free...OK
+899/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot protects input in unused retained output capacity...OK
+900/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot protects chunk bytes and aliased outer descriptors...OK
+901/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot copies only descriptors when chunk bytes are external...OK
+902/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot protects RAW bytes and their outer descriptors...OK
+903/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot protects RAW bytes with external descriptors...OK
+904/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot reparses copied serialized backing...OK
+905/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot owns an aliased serialized view and survives owner movement...OK
+906/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot protects serialized backing and view in one output allocation...OK
+907/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot releases every failed allocation before output mutation...OK
+908/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot prediction matches exact charged live memory...OK
+909/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot rejects reparsing errors without changing its borrowed view...OK
+910/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot predictions check integer overflow without reading payloads...OK
+911/1422 br.encoder.hq_codec.alias_tests.test.Brotli HQ alias snapshot overlap uses half-open ranges in either order...OK
+912/1422 br.encoder.hq_tree.large_window_tests.test.Brotli HQ Large Window resource geometry rejects unrepresentable or zero-budget storage before allocation...OK
+913/1422 br.encoder.hq_tree.large_window_tests.test.Brotli HQ Large Window small sources retain small rings and explicit format across rebind...OK
+914/1422 br.encoder.hq_tree.large_window_tests.test.Brotli HQ Large Window standard source cannot borrow a large-format window...OK
+915/1422 br.encoder.hq_dictionary.options_tests.test.Brotli HQ options resolve native beam and reference pass defaults without profile mutation...OK
+916/1422 br.encoder.hq_dictionary.options_tests.test.Brotli HQ profile accumulates real work with max peak and separate emitted rollback...OK
+917/1422 br.encoder.hq_dictionary.types_tests.test.Brotli HQ source keeps ordinary past frame bytes and u64 absolute positions...OK
+918/1422 br.encoder.hq_dictionary.types_tests.test.Brotli HQ exact encoding preserves semantic aliases and canonical terminal fields...OK
+919/1422 br.encoder.hq_dictionary.provider_tests.test.Brotli HQ dictionary provider preserves short static raw boundaries and failed query frontier...OK
+920/1422 br.encoder.hq_dictionary.provider_tests.test.Brotli HQ dictionary provider uses serialized contextual address authority and actual budgets...OK
+921/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal rollback restores exact arrays and retry equals unlogged baseline...OK
+922/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal committed batch continues with the same history and tokens...OK
+923/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal repeated bucket and ring slot writes undo in reverse order...OK
+924/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal capacity failure never writes an unlogged insertion...OK
+925/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal owners move and reservation failure preserve reusable capacity...OK
+926/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal inactive nested and zero allocation lifecycle contracts...OK
+927/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal keeps full i64 positions and the largest ring slot...OK
+928/1422 lz77.streaming_hash_journal_tests.test.Streaming hash journal releases all state log token and rollback allocation failures...OK
+929/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge preserves legacy static deferral and empty-final wire...OK
+930/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge delays only opted-in full blocks...OK
+931/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge chooses non-final blocks before more input and metadata...OK
+932/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge final publication failure retains buffered input and reservoir...OK
+933/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge failed flush retries one non-final publication...OK
+934/1422 br.incremental.stored.encoder_tests.test.Brotli HQ generic bridge retains progress when metadata fails after draining output...OK
+935/1422 br.incremental.stored.encoder_counter_tests.test.Brotli HQ generic counters cross 4 GiB and continue streams without large buffers...OK
+936/1422 br.incremental.stored.encoder_counter_tests.test.Brotli HQ generic counters reject offered input overflow before changing state...OK
+937/1422 br.incremental.stored.encoder_counter_tests.test.Brotli HQ generic counters reject output overflow before copying or advancing offsets...OK
+938/1422 br.incremental.stored.encoder_counter_tests.test.Brotli HQ generic counters retain accepted input and prior output on later overflow...OK
+939/1422 br.incremental.stored.encoder_counter_tests.test.Brotli HQ generic counters check stream completion overflow...OK
+940/1422 br.incremental.stored.encoder_block_options_tests.test.Brotli HQ generic prefix receives the resolved outer block target...OK
+941/1422 br.incremental.stored.encoder_block_options_tests.test.Brotli HQ generic prefix preserves codecs without the block target hook...OK
+942/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic rejects control and IO capacity overflow before allocation...OK
+943/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic activates only configured tracking and charges all owned buffers...OK
+944/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic seeds retained bytes once and rejects reconfiguration before reset...OK
+945/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic moves with a shared lease and frees through its original owner...OK
+946/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic preserves backing OOM and retries accepted final input...OK
+947/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory generic maps total denial without discarding earlier output progress...OK
+948/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory public tiny caps reject before input and preserve backing accounting...OK
+949/1422 br.incremental.stored.encoder_memory_tests.test.Brotli total memory public tiny profile-only encoding tracks real buffers and round trips...OK
+950/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources default profile and exact quota charge real retained buffers...OK
+951/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources validate before control admission and preserve backing OOM...OK
+952/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources prefix metadata allocation failure restores partial header before retry...OK
+953/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources failed flush preserves mutable tail and accepted input for empty retry...OK
+954/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources metadata failure retains sent prefix and retries with exact durable progress...OK
+955/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources final marker quota failure preserves completed content before retry...OK
+956/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources reset and next stream retain quota and switch profile only after validation...OK
+957/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources moving shared encoder preserves one lease and original ownership...OK
+958/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources first budget activation seeds existing IO capacities exactly once...OK
+959/1422 br.incremental.stored.stored_resource_tests.test.Brotli stored resources shared child keeps outer refusal classification through real output...OK
+960/1422 br.encoder.hq_parser.whole_options_tests.test.Brotli whole-block options preserve bounded defaults and every other resolved control...OK
+961/1422 br.encoder.hq_parser.whole_options_tests.test.Brotli whole-block options accept complete meta-block bounds without implicit fallback...OK
+962/1422 br.encoder.hq_parser.whole_options_tests.test.Brotli whole-block options profile tracks actual mode passes with saturating counts and maximum span...OK
+963/1422 br.encoder.hq_parser.length_options_tests.test.Brotli copy-length options preserve sampled defaults and independent resolved settings...OK
+964/1422 br.encoder.hq_parser.length_options_tests.test.Brotli copy-length options forward zero and finite per-plan evaluation limits without changing quality validation...OK
+965/1422 br.encoder.hq_parser.length_options_tests.test.Brotli copy-length options profile counts actual passes and measured maxima independently of limits...OK
+966/1422 br.encoder.total_budget.tests.test.Brotli total budget defaults and zero cap allocate no extra control...OK
+967/1422 br.encoder.total_budget.tests.test.Brotli total budget counts control exact limits and pure reconfiguration...OK
+968/1422 br.encoder.total_budget.tests.test.Brotli total budget lease move nested sharing and late frees preserve stable state...OK
+969/1422 br.encoder.total_budget.tests.test.Brotli total budget adopts reusable storage and external releases exactly once...OK
+970/1422 br.encoder.total_budget.tests.test.Brotli total budget returned wire detaches only to its real backing owner...OK
+971/1422 br.encoder.total_budget.tests.test.Brotli total budget resize remap and fallback realloc charge actual live bytes...OK
+972/1422 br.encoder.total_budget.tests.test.Brotli total budget owner begins a fresh backing-failure classification...OK
+973/1422 br.encoder.total_budget.tests.test_0...OK
+974/1422 br.encoder.total_budget.tests.test.Brotli total budget profiles reset at current live bytes and merge ordered snapshots...OK
+975/1422 br.encoder.total_budget.tests.test.Brotli total budget owned control and payload clean every allocation failure...OK
+976/1422 br.encoder.total_budget.tests.test.Brotli total budget nested profiles cannot escape their ownership scope...OK
+977/1422 br.encoder.total_budget.tests.test.Brotli total budget external reservations count actual cross-allocator heaps only...OK
+978/1422 br.encoder.total_budget.tests.test.Brotli total budget rejects mismatched backing contexts with an identical vtable...OK
+979/1422 br.encoder.total_budget.sticky_tests.test.Brotli total authority descendants preserve the owner's quota interval...OK
+980/1422 br.encoder.total_budget.sticky_tests.test.Brotli total authority successful allocation resize remap adoption and configuration stay sticky...OK
+981/1422 br.encoder.total_budget.sticky_tests.test.Brotli total authority external success and backing OOM preserve quota until owner begins again...OK
+982/1422 br.encoder.total_budget.sticky_tests.test.Brotli total authority child configuration checks reject before shared state mutation...OK
+983/1422 br.encoder.total_budget.sticky_tests.test.Brotli total authority closed leases cannot revive outstanding allocator state...OK
+984/1422 br.encoder.large_distance_tests.test.Brotli large distance authority separates wire and active alphabets for all sixty four shapes...OK
+985/1422 br.encoder.large_distance_tests.test.Brotli large distance authority checks every active bucket boundary and forbidden extras...OK
+986/1422 br.encoder.large_distance_tests.test.Brotli large distance authority excludes incomplete groups below the global safe value...OK
+987/1422 br.encoder.large_window_types_tests.test.Brotli large window authority Source enforces actual format and u64 frame positions...OK
+988/1422 br.encoder.large_window_types_tests.test.Brotli large window authority exact commands and resolved settings carry explicit format...OK
+989/1422 br.incremental.copy_decoder.test_0...OK
+990/1422 br.incremental.owned_copy_decoder.test_0...OK
+991/1422 br.serialized_dictionary_trainer.test.serialized trainer is deterministic and emits power-of-two buckets...OK
+992/1422 br.serialized_dictionary_trainer.test.serialized trainer builds deterministic fixed-word COVER buckets...OK
+993/1422 br.serialized_dictionary_trainer.test.serialized trainer validates bounds and handles empty corpora...OK
+994/1422 br.serialized_dictionary_trainer.test.serialized trainer learns deterministic two-group context maps...OK
+995/1422 br.serialized_dictionary_trainer.test.serialized trainer learns deterministic non-contiguous context clusters...OK
+996/1422 br.serialized_dictionary_trainer.test.serialized trainer derives canonical transform families...OK
+997/1422 br.serialized_dictionary_trainer.test.serialized trainer releases every allocation failure path...OK
+998/1422 dictionary.test_0...OK
+999/1422 dictionary.test.dictionary phrase index handles collisions and backward-shift deletion...OK
+1000/1422 dictionary.test.dictionary phrase index growth releases every allocation failure...OK
+1001/1422 dictionary.test.dictionary IDs are stable and content sensitive...OK
+1002/1422 dictionary.test.dictionary metadata codec is fixed size and versioned...OK
+1003/1422 dictionary.test.dictionary metadata codec rejects malformed records...OK
+1004/1422 dictionary.test.dictionary metadata catalog codec round trips entries...OK
+1005/1422 dictionary.test.dictionary metadata catalog codec rejects malformed records...OK
+1006/1422 dictionary.test.dictionary metadata validates content and window...OK
+1007/1422 dictionary.test.training plan summarizes sample corpus...OK
+1008/1422 dictionary.test.dictionary trainer is deterministic and extracts repeated phrases...OK
+1009/1422 dictionary.test.dictionary trainer indexed candidate set matches scan reference...OK
+1010/1422 dictionary.test.dictionary trainer benchmark corpus remains byte exact...OK
+1011/1422 dictionary.test.validated dictionary trainer preserves or improves held-out coverage...OK
+1012/1422 dictionary.test.COVER-class optimizer selects the best enumerated held-out score...OK
+1013/1422 dictionary.test.validated dictionary trainer reuses collection without changing selection...OK
+1014/1422 dictionary.test.validated dictionary trainer shares phrase scans across target sizes...OK
+1015/1422 dictionary.test.validated target training releases every allocation failure path...OK
+1016/1422 dictionary.test.dictionary trainer handles empty target...OK
+1017/1422 dictionary.test.dictionary trainer replaces low-value phrase candidates...OK
+1018/1422 dictionary.test.cross-sample phrase ranking prefers corpus-wide phrases...OK
+1019/1422 dictionary.test.dictionary match scanner summarizes coverage...OK
+1020/1422 dictionary.test.streaming dictionary match summary equals materialized oracle...OK
+1021/1422 dictionary.test.indexed dictionary validation score matches linear oracle...OK
+1022/1422 dictionary.test.indexed dictionary validation scorer recovers after allocation failure...OK
+1023/1422 dictionary.test.short COVER validation scoring remains allocation free...OK
+1024/1422 dictionary.test.dictionary prefix index matches linear scan and preserves earliest ties...OK
+1025/1422 dictionary.test.dictionary patch codec round trips matched and literal bytes...OK
+1026/1422 dictionary.test.dictionary patch uses compact match op encoding...OK
+1027/1422 dictionary.test.dictionary patch decode into rejects short output and overlong op streams...OK
+1028/1422 dictionary.test.dictionary patch rejects non-progress literal ops...OK
+1029/1422 br.serialized_dictionary_word_pruner.test.serialized dictionary word pruner generates deterministic iterative neighbors...OK
+1030/1422 dictionary.cover.test.COVER-class epoch sizing follows the COVER invariant...OK
+1031/1422 dictionary.cover.test.COVER-class hashes match Zstandard 6-byte and 8-byte formulas...OK
+1032/1422 dictionary.cover.test.COVER-class rolling scorer matches brute-force distinct-hash oracle...OK
+1033/1422 dictionary.cover.test.COVER-class trainer is deterministic and preserves sample boundaries...OK
+1034/1422 dictionary.cover.test.COVER-class full segments preserve fixed-record alignment...OK
+1035/1422 dictionary.cover.test.COVER-class trainer validates bounded parameters...OK
+1036/1422 dictionary.cover.test.COVER-class trainer releases every allocation failure path...OK
+1037/1422 dictionary.cover.test.COVER-class prepared corpus matches independent segment training...OK
+1038/1422 dictionary.cover.test.COVER-class prepared corpus recovers from candidate allocation failure...OK
+1039/1422 dictionary.cover.test.COVER-class prepared corpus releases every allocation failure path...OK
+1040/1422 br.serialized_dictionary_context_clusterer.test.serialized context clusterer learns non-contiguous phrase groups...OK
+1041/1422 br.serialized_dictionary_context_clusterer.test.serialized context clusterer validates options and sparse evidence...OK
+1042/1422 br.serialized_dictionary_affix_trainer.test.serialized affix trainer learns deterministic prefix suffix pairs...OK
+1043/1422 br.serialized_dictionary_affix_trainer.test.serialized affix trainer validates bounds and releases failures...OK
+1044/1422 br.serialized_dictionary_shift_trainer.test.serialized shift trainer learns first and all signed deltas...OK
+1045/1422 br.serialized_dictionary_shift_trainer.test.serialized shift trainer validates bounds and releases failures...OK
+1046/1422 br.serialized_dictionary_transform_clusterer.test.serialized transform clusterer validates bounded inputs...OK
+1047/1422 br.serialized_dictionary_transform_clusterer.test.serialized transform clusterer assigns minimal profiles and releases failures...OK
+1048/1422 checksum.test.Adler-32 combine matches one-shot and is associative...OK
+1049/1422 checksum.test.CRC-32 known IEEE vectors...OK
+1050/1422 checksum.test.CRC-32 streaming matches one-shot...OK
+1051/1422 checksum.test.CRC-32C known Castagnoli vectors...OK
+1052/1422 checksum.test.CRC-32C streaming matches one-shot...OK
+1053/1422 checksum.test.CRC-32C slice-by-8 slice-by-16 and slice-by-32 match scalar...OK
+1054/1422 checksum.test.CRC implementations match Zig std catalog...OK
+1055/1422 checksum.test.CRC-32 slice-by-4 slice-by-8 slice-by-16 and slice-by-32 match scalar...OK
+1056/1422 checksum.test.CRC combine matches one-shot for IEEE and Castagnoli...OK
+1057/1422 checksum.test.CRC combine is associative across block boundaries...OK
+1058/1422 checksum.test.CRC-32 best dispatch matches scalar...OK
+1059/1422 checksum.test.CPU feature report selects validated IEEE CRC32 hardware paths...OK
+1060/1422 checksum.test.CRC-32 PCLMUL path matches slicing across lengths offsets and updates...OK
+1061/1422 checksum.test.CRC-32 ARM path matches slicing across lengths offsets and updates...OK
+1062/1422 checksum.test.CRC-32C hardware path matches table path...OK
+1063/1422 checksum.adler.test.known zlib vectors...OK
+1064/1422 checksum.adler.test.streaming matches one-shot across reduction boundary...OK
+1065/1422 checksum.adler.test.fragmented streaming updates match scalar oracle...OK
+1066/1422 checksum.adler.test.optimized and portable folds match scalar oracle at boundaries...OK
+1067/1422 dictionary.cover_optimize.test.COVER-class optimizer collapses duplicate grid points and preserves first ties...OK
+1068/1422 dictionary.cover_optimize.test.COVER-class optimizer automatic segment ladder is bounded and deterministic...OK
+1069/1422 dictionary.cover_optimize.test.COVER-class optimizer shared contexts match separate training oracle...OK
+1070/1422 dictionary.cover_optimize.test.COVER-class optimizer validates grid and candidate limits...OK
+1071/1422 dictionary.cover_optimize.test.COVER-class optimizer releases every allocation failure path...OK
+1072/1422 dictionary.fast_cover_tests.test.FastCover contracts hashed frequencies and chosen segments match an independent slow oracle...OK
+1073/1422 dictionary.fast_cover_tests.test.FastCover contracts acceleration changes observed frequency work and exact finalizer sample fractions...OK
+1074/1422 dictionary.fast_cover_tests.test.FastCover contracts frequency reads never cross tiny sample boundaries and old COVER remains distinct...OK
+1075/1422 dictionary.fast_cover_tests.test.FastCover contracts all invalid scalar corpus and arithmetic bounds reject before allocation...OK
+1076/1422 dictionary.fast_cover_tests.test.FastCover contracts prepared reset fork and poisoned value move preserve selection...OK
+1077/1422 dictionary.fast_cover_tests.test.FastCover contracts large same bucket windows use counters wider than sixteen bits...OK
+1078/1422 dictionary.fast_cover_tests.test.FastCover optimizer contracts chooses the best independently enumerated held out cost and folds duplicates...OK
+1079/1422 dictionary.fast_cover_tests.test.FastCover optimizer contracts automatic endpoints and serial parallel selection are deterministic...OK
+1080/1422 dictionary.fast_cover_tests.test.FastCover optimizer contracts suffix shrink is bounded by the global full dictionary baseline...OK
+1081/1422 dictionary.fast_cover_tests.test.FastCover optimizer contracts invalid grids partitions and scoring errors are explicit...OK
+1082/1422 dictionary.fast_cover_resource_tests.test.FastCover resources exact live peak includes actual short result rather than target allowance...OK
+1083/1422 dictionary.fast_cover_resource_tests.test.FastCover resources shared allocator charges retained outputs and cached workspace together...OK
+1084/1422 dictionary.fast_cover_resource_tests.test.FastCover resources every allocation path including forks and moves releases owned buffers...OK
+1085/1422 dictionary.fast_cover_resource_tests.test.FastCover resources failed final result or reprepare allocation leaves previous corpus reusable...OK
+1086/1422 dictionary.fast_cover_resource_tests.test.FastCover optimizer resources managed scorer candidate winner and exact result share one peak...OK
+1087/1422 dictionary.fast_cover_resource_tests.test.FastCover optimizer resources every managed scorer and candidate allocation failure frees all storage...OK
+1088/1422 dictionary.fast_cover_resource_tests.test.FastCover optimizer resources a tiny native stack budget falls back without dropping candidates...OK
+1089/1422 br.incremental.owned_counter_tests.test.Brotli owned counters cross 4 GiB with bounded buffers and preserve frame totals...OK
+1090/1422 br.incremental.owned_counter_tests.test.Brotli owned counters retain wide pledges without narrowing payload remaining...OK
+1091/1422 br.incremental.owned_counter_tests.test.Brotli owned counters reject offered input and completion overflow before accepting bytes...OK
+1092/1422 br.incremental.owned_counter_tests.test.Brotli owned counters clip large output capacity and permit final bits at the limit...OK
+1093/1422 br.incremental.owned_counter_tests.test.Brotli owned counters keep accepted prefix on output exhaustion and publish partial failures...OK
+1094/1422 br.incremental.owned_counter_tests.test.Brotli owned counters check finish and admit the last representable frame...OK
+1095/1422 br.incremental.owned_counter_tests.test.Brotli owned counters compare full offered input against wide caps and pledges...OK
+1096/1422 br.incremental.owned_counter_tests.test.Brotli owned counters preserve next-frame operation caps transactionally...OK
+1097/1422 br.incremental.copy_counter_tests.test.Brotli copy counters cross 4 GiB through stored output and diagnostics...OK
+1098/1422 br.incremental.copy_counter_tests.test.Brotli copy counters use wide positions for scalar and bulk history rings...OK
+1099/1422 br.incremental.copy_counter_tests.test.Brotli copy counters widen compressed meta-block endpoints and wrap bit phases...OK
+1100/1422 br.incremental.copy_counter_tests.test.Brotli copy counters metadata totals and block counts cross 4 GiB...OK
+1101/1422 br.incremental.copy_counter_tests.test.Brotli copy counters preserve wide operation caps across nextFrame...OK
+1102/1422 br.incremental.copy_counter_tests.test.Brotli copy counters check compound dictionary spans before cursor writes...OK
+1103/1422 br.incremental.copy_counter_tests.test.Brotli copy counters reject offered input overflow before parsing...OK
+1104/1422 br.incremental.copy_counter_tests.test.Brotli copy counters reject copy output overflow before writing or advancing...OK
+1105/1422 br.incremental.copy_counter_tests.test.Brotli copy counters preserve accepted prefixes before later output overflow...OK
+1106/1422 br.incremental.copy_counter_tests.test.Brotli copy counters reject metadata and completed-frame overflow before commit...OK
+1107/1422 br.incremental.copy_counter_tests.test.Brotli copy counters bit checkpoints wrap without limiting absolute bytes...OK
+1108/1422 br.pattern.test.repeated distinct prefix detection...OK
+1109/1422 br.encoder.stored_memory_owner.test_0...OK
+1110/1422 br.encoder.stored_memory_reuse.test_0...OK
+1111/1422 br.encoder.stored_memory_reuse_tests.test.Brotli stored memory scratch only protects borrows overlapping actual destination...OK
+1112/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner disabled operations retain no authority or control...OK
+1113/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner failed activation rolls back exact retained capacity...OK
+1114/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner committed adoption moves safely and detaches call profile...OK
+1115/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner existing failure restores cap and existing success keeps cap...OK
+1116/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner inherited authority preserves outer profile cap and lifetime...OK
+1117/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner rejected inherited activation does not detach outer profile...OK
+1118/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner rejects changed backing and distinguishes backing allocation failure...OK
+1119/1422 br.encoder.stored_memory_owner_tests.test.Brotli stored memory owner activation cleans every backing allocation failure...OK
+1120/1422 br.incremental.tests.test.Brotli incremental decoder accepts split input and tiny output...OK
+1121/1422 br.incremental.tests.test.Brotli incremental decoder enforces input output and exact limits...OK
+1122/1422 br.incremental.tests.test.Brotli incremental decoder auto completes pledged compressed input...OK
+1123/1422 br.incremental.tests.test.Brotli incremental decoder auto completes compressed meta-block input...OK
+1124/1422 br.incremental.tests.test.Brotli incremental decoder reuses allocations across framed payloads...OK
+1125/1422 br.incremental.tests.test.Brotli incremental decoder rejects early next frame...OK
+1126/1422 br.incremental.tests.test.Brotli incremental decoder streams compressed output before finish...OK
+1127/1422 br.incremental.tests.test.Brotli incremental decoder sizes history from the window prefix...OK
+1128/1422 br.incremental.tests.test.Brotli incremental decoder reports an insufficient history cap...OK
+1129/1422 br.incremental.tests.test.Brotli incremental decoder releases every owned history allocation failure...OK
+1130/1422 br.incremental.tests.test.Brotli incremental decoder forwards metadata and external header scratch...OK
+1131/1422 br.incremental.tests.test.Brotli incremental decoder owns large headers on demand...OK
+1132/1422 br.incremental.tests.test.Brotli incremental decoder bounds owned large headers...OK
+1133/1422 br.incremental.tests.test.Brotli incremental decoder releases owned large header allocation failures...OK
+1134/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder handles split Huffman input...OK
+1135/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder accepts Node-gated hello shape...OK
+1136/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder consumes final-empty trailer...OK
+1137/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder streams following stored blocks...OK
+1138/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder streams multiple stored blocks...OK
+1139/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder captures following metadata...OK
+1140/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder crosses insert and length boundaries...OK
+1141/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder enforces bounds and framing...OK
+1142/1422 br.incremental.literal_tests.test.byte-progressive compressed literal decoder rejects copy commands...OK
+1143/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder resumes overlapping copies...OK
+1144/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder consumes final-empty trailer...OK
+1145/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder crosses compressed meta-blocks...OK
+1146/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder preserves contexts across meta-blocks...OK
+1147/1422 br.incremental.copy_tests.test.byte-progressive copy decoder accepts stored and metadata first blocks...OK
+1148/1422 br.incremental.copy_tests.test.byte-progressive copy decoder uses caller-owned compressed header scratch...OK
+1149/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder streams following stored blocks...OK
+1150/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder skips following metadata...OK
+1151/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder handles repeated commands and history wrap...OK
+1152/1422 br.incremental.copy_tests.test.byte-progressive copy decoder bulk spans preserve overlap and ring wrap...OK
+1153/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder supports recent and regular distances...OK
+1154/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder accepts planner output...OK
+1155/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder accepts ratio context output...OK
+1156/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder selects literal and distance contexts...OK
+1157/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder switches entropy block types...OK
+1158/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder enforces history and framing...OK
+1159/1422 br.incremental.copy_tests.test.byte-progressive compressed copy decoder emits transformed dictionary words...OK
+1160/1422 br.incremental.copy_tests.test.byte-progressive copy decoder completes a partial-byte static dictionary header...OK
+1161/1422 br.incremental.contracts_tests.test.Brotli stream contracts known unknown bounds zero output and tiny chunks...OK
+1162/1422 br.incremental.contracts_tests.test.Brotli stream contracts fatal errors publish consumed output prefix and stay sticky...OK
+1163/1422 br.incremental.contracts_tests.test.Brotli stream contracts payload errors after compressed copies report the same prefix...OK
+1164/1422 br.incremental.contracts_tests.test.Brotli stream contracts total output cap survives nextFrame and reset starts independently...OK
+1165/1422 br.incremental.contracts_tests.test.Brotli stream contracts memory retained across frames and explicit reconfiguration frees it...OK
+1166/1422 br.incremental.contracts_tests.test.Brotli stream contracts budget denial and backing allocation failure are distinct...OK
+1167/1422 br.incremental.contracts_tests.test.Brotli stream contracts metadata dictionaries history caps and moved state preserve behavior...OK
+1168/1422 br.incremental.contracts_tests.test.Brotli stream contracts large headers account replacement peak and retained storage...OK
+1169/1422 br.incremental.contracts_tests.test.Brotli stream contracts standard and large window resource bounds match reference output...OK
+1170/1422 br.incremental.contracts_tests.test.Brotli stream contracts nextFrame rejects caps below committed output transactionally...OK
+1171/1422 br.incremental.contracts_tests.test.Brotli stream contracts malformed dictionaries and compressed size preflight make no progress...OK
+1172/1422 br.incremental.contracts_tests.test.Brotli stream contracts caller header exhaustion can grow and retry without replay...OK
+1173/1422 br.incremental.contracts_tests.test.Brotli stream contracts moving active parsed copy state keeps owned pointers stable...OK
+1174/1422 br.incremental.contracts_tests.test.Brotli stream contracts caller header capacity boundaries do not retain payload across retry...OK
+1175/1422 br.incremental.rle_tests.test.byte-progressive compressed RLE decoder handles byte input and output backpressure...OK
+1176/1422 br.incremental.rle_tests.test.byte-progressive compressed RLE decoder covers command extra-bit boundaries...OK
+1177/1422 br.incremental.rle_tests.test.byte-progressive compressed RLE decoder enforces limits truncation and trailing data...OK
+1178/1422 br.incremental.rle_tests.test.byte-progressive compressed RLE decoder rejects a broader compressed stream...OK
+1179/1422 br.incremental.stored.tests.test.byte-progressive stored decoder streams headers metadata and payload...OK
+1180/1422 br.incremental.stored.tests.test.byte-progressive stored decoder captures bounded metadata...OK
+1181/1422 br.incremental.stored.tests.test.byte-progressive stored decoder rejects compressed and truncated streams...OK
+1182/1422 br.incremental.stored.tests.test.byte-progressive stored decoder continues framed streams...OK
+1183/1422 br.incremental.stored.tests.test.incremental stored encoder round trips split input and tiny output...OK
+1184/1422 br.incremental.stored.tests.test.incremental stored encoder enforces limits and finish...OK
+1185/1422 br.incremental.stored.tests.test.incremental stored encoder flushes and resumes...OK
+1186/1422 br.incremental.stored.tests.test.incremental stored encoder continues independent streams...OK
+1187/1422 br.incremental.stored.tests.test.incremental stored encoder inserts metadata between payloads...OK
+1188/1422 br.incremental.literal_decoder.test.Brotli subset counters literal crosses 4 GiB with bounded metadata and bit phase...OK
+1189/1422 br.incremental.literal_decoder.test.Brotli subset counters literal preflights offered input and preserves earlier output...OK
+1190/1422 br.incremental.literal_decoder.test.Brotli subset counters literal metadata failure retains consumed input and literals...OK
+1191/1422 br.incremental.rle_decoder.test.Brotli subset counters RLE crosses 4 GiB with local output slices...OK
+1192/1422 br.incremental.rle_decoder.test.Brotli subset counters RLE rejects offered input and output overflow before writes...OK
+1193/1422 br.incremental.rle_decoder.test.Brotli subset counters format failures retain consumed bytes and completed output...OK
+1194/1422 br.incremental.rle_decoder.test.Brotli subset counters diagnostics preserve header rejection and continued stream offsets...OK
+1195/1422 br.incremental.stored.decoder.test.Brotli subset counters stored crosses 4 GiB and continues legal streams...OK
+1196/1422 br.incremental.stored.decoder.test.Brotli subset counters stored rejects overflow before input and output writes...OK
+1197/1422 br.incremental.stored.decoder.test.Brotli subset counters stored checks metadata and stream completion before commit...OK
+1198/1422 br.incremental.planned_encoder_tests.test.incremental planned encoder mixes compressed and stored blocks...OK
+1199/1422 br.incremental.planned_encoder_tests.test.incremental planned encoder flushes compressed blocks around metadata...OK
+1200/1422 br.incremental.planned_encoder_tests.test.incremental planned encoder retains planner capacity across streams...OK
+1201/1422 br.incremental.planned_encoder_tests.test.incremental planned encoder matches across block history...OK
+1202/1422 br.incremental.planned_encoder_tests.test.quality wide windows match beyond 64 KiB across every planned surface...OK
+1203/1422 br.incremental.planned_encoder_tests.test.quality streams use the complete standard 16-bit history...OK
+1204/1422 br.incremental.planned_encoder_tests.test.incremental planned encoder bounds history to the advertised window...OK
+1205/1422 br.incremental.planned_encoder_tests.test.chunked and incremental planned encoders honor quality policies...OK
+1206/1422 br.incremental.planned_encoder_tests.test.command-state work override propagates across chunked and next stream...OK
+1207/1422 br.incremental.planned_encoder_tests.test.q0 and q1 fragment surfaces share one deterministic block core...OK
+1208/1422 br.incremental.planned_encoder_tests.test.q0 and q1 fragment parsers do not borrow prior block history...OK
+1209/1422 br.incremental.planned_encoder_tests.test.q0 and q1 one-shot bounds cover incompressible multi-fragment output...OK
+1210/1422 br.incremental.planned_encoder_tests.test.q0 and q1 fragment one-shot paths release every allocation failure...OK
+1211/1422 br.incremental.planned_encoder_tests.test.planned stream quality options reject invalid chunked combinations before output...OK
+1212/1422 br.incremental.planned_encoder_tests.test.quality-aware planned blocks consider static dictionary without LZ77 matches...OK
+1213/1422 br.incremental.planned_encoder_tests.test.planned stream policies select quality-specific block sizes...OK
+1214/1422 br.incremental.planned_encoder_tests.test.incremental auto block sizing matches chunked quality wire...OK
+1215/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation follows midpoint changes...OK
+1216/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation follows quarter changes...OK
+1217/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation follows a non-quarter grid change...OK
+1218/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation follows a 4 KiB grid change...OK
+1219/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation arbitrates the proxy frontier...OK
+1220/1422 br.incremental.planned_encoder_tests.test.entropy-aware planned stream segmentation retains the two-half winner...OK
+1221/1422 br.incremental.planned_encoder_tests.test.warmed entropy-aware incremental segmentation reuses retained scratch...OK
+1222/1422 br.incremental.planned_encoder_tests.test.oversized planned input applies quality policy to every meta block...OK
+1223/1422 br.incremental.planned_encoder_tests.test.incremental static dictionary encoder matches one-shot across fragments...OK
+1224/1422 br.incremental.planned_encoder_tests.test.incremental static dictionary encoder preserves addresses across blocks...OK
+1225/1422 br.incremental.planned_encoder_tests.test.incremental static dictionary encoder resumes after metadata...OK
+1226/1422 br.incremental.planned_encoder_tests.test.static dictionary convenience APIs preserve wire and chunk boundaries...OK
+1227/1422 br.incremental.planned_encoder_tests.test.static dictionary chunk conveniences preflight and roll back...OK
+1228/1422 br.incremental.planned_encoder_tests.test.static dictionary chunk append releases every allocation failure...OK
+1229/1422 br.incremental.planned_encoder_tests.test.reusable static dictionary stream encoder needs no warmed allocations...OK
+1230/1422 br.incremental.planned_encoder_tests.test.static dictionary stream wire ignores randomized input output fragmentation...OK
+1231/1422 br.incremental.planned_encoder_tests.test.incremental static dictionary encoder covers tiny streams and preflight errors...OK
+1232/1422 br.incremental.planned_encoder_tests.test.incremental static dictionary encoder releases allocation failures...OK
+1233/1422 tests.br_total_memory_contracts.test_0...OK
+1234/1422 tests.br_total_memory_contracts.test.Brotli total memory null policy and profile preserve representative complete base wires...OK
+1235/1422 tests.br_total_memory_contracts.test.Brotli total memory profile and exact cap match independent requested peak for every legacy quality and HQ...total-memory setting=fast requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=balanced requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=ratio requested-peak=689759 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q0 requested-peak=4433 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q1 requested-peak=2775 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q2 requested-peak=689668 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q3 requested-peak=689654 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q4 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q5 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q6 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q7 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q8 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q9 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q10 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q11 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq10 requested-peak=8953273 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq11 requested-peak=9355743 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+OK
+1236/1422 tests.br_total_memory_contracts.test.Brotli total memory zero rejects before backing allocation and empty operations expose real overhead...OK
+1237/1422 tests.br_total_memory_contracts.test.Brotli total memory HQ workspace and total caps remain independent and dual profiling preserves wire...OK
+1238/1422 tests.br_total_memory_contracts.test.Brotli total memory incremental plain pending history and HQ full candidates share one measured cap...OK
+1239/1422 tests.br_total_memory_contracts.test.Brotli total memory real in place allocator growth and remap preserve independently measured profile...OK
+1240/1422 tests.br_total_memory_transactions.test.Brotli total memory Into rejects an impossible budget without touching caller destination...OK
+1241/1422 tests.br_total_memory_transactions.test.Brotli total memory append constant borrowed output is excluded and exact cap preserves aliased input...OK
+1242/1422 tests.br_total_memory_transactions.test.Brotli total memory append moving destination growth is charged until publication and refuses atomically...OK
+1243/1422 tests.br_total_memory_transactions.test.Brotli total memory append to encoder owned output preserves old prefix and aliased outer chunks...OK
+1244/1422 tests.br_total_memory_transactions.test.Brotli total memory bounded tiny allocation graph releases all failed nested HQ guard and legacy work...OK
+1245/1422 tests.br_total_memory_transactions.test.Brotli total memory warm legacy capacity seeds the cap and refusal preserves reusable wire and allocator...OK
+1246/1422 tests.br_total_memory_transactions.test.Brotli total memory returned owned wire remains valid and freeable after reusable handle destruction...OK
+1247/1422 tests.br_total_memory_transactions.test.Brotli total memory an OOM after draining metadata accounts copied progress and resumes without duplication...OK
+1248/1422 tests.br_total_memory_transactions.test.Brotli total memory next stream lower cap refuses before reset and moved handles retain one owner...OK
+1249/1422 tests.br_total_memory_transactions.test.Brotli total memory distinct caller allocator transfer counts simultaneous bytes and changed owner identity rejects...OK
+1250/1422 tests.br_total_memory_transactions.test.Brotli total memory Into aliased encoder output subslice survives moving allocation and zero cap refusal...OK
+1251/1422 tests.br_large_window_contracts.test.Brotli large window default false and instrumentation preserve the frozen complete legacy wires...OK
+1252/1422 tests.br_large_window_contracts.test.Brotli large window all twenty one widths use extension identity and explicit decode consent...OK
+1253/1422 tests.br_large_window_contracts.test.Brotli large window q11 complete wire cannot exceed q10 with matching window shape and metadata...OK
+1254/1422 tests.br_large_window_contracts.test.Brotli large window empty and one two three byte tails retain explicit extension format...OK
+1255/1422 tests.br_large_window_contracts.test.Brotli large window chunks reusable and fragmented encoders preserve actual meta targets and format...OK
+1256/1422 tests.br_large_window_resources.test.Brotli large window invalid widths reject before allocation and general options retain extension...OK
+1257/1422 tests.br_large_window_resources.test.Brotli large window total memory exact requested peak and one below remain independent of HQ cap...OK
+1258/1422 tests.br_large_window_transactions.test.Brotli large window actual command wire preserves implicit explicit zero and aliased nonzero cache semantics...OK
+1259/1422 tests.br_large_window_transactions.test.Brotli large window actual static raw four transforms advance one two three five output bytes without cache push...OK
+1260/1422 tests.br_large_window_transactions.test.Brotli large window next stream format changes clear previous caches and preserve reset identity...OK
+1261/1422 tests.br_large_window_transactions.test.Brotli large window failed final allocation preserves extension reservoir and retries the same format...OK
+1262/1422 tests.br_large_window_transactions.test.Brotli large window aliased reusable input chunks and dictionary keep the exact extension wire...OK
+1263/1422 tests.br_whole_block_contracts.test.Brotli whole block default bounded policy preserves archived small complete wires for all quality controls...OK
+1264/1422 tests.br_whole_block_contracts.test.Brotli whole block 4098 independent cost witness reaches 32792 and retains exact selector in actual wire...OK
+1265/1422 tests.br_whole_block_contracts.test.Brotli whole block finite exhaustive tiny paths match with sufficient beam without global beam claims...OK
+1266/1422 tests.br_whole_block_contracts.test.Brotli whole block all sixteen independently priced aliases retain semantic zero and cache order...OK
+1267/1422 tests.br_whole_block_contracts.test.Brotli whole block public mode reaches complete span in standard large and reusable fragmented APIs...OK
+1268/1422 tests.br_whole_block_contracts.test.Brotli whole block public complete wire preserves bounded guard and q11 q10 ordering...OK
+1269/1422 tests.br_whole_block_resources.test.Brotli whole block full span workspace exact budget and one below reject without bounded fallback...whole-block moving workspace peak=1938400 exact=pass one-below=WorkingMemoryLimitExceeded live=0
+OK
+1270/1422 tests.br_whole_block_resources.test.Brotli whole block predecessor trace crosses unsigned sixteen positions and replays every selected copy...whole-block wide trace commands=33792 moving-peak=21070392 returned-live=3244032
+OK
+1271/1422 tests.br_whole_block_resources.test.Brotli whole block sixteen MiB metadata with zero budget rejects before reading or backing allocation...OK
+1272/1422 tests.br_whole_block_resources.test.Brotli whole block shared nested HQ and total heap profiles match independent requested allocations...OK
+1273/1422 tests.br_whole_block_transactions.test.Brotli whole block raw static length four advances transformed five bytes across four and sixty four KiB...OK
+1274/1422 tests.br_whole_block_transactions.test.Brotli whole block failed full meta allocation retries without changing committed input cache or selected mode...OK
+1275/1422 tests.br_whole_block_transactions.test.Brotli whole block next stream mode switch and reset use the requested parser from fresh state...OK
+1276/1422 tests.br_whole_block_transactions.test.Brotli whole block tiny full span allocation graph preserves source and releases every failed site...OK
+1277/1422 br.encoder.hq_codec.whole_block_tests.test.Brotli HQ whole block public actual wire keeps complete bounded and corresponding q10 guards...OK
+1278/1422 br.encoder.hq_codec.whole_block_tests.test.Brotli HQ whole block workspace failure never returns the completed bounded candidate...OK
+1279/1422 br.encoder.hq_codec.whole_block_tests.test.Brotli HQ whole block total quota charges complete candidates and preserves publication on failure...OK
+1280/1422 br.encoder.hq_codec.complete_length_tests.test.Brotli HQ complete lengths actual public wire preserves matching sampled and q10 complete frames...OK
+1281/1422 br.encoder.hq_codec.complete_length_tests.test.Brotli HQ complete lengths exact per plan search cap succeeds and zero or one below preserves caller output...OK
+1282/1422 br.encoder.hq_codec.complete_length_tests.test.Brotli HQ complete lengths shared total quota charges all frames and rolls back emitted state...OK
+1283/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths default sampled controls preserve the independently frozen small wires...OK
+1284/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths interior fifty sixty nine and eighty three beat sampled edges with actual wire selectors...OK
+1285/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths tiny finite cache paths agree with independent exhaustive command pricing...OK
+1286/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths compound interior fifty is enumerated while static transforms stay atomic...OK
+1287/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths all sixteen aliases retain exact semantic selectors and code zero cache state...OK
+1288/1422 tests.br_complete_lengths_contracts.test.Brotli complete lengths public APIs preserve format sampled wire guard and q11 ordering in both parse modes...OK
+1289/1422 tests.br_complete_lengths_resources.test.Brotli complete lengths independent three admitted command choices enforce per plan zero exact and one below...OK
+1290/1422 tests.br_complete_lengths_resources.test.Brotli complete lengths dynamic command heap exact and one below remain independent of search quota...OK
+1291/1422 tests.br_complete_lengths_transactions.test.Brotli complete lengths public search limit restores emitted counters and caller output before retry...OK
+1292/1422 tests.br_complete_lengths_transactions.test.Brotli complete lengths incremental search denial preserves buffered input and repeats deterministically...OK
+1293/1422 tests.br_complete_lengths_transactions.test.Brotli complete lengths allocation failures keep search errors separate and release command ownership...OK
+1294/1422 tests.br_general_large_window_contracts.test.Brotli general large window false preserves archived q mode legacy and stored wires...OK
+1295/1422 tests.br_general_large_window_contracts.test.Brotli general large window all non HQ qualities modes and legacy levels emit requested extension...OK
+1296/1422 tests.br_general_large_window_contracts.test.Brotli general large window every quality shares valid chunks reusable append into and incremental routes...OK
+1297/1422 tests.br_general_large_window_contracts.test.Brotli general large window stored APIs preserve window metadata and tiny input format...OK
+1298/1422 tests.br_general_large_window_contracts.test.Brotli general large window RAW serialized and custom static dictionaries stay valid on low and command paths...OK
+1299/1422 tests.br_general_large_window_contracts.test.Brotli general large window q0 q1 64 KiB sources retain actual compressed fragment format...OK
+1300/1422 tests.br_general_large_window_contracts.test.Brotli general large window q4 accepts actual adaptive entropy blocks...OK
+1301/1422 tests.br_general_large_window_resources.test.Brotli general large window invalid widths and settings reject before caller mutation...OK
+1302/1422 tests.br_general_large_window_resources.test.Brotli general large window total requested peak is exact and one below refuses all low and legacy paths...OK
+1303/1422 tests.br_general_large_window_resources.test.Brotli general large window one shot releases every allocation failure...OK
+1304/1422 tests.br_general_large_window_resources.test.Brotli general large window encoded bounds detect host integer overflow...SKIP
+1305/1422 tests.br_general_large_window_transactions.test.Brotli general large window q0 q1 and command streams flush metadata and continue across reset...OK
+1306/1422 tests.br_general_large_window_transactions.test.Brotli general large window incremental final OOM retains accepted source and extension tail...OK
+1307/1422 tests.br_general_large_window_transactions.test.Brotli general large window reusable output aliases source and dictionary descriptors safely...OK
+1308/1422 tests.br_general_large_window_transactions.test.Brotli general large window Into refuses insufficient storage before touching caller bytes...OK
+1309/1422 tests.br_stream_counter_contracts.test.Brotli stream counters independent dacd500a decoder wire and local progress...OK
+1310/1422 tests.br_stream_counter_contracts.test.Brotli stream counters independent dacd500a stored literal and RLE subsets...OK
+1311/1422 tests.br_stream_counter_contracts.test.Brotli stream counters three incremental encoder wires preserve dacd500a...OK
+1312/1422 tests.br_stream_counter_contracts.test.Brotli stream counters legal stored prefix crosses output 4 GiB and nonpower ring...OK
+1313/1422 tests.br_stream_counter_contracts.test.Brotli stream counters stored header phase survives coded bit 32-bit wrap...OK
+1314/1422 tests.br_stream_counter_contracts.test.Brotli stream counters literal stored continuation crosses 4 GiB with metadata intact...OK
+1315/1422 tests.br_stream_counter_resources.test.Brotli stream counters cumulative API types preserve physical usize storage...OK
+1316/1422 tests.br_stream_counter_resources.test.Brotli stream counters coded bit cursor wraps while checkpoint retains real bytes...OK
+1317/1422 tests.br_stream_counter_resources.test.Brotli stream counters metadata input crosses 4 GiB without output or capture growth...OK
+1318/1422 tests.br_stream_counter_resources.test.Brotli stream counters metadata totals pass 4 GiB with bounded owned state...OK
+1319/1422 tests.br_stream_counter_transactions.test.Brotli stream counters metadata Counter upper bound refuses before caller writes...OK
+1320/1422 tests.br_stream_counter_transactions.test.Brotli stream counters owned OOM and budget retain long cumulative diagnostics...OK
+1321/1422 tests.br_stream_counter_transactions.test.Brotli stream counters owned next frame limits reject before resetting completed stream...OK
+1322/1422 tests.br_stream_counter_transactions.test.Brotli stream counters encoders reject cumulative output overflow before draining...OK
+1323/1422 tests.br_stream_counter_transactions.test.Brotli stream counters planned encoder cumulative input overflow precedes prefix...OK
+1324/1422 tests.br_stream_counter_transactions.test.Brotli stream counters literal cumulative pledge rejects before stored payload...OK
+1325/1422 tests.br_stream_counter_transactions.test.Brotli stream counters RLE finite pledge and cap reject before output...OK
+1326/1422 tests.br_stream_counter_transactions.test.Brotli stream counters partial stored output survives the following block cap failure...OK
+1327/1422 tests.br_stored_memory_contracts.test.Brotli stored memory default wires preserve archived contiguous chunks empty reusable and incremental formats...OK
+1328/1422 tests.br_stored_memory_contracts.test.Brotli stored memory all complete input output forms preserve frozen wires with instrumentation...OK
+1329/1422 tests.br_stored_memory_contracts.test.Brotli stored memory default null policy adds no control allocation and boundary wires remain archived...OK
+1330/1422 tests.br_stored_memory_contracts.test.Brotli stored memory nonalias Into is a zero heap path for metadata chunks empty and LargeWindow...OK
+1331/1422 tests.br_stored_memory_contracts.test.Brotli stored memory invalid bounds and short destinations reject before allocator or caller writes...OK
+1332/1422 tests.br_stored_memory_resources.test.Brotli stored memory owned contiguous and chunks exact quota equals independent requested peak...OK
+1333/1422 tests.br_stored_memory_resources.test.Brotli stored memory owned zero quota and backing OOM remain distinct and leak free...OK
+1334/1422 tests.br_stored_memory_resources.test.Brotli stored memory spare caller append capacity is borrowed and nonalias cap zero succeeds...OK
+1335/1422 tests.br_stored_memory_resources.test.Brotli stored memory append moving replacement remains charged until handoff and below cap is atomic...OK
+1336/1422 tests.br_stored_memory_resources.test.Brotli stored memory append input and metadata aliases in retained tail snapshot before writes...OK
+1337/1422 tests.br_stored_memory_resources.test.Brotli stored memory aliased outer chunk descriptors and payload are charged with atomic refusal...OK
+1338/1422 tests.br_stored_memory_resources.test.Brotli stored memory direct Into aliases charge snapshots and quota zero leaves allocation untouched...OK
+1339/1422 tests.br_stored_memory_resources.test.Brotli stored memory inherited authority rejects conflicting cap and profile on zero heap routes...OK
+1340/1422 tests.br_stored_memory_transactions.test.Brotli stored memory reusable adoption charges full retained capacity exactly once across calls...OK
+1341/1422 tests.br_stored_memory_transactions.test.Brotli stored memory reusable failed activation preserves bytes capacity and original ownership...OK
+1342/1422 tests.br_stored_memory_transactions.test.Brotli stored memory reusable moving growth charges old new capacities and refuses transactionally...OK
+1343/1422 tests.br_stored_memory_transactions.test.Brotli stored memory reusable lease survives moves and call profile storage detaches...OK
+1344/1422 tests.br_stored_memory_transactions.test.Brotli stored memory reusable aliased scratch Into snapshots input chunks and metadata before overwrite...OK
+1345/1422 tests.br_stored_memory_transactions.test.Brotli stored memory incremental exact quota matches independent retained IO and one shared control...OK
+1346/1422 tests.br_stored_memory_transactions.test.Brotli stored memory incremental reset nextStream and move preserve persistent quota and full capacities...OK
+1347/1422 tests.br_stored_memory_transactions.test.Brotli stored memory incremental borrowed metadata flush and bounded output share the retained ledger...OK
+1348/1422 tests.br_stored_memory_transactions.test.Brotli stored memory incremental quota zero and invalid policy fail before accepting input or output...OK
+1349/1422 tests.br_stored_memory_transactions.test.Brotli stored memory incremental late quota refusal and OOM keep accepted progress and retry without duplicate blocks...OK
+1350/1422 tests.wide_bit_contracts.test.Wide bit archived stored and planned wires remain exact across native readers...OK
+1351/1422 tests.wide_bit_contracts.test.Wide bit native layouts retain archived offsets while narrow targets widen whole positions only...OK
+1352/1422 tests.wide_bit_contracts.test.Wide bit archived mixed values and cursor checkpoints hold for all five readers...OK
+1353/1422 tests.wide_bit_contracts.test.Wide bit scalar complete probes and reads agree with a one bit oracle at every alignment...OK
+1354/1422 tests.wide_bit_contracts.test.Wide bit partial scalar padding hides real high bytes beyond every logical endpoint...OK
+1355/1422 tests.wide_bit_contracts.test.Wide bit partial scalar and Brotli failures retain logical cursor after probes and invalid widths...OK
+1356/1422 tests.wide_bit_contracts.test.Wide bit Brotli hot probes staged fields and synchronization match the independent oracle...OK
+1357/1422 tests.wide_bit_contracts.test.Wide bit buffered word refill and wide fields preserve independent values without overconsumption...OK
+1358/1422 tests.wide_bit_contracts.test.Wide bit both chunk readers match independent probes in one byte and empty chunk layouts...OK
+1359/1422 tests.wide_bit_contracts.test.Wide bit uneven chunk layouts keep copied aligned integers and later reservoir reads ordered...OK
+1360/1422 tests.wide_bit_contracts.test.Wide bit aligned reads preserve caller sentinels and cursor on malformed tails...OK
+1361/1422 tests.wide_bit_contracts.test.Wide bit staged peeks commit exactly the selected symbol width across reservoir readers...OK
+1362/1422 tests.wide_bit_contracts.test.Wide bit chunk offset constructors and exhausted probes preserve actual slice boundaries...OK
+1363/1422 tests.wide_bit_resources.test.Wide bit numeric byte geometry crosses the former bit address ceiling without allocating input...OK
+1364/1422 tests.wide_bit_resources.test.Wide bit quotient remainder rounding and local narrowing stay checked at maximum integers...OK
+1365/1422 tests.wide_bit_resources.test.Wide bit scalar numeric checkpoints report large positions without reading synthetic addresses...OK
+1366/1422 tests.wide_bit_resources.test.Wide bit buffered numeric consumed counts round offsets without addition overflow...OK
+1367/1422 tests.wide_bit_resources.test.Wide bit chunk numeric positions and remaining geometry preserve wide bits and local byte indices...OK
+1368/1422 tests.wide_bit_resources.test.Wide bit Brotli numeric staged endpoints synchronize without touching large backing addresses...OK
+1369/1422 tests.wide_bit_resources.test.Wide bit stored public bounds accept 512 MiB numeric lengths with independent format costs...OK
+1370/1422 tests.wide_bit_resources.test.Wide bit planned public bounds and actual chunk boundaries preserve independent stored geometry...OK
+1371/1422 tests.wide_bit_resources.test.Wide bit impossible output geometry and invalid formats fail before resource profiles change...OK
+1372/1422 tests.wide_bit_resources.test.Wide bit small real stored quota and OOM behavior remains precise after address widening...OK
+1373/1422 br.encoder.hq_tree_oracle_tests.test_0...OK
+1374/1422 br.encoder.hq_tree_oracle_tests.test.Brotli HQ BT oracle tiny random repetitive best prefixes and two three byte anchors...OK
+1375/1422 br.encoder.hq_tree_oracle_tests.test.Brotli HQ BT oracle tree key is 128 but full copy exceeds nice and key lengths...OK
+1376/1422 br.encoder.hq_tree_oracle_tests.test.Brotli HQ BT oracle complete seventy thousand history and frontier beyond 256 records...OK
+1377/1422 br.encoder.hq_tree_oracle_tests.test.Brotli HQ BT oracle persistent rebind stitches tail 127 and preserves generation across cycles...OK
+1378/1422 br.encoder.hq_tree_oracle_tests.test.Brotli HQ BT oracle above four GiB positions and virtual normalization preserve real matcher results...OK
+1379/1422 tests.br_hq_contracts.test.Brotli HQ independent RFC mapping covers all seven hundred four commands...OK
+1380/1422 tests.br_hq_contracts.test.Brotli HQ independent semantic short selectors preserve every code zero without push...OK
+1381/1422 tests.br_hq_contracts.test.Brotli HQ independent sixty four distance shapes reach complete five hundred twenty alphabet...OK
+1382/1422 tests.br_hq_contracts.test.Brotli HQ actual writer preserves implicit explicit and aliased semantic distance selectors...OK
+1383/1422 tests.br_hq_contracts.test.Brotli HQ actual static dictionary wire keeps raw copy length separate from output length and cache...OK
+1384/1422 tests.br_hq_contracts.test.Brotli HQ actual static shortened transforms emit raw four output one two three and preserve cache...OK
+1385/1422 tests.br_hq_contracts.test.Brotli HQ actual exact writer emits ordinary distance beyond unsigned sixteen without narrowing...OK
+1386/1422 tests.br_hq_contracts.test.Brotli HQ public raw prefix dictionary publishes real compound copies and requires the same borrowed content...OK
+1387/1422 tests.br_hq_contracts.test.Brotli HQ null quality mode and API wires match the complete pre HQ binary baseline...OK
+1388/1422 tests.br_hq_contracts.test.Brotli HQ q10 q11 generic text font publish real work and preserve profiled wire...OK
+1389/1422 tests.br_hq_contracts.test.Brotli HQ all standard windows and short tails are valid without large allocation...OK
+1390/1422 tests.br_hq_contracts.test.Brotli HQ whole meta block chunks reusable and fragmented streams preserve requested boundaries...OK
+1391/1422 tests.br_hq_contracts.test.Brotli HQ complete command tail cost rejects unconditional match extension across parser horizon...OK
+1392/1422 tests.br_hq_resource_contracts.test.Brotli HQ exact matcher parser budget succeeds and one byte below preserves caller output...OK
+1393/1422 tests.br_hq_resource_contracts.test.Brotli HQ invalid quality combinations reject before allocation or destination writes...OK
+1394/1422 tests.br_hq_resource_contracts.test.Brotli HQ short allocation failures preserve caller alias and emitted profile counters...OK
+1395/1422 tests.br_hq_resource_contracts.test.Brotli HQ moving scratch output preserves aliased outer input and dictionary descriptors...OK
+1396/1422 tests.br_hq_transaction_contracts.test.Brotli HQ incremental selected early middle and publication allocation failures retry identical wire...OK
+1397/1422 tests.br_hq_transaction_contracts.test.Brotli HQ second meta block OOM retry preserves committed history matcher model cache and profile...OK
+1398/1422 tests.br_hq_transaction_contracts.test.Brotli HQ invalid offered input cannot drain already committed output or change published profile...OK
+1399/1422 tests.br_hq_transaction_contracts.test.Brotli HQ reset clears previous stream history cache and output while retaining independent profile...OK
+1400/1422 br.incremental.stored.hq_encoder_tests.test.Brotli HQ public encoder defers exact full blocks and drains final output one byte at a time...OK
+1401/1422 br.incremental.stored.hq_encoder_tests.test.Brotli HQ public encoder retries final allocation failure with identical wire and emitted profile...OK
+1402/1422 br.incremental.stored.hq_encoder_tests.test.Brotli HQ public encoder outer block override controls the actual parser target...OK
+1403/1422 br.incremental.stored.hq_encoder_tests.test.Brotli HQ public encoder reuses output aliased by input and outer chunk descriptors...OK
+1404/1422 tests.br_hq_bridge_tests.test.Brotli HQ bridge legacy inspection measures static physical distance and strict shape...OK
+1405/1422 tests.br_hq_bridge_tests.test.Brotli HQ bridge q11 model allocation failure reports the public effective quality...OK
+1406/1422 br.header_profile.test.Brotli header profile totals stages and prefix counters...OK
+1407/1422 br.header_profile.test.Brotli header profile preserves wide input totals and wraps checksum...OK
+1408/1422 br.encoder.hq_tree_oracle_tests.resources_tests.test.Brotli HQ BT oracle exact cold quota move and independent fork requested bytes...OK
+1409/1422 br.encoder.hq_tree_oracle_tests.resources_tests.test.Brotli HQ BT oracle rebind peak below quota OOM detached checkpoint and poisoned old source...OK
+1410/1422 br.encoder.hq_tree_oracle_tests.resources_tests.test.Brotli HQ BT oracle every bounded init fork and rebind allocation failure releases storage...OK
+1411/1422 tests.br_large_window_helpers.test.Brotli large window independent tracker observes in place growth shrink and overlapping live requests...OK
+1412/1422 tests.br_large_window_helpers.test.Brotli large window independent tracker charges old and new buffers during moving fallback growth...OK
+1413/1422 tests.br_large_window_helpers.test.Brotli large window independent failed allocation resize and remap preserve live bytes and old content...OK
+1414/1422 tests.br_large_window_helpers.test.Brotli large window independent tracker excludes one borrowed identity but counts its moving replacement...OK
+1415/1422 tests.br_complete_lengths_helpers.test.Brotli complete lengths independent tracker observes in place growth shrink and overlapping live requests...OK
+1416/1422 tests.br_complete_lengths_helpers.test.Brotli complete lengths independent tracker charges old and new buffers during moving fallback growth...OK
+1417/1422 tests.br_complete_lengths_helpers.test.Brotli complete lengths independent failed allocation resize and remap preserve live bytes and old content...OK
+1418/1422 tests.br_complete_lengths_helpers.test.Brotli complete lengths independent tracker excludes one borrowed identity but counts its moving replacement...OK
+1419/1422 tests.br_whole_block_helpers.test.Brotli whole block independent tracker observes in place growth shrink and overlapping live requests...OK
+1420/1422 tests.br_whole_block_helpers.test.Brotli whole block independent tracker charges old and new buffers during moving fallback growth...OK
+1421/1422 tests.br_whole_block_helpers.test.Brotli whole block independent failed allocation resize and remap preserve live bytes and old content...OK
+1422/1422 tests.br_whole_block_helpers.test.Brotli whole block independent tracker excludes one borrowed identity but counts its moving replacement...OK
+1421 passed; 1 skipped; 0 failed.
