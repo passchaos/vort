@@ -138,7 +138,9 @@ instructions alone do not establish a measured CPU-time cause.
 The [evidence package](data/deflate64-index-capacity-20261025/artifact-manifest.json)
 retains full-ring reference, allocate-first and remap
 source epochs, requests/cleanup and raw timing, independent references and
-final handoff. The parallel read-only dynamic-encoder plan identifies next
+final handoff. After pulling with rebase, ReleaseFast Deflate64100/100 and
+focused ZIP44/44 pass again under unchanged fullsrc/tools/build hashes.
+The parallel read-only dynamic-encoder plan identifies next
 functional work:32 distance symbols, extended285 lengths, bounded318 code-length
 entries, actual histogram/RLE costs and exact stored/fixed/dynamic arbitration.
 Dynamic Huffman, dictionaries and broad quality/platform/memory leadership
