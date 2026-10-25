@@ -7,6 +7,7 @@ const literal_context = @import("literal_context.zig");
 const literal_context_profile = @import("literal_context_profile.zig");
 const small_huffman = @import("small_huffman.zig");
 const literal_tree_score_cache = @import("literal_tree_score_cache.zig");
+const literal_alphabet = @import("literal_alphabet.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
@@ -1005,6 +1006,15 @@ fn buildTreeAlphabet(
     alphabet: *command_plan.PrefixAlphabetFor(256),
     tree_symbols: *ActiveSymbols,
 ) !void {
+    return literal_alphabet.build(frequencies, active_symbols.symbols[0..active_symbols.len], alphabet, tree_symbols);
+}
+
+fn buildTreeAlphabetReference(
+    frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+    alphabet: *command_plan.PrefixAlphabetFor(256),
+    tree_symbols: *ActiveSymbols,
+) !void {
     // The shared support is symbol-ascending. Appending live entries preserves
     // that order for sparse RLE while the parallel insertion keeps the exact
     // frequency-descending/symbol-ascending PrefixAlphabet tie behavior.
@@ -1281,6 +1291,13 @@ test "literal context sparse tree support matches dense scoring" {
         var sparse_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
         var tree_symbols: ActiveSymbols = undefined;
         try buildTreeAlphabet(&frequencies, &support, &sparse_alphabet, &tree_symbols);
+        var reference_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+        var reference_tree_symbols: ActiveSymbols = undefined;
+        try buildTreeAlphabetReference(&frequencies, &support, &reference_alphabet, &reference_tree_symbols);
+        try std.testing.expectEqual(reference_alphabet.len, sparse_alphabet.len);
+        try std.testing.expectEqual(reference_tree_symbols.len, tree_symbols.len);
+        try std.testing.expectEqualSlices(u16, reference_alphabet.symbols[0..reference_alphabet.len], sparse_alphabet.symbols[0..sparse_alphabet.len]);
+        try std.testing.expectEqualSlices(u8, reference_tree_symbols.symbols[0..reference_tree_symbols.len], tree_symbols.symbols[0..tree_symbols.len]);
         var dense_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
         try command_plan.alphabetFromFrequenciesInto(256, &dense_alphabet, &frequencies);
         try std.testing.expectEqual(dense_alphabet.len, sparse_alphabet.len);

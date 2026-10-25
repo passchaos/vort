@@ -3257,6 +3257,25 @@ pub fn build(b: *std.Build) void {
     const run_br_dense_huffman_bench = b.addRunArtifact(br_dense_huffman_bench);
     if (b.args) |args| run_br_dense_huffman_bench.addArgs(args);
     b.step("run-br-dense-huffman-bench", "Compare exact dense Brotli prefix lengths with package merge").dependOn(&run_br_dense_huffman_bench.step);
+    const br_literal_alphabet_bench = b.addExecutable(.{
+        .name = "vort-br-literal-alphabet-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/literal_alphabet_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "literal_alphabet", .module = b.createModule(.{
+                    .root_source_file = b.path("src/br/encoder/literal_alphabet.zig"),
+                    .target = target,
+                    .optimize = .ReleaseFast,
+                }) },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_literal_alphabet_bench = b.addRunArtifact(br_literal_alphabet_bench);
+    if (b.args) |args| run_br_literal_alphabet_bench.addArgs(args);
+    b.step("run-br-literal-alphabet-bench", "Compare exact literal-alphabet collection and ordering").dependOn(&run_br_literal_alphabet_bench.step);
     if (b.args) |args| run_br_planned_encode_bench.addArgs(args);
     const br_planned_encode_bench_step = b.step("run-br-planned-encode-bench", "Compare planner-backed Brotli encode with libbrotli");
     br_planned_encode_bench_step.dependOn(&run_br_planned_encode_bench.step);
@@ -7160,6 +7179,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
     check_step.dependOn(&br_literal_context_profile_exe.step);
     check_step.dependOn(&br_dense_huffman_bench.step);
+    check_step.dependOn(&br_literal_alphabet_bench.step);
     check_step.dependOn(&br_record_optimal_audit_exe.step);
     check_step.dependOn(&br_record_optimal_shape_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
