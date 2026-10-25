@@ -2,6 +2,7 @@
 //! The immutable block stays borrowed for the lifetime of this value. Updating
 //! cuts visits only bytes entering or leaving each stream's physical ranges.
 const std = @import("std");
+const frequency_merge = @import("frequency_merge.zig");
 
 pub const Error = error{ CorruptFrame, IntegerOverflow };
 pub const max_block_len: usize = 128 * 1024;
@@ -67,6 +68,12 @@ pub const CutHistogram = struct {
         }
     }
 
+    /// Merge the current valid cuts and count active symbols in one traversal.
+    /// The output matches totalFrequencies; no histogram state is changed.
+    pub fn totalFrequenciesAndCount(self: *const Self, out: *[256]u32) usize {
+        return frequency_merge.mergeActive(&self.stream_frequencies, out);
+    }
+
     fn applyDifference(self: *const Self, frequencies: *[256]u32, source: Range, covered: Ranges, comptime operation: Operation) void {
         var cursor = source.start;
         for (covered) |range| {
@@ -128,4 +135,8 @@ fn differenceLen(source: Range, covered: Ranges) u64 {
 
 test {
     _ = @import("cut_histogram_tests.zig");
+}
+
+test "zstd frequency merge real cut histogram contracts" {
+    try @import("frequency_merge_tests.zig").histograms(CutHistogram);
 }

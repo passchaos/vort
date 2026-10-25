@@ -144,9 +144,7 @@ pub fn Cache(comptime Codec: type) type {
         pub fn prepareLiterals(self: *Self, prefix_len: usize, tail_start: usize) Codec.Error!PreparedLiterals {
             try self.histogram.update(prefix_len, tail_start);
             var frequencies: [256]u32 = undefined;
-            self.histogram.totalFrequencies(&frequencies);
-            var unique: usize = 0;
-            for (frequencies) |frequency| unique += @intFromBool(frequency != 0);
+            const unique = self.histogram.totalFrequenciesAndCount(&frequencies);
             const regenerated = self.histogram.regenerated_len;
             const raw_len = if (unique == 1) 1 else regenerated;
             const raw_cost = std.math.add(usize, try Codec.literalHeaderLen(regenerated), raw_len) catch return error.IntegerOverflow;
