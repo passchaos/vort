@@ -1,0 +1,166 @@
+{
+  "schema": "vort.br.large-history.cross-target.v1",
+  "source_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+  "source_manifest_sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b",
+  "source_equal": true,
+  "all_wires_plaintext_progress_tokens_history_equal": true,
+  "excluded_target_fields": [
+    "cpu_model",
+    "maximum_observed_history_capacity",
+    "maximum_observed_retained_capacity",
+    "memory_profile",
+    "target",
+    "checkpoints.history_capacity",
+    "checkpoints.retained_capacity"
+  ],
+  "targets": [
+    {
+      "target": "native-retained",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/c34e8d9f50935423562ee3a0cbbda467/vort-br-large-history-probe",
+        "bytes": 12149968,
+        "sha256": "0e25d8431bfade79846954bb09b3d659d2a6ab720bd749593b3c6c44267ace2c"
+      },
+      "report_sha256": "e0e391c0f2f404b0fb040c090684d6f6c317cf4dd233d6acd9fabe977238ad71",
+      "counts": {
+        "cases": 450,
+        "passed": 450,
+        "failed": 0,
+        "actual_far_cases": 324,
+        "actual_far_streaming_cases": 297,
+        "one_shot_cases": 27,
+        "one_shot_passed": 27,
+        "streaming_cases": 423,
+        "window_boundary_cases": 27,
+        "independently_decoded_new_frames": 300
+      },
+      "commands": 450,
+      "sources_preserved": true,
+      "reference": {
+        "requested_libraries": {
+          "encoder": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+          "decoder": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+          "common": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0"
+        },
+        "symbol_owners": {
+          "encoder": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+            "sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e"
+          },
+          "decoder": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+            "sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a"
+          },
+          "encoder_common": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          },
+          "decoder_common": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          }
+        },
+        "common_load_mode": "RTLD_GLOBAL before encoder/decoder",
+        "versions": {
+          "encoder": {
+            "packed": 16785408,
+            "version": "1.2.0"
+          },
+          "decoder": {
+            "packed": 16785408,
+            "version": "1.2.0"
+          }
+        },
+        "libraries": [
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          },
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+            "sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a"
+          },
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+            "sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e"
+          }
+        ],
+        "encode_operation": "BROTLI_OPERATION_EMIT_METADATA (3), one full body per call sequence"
+      }
+    },
+    {
+      "target": "x86-retained",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/4c396259f34943ab2215dcf6712230d1/vort-br-large-history-probe",
+        "bytes": 9857788,
+        "sha256": "508a53de5740a5534ef3e99154567ef0c69124f19df5305dc483e25d8316d23a"
+      },
+      "report_sha256": "63a7fcd64dde5007729ad23c83bc94e364e60de0102d568c097513c7b0cf20fc",
+      "counts": {
+        "cases": 450,
+        "passed": 450,
+        "failed": 0,
+        "actual_far_cases": 324,
+        "actual_far_streaming_cases": 297,
+        "one_shot_cases": 27,
+        "one_shot_passed": 27,
+        "streaming_cases": 423,
+        "window_boundary_cases": 27,
+        "independently_decoded_new_frames": 300
+      },
+      "commands": 450,
+      "sources_preserved": true,
+      "reference": {
+        "requested_libraries": {
+          "encoder": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+          "decoder": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+          "common": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0"
+        },
+        "symbol_owners": {
+          "encoder": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+            "sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e"
+          },
+          "decoder": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+            "sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a"
+          },
+          "encoder_common": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          },
+          "decoder_common": {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          }
+        },
+        "common_load_mode": "RTLD_GLOBAL before encoder/decoder",
+        "versions": {
+          "encoder": {
+            "packed": 16785408,
+            "version": "1.2.0"
+          },
+          "decoder": {
+            "packed": 16785408,
+            "version": "1.2.0"
+          }
+        },
+        "libraries": [
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlicommon.so.1.2.0",
+            "sha256": "18f909e330c6bc7733b0f5f8317d1bfbf49d2f84695330db59796e711287b3d7"
+          },
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlidec.so.1.2.0",
+            "sha256": "0f88c6ef560558329f98d6a371387358c11cc3320a32769a45be5b258fc9b54a"
+          },
+          {
+            "path": "/tmp/vort-br-general-experimental-build/libbrotlienc.so.1.2.0",
+            "sha256": "20155a6ec255960ae0563b903eb24678c4bae5e447e962eadd45d12674b1c11e"
+          }
+        ],
+        "encode_operation": "BROTLI_OPERATION_EMIT_METADATA (3), one full body per call sequence"
+      }
+    }
+  ]
+}

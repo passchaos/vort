@@ -1,0 +1,24 @@
+test-br
++- run test vort-br-tests
+   +- compile test vort-br-tests Debug native 1 errors
+src/br/encoder/long_distance_history_tests.zig:78:32: error: type '*const struct { comptime comptime_int = 201, comptime comptime_int = 202, comptime comptime_int = 203 }' is not an indexable pointer
+    @memcpy(input[position..], &.{ 201, 202, 203 });
+                               ^~~~~~~~~~~~~~~~~~~
+src/br/encoder/long_distance_history_tests.zig:78:32: note: operand must be a slice, a many pointer or a pointer to an array
+referenced by:
+    contracts__anon_44854: src/br/encoder/long_distance_history_tests.zig:184:23
+    test.Brotli large history three-byte augmentation contracts: src/br/encoder/long_distance.zig:359:61
+    2 reference(s) hidden; use '-freference-trace=4' to see all references
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/b0d047ba2b114a510a29fad6255d7eaf/vort-br-record-optimal.o -ODebug -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/br.zig --test-filter "Brotli large history three-byte" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/5 steps succeeded (1 failed)
+test-br transitive failure
++- run test vort-br-tests transitive failure
+   +- compile test vort-br-tests Debug native 1 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 4ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/8c27568013619c3bab8292d259f5c3ab/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xc89d3a45 -Z2da313df1f421c91 test-br -Dbr-test-filter=Brotli large history three-byte -j3 --summary all

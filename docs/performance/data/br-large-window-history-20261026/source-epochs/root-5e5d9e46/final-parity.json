@@ -1,0 +1,40 @@
+{
+  "schema": "vort.br.large-history-final-parity-combined.v1",
+  "created_utc": "2026-10-25T17:12:03.089620+00:00",
+  "source_epoch": "root-5e5d9e46",
+  "prior_parity": {
+    "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/legacy-parity.json",
+    "bytes": 4569251,
+    "sha256": "eee4744b1f08bafc545437854c120872a46b2f769420050fad5e8df0b6deb105"
+  },
+  "targets": [
+    {
+      "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/native-final-parity.json",
+      "bytes": 1249462,
+      "sha256": "1925cc9143418f00ee4ac2ab6cadfe38beb74b3feda0d1b5cfd93f935406b221"
+    },
+    {
+      "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/x86-final-parity.json",
+      "bytes": 1244950,
+      "sha256": "715368d2751927cc86385494525eabbec4473b44023bb3160cdf348d99c11133"
+    }
+  ],
+  "counts": {
+    "comparisons": 216,
+    "matched": 216,
+    "counterexamples": 0,
+    "new_main_reference_decodes": 216,
+    "reset_comparisons": 120,
+    "new_reset_reference_decodes": 120,
+    "old_probe_executions": 0,
+    "old_reference_decodes": 0,
+    "compilations": 0
+  },
+  "all_rows_matched": true,
+  "actual_sources_preserved_by_target": {
+    "native": true,
+    "x86": true
+  },
+  "measurement_scope": "Final new-only runtime refresh against retained legacy artifacts; original earlier-epoch parity report remains untouched.",
+  "counterexamples": []
+}

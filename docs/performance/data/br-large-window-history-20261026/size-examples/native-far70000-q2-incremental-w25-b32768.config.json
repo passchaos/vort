@@ -1,0 +1,13 @@
+{
+  "api": "incremental",
+  "level": "fast",
+  "quality": 2,
+  "window_bits": 25,
+  "large_window": true,
+  "block_len": 32768,
+  "input_chunk": 32768,
+  "prefix_len": 70000,
+  "event": "none",
+  "exercise_new_stream": true,
+  "max_total_working_memory": null
+}

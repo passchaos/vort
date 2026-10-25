@@ -1,0 +1,80 @@
+{
+  "schema": "vort.br.large-history.validation.v1",
+  "baseline_commit": "e047456b4c5d38640e18cace58a36c366e10b5ea",
+  "initial_feature_commit": "18a7fc6df2ada175152f4d921a795f7f90bc0e82",
+  "final_feature_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+  "final_manifest_sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b",
+  "source_files": 1901,
+  "zig": "0.16.0",
+  "final_public_tests": {
+    "native_debug": 27,
+    "native_releasefast": 27,
+    "x86_releasefast": 27
+  },
+  "matcher_filter": {
+    "passed": 20,
+    "total": 20
+  },
+  "metadata_regression_earlier_epoch": {
+    "passed": 130,
+    "total": 130
+  },
+  "final_external_each": {
+    "cases": 450,
+    "passed": 450,
+    "streaming_cases": 423,
+    "one_shot_cases": 27,
+    "actual_far_reported": 324,
+    "actual_far_streaming": 297,
+    "window_boundary_cases": 27,
+    "decoded_independent_new_frames": 300,
+    "commands": 450
+  },
+  "final_parity": {
+    "main_matches": 216,
+    "reset_matches": 120,
+    "new_reference_decodes": 336,
+    "old_streams_reexecuted": 0
+  },
+  "full_brotli_final": {
+    "passed": 1432,
+    "total": 1433,
+    "skipped": 1,
+    "source_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+    "note": "32-bit-only host overflow gate separately passes actual x8620/20; test import scope differs from focused history contracts."
+  },
+  "build_check_final": {
+    "steps": 182,
+    "source_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2"
+  },
+  "host_overflow_x86": {
+    "passed": 20,
+    "total": 20
+  },
+  "cli_help": {
+    "steps": 7
+  },
+  "timing_performed": false,
+  "notes": [
+    "Explicit Large Window can change bytes; standard/q0/q1 parity applies to the recorded matrix.",
+    "Historical failed/negative snapshots are preserved separately.",
+    "Requested live heap and logical history length do not equal RSS or total stack."
+  ],
+  "adaptive_followup": {
+    "native_debug": 27,
+    "native_releasefast": 27,
+    "x86_releasefast": 27,
+    "source_scope": "test-only adaptive fixture and caller hook; production codec and tool bytes unchanged",
+    "actual_history_prefix": 70000,
+    "adaptive_current_block": 65536,
+    "targeted_growth_refusals": [
+      "history",
+      "history_snapshot",
+      "adaptive_split_history"
+    ]
+  },
+  "final_test_commit": "2adbe60b64767220acc037317ff5bda48d8d0276",
+  "final_test_source_files": 1902,
+  "final_test_manifest_sha256": "124606e1cd3bfc8bd165c86d5123232c47cfad2e00d8c3177fdf73828eee6a74",
+  "codec_manifest_sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b"
+}

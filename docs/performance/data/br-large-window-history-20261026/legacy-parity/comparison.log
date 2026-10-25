@@ -1,0 +1,3 @@
+{"target_completed": "native", "comparisons": 108, "matched": 108}
+{"target_completed": "x86", "comparisons": 108, "matched": 108}
+{"report": "/tmp/vort-br-large-window-history-20261026/legacy-parity/legacy-parity.json", "sha256": "eee4744b1f08bafc545437854c120872a46b2f769420050fad5e8df0b6deb105", "comparisons": 216, "matched": 216, "counterexamples": 0, "wire_mismatches": 0, "old_failures": 0, "new_failures": 0, "main_reference_decodes": 432, "reset_comparisons": 120, "reset_reference_decodes": 240}

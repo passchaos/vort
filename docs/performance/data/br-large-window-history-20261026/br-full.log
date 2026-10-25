@@ -1,0 +1,31 @@
+test-br
++- run test vort-br-tests w
+total-memory setting=fast requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=balanced requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=ratio requested-peak=689759 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q0 requested-peak=4433 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q1 requested-peak=2775 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q2 requested-peak=689668 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q3 requested-peak=689654 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q4 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q5 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q6 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q7 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q8 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q9 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q10 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q11 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq10 requested-peak=8953273 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq11 requested-peak=9355743 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+whole-block moving workspace peak=1938400 exact=pass one-below=WorkingMemoryLimitExceeded live=0
+whole-block wide trace commands=33792 moving-peak=21070392 returned-live=3244032
+failed command: ./.zig-cache/o/678620022fa9953f6255f669bc095363/vort-br-tests --cache-dir=./.zig-cache --seed=0x84b22cd7 --listen=-
+
+Build Summary: 5/5 steps succeeded; 1432/1433 tests passed (1 skipped)
+test-br success
++- run test vort-br-tests 1432 pass, 1 skip (1433 total) 5m MaxRSS:145M
+   +- compile test vort-br-tests ReleaseFast native success 4m MaxRSS:3G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+

@@ -14,21 +14,36 @@ independently of how small the chosen window is.
 
 ## Declared window and actual search
 
-An advertised window is a format bound, not an allocation or search promise.
-The low-quality q0/q1 parsers retain fragment-local matching, with a normal
-distance bound no larger than 65520 and no cross-block match history. General
-non-HQ Large Window encoding retains at most the smaller of the advertised
-history and 65535 bytes. Its existing bounded ordinary and optimal parsers
-keep their own candidate/search limits.
+The [large-history increment](../performance/brotli-large-history-functional-baseline.md)
+implements explicit Large Window history growth and retains both old ratio and
+new history candidates for exact selection. Completed family/build and
+test-only adaptive verification are recorded there. The encoder
+retains accepted history for non-HQ q2+ and legacy non-fragment paths up to the
+advertised distance, growing with actual data rather than preallocating the
+complete window30 buffer. q0/q1 remain fragment-local, with no cross-block match
+history and a normal distance bound no larger than 65520. Standard-format policy
+and its existing ratio augmentation are unchanged.
 
-That retained-history size is not a universal distance ceiling. Legacy ratio
-long-distance augmentation can inspect the available history together with
-the current input block, and one-shot ratio candidates retain their existing
-input-bounded long-distance work. Such copies may exceed 65535 while remaining
-within reachable source bytes and the advertised safe format range. The
-implementation does not allocate or search a complete 1 GiB window for these
-general paths. Opt-in HQ retains its separately documented window/history and
-working-budget behavior.
+The shared near matcher keeps its original 65,535-byte suffix and u16 tokens.
+A separate history augmenter uses three-byte anchors, matches of 3...258 bytes,
+512-candidate chain limits and reachable-band strides of 1/2/4/8/16, creating
+wide copy commands. Baseline and literal-only proposals remain available, and
+full-wire exact costs select an alternative only when it improves strictly.
+This includes q2/q3 inputs with no near copy. The bounded candidate set is not
+an exhaustive search or optimality guarantee.
+
+Public non-fragment one-shot q2...q11 and legacy routes also consider wide
+copies within the available input, with empty external history. A one-shot
+distance above 64 KiB does not prove cross-block history retention; streaming,
+chunked and reusable old-block cases are validated separately. Original ratio
+candidates remain available for exact comparison. The ordinary q11-over-q10
+size guarantee applies to the no-shared-dictionary quality route; the prepared
+shared-dictionary pipeline has no blanket version of that guarantee.
+
+The previous completed non-HQ Large Window baseline retained at most 65,535
+bytes across blocks; its legacy ratio/current-block augmentation could already
+emit greater distances. That older scope remains in dated reports. Opt-in HQ
+keeps its separately documented window/history and working-budget behavior.
 
 ## Entropy and dictionary behavior
 
@@ -63,6 +78,28 @@ All newly enabled planned candidates use the original
 HQ workspace limits remain separate. General paths cannot bypass the existing
 total budget while preparing a new format, dictionary or stored fallback.
 
+For the large-history candidate, actual history growth is admitted before wire
+publication, followed by an allocation-free prepared append. Adaptive branches
+reserve rollback capacity before clearing history storage. All real history
+copies, rollback buffers and candidate/matcher allocations remain subject to
+the existing quota; one retained-history value does not represent the entire
+working set. Metadata and flush preserve match history, while reset/next-stream
+start an independent frame. Native Debug/ReleaseFast and x86 ReleaseFast
+filtered contracts each pass 27/27, and each native/x86 reference matrix passes
+450/450. Final legacy refresh matches 216 main and 120 reset comparisons against
+saved old wires, with 336 new streams independently decoded. The complete
+native ReleaseFast family at the corrected codec revision reports 1432
+passed and one skipped out of 1433; the skipped host-overflow gate passes
+separately on x86. Build checks pass 182/182. A later test-only adaptive matrix
+passes on all three configurations, including actual greater-than-64-KiB
+history, branch growth failures before clear and retry. Its source scope is
+distinct from unchanged codec/reference results.
+
+The retained history length is capped by actual accepted data and the window,
+but geometric allocation reserves may exceed that length or the logical window
+bound. The quota charges actual capacities and simultaneous branch copies,
+rather than treating the history length as an exact heap bound.
+
 Reusable encoding captures overlapping chunk descriptors, source bytes,
 dictionary descriptors and metadata before clearing or replacing its output
 storage. Borrowed spans that overlap unused output capacity are also captured.
@@ -77,6 +114,13 @@ policy controls are still inapplicable to stored encoding and are rejected by
 the CLI instead of being silently ignored.
 
 ## Validation
+
+The commands and reference scope below describe the preceding completed Large
+Window format increment. Current large-history results are recorded in the
+new functional baseline, without relabeling earlier evidence. The initial
+legacy-fast 64 KiB parser failures and their full-hash-planner fix retain
+separate source epochs; native/x86 wire/history equality does not imply identical
+geometrically allocated capacities or memory profiles.
 
 ```sh
 zig build test-br-general-large-window -Doptimize=Debug --summary all

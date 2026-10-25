@@ -23528,3 +23528,45 @@ reuse, so production keeps the simpler independently owned plans.
   functional slices are non-HQ Large Window retained history, core Zstd
   magicless APIs and bounded XZ worker encoding, before broader performance
   optimization and best-library claims.
+
+- 2026-10-26: non-HQ Brotli Large Window
+  q2+ and legacy non-fragment streams grow history from actual accepted data up to
+  the advertised window, without preallocating window30. q0/q1 remain
+  fragment-local; standard policy and four-byte/min16 ratio augmentation stay
+  unchanged. Near matching keeps its65535suffix/u16tokens; dedicated history
+  augmentation uses3-byte anchors/min3/max258,512chains and bounded1/2/4/8/16
+  source strides. Wide distance commands remain subject to full-wire exact
+  strict selection against baseline/literal alternatives, including q2/q3 with
+  no near copies. History publication admits real capacity first; adaptive
+  rollback reserves capacity before clearing, and all history copies remain
+  charged to existing quotas. Metadata/flush preserve history, reset/nextStream
+  separate frames. One-shot q2...q11/legacy non-fragment paths also compare
+  physical far copies inside available input, separately from old-block
+  streaming history. Ordinary non-shared-dictionary q11 retains q10 inheritance;
+  no blanket dictionary-route size guarantee is added. Geometric allocated
+  capacities may exceed logical history/window lengths and remain quota-charged.
+  [Functional evidence](performance/brotli-large-history-functional-baseline.md)
+  records final27/27 on threeconfigurations and eachnative/x86450/450 cases,
+  including423stream/27one-shot, reportedfar324 and300independently decoded
+  newframes. The27window-boundary cases are separately classified. Initial
+  nine legacy-fast64KiB failures required the fullhash planner rather than the
+  tiny32KiB parser; budgets/blocksize/sampling are preserved. Cross-target
+  wires/headers/progress/historytails match, but geometric capacity/memory
+  fields remain target-specific. Correctedfinal2f421462 retains both oldratio
+  and newhistory candidates; narrow27×3 and reference450×2 bind that source.
+  Pre-correction
+  q2output70270→70039 trades for higher requestedpeak; q8chunks70051→70053
+  retains a negative size point. Finalq8chunks70051→70050 improves onebyte,
+  without changing the recorded requestedpeak; q2memory increases remain.
+  Final legacyrefresh matches216main/120reset
+  savedold wires with336new independent decodes, without reexecuting oldcode.
+  CLIhelp7/7 and independentx86 hostoverflow20/20 pass. FinalReleaseFast family
+  at correctedcodec2f421462 passes1432/1433 with one independently covered
+  hostskip; checks182/182 pass. Later test-only2adbe60b adds explicitadaptive
+  q2/window25 with70Khistories, split/grid snapshots, exact/below budgets and
+  three targetedgrowth OOM/retry paths; all three filtered scopes remain27/27
+  with greater internal coverage. The1902-file testmanifest stays separate from
+  unchanged1901-file codec/reference manifests, without relabeling runtime runs.
+  No exhaustive candidate or
+  throughput/memory-lead claim is assigned.
+  Zstd magicless core APIs and bounded XZ workers remain subsequent slices.

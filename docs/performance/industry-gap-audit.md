@@ -24,7 +24,7 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; signed native acceleration, independent chain depth and actual work profiles; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | Native chain/lazy defaults and accelerated search differ from liblz4's single-hash fast parser. Empty raw input retains the legacy API-only empty-slice convention. Full corpus/platform fast/HC ratio, throughput and memory leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
-| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching is fragment-local; general non-HQ retained history is at most 65535 bytes, with separate input/history-bounded ratio candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
+| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching remains fragment-local. Explicit Large Window q2+ and legacy non-fragment history grows to the advertised bound, while shared near matching retains its 65535-byte suffix. Far matching still uses bounded chain/stride candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
 | XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups, and broad encoder speed/ratio/memory parity remains unproven. |
 
@@ -57,6 +57,44 @@ long-window match history and broader encoder quality remain separate work,
 and dated performance results are not refreshed by this increment. Subsequent
 functional candidates are retained Large Window history, core Zstd magicless
 APIs and bounded XZ worker encoding, each with separate validation requirements.
+
+The [non-HQ Large Window history increment](brotli-large-history-functional-baseline.md)
+grows q2+ and legacy non-fragment retained
+history with accepted data up to the advertised window, keeping q0/q1 fragment
+history and the standard-format policy unchanged. A dedicated sampled augmenter
+uses three-byte anchors, 512-candidate chains and bounded strides, while near
+matching retains its 65,535-byte suffix. Baseline/literal proposals and strict
+full-wire selection remain in place. Actual growth and branch rollback buffers
+use the existing allocator authority, without a complete-search guarantee or
+memory/throughput lead. Final filtered contracts pass 27/27 on three configurations,
+and native/x86 matrices each pass 450/450: 423 stream and 27 one-shot cases.
+The reported far subset is 324, with window-boundary cases classified separately;
+300 new frames per target are independently decoded. Initial nine legacy-fast
+64 KiB failures were fixed by selecting the full planner, without reducing
+budgets or changing sampling. Wires/progress/history tails agree across targets;
+geometric capacity and memory-profile fields remain distinct. Final narrow and
+reference results bind `2f421462`, which retains both the original ratio and new
+history alternatives. On two same-input examples, q2
+incremental output shrinks 70,270 to 70,039 bytes but requested peak increases;
+q8 chunked output changes 70,051 to 70,050 bytes with the same requested peak.
+The earlier `18a7fc6d` q8 candidate's 70,053-byte result remains recorded,
+alongside the correction. These do not establish universal ratio/memory gains.
+Final legacy
+refresh matches 216 main and 120 reset cases against old saved wires, with
+336 new streams independently decoded and no old rerun. CLI help passes 7/7;
+the host-overflow gate passes separately on x86. The complete final ReleaseFast
+family at corrected codec `2f421462` reports 1432 passed and one skipped out of
+1433; build checks pass 182/182. Later test-only `2adbe60b` adaptive coverage
+passes in all three 27/27 filtered scopes, adding real long history, split/grid
+snapshots, exact/below budgets and targeted growth-OOM retry. That 1,902-file
+test manifest is separate from the unchanged 1,901-file codec/runtime manifest;
+the external/full reports are not rewritten as new test-only executions.
+Earlier metadata and Large Window
+results retain their own source epochs. The encoder also covers physical far
+copies inside non-fragment one-shot input; those are distinct from retained
+old-block matches. Geometric capacities may exceed logical history/window
+lengths, with all real allocations charged. Ordinary no-shared-dictionary
+q11/q10 inheritance remains scoped separately from prepared dictionary routes.
 
 The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes

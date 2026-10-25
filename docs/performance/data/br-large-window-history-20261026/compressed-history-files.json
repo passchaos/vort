@@ -1,0 +1,69 @@
+{
+  "schema": "vort.compressed-evidence.v1",
+  "files": [
+    {
+      "source_path": "native-initial-differential.json",
+      "stored_path": "native-initial-differential.json.xz",
+      "bytes": 5419390,
+      "sha256": "210f21808abd44b93667c8fa0059a8f0c80913e773e4033e485d1742f607682c",
+      "stored_bytes": 79272,
+      "stored_sha256": "ffa47b20ec612b14607014e02201ddf0d6fc4803c930b86c831f26a543fc0f7e"
+    },
+    {
+      "source_path": "x86-initial-differential.json",
+      "stored_path": "x86-initial-differential.json.xz",
+      "bytes": 5406744,
+      "sha256": "dc11bba73076cde323e007dc07d9253abd0baaac1934da7ee7b7db1af7abefa7",
+      "stored_bytes": 79284,
+      "stored_sha256": "95727d6f609f23c60f279ef54678006f3b1b896c88afb63e9973baf7055f4ce0"
+    },
+    {
+      "source_path": "legacy-parity/native-new-report-pinned.json",
+      "stored_path": "legacy-parity/native-new-report-pinned.json.xz",
+      "bytes": 5419390,
+      "sha256": "210f21808abd44b93667c8fa0059a8f0c80913e773e4033e485d1742f607682c",
+      "stored_bytes": 79272,
+      "stored_sha256": "ffa47b20ec612b14607014e02201ddf0d6fc4803c930b86c831f26a543fc0f7e"
+    },
+    {
+      "source_path": "legacy-parity/x86-new-report-pinned.json",
+      "stored_path": "legacy-parity/x86-new-report-pinned.json.xz",
+      "bytes": 5406744,
+      "sha256": "dc11bba73076cde323e007dc07d9253abd0baaac1934da7ee7b7db1af7abefa7",
+      "stored_bytes": 79284,
+      "stored_sha256": "95727d6f609f23c60f279ef54678006f3b1b896c88afb63e9973baf7055f4ce0"
+    },
+    {
+      "source_path": "legacy-parity/legacy-parity.json",
+      "stored_path": "legacy-parity/legacy-parity.json.xz",
+      "bytes": 4569251,
+      "sha256": "eee4744b1f08bafc545437854c120872a46b2f769420050fad5e8df0b6deb105",
+      "stored_bytes": 44648,
+      "stored_sha256": "778d7501fa12e9d569dce8596864edaa4f18dd15e4233840f44cd43191d42c0f"
+    },
+    {
+      "source_path": "source-epochs/br-pre-fast-fix.zig",
+      "stored_path": "source-epochs/br-pre-fast-fix.zig.xz",
+      "bytes": 2466172,
+      "sha256": "31f3d45eb36402463fc95caa96cb0a046aa060f41917e431fe14a8de821de8b0",
+      "stored_bytes": 204496,
+      "stored_sha256": "742bb5752af6b9ebae6f3f32186b42f8edbf7415665c52964eee856d291bc481"
+    },
+    {
+      "source_path": "source-epochs/root-5e5d9e46/native-final-parity.json",
+      "stored_path": "source-epochs/root-5e5d9e46/native-final-parity.json.xz",
+      "bytes": 1249462,
+      "sha256": "1925cc9143418f00ee4ac2ab6cadfe38beb74b3feda0d1b5cfd93f935406b221",
+      "stored_bytes": 30760,
+      "stored_sha256": "e1ee0dbafff50a65841843164b0cca143e95722ad01184d5dacd34aaf369a89c"
+    },
+    {
+      "source_path": "source-epochs/root-5e5d9e46/x86-final-parity.json",
+      "stored_path": "source-epochs/root-5e5d9e46/x86-final-parity.json.xz",
+      "bytes": 1244950,
+      "sha256": "715368d2751927cc86385494525eabbec4473b44023bb3160cdf348d99c11133",
+      "stored_bytes": 30788,
+      "stored_sha256": "c73c3647ca3889d883f3c657da5dea96bdf2c9cda8b70544036c6ff0994ebf58"
+    }
+  ]
+}

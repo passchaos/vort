@@ -1,0 +1,12 @@
+{
+  "schema": "vort.source-delta.v1",
+  "old_commit": "18a7fc6df2ada175152f4d921a795f7f90bc0e82",
+  "final_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+  "changed_files": [
+    {
+      "path": "src/br.zig",
+      "sha256": "df800cdf2b6274765c1fe979d6a1acf8f95d843f5aa327cc203b168d6e5d1904"
+    }
+  ],
+  "note": "LargeWindow ratio considers every original four-byte/min16 proposal before each new three-byte/min3 proposal. Standard and non-ratio paths remain unchanged."
+}

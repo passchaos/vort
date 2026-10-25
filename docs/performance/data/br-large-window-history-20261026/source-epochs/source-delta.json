@@ -1,0 +1,15 @@
+{
+  "schema": "vort.source-epoch-delta.v1",
+  "initial_br_sha256": "31f3d45eb36402463fc95caa96cb0a046aa060f41917e431fe14a8de821de8b0",
+  "final_br_sha256": "5e5d9e46e8aa7086d0cab12879137aad5238396bbe2a0e603481501daa8532a6",
+  "initial_source_file": "br-pre-fast-fix.zig",
+  "change": "Only the empty-history legacy-fast >32768 branch changes from tiny scratch parser to full hash planner and transfers token ownership. The block and GreedyOptions are unchanged.",
+  "initial_runtime_reports": [
+    "native/differential.json",
+    "x86/differential.json"
+  ],
+  "final_runtime_reports": [
+    "native-fixed/differential.json",
+    "x86-fixed/differential.json"
+  ]
+}

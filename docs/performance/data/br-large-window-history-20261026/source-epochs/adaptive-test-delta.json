@@ -1,0 +1,16 @@
+{
+  "schema": "vort.source-delta.v1",
+  "codec_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+  "final_test_commit": "2adbe60b64767220acc037317ff5bda48d8d0276",
+  "changed_files": [
+    {
+      "path": "src/br_large_history_tests.zig",
+      "sha256": "161170a45a264198b9ba4c9b42975f017a38e5504ec3813d3d25aa9af0bb5457"
+    },
+    {
+      "path": "src/tests/br_large_history_adaptive.zig",
+      "sha256": "8c985ea6a02f6c9fe94c15545c7e609de60f15f0af57aab74d28e0b0ce98a21e"
+    }
+  ],
+  "note": "Only targeted adaptive correctness tests and their caller hook are added. Production codec/tools are byte-identical to 2f421462."
+}

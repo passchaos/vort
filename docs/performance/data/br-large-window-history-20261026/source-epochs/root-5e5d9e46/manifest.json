@@ -1,0 +1,43 @@
+{
+  "source_epoch": "root-5e5d9e46",
+  "feature_commit": "18a7fc6df2ada175152f4d921a795f7f90bc0e82",
+  "scope": "Exact byte-preserving copies; original independent reports retain their original paths and epochs.",
+  "files": [
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/final-parity.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/final-parity.json",
+      "bytes": 1421,
+      "sha256": "d29d821d8c192d61bbb3e5759dd103c0651123a29ecc72b291a61ca25ac94371"
+    },
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/native-final-parity.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/native-final-parity.json",
+      "bytes": 1249462,
+      "sha256": "1925cc9143418f00ee4ac2ab6cadfe38beb74b3feda0d1b5cfd93f935406b221"
+    },
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/x86-final-parity.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/x86-final-parity.json",
+      "bytes": 1244950,
+      "sha256": "715368d2751927cc86385494525eabbec4473b44023bb3160cdf348d99c11133"
+    },
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/final-parity-seal.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/final-parity-seal.json",
+      "bytes": 1978,
+      "sha256": "7af5230d5714c31dfbd21eb7c25000d507a15458ce4f1460949640cb829528cc"
+    },
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/size-examples/summary.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/size-examples-summary.json",
+      "bytes": 85654,
+      "sha256": "9912f62acc39ab1a40d8797aff5c14276e032eacdd260a69578d4899555eb55c"
+    },
+    {
+      "original_path": "/tmp/vort-br-large-window-history-20261026/initial-feature-source-manifest.json",
+      "archived_path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/initial-feature-source-manifest.json",
+      "bytes": 278829,
+      "sha256": "a2d44881e5dec9d06554684be79b4ef7dac93c1b007eef98b0236030317e799d"
+    }
+  ]
+}

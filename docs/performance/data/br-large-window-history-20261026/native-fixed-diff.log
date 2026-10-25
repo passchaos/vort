@@ -1,0 +1,9 @@
+{"report": "/tmp/vort-br-large-window-history-20261026/native-fixed/differential.json", "cases": 450, "passed": 450, "failed": 0, "actual_far_cases": 324, "actual_far_streaming_cases": 297, "one_shot_cases": 27, "one_shot_passed": 27, "streaming_cases": 423, "window_boundary_cases": 27, "independently_decoded_new_frames": 300, "sources_preserved": true}
+Build Summary: 5/5 steps succeeded
+run-br-large-history-diff success
++- run python3 success 1m
+   +- compile exe vort-br-large-history-probe ReleaseFast native success 1m MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+

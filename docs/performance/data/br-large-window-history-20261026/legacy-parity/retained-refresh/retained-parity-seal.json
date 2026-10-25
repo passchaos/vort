@@ -1,0 +1,63 @@
+{
+  "schema": "vort.br.large-history-retained-parity-seal.v1",
+  "created_utc": "2026-10-25T17:26:50.817365+00:00",
+  "source_epoch": "root-df800cdf",
+  "feature_commit": "2f421462ce9399dfa9d4febcc39028dba2ce95c2",
+  "feature_source_manifest": {
+    "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/retained-refresh/feature-source-manifest-pinned.json",
+    "bytes": 278889,
+    "sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b"
+  },
+  "feature_source_files": 1901,
+  "feature_source_contains_exact_compiled_probe_sources": true,
+  "combined_parity": {
+    "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/retained-refresh/final-parity.json",
+    "bytes": 1427,
+    "sha256": "1b5da6691fabc72d29a4628df809e7ac85d511e8ccac4064a104a5f41e4b4c66"
+  },
+  "target_reports": [
+    {
+      "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/retained-refresh/native-final-parity.json",
+      "bytes": 1252918,
+      "sha256": "6c9fd987a5a9d0b7e35e3696d6357fff974cfc447126efaeb3813b1a3a30c91e"
+    },
+    {
+      "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/retained-refresh/x86-final-parity.json",
+      "bytes": 1248406,
+      "sha256": "60f4bb9347ab30d1b6f8cb071d28699e9505c8879a7ac16c981277eb9d27936e"
+    }
+  ],
+  "size_examples_retained": {
+    "path": "/tmp/vort-br-large-window-history-20261026/size-examples/summary-retained.json",
+    "bytes": 86304,
+    "sha256": "3f1b834823f0bb0f7703010524cf5fe51bcf66e4232d52aa143d57719f47c0c3"
+  },
+  "preserved_previous_parity": {
+    "path": "/tmp/vort-br-large-window-history-20261026/legacy-parity/final-refresh/final-parity.json",
+    "bytes": 1421,
+    "sha256": "d29d821d8c192d61bbb3e5759dd103c0651123a29ecc72b291a61ca25ac94371"
+  },
+  "preserved_previous_size_examples": {
+    "path": "/tmp/vort-br-large-window-history-20261026/size-examples/summary.json",
+    "bytes": 85654,
+    "sha256": "9912f62acc39ab1a40d8797aff5c14276e032eacdd260a69578d4899555eb55c"
+  },
+  "preserved_source_epoch_manifest": {
+    "path": "/tmp/vort-br-large-window-history-20261026/source-epochs/root-5e5d9e46/manifest.json",
+    "bytes": 2355,
+    "sha256": "4dd488e29838f6bde5cd34feec7d1606dd1c06442ba1b7a185db3b0a4cdecb61"
+  },
+  "counts": {
+    "comparisons": 216,
+    "matched": 216,
+    "counterexamples": 0,
+    "new_main_reference_decodes": 216,
+    "reset_comparisons": 120,
+    "new_reset_reference_decodes": 120,
+    "old_probe_executions": 0,
+    "old_reference_decodes": 0,
+    "compilations": 0
+  },
+  "all_rows_matched": true,
+  "scope": "Link-only final retained-source seal. Earlier root5e5 results and their original hashes remain unchanged."
+}
