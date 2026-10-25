@@ -135,3 +135,7 @@ remain separate work. The
 [evidence package](data/zstd-single-price-20261025/artifact-manifest.json)
 retains exact input identities, all raw rounds, excluded-run decisions,
 source/executable/reference identities, proof/ELF reviews and validation.
+After pulling with rebase, the scalar cost filter passes 11/11 again with
+unchanged source manifests. CLI help passes its seven-step check and the new
+benchmark route passes a five-step one-query smoke; smoke durations are not
+part of the performance evidence.
