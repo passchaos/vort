@@ -124,6 +124,15 @@ Wasm.
 
 ## Evidence identity and remaining scope
 
+After documentation commit `9654817f`, `git pull --rebase origin main` reports
+the branch up to date. The [post-rebase record](data/xz-parallel-20261026/post-rebase.json)
+and [raw logs](data/xz-parallel-20261026/post-rebase.tar.xz) preserve a fresh
+ReleaseFast run of 27 core and 111 root/consumer tests, actual Wasm fallback and
+CLI help, with 197/197 combined build steps. Global checks use cached compilation;
+the complete root test binary is not executed. All 1998 source hashes remain
+unchanged. The final evidence manifest covers 18 artifacts, including these two
+post-rebase files; earlier campaign and executable identities are preserved.
+
 The [repository evidence directory](data/xz-parallel-20261026/) preserves the
 campaigns and their raw artifacts:
 

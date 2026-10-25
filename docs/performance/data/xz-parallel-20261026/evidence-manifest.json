@@ -47,6 +47,16 @@
       "sha256": "aaec63fa6262108875792835553fdea4ec46a30b281a6018b45e42a806ea8443"
     },
     {
+      "path": "post-rebase.json",
+      "bytes": 1319,
+      "sha256": "0f19bf94d3a009bed742576d0888b3539097b2045a7aa38dfba29379921c6266"
+    },
+    {
+      "path": "post-rebase.tar.xz",
+      "bytes": 11516,
+      "sha256": "89f077d86b9a2961044dafc8b269c2b450f104b9957a9a35010df3ed1f038e3c"
+    },
+    {
       "path": "probes.tar.xz",
       "bytes": 2235212,
       "sha256": "239cfae2bc49687e6ff9e6d304f2a26f782792d3a9c89e548139386cebe45411"

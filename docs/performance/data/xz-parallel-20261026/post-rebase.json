@@ -1,0 +1,32 @@
+{
+  "schema": "vort.xz.parallel-post-rebase.v1",
+  "tested_commit": "9654817ff46025ec765a30930fd5225d09b68846",
+  "feature_commit": "cbef5071fe7209cd412be983e87603150f1bc75f",
+  "remote_base": "0b07b716772d41d04d1bdd694435df5759faa61f",
+  "pull_rebase_result": "From github.com:passchaos/vort\n * branch              main       -> FETCH_HEAD\nCurrent branch main is up to date.\n",
+  "command": [
+    "zig",
+    "build",
+    "test-xz-parallel",
+    "test-xz-parallel-wasm",
+    "check",
+    "run",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all",
+    "--",
+    "--help"
+  ],
+  "result": "197/197 build steps succeeded; 138/138 tests passed",
+  "core_test_executions": 27,
+  "root_consumer_test_executions": 111,
+  "actual_wasm_fallback_run": true,
+  "actual_cli_help_run": true,
+  "global_check": "cached compilation; complete root tests not executed",
+  "source_files_verified": 1998,
+  "source_manifest_sha256": "945b711f37a33d2a8d6900678e98e9ee10d3ae3f2d617649897f81ad3c4a9e67",
+  "source_mismatches": [],
+  "post_rebase_log_sha256": "9124e9b27e5dc2eeaa5f86bb69f8d98c91e492dcc90fcf0b559392be962e8486",
+  "scope": "Fresh narrow test and Wasm/CLI execution after pull --rebase. Previous reference and default-wire campaigns retain their own epochs.",
+  "recorded_system_time_utc": "2026-10-25 21:17:49 UTC"
+}
