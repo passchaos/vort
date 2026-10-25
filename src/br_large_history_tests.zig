@@ -12,6 +12,7 @@ pub fn contracts(comptime Br: type) !void {
     try Cases.expiration();
     try Cases.metadataAndFrames();
     try @import("tests/br_large_history_memory.zig").contracts(Br);
+    try @import("tests/br_large_history_adaptive.zig").contracts(Br);
 }
 
 fn Suite(comptime Br: type) type {
