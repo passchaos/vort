@@ -1,0 +1,178 @@
+{
+  "schema": "vort.xz.incremental-parallel-environment.v1",
+  "sampled_utc": "2026-10-25T23:15:01.804463+00:00",
+  "host": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+  "machine": "x86_64",
+  "python": "3.10.12",
+  "zig_version": "0.16.0",
+  "build_mode": "ReleaseFast",
+  "parent_reported_code_commit": "8f4ae62f",
+  "parent_reported_base_commit": "676b957c",
+  "native_cpu_model": "skylake",
+  "x86_cpu_model": "pentium4",
+  "reference": {
+    "library": {
+      "path": "/tmp/vort-xz-ref.vVVDxq/build/liblzma.so.5.8.4",
+      "bytes": 223896,
+      "sha256": "03a333e8fd35e4c771c04ce93ab08dc0b8bbfa7615900179c53e1dd92a4d9ec0"
+    },
+    "version": "5.8.4",
+    "version_number": 50080042,
+    "headers": [
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma.h",
+        "bytes": 9790,
+        "sha256": "6829350ef1ee35fae25481cc87a4f4b17c4b6c2a3df26f2b34dc1804df75c0d9"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/version.h",
+        "bytes": 3872,
+        "sha256": "9dec302470df2f505474cad90065a12eed8f65a7944e44ae1844499e72a4bb9f"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/lzma12.h",
+        "bytes": 20818,
+        "sha256": "863e8c4b64472c5bca2246f17e2208af6dac9a07a34386a6e0af707708abdb50"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/filter.h",
+        "bytes": 31746,
+        "sha256": "bdc89d83271fd6cfc6e345913d6c6882c4c0f9093c71ea576c64ba562233ca6b"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/bcj.h",
+        "bytes": 6105,
+        "sha256": "7420ecbd1bd0e7ed726ccb4b771c92c5e99366fd98f725b57055ddd90cd6384b"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/delta.h",
+        "bytes": 2187,
+        "sha256": "ff69bb02c2beb169284a50f68962006dde746e1859c31d47be0bc8e56db7a7b1"
+      },
+      {
+        "path": "/tmp/vort-xz-ref.vVVDxq/xz/src/liblzma/api/lzma/container.h",
+        "bytes": 42082,
+        "sha256": "1cc1586e26307154822c50c477807cba245e5813a30d828eeb8fe6edfe551ee7"
+      }
+    ],
+    "supported_checks": {
+      "none": true,
+      "crc32": true,
+      "crc64": true,
+      "sha256": true
+    },
+    "supported_filters": {
+      "delta": true,
+      "x86": true,
+      "powerpc": true,
+      "ia64": true,
+      "arm": true,
+      "arm_thumb": true,
+      "sparc": true,
+      "arm64": true,
+      "riscv": true
+    },
+    "abi_scope": "ctypes layout follows selected public lzma_options_lzma/filter/delta/bcj headers"
+  },
+  "reference_dependency": {
+    "archive": {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-block-sizes-20261026/reference.tar.xz",
+      "bytes": 1214556,
+      "sha256": "8c6df9db74d949d77b93d7503018062db5b7ce1992c839bd6559ef1f43cedf8d"
+    },
+    "build_record": {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-block-sizes-20261026/reference-build.json",
+      "bytes": 3885,
+      "sha256": "9c5f7a2b5b2148702369c56009bd2f625ee7836efa5654c9dd0e69a2004b4a9a"
+    },
+    "source_provenance": {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-block-sizes-20261026/reference-provenance.json",
+      "bytes": 4907,
+      "sha256": "0c113f0939f190e2cd7e09c7f4d062dcb26a84cd4e7327ad04d517510a35723e"
+    },
+    "reuse_scope": "Existing committed reference epoch; not rebuilt, copied into this dataset, or refreshed."
+  },
+  "optional_original_mt_adapter": {
+    "adapter": {
+      "path": "/tmp/vort-xz-block-sizes-20261026/block_sizes_reference.so",
+      "bytes": 16200,
+      "sha256": "b256261a2a670285150d94654dfe23cd24d494fc4b7558d932bf9a8ea315ef1b"
+    },
+    "adapter_source": {
+      "path": "/home/passchaos/project-z/vort/tools/xz/block_sizes_reference.c",
+      "bytes": 6646,
+      "sha256": "fff1b11101d4a05f526e712e9b527c7e4a34712b638b32a343350d20f69db779"
+    },
+    "abi": 1,
+    "public_struct_sizes": {
+      "stream": 136,
+      "mt": 128,
+      "lzma_options": 112
+    },
+    "actual_library_owners": {
+      "original": {
+        "path": "/tmp/vort-xz-ref.vVVDxq/build/liblzma.so.5.8.4",
+        "bytes": 223896,
+        "sha256": "03a333e8fd35e4c771c04ce93ab08dc0b8bbfa7615900179c53e1dd92a4d9ec0"
+      },
+      "instrumented": {
+        "path": "/tmp/vort-xz-block-sizes-mt-instrumented/build/liblzma.so.5.8.4",
+        "bytes": 224088,
+        "sha256": "5484343e9b9e0674f5ccf7f6ecfcbf24ba8bb4f37879dedfb5df83fb3050d85c"
+      }
+    },
+    "counter_abi": 1,
+    "counter_count": 30,
+    "counter_fields": [
+      "workers_created",
+      "worker_threads_entered",
+      "worker_threads_exited",
+      "worker_threads_live",
+      "worker_jobs_entered",
+      "worker_jobs_completed",
+      "worker_jobs_failed",
+      "worker_jobs_abandoned",
+      "worker_decode_calls",
+      "worker_call_input_bytes",
+      "worker_call_output_bytes",
+      "active_worker_decode_calls",
+      "peak_active_worker_decode_calls",
+      "active_worker_jobs",
+      "peak_active_worker_jobs",
+      "worker_call_identity_mask",
+      "worker_completed_identity_mask",
+      "worker_call_distinct",
+      "worker_completed_distinct",
+      "worker_identity_overflow",
+      "direct_blocks_initialized",
+      "direct_blocks_completed",
+      "direct_decode_calls",
+      "direct_call_input_bytes",
+      "direct_call_output_bytes",
+      "direct_reason_missing_size",
+      "direct_reason_oversized",
+      "direct_reason_memory_limit",
+      "direct_reason_memory_overflow",
+      "invariant_failures"
+    ]
+  },
+  "optional_mt_build_record_identity": {
+    "path": "/tmp/vort-xz-block-sizes-mt-instrumented/artifacts/reference-build.json",
+    "bytes": 3885,
+    "sha256": "9c5f7a2b5b2148702369c56009bd2f625ee7836efa5654c9dd0e69a2004b4a9a"
+  },
+  "wasm": {
+    "status": "ok",
+    "sha256": "736ded5ffa0c582021dc4e421b460351036a05fae10a54f371701b3e044774b7",
+    "scope": "Real bounded persistent incremental XZ operations on unsupported-target synchronous fallback; no OS workers, giant input or performance claim."
+  },
+  "handoff_state": "Post-rebase validation and remote push are parent responsibilities; neither is claimed here.",
+  "campaign_case_scope": {
+    "per_target_total": 84,
+    "incremental_protocol_cases": 71,
+    "complete_incremental_streams": 70,
+    "expected_sticky_worker_error": 1,
+    "native_reference_to_target_decodes": 13,
+    "scope_note": "84 passed includes the intentional sticky error assertion. It does not mean 84 complete encoded streams or 71 full incremental decodes."
+  }
+}

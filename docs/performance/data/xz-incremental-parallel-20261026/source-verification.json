@@ -1,0 +1,12 @@
+{
+  "schema": "vort.xz.incremental-parallel-source-verification.v1",
+  "parent_reported_commit": "8f4ae62f",
+  "final_full_scan_digest": "0f8e5a18fb244d6eae89549cbc1ec8841dd06e8e966b55480c3f2d208a7064f0",
+  "full_scan_file_count": 1958,
+  "final_compiled_module_file_count": 133,
+  "native_x86_compiled_scope_identical": true,
+  "compiled_scope_current_mismatches": [],
+  "final_source_archive_members": 140,
+  "late_capture_labels_preserved": true,
+  "reconstructed_source_exact_reported_hashes": true
+}

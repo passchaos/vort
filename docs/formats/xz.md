@@ -144,6 +144,20 @@ records three configurations at 134/134, native/x86 reference matrices each
 shorthand true; LZMA/raw LZMA2/MicroLZMA reject even an explicit false flag.
 Those scoped results establish no throughput/RSS or full MT feature-parity claim.
 
+The [persistent incremental parallel option](xz-incremental-parallel.md) has
+independent functional validation. `XzIncrementalEncoder.Options.parallel = null`
+keeps the serial path; explicit options keep stable workers/owned accepted input
+across steps. Header delivery precedes startup/admission, and block/byte credits
+remain held through final Block-byte delivery. New snapshots separate accepted,
+encoded, Index-published and caller-delivered progress, with recoverable admission
+limits and sticky worker/heap failures. Reset/deinit join workers; done retains
+charged storage. ZIP incremental XZ inherits the option and a precise failed-step
+progress bridge. [New validation](../performance/xz-incremental-parallel-functional-baseline.md)
+records native/x86 external campaigns each 84/84, actual peak three active
+encoder workers, owned-input overwrites and moves with jobs, real Wasm fallback
+and the complete Debug XZ/consumer family at 302/302. Earlier one-shot/header
+results retain their own source epochs; no new throughput or RSS lead is claimed.
+
 One-shot caller-buffer decoding, decoded-size queries and inspection use a
 reusable bounded workspace rather than complete plaintext storage. A count
 pass validates all block checks, Index/Footer records, stream padding and

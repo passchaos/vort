@@ -1,0 +1,63 @@
+{
+  "schema": "vort-xz-parallel-incremental-wasm-v1",
+  "status": "ok",
+  "utc": "2026-10-25T22:48:24.163Z",
+  "node_version": "v26.10.0",
+  "wasm_path": "/home/passchaos/project-z/vort/.zig-cache/o/4e268dbaeffc48a4409c9285bd8b3299/vort-xz-parallel-incremental-wasm.wasm",
+  "wasm_sha256": "736ded5ffa0c582021dc4e421b460351036a05fae10a54f371701b3e044774b7",
+  "consumer_source_sha256": "e9e7e58295747f069d139ed5f73d7d707f9f1273e7db818537261ec7995d3924",
+  "node_gate_sha256": "6558e0a58587244681e6c667640dd5dae5ccb00e56e2404a9dd934a5b52f62b7",
+  "imports": [],
+  "allocator": "FixedBufferAllocator",
+  "fixed_capacity": "4194304",
+  "parallel_io": "std.Io.failing",
+  "requested_workers": "3",
+  "pointer_bits": "32",
+  "serial_fallback": true,
+  "workers_started": "0",
+  "workers_live": "0",
+  "max_inflight_blocks": "2",
+  "max_inflight_bytes": "2048",
+  "stored": {
+    "input_bytes": "8192",
+    "wire_bytes": "8480",
+    "delivered_blocks": "8",
+    "staging_overwrites": "119",
+    "heap_peak": "8884",
+    "retained_heap_after_done": "7213",
+    "same_config_reset_no_allocation": true,
+    "live_after_deinit": "0"
+  },
+  "compressed_move": {
+    "input_bytes": "2048",
+    "wire_bytes": "200",
+    "accepted_owned_jobs_before_move": "2",
+    "final_body_byte_credit_checks": "2",
+    "retained_heap_after_done": "5084",
+    "heap_peak": "811738",
+    "live_after_deinit": "0",
+    "old_value_invalidated": true
+  },
+  "partial_credit": {
+    "input_bytes": "65",
+    "wire_bytes": "152",
+    "capped_partial_bytes": "64",
+    "delivered_blocks": "2",
+    "recoverable_refusals": "1",
+    "block_size": "128",
+    "flushed_first_block": "64",
+    "final_block": "1",
+    "serial_same_explicit_flush_wire": true,
+    "no_automatic_block_shrink": true
+  },
+  "zero_heap_init": {
+    "refusals": "1",
+    "live_bytes": "0",
+    "backing_allocator_position": "0",
+    "error": "WorkingMemoryLimitExceeded"
+  },
+  "all_wires_public_decoded": true,
+  "serial_wire_equal": true,
+  "caller_input_copied_before_overwrite": true,
+  "scope": "Real bounded persistent incremental XZ operations on unsupported-target synchronous fallback; no OS workers, giant input or performance claim."
+}

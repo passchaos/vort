@@ -122,9 +122,16 @@ low-threading-memory controls use direct mode. These test-only reference
 observations do not alter the earlier parallel baseline's source epoch or
 promise three workers for arbitrary streams.
 
-The incremental XZ encoder remains serial and gains no parallel control in this
-increment. Parallel incremental publication or further XZ ratio/matcher quality
-work needs a fresh behavior/ownership review. No throughput or industry-best
-claim follows from enabling workers. Functional worker activity, byte parity,
+The earlier one-shot increment leaves incremental XZ serial. Its subsequent
+[persistent incremental parallel option](xz-incremental-parallel.md) has completed
+independent functional validation, with stable owner/queue storage and owned accepted input
+across calls. Incremental credits last until the Block's final caller byte,
+while this one-shot pipeline releases its borrowed-input credit at internal
+staging. The new snapshot exposes delivered blocks separately from Index
+publication; its reset/failure/mode-change and ZIP progress contracts have
+[separate completed evidence](../performance/xz-incremental-parallel-functional-baseline.md),
+including native/x86 84/84 and actual owned-input/move-with-jobs witnesses.
+Further XZ ratio/matcher quality work needs a fresh scope review. No throughput
+or industry-best claim follows from enabling workers. Functional worker activity, byte parity,
 reference interoperability and real Wasm fallback have been verified within the
 baseline's bounded matrices; no throughput or encoder RSS measurement was run.

@@ -1,0 +1,3276 @@
+{
+  "schema": "vort.xz.incremental-parallel-build-provenance.v1",
+  "sampled_utc": "2026-10-25T23:16:20.724095+00:00",
+  "parent_reported_code_commit": "8f4ae62f",
+  "parent_reported_base_commit": "676b957c",
+  "compiler": {
+    "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "bytes": 172641672,
+    "sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c"
+  },
+  "compiler_version": "0.16.0",
+  "build_source": {
+    "path": "/home/passchaos/project-z/vort/build.zig",
+    "bytes": 439930,
+    "sha256": "0b3b1c6798020ec6294733f05685f255c92a326340473b53a9308715e6f70c98"
+  },
+  "build_graph_excerpt": "    const xz_incremental_parallel_probe = b.addExecutable(.{\n        .name = \"vort-xz-incremental-parallel-probe\",\n        .root_module = b.createModule(.{ .root_source_file = b.path(\"tools/xz/incremental_parallel_probe.zig\"), .target = target, .optimize = optimize, .imports = &.{.{ .name = \"xz\", .module = xz_tests_mod }} }),\n    });\n    const xz_incremental_parallel_probe_step = b.step(\"build-xz-incremental-parallel-probe\", \"Build the public incremental XZ parallel interoperability probe\");\n    xz_incremental_parallel_probe_step.dependOn(&b.addInstallArtifact(xz_incremental_parallel_probe, .{}).step);\n    const xz_incremental_parallel_diff = b.addSystemCommand(&.{ \"python3\", \"tools/xz/incremental_parallel_diff.py\", \"--probe\" });\n    xz_incremental_parallel_diff.addArtifactArg(xz_incremental_parallel_probe);\n    if (b.args) |args| xz_incremental_parallel_diff.addArgs(args);\n    const xz_incremental_parallel_diff_step = b.step(\"run-xz-incremental-parallel-diff\", \"Validate persistent XZ worker input ownership and stream progress against liblzma\");\n    xz_incremental_parallel_diff_step.dependOn(&xz_incremental_parallel_diff.step);\n",
+  "probe_source": {
+    "path": "/home/passchaos/project-z/vort/tools/xz/incremental_parallel_probe.zig",
+    "bytes": 19656,
+    "sha256": "92cde6b0d54b542e0f745271b1caad1c97899e87b6af944c3d8becb980d30f70"
+  },
+  "final_driver_source": {
+    "path": "/home/passchaos/project-z/vort/tools/xz/incremental_parallel_diff.py",
+    "bytes": 20455,
+    "sha256": "027f49cda90467b103bca591bc6033f7b741e09941788b9600bb5f7c5012c2dc"
+  },
+  "targets": {
+    "native": {
+      "executable": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 5612216,
+        "sha256": "5ec9937d79f239b15dcd1525013f1fe0b638cf7412ccb13dfd6e300dbf4b082c"
+      },
+      "target": "x86_64",
+      "cpu_model": "skylake",
+      "build_mode": "ReleaseFast",
+      "compiled_source_manifest_digest": "c703a9e7b17019c50daa2f1ef72e60fb485c625fc20fb831a5fd3705150ccd0b",
+      "build_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-releasefast.log",
+        "bytes": 1018,
+        "sha256": "aefb344d7c4abb14ace1b9adafa108e7cd7679c0ff842e0131be2066ffe25436"
+      },
+      "final_campaign_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential-final.log",
+        "bytes": 342,
+        "sha256": "fffa7b65f8f472c7fc8f16f7091179f4a87e3f80c66530fbc1ebe76899727267"
+      },
+      "campaign_commands": [
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-000-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-000-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-000-empty-normal.stdout",
+            "bytes": 6249,
+            "sha256": "e85e0151e53fdeb6fb96ab1310b94a3fb1848879ef2b2a5cf6d2106212923865"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-000-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-001-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-001-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-001-empty-normal.stdout",
+            "bytes": 6248,
+            "sha256": "26fd61d0ed90aa3ec7d63f7b3c6462790dc955160f69460998c0db242d90b76c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-001-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-002-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-002-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-002-empty-normal.stdout",
+            "bytes": 6250,
+            "sha256": "730029dbebd079655b4ad4dcd813f4817a04fb536ecb30aa4831b03420358528"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-002-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-003-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-003-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-003-empty-normal.stdout",
+            "bytes": 6249,
+            "sha256": "a528415a0c0a7e82722af2fdb8aa4a20e8e215cf024ad743ff81133ef455e711"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-003-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-004-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-004-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-004-empty-normal.stdout",
+            "bytes": 6250,
+            "sha256": "00084624691fe26b2e6f7696f9d1a8aefd7e80474372cbd294c84ea21c2de583"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-004-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-005-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-005-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-005-empty-normal.stdout",
+            "bytes": 6249,
+            "sha256": "2afcb74a8590dad93d974302bffcdfd01cb3d5418840dccc6115ac62503798a9"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-005-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-006-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-006-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-006-empty-normal.stdout",
+            "bytes": 6251,
+            "sha256": "7131622380fa7fe8a18cab2d8cbacbd006b4d6ac451c9680e23a4d8b97bc8df6"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-006-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-007-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-007-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-007-empty-normal.stdout",
+            "bytes": 6250,
+            "sha256": "f3438383cfbb607571e899d871cbb7276018802c5dc09ada294a0b2141fc96fe"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-007-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-008-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-008-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-008-tiny-normal.stdout",
+            "bytes": 7383,
+            "sha256": "1574f8758435c7f3e3d376c0ca207d2901118ca6f2fac3bbde27633f84d1b46b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-008-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-009-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-009-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-009-tiny-normal.stdout",
+            "bytes": 7382,
+            "sha256": "df1eed9e62060e6b1b58a23ab9654ddbcce7167c044d0fcd3f826c24dc46e85b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-009-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-010-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-010-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-010-tiny-normal.stdout",
+            "bytes": 7384,
+            "sha256": "544836284742743c92c81c3a0deb6cfd33287e69d75d8894f7442f8f479b19d6"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-010-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-011-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-011-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-011-tiny-normal.stdout",
+            "bytes": 7383,
+            "sha256": "427256893ad15409a56e6edc14260f3ba576aee95139c8495e4d283bdbb6cc5b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-011-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-012-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-012-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-012-tiny-normal.stdout",
+            "bytes": 7384,
+            "sha256": "ed7ac2f9b61abba4a83a64c2711a57b57c9d4ea27942c9043a7f5483fb28d617"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-012-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-013-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-013-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-013-tiny-normal.stdout",
+            "bytes": 7383,
+            "sha256": "6c3d713cb6d59f772e7faade907c8598dd257546de52bf75c6013104def4adfb"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-013-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-014-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-014-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-014-tiny-normal.stdout",
+            "bytes": 7392,
+            "sha256": "01f90eafde44834b8b4448fb96f3ffe89b5e57867a80799ede7b413c2738e9fc"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-014-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-015-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-015-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-015-tiny-normal.stdout",
+            "bytes": 7391,
+            "sha256": "1239c0622e84d1e1adf575844e4a4d9ddbcfbe23704855e18ef51324794c7b5b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-015-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-016-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-016-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-016-repeat-normal.stdout",
+            "bytes": 21054,
+            "sha256": "4d620a5781c3bcdcd06814a5af586e8d4f7e3509c5973416c2a744b4bfe15bf7"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-016-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-017-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-017-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-017-repeat-normal.stdout",
+            "bytes": 21053,
+            "sha256": "8c0257bb22760b165e54f7469fde7bfd438261bafceea56a03ac43cd1bfed272"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-017-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-018-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-018-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-018-repeat-normal.stdout",
+            "bytes": 21055,
+            "sha256": "813a9fa78b738d7bcd4b8b2e4ae9e92e0128a1eb59d2fa59f8f6da4a5041e56d"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-018-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-019-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-019-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-019-repeat-normal.stdout",
+            "bytes": 21054,
+            "sha256": "6ff1f0af513034dda9de3e07d97c758cd8357a0c2170b83aa36080c1f14bc9b7"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-019-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-020-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-020-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-020-repeat-normal.stdout",
+            "bytes": 21056,
+            "sha256": "2116e3de94bed30b231a048c2ca62d3240732668672bc979eecbf899d98c5647"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-020-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-021-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-021-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-021-repeat-normal.stdout",
+            "bytes": 21054,
+            "sha256": "92ff4c40777007c896634af709c52e11cdd2dbfa046e3b8e4bbb81b9104eb816"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-021-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-022-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-022-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-022-repeat-normal.stdout",
+            "bytes": 21083,
+            "sha256": "fdc3cdba8fb987b1f47b02a2c2649b0811f6a4d4648ef5be4d1330ce58a97a95"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-022-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-023-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-023-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-023-repeat-normal.stdout",
+            "bytes": 21082,
+            "sha256": "09708250475592c060bc255b5cd78506a948fdace487b6f232d7c2e8366209e3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-023-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-024-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-024-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-024-random-normal.stdout",
+            "bytes": 21226,
+            "sha256": "0f8484e5a4acec82bd9044e1199076600853357268fced3ed55c849265115227"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-024-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-025-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-025-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-025-random-normal.stdout",
+            "bytes": 21224,
+            "sha256": "007dabff9ac8577c6b10c6ddd9458e1caf8ece7730a3cb97fd91a8eba44cbafe"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-025-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-026-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-026-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-026-random-normal.stdout",
+            "bytes": 21226,
+            "sha256": "7125a8d0e5544b4494c8e2fd7eecbdb69ada2ac6db14ddc3703ffae3a40fd1d1"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-026-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-027-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-027-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-027-random-normal.stdout",
+            "bytes": 21226,
+            "sha256": "85ee3174cfd7c130f2f5b41c103a97b7c80a7515c2c43dbc691c4f73ad18221a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-027-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-028-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-028-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-028-random-normal.stdout",
+            "bytes": 21226,
+            "sha256": "163b219a665ea7478055bd8adeff22a436f5794991387a6b3f2acdb37d995495"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-028-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-029-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-029-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-029-random-normal.stdout",
+            "bytes": 21223,
+            "sha256": "f3a6979e8a12624ac30e64fa14569ec042e6373e38b0c0d3d7dd55b38b570610"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-029-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-030-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-030-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-030-random-normal.stdout",
+            "bytes": 21223,
+            "sha256": "7b0c7b1fa61d3e3a0c6304fc2725c86ac979c0d748bc47fc18349a6ca1fa35fa"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-030-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-031-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-031-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-031-random-normal.stdout",
+            "bytes": 21220,
+            "sha256": "5fde073856db90d98181232a55e71e9a0b8f032114f3c2c948530c6011e8a289"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-031-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-032-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-032-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-032-repeat-queue-cycles.stdout",
+            "bytes": 21052,
+            "sha256": "4b737ed550b8d8f80bbda5d712184dbd51ce17a8d2c6ecc1b8544cd5c6b3ec11"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-032-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-033-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-033-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-033-repeat-queue-cycles.stdout",
+            "bytes": 21055,
+            "sha256": "798528e23612c08eefa0984361b53b134db9156c305936bb3e29e6ba2acd334a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-033-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-034-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-034-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-034-repeat-queue-cycles.stdout",
+            "bytes": 8597,
+            "sha256": "f3dd7692dbdb4d6fb441b78bc6c50c1f3440566bfaffe54908b8c2d246f74780"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-034-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-035-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-035-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-035-repeat-queue-cycles.stdout",
+            "bytes": 8598,
+            "sha256": "1fc1d2ce8fcb285122c74caa174768a07e84c2b00783ad24417f75590bfcd6d5"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-035-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-036-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-036-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-036-cycles-queue-cycles.stdout",
+            "bytes": 80936,
+            "sha256": "ceff9aac6e81bd091e22990854572a0f0cd3cafd966fe8d42ee8d20f94b5a12a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-036-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-037-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-037-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-037-cycles-queue-cycles.stdout",
+            "bytes": 81060,
+            "sha256": "32e931333b58abadbbce54df843e4886e617a0618c23d23006b2d963e60e537b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-037-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-038-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-038-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-038-cycles-queue-cycles.stdout",
+            "bytes": 16675,
+            "sha256": "0d44f558c11734103297f37226dd8321c6910c5b3cede711db26121fd74e2e54"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-038-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-039-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-039-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-039-cycles-queue-cycles.stdout",
+            "bytes": 16764,
+            "sha256": "ce5412f08695356bb0b26da8c6267112394944bae4a37b68079ea66a49e6b247"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-039-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-040-cycles-flush.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-040-cycles-flush.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-040-cycles-flush.stdout",
+            "bytes": 83302,
+            "sha256": "3fbb8233a67979cd4da27a97f491cc93ba4dc01881d8657aa5d7f0eac56daa4f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-040-cycles-flush.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-041-cycles-flush.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-041-cycles-flush.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-041-cycles-flush.stdout",
+            "bytes": 83293,
+            "sha256": "f759527cfc4835d875fec1f9a8b42294ae7fdf5d986a1e56d0d60dc70b6273f2"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-041-cycles-flush.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-042-cycles-concat.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-042-cycles-concat.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-042-cycles-concat.stdout",
+            "bytes": 156798,
+            "sha256": "f343c371658874219ff9019b2d427acb3b4a3f8008871908a4371994e55d93d2"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-042-cycles-concat.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-043-cycles-concat.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-043-cycles-concat.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-043-cycles-concat.stdout",
+            "bytes": 156800,
+            "sha256": "eb1849196833bb5cecdd4f6e5596606f48bf38a269b4f38b0c31771a41d77498"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-043-cycles-concat.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-044-cycles-reset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-044-cycles-reset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-044-cycles-reset.stdout",
+            "bytes": 159335,
+            "sha256": "053f5ba84ddf69fd368212d3553b1d02e9501dd75968cd54de4937240115e9c5"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-044-cycles-reset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-045-cycles-reset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-045-cycles-reset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-045-cycles-reset.stdout",
+            "bytes": 159345,
+            "sha256": "9323168606e01c7d488a22b8749ce10a5622d4b36720ed55ec1473f1482042cd"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-045-cycles-reset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-046-cycles-move.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-046-cycles-move.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-046-cycles-move.stdout",
+            "bytes": 82204,
+            "sha256": "eb8de6d57d523c7221e9a81d3f1cf768ef76a2963ffeedd8bf7a02d711535c38"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-046-cycles-move.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-047-cycles-move.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-047-cycles-move.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-047-cycles-move.stdout",
+            "bytes": 82213,
+            "sha256": "daf09c430f9f716549a65e96f47feadd98dd57d118f8ad39fda4c8740e623c3d"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-047-cycles-move.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-048-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-048-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-048-repeat-parser.stdout",
+            "bytes": 21053,
+            "sha256": "3db3fac884e6db7ed4730191d66b0394f32c240f479ff93b437a3915ee50d7d2"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-048-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-049-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-049-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-049-repeat-parser.stdout",
+            "bytes": 21031,
+            "sha256": "cc7f0f88ee70ce4db8ac7c3a5646640af8e96d88b845acbaf82edede1a93c076"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-049-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-050-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-050-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-050-repeat-parser.stdout",
+            "bytes": 21067,
+            "sha256": "51a9f793d7775b1392ad58d9abf374a8abd7eecfdb6ee2672d000052ae0cb554"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-050-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-051-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-051-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-051-repeat-parser.stdout",
+            "bytes": 21073,
+            "sha256": "ee90c5fe9d0897b8ce84ba8793c4d59f269f1c00da1cf16d9abf3d23b222ef18"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-051-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-052-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-052-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-052-binary-filter.stdout",
+            "bytes": 11993,
+            "sha256": "a9ad6963fa9d53ef0f7e95d2eecc37ddfa73ed0cc2a26e39e61e9ccc48a2838f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-052-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-053-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-053-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-053-binary-filter.stdout",
+            "bytes": 12031,
+            "sha256": "443f29ebf560b9f15c0f113faf782e3d52035a8caf541e5432d3846b5fe57f32"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-053-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-054-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-054-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-054-binary-filter.stdout",
+            "bytes": 11996,
+            "sha256": "9a7b9ddfceec2b724087903935daf29cf4b3b30e71150385414fc6fb76b1441a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-054-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-055-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-055-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-055-binary-filter.stdout",
+            "bytes": 11994,
+            "sha256": "58f2ff85b56039d5920f844ab1ac4a5d16334d866911c056c91f7469de5f3f65"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-055-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-056-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-056-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-056-binary-filter.stdout",
+            "bytes": 11992,
+            "sha256": "cb56cbffc4a0ef4831a3dd544c210ee3c311dbea271eadfbd2927aa509f3695a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-056-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-057-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-057-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-057-binary-filter.stdout",
+            "bytes": 12028,
+            "sha256": "bc08d17ac73690a4f7b0cdacc18e6cad3143a8ab8da128e131d6f2b542f087ef"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-057-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-058-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-058-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-058-binary-filter.stdout",
+            "bytes": 11994,
+            "sha256": "5f4f6c4db283287cd44199a14357c23e6c188ab76f35eff3c8429fe42d4325ce"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-058-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-059-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-059-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-059-binary-filter.stdout",
+            "bytes": 11995,
+            "sha256": "d8d4fd35b35b60bda43392dc221689b9d6c97ea4b5f34494087b2e5c922594e0"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-059-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-060-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-060-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-060-binary-filter.stdout",
+            "bytes": 11994,
+            "sha256": "1943e55aebe908f8011735452dea9e6a2bc6c68c1d8943902d61d838b45f59cb"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-060-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-061-tiny-preset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-061-tiny-preset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-061-tiny-preset.stdout",
+            "bytes": 7384,
+            "sha256": "32e80b357e24afc5674fe76ed7c868e2501e4d759f08856cb3eac160aece8e7f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-061-tiny-preset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-062-tiny-preset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-062-tiny-preset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-062-tiny-preset.stdout",
+            "bytes": 7384,
+            "sha256": "83ec22b258a92e5e895658243b544c4ed567848c34c83edd3436074e56c8fe01"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-062-tiny-preset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-063-repeat-null-parallel.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-063-repeat-null-parallel.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-063-repeat-null-parallel.stdout",
+            "bytes": 19493,
+            "sha256": "f718a1fcec8aa91161e6ec00fd062674de9cab56928301da096eeb419ab641e3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-063-repeat-null-parallel.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-064-repeat-worker1.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-064-repeat-worker1.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-064-repeat-worker1.stdout",
+            "bytes": 21040,
+            "sha256": "89e1ccb31c38b2c063cd71b8e5f32a0d105529541a59a67eb469121e0addddd8"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-064-repeat-worker1.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/partial.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-065-partial-recover-partial-credit.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-065-partial-recover-partial-credit.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-065-partial-recover-partial-credit.stdout",
+            "bytes": 12041,
+            "sha256": "624a713730780ca5279be754686b358a11b44fbb9917fc579e22971a82e4950b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-065-partial-recover-partial-credit.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/tiny-credit.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-066-tiny-credit-actual-tiny-credit.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-066-tiny-credit-actual-tiny-credit.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-066-tiny-credit-actual-tiny-credit.stdout",
+            "bytes": 7444,
+            "sha256": "f69bc46da4a968e21527f0494bdb371dbe78a4aa516e6cc2b5b24070d1c72771"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-066-tiny-credit-actual-tiny-credit.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-067-repeat-recover-pending.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-067-repeat-recover-pending.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-067-repeat-recover-pending.stdout",
+            "bytes": 22266,
+            "sha256": "2c97815600a2ee3299ef0c8cc97e2b13eb14a6b76efa5b91235cd073a46e742c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-067-repeat-recover-pending.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-068-repeat-recover-input.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-068-repeat-recover-input.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-068-repeat-recover-input.stdout",
+            "bytes": 23317,
+            "sha256": "07521a649dd6c972c0445fc293cf0976db87e88dc6f2de93be13910f23009438"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-068-repeat-recover-input.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-069-repeat-sticky-worker-error.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-069-repeat-sticky-worker-error.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-069-repeat-sticky-worker-error.stdout",
+            "bytes": 7511,
+            "sha256": "1aec12f8c8b767df3a4394264f22b94fa8c7a4f2d7a1c76ad5b0a7c5b9642434"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-069-repeat-sticky-worker-error.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-070-cycles-continued-pool.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-070-cycles-continued-pool.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-070-cycles-continued-pool.stdout",
+            "bytes": 159461,
+            "sha256": "a73a548b0d08ee4d697b88284dc5619a92826fd4f233673b2f225b5fd3910002"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/case-070-cycles-continued-pool.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-000.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-000.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-000.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-000.stdout",
+            "bytes": 1742,
+            "sha256": "0a354af082d04787a1b2ec4e1525b57f10c6c386bb8880935d618f11825e049c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-000.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-001.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-001.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-001.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-001.stdout",
+            "bytes": 1742,
+            "sha256": "c8a77044149b36d2f96ef8bb47979d2da2030f700bc47238389bdd34f367a8b6"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-001.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-002.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-002.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-002.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-002.stdout",
+            "bytes": 1742,
+            "sha256": "16f70e98e09195ab92aa0b636b31027cb0f3ada9b9180d61adcc537f3d6bef39"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-002.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-003.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-003.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-003.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-003.stdout",
+            "bytes": 1743,
+            "sha256": "c2683493537d140ec0357188a49aa934895ff622c8c1695d1a1a31ef060433ff"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-003.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-004.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-004.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-004.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-004.stdout",
+            "bytes": 1749,
+            "sha256": "d4cb01fbdf08f86368473bf8dd54a6ff4385454a551c5c380026eb391921b889"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-004.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-005.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-005.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-005.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-005.stdout",
+            "bytes": 1750,
+            "sha256": "6b30e8137e25891cbd172b7f1e73f917b10bb6a002dec8a58fd3b80729f43d2c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-005.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-006.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-006.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-006.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-006.stdout",
+            "bytes": 1749,
+            "sha256": "854faaa3c6e541fb18e9dff08a7078b688b4f8b4c73ca9ce672d5268a2d97a59"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-006.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-007.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-007.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-007.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-007.stdout",
+            "bytes": 1749,
+            "sha256": "293a29e0048a19cffc5945b3d547b820a25d9996ec3f5a918397f53ccd8ba5b4"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-007.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-008.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-008.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-008.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-008.stdout",
+            "bytes": 1749,
+            "sha256": "a454a0d439aca3fca19eb02e8d1f4a4d0097d2868b57f67ea8413aa87bc94913"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-008.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-009.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-009.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-009.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-009.stdout",
+            "bytes": 1750,
+            "sha256": "d79d7428602b25af65eea1007bbd99800e186377abeee76abd38267cb1c8d85c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-009.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-010.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-010.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-010.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-010.stdout",
+            "bytes": 1749,
+            "sha256": "9318548ab05a61b07ef773aae7bcec453c1053327528bbadb5ede33480be3ad8"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-010.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-011.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-011.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-011.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-011.stdout",
+            "bytes": 1749,
+            "sha256": "05403b582c5cfb30dfc321df341248961f6ddce25736dd719126151d7805dab1"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-011.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-012.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-012.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-012.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-012.stdout",
+            "bytes": 1749,
+            "sha256": "7af978390d4bdbc15141e41cf5c8b4db6ea4fa0ee3a0e52c97e73c8365f1ab6a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/native-reference-012.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      ]
+    },
+    "x86": {
+      "executable": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 4638736,
+        "sha256": "2cd6af0f3038c7f8b0735701970472584b0d6f85f265f52ed0db89e9fafe0f5c"
+      },
+      "target": "x86",
+      "cpu_model": "pentium4",
+      "build_mode": "ReleaseFast",
+      "compiled_source_manifest_digest": "c703a9e7b17019c50daa2f1ef72e60fb485c625fc20fb831a5fd3705150ccd0b",
+      "build_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-releasefast.log",
+        "bytes": 1066,
+        "sha256": "c2c508284adb652356a569cb97e3e7d71320995a68f649e341ab17f1cff8086b"
+      },
+      "final_campaign_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential-final.log",
+        "bytes": 339,
+        "sha256": "fd66f259b4bf1ccdb4287859f2e1b1085b99c4dccbda785c5a0878ca0296cc23"
+      },
+      "campaign_commands": [
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-000-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-000-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-000-empty-normal.stdout",
+            "bytes": 6241,
+            "sha256": "81357bfc8f3521c19c3dd423ed790a5174516fa706475c10aa1ab7b50b33a0b8"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-000-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-001-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-001-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-001-empty-normal.stdout",
+            "bytes": 6240,
+            "sha256": "c7cd5e5579c1a29d75a75fed81cfbef9969e22700166de3e350be82555fc7886"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-001-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-002-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-002-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-002-empty-normal.stdout",
+            "bytes": 6242,
+            "sha256": "a2445b16603da846ef5c9bbe803886516e33f74d0d91c0ba30f5bb3de4176a1b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-002-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-003-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-003-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-003-empty-normal.stdout",
+            "bytes": 6241,
+            "sha256": "6af0c79b61c1ca17adce4f96b8565a6d0707d803686ecdf1323da47d557912fa"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-003-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-004-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-004-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-004-empty-normal.stdout",
+            "bytes": 6242,
+            "sha256": "836437dadf25ab0328cb7f29da0db1a9ae71a77ab7c7ba8d702e8c19fc4b1cf3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-004-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-005-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-005-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-005-empty-normal.stdout",
+            "bytes": 6241,
+            "sha256": "4f1fbdc7326580a0259a41a99f97fdee99334e4e217bbfb52f6ae9ca483f8ec3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-005-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-006-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-006-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-006-empty-normal.stdout",
+            "bytes": 6243,
+            "sha256": "42f0d095fad195a2645690a29025b0dace0fd33209ba14fc706a3b9df92a69aa"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-006-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/empty.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-007-empty-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-007-empty-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-007-empty-normal.stdout",
+            "bytes": 6242,
+            "sha256": "671a449b5d37977abee1c6a225916d75a1da5273d75e97b39e0d6455d5a2de92"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-007-empty-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-008-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-008-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-008-tiny-normal.stdout",
+            "bytes": 7371,
+            "sha256": "1a8c4242a3bf7b694dcbcd76864a324f9745a841211b3d1ca692e2535cbfe835"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-008-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-009-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-009-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-009-tiny-normal.stdout",
+            "bytes": 7370,
+            "sha256": "ec69b9385d36a5015cf20a04aeef32e9fc6f85ec5e4a0f6c2aae5716f23f4afa"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-009-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-010-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-010-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-010-tiny-normal.stdout",
+            "bytes": 7372,
+            "sha256": "92751a4834fa8d1aba8a25178cb507895387c70eed020d97319d3bb669f7a26c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-010-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-011-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-011-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-011-tiny-normal.stdout",
+            "bytes": 7371,
+            "sha256": "47edb957b1c1a16ec26dda43a2097a80f62f131cd6626a8779b2193a715d2b23"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-011-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-012-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-012-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-012-tiny-normal.stdout",
+            "bytes": 7372,
+            "sha256": "f3699e7d50e3608ed46afe71b4823f2e552249e62e862b1315658c294c4784fc"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-012-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-013-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-013-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-013-tiny-normal.stdout",
+            "bytes": 7371,
+            "sha256": "d52223d52830a9df126d75aeb80e0fbb47043e975ee507f3f4d17cc404239672"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-013-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-014-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-014-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-014-tiny-normal.stdout",
+            "bytes": 7380,
+            "sha256": "cb4560f12e427e44441b7c03b48aa71debfaa7b294927839246564f183147ab9"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-014-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-015-tiny-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-015-tiny-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-015-tiny-normal.stdout",
+            "bytes": 7379,
+            "sha256": "743c1ce0cbe7dc953b7da6b18956e9bd57df1d49550874eba653c382f9beb017"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-015-tiny-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-016-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-016-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-016-repeat-normal.stdout",
+            "bytes": 21043,
+            "sha256": "82fca2eb563b6cfb000f0ebe7f9db72407bf784f155c822faf06d5cbfa29d811"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-016-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-017-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-017-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-017-repeat-normal.stdout",
+            "bytes": 21042,
+            "sha256": "df9c77ea099812c2b0619769df0d2e759eb308a15d8c90aa490be37b996ca550"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-017-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-018-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-018-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-018-repeat-normal.stdout",
+            "bytes": 21045,
+            "sha256": "295dcf7ff100710e5cfc45160d2cc546445e212ae4045a04f1204a95d84bed14"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-018-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-019-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-019-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-019-repeat-normal.stdout",
+            "bytes": 21044,
+            "sha256": "5ff01d10fcc253ec1ee2ffe0b9236c31e28d602d418de0a6a0eb2f1e4631d430"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-019-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-020-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-020-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-020-repeat-normal.stdout",
+            "bytes": 21045,
+            "sha256": "e5a82da8b707f850853ee695669c859570fb5b69cad9be9ee81252bdb56d8001"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-020-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-021-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-021-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-021-repeat-normal.stdout",
+            "bytes": 21043,
+            "sha256": "fec534db6c707bfab78e60398d889c58ba25731064855d9aaad879cd3e773a03"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-021-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-022-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-022-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-022-repeat-normal.stdout",
+            "bytes": 21045,
+            "sha256": "4b5dc93280f0458d0366a479618092c079ebb98ba4237e8094c5f257ee36d52d"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-022-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-023-repeat-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-023-repeat-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-023-repeat-normal.stdout",
+            "bytes": 21045,
+            "sha256": "8d0a7cbdcc78718c36f3dd8637ebf46c539d51ce5ac13e0fea5dd41586cf3d5f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-023-repeat-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-024-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-024-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-024-random-normal.stdout",
+            "bytes": 21203,
+            "sha256": "56499100f691def5213d6377593ccfb149b2788a835b6ab6c03aaae1dca4111d"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-024-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-025-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-025-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-025-random-normal.stdout",
+            "bytes": 21203,
+            "sha256": "6fe842cd2c9ce00836e7a55f6e58983c375f54569296450962f7ec2c1d6a8ff0"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-025-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-026-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-026-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-026-random-normal.stdout",
+            "bytes": 21205,
+            "sha256": "8f6633035389f45328e10afed5208b6d1a8419594576ac2cc4fe4433e202e732"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-026-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-027-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-027-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-027-random-normal.stdout",
+            "bytes": 21202,
+            "sha256": "17625a2e178110bd77ae2aabf35c1a55f702a01624bbb11f07feb85eac118a49"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-027-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-028-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-028-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-028-random-normal.stdout",
+            "bytes": 21205,
+            "sha256": "ab4f400871f57830c9d9d65bdf9c3a9022191cf6ce6f2955c67a99ad18d40ed7"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-028-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-029-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-029-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-029-random-normal.stdout",
+            "bytes": 21203,
+            "sha256": "df893c3cf8254efca90ca13addc43c31f8e1d15a237ad4025432647b5ebe168a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-029-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-030-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-030-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-030-random-normal.stdout",
+            "bytes": 21201,
+            "sha256": "b9504b52876856ce87f2cc2130e33988e03847c92f0b8d1c14dca507db15e290"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-030-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/random.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-031-random-normal.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-031-random-normal.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-031-random-normal.stdout",
+            "bytes": 21200,
+            "sha256": "c2c05dc166e07a43cdfd991e2beebd8657a18b12c305e801ce0ad5692b7583d3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-031-random-normal.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-032-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-032-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-032-repeat-queue-cycles.stdout",
+            "bytes": 21031,
+            "sha256": "615beb301ccf8fa73024320207226ada65807fc039008b25ac43136e705103c3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-032-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-033-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-033-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-033-repeat-queue-cycles.stdout",
+            "bytes": 21043,
+            "sha256": "09a59c416b9e50412256f560860fc0b6a6492a2e592c640bcbf29ceae9fa4528"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-033-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-034-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-034-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-034-repeat-queue-cycles.stdout",
+            "bytes": 8585,
+            "sha256": "c1f1e777843ff2be5bc0e0b44af42c235a390c19ed499de98f2730fb6828bcdc"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-034-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-035-repeat-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-035-repeat-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-035-repeat-queue-cycles.stdout",
+            "bytes": 8586,
+            "sha256": "6e264006923d861d60991c384f40ab4b13b39f8d22b4b57208893f242708926a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-035-repeat-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-036-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-036-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-036-cycles-queue-cycles.stdout",
+            "bytes": 80865,
+            "sha256": "b4a5f9e6fd7669d68b6f83fcbde916431efd51da4179936e5d83768a1b6e7f54"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-036-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-037-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-037-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-037-cycles-queue-cycles.stdout",
+            "bytes": 80991,
+            "sha256": "a180a0828dec50d0caba2b33519ff25be2ae4e652b257e19910c6d90f23ec6b3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-037-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-038-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-038-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-038-cycles-queue-cycles.stdout",
+            "bytes": 16661,
+            "sha256": "c3b32451aa067652a633a0eb1c4155b4324dc621bc055f6e1d01028cc9f40b2f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-038-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-039-cycles-queue-cycles.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-039-cycles-queue-cycles.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-039-cycles-queue-cycles.stdout",
+            "bytes": 16750,
+            "sha256": "c18ba3cf1d9e954bca9791a4880b16545a51aac562edb12276c921412bc8e4f7"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-039-cycles-queue-cycles.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-040-cycles-flush.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-040-cycles-flush.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-040-cycles-flush.stdout",
+            "bytes": 83226,
+            "sha256": "7312d07fa90ce91cd551f3d2978a3ee19c508ef028f27d1fcd1c95474652ed54"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-040-cycles-flush.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-041-cycles-flush.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-041-cycles-flush.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-041-cycles-flush.stdout",
+            "bytes": 83234,
+            "sha256": "5e81472dc35f2e6681b3428e2d217bada6b5c05300e38e13baeb770c123850fd"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-041-cycles-flush.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-042-cycles-concat.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-042-cycles-concat.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-042-cycles-concat.stdout",
+            "bytes": 156758,
+            "sha256": "d99741f1e9806b2f771419f9559984edcb4e5094c86772dfbe8e7af9aa031ce4"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-042-cycles-concat.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-043-cycles-concat.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-043-cycles-concat.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-043-cycles-concat.stdout",
+            "bytes": 156737,
+            "sha256": "b331f6bfbcdae64ee3a44cef41b957a02ff4c050e2346b54d3bbb218474f845c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-043-cycles-concat.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-044-cycles-reset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-044-cycles-reset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-044-cycles-reset.stdout",
+            "bytes": 159273,
+            "sha256": "6d2f47d1fcbf012f4ac5d9007c90a54ad7a9f8d745fb57b8094cb09fedc9fe2a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-044-cycles-reset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-045-cycles-reset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-045-cycles-reset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-045-cycles-reset.stdout",
+            "bytes": 159258,
+            "sha256": "b16a372ba7cf5d6908628cc8b9295782896110a533e953c4d3c1dc6ceeb8b614"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-045-cycles-reset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-046-cycles-move.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-046-cycles-move.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-046-cycles-move.stdout",
+            "bytes": 82135,
+            "sha256": "992e46a6fb2955127cf1ae0c59866105cd0672603f52a010ca3e65fb8a36923d"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-046-cycles-move.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-047-cycles-move.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-047-cycles-move.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-047-cycles-move.stdout",
+            "bytes": 82136,
+            "sha256": "f2c973c1ff4ea1ce84a15fa5bdbbc6d5c50f8c6744ee0b132f7f342e0bf81a28"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-047-cycles-move.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-048-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-048-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-048-repeat-parser.stdout",
+            "bytes": 21043,
+            "sha256": "cc98bd833f6f0c9175b513cdfee01cf1a382173a54ae8ae4462e98775c997c9e"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-048-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-049-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-049-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-049-repeat-parser.stdout",
+            "bytes": 21011,
+            "sha256": "ce68e6c9d5602f5cd7162adbb307173d4ca37b66da3deba90e015fa378caa006"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-049-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-050-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-050-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-050-repeat-parser.stdout",
+            "bytes": 21041,
+            "sha256": "0e1a2860107c5e714316cc453b07ed059c695437f17705b01d0308b44dac0ace"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-050-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-051-repeat-parser.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-051-repeat-parser.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-051-repeat-parser.stdout",
+            "bytes": 21047,
+            "sha256": "b6597d08b859da9c4ef7d063eee8cbba97ae76ba6b0b730fe607c99e87da8865"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-051-repeat-parser.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-052-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-052-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-052-binary-filter.stdout",
+            "bytes": 11975,
+            "sha256": "d2d4c27bb3d872610947ae736db3cad60a304916febc444db96a4932468984da"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-052-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-053-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-053-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-053-binary-filter.stdout",
+            "bytes": 12013,
+            "sha256": "9f65c628d05b590ba64d7770e392790003319fa2dbfcbb75ddc22fc5c94add94"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-053-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-054-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-054-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-054-binary-filter.stdout",
+            "bytes": 11978,
+            "sha256": "9b7002cefe83c0967693ba04060afa7ee2d834763e58cf3f78498f5a7f8b078b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-054-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-055-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-055-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-055-binary-filter.stdout",
+            "bytes": 11975,
+            "sha256": "c3ff40e96ecb55305c7eac7a0c3471c9d420659c891e2daab4c68007afd941dc"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-055-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-056-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-056-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-056-binary-filter.stdout",
+            "bytes": 11974,
+            "sha256": "6695e0582deb1ce153b7953d8bd4e28abba1c2f6c8890502702c711b613e283a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-056-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-057-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-057-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-057-binary-filter.stdout",
+            "bytes": 12010,
+            "sha256": "868eaec724eabe7a66795ccb05efdea6c95d3e7c2f74879248c97b5a16eb44dd"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-057-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-058-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-058-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-058-binary-filter.stdout",
+            "bytes": 11976,
+            "sha256": "ee29424baac1f62631a439f53ae2ce70fad904137d38691cac0cc20cdaf44b4a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-058-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-059-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-059-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-059-binary-filter.stdout",
+            "bytes": 11976,
+            "sha256": "d8f98c36358a2f65f40b3d575d4a7155492b7c27423919d40df22936d68d967c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-059-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/binary.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-060-binary-filter.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-060-binary-filter.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-060-binary-filter.stdout",
+            "bytes": 11975,
+            "sha256": "1f0f673aea1767b3678d9a1ce9ddf5b75346f4fb84fdf22b4f7491900db1eb2f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-060-binary-filter.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-061-tiny-preset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-061-tiny-preset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-061-tiny-preset.stdout",
+            "bytes": 7368,
+            "sha256": "edfcd0524fa11397d60b49cfd503de6c7d70db7c38f6edfc9616ca7aafff7a34"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-061-tiny-preset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-062-tiny-preset.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-062-tiny-preset.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-062-tiny-preset.stdout",
+            "bytes": 7368,
+            "sha256": "4e746ea4f1c7c5beb1b8d6ff977e8834526fb876761f01f709231d4d45c92dc3"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-062-tiny-preset.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-063-repeat-null-parallel.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-063-repeat-null-parallel.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-063-repeat-null-parallel.stdout",
+            "bytes": 19495,
+            "sha256": "ee490ba82a7c712d06ccbb586fb9bda583d437a09aefde40cd50e35900b22c17"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-063-repeat-null-parallel.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-064-repeat-worker1.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-064-repeat-worker1.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-064-repeat-worker1.stdout",
+            "bytes": 21032,
+            "sha256": "bf43ef94bb889956ca67a94c93dfe6e22a73911ddfd1760845e5d5c848a731f4"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-064-repeat-worker1.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/partial.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-065-partial-recover-partial-credit.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-065-partial-recover-partial-credit.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-065-partial-recover-partial-credit.stdout",
+            "bytes": 12023,
+            "sha256": "431a625d975860d1a75fc83e9eb598624a3215f2aa525b8239ecb83522e24cfd"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-065-partial-recover-partial-credit.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/tiny-credit.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-066-tiny-credit-actual-tiny-credit.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-066-tiny-credit-actual-tiny-credit.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-066-tiny-credit-actual-tiny-credit.stdout",
+            "bytes": 7434,
+            "sha256": "05a502b1ae86e3badc3cc699a2e5b19be9ab3bdb9ddcec4fdb9b813e4370a189"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-066-tiny-credit-actual-tiny-credit.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-067-repeat-recover-pending.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-067-repeat-recover-pending.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-067-repeat-recover-pending.stdout",
+            "bytes": 22256,
+            "sha256": "258318838269c5c09650d25ee5aa6d77fef46e4906809b4d9143ea4720b1b333"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-067-repeat-recover-pending.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-068-repeat-recover-input.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-068-repeat-recover-input.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-068-repeat-recover-input.stdout",
+            "bytes": 23305,
+            "sha256": "46a229c088b9a6212c9c11670f9e733903b7890b8bbb7d196d3fe080e3cd458c"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-068-repeat-recover-input.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/repeat.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-069-repeat-sticky-worker-error.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-069-repeat-sticky-worker-error.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-069-repeat-sticky-worker-error.stdout",
+            "bytes": 7501,
+            "sha256": "4686ac53e55e623a0f0ac70ec79d8316b0fd11b1373735d7ce84bc5def034f49"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-069-repeat-sticky-worker-error.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/cycles.input",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-070-cycles-continued-pool.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-070-cycles-continued-pool.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-070-cycles-continued-pool.stdout",
+            "bytes": 159388,
+            "sha256": "965f7a311ebf463461168af9a653a2fa40a1d06bb6eb1b744acdbe137c71b6d7"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/case-070-cycles-continued-pool.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-000.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-000.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-000.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-000.stdout",
+            "bytes": 1740,
+            "sha256": "34e19bfdc2c2c31ad8a1048a35e216d810e05fc9da8a1411939f3874c3c51723"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-000.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-001.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-001.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-001.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-001.stdout",
+            "bytes": 1740,
+            "sha256": "2ef12b5b1e20a54c79112c7ae06d3c232cd896b463cfd21cd2ed118070d0788b"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-001.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-002.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-002.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-002.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-002.stdout",
+            "bytes": 1740,
+            "sha256": "5764052399b17e4882ed47f6f9936c23f87490fe69d6ca480e259869245a00a2"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-002.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-003.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-003.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-003.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-003.stdout",
+            "bytes": 1741,
+            "sha256": "9de2cba6497bbbd181453c13678410a79167f4ab410c02c1069c20b370d1b1d0"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-003.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-004.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-004.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-004.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-004.stdout",
+            "bytes": 1747,
+            "sha256": "da8d5dae0bdc95be618cabf4fa8c35ca20acec13b5404c5e9f75fe7aa25b9682"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-004.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-005.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-005.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-005.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-005.stdout",
+            "bytes": 1748,
+            "sha256": "decaa1005a63ae722b745a0139c8c14c862f0007d04822f93823fdeee1616b73"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-005.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-006.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-006.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-006.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-006.stdout",
+            "bytes": 1747,
+            "sha256": "79572525455b2814b6297d27bb823bd42d98a161d1bc101468c8f9e7ebdd3d56"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-006.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-007.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-007.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-007.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-007.stdout",
+            "bytes": 1747,
+            "sha256": "8dec602e1e13eccb4f910c4c7fa4053a6bd89b5de97a1afc510c270f443410b4"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-007.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-008.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-008.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-008.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-008.stdout",
+            "bytes": 1747,
+            "sha256": "2b8f692752096c5ae91a1292e223f9a25c0ede89b8bc0aa0c39c966f816b99b1"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-008.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-009.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-009.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-009.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-009.stdout",
+            "bytes": 1748,
+            "sha256": "3c94c0a87c9afb22c4cbd79ec125364a487279933ff89e1d9c200754b131ad9f"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-009.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-010.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-010.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-010.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-010.stdout",
+            "bytes": 1747,
+            "sha256": "04bd5aefa6a2e584b5bc35304ba2e0f47b14a065f6912c241b1d0cd1bde73199"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-010.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-011.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-011.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-011.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-011.stdout",
+            "bytes": 1747,
+            "sha256": "da873af251306ab933fbe2dd1ec83a0ace1d9ffae57b29f034dcf8d3ae43e849"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-011.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "command": [
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-012.xz",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-012.decoded",
+            "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-012.json"
+          ],
+          "exit_code": 0,
+          "stdout": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-012.stdout",
+            "bytes": 1747,
+            "sha256": "546b4926278b924d4de13ae350edb9b136f4645a180c6a4211cccd5a28804c9a"
+          },
+          "stderr": {
+            "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/native-reference-012.stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      ]
+    }
+  },
+  "exact_successful_compiler_argv_captured": false,
+  "argv_capture_limit": "Raw successful build summaries retain compiler/version/build graph/mode/target and executable hashes but not the complete compiler argv. Exact failed commands remain in their original logs. Final source and successful ELF are not substituted for the failed compiler inputs.",
+  "reference_reused_archive": {
+    "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-block-sizes-20261026/reference.tar.xz",
+    "bytes": 1214556,
+    "sha256": "8c6df9db74d949d77b93d7503018062db5b7ce1992c839bd6559ef1f43cedf8d"
+  },
+  "scope": "Existing actual compiler/probe/source identities and raw logged builds; no build was performed for archival work."
+}

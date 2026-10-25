@@ -1,0 +1,94 @@
+{
+  "schema": "vort.xz.incremental-parallel-artifacts.v1",
+  "created_utc": "2026-10-25T23:16:21.088350+00:00",
+  "files": [
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/archive-verification.json",
+      "bytes": 2253,
+      "sha256": "e3074938a0b33c4a257e1700bb5d1c34cd17abcac19c7d3779a46fa2e4979790",
+      "file": "archive-verification.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/build-provenance.json",
+      "bytes": 170429,
+      "sha256": "f55381e8b132f4ff82f624efce3eb52d5e2809893c169b17d2bf7421e62315d1",
+      "file": "build-provenance.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/campaigns.tar.xz",
+      "bytes": 3543300,
+      "sha256": "cc960d80dcdd8263174cffe705479975a43103bab371c0c209f4c52dd9ca447c",
+      "file": "campaigns.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/cross-target.json",
+      "bytes": 261252,
+      "sha256": "60279e7b6ab37666252201a5f4932c58e67092b1631225eb945ec00f1b238d27",
+      "file": "cross-target.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/environment.json",
+      "bytes": 6563,
+      "sha256": "6a7f7ba5bf57dc00e8cf880c1361090240d767c8a260f0a3fbd5ada66b3a1167",
+      "file": "environment.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/evidence-manifest.json",
+      "bytes": 590825,
+      "sha256": "5411a288039f8cade62527384745630023ee966897cbd0ded69448178178d749",
+      "file": "evidence-manifest.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/failure-sources.tar.xz",
+      "bytes": 174280,
+      "sha256": "fab832431c6f815968f9af0d0301e248157ddaf965d5865b3dff0253ec8eb1fb",
+      "file": "failure-sources.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/final-source-manifest.json",
+      "bytes": 348851,
+      "sha256": "8347bdb46db3bc85eaa35121ff9e98113b84c01ca003e992ed31b8cca422de8a",
+      "file": "final-source-manifest.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/final-sources.tar.xz",
+      "bytes": 368516,
+      "sha256": "25fd123cc8a2a95a322c83e1186c6dc1d28ddbdfbfd357235ae5510305f7a303",
+      "file": "final-sources.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/logs.tar.xz",
+      "bytes": 17796,
+      "sha256": "9bdedfb83a13610554a59262beaa00ba6f69990d19ec51ff42ef3176c041271f",
+      "file": "logs.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/probes-wasm.tar.xz",
+      "bytes": 2911036,
+      "sha256": "045ea9a84e3408e78c86c2ff2d8df244ee7eb0720c17e3036635b16ba2fea773",
+      "file": "probes-wasm.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/source-verification.json",
+      "bytes": 505,
+      "sha256": "cc72d86bc5bf692171481fed19dd1c37568fb9d06ac2d3dc144367131d0bf5e5",
+      "file": "source-verification.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/validation-summary.json",
+      "bytes": 19631,
+      "sha256": "3144a7b0995e6030f10817958b49151dd2b637ab9c3820be577bb1f7aaaa4c2c",
+      "file": "validation-summary.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/xz-incremental-parallel-20261026/wasm-report.json",
+      "bytes": 2187,
+      "sha256": "30ae89a8142a905d5e87c04d04406ff350443fc7f4066a0898acf9583560307f",
+      "file": "wasm-report.json"
+    }
+  ],
+  "all_original_raw_files_archived": true,
+  "raw_file_count": 1762,
+  "archive_count": 5,
+  "scope": "Files are independent immutable evidence records; SHA256SUMS includes this manifest and omits its own checksum."
+}

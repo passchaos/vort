@@ -23657,6 +23657,41 @@ reuse, so production keeps the simpler independently owned plans.
   Debug check 195 cached steps; global root tests are compile-only.
   Final feature `63a7dfa2`/2011 files does not refresh the 118-file probe epoch or
   Wasm runtime identity. Earlier parallel baseline epochs remain unchanged.
-  Incremental encoding is still serial; next review bounded parallel incremental
-  ownership/backpressure, then broader ratio/speed/memory benchmarks. No
+  At that epoch incremental encoding is serial. The subsequent persistent
+  incremental ownership/backpressure increment is recorded below; broader
+  ratio/speed/memory benchmarks remain open. No
   constant-memory, RSS, throughput or full-MT-parity claim is assigned.
+
+- 2026-10-26: `XzIncrementalEncoder.Options.parallel = null`
+  preserves serial startup/retry behavior; explicit options keep heap-stable
+  owner/control/queue/worker slots across steps. The full Header is delivered
+  before starting/accepting, accepted plaintext is copied for next-step caller
+  reuse, and credit includes partial/queued/active/completed/delivering Blocks
+  until their final caller byte. Later input can enter behind an undrained front
+  up to caps. Public profiles never escape to workers; new snapshots distinguish
+  accepted/encoded/Index-published/delivered progress and logical/retained/heap
+  storage. Small partial byte caps, input/pledge/block-count and complete-front
+  pending limits are recoverable; completed publication retry does not re-encode.
+  Worker/spawn/heap errors stop/join and become sticky with precise last-step
+  progress; reset clears them infallibly while retaining capacities. Mode changes
+  admit all retained storage transactionally; done retains heap, deinit joins/
+  frees to live zero. Index grows under block-count and heap caps, without a
+  constant whole-stream memory claim. ZIP incremental XZ forwards options and
+  accounts failed input/CRC/encryption/output bytes once; null bridge remains old.
+  [Functional gates](performance/xz-incremental-parallel-functional-baseline.md)
+  pass native Debug/ReleaseFast and actual x86 ReleaseFast 129/129 executions
+  each; single-thread Debug 35 passed/one partial-spawn skip. Final native/x86
+  external campaigns each pass 84/84 (71 incremental plus 13 upstream decode),
+  with natural peak three active encoder workers, 539/528 staging overwrites
+  while queued/active jobs exist, and two actual moves carrying jobs per target.
+  Real Wasm fallback executes stored/reset, compressed move/final-byte credit,
+  explicit partial flush and zero-heap rejection in a three-step gate. Complete
+  Debug XZ199 plus consumer103 passes 302/302; family/check/help passes 208
+  steps and final compilation check 200. Initial production compile errors,
+  test cleanup/reset/scheduling assumptions and Python hash/per-row assertions
+  are retained with their corrected epochs. The final 133-file tool closure
+  and frozen probes remain separate from feature `8f4ae62f` and future
+  post-rebase records. No CLI worker flag or performance result is added; old
+  one-shot/header evidence stays historical. All five core families still lack
+  a complete industry-best functionality/performance result; prioritize current
+  symmetric competitor measurements and Brotli/Zstd encoder throughput next.

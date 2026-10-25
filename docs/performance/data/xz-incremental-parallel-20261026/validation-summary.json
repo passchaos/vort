@@ -1,0 +1,458 @@
+{
+  "schema": "vort.xz.incremental-parallel-validation.v1",
+  "created_utc": "2026-10-25T23:15:01.804463+00:00",
+  "campaigns": [
+    {
+      "directory": "native",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/native",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential.log",
+        "bytes": 394,
+        "sha256": "463e9059aa9779a7f2f44b21806464f243ca8616aa98d60c2c22700ab2007c67"
+      },
+      "aggregate_report_available": false,
+      "status": "aborted_first_case_hash_schema_TypeError",
+      "aggregate_report": null,
+      "completed_case_stdout": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native/case-000-empty-normal.stdout",
+        "bytes": 6249,
+        "sha256": "e85e0151e53fdeb6fb96ab1310b94a3fb1848879ef2b2a5cf6d2106212923865"
+      },
+      "actual_frame_hash_type": "str",
+      "scope": "The original driver treated a hex string as bytes; no 84-case completion is claimed."
+    },
+    {
+      "directory": "x86",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/x86",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential.log",
+        "bytes": 394,
+        "sha256": "463e9059aa9779a7f2f44b21806464f243ca8616aa98d60c2c22700ab2007c67"
+      },
+      "aggregate_report_available": false,
+      "status": "aborted_first_case_hash_schema_TypeError",
+      "aggregate_report": null,
+      "completed_case_stdout": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86/case-000-empty-normal.stdout",
+        "bytes": 6241,
+        "sha256": "81357bfc8f3521c19c3dd423ed790a5174516fa706475c10aa1ab7b50b33a0b8"
+      },
+      "actual_frame_hash_type": "str",
+      "scope": "The original driver treated a hex string as bytes; no 84-case completion is claimed."
+    },
+    {
+      "directory": "native-fixed",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/native-fixed",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential-fixed.log",
+        "bytes": 1063,
+        "sha256": "a4f95c64d59c626879a3733f2274660a2349b7db70afa58deb49d742c3048901"
+      },
+      "aggregate_report_available": true,
+      "report": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native-fixed/differential.json",
+        "bytes": 6916553,
+        "sha256": "5c871246d888bc4bad813bf3350f232e0444646a30edd9880ffb4718dc690dfe"
+      },
+      "source_epoch": "xz-persistent-incremental-epoch4-fixed-tool-20261026",
+      "source_digest": "c391703dd5d16d57cfe28593e4f493eec70f87381a6c05035335011bac80d0c1",
+      "counts": {
+        "cases": 84,
+        "passed": 82,
+        "failed": 2,
+        "incremental_encode_cases": 71,
+        "native_reference_decode_cases": 13,
+        "observed_peak_active_workers": 3,
+        "input_overwrites_with_jobs": 541,
+        "actual_moves": 2
+      },
+      "probe": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 5612216,
+        "sha256": "5ec9937d79f239b15dcd1525013f1fe0b638cf7412ccb13dfd6e300dbf4b082c"
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "x86-fixed",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/x86-fixed",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential-fixed.log",
+        "bytes": 1060,
+        "sha256": "7614f8c358b24d4ec56782e1ebca9763a18a4f19f5153abf1cfb31925df4864c"
+      },
+      "aggregate_report_available": true,
+      "report": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-fixed/differential.json",
+        "bytes": 6912450,
+        "sha256": "f621a1ebac1df8649290790bfabda7f0830be6e16e57f9606b899c5091d5ece2"
+      },
+      "source_epoch": "xz-persistent-incremental-epoch4-fixed-tool-20261026",
+      "source_digest": "c391703dd5d16d57cfe28593e4f493eec70f87381a6c05035335011bac80d0c1",
+      "counts": {
+        "cases": 84,
+        "passed": 82,
+        "failed": 2,
+        "incremental_encode_cases": 71,
+        "native_reference_decode_cases": 13,
+        "observed_peak_active_workers": 3,
+        "input_overwrites_with_jobs": 536,
+        "actual_moves": 2
+      },
+      "probe": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 4638736,
+        "sha256": "2cd6af0f3038c7f8b0735701970472584b0d6f85f265f52ed0db89e9fafe0f5c"
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "native-final",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/native-final",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential-final.log",
+        "bytes": 342,
+        "sha256": "fffa7b65f8f472c7fc8f16f7091179f4a87e3f80c66530fbc1ebe76899727267"
+      },
+      "aggregate_report_available": true,
+      "report": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native-final/differential.json",
+        "bytes": 6943659,
+        "sha256": "6f6038e1a2316cc84295de943d95183c97185483b64865aad96ee0bce703a3df"
+      },
+      "source_epoch": "xz-persistent-incremental-epoch4-final-tool-20261026",
+      "source_digest": "c703a9e7b17019c50daa2f1ef72e60fb485c625fc20fb831a5fd3705150ccd0b",
+      "counts": {
+        "cases": 84,
+        "passed": 84,
+        "failed": 0,
+        "incremental_encode_cases": 71,
+        "native_reference_decode_cases": 13,
+        "observed_peak_active_workers": 3,
+        "input_overwrites_with_jobs": 539,
+        "actual_moves": 2,
+        "actual_moves_with_jobs": 2
+      },
+      "probe": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/native-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 5612216,
+        "sha256": "5ec9937d79f239b15dcd1525013f1fe0b638cf7412ccb13dfd6e300dbf4b082c"
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "x86-final",
+      "original_directory": "/tmp/vort-xz-incremental-parallel-20261026/x86-final",
+      "raw_log": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential-final.log",
+        "bytes": 339,
+        "sha256": "fd66f259b4bf1ccdb4287859f2e1b1085b99c4dccbda785c5a0878ca0296cc23"
+      },
+      "aggregate_report_available": true,
+      "report": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-final/differential.json",
+        "bytes": 6939706,
+        "sha256": "6a8d49e205e1d1f7da72513075b059e222e34f016f147733db974b08bc054e01"
+      },
+      "source_epoch": "xz-persistent-incremental-epoch4-final-tool-20261026",
+      "source_digest": "c703a9e7b17019c50daa2f1ef72e60fb485c625fc20fb831a5fd3705150ccd0b",
+      "counts": {
+        "cases": 84,
+        "passed": 84,
+        "failed": 0,
+        "incremental_encode_cases": 71,
+        "native_reference_decode_cases": 13,
+        "observed_peak_active_workers": 3,
+        "input_overwrites_with_jobs": 528,
+        "actual_moves": 2,
+        "actual_moves_with_jobs": 2
+      },
+      "probe": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/x86-probe/bin/vort-xz-incremental-parallel-probe",
+        "bytes": 4638736,
+        "sha256": "2cd6af0f3038c7f8b0735701970472584b0d6f85f265f52ed0db89e9fafe0f5c"
+      },
+      "sources_preserved": true
+    }
+  ],
+  "final_native": {
+    "cases": 84,
+    "passed": 84,
+    "failed": 0,
+    "incremental_encode_cases": 71,
+    "native_reference_decode_cases": 13,
+    "observed_peak_active_workers": 3,
+    "input_overwrites_with_jobs": 539,
+    "actual_moves": 2,
+    "actual_moves_with_jobs": 2
+  },
+  "final_x86": {
+    "cases": 84,
+    "passed": 84,
+    "failed": 0,
+    "incremental_encode_cases": 71,
+    "native_reference_decode_cases": 13,
+    "observed_peak_active_workers": 3,
+    "input_overwrites_with_jobs": 528,
+    "actual_moves": 2,
+    "actual_moves_with_jobs": 2
+  },
+  "logs": [
+    {
+      "file": "check-final-debug.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/check-final-debug.log",
+        "bytes": 61081,
+        "sha256": "947fe563c4b71381385b194cef8291877d508ba67e2edcf198839bdd370cf2d2"
+      },
+      "build_summaries": [
+        "Build Summary: 200/200 steps succeeded"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "contracts-debug-retry.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/contracts-debug-retry.log",
+        "bytes": 980,
+        "sha256": "2ea8d210c895bfb4e1a82f57aa245dfa75e54ce0d47a3c400b542294e95bcf18"
+      },
+      "build_summaries": [
+        "Build Summary: 12/12 steps succeeded; 129/129 tests passed"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "family-check-help-debug.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/family-check-help-debug.log",
+        "bytes": 104537,
+        "sha256": "cbc987c4716105f3bc108c188eed588017a5e0aa04cbce0dbdd781250fa8293f"
+      },
+      "build_summaries": [
+        "Build Summary: 208/208 steps succeeded; 302/302 tests passed"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "first-contracts-debug.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/first-contracts-debug.log",
+        "bytes": 6967,
+        "sha256": "7015bf035df58b764fcaf4c927a5326958dd3da382f282d002403106425dda16"
+      },
+      "build_summaries": [
+        "Build Summary: 9/12 steps succeeded (2 failed); 126/129 tests passed (2 failed, 1 crashed)"
+      ],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "initial-family-debug.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/initial-family-debug.log",
+        "bytes": 2788,
+        "sha256": "0d35be4eb5f03c23b2414df8c56c5d3acfaf484b18bbd6448f2978b8873fc414"
+      },
+      "build_summaries": [
+        "Build Summary: 0/3 steps succeeded (1 failed)"
+      ],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "native-differential-final.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential-final.log",
+        "bytes": 342,
+        "sha256": "fffa7b65f8f472c7fc8f16f7091179f4a87e3f80c66530fbc1ebe76899727267"
+      },
+      "build_summaries": [],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "native-differential-fixed.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential-fixed.log",
+        "bytes": 1063,
+        "sha256": "a4f95c64d59c626879a3733f2274660a2349b7db70afa58deb49d742c3048901"
+      },
+      "build_summaries": [],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "native-differential.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-differential.log",
+        "bytes": 394,
+        "sha256": "463e9059aa9779a7f2f44b21806464f243ca8616aa98d60c2c22700ab2007c67"
+      },
+      "build_summaries": [],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "native-releasefast.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/native-releasefast.log",
+        "bytes": 1018,
+        "sha256": "aefb344d7c4abb14ace1b9adafa108e7cd7679c0ff842e0131be2066ffe25436"
+      },
+      "build_summaries": [
+        "Build Summary: 12/12 steps succeeded; 129/129 tests passed"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "structured-debug-retry.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/structured-debug-retry.log",
+        "bytes": 1231,
+        "sha256": "016116a654f2e7111fbfce31fe5cdeea915f881b98d0c98cd9feb896405e9b06"
+      },
+      "build_summaries": [
+        "Build Summary: 15/15 steps succeeded; 164/165 tests passed (1 skipped)"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "structured-debug.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/structured-debug.log",
+        "bytes": 3057,
+        "sha256": "7a4c49058a0e2b4a13026a241a54b9b7451964f1c168e41085151692f080a6df"
+      },
+      "build_summaries": [
+        "Build Summary: 12/15 steps succeeded (1 failed); 128/129 tests passed (1 skipped)"
+      ],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "wasm-initial.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/wasm-initial.log",
+        "bytes": 2390,
+        "sha256": "05cceed3334dd9cf5bec011f8327dff3d80e020a70ec6a873814ab70c70cecde"
+      },
+      "build_summaries": [
+        "Build Summary: 3/3 steps succeeded"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "x86-differential-final.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential-final.log",
+        "bytes": 339,
+        "sha256": "fd66f259b4bf1ccdb4287859f2e1b1085b99c4dccbda785c5a0878ca0296cc23"
+      },
+      "build_summaries": [],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "x86-differential-fixed.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential-fixed.log",
+        "bytes": 1060,
+        "sha256": "7614f8c358b24d4ec56782e1ebca9763a18a4f19f5153abf1cfb31925df4864c"
+      },
+      "build_summaries": [],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "x86-differential.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-differential.log",
+        "bytes": 394,
+        "sha256": "463e9059aa9779a7f2f44b21806464f243ca8616aa98d60c2c22700ab2007c67"
+      },
+      "build_summaries": [],
+      "failed": true,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    },
+    {
+      "file": "x86-releasefast.log",
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/logs/x86-releasefast.log",
+        "bytes": 1066,
+        "sha256": "c2c508284adb652356a569cb97e3e7d71320995a68f649e341ab17f1cff8086b"
+      },
+      "build_summaries": [
+        "Build Summary: 12/12 steps succeeded; 129/129 tests passed"
+      ],
+      "failed": false,
+      "scope": "Original complete log; any compiler-reported timing/RSS is archival output, not benchmark evidence."
+    }
+  ],
+  "parent_confirmed_checks": {
+    "format": "23 changed Zig files zig fmt --check passed",
+    "diff_whitespace": "git diff --check passed",
+    "family_check_help": "208/208 steps; 302/302 tests (199 XZ plus 103 consumers)",
+    "final_check": "200/200 steps"
+  },
+  "failure_history": {
+    "initial_compilation": "Invalid Zig assignments/error-union return; later source correction recorded by retained logs.",
+    "runtime_contracts": "Initial test harness teardown/use-after-owner and retry/worker-liveness assumptions failed; all original logs retained.",
+    "late_source_capture": {
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/runtime-failure-source-snapshot.json",
+        "bytes": 2978,
+        "sha256": "7f90a79e70724acfd045230d8a389ddbe22727d34af4627e3d5ea804f725df72"
+      },
+      "scope": "Snapshot captured after the first failed runtime gate and before/while QA correction messages were delivered; matching old file hashes are explicit, no stronger compile-input binding claimed.",
+      "old_failure_files_match": {
+        "src/tests/xz_parallel_incremental_consumers.zig": false,
+        "src/xz/incremental_parallel/memory_tests.zig": false,
+        "src/xz/incremental_parallel/tests/resources.zig": false
+      }
+    },
+    "reconstructed_qa_sources": {
+      "identity": {
+        "path": "/tmp/vort-xz-incremental-parallel-20261026/reconstructed-failed-test-sources/manifest.json",
+        "bytes": 840,
+        "sha256": "ecd39e1b7ed8542ff537ad481fab6a1492ec40085ecc8f57a5e51ae6c14a889d"
+      },
+      "scope": "Reconstructed by reversing only the documented QA corrections in the final files. Exact hashes match agents' pre-runtime source reports. These are not falsely labeled raw compiler-captured sources. Original failure logs are retained separately.",
+      "files": [
+        {
+          "path": "memory_tests.zig",
+          "sha256": "fd2b332b6624a00ade5a17fb2d7241575d4a43f128f205fb7bcea1d89ced4331",
+          "matches_reported_failed_source_hash": true
+        },
+        {
+          "path": "xz_parallel_incremental_consumers.zig",
+          "sha256": "f385db850610eb0a46b716e6dca3b5962eb2368d709eb588cb3a4bf10085482d",
+          "matches_reported_failed_source_hash": true
+        },
+        {
+          "path": "resources.zig",
+          "sha256": "a21d5302ae7cab1526086b1d5d4d6154725bcc952dd2ce06421ad9e6d1eec479",
+          "matches_reported_failed_source_hash": true
+        }
+      ]
+    },
+    "initial_external": "Both aborted on first frame hash: actual hex string was treated as bytes; no aggregate report existed.",
+    "fixed_external": "82/84 per target; two 32KiB repeat cases validly delivered first block before return and retained partial owned input, invalidating the per-case queued/active-only witness.",
+    "final_external": "84/84 per target; strict hash/caller/full-content checks preserved and global deferred input/actual overlap/move checks remain mandatory."
+  },
+  "evidence_limit": "Final source manifest and successful probes are final execution evidence; neither late captures nor reconstructed files are labeled raw sources captured by earlier compilers. Timing/RSS claims and post-rebase/push completion are excluded.",
+  "final_case_scope": {
+    "per_target_total": 84,
+    "incremental_protocol_cases": 71,
+    "complete_incremental_streams": 70,
+    "expected_sticky_worker_error": 1,
+    "native_reference_to_target_decodes": 13,
+    "scope_note": "84 passed includes the intentional sticky error assertion. It does not mean 84 complete encoded streams or 71 full incremental decodes."
+  }
+}
