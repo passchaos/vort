@@ -10,6 +10,11 @@ The objective of exceeding the best competing libraries in both functionality
 and performance remains incomplete. Format interoperability, API coverage,
 encoder quality and throughput are separate claims.
 
+For the five core user-facing families—gzip, ZIP, XZ, Brotli and Zstd—the
+evidence below supports specific compatibility and optimization slices, not an
+overall best-library ranking. ZIP is a container whose codec and encryption
+coverage must be assessed alongside archive throughput and resource behavior.
+
 ## Current functionality
 
 | Family | Implemented public functionality | Remaining gap |
@@ -28,15 +33,15 @@ limits. Split incremental writing already removes
 the owned split writer's whole-archive staging requirement. These container
 features do not establish archive-wide competitor performance leadership.
 
-The [Deflate64 streaming increment](deflate64-stream-functional-baseline.md)
+The earlier [Deflate64 streaming increment](deflate64-stream-functional-baseline.md)
 closes ZIP method 9's stored-only incremental encoding gap. Its public raw
 `IncrementalEncoder` and ZIP adapter default to adaptive fixed/stored output,
 128 KiB planning blocks, 65,536-byte history and matches through 65,538 bytes.
 Explicit stored mode disables matching; total input and pending-output limits
 remain caller controls. Failed calls preserve actual committed progress through
 ZIP encryption accounting before the writer becomes poisoned.
-Dynamic-Huffman Deflate64 encoding, preset dictionaries and broad current
-quality/platform/ratio/speed/memory comparisons remain open. Core contracts
+At that revision, dynamic-Huffman Deflate64 encoding and preset dictionaries
+remained open. Its recorded core contracts
 pass 183/183 in native Debug, native ReleaseFast and x86, including 4 MiB across
 1024 blocks and warmed reuse without further heap growth. Native Debug/x86 ZIP
 contracts each pass 41/41 on stable source. Native and x86 independent Info-ZIP
@@ -61,9 +66,9 @@ candidate narrows to physical usize allocation size; an oversized losing fixed
 candidate cannot prevent a representable stored result. `nice_length` widens to
 u32 with default 128 and preserves the 0...2 first-match stop behavior. Output
 atomicity and stored-only APIs remain intact, while adaptive encoded bytes may
-change. Incremental policy is unchanged; dynamic-Huffman encoding, preset
-dictionaries and broader competitor quality/platform/ratio/speed/memory claims
-remain open. The [one-shot baseline](deflate64-one-shot-functional-baseline.md)
+change. That increment did not change incremental policy; dynamic encoding and
+preset dictionaries remained open at its revision. The
+[one-shot baseline](deflate64-one-shot-functional-baseline.md)
 records final codec contracts at 99/99 on native Debug, native ReleaseFast and
 x86, complete ZIP tests at 1992/1992, build checks at 176/176 and CLI help at
 7/7 on stable final source. Native/x86 external campaigns each verify
@@ -107,8 +112,34 @@ The aggregate is 1.005803x without statistical significance or a broad throughpu
 claim. A separate fixed-slot specialization was withdrawn after unfavorable
 repeat points; the retained resource implementation is the simpler variable-mask
 version, and its source/executable evidence remains separate from that experiment.
-Dynamic encoding and preset dictionaries are future work, with broader
-quality/platform/performance evidence still open.
+Dynamic encoding and preset dictionaries were still future work for that
+index-capacity revision; its timing is not a rerun of the subsequent encoder.
+
+The [Deflate64 dynamic-Huffman increment](deflate64-dynamic-functional-baseline.md)
+adds explicit dynamic streaming blocks,
+exact stored/fixed/dynamic adaptive arbitration, a dynamic-block snapshot count
+and fixed/dynamic one-shot chunk selection under the unchanged global stored
+bound. It shares full-range match decisions and bounded histogram/RLE plans
+without token staging, at the cost of two streaming and three one-shot match
+traversals. Final native Debug/ReleaseFast/x86 codec checks each pass 108/108,
+RLE checks 4/4 and focused ZIP checks 44/44. The final ReleaseFast complete
+ZIP/codec suite passes 2000/2000, checks 177/177 and CLI help 7/7. The earlier
+full Debug oracle aggregate reports 1998 passed and one skipped; its
+ReleaseFast-only LZMA-distance fixture is covered by the final suite.
+Final native/x86 independent campaigns each verify 80 artifacts, 112 member
+plaintexts and 154 commands, including 35 dynamic blocks and 4,600,430 parsed
+dynamic bits; full manifests/results agree across targets and with initial
+campaigns. Source/report identities retain their correct revisions.
+An untimed resource comparison retains six
+one-shot wires and all 4 MiB stream ledger values, while the distant fixture's
+wire changes from 69,098 to 65,633 bytes. Its requested peak changes from
+462,314 to 458,849 by the same output reduction, with non-output allocation
+payload unchanged at 393,216 bytes. This is not dynamic-tree stack/RSS or
+throughput evidence. Preset dictionaries and broad quality/platform/performance
+comparisons remain open; the preceding index-capacity timing keeps its own epoch.
+ZIP method 9 has no preset-dictionary ID, so future dictionary support needs an
+explicit compatibility contract. The dynamic slice is complete, while the
+industry-best objective and Brotli/Zstd throughput priorities remain open.
 
 The former LZMA/XZ complete plaintext staging gap is now closed in
 caller-buffer decoding and size queries, while preserving caller output on

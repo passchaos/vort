@@ -1,0 +1,13 @@
+src/deflate64/test_wire.zig:56:41: error: capture shadows declaration of 'symbol'
+            for (lengths, 0..) |length, symbol| if (length == width) {
+                                        ^~~~~~
+src/deflate64/test_wire.zig:64:5: note: declared here
+    fn symbol(self: *const Canonical, reader: *Cursor) !u16 {
+    ^~
+src/deflate64/dynamic_tests.zig:149:28: error: LHS of shift must be a fixed-width integer type, or RHS must be comptime-known
+    var remaining: i32 = 1 << @as(u5, max_bits);
+                         ~~^~~~~~~~~~~~~~~~~~~~
+referenced by:
+    exactBlock__anon_48633: src/deflate64/dynamic_tests.zig:170:22
+    contracts__anon_48606: src/deflate64/dynamic_tests.zig:249:23
+    4 reference(s) hidden; use '-freference-trace=6' to see all references

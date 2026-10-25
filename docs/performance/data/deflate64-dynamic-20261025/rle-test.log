@@ -1,0 +1,5 @@
+1/4 code_length_rle.test.code-length RLE fuses frequency and extra-bit accounting...OK
+2/4 code_length_rle.test.code-length RLE 318 capacity preserves alternating worst case and ordinary wrapper...OK
+3/4 code_length_rle.test.code-length RLE 318 repeats fuse across literal and distance alphabets...OK
+4/4 code_length_rle.test.code-length RLE generalized run boundaries and empty alphabets expand exactly...OK
+All 4 tests passed.

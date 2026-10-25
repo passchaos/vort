@@ -1,0 +1,108 @@
+1/107 deflate64.test_0...OK
+2/107 deflate64.decoder.test.Deflate64 fixed block decodes extended length code 285...OK
+3/107 deflate64.decoder.test.Deflate64 fixed block reaches the 64 KiB distance boundary...OK
+4/107 deflate64.decoder.test.Deflate64 decoder enforces corruption and output limits...OK
+5/107 deflate64.encoder.test.Deflate64 fixed codes cover extended length and distance boundaries...OK
+6/107 deflate64.encoder.test.Deflate64 encoder round trips empty, stored, and fixed streams...OK
+7/107 deflate64.encoder.test.Deflate64 encoder emits matches beyond the Deflate window...OK
+8/107 deflate64.encoder.test.Deflate64 stored encoder splits blocks and preserves caller buffers...OK
+9/107 deflate64.encoder.test.Deflate64 one-shot full range and transactional output contracts...OK
+10/107 deflate64.incremental_tests.test.Deflate64 incremental decoder streams extended distances and leaves suffix...OK
+11/107 deflate64.incremental_tests.test.Deflate64 incremental decoder handles backpressure limits and truncation...OK
+12/107 deflate64.incremental_tests.test.Deflate64 incremental decoder accepts a 7-Zip reference stream...OK
+13/107 deflate64.incremental_tests.test.Deflate64 incremental decoder requires the complete history ring...OK
+14/107 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder is split independent...OK
+15/107 deflate64.incremental_encoder_tests.test.Deflate64 incremental stored encoder handles empty backpressure and limits...OK
+16/107 deflate64.stream_encoder.test.Deflate64 incremental compressed encoder complete contracts...OK
+17/107 deflate64.stream_blocks.test.Deflate64 dynamic block exact plan and continuous bitstream contracts...OK
+18/107 deflate64.stream_match.test.Deflate64 match index bounded capacity and full-window reference contracts...OK
+19/107 core.test.streaming diagnostics keep cumulative counts wide and caller progress local...OK
+20/107 core.test.Progress add checks overflow...OK
+21/107 deflate64.test_wire.test.Deflate64 test wire canonical dynamic header handles all repeat symbols and rejects overruns...OK
+22/107 bitstream.test.buffered bit reader matches scalar reader across mixed operations...OK
+23/107 bitstream.test.buffered bit reader word prefetch preserves logical offsets and tail reads...OK
+24/107 bitstream.test.buffered bit reader aligned reads discard prefetched bytes without skipping input...OK
+25/107 bitstream.test.buffered bit reader word prefetch keeps padded peeks strict on truncation...OK
+26/107 bitstream.test.BitReader consumes LSB-first deflate bits...OK
+27/107 bitstream.test.BitReader exact bit length rejects high padding bits...OK
+28/107 bitstream.test.BitWriter bulk packing matches scalar bit packing...OK
+29/107 bitstream.test.BitWriter reserved-capacity packing matches checked packing...OK
+30/107 bitstream.test.BitReader skipBits advances without reading values...OK
+31/107 bitstream.test.BitReader hasBits and unchecked advance match skipBits...OK
+32/107 bitstream.test.BitReader peekBitsPadded uses zero padding past input...OK
+33/107 bitstream.test.ChunkedBitReader skips empty chunks and keeps a forward cursor...OK
+34/107 bitstream.test.ChunkedBitReader matches contiguous bit and aligned-byte reads...OK
+35/107 bitstream.test.ChunkedBitReader known-total initializer matches initAt...OK
+36/107 bitstream.test.ChunkedSpanBitReader matches ChunkedBitReader across chunk boundaries...OK
+37/107 bitstream.test.ChunkedBitReader hasBits and unchecked advance match skipBits...OK
+38/107 bitstream.test.BitWriter emits LSB-first bytes readable by BitReader...OK
+39/107 bitstream.test_0...OK
+40/107 io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input...OK
+41/107 io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries...OK
+42/107 huffman.test.sparse trusted encoder matches dense canonical codes...OK
+43/107 huffman.test.sparse trusted decoder matches dense canonical table...OK
+44/107 huffman.test.explicit-symbol decoder matches dense simple trees...OK
+45/107 huffman.test.explicit-symbol decoder rejects malformed lists...OK
+46/107 huffman.test.sparse trusted decoder rejects invalid active sets...OK
+47/107 huffman.test.sparse trusted decoder matches dense randomized tables...OK
+48/107 huffman.test.sparse trusted encoder matches dense randomized alphabets...OK
+49/107 huffman.test.sparse trusted encoder rejects invalid active sets...OK
+50/107 huffman.test.mapped packed lookups preserve fixed-width symbols and slots...OK
+51/107 huffman.test.Zstd medium known-active back-reference workspace preserves exact lengths...OK
+52/107 huffman.test.fixed Huffman tables expose expected boundary code lengths...OK
+53/107 huffman.test.canonical Huffman decoder handles a small RFC-style tree...OK
+54/107 huffman.test.tail lookup decoder matches compact decoder...OK
+55/107 huffman.test.external packed lookup covers dense tables and long-code fallback...OK
+56/107 huffman.test.fast Huffman decoder falls back for long codes...OK
+57/107 huffman.test.fast Huffman decoder checks staged bits after padded lookup...OK
+58/107 huffman.test.fast Huffman decoder reports lookup coverage...OK
+59/107 huffman.test.Huffman table records maximum active code length...OK
+60/107 huffman.test.canonical Huffman decoder rejects oversubscribed trees...OK
+61/107 huffman.test.fixed literal table decodes end-of-block code...OK
+62/107 huffman.test.dynamic header parser reads RFC1951 fields...OK
+63/107 huffman.test.dynamic length parser expands repeat symbols...OK
+64/107 huffman.test.dynamic length parser rejects invalid repeat symbols...OK
+65/107 huffman.test.fixed Huffman encoder writes symbols decoded by fixed table...OK
+66/107 huffman.test.dynamic parser rejects non-dynamic block type and truncated header...OK
+67/107 huffman.test.simple Huffman length builder creates decodable table...OK
+68/107 huffman.test.weighted Huffman length builder favors frequent symbols...OK
+69/107 huffman.test.tree Huffman length builder favors frequent symbols and decodes...OK
+70/107 huffman.test.package-merge Huffman length builder preserves canonical code space...OK
+71/107 huffman.test.package-merge naturally ordered pairs match sorted reference...OK
+72/107 huffman.test.compact sparse package-merge matches full-width reference...OK
+73/107 huffman.test.known-active package-merge matches scanned builder...OK
+74/107 huffman.test.dense back-reference package-merge preserves optimal weighted cost...OK
+75/107 huffman.test.dense Deflate unbounded tree matches package-merge cost...OK
+76/107 huffman.test.dense Deflate leaf ordering matches generic total order...OK
+77/107 huffman.test.linear back-reference recovery matches root traversal...OK
+78/107 huffman.test.dense known-active fast paths match comparison sort...OK
+79/107 huffman.test.package-merge Huffman lengths match small optimal costs...OK
+80/107 huffman.test.package-merge Huffman length builder covers deflate alphabet sizes...OK
+81/107 huffman.test.direct Huffman encoder matches canonical decoder table entries...OK
+82/107 huffman.test.tree Huffman length limiter preserves skewed short codes...OK
+83/107 huffman.test.fast decoder sparse-clears long prefixes...OK
+84/107 huffman.test.fixed literal fast lookup matches table decoder...OK
+85/107 huffman.test.fixed distance fast lookup decodes all symbols...OK
+86/107 deflate.dynamic.code_length_rle.test.code-length RLE fuses frequency and extra-bit accounting...OK
+87/107 deflate.dynamic.code_length_rle.test.code-length RLE 318 capacity preserves alternating worst case and ordinary wrapper...OK
+88/107 deflate.dynamic.code_length_rle.test.code-length RLE 318 repeats fuse across literal and distance alphabets...OK
+89/107 deflate.dynamic.code_length_rle.test.code-length RLE generalized run boundaries and empty alphabets expand exactly...OK
+90/107 deflate64.block_choice.test.Deflate64 block ties preserve format order including final padding...OK
+91/107 br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries...OK
+92/107 br.fast_bit_reader.test.Brotli fast bit reader matches scalar mixed reads and cursors...OK
+93/107 br.fast_bit_reader.test.Brotli fast bit reader preserves truncated bit length...OK
+94/107 br.fast_bit_reader.test.Brotli fast bit reader loads complete short tails...OK
+95/107 br.fast_bit_reader.test.Brotli fast bit reader specialized fixed-width peeks match generic reads...OK
+96/107 br.fast_bit_reader.test.Brotli fast bit reader full-word refills honor every logical tail...OK
+97/107 br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle...OK
+98/107 bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment...OK
+99/107 bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries...OK
+100/107 bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width...OK
+101/107 bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged...OK
+102/107 bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors...OK
+103/107 bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain...OK
+104/107 bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation...OK
+105/107 io.stream_count.test.stream count preserves native types and crosses the 32-bit byte boundary...OK
+106/107 io.stream_count.test.stream count overflow refuses an advance without changing state...OK
+107/107 io.stream_count.test.stream count narrows only after checking a physical bound...OK
+All 107 tests passed.

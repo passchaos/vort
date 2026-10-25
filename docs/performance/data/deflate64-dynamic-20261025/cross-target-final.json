@@ -1,0 +1,38 @@
+{
+  "schema": "vort.deflate64.cross-target.v1",
+  "source_commit": "02b6498aa2e24fdf7e09eb1f194bc680aeac7b7f",
+  "source_manifest_sha256": "5c39685857351c98b13d969d73fa80a7ea19ecadadfc710ecb5401be289cd2bc",
+  "manifest_equal": true,
+  "full_results_equal": true,
+  "prior_campaign_results_equal": true,
+  "targets": [
+    {
+      "target": "native-final",
+      "manifest_sha256": "54fc0c8a6a7564e5d7275eaf39d5f46d115c0dbbe93438f9e5879bb1b94a5d06",
+      "report_sha256": "4fa3a1c33f15bc011ee9f2e068c798303105bf0c22fd9643b3dfdf793cd0c1dc",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/fb788a62311c4d1dbed13689326fc0d1/vort-deflate64-stream-probe",
+        "sha256": "a88a5808e7f737c94d0a0e89a0c8552b62e75f3becfce0bddaced86fd47874e2"
+      },
+      "artifacts": 80,
+      "members": 112,
+      "commands": 154,
+      "dynamic_blocks": 35,
+      "dynamic_bits": 4600430
+    },
+    {
+      "target": "x86-final",
+      "manifest_sha256": "54fc0c8a6a7564e5d7275eaf39d5f46d115c0dbbe93438f9e5879bb1b94a5d06",
+      "report_sha256": "4e7855c87a36a5d390360f45a1e01e04b034df91cabbfbfa07fe40c655823f00",
+      "probe": {
+        "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/f68d61015be8ec0b618bca2c1781b246/vort-deflate64-stream-probe",
+        "sha256": "f59ebdd9be70a245558d68825bcb0cc345a0155cb65a81d788c5aaae82a21b37"
+      },
+      "artifacts": 80,
+      "members": 112,
+      "commands": 154,
+      "dynamic_blocks": 35,
+      "dynamic_bits": 4600430
+    }
+  ]
+}

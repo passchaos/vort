@@ -23469,3 +23469,29 @@ reuse, so production keeps the simpler independently owned plans.
   speed/memory leadership. Dynamic Huffman work next requires32distance symbols,
   full285length pricing and bounded318code-length entries with exact block
   arbitration; current dynamic encoding and preset dictionaries remain open.
+
+- 2026-10-25: Deflate64 dynamic-Huffman adds an
+  explicit streaming `.dynamic` strategy, `dynamic_block_count`, and adaptive
+  exact stored/fixed/dynamic cost selection with stored/fixed/dynamic tie order.
+  One-shot fixed/dynamic chunk choices remain subject to the original global
+  stored bound and private wide sizing, without a new forced one-shot option.
+  Actual histograms, 286/32 alphabets and bounded318-entry code-length RLE share
+  the full65536-distance/65538-length matcher. Streaming plan/emission uses two
+  match traversals; one-shot preflight/rebuild/emission uses three, without
+  whole-input or token staging. [Functional evidence](performance/deflate64-dynamic-functional-baseline.md)
+  records nativeDebug/ReleaseFast/x86 codec108/108, RLE4/4, focusedZIP44/44,
+  finalReleaseFast fullZIP/codec2000/2000, checks177/177 and CLI7/7. The earlier
+  fullDebug oracle1998passed/1skip retains its own scope; finalReleaseFast
+  covers the largeLZMA-distance fixture skipped in Debug. Finalnative/x86
+  campaigns each verify80 artifacts112 members154commands, including35dynamic
+  blocks/4600430exactbits; full manifests/results equal across targets and
+  initial campaigns with source/report epochs preserved. The untimed
+  distant fixture shrinks69098->65633bytes; requested peak462314->458849 falls
+  entirely with returned output, while393216bytes non-output payload is unchanged.
+  Six other one-shot wires/ledgers and4MiB stream6328wire/462909peak remain
+  identical. Historical fixed-only BTYPE and Python code-length
+  order assertions were corrected without changing codec semantics. Preset
+  dictionaries and industry-best ratio/speed/memory evidence remain open. Next
+  define dictionary/history compatibility explicitly: ZIPmethod9 has no preset
+  dictionaryID and must not silently depend on hidden history. Broader codec
+  comparisons and Brotli/Zstd throughput work remain separate priorities.

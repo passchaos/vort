@@ -1,0 +1,54 @@
+{
+  "schema": "vort.deflate64.dynamic-validation.v1",
+  "source_commit": "02b6498aa2e24fdf7e09eb1f194bc680aeac7b7f",
+  "source_manifest_sha256": "5c39685857351c98b13d969d73fa80a7ea19ecadadfc710ecb5401be289cd2bc",
+  "zig": "0.16.0",
+  "codec_native_debug": {
+    "passed": 108,
+    "total": 108
+  },
+  "codec_native_releasefast": {
+    "passed": 108,
+    "total": 108
+  },
+  "codec_x86_releasefast": {
+    "passed": 108,
+    "total": 108
+  },
+  "rle": {
+    "passed": 4,
+    "total": 4
+  },
+  "zip_focused": {
+    "passed": 44,
+    "total": 44
+  },
+  "zip_all_final_releasefast": {
+    "passed": 2000,
+    "total": 2000
+  },
+  "zip_all_earlier_debug": {
+    "passed": 1998,
+    "total": 1999,
+    "skipped": 1,
+    "scope": "earlier oracle before strict tree/nice follow-up; large dictionary actual distance ReleaseFast fixture skipped in Debug"
+  },
+  "check": {
+    "steps": 177
+  },
+  "cli_help": {
+    "steps": 7
+  },
+  "external_targets": [
+    "native-final",
+    "x86-final"
+  ],
+  "external_each": {
+    "artifacts": 80,
+    "members": 112,
+    "commands": 154,
+    "dynamic_blocks": 35
+  },
+  "timing_performed": false,
+  "notes": "Source/test scopes and historical snapshots are distinct. Resource metric is codec requested live heap including returned wire, excluding RSS/stack and caller input/collectors."
+}
