@@ -140,3 +140,11 @@ reference frame lengths/hashes and settings. Its one-round elapsed values are
 not promoted to a throughput ranking. Default encoding makes no new anchor
 storage request; explicit diagnostic allocation failure remains a separate
 contract from existing production memory budgets.
+
+After pulling with rebase, the final anchor finder/storage filter passes
+13/13 again with unchanged source manifests. CLI help passes its seven-step
+build/run check, and the diagnostic route smoke verifies cached/uncached mode
+switching and RLE input behavior. The
+[evidence package](data/zstd-anchor-cache-20261025/artifact-manifest.json)
+retains commands, exact source/input/executable identities, raw alternating
+rounds, temporary wrapper reproduction data, ELF inspection and final tests.
