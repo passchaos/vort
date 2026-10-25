@@ -501,6 +501,27 @@ pub fn build(b: *std.Build) void {
     });
     const br_general_large_step = b.step("test-br-general-large-window", "Run non-HQ Brotli Large Window format, ownership and resource contracts");
     br_general_large_step.dependOn(&b.addRunArtifact(br_general_large_tests).step);
+    const br_large_history_tests = b.addTest(.{
+        .name = "vort-br-large-history-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli general large history", "Brotli large history", "Br general large window distinguishes" },
+    });
+    b.step("test-br-large-history", "Run actual Brotli Large Window history, matcher and resource contracts").dependOn(&b.addRunArtifact(br_large_history_tests).step);
+    const br_large_history_probe = b.addExecutable(.{
+        .name = "vort-br-large-history-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/large_history_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "br", .module = br_encode_bench_mod }},
+        }),
+    });
+    b.step("build-br-large-history-probe", "Compile the public Brotli long-history compatibility probe").dependOn(&br_large_history_probe.step);
+    const br_large_history_diff = b.addSystemCommand(&.{ "python3", "tools/br/large_history_diff.py", "--probe" });
+    br_large_history_diff.addArtifactArg(br_large_history_probe);
+    br_large_history_diff.addArgs(&.{ "--directory", "zig-out/br-large-history" });
+    if (b.args) |args| br_large_history_diff.addArgs(args);
+    b.step("run-br-large-history-diff", "Validate actual Brotli long-history streams against libbrotli").dependOn(&br_large_history_diff.step);
     const br_stream_counter_tests = b.addTest(.{
         .name = "vort-br-stream-counter-tests",
         .root_module = br_tests_mod,
@@ -7169,6 +7190,8 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(&br_large_history_tests.step);
+    check_step.dependOn(&br_large_history_probe.step);
     check_step.dependOn(&br_metadata_tests.step);
     check_step.dependOn(&br_metadata_root_tests.step);
     check_step.dependOn(&br_metadata_probe.step);

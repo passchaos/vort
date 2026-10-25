@@ -93,6 +93,57 @@ pub fn augmentAllocWithHistoryAndMaxDistanceForFormat(
     return augmentAllocWithStride(16, allocator, active_history, input, commands, reachable_max_distance);
 }
 
+/// Non-HQ Large Window history augmentation. All retained bytes inside the
+/// advertised distance are eligible for the existing sampled source policy;
+/// bounded chains/strides do not promise an exhaustive search. Three-byte
+/// anchors admit exact length-three matches, including the final input bytes.
+/// Legacy entry points retain their four-byte/16-byte-minimum behavior.
+/// Commands with cached HQ encodings are rejected before allocation: their
+/// encoded insert range cannot be retained after literal-run replacement.
+pub fn augmentLargeWindowHistoryAlloc(
+    allocator: std.mem.Allocator,
+    history: []const u8,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    max_backward_distance: usize,
+) !?[]command_plan.Command {
+    if (max_backward_distance < min_distance or max_backward_distance > encoder_distance.safe_max_distance)
+        return error.InvalidBlockPlan;
+    const active_history = history[history.len - @min(history.len, max_backward_distance) ..];
+    const combined_len = std.math.add(usize, active_history.len, input.len) catch return error.IntegerOverflow;
+    if (combined_len > std.math.maxInt(i32)) return error.InvalidBlockPlan;
+    try validateLargeWindowCommands(active_history.len, input.len, commands, max_backward_distance);
+    if (input.len < 3 or combined_len - 3 < min_distance or commands.len == 0) return null;
+    const reachable = @min(max_backward_distance, combined_len - 3);
+    if (reachable <= max_dense_distance)
+        return augmentWithStridePolicy(1, true, allocator, active_history, input, commands, reachable);
+    if (reachable <= (@as(usize, 1) << 21) - 16)
+        return augmentWithStridePolicy(2, true, allocator, active_history, input, commands, reachable);
+    if (reachable <= (@as(usize, 1) << 22) - 16)
+        return augmentWithStridePolicy(4, true, allocator, active_history, input, commands, reachable);
+    if (reachable <= (@as(usize, 1) << 23) - 16)
+        return augmentWithStridePolicy(8, true, allocator, active_history, input, commands, reachable);
+    return augmentWithStridePolicy(16, true, allocator, active_history, input, commands, reachable);
+}
+
+fn validateLargeWindowCommands(history_len: usize, input_len: usize, commands: []const command_plan.Command, max_backward_distance: usize) !void {
+    if (commands.len == 0) return;
+    var position: usize = 0;
+    for (commands) |command| {
+        if (command.insert_start != position or command.hq_encoding != null) return error.InvalidBlockPlan;
+        position = std.math.add(usize, position, command.insert_len) catch return error.InvalidBlockPlan;
+        if (position > input_len) return error.InvalidBlockPlan;
+        if (!command.has_copy) continue;
+        const copy_len = command.outputLen();
+        if (copy_len == 0 or copy_len > input_len - position) return error.InvalidBlockPlan;
+        if (command.isLz77() and (command.copy_len < 2 or command.distance == 0 or
+            command.distance > max_backward_distance or command.distance > history_len + position))
+            return error.InvalidBlockPlan;
+        position += copy_len;
+    }
+    if (position != input_len) return error.InvalidBlockPlan;
+}
+
 fn augmentAllocWithStride(
     comptime stride: usize,
     allocator: std.mem.Allocator,
@@ -101,9 +152,22 @@ fn augmentAllocWithStride(
     commands: []const command_plan.Command,
     max_backward_distance: usize,
 ) !?[]command_plan.Command {
+    return augmentWithStridePolicy(stride, false, allocator, history, input, commands, max_backward_distance);
+}
+
+fn augmentWithStridePolicy(
+    comptime stride: usize,
+    comptime large_history: bool,
+    allocator: std.mem.Allocator,
+    history: []const u8,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    max_backward_distance: usize,
+) !?[]command_plan.Command {
+    const minimum_match = if (large_history) 3 else min_match;
     const combined_len = std.math.add(usize, history.len, input.len) catch
         return error.IntegerOverflow;
-    if (input.len < min_match or combined_len - min_match < min_distance or
+    if (input.len < minimum_match or combined_len - minimum_match < min_distance or
         commands.len == 0)
     {
         return null;
@@ -136,10 +200,11 @@ fn augmentAllocWithStride(
             const absolute_position = history.len + position;
             if (absolute_position >= min_distance) {
                 while (indexed_through <= absolute_position - min_distance) : (indexed_through += stride)
-                    insert(stride, history, input, indexed_through, head, prev, prev_mask);
+                    insertFor(stride, large_history, history, input, indexed_through, head, prev, prev_mask);
             }
-            const match = find(
+            const match = findFor(
                 stride,
+                large_history,
                 history,
                 input,
                 absolute_position,
@@ -149,8 +214,11 @@ fn augmentAllocWithStride(
                 prev_mask,
                 max_backward_distance,
             );
-            if (match.length >= min_match) {
-                try appendCopy(&output, allocator, insert_start, insert_len, match.length, match.distance);
+            if (match.length >= minimum_match) {
+                if (large_history)
+                    try output.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len, .copy_len = match.length, .distance = match.distance, .has_copy = true })
+                else
+                    try appendCopy(&output, allocator, insert_start, insert_len, match.length, match.distance);
                 found = true;
                 position += match.length;
                 insert_start = position;
@@ -163,7 +231,7 @@ fn augmentAllocWithStride(
         if (!command.has_copy) continue;
         const copy_output_len = command.outputLen();
         if (copy_output_len == 0 or copy_output_len > input.len - position) return error.InvalidBlockPlan;
-        if (command.isLz77()) {
+        if (!large_history and command.isLz77()) {
             try appendCopy(&output, allocator, insert_start, insert_len, command.copy_len, command.distance);
         } else {
             var copied = command;
@@ -186,8 +254,9 @@ fn augmentAllocWithStride(
 
 const Match = struct { length: usize = 0, distance: usize = 0 };
 
-fn find(
+fn findFor(
     comptime stride: usize,
+    comptime large_history: bool,
     history: []const u8,
     input: []const u8,
     position: usize,
@@ -197,9 +266,11 @@ fn find(
     prev_mask: usize,
     max_backward_distance: usize,
 ) Match {
+    const hash_bytes = if (large_history) 3 else 4;
+    const minimum_match = if (large_history) 3 else min_match;
     const combined_len = history.len + input.len;
-    if (available < min_match or position + 4 > combined_len) return .{};
-    var candidate_i = head[hashAt(history, input, position)];
+    if (available < minimum_match or position + hash_bytes > combined_len) return .{};
+    var candidate_i = head[hashAtFor(large_history, history, input, position)];
     var checked: usize = 0;
     var best = Match{};
     const limit = @min(available, max_match);
@@ -223,8 +294,9 @@ fn find(
     return best;
 }
 
-fn insert(
+fn insertFor(
     comptime stride: usize,
+    comptime large_history: bool,
     history: []const u8,
     input: []const u8,
     position: usize,
@@ -232,10 +304,19 @@ fn insert(
     prev: []i32,
     prev_mask: usize,
 ) void {
-    if (position + 4 > history.len + input.len) return;
-    const slot = hashAt(history, input, position);
+    const hash_bytes = if (large_history) 3 else 4;
+    if (position + hash_bytes > history.len + input.len) return;
+    const slot = hashAtFor(large_history, history, input, position);
     prev[(position / stride) & prev_mask] = head[slot];
     head[slot] = @intCast(position);
+}
+
+fn hashAtFor(comptime large_history: bool, history: []const u8, input: []const u8, position: usize) usize {
+    if (!large_history) return hashAt(history, input, position);
+    const value = @as(u32, byteAt(history, input, position)) |
+        (@as(u32, byteAt(history, input, position + 1)) << 8) |
+        (@as(u32, byteAt(history, input, position + 2)) << 16);
+    return (value *% 0x9e37_79b1) >> 17;
 }
 
 fn hashAt(history: []const u8, input: []const u8, position: usize) usize {
@@ -272,6 +353,10 @@ fn appendCopy(output: *std.ArrayList(command_plan.Command), allocator: std.mem.A
         }
     }
     try output.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len, .copy_len = copy_len, .distance = distance, .has_copy = true });
+}
+
+test "Brotli large history three-byte augmentation contracts" {
+    try @import("long_distance_history_tests.zig").contracts(@This());
 }
 
 test "augments literal runs with Brotli-only long matches" {

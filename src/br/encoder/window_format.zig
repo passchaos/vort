@@ -1,7 +1,7 @@
 //! Window identity and bounded non-HQ matching policy are separate contracts.
 //! A Large Window header never asks the fragment/LZ matcher to allocate the
-//! advertised window; ratio's block-local long-distance search remains free
-//! to inspect the actual input block within that advertised distance.
+//! advertised window. Non-fragment streams retain only actual input received,
+//! while their long-distance search can inspect that advertised history.
 const std = @import("std");
 const distance = @import("distance.zig");
 
@@ -39,8 +39,7 @@ pub fn fragmentDistance(bits: u5, large_window: bool) Error!usize {
 }
 
 pub fn retainedHistory(bits: u5, large_window: bool) Error!usize {
-    const advertised = try advertisedDistance(bits, large_window);
-    return if (large_window) @min(advertised, non_hq_history_limit) else advertised;
+    return advertisedDistance(bits, large_window);
 }
 
 pub fn write(allocator: std.mem.Allocator, writer: anytype, bits: u5, large_window: bool) !void {
@@ -78,7 +77,7 @@ test "Br general large window distinguishes advertised distance from bounded mat
         try std.testing.expectEqual(@as(usize, 14), try prefixBitLen(bits, true));
         const advertised = (@as(usize, 1) << bits) - 16;
         try std.testing.expectEqual(@min(advertised, fragment_max_distance), try fragmentDistance(bits, true));
-        try std.testing.expectEqual(@min(advertised, non_hq_history_limit), try retainedHistory(bits, true));
+        try std.testing.expectEqual(advertised, try retainedHistory(bits, true));
         if (bits <= 24) try std.testing.expectEqual(advertised, try retainedHistory(bits, false));
     }
     for ([_]u5{ 0, 9, 31 }) |bits|

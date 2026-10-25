@@ -1911,19 +1911,6 @@ const IncrementalPlannedEncoderCodec = struct {
         else
             bit_count_math.positionAssumeBounded(len - 1, bit_index);
     }
-
-    fn appendHistory(history: *std.ArrayList(u8), allocator: std.mem.Allocator, block: []const u8, limit: usize) br.Error!void {
-        if (block.len >= limit) {
-            history.clearRetainingCapacity();
-            try history.appendSlice(allocator, block[block.len - limit ..]);
-            return;
-        }
-        const keep = @min(history.items.len, limit - block.len);
-        if (keep != history.items.len)
-            std.mem.copyForwards(u8, history.items[0..keep], history.items[history.items.len - keep ..]);
-        history.shrinkRetainingCapacity(keep);
-        try history.appendSlice(allocator, block);
-    }
 };
 
 pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(IncrementalPlannedEncoderCodec);
@@ -3548,6 +3535,10 @@ test "Brotli metadata full-range public contracts" {
     try @import("br_metadata_tests.zig").contracts(@This());
 }
 
+test "Brotli general large history contracts" {
+    try @import("br_large_history_tests.zig").contracts(@This());
+}
+
 pub const default_window_bits: u5 = 16;
 const planned_chunk_max_input_len: usize = 64 * 1024;
 
@@ -4759,9 +4750,9 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             }
         }
     }
-    if ((mixed == null or mixed.?.match_count == 0) and
-        !has_serialized_match and
-        lz_plan.stats.matches == 0)
+    const has_base_match = (mixed != null and mixed.?.match_count != 0) or
+        has_serialized_match or lz_plan.stats.matches != 0;
+    if (!has_base_match and !largeWindowInputSearchEnabled(options, window_bits, input.len))
         return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
 
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -4783,7 +4774,9 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             .metadata = options.metadata,
         };
     lazy_options.compound_dictionary_size = compound_size;
-    var best = (if (options.level == .fast and options.quality == null)
+    var best = (if (!has_base_match)
+        encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options)
+    else if (options.level == .fast and options.quality == null)
         encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
             .large_window = options.large_window,
             .window_bits = window_bits,
@@ -4795,7 +4788,8 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options),
         else => return err,
     };
-    errdefer allocator.free(best);
+    var best_owned = true;
+    errdefer if (best_owned) allocator.free(best);
 
     for (serialized_plans, 0..) |maybe_plan, mode| if (maybe_plan) |plan| {
         var serialized_stats: encoder_stats.PlannedEncodeStats = .{};
@@ -4938,6 +4932,17 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         }
     }
 
+    try selectLargeWindowInputCandidatesRecorded(
+        false,
+        .{},
+        allocator,
+        input,
+        base_commands,
+        options,
+        lazy_options,
+        &best,
+    );
+
     const use_long_distance = if (schedule) |active|
         active.family == .ratio
     else
@@ -4995,6 +5000,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
         }
     }
+    best_owned = false;
     return chooseStoredIfSmallerWithOptions(allocator, input, best, stream_options);
 }
 
@@ -5165,6 +5171,59 @@ fn encodeStoredStreamRecorded(
     return wire;
 }
 
+fn largeWindowInputSearchEnabled(options: PlannedEncodeOptions, window_bits: u5, input_len: usize) bool {
+    return options.large_window and window_bits >= 17 and
+        (options.quality == null or options.quality.? >= 2) and
+        input_len >= long_distance.min_distance + 3;
+}
+
+/// Add wide-history candidates without removing any existing one-shot planner
+/// or format-specific proposal. The same all-literal alternate admits far
+/// copies even when the bounded near parser found no match.
+fn selectLargeWindowInputCandidatesRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    options: PlannedEncodeOptions,
+    wire_options: LazyWireOptions,
+    best: *[]u8,
+) Error!void {
+    if (!largeWindowInputSearchEnabled(options, wire_options.window_bits, input.len)) return;
+    const max_backward_distance = try encoder_window_format.advertisedDistance(wire_options.window_bits, true);
+    const literal_commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const proposal_count: usize = if (commandPlanHasCopy(commands)) 2 else 1;
+    for (0..proposal_count) |proposal_index| {
+        const proposal = if (proposal_index == 0) commands else &literal_commands;
+        const augmented = try long_distance.augmentLargeWindowHistoryAlloc(
+            allocator,
+            "",
+            input,
+            proposal,
+            max_backward_distance,
+        ) orelse continue;
+        defer freeQualityRecorded(trace_enabled, trace, allocator, augmented);
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const candidate = encodeLazyCommandPlanAllocRecorded(
+            trace_enabled,
+            trace.withOrigin(.lazy),
+            allocator,
+            input,
+            augmented,
+            &stats,
+            wire_options,
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => continue,
+            else => return err,
+        };
+        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, best, candidate);
+    }
+}
+
 fn encodePlannedStreamQualityWithOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -5248,6 +5307,17 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, q10);
         inherited_q10 = null;
     }
+
+    try selectLargeWindowInputCandidatesRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        command_stream.commands,
+        options,
+        wire_options,
+        &best,
+    );
 
     if (schedule.family == .ratio and window_bits >= 17 and
         input.len > long_distance.min_distance)
@@ -5800,10 +5870,35 @@ fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const
         }, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
         .ratio => unreachable,
     };
-    const encoded = compressed catch |err| switch (err) {
-        error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
+    var encoded = compressed catch |err| switch (err) {
+        error.InvalidBlockPlan => fallback: {
+            if (!largeWindowInputSearchEnabled(options, window_bits, input.len))
+                return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
+            break :fallback try encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
+        },
         else => return err,
     };
+    var encoded_owned = true;
+    errdefer if (encoded_owned) allocator.free(encoded);
+    const literal_commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    try selectLargeWindowInputCandidatesRecorded(
+        false,
+        .{},
+        allocator,
+        input,
+        &literal_commands,
+        options,
+        .{
+            .large_window = options.large_window,
+            .window_bits = window_bits,
+            .metadata = options.metadata,
+        },
+        &encoded,
+    );
+    encoded_owned = false;
     return chooseStoredIfSmallerWithOptions(allocator, input, encoded, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
 }
 
@@ -6085,12 +6180,34 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
             }};
             try selectExtendedRatioStaticDictionary(allocator, input, &literal_plan, window_bits, options.large_window, options.metadata, options.extended_dictionary_probes, &baseline);
         }
+        const literal_commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = input.len,
+        }};
+        try selectLargeWindowInputCandidatesRecorded(
+            false,
+            .{},
+            allocator,
+            input,
+            &literal_commands,
+            options,
+            .{
+                .try_recent_distances = true,
+                .try_literal_split = true,
+                .try_command_split = true,
+                .try_distance_split = true,
+                .large_window = options.large_window,
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+            },
+            &baseline,
+        );
         return baseline;
     }
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    var baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{
+    const wire_options: LazyWireOptions = .{
         .try_recent_distances = true,
         .try_literal_split = true,
         .try_adaptive_literal_split = options.adaptive_literal_split,
@@ -6101,7 +6218,8 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         .large_window = options.large_window,
         .window_bits = window_bits,
         .metadata = options.metadata,
-    });
+    };
+    var baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, wire_options);
     var baseline_owned = true;
     errdefer if (baseline_owned) allocator.free(baseline);
 
@@ -6122,6 +6240,16 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     }
     if (options.extended_dictionary_probes != 0)
         try selectExtendedRatioStaticDictionary(allocator, input, plan.commands, window_bits, options.large_window, options.metadata, options.extended_dictionary_probes, &baseline);
+    try selectLargeWindowInputCandidatesRecorded(
+        false,
+        .{},
+        allocator,
+        input,
+        plan.commands,
+        options,
+        wire_options,
+        &baseline,
+    );
     if ((explicit_window_bits != null and window_bits < 17) or input.len <= long_distance.min_distance) {
         baseline_owned = false;
         return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
@@ -7934,11 +8062,10 @@ fn considerPlannedLongDistanceMetaBlockCommands(
     start_bit_index: u3,
     best: *?PlannedMetaBlockCandidate,
 ) Error!void {
-    if (policy.family != .ratio or state.window_bits < 17 or
-        state.history.items.len == 0)
-    {
-        return;
-    }
+    if (state.large_window) {
+        if (policy.fragment_variant != null or state.window_bits < 17) return;
+    } else if (policy.family != .ratio or state.window_bits < 17 or
+        state.history.items.len == 0) return;
     const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
     const literal_commands = [_]command_plan.Command{.{
         .insert_start = 0,
@@ -7950,14 +8077,23 @@ fn considerPlannedLongDistanceMetaBlockCommands(
             commands
         else
             &literal_commands;
-        const augmented = try long_distance.augmentAllocWithHistoryAndMaxDistanceForFormat(
-            allocator,
-            state.history.items,
-            input,
-            proposal,
-            max_backward_distance,
-            encoder_window_format.format(state.large_window),
-        ) orelse continue;
+        const augmented = (if (state.large_window)
+            try long_distance.augmentLargeWindowHistoryAlloc(
+                allocator,
+                state.history.items,
+                input,
+                proposal,
+                max_backward_distance,
+            )
+        else
+            try long_distance.augmentAllocWithHistoryAndMaxDistanceForFormat(
+                allocator,
+                state.history.items,
+                input,
+                proposal,
+                max_backward_distance,
+                .standard,
+            )) orelse continue;
         defer allocator.free(augmented);
         try considerPlannedMetaBlockCommands(
             allocator,
@@ -8121,13 +8257,24 @@ fn considerPlannedMetaBlockPolicy(
     } else {
         const plan_stats = if (state.history.items.len == 0)
             switch (policy.family) {
-                .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(
-                    &state.tokens,
-                    &state.greedy_scratch,
-                    allocator,
-                    input,
-                    parser_options,
-                ),
+                .fast => if (input.len <= 32 * 1024)
+                    try lz77.hashGreedyPlanAutoTinyScratchReuse(
+                        &state.tokens,
+                        &state.greedy_scratch,
+                        allocator,
+                        input,
+                        parser_options,
+                    )
+                else full: {
+                    // The reusable tiny tables only accept 32 KiB inputs.
+                    // Explicit stream blocks may reach 64 KiB even before
+                    // history exists; the full planner keeps the same near
+                    // distance and search budgets for that first block.
+                    const plan = try lz77.hashGreedyPlanAlloc(allocator, input, parser_options);
+                    state.tokens.deinit(allocator);
+                    state.tokens = .fromOwnedSlice(plan.tokens);
+                    break :full plan.stats;
+                },
                 .balanced, .ratio => if (input.len <= 32 * 1024)
                     try lz77.lazyGreedyPlanTinyReuse(
                         &state.tokens,
@@ -8178,7 +8325,8 @@ fn considerPlannedMetaBlockPolicy(
     const q0_one_pass = policy.fragment_variant == .q0 and !state.adaptive_blocks;
     const has_serialized_static = state.shared_dictionary.hasSerializedStatic();
     if (match_count != 0 or state.compound_dictionary_size != 0 or
-        has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass)
+        has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass or
+        (state.large_window and policy.fragment_variant == null))
     {
         const mixed = if (state.compound_dictionary_size != 0)
             try command_plan.mixCompoundDictionaryAlloc(
@@ -8518,12 +8666,22 @@ fn prepareAdaptiveBranch(
     if (start_bit_index != 0) try branch.append(allocator, start_byte);
 }
 
-fn restorePlannedHistory(
+fn copyPlannedHistory(
     allocator: std.mem.Allocator,
-    state: *IncrementalPlannedEncoderCodec.State,
+    destination: *std.ArrayList(u8),
+    source: []const u8,
 ) Error!void {
+    try destination.ensureTotalCapacity(allocator, source.len);
+    destination.clearRetainingCapacity();
+    destination.appendSliceAssumeCapacity(source);
+}
+
+fn restorePlannedHistory(state: *IncrementalPlannedEncoderCodec.State) void {
+    // History capacity only grows while evaluating branches. The snapshot was
+    // already backed by this allocation before the first branch changed it.
+    std.debug.assert(state.history.capacity >= state.history_snapshot.items.len);
     state.history.clearRetainingCapacity();
-    try state.history.appendSlice(allocator, state.history_snapshot.items);
+    state.history.appendSliceAssumeCapacity(state.history_snapshot.items);
 }
 
 fn plannedStateRetainsMatchHistory(
@@ -8550,14 +8708,15 @@ fn writeAdaptivePlannedStreamBlock(
     const start_wire_state = state.wire_state;
     const start_context_previous = state.context_previous;
     const start_q0_entropy_state = state.q0_entropy_state;
-    state.history_snapshot.clearRetainingCapacity();
-    try state.history_snapshot.appendSlice(allocator, state.history.items);
+    try copyPlannedHistory(allocator, &state.history_snapshot, state.history.items);
     errdefer {
-        restorePlannedHistory(allocator, state) catch {};
+        restorePlannedHistory(state);
         state.bit_index = start_bit_index;
         state.wire_state = start_wire_state;
         state.context_previous = start_context_previous;
         state.q0_entropy_state = start_q0_entropy_state;
+        out.items.len = start_len;
+        if (start_len != 0) out.items[start_len - 1] = start_byte;
     }
 
     try prepareAdaptiveBranch(
@@ -8624,8 +8783,7 @@ fn writeAdaptivePlannedStreamBlock(
     var grid_context_previous: [2]u8 = undefined;
     var grid_q0_entropy_state: fast_fragment_one_pass.State = undefined;
     if (grid_plans.len != 0) {
-        state.adaptive_split_history.clearRetainingCapacity();
-        try state.adaptive_split_history.appendSlice(allocator, state.history.items);
+        try copyPlannedHistory(allocator, &state.adaptive_split_history, state.history.items);
         state.adaptive_grid_wire.clearRetainingCapacity();
         state.adaptive_grid_history.clearRetainingCapacity();
         for (grid_plans) |*grid_plan| {
@@ -8635,7 +8793,7 @@ fn writeAdaptivePlannedStreamBlock(
                 start_byte,
                 start_bit_index,
             );
-            try restorePlannedHistory(allocator, state);
+            restorePlannedHistory(state);
             state.bit_index = start_bit_index;
             state.wire_state = start_wire_state;
             state.context_previous = start_context_previous;
@@ -8665,16 +8823,10 @@ fn writeAdaptivePlannedStreamBlock(
             ) - start_bit_index);
             if (grid_bits == null or candidate_bits < grid_bits.?) {
                 grid_bits = candidate_bits;
+                try state.adaptive_grid_wire.ensureTotalCapacity(allocator, state.adaptive_grid_candidate_wire.items.len);
                 state.adaptive_grid_wire.clearRetainingCapacity();
-                try state.adaptive_grid_wire.appendSlice(
-                    allocator,
-                    state.adaptive_grid_candidate_wire.items,
-                );
-                state.adaptive_grid_history.clearRetainingCapacity();
-                try state.adaptive_grid_history.appendSlice(
-                    allocator,
-                    state.history.items,
-                );
+                state.adaptive_grid_wire.appendSliceAssumeCapacity(state.adaptive_grid_candidate_wire.items);
+                try copyPlannedHistory(allocator, &state.adaptive_grid_history, state.history.items);
                 grid_bit_index = state.bit_index;
                 grid_wire_state = state.wire_state;
                 grid_context_previous = state.context_previous;
@@ -8701,28 +8853,20 @@ fn writeAdaptivePlannedStreamBlock(
     try out.ensureUnusedCapacity(allocator, selected.len - shared_byte_count);
     switch (choice) {
         .single => {
-            try restorePlannedHistory(allocator, state);
+            const retain_history = try plannedStateRetainsMatchHistory(state);
+            const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
+            if (retain_history)
+                try state.history.ensureTotalCapacity(allocator, hq_codec.history.capacity(state.history_snapshot.items.len, block.len, max_backward_distance));
+            restorePlannedHistory(state);
             state.bit_index = single_bit_index;
             state.wire_state = single_wire_state;
             state.context_previous = single_context_previous;
             state.q0_entropy_state = single_q0_entropy_state;
-            if (try plannedStateRetainsMatchHistory(state)) {
-                const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
-                try IncrementalPlannedEncoderCodec.appendHistory(
-                    &state.history,
-                    allocator,
-                    block,
-                    max_backward_distance,
-                );
-            }
+            if (retain_history) hq_codec.history.appendPrepared(&state.history, block, max_backward_distance);
         },
         .halves => {
             if (grid_plans.len != 0) {
-                state.history.clearRetainingCapacity();
-                try state.history.appendSlice(
-                    allocator,
-                    state.adaptive_split_history.items,
-                );
+                try copyPlannedHistory(allocator, &state.history, state.adaptive_split_history.items);
             }
             state.bit_index = split_bit_index;
             state.wire_state = split_wire_state;
@@ -8730,11 +8874,7 @@ fn writeAdaptivePlannedStreamBlock(
             state.q0_entropy_state = split_q0_entropy_state;
         },
         .grid => {
-            state.history.clearRetainingCapacity();
-            try state.history.appendSlice(
-                allocator,
-                state.adaptive_grid_history.items,
-            );
+            try copyPlannedHistory(allocator, &state.history, state.adaptive_grid_history.items);
             state.bit_index = grid_bit_index;
             state.wire_state = grid_wire_state;
             state.context_previous = grid_context_previous;
@@ -8768,7 +8908,15 @@ fn writePlannedStreamMetaBlock(
     const stored_bit_count = try bit_count_math.toLocal(stored_end_bits - start_bits);
     const start_wire_state = state.wire_state;
     const start_q0_entropy_state = state.q0_entropy_state;
-    errdefer state.q0_entropy_state = start_q0_entropy_state;
+    const start_context_previous = state.context_previous;
+    errdefer {
+        out.items.len = start_len;
+        if (start_len != 0) out.items[start_len - 1] = start_byte;
+        state.bit_index = start_bit_index;
+        state.wire_state = start_wire_state;
+        state.context_previous = start_context_previous;
+        state.q0_entropy_state = start_q0_entropy_state;
+    }
     state.candidate_wire.clearRetainingCapacity();
     state.best_wire.clearRetainingCapacity();
     var best: ?PlannedMetaBlockCandidate = null;
@@ -8813,6 +8961,9 @@ fn writePlannedStreamMetaBlock(
         );
     }
 
+    const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
+    if (update_history and retain_match_history)
+        try state.history.ensureTotalCapacity(allocator, hq_codec.history.capacity(state.history.items.len, block.len, max_backward_distance));
     if (best) |candidate| {
         if (candidate.bit_count <= stored_bit_count) {
             try commitPlannedMetaBlockCandidate(
@@ -8837,15 +8988,8 @@ fn writePlannedStreamMetaBlock(
         state.wire_state = start_wire_state;
         state.wire_state.output_pos = next_output_pos;
     }
-    if (update_history and retain_match_history) {
-        const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
-        try IncrementalPlannedEncoderCodec.appendHistory(
-            &state.history,
-            allocator,
-            block,
-            max_backward_distance,
-        );
-    }
+    if (update_history and retain_match_history)
+        hq_codec.history.appendPrepared(&state.history, block, max_backward_distance);
     appendPreviousBytes(&state.context_previous, block);
 }
 
@@ -22046,7 +22190,7 @@ test "Br general large window static stored codecs and non HQ history keep expli
         });
         try IncrementalPlannedEncoderCodec.writeBlock(allocator, &wire, &state, &block);
         try IncrementalPlannedEncoderCodec.writeFinalBlock(allocator, &wire, &state, &block);
-        try std.testing.expectEqual(if (quality <= 1) @as(usize, 0) else encoder_window_format.non_hq_history_limit, state.history.items.len);
+        try std.testing.expectEqual(if (quality <= 1) @as(usize, 0) else block.len * 2, state.history.items.len);
         const actual = try decodeStreamAllocWithOptions(allocator, wire.items, .{ .allow_large_window = true });
         defer allocator.free(actual);
         try std.testing.expectEqualSlices(u8, &block, actual[0..block.len]);
