@@ -19,18 +19,19 @@ pub const Plan = struct {
 /// Size the complete fixed candidate before allocating its output. Local
 /// helper arithmetic is bounded by chunk_len; cross-chunk sums are checked.
 pub fn plan(allocator: std.mem.Allocator, matcher: *Matcher, input: []const u8, max_chain: usize, nice_length: u32) Error!Plan {
-    if (input.len != 0) try matcher.ensure(allocator);
     var result: Plan = .{ .bit_len = 0, .encoded_len = 0, .stats = .{} };
     var offset: usize = 0;
     while (true) {
         const take = @min(chunk_len, input.len - offset);
         const end = offset + take; // take is bounded by the remaining slice.
         const history_start = offset - @min(offset, matching.window_len);
+        if (take != 0) try matcher.ensureForSize(allocator, end - history_start);
         const block = blocks.fixedPlan(matcher, input[history_start..offset], input[offset..end], max_chain, nice_length);
         result.bit_len = std.math.add(u128, result.bit_len, block.bits) catch return error.IntegerOverflow;
         result.stats.match_count = std.math.add(usize, result.stats.match_count, block.stats.match_count) catch return error.IntegerOverflow;
         result.stats.max_match_length = @max(result.stats.max_match_length, block.stats.max_match_length);
         result.stats.max_match_distance = @max(result.stats.max_match_distance, block.stats.max_match_distance);
+        matcher.reset();
         offset = end;
         if (offset == input.len) break;
     }

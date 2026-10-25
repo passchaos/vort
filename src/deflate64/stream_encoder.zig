@@ -288,7 +288,7 @@ pub const Encoder = struct {
         const stored_bits = blocks.storedBits(self.state, block.len);
         var plan: blocks.Plan = .{ .bits = 10, .stats = .{} };
         if (self.options.compression != .stored) {
-            if (block.len != 0) try self.matcher.ensure(self.allocator);
+            if (block.len != 0) try self.matcher.ensureForSize(self.allocator, self.history.items.len + block.len);
             plan = blocks.fixedPlan(&self.matcher, self.history.items, block, self.options.max_chain, self.options.nice_length);
         }
         // Non-final blocks compare exact continuous bit counts. Finish includes

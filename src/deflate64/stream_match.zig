@@ -7,6 +7,12 @@ pub const max_match_len: usize = 65_538;
 const hash_len = 1 << 15;
 const invalid = std.math.maxInt(u32);
 
+/// Small passes never wrap a ring large enough for their complete local span.
+/// Larger passes retain the original full-window ring and matching semantics.
+pub fn requiredPreviousLen(span: usize) usize {
+    return std.math.ceilPowerOfTwoAssert(usize, @max(@as(usize, 1), @min(span, window_len)));
+}
+
 pub const Match = struct { length: usize = 0, distance: usize = 0 };
 pub const Matcher = struct {
     heads: []u32 = &.{},
@@ -15,8 +21,39 @@ pub const Matcher = struct {
     block: []const u8 = &.{},
 
     pub fn ensure(self: *Matcher, allocator: std.mem.Allocator) std.mem.Allocator.Error!void {
-        if (self.heads.len == 0) self.heads = try allocator.alloc(u32, hash_len);
-        if (self.previous.len == 0) self.previous = try allocator.alloc(u32, window_len);
+        try self.ensureForSize(allocator, window_len);
+    }
+    /// Prepare outside an active matching pass, then rebuild with begin().
+    /// Capacity only grows. Fresh tables need no copy because begin rebuilds
+    /// every reachable link; failed allocation leaves all Matcher state intact.
+    /// Hash heads keep their exact 32768-entry shape for every span.
+    /// Prefer backing-allocator remap to avoid owning old and new rings at once.
+    /// A refused remap retains allocate-before-free fallback and its peak.
+    pub fn ensureForSize(self: *Matcher, allocator: std.mem.Allocator, span: usize) std.mem.Allocator.Error!void {
+        const required = requiredPreviousLen(span);
+        var new_heads: []u32 = &.{};
+        errdefer if (new_heads.len != 0) allocator.free(new_heads);
+        if (self.heads.len == 0) new_heads = try allocator.alloc(u32, hash_len);
+        const grow_previous = self.previous.len < required;
+        var remapped = false;
+        const new_previous = if (grow_previous) allocation: {
+            if (self.previous.len != 0) {
+                if (allocator.remap(self.previous, required)) |resized| {
+                    // No fallible operation remains after a successful remap:
+                    // the old allocation is already consumed by the allocator.
+                    remapped = true;
+                    break :allocation resized;
+                }
+            }
+            break :allocation try allocator.alloc(u32, required);
+        } else self.previous;
+
+        if (new_heads.len != 0) self.heads = new_heads;
+        if (grow_previous) {
+            const old_previous = self.previous;
+            self.previous = new_previous;
+            if (old_previous.len != 0 and !remapped) allocator.free(old_previous);
+        }
     }
     pub fn deinit(self: *Matcher, allocator: std.mem.Allocator) void {
         if (self.heads.len != 0) allocator.free(self.heads);
@@ -28,7 +65,9 @@ pub const Matcher = struct {
         self.block = &.{};
     }
     pub fn begin(self: *Matcher, history: []const u8, block: []const u8) void {
-        std.debug.assert(history.len <= window_len and self.heads.len == hash_len and self.previous.len == window_len);
+        std.debug.assert(history.len <= window_len and self.heads.len == hash_len);
+        std.debug.assert(std.math.isPowerOfTwo(self.previous.len) and self.previous.len <= window_len);
+        std.debug.assert(self.previous.len >= requiredPreviousLen(history.len + block.len));
         self.history = history;
         self.block = block;
         @memset(self.heads, invalid);
@@ -45,7 +84,7 @@ pub const Matcher = struct {
     pub fn insert(self: *Matcher, position: usize) void {
         if (position + 3 > self.history.len + self.block.len) return;
         const key = self.hash(position);
-        self.previous[position & (window_len - 1)] = self.heads[key];
+        self.previous[position & (self.previous.len - 1)] = self.heads[key];
         self.heads[key] = @intCast(position);
     }
     /// Search before inserting position. This keeps the ring slot for exactly
@@ -66,8 +105,12 @@ pub const Matcher = struct {
                 best = .{ .length = length, .distance = position - first };
                 if (length >= nice_length) break;
             }
-            candidate = self.previous[first & (window_len - 1)];
+            candidate = self.previous[first & (self.previous.len - 1)];
         }
         return best;
     }
 };
+
+test "Deflate64 match index bounded capacity and full-window reference contracts" {
+    try @import("stream_match_tests.zig").contracts(@This());
+}
