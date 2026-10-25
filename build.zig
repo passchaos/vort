@@ -5893,6 +5893,26 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_zstd_multi_duplicate_profile.addArgs(args);
     const zstd_multi_duplicate_profile_step = b.step("run-zstd-multi-duplicate-profile", "Count unindexed Zstd multi-duplicate work for 64...128 KiB file inputs");
     zstd_multi_duplicate_profile_step.dependOn(&run_zstd_multi_duplicate_profile.step);
+
+    const weighted_bound_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-weighted-bound-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/weighted_bound_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "weighted_bound", .module = b.createModule(.{
+                    .root_source_file = b.path("src/zstd/literals/weighted_bound.zig"),
+                    .target = target,
+                    .optimize = .ReleaseFast,
+                }) },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_weighted_bound_bench = b.addRunArtifact(weighted_bound_bench_exe);
+    if (b.args) |args| run_weighted_bound_bench.addArgs(args);
+    b.step("run-zstd-weighted-bound-bench", "Compare complete scalar and wide Zstd certificate analysis").dependOn(&run_weighted_bound_bench.step);
     const run_zstd_encode_bench_csv = b.addRunArtifact(zstd_encode_bench_exe);
     run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "3", "--rounds", "3", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
     const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv", "--executable" });
@@ -7095,6 +7115,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_level_schedule_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_multi_duplicate_profile_exe.step);
+    check_step.dependOn(&weighted_bound_bench_exe.step);
     check_step.dependOn(&zstd_large_sequence_probe_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
