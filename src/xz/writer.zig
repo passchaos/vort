@@ -4,8 +4,10 @@ const container = @import("container.zig");
 const filters = @import("filters.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
 const lzma2_writer = @import("lzma2_writer.zig");
+const parallel_types = @import("parallel/types.zig");
+const parallel_stream = @import("parallel/stream.zig");
 
-pub const Error = container.Error || lzma_encoder.Error;
+pub const Error = container.Error || lzma_encoder.Error || std.Thread.SpawnError;
 pub const Check = container.Check;
 pub const Filter = filters.Filter;
 pub const Parser = lzma2_writer.Parser;
@@ -29,6 +31,9 @@ pub const EncodeOptions = struct {
     parser: Parser = .greedy,
     properties: Properties = .{},
     match_options: ?MatchOptions = null,
+    /// Null preserves the serial writer. Parallel mode borrows the caller's
+    /// I/O implementation for blocking worker coordination.
+    parallel: ?parallel_types.Options = null,
 
     pub fn fromPreset(level: u32, extreme: bool) Error!EncodeOptions {
         const preset = try encode_settings.resolvePreset(level, extreme);
@@ -76,6 +81,13 @@ pub fn encodeLazyInto(
     output: []u8,
     options: EncodeOptions,
 ) !usize {
+    if (options.parallel) |parallel| {
+        var forced = options;
+        forced.parser = .lazy;
+        try validateOptions(forced);
+        forced.recordEffectiveSettings();
+        return parallel_stream.encodeInto(allocator, output, input, forced, .compressed, parallel);
+    }
     const encoded = try encodeLazyAlloc(allocator, input, options);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
@@ -98,6 +110,11 @@ pub fn encodeInto(
     output: []u8,
     options: EncodeOptions,
 ) !usize {
+    if (options.parallel) |parallel| {
+        try validateOptions(options);
+        options.recordEffectiveSettings();
+        return parallel_stream.encodeInto(allocator, output, input, options, .compressed, parallel);
+    }
     const encoded = try encodeAlloc(allocator, input, options);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
@@ -127,6 +144,11 @@ pub fn encodeStoredInto(
     output: []u8,
     options: EncodeOptions,
 ) !usize {
+    if (options.parallel) |parallel| {
+        try validateOptions(options);
+        options.recordEffectiveSettings();
+        return parallel_stream.encodeInto(allocator, output, input, options, .stored, parallel);
+    }
     const encoded = try encodeStoredAlloc(allocator, input, options);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
@@ -153,6 +175,8 @@ fn encodeWithPayload(
 ) !usize {
     try validateOptions(options);
     options.recordEffectiveSettings();
+    if (options.parallel) |parallel|
+        return parallel_stream.encodeAppend(allocator, out, input, options, payload_encoding, parallel);
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
@@ -195,6 +219,7 @@ pub fn validateOptions(options: EncodeOptions) Error!void {
     try options.lzma2Options().validate();
     try filters.validateChain(options.filters);
     _ = try checkSize(options.check);
+    if (options.parallel) |parallel| try parallel.validate();
 }
 
 pub fn appendStreamHeader(

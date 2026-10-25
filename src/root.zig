@@ -284,6 +284,9 @@ pub const XzStreamInfo = xz.StreamInfo;
 pub const XzDecodeOptions = xz.DecodeOptions;
 pub const XzDecodeWorkspace = xz.DecodeWorkspace;
 pub const XzEncodeOptions = xz.EncodeOptions;
+pub const XzParallelOptions = xz.ParallelOptions;
+pub const XzParallelProfile = xz.ParallelProfile;
+pub const xz_parallel_worker_stack_bytes = xz.parallel_worker_stack_bytes;
 pub const RawLzma2EncodeOptions = xz.RawLzma2EncodeOptions;
 pub const validateXzEncodeOptions = xz.validateEncodeOptions;
 pub const XzEncodeParser = xz.Parser;
@@ -2427,6 +2430,10 @@ pub const zstdInspectNativeFrameFirstBlockWithFormat = zstd.inspectNativeFrameFi
 
 test "root Zstd magicless consumer contracts" {
     try @import("tests/zstd_magicless_consumers.zig").contracts(@This());
+}
+
+test "root XZ parallel consumer contracts" {
+    try @import("tests/xz_parallel_consumers.zig").contracts(@This());
 }
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
 pub const zstdMinCompressionLevel = zstd.min_compression_level;

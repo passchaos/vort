@@ -101,6 +101,18 @@ pub fn build(b: *std.Build) void {
     const wasm_lib = b.addLibrary(.{ .name = "vort-wasm-check", .root_module = wasm_mod });
     const wasm_check_step = b.step("check-wasm", "Compile the complete Vort library for wasm32-wasi");
     wasm_check_step.dependOn(&wasm_lib.step);
+    const xz_parallel_wasm_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = wasm_target, .optimize = optimize, .single_threaded = true });
+    const xz_parallel_wasm = b.addExecutable(.{
+        .name = "vort-xz-parallel-wasm",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/tests/xz_parallel_wasm.zig"), .target = wasm_target, .optimize = optimize, .single_threaded = true, .imports = &.{.{ .name = "xz", .module = xz_parallel_wasm_mod }} }),
+    });
+    xz_parallel_wasm.entry = .disabled;
+    xz_parallel_wasm.rdynamic = true;
+    xz_parallel_wasm.stack_size = 8 * 1024 * 1024;
+    const xz_parallel_wasm_run = b.addSystemCommand(&.{ "node", "tools/xz/parallel_wasm_gate.js" });
+    xz_parallel_wasm_run.addArtifactArg(xz_parallel_wasm);
+    const xz_parallel_wasm_step = b.step("test-xz-parallel-wasm", "Execute the public bounded XZ parallel serial fallback in WebAssembly");
+    xz_parallel_wasm_step.dependOn(&xz_parallel_wasm_run.step);
     const br_public_wasm = b.addExecutable(.{
         .name = "vort-br-public-wasm",
         .root_module = b.createModule(.{
@@ -887,6 +899,15 @@ pub fn build(b: *std.Build) void {
     const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
     const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
     xz_test_step.dependOn(&b.addRunArtifact(xz_tests).step);
+    const xz_parallel_tests = b.addTest(.{ .name = "vort-xz-parallel-tests", .root_module = xz_tests_mod, .filters = &.{"XZ parallel"} });
+    const xz_parallel_test_step = b.step("test-xz-parallel", "Run bounded XZ parallel block, ordering, resource and failure contracts");
+    xz_parallel_test_step.dependOn(&b.addRunArtifact(xz_parallel_tests).step);
+    const xz_parallel_root_tests = b.addTest(.{ .name = "vort-xz-parallel-root-tests", .root_module = tests_mod, .filters = &.{"root XZ parallel"} });
+    xz_parallel_test_step.dependOn(&b.addRunArtifact(xz_parallel_root_tests).step);
+    const xz_single_thread_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = target, .optimize = optimize, .single_threaded = true });
+    const xz_parallel_single_tests = b.addTest(.{ .name = "vort-xz-parallel-single-tests", .root_module = xz_single_thread_mod, .filters = &.{"XZ parallel"} });
+    const xz_parallel_single_step = b.step("test-xz-parallel-single", "Run the complete XZ parallel contracts through the single-thread fallback");
+    xz_parallel_single_step.dependOn(&b.addRunArtifact(xz_parallel_single_tests).step);
     const lzma_encode_controls_tests = b.addTest(.{
         .name = "vort-lzma-encode-controls-tests",
         .root_module = lzma_contracts_mod,
@@ -2931,6 +2952,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xz_one_shot_diff.addArgs(args);
     const xz_one_shot_diff_step = b.step("run-xz-one-shot-diff", "Validate bounded atomic XZ caller-buffer decoding against system liblzma");
     xz_one_shot_diff_step.dependOn(&xz_one_shot_diff.step);
+
+    const xz_parallel_probe = b.addExecutable(.{
+        .name = "vort-xz-parallel-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/xz/parallel_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xz", .module = xz_tests_mod }} }),
+    });
+    const xz_parallel_probe_build = b.step("build-xz-parallel-probe", "Build the public XZ parallel interoperability probe without running or timing it");
+    xz_parallel_probe_build.dependOn(&b.addInstallArtifact(xz_parallel_probe, .{}).step);
+    const xz_parallel_diff = b.addSystemCommand(&.{ "python3", "tools/xz/parallel_diff.py", "--probe" });
+    xz_parallel_diff.addArtifactArg(xz_parallel_probe);
+    if (b.args) |args| xz_parallel_diff.addArgs(args);
+    const xz_parallel_diff_step = b.step("run-xz-parallel-diff", "Validate bounded XZ parallel encoding, serial wire parity and liblzma interoperability");
+    xz_parallel_diff_step.dependOn(&xz_parallel_diff.step);
 
     const xz_encode_bench_exe = b.addExecutable(.{
         .name = "vort-xz-encode-bench",
@@ -7218,6 +7251,11 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(&xz_parallel_tests.step);
+    check_step.dependOn(&xz_parallel_single_tests.step);
+    check_step.dependOn(&xz_parallel_probe.step);
+    check_step.dependOn(&xz_parallel_root_tests.step);
+    check_step.dependOn(&xz_parallel_wasm.step);
     check_step.dependOn(&zstd_magicless_tests.step);
     check_step.dependOn(&zstd_magicless_root_tests.step);
     check_step.dependOn(&zstd_magicless_probe.step);
