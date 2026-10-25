@@ -12,6 +12,7 @@ fn VerifiedCostCodec(comptime Codec: type) type {
         pub const predefinedPayloadLen = Codec.CostCodec.predefinedPayloadLen;
         pub const optimal_huffman_bits = Codec.CostCodec.optimal_huffman_bits;
         pub const minimum_tree_bytes = Codec.CostCodec.minimum_tree_bytes;
+        pub const singleSequenceBaseLen = Codec.CostCodec.singleSequenceBaseLen;
         pub const referenceCost = Codec.referenceCost;
     };
 }

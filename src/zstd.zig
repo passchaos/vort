@@ -33,6 +33,7 @@ const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
 const literal_copy = @import("zstd/literals/copy.zig");
 const single_literal_cost = @import("zstd/literals/single_cost_cache.zig");
 const winner_literal_cost = @import("zstd/literals/winner_cost_cache.zig");
+const single_sequence_cost = @import("zstd/sequence/single_cost.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
@@ -31097,6 +31098,10 @@ const SingleLiteralCostCodec = struct {
     pub const optimal_huffman_bits: u8 = 11;
     pub const minimum_tree_bytes: usize = 2;
 
+    pub fn singleSequenceBaseLen(prefix_len: usize, offset: usize, match_len: usize) zstd.Error!usize {
+        return SingleSequenceCost.baseLen(prefix_len, offset, match_len, 0);
+    }
+
     pub fn planFromFrequencies(frequencies: *const [256]u32) ?SmallHuffmanLiteralPlan {
         var plan: SmallHuffmanLiteralPlan = .{ .frequencies = frequencies.* };
         for (frequencies, 0..) |frequency, symbol| {
@@ -31119,6 +31124,61 @@ const SingleLiteralCostCodec = struct {
 const SingleLiteralCostCache = single_literal_cost.Cache(SingleLiteralCostCodec);
 const SingleLiteralShadowCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .shadow);
 const SingleLiteralWinnerCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .prune);
+
+const SingleSequenceCostRules = struct {
+    pub const Error = zstd.Error;
+    pub const literalCode = literalLengthCode;
+    pub const offsetCode = zstd.offsetCode;
+    pub const matchCode = matchLengthCode;
+    pub const literal_bits = &ll_bits;
+    pub const offset_bits = &of_bits;
+    pub const match_bits = &ml_bits;
+    pub const literal_masks = &predefined_literal_state_masks;
+    pub const offset_masks = &predefined_offset_state_masks;
+    pub const match_masks = &predefined_match_state_masks;
+    pub const contract: single_sequence_cost.Contract = .{};
+};
+
+const SingleSequenceCost = single_sequence_cost.Calculator(SingleSequenceCostRules);
+
+fn referenceSingleSequenceBaseLen(prefix_len: usize, offset: usize, match_len: usize, section_len: usize) Error!usize {
+    var best: ?usize = null;
+    if (rleSequencePayloadLenForValuesWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, section_len)) |len| {
+        best = len;
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (predefinedSequencePayloadLenWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, section_len)) |len| {
+        if (best == null or len < best.?) best = len;
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    return best orelse error.CorruptFrame;
+}
+
+pub fn benchmarkSingleSequenceBaseLen(comptime scalar: bool, prefix_len: usize, offset: usize, match_len: usize) Error!usize {
+    return if (scalar) SingleSequenceCost.baseLen(prefix_len, offset, match_len, 0) else referenceSingleSequenceBaseLen(prefix_len, offset, match_len, 0);
+}
+
+const SingleSequenceCostTestCodec = struct {
+    pub const Rules = SingleSequenceCostRules;
+    pub const Calculator = SingleSequenceCost;
+    pub const literal_bases = &zstd.ll_base;
+    pub const offset_bases = &zstd.of_base;
+    pub const match_bases = &zstd.ml_base;
+    pub const literal_symbols = &sequence_predefined.literal_symbols;
+    pub const offset_symbols = &sequence_predefined.offset_symbols;
+    pub const match_symbols = &sequence_predefined.match_symbols;
+    pub const referenceBase = referenceSingleSequenceBaseLen;
+    pub fn referenceRle(prefix_len: usize, offset: usize, match_len: usize, section_len: usize) Error!usize {
+        return rleSequencePayloadLenForValuesWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, section_len);
+    }
+    pub fn referencePredefined(prefix_len: usize, offset: usize, match_len: usize, section_len: usize) Error!usize {
+        return predefinedSequencePayloadLenWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, section_len);
+    }
+};
 
 const SingleLiteralCostTestCodec = struct {
     pub const CostCodec = SingleLiteralCostCodec;
@@ -31154,6 +31214,10 @@ test "zstd single literal cost cache preserves multi wire and allocator requests
 
 test "zstd weighted bound tiny exhaustive Kraft oracle" {
     try @import("zstd/literals/weighted_bound_tests.zig").tinyExhaustive();
+}
+
+test "zstd scalar single sequence prices match old tables and packed bits" {
+    try @import("zstd/sequence/single_cost_tests.zig").contracts(SingleSequenceCostTestCodec);
 }
 test "zstd weighted bound checked resources and trusted cost contracts" {
     try @import("zstd/literals/weighted_bound_tests.zig").resources();
@@ -32025,6 +32089,7 @@ fn matchLengthCode(value: usize) Error!u8 {
 
 fn offsetCode(value: usize) Error!u8 {
     if (value == 0) return 0;
+    if (value > std.math.maxInt(usize) - 3) return error.CorruptFrame;
     const code: usize = std.math.log2_int(usize, value + 3);
     if (code >= of_base.len or value < of_base[code] or value - of_base[code] >= (@as(usize, 1) << @intCast(of_bits[code]))) return error.CorruptFrame;
     return @intCast(code);
@@ -32040,6 +32105,16 @@ fn sequenceCodeForValueReference(value: usize, bases: []const usize, bits: []con
         if (best == null or base >= bases[best.?]) best = code;
     }
     return @intCast(best orelse return error.CorruptFrame);
+}
+
+test "zstd offset code rejects arithmetic overflow before adding bias" {
+    const values = [_]usize{ 0, 1, 2, 3, 4, std.math.maxInt(u32) - 3, std.math.maxInt(u32), std.math.maxInt(usize) - 3, std.math.maxInt(usize) - 2, std.math.maxInt(usize) - 1, std.math.maxInt(usize) };
+    for (values) |value| {
+        const expected = sequenceCodeForValueReference(value, &of_base, &of_bits);
+        if (expected) |code| {
+            try std.testing.expectEqual(code, try offsetCode(value));
+        } else |err| try std.testing.expectError(err, offsetCode(value));
+    }
 }
 
 test "zstd fast sequence codes match table scan" {

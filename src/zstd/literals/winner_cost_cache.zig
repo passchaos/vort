@@ -135,6 +135,8 @@ pub fn Cache(comptime Codec: type, comptime mode: Mode) type {
         }
 
         fn sequenceBase(prefix_len: usize, offset: usize, match_len: usize) ?usize {
+            if (@hasDecl(Codec, "singleSequenceBaseLen"))
+                return Codec.singleSequenceBaseLen(prefix_len, offset, match_len) catch null;
             var best: ?usize = null;
             if (Codec.rlePayloadLen(prefix_len, offset, match_len, 0)) |value| {
                 best = value;
