@@ -98,6 +98,8 @@ production control. The new fourteen-row throughput geometric ratio is
 pass 1092/1092. Independent old/new XML requested-heap peaks and all 282
 allocator events remain identical. This advances performance while preserving
 the old choices; it does not establish industry-best throughput or RSS.
+The final build check passes 169/169; post-rebase winner tests and CLI help
+also pass with unchanged source manifests.
 
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical

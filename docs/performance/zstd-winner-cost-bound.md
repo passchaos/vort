@@ -116,6 +116,14 @@ competitor memory measurements; no duration was collected by this probe.
 
 The new fourteen-row throughput geometric ratio is 0.00294786x reference,
 with zero throughput wins. This leaves a substantial gap despite the local
-version improvement. Build verification and post-rebase checks will be appended
-after completion. Broader levels, incremental APIs, 1 MiB, ARM64 and symmetric
-competitor memory evidence remain open.
+version improvement. Complete build verification passes 169/169. Broader
+levels, incremental APIs, 1 MiB, ARM64 and symmetric competitor memory evidence
+remain open.
+
+After pulling with rebase, the winner-cost filter passes 11/11 again and CLI
+help passes its seven-step build/run check. Sources remain identical to the
+complete-family and benchmark manifests. The
+[evidence package](data/zstd-winner-bound-20261025/artifact-manifest.json)
+retains shadow/initial-prune identities, all seventy public rounds, frozen
+input identities, compiler observations, proof reviews, resource events and
+final verification.

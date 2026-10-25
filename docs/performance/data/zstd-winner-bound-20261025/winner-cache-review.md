@@ -6,7 +6,7 @@
 
 当前固定 `SingleLiteralCostCodec`、合法128KiB以内block和未索引multi finder调用范围内，未发现unsafe lower bound、stale prepared绑定、Cf提前发布、shadow刷新泄露或incumbent tie错误。真实shadow结果支持该算法在XML/MR两种64KiB切片上有很高的可剪枝覆盖率，并且保持旧wire与候选数；它不是新prune产线的运行证据。
 
-新实现的两个通用错误处理限制需要明确：Prepared API没有快照版本校验；`verifyRejected`会忽略reference error。当前内部调用序列和finder的catch-continue语义避免产线结果差异，但不能把此wrapper当作保留任意Codec错误行为的通用API。seed后流/头部边界与prune完整wire差分应在本次接线的相关验证中覆盖。
+最终版本已修复prepare失败重试造成重复histogram admission的问题，并新增HeaderFailureCodec回归。Prepared API的快照绑定现在有明确调用前提文档；`verifyRejected`仍忽略reference error，所以wrapper不承诺任意Codec的error-exact行为。seed后流/头部边界已加入preparedBoundaries测试且通过三个配置；最终验证与证据epoch见本报告末尾。
 
 ## 已核对的契约
 
@@ -16,7 +16,7 @@
 
 Base的`prepareLiterals`（`single_cost_cache.zig:135`）先完成当前cut histogram更新，再取得完整frequency/unique/R/raw_cost。`streamsLen`（`:184`）仍从self.histogram的canonical一/四流读取counts，`:197`把未舍入stream_bits相加。该和在当前绑定下等于sum(prepared.f_i*plan.bits_i)，不包含end bit、padding、jump或tree bytes。
 
-Prepared API本身是内部可信协议：`payloadCostPrepared`没有核对prefix/tail、generation或frequency与live histogram。若未来调用者在prepare与消费间update另一个cut，scalar会属于另一频率，可能仍通过Certificate的数值envelope而失去下界保证。当前唯一wrapper调用安全；若扩大API使用，需文档明确single-query lifetime，或增加generation/cut校验。borrowed block也必须保持immutable。
+Prepared API本身是内部可信协议：最终`payloadCostPrepared`文档明确要求prepare与pricing间不能update cut（Base`:93`）；接口没有核对prefix/tail、generation或frequency与live histogram。若未来调用者在prepare与消费间update另一个cut，scalar会属于另一频率，可能仍通过Certificate的数值envelope而失去下界保证。当前唯一wrapper调用安全；若扩大API使用，需文档明确single-query lifetime，或增加generation/cut校验。borrowed block也必须保持immutable。
 
 ### 成功 weighted scalar 与 11-bit 最优前提
 
@@ -68,7 +68,7 @@ bound_checks和negative/age histograms在support成功后、header/sequence进�
 ## 错误处理限制与真实风险
 
 1. **Prepared-generation是内部前提，未在API编码。** 当前query局部顺序安全；跨cut复用prepared会影响Cf真实性和后续prune安全。见Base`:86`, `:184`。
-2. **prepare失败重试仅对cut/admission错误完全无额外histogram更新。** winner`:57`catch调用inner.payloadLen重试；Base`:136`先hist.update、`:143`才literalHeaderLen。注入失败literalHeaderLen时第一次prepare已改变ranges/计数，重试会再增加update_count；wrapper注释“rejected preparation mutates no ranges”对这类error不成立。当前固定Codec在R<=128KiB时literalHeaderLen必成功，故产线不会触发；任意mock/stateful Codec不能据此声称完全相同的work/error调用次数。
+2. **prepare重复admission问题已修复。** 最终Base `failedPreparation`（`:84`）直接以已有error记一次cost_queries并调用reference，再返回原错误；winner`:57`catch不再调用payloadLen重试。新增HeaderFailureCodec测试在shadow/prune及有/无已有certificate下验证histogram.update_count、cost_queries、reference_checks各1，reference_mismatches0、旧证书/age正确。最终代码没有此项待修风险。
 3. **prune reference错误未纳入诊断。** verifyRejected（winner`:154`）验证成功reference成本，但`:162`忽略所有reference errors，不增加mismatch也不传播。任意Codec若literal阶段在已有证书的后续query中报错，而sequence/header下界仍可算，prune会return null，shadow会返回原错误。当前finder原本对成本errors和null都continue，固定合法Codec也没有预计的literal arithmetic/range error；生产选优语义不变，但wrapper不能承诺一般error-exact行为。未来可扩大的error域应受独立回归约束。
 4. **shadow计数不能替代新prune运行验证。** 当前产线接线和profile默认已改prune，主文件hash与shadow执行快照不同。尤其shadow tree cache更新较多，不能把would-reject比例直接换算成吞吐speedup。
 
@@ -115,3 +115,57 @@ Base旧tests继续覆盖其exact成本及分流边界；wireAndAllocations比较
 - `src/zstd/literals/weighted_bound.zig`: `52ed8c0e99c7ea827c904ac87957315f690a1774fba20ed05410c7f5f6474313`
 - `src/zstd/literals/winner_cost_cache_tests.zig`: `9cca55c33c5859d8663b722f27f51d385a5f91f5e1c57bc96a88cf8f2077aa29`
 - `src/zstd.zig`: `490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc`
+
+
+## 最终修复与验证 epoch（2026-10-25 14:26:45 Asia/Shanghai）
+
+本节更新最终事实；前文14:13审查内容中的旧source hash、未执行测试状态及prepare重试发现属于当时快照。最终修复后源码与运行证据以本节为准。整个审计代理没有编译、运行编码或计时，只核对既有产物和只读代码。
+
+### 最终代码与范围
+
+当前Git代码HEAD为 `e54066d5`，两个功能提交：
+
+- `141e8040 feat(zstd): add weighted Huffman cost certificates`
+- `e54066d5 perf(zstd): skip exact costs that cannot update the finder winner`
+
+当前工作树额外变化仅是父代理在完善性能文档；本审计没有参与源代码或Git修改。生产启用仍仅为unindexed multi：cache_costs启用、duplicate_index==null、block.len>duplicate_exact_hash_input_max且<=128KiB；single/indexed与原limits不变。声明仍只证明11-bit weighted optimum，fresh tree最小2，没有扩大为serialized-byte optimum或public rank claim。
+
+最终Base `failedPreparation`（`src/zstd/literals/single_cost_cache.zig:84`）直接account一次已失败query并保持reference/error，而winnercatch（`winner_cost_cache.zig:57`）不再重新prepare。Prepared-consumption调用约束（Base`:93`）写明不得在prepare/pricing间update cut。源码回读未发现该修复影响正常query Cf绑定、lower公式、shadow refresh或prune predicate。
+
+### 增强回归与全族结果
+
+新增 `winner_cost_cache_tests.zig:206 preparedBoundaries`在seed后往返R1023/1024、16383/16384、65535/65536/65537、131072，再返回较小R；每cut先用严格incumbent检验wouldreject、旧witness不刷新，然后looseincumbent完整定价和refresh。它独立对比physical suffix frequency与histogram，验证1/4流、header3/4/5、growing/shrinking totals、zero bound/reference mismatches。满block cut是成本几何测试，不声称每个cut都对应可编码的真实match。
+
+新增 `:262 HeaderFailureCodec`使literalHeaderLen返回IntegerOverflow，并提供匹配error oracle；`:284 failedPreparationAccounting`覆盖shadow/prune以及有/无证书，核对hist-update、costquery、reference各1、error一致、no huffman plan/no refresh、旧certificate保持。
+
+既有产物：
+
+- `winner-extended-debug.log`：native Debug 11/11通过。
+- `winner-extended-releasefast.log`：native ReleaseFast 11/11通过。
+- `winner-extended-x86.log`：x86 ReleaseFast 11/11通过。
+- `complete-family/result.json`：ReleaseFast native `zig build test-zstd -j2` exit0，source_stable=true；run.log的Build Summary为5/5 steps、1092/1092 tests通过。该结果的final四个源hash与当前源码、current14一致。
+
+`complete-check/run.log`在06:25:55 UTC仍为空，进程观察确认已有 `zig build check -j4 --summary all`运行。尚未读取其完成结果，故此审计不写check通过；父代理继续跟踪。先前必需验证清单中，新增prepared边界和header failure已完成；generic被skip的literal/reference错误精确合同仍是接口范围限制，而不是当前固定生产路径新增功能要求。
+
+### 诊断 profile epoch 与公开 benchmark epoch
+
+`prune-work-initial.json`来自**初始prune diagnostic executable**，不要将其身份改写成修复后的最终可执行文件。读取比较确认其XML/MR的input bytes/hash、available、encoded bytes/wire hash、logical cost_queries和selected matches与shadow全部一致；prune huffman_plans为29499/16401，rejected为1443518/1023531，等于shadow would_reject，refreshes同29499/16401。这些是实际跳过工作的证据。其生产Codec无reference callback，所以prune中的violation/false0本身不替代shadow完整定价校验；数学证明、shadow真实逐候选核验与回归共同支撑安全性。prepare-error修复对这些成功literal preparation query无行为影响。
+
+最终公开codec基准与上述raw candidate profile分开：`current14/result.json`来自最终源码，2026-10-25 06:16:33..06:16:56 UTC，14个固定64KiB切片、level3、iterations1、每行5轮交替vort/reference，一次当前executable process；ReleaseFast/Zig0.16.0/x86_64，Intel i7-10700K，affinity8。result exit0、source/ref/exe stable=true、compiler_observations_with_process0。`sample-gate-result.json`exit0，验证14行70round的冻结输入长度/SHA256及explicit reference文件。reference为本地Zstd1.6.0；动态依赖的loaded identity仍unverified，不扩展竞争库身份保证。
+
+最终公开median：
+
+| 输入 | vort median ms | 本地Zstd median ms | vort吞吐/reference |
+|---|---:|---:|---:|
+| XML | 1292.706850 | 0.093915 | 0.0000726498819 |
+| MR | 971.940792 | 0.269758 | 0.000277545713 |
+| brotli-source | 500.746302 | 0.172252 | 0.000343990558 |
+
+`analysis.json`记载14/14 wire不变、GM throughput/reference=`0.0029478574701022075`、throughput wins0/14。vort总bytes310437、reference328241、size wins13/14。当前比此前生产控制在XML/source的version-point加速为9.1578x/10.0755x；只有这两行有明确previous生产控制，不能转成all14 speedup或统计显著性结论。行业吞吐领先仍未达到，ratio改善也不等同于综合排名。
+
+最终source hash与完整family/current14 source_before/after一致：
+- `src/zstd.zig`: `490d3f2c560fecb0261ddafc79d04c1c3efd9000aa22bec7774917d5cd0459dc`
+- `src/zstd/literals/single_cost_cache.zig`: `f0329e0e93e16996dfcf32451ed6b858ff61c095891e9d84e9518034ab43395b`
+- `src/zstd/literals/winner_cost_cache.zig`: `6ba152ff5934a97a6b1945b7d7492505d2760b79cb67630328c04f85ae936166`
+- `src/zstd/literals/weighted_bound.zig`: `52ed8c0e99c7ea827c904ac87957315f690a1774fba20ed05410c7f5f6474313`
+- `src/zstd/literals/winner_cost_cache_tests.zig`: `0a47b3b993d6c147b253e6caebc00f214fce8b5c970f70f2db3c4c3d5762eb78`

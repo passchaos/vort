@@ -9,6 +9,7 @@
     "candidate-executable.json": "97e6d218e827784531d0bf15e3e2f58cc66a28de58d2147832e7d1fadec5d536",
     "weighted-releasefast.log": "c2c19c6382acc5b63ef6360b8a77aa1f651914cf5d41ffb379e19cb02e6f6276",
     "input-manifest.json": "c653c85ee8b76deaaa1869877a9f8c354a2e62c50ca69566a789e5b87cf5794f",
+    "next-bound-hotpath.md": "3f39b61046127611e1c04fba46f30ef54e056f093796172a531b8da1abfbba63",
     "shadow-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "bound-contract-audit.md": "fb1f1afef9ba2eebf8a3d8f545f3a2699d23d1f47d4437e6b6ff82c3c373ef2e",
     "shadow-result.json": "589397c765a1010f630ea87a3213aea7114917e8e544ddfbbe93530b257ce4a2",
@@ -21,10 +22,11 @@
     "weighted-module-contract.md": "8b1e7633e485925a8a50133a0ca1fa10e1454cdf8b61bb3eedd2ef1bd21f6724",
     "prune-work-initial.json": "601667df124db81374fe72edb3e3b819d5bd5d87af439551d0502e909b057939",
     "winner-extended-debug.log": "8b007168c598982161517621ac9af0459e1cea53840b219c150a20aa5efbfbd1",
-    "winner-cache-review.md": "b5dbd180bf17842f946cc010020d9e0224020f7f318d64753125c2d2bee2dfba",
+    "winner-cache-review.md": "f4356ec4f88b0d256751a81d2ae1e3ddd11eb63b044452a9e9307590fb3edc7d",
     "winner-extended-releasefast.log": "8b007168c598982161517621ac9af0459e1cea53840b219c150a20aa5efbfbd1",
     "weighted-x86.log": "c2c19c6382acc5b63ef6360b8a77aa1f651914cf5d41ffb379e19cb02e6f6276",
-    "complete-check/run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "complete-check/run.log": "84fbdc3b6f410b480bdcb6b0fd8b15c48981f2206d557e0213f2e127e26e682d",
+    "complete-check/result.json": "6a43df1c46cffaeb79db5ffa19836fba915b97c7ce1f8b07f5b3e1d65b6809c5",
     "memory/new-source-after.json": "068d431d176db13b8eed78948cbc60906903ba6959df22b9a976a02e0af98768",
     "memory/report.md": "2a5ddfef2d30d61db90dbf5f6b55354510060d91c583558dc48a60d1ac2708bc",
     "memory/setup.json": "6510a8f81977cf2a315fa4210cf66ee2a8271ed14369b5a05fa1bddbe790af81",
@@ -45,6 +47,8 @@
     "memory/tracking_allocator.zig": "1d13b89f918a22e10fdf6cb3f49fed81e3592caffcf98be91d2f91036bfa50ba",
     "memory/old.log": "039d5ebf8033231b019699573315df977501bfa7dc54b31b182365d3b720e5bd",
     "memory/old-allocation-events.json": "bb4e3e13b919217e8df17510cba2a7f4b20c6629b7806f6839d884d39953e0f3",
+    "cli-help/run.log": "4581785e71226e56764d4adb3a40ac5ff1e7b1aeed78a067018a4c11649367bc",
+    "cli-help/result.json": "180042c298da60c7db49aa58a9c59f0909ac8de79a737f7d3a326870d2d34cac",
     "complete-family/run.log": "844920096b4d07c64c685e4887b3c0b39d4fe205278685f1dcca7b6737d49b0b",
     "complete-family/result.json": "deddc7fceaa1d273e894db7d434b18b84033780c490d77ea62dbe353fe6e0311",
     "current14/samples.json": "f4769c4b5bb697f6fc53da62eb49b8e767fe50d8a4f100950758e645e3da2131",
@@ -53,6 +57,8 @@
     "current14/samples.csv": "133fcaf55c86fc900f81b4bfcd1a1dfc49239794dd3cb1378bcbb6b2f96b3ece",
     "current14/sample-gate-result.json": "ae9e233f63b64b6a41650ef51347524b5eb0ffec93b0e83b1c48404f949b6166",
     "current14/compiler-monitor.json": "7da56c9e21b81c66b00118fd0b22a395424ea4d6d1ead939d62c82715beee1c2",
-    "current14/result.json": "7268d3b4077940321c2aa50da967d5fa09d45fb463a6554f95eac72a95ab1499"
+    "current14/result.json": "7268d3b4077940321c2aa50da967d5fa09d45fb463a6554f95eac72a95ab1499",
+    "post-rebase/run.log": "8b007168c598982161517621ac9af0459e1cea53840b219c150a20aa5efbfbd1",
+    "post-rebase/result.json": "62a1588bbba094c1824b9c27df97f6b09979b69c0eb615b939d8334625878b8b"
   }
 }
