@@ -44,8 +44,8 @@ pub const Options = struct {
     /// Maximum input bytes retained for one Deflate planning block, including
     /// lookahead but excluding the fixed 32 KiB history and encoded output.
     max_deflate_buffer_size: usize = 1024 * 1024,
-    /// Stored-block Deflate64 policy. Fixed/match-producing streaming output is
-    /// a later ratio optimization; this path is fully method-9 compatible.
+    /// Deflate64 matching policy, total-input and pending-output limits.
+    /// Defaults use adaptive fixed/stored blocks with a 128 KiB planning block.
     deflate64_options: codecs.Deflate64Options = .{},
     /// DCL Implode literal/dictionary/matcher policy plus total-input limit.
     dcl_implode_options: codecs.DclImplodeOptions = .{},
@@ -120,8 +120,10 @@ pub const Phase = enum {
 /// Resumable ZIP archive writer. A complete payload and already-emitted archive
 /// bytes are never retained. Central-directory bytes are retained until
 /// `finishArchive`; Deflate additionally keeps one bounded planning block,
-/// history/match state, and one encoded pending block. Bzip2 retains at most
-/// one configured RLE/BWT block plus bounded encoded output. Zstandard retains
+/// history/match state, and one encoded pending block. Deflate64 retains one
+/// configured planning block, 64 KiB history, and bounded encoded output.
+/// Bzip2 retains at most one configured RLE/BWT block plus bounded encoded output.
+/// Zstandard retains
 /// one configured frame block, bounded rolling history, and pending output.
 /// LZMA retains bounded input/lookahead, dictionary history, and range output.
 /// XZ retains one configured plaintext block, encoded output, and Index records.
@@ -615,7 +617,10 @@ pub const Writer = struct {
                         entry.codec.finish();
                         const codec_output = output[output_written..][0..self.limitArchiveWrite(output.len - output_written)];
                         if (codec_output.len == 0) return error.OutputLimitExceeded;
-                        const encoded = try entry.codec.step("", codec_output);
+                        const encoded = entry.codec.step("", codec_output) catch |err| {
+                            try self.accountFailedCodecProgress(entry, "", codec_output, &input_read, &output_written);
+                            return err;
+                        };
                         entry.encryptOutput(codec_output[0..encoded.progress.output_written]);
                         try self.accountCodecProgress(entry, "", encoded.progress, &input_read, &output_written);
                         if (encoded.status == .done) {
@@ -654,10 +659,13 @@ pub const Writer = struct {
 
                     const codec_output = output[output_written..][0..self.limitArchiveWrite(output.len - output_written)];
                     if (codec_output.len == 0) return error.OutputLimitExceeded;
-                    const encoded = try entry.codec.step(
+                    const encoded = entry.codec.step(
                         input[input_read..],
                         codec_output,
-                    );
+                    ) catch |err| {
+                        try self.accountFailedCodecProgress(entry, input[input_read..], codec_output, &input_read, &output_written);
+                        return err;
+                    };
                     entry.encryptOutput(codec_output[0..encoded.progress.output_written]);
                     const before = input_read;
                     try self.accountCodecProgress(entry, input[input_read..], encoded.progress, &input_read, &output_written);
@@ -778,7 +786,20 @@ pub const Writer = struct {
             }
 
             const offered = if (self.finish_entry_requested) "" else input[input_read.*..];
-            const encoded = try entry.codec.step(offered, &state.codec_output);
+            const encoded = entry.codec.step(offered, &state.codec_output) catch |err| {
+                if (entry.codec.failedProgress()) |progress| {
+                    if (progress.input_read > offered.len or progress.output_written > state.codec_output.len)
+                        return error.InvalidBlockPlan;
+                    entry.crc.update(offered[0..progress.input_read]);
+                    try self.addEntryInput(entry, progress.input_read);
+                    input_read.* += progress.input_read;
+                    // These bytes belong to the codec bridge, not the caller's
+                    // encrypted output. Archive accounting waits for encryption.
+                    state.codec_output_len = progress.output_written;
+                    state.codec_output_pos = 0;
+                }
+                return err;
+            };
             if (encoded.progress.input_read > offered.len or
                 encoded.progress.output_written > state.codec_output.len)
                 return error.InvalidBlockPlan;
@@ -929,6 +950,22 @@ pub const Writer = struct {
             return error.IntegerOverflow;
         self.total_input = std.math.add(u64, self.total_input, amount64) catch
             return error.IntegerOverflow;
+    }
+
+    fn accountFailedCodecProgress(
+        self: *Self,
+        entry: *CurrentEntry,
+        input: []const u8,
+        output: []u8,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!void {
+        if (entry.codec.failedProgress()) |progress| {
+            if (progress.input_read > input.len or progress.output_written > output.len)
+                return error.InvalidBlockPlan;
+            entry.encryptOutput(output[0..progress.output_written]);
+            try self.accountCodecProgress(entry, input, progress, input_read, output_written);
+        }
     }
 
     fn accountCodecProgress(

@@ -2,10 +2,11 @@ const decoder = @import("deflate64/decoder.zig");
 const encoder = @import("deflate64/encoder.zig");
 const incremental_decoder = @import("deflate/incremental/decoder/fixed_literals.zig");
 const incremental_encoder = @import("deflate64/incremental_encoder.zig");
+const stream_encoder = @import("deflate64/stream_encoder.zig");
 const incremental_encoder_tests = @import("deflate64/incremental_encoder_tests.zig");
 const incremental_tests = @import("deflate64/incremental_tests.zig");
 
-pub const Error = decoder.Error || encoder.Error;
+pub const Error = decoder.Error || encoder.Error || stream_encoder.Error;
 pub const DecodeResult = decoder.DecodeResult;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
@@ -18,6 +19,7 @@ pub const IncrementalDecoder = incremental_decoder.DecoderWithFormat(.{
     .extended_length_285 = true,
 });
 pub const IncrementalStoredEncoder = incremental_encoder.Encoder;
+pub const IncrementalEncoder = stream_encoder.Encoder;
 pub const EncodeOptions = encoder.EncodeOptions;
 pub const encodedBound = encoder.encodedBound;
 pub const encodeAlloc = encoder.encodeAlloc;
@@ -32,4 +34,5 @@ test {
     _ = encoder;
     _ = incremental_tests;
     _ = incremental_encoder_tests;
+    _ = stream_encoder;
 }

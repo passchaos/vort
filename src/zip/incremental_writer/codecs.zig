@@ -18,7 +18,7 @@ const xz = @import("../../xz.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
 pub const DeflateOptions = deflate.RawDeflateIncrementalBestEncoder.Options;
-pub const Deflate64Options = deflate64.IncrementalStoredEncoder.Options;
+pub const Deflate64Options = deflate64.IncrementalEncoder.Options;
 pub const DclImplodeOptions = dcl_implode_encoder.Encoder.Options;
 pub const ImplodeOptions = implode_encoder.Encoder.Options;
 pub const Bzip2Options = bzip2.IncrementalEncoder.Options;
@@ -53,7 +53,7 @@ pub const Options = struct {
 pub const State = union(enum) {
     stored,
     deflate: deflate.RawDeflateIncrementalBestEncoder,
-    deflate64: deflate64.IncrementalStoredEncoder,
+    deflate64: deflate64.IncrementalEncoder,
     dcl_implode: dcl_implode_encoder.Encoder,
     implode: implode_encoder.Encoder,
     bzip2: bzip2.IncrementalEncoder,
@@ -87,13 +87,13 @@ pub const State = union(enum) {
                     options.deflate,
                 ) },
             .deflate64 => .{ .deflate64 = if (expected_size) |expected|
-                deflate64.IncrementalStoredEncoder.initExactSize(
+                deflate64.IncrementalEncoder.initExactSize(
                     allocator,
                     options.deflate64,
                     @intCast(expected),
                 )
             else
-                deflate64.IncrementalStoredEncoder.initWithOptions(
+                deflate64.IncrementalEncoder.initWithOptions(
                     allocator,
                     options.deflate64,
                 ) },
@@ -259,6 +259,13 @@ pub const State = union(enum) {
             .shrink => |*encoder| encoder.step(input, output),
         };
     }
+
+    pub fn failedProgress(self: *const Self) ?core.Progress {
+        return switch (self.*) {
+            .deflate64 => |*encoder| encoder.failedProgress(),
+            else => null,
+        };
+    }
 };
 
 pub fn validate(
@@ -278,9 +285,7 @@ pub fn validate(
             try validateExpectedSize(expected_size, options.deflate.max_input_len);
         },
         .deflate64 => {
-            if (options.deflate64.block_len == 0 or
-                options.deflate64.block_len > std.math.maxInt(u16))
-                return error.InvalidBlockPlan;
+            try deflate64.IncrementalEncoder.validateOptions(options.deflate64);
             try validateExpectedSize(expected_size, options.deflate64.max_input_len);
         },
         .dcl_implode => {

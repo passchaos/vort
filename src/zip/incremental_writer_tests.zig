@@ -1220,7 +1220,7 @@ test "ZIP incremental writer emits multi-block Deflate64 stored streams" {
     }};
     const bytes = try encodeEntries(allocator, &entries, .{
         .zip64 = .never,
-        .deflate64_options = .{ .block_len = 4096 },
+        .deflate64_options = .{ .block_len = 4096, .compression = .stored },
     }, 257, 11);
     defer allocator.free(bytes);
     const archive = try zip.parse(bytes);

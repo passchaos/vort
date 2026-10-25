@@ -38,6 +38,10 @@ const wire = @import("zip/wire.zig");
 pub const writer = @import("zip/writer.zig");
 pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
+
+test {
+    _ = @import("zip/deflate64_stream_writer_tests.zig").contracts(@This());
+}
 pub const incremental_reader = @import("zip/incremental_reader.zig");
 
 pub const Error = writer.Error || split.Error || split_writer.Error || split_incremental_writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
