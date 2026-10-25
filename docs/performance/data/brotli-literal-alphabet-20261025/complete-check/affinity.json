@@ -1,0 +1,42 @@
+{
+  "time_utc": "2026-10-25T11:06:53.022194+00:00",
+  "reason": "Allow current six-job check to use available compilation CPUs; benchmark timing remains excluded until all known validations finish.",
+  "results": [
+    {
+      "pid": 605962,
+      "exit_code": 0
+    },
+    {
+      "pid": 605965,
+      "exit_code": 0
+    },
+    {
+      "pid": 605977,
+      "exit_code": 0
+    },
+    {
+      "pid": 605978,
+      "exit_code": 0
+    },
+    {
+      "pid": 605979,
+      "exit_code": 0
+    },
+    {
+      "pid": 605982,
+      "exit_code": 0
+    },
+    {
+      "pid": 605987,
+      "exit_code": 0
+    },
+    {
+      "pid": 606014,
+      "exit_code": 0
+    },
+    {
+      "pid": 606029,
+      "exit_code": 0
+    }
+  ]
+}

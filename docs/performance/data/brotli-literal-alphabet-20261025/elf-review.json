@@ -1,0 +1,133 @@
+{
+  "schema": "vort.brotli.context-alphabet.elf-review.v1",
+  "created_utc": "2026-10-25T11:15:28.034509+00:00",
+  "created_asia_shanghai": "2026-10-25T19:15:28.034509+08:00",
+  "scope": "Bounded read-only pinned public ELF and frozen alphabet source review. No compile, benchmark/test execution, source or Git mutation.",
+  "elf": {
+    "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/1928ccf0f65566cb15f468f5a8857ce6/vort-br-planned-encode-bench",
+    "sha256": "60204e9a3b332da25ebd9c738d481a5f307adf731ac74846c7b38747e3d2b839",
+    "source_binding": "complete-check/result.json fullsrc/tools/buildbefore-afterstable,175/175steps"
+  },
+  "source_sha256_at_review": {
+    "src/br/encoder/literal_alphabet.zig": "66ecc843530b925666f93f6c2983a056668d95a8f7f978ce680940b111e475c7",
+    "src/br/encoder/literal_context_split.zig": "37d886fd412ac3ae7444ca4d73549f6aa80d49f6f5a28db36ffdb717eca8edcf"
+  },
+  "source_binding_limit": "Pinned SHA and the two supplied frozen sources verified. Whole-source complete-check/family status and runtime exact-output proof remain parent-owned.",
+  "ordinary_route": {
+    "source_wrapper": "literal_context_split.buildTreeAlphabet -> literal_alphabet.build",
+    "scorer_symbol": "br.encoder.literal_context_split.treeBitCostProfiled__anon_46144",
+    "scorer_address": "0x120e0e0",
+    "scorer_code_bytes": 1600,
+    "support_threshold": "0x120e102 cmp support_len,63; 0x120e106 ja large if >=64",
+    "small_route": "support<64 inline literal_alphabet.reference fused insertion; no large-helper call or large scratch parameter",
+    "large_call": "0x120e1b6 -> br.encoder.literal_alphabet.buildLargeSupport__anon_72625 at0x12131e0",
+    "large_live_threshold": "after nonzero filter and already_ordered check,0x1213312 cmp live,64;0x1213317 jae key/radix",
+    "already_ordered": "initial nonzero frequencies monotonically descend;0x12132f0\u20130x1213304 branches to ascending-symbol copy without keys",
+    "large_support_small_live": "When support>=64 but live<64 and not already_ordered, helper performs insertion over filtered live list; helper frame was already reserved.",
+    "next_code_lengths": "0x120e1e6 -> PrefixAlphabetFor(256).codeLengths"
+  },
+  "frequency_reads": {
+    "initial_filter": "u8 support symbol load then u32 frequency load e.g0x1213262/0x1213268",
+    "key_build": "u8 filtered tree symbol then complete u32 frequency load e.g0x1213430/0x1213436",
+    "small_insertion": "current supported symbol and earlier alphabet symbols, which were populated only from supported nonzero symbols",
+    "full_u32_value": true,
+    "reads_all256_frequencies_unconditionally": false,
+    "raw_input_block_pointer_or_copy": false,
+    "supported_contract": "Support strictly ascending and unique, with <=256 symbols; assertions are contract/debug checks, not runtime validation of arbitrary malformed support in ReleaseFast."
+  },
+  "radix": {
+    "key_formula": "(u64(~u32_frequency)<<8)|u8_symbol",
+    "full_complement_width": "0x1213436 u32 load;0x121343a NOT r10d;0x121343d 64-bit SHL8; symbol OR0x1213441",
+    "sort_direction": "ascending complemented frequency = descending original frequency",
+    "stable_symbol_ties": "Input live tree_symbols is strictly ascending by symbol; frequency-only stable LSD passes preserve this order for equal complete u32 frequencies.",
+    "four_shifts": [
+      8,
+      16,
+      24,
+      32
+    ],
+    "rodata": "0x1002a00 bytes08 10 18 20",
+    "symbol_byte_extra_pass": false,
+    "variation": "OR(key XOR key0) over live keys",
+    "uniform_skip_gates": [
+      {
+        "shift": 8,
+        "branch": "0x1213673 je0x121394f"
+      },
+      {
+        "shift": 16,
+        "branch": "0x1213962 je0x1213c41"
+      },
+      {
+        "shift": 24,
+        "branch": "0x1213c54 je0x1213f2e"
+      },
+      {
+        "shift": 32,
+        "branch": "0x1213f41 je0x12142fd"
+      }
+    ],
+    "counting": "Scalar SHRX/extract-u8 followed by u16 incw counts; four-way unrolled loops",
+    "prefix": "u16 positions built from u16 counts, values0..256",
+    "stable_scatter": "0x1213860 source key order;positions[digit] load;destination[index] fullkey store;incrementpositions before next source key",
+    "buffer_parity": "keys and temporary alternate only on executed passes;odd parity finalmemcpy at0x1214235, length8*live",
+    "simd_sort_claim": false,
+    "vector_stores_role": "Some vector writes zero fixed count scratch; radix extraction/count/scatter are scalar."
+  },
+  "output": {
+    "tree_symbols": "Filtered ascending support retained; only liveprefix written; nonzero count stored asu16",
+    "alphabet": "After optional sorting, low symbolbyte extracted from each key and written asu16 e.g0x1214250/58; alphabet.len stored0x12142e6",
+    "unique_and_complete_scope": "Under unique support contract, filter contains every supported nonzero symbol once; radix moves full keys and output extracts symbols, no additional symbols. Static implementation invariant, not an executed full-output oracle.",
+    "inactive_tail": "Outside live prefixes source intentionally leaves previous bytes untouched.",
+    "ties": "frequency ties preserve ascending original symbol order; no lossy frequency key or numeric narrowing."
+  },
+  "actual_internal_abi": {
+    "large": "rdi frequencies; rsi supportptr; rdx supportlen; rcx alphabetptr; r8 tree_symbolsptr; u16 Error returninax",
+    "allocator_or_clock_argument": false,
+    "large_call_targets": [
+      "121379f:\te8 8c 56 08 00       \tcall   1298e30 <compiler_rt.memcpy.memcpyFast>",
+      "1213a9f:\te8 8c 53 08 00       \tcall   1298e30 <compiler_rt.memcpy.memcpyFast>",
+      "1213d8f:\te8 9c 50 08 00       \tcall   1298e30 <compiler_rt.memcpy.memcpyFast>",
+      "121407f:\te8 ac 4d 08 00       \tcall   1298e30 <compiler_rt.memcpy.memcpyFast>",
+      "1214235:\te8 f6 4b 08 00       \tcall   1298e30 <compiler_rt.memcpy.memcpyFast>"
+    ],
+    "no_heap_allocator_calls_in_helper": true
+  },
+  "local_stack": {
+    "scorer_sub_rsp_bytes": 1720,
+    "scorer_saved_push_bytes": 48,
+    "large_sub_rsp_bytes": 5656,
+    "large_saved_push_bytes": 48,
+    "large_stable_rsp_relative_rbp": "rbp-0x1640 (five non-rbp saved registers40B plus explicitsub5656)",
+    "declared_radix_array_bytes": 5120,
+    "observed_bases": {
+      "keys": "rbp-0xe40,2048B",
+      "temporary": "rbp-0x1640,2048B",
+      "counts": "rbp-0x240,512B",
+      "positions": "rbp-0x440,512B",
+      "compiler_count_copy": "rbp-0x640,512B"
+    },
+    "additional_copy": "Four fixed512B memcpy sites copy counts to compiler temporary before prefix; these are local scratch copies, not heap/rawinput copies.",
+    "below_large_rsp_access_observed": false,
+    "scratch_bottom_at_stable_rsp": true,
+    "small_support_large_workspace_not_in_scorer_frame": true,
+    "large_support_small_live_still_reserves_helper_frame": true,
+    "limit": "Explicitsub and observed scratch bases only; not Cache/workspace sizeof, complete stack/call-chain peak, heap or RSS."
+  },
+  "limitations": [
+    "No current tests/benchmark executed; no exact correctness proof for all input/support combinations.",
+    "No throughput, SIMD ranking, bandwidth, heap/RSS or full-stack peak claim.",
+    "Untrusted support contract violations are not promised safe/valid by static ReleaseFast audit.",
+    "Pinned identity and frozen sources are not whole family/check pass assertions."
+  ],
+  "evidence": {
+    "four-frequency-byte-skip-gates.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/four-frequency-byte-skip-gates.asm",
+    "large-live-filter-key-and-threshold.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/large-live-filter-key-and-threshold.asm",
+    "literal_alphabet.buildLargeSupport__anon_72625.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/literal_alphabet.buildLargeSupport__anon_72625.asm",
+    "literal_context_split.treeBitCostProfiled__anon_46144.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/literal_context_split.treeBitCostProfiled__anon_46144.asm",
+    "ordinary-small-and-large-route.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/ordinary-small-and-large-route.asm",
+    "radix-scalar-count-prefix-stable-scatter.asm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/radix-scalar-count-prefix-stable-scatter.asm",
+    "radix-shifts.rodata": "/tmp/vort-br-context-alphabet-20261025/focusedasm/radix-shifts.rodata",
+    "symbols.nm": "/tmp/vort-br-context-alphabet-20261025/focusedasm/symbols.nm"
+  }
+}

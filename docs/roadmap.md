@@ -23400,3 +23400,20 @@ reuse, so production keeps the simpler independently owned plans.
   industry-best or all-level/platform/memory parity. Next optimize remaining
   context/entropy coding cost through the ordinary API and extend the quality,
   streaming and memory comparison matrix.
+
+- 2026-10-25: literal-context alphabet ranking now uses a small pure module
+  with exact full32-bit complemented-frequency keys and stable byte radix;
+  symbol-ascending input preserves ties, uniform frequency bytes can skip a
+  pass, and already-ordered/small collections keep exact insertion/copy paths.
+  A correct PDQ candidate was rejected on same-input micro evidence before
+  public runs; radix64/96/128/dense pools instead improve by2.26/3.38/4.33/7.60x,
+  while small16's negative point remains recorded. Three alternating ordinary
+  q8 version pairs yield1.062096x geometric throughput against d689a411, with
+  all fourteen wire/settings and seventy candidate/selection/non-time detail
+  fields unchanged. Module oracle matrices pass Debug/ReleaseFast/x86, full
+  Brotli tests1424 with one skip and checks175/175. [Evidence and limits](performance/brotli-literal-alphabet-x86.md)
+  retain both algorithm epochs and exact supported-read/tail/offset256 tests;
+  no frequency clamp or candidate reduction is used. Broader format/level/
+  streaming/platform ratio/speed/memory leadership remains incomplete. Next
+  optimize unchanged cluster assignment/context-prefix and wire coding costs,
+  alongside the current cross-library comparison matrix.

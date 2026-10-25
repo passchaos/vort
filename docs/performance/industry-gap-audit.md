@@ -244,6 +244,40 @@ Brotli family passes 1423 with one skip, and build checks pass 174/174 on stable
 source. This is a bounded encoder improvement, while all-quality, all-platform
 ratio/speed/memory leadership and the industry-best objective remain open.
 
+The [literal-alphabet increment](brotli-literal-alphabet-x86.md) replaces large
+supported-symbol insertion ordering with stable byte radix passes at a threshold
+of 64, preserving complete unsigned frequencies and ascending-symbol ties. An
+earlier PDQ candidate was rejected before public measurement: its 64/96/128
+random-family point ratios were 0.401656x/0.476636x/0.527122x. On the same frozen
+micro input pools, radix gives 2.259250x/3.382456x/4.332092x on those families,
+7.600826x on dense mixed input and 2.676835x on sparse dense support. The small
+16-symbol control remains slower at 0.932553x; these complete collection/rank
+and checksum timings do not replace public encoding measurements. The declared
+key/count scratch totals 5 KiB, without a measured RSS or full-stack peak claim.
+
+Fourteen ordinary 64 KiB q8/generic rows against `d689a411` retain all settings
+and wire identities. The first-screen version throughput geometric point ratio
+is 1.060756x, with 11/14 positive rows; Dickens/Reymont/NCI retain point ratios
+of 0.999098x/0.998364x/0.981048x. Reference throughput still wins all fourteen
+rows, with a Vort/reference geometric ratio of 0.034437x. Three alternating
+old/new process pairs aggregate to 1.062096x; their corpus point ratios are
+1.064995x/1.052964x/1.068392x. Individual repeats remain mixed: Dickens,
+Reymont, XML and schema retain sub-1 points, including 0.979612x/0.999681x/
+0.982929x/0.980425x. All settings/wires, inputs and reference files remain
+identical on stable source with zero observed compiler processes. No
+statistical-significance or every-repeat-win claim is assigned. Seventy profiled calls
+retain every non-time proposal/detail count and wire/selection outcome.
+Mozilla's lazy/optimal alphabet-stage medians change from 4.984463/5.291635 to
+1.360870/1.691083ms, SAO's from 11.365281/11.284848 to 1.718895/1.759234ms,
+and the source control's from 0.584796/0.629856 to 0.295514/0.331832ms. These
+nested, separately computed instrumented medians are non-additive. Three
+platform module contracts pass their complete internal matrices, Debug/x86
+context contracts each pass 76/76, the full Brotli family passes 1424 with one
+skip, build checks pass 175/175, and legacy profile/CLI checks pass 10/10 and
+7/7 on stable source. This remains a bounded q8 encoder result; all-quality,
+all-platform performance and the industry-best functionality/performance
+objective remain open.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

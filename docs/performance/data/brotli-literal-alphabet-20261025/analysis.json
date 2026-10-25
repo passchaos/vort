@@ -1,0 +1,1016 @@
+{
+  "public": {
+    "rows": [
+      {
+        "case": "file0_silesia_dickens_65536_bin",
+        "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+        "old_median_ns": 55501306,
+        "new_median_ns": 55551395,
+        "reference_median_ns": 2244569,
+        "version_speedup": 0.9990983304739692,
+        "throughput_reference_ratio": 0.04040526795051681,
+        "wires": {
+          "vort_bytes": 24723,
+          "reference_bytes": 25210,
+          "vort_sha256": "2d5a260a0e470c49372ad983dc6ef7ffb5a50658a16a2839e1dddc83381d9342",
+          "reference_sha256": "5b29d9be9c0e6bcb2c5abdef769b8320b9d8be345aa28ed8774376765288438c"
+        }
+      },
+      {
+        "case": "file1_silesia_mozilla_65536_bin",
+        "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+        "old_median_ns": 59791835,
+        "new_median_ns": 52176148,
+        "reference_median_ns": 1607412,
+        "version_speedup": 1.1459610816804644,
+        "throughput_reference_ratio": 0.030807410313233547,
+        "wires": {
+          "vort_bytes": 14216,
+          "reference_bytes": 13646,
+          "vort_sha256": "0edaa9cf782d41223ce9cca5f4811d94e2bcfe58185ab88a513d297b210f6209",
+          "reference_sha256": "df9c08a20a158806810f9293223210466bf1fd23c2b0d367d521a7eedace0c53"
+        }
+      },
+      {
+        "case": "file2_silesia_mr_65536_bin",
+        "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+        "old_median_ns": 66229785,
+        "new_median_ns": 63419675,
+        "reference_median_ns": 2015034,
+        "version_speedup": 1.0443097508777837,
+        "throughput_reference_ratio": 0.031773010505020724,
+        "wires": {
+          "vort_bytes": 15482,
+          "reference_bytes": 15304,
+          "vort_sha256": "57619fbc05dc6474c2e48c73a9e44d193ffdd1630ed78fcd1a223f8dc180209b",
+          "reference_sha256": "906d6bd60478308ad99b37ed4115e8f43ce32ba79ca6524d59e30703f0ac7dac"
+        }
+      },
+      {
+        "case": "file3_silesia_nci_65536_bin",
+        "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+        "old_median_ns": 26387359,
+        "new_median_ns": 26897108,
+        "reference_median_ns": 682105,
+        "version_speedup": 0.9810481855521419,
+        "throughput_reference_ratio": 0.025359789610094885,
+        "wires": {
+          "vort_bytes": 4389,
+          "reference_bytes": 4167,
+          "vort_sha256": "0b2fef2e1029a79fe91cdfdbd5a276732b6c784c7985226a875744a8d061222f",
+          "reference_sha256": "01f969041acd8cbdbb2921a424bf14f527d97d66dee485835bd3a403e600c6fe"
+        }
+      },
+      {
+        "case": "file4_silesia_ooffice_65536_bin",
+        "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+        "old_median_ns": 79850359,
+        "new_median_ns": 70975657,
+        "reference_median_ns": 2269264,
+        "version_speedup": 1.125038673470821,
+        "throughput_reference_ratio": 0.03197242682797568,
+        "wires": {
+          "vort_bytes": 30895,
+          "reference_bytes": 31225,
+          "vort_sha256": "336f1816d7513e399c951f648edd9343d9aa72102994711a6df35cf5e1ea1079",
+          "reference_sha256": "9ab78ba7077695701ef35afb61af5031370bae61cb50b54e248c33824c90cc47"
+        }
+      },
+      {
+        "case": "file5_silesia_osdb_65536_bin",
+        "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+        "old_median_ns": 65369453,
+        "new_median_ns": 58406842,
+        "reference_median_ns": 1673104,
+        "version_speedup": 1.1192088248839065,
+        "throughput_reference_ratio": 0.02864568503806455,
+        "wires": {
+          "vort_bytes": 25634,
+          "reference_bytes": 26200,
+          "vort_sha256": "6bba03ab24628b41d4a24322db82a6650752ad63ff9fa49a3a2b46e6bf96bfb4",
+          "reference_sha256": "ba511e6659c3ecb8f25cdb4fde226dfc249de6a91e35249ccb76f2e639852bd4"
+        }
+      },
+      {
+        "case": "file6_silesia_reymont_65536_bin",
+        "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+        "old_median_ns": 50425703,
+        "new_median_ns": 50508319,
+        "reference_median_ns": 1944246,
+        "version_speedup": 0.9983643090557023,
+        "throughput_reference_ratio": 0.03849357964180119,
+        "wires": {
+          "vort_bytes": 17484,
+          "reference_bytes": 18259,
+          "vort_sha256": "a3c8bec39491e8c0f39ef74b6bf351b5dd93a3844e08d00bc1a0475e9a891a28",
+          "reference_sha256": "f5e76b9248b3ff38d4cfd7b456693fa61cc778494266a637109f34967a381d94"
+        }
+      },
+      {
+        "case": "file7_silesia_samba_65536_bin",
+        "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+        "old_median_ns": 47424051,
+        "new_median_ns": 45540244,
+        "reference_median_ns": 1882139,
+        "version_speedup": 1.0413657643116712,
+        "throughput_reference_ratio": 0.041329137366940764,
+        "wires": {
+          "vort_bytes": 21033,
+          "reference_bytes": 21378,
+          "vort_sha256": "605aeee381290d2b64baf1385e69947079ff88074324b4e7c10c7238db199e17",
+          "reference_sha256": "66c738860a608c8f0ebdf414f237c7c861d5a8b0e6d76a1ef0714ec8013840b3"
+        }
+      },
+      {
+        "case": "file8_silesia_sao_65536_bin",
+        "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+        "old_median_ns": 92752583,
+        "new_median_ns": 74498283,
+        "reference_median_ns": 2960201,
+        "version_speedup": 1.2450298082708833,
+        "throughput_reference_ratio": 0.0397351573861105,
+        "wires": {
+          "vort_bytes": 47226,
+          "reference_bytes": 48819,
+          "vort_sha256": "66857e85f96877f63c451dd9144a849c2555e9a95a93f8b4bfe0bb930a579f1f",
+          "reference_sha256": "347164c7f7ad6ff5b87fdb8bc411759cb4927aba198e38a1fd450b0a666abf6a"
+        }
+      },
+      {
+        "case": "file9_silesia_webster_65536_bin",
+        "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+        "old_median_ns": 44730106,
+        "new_median_ns": 43999290,
+        "reference_median_ns": 1955635,
+        "version_speedup": 1.0166097225659778,
+        "throughput_reference_ratio": 0.04444696721242547,
+        "wires": {
+          "vort_bytes": 21623,
+          "reference_bytes": 22077,
+          "vort_sha256": "9982051ee8637f74ba4cfb212f458335d73b8d6b609d19f14177fa007f1c5b67",
+          "reference_sha256": "8aa759bf41beaf99d30c70ff344a18be4a32e14e0e67472ff0f899791f7406ab"
+        }
+      },
+      {
+        "case": "file10_silesia_xml_65536_bin",
+        "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+        "old_median_ns": 26099161,
+        "new_median_ns": 25346798,
+        "reference_median_ns": 620885,
+        "version_speedup": 1.0296827630851044,
+        "throughput_reference_ratio": 0.024495599010178722,
+        "wires": {
+          "vort_bytes": 4724,
+          "reference_bytes": 4681,
+          "vort_sha256": "a12b4ae959a90a2ead26dce66bc06f50a134dbacd56d688c02048a11b156cb31",
+          "reference_sha256": "c2edd9e40d9ad6d2d2ec0575c1de8721114cfd61d03714e91384a04637450ab5"
+        }
+      },
+      {
+        "case": "file11_silesia_x_ray_65536_bin",
+        "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+        "old_median_ns": 60509951,
+        "new_median_ns": 56188016,
+        "reference_median_ns": 2823210,
+        "version_speedup": 1.0769191601283803,
+        "throughput_reference_ratio": 0.05024576770961267,
+        "wires": {
+          "vort_bytes": 42611,
+          "reference_bytes": 47477,
+          "vort_sha256": "aa8729893be82d2491dedd3cd67f681b86e90fb8e716acae159ca8fd69d0ef86",
+          "reference_sha256": "60d391da3e694b51cbc9a136281bbf63dd84a6fa7f256e614df989bb3ca98105"
+        }
+      },
+      {
+        "case": "file12_brotli_source_65536_bin",
+        "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+        "old_median_ns": 36564242,
+        "new_median_ns": 35196245,
+        "reference_median_ns": 1227266,
+        "version_speedup": 1.0388676973921507,
+        "throughput_reference_ratio": 0.03486923107848579,
+        "wires": {
+          "vort_bytes": 11687,
+          "reference_bytes": 11590,
+          "vort_sha256": "be2ad874869eea7ed49b3432ddace040e3a6963a268e19b94268716a8f37a45f",
+          "reference_sha256": "ac2fbc7d590854186cfd3a3cceb43cc6ee38de7b6f94c6973377f3015f54dd21"
+        }
+      },
+      {
+        "case": "file13_validation_schema_json_65536_bin",
+        "input_sha256": "71e74329ab6dc2852d3c187f73935c6dcf59804ae9547b1be14f711d560ca0d0",
+        "old_median_ns": 25423276,
+        "new_median_ns": 24926687,
+        "reference_median_ns": 742375,
+        "version_speedup": 1.0199219816095095,
+        "throughput_reference_ratio": 0.029782337299778347,
+        "wires": {
+          "vort_bytes": 6364,
+          "reference_bytes": 6412,
+          "vort_sha256": "a09441c11d8852581b10534e8472c2b11d333266ed4915a444ff556770e5c2b4",
+          "reference_sha256": "dc65012b545a66e4f56fe0c567b8562544175dfe91b208868308248a5c7cf800"
+        }
+      }
+    ],
+    "version_geomean": 1.0607559102869335,
+    "reference_geomean": 0.03443715899598447,
+    "version_point_wins": 11,
+    "reference_point_wins": 0,
+    "all_old_settings_wires_equal": true
+  },
+  "scope": "d689a411 vs context alphabet candidate, fixed64KiB q8/generic ordinary public interface, five alternating reference rounds each; no all-quality/platform/statistical significance claim.",
+  "profile": {
+    "rows": [
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-dickens-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 3786399,
+          "lazy_commands": 347763,
+          "optimal_parse": 10549754,
+          "optimal_commands": 333260,
+          "preferred_context": 4919,
+          "recent_distance_scan": 229429,
+          "context_proposals": 7783655,
+          "split_planning": 2276148,
+          "wire": 27505014,
+          "distance_parameters": 4187448,
+          "selection": 76,
+          "other": 67941
+        },
+        "outer_median_ns": 57287545,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 9541,
+            "small_calls": 583,
+            "fallback_calls": 0,
+            "active_buckets": [
+              20,
+              33,
+              88,
+              194,
+              268,
+              0
+            ],
+            "tree_lengths_median_ns": 503499,
+            "tree_lengths_old_median_ns": 505637,
+            "tree_alphabet_median_ns": 315751,
+            "tree_alphabet_old_median_ns": 557475
+          },
+          {
+            "origin": "optimal",
+            "command_count": 8461,
+            "small_calls": 608,
+            "fallback_calls": 0,
+            "active_buckets": [
+              17,
+              26,
+              69,
+              250,
+              263,
+              0
+            ],
+            "tree_lengths_median_ns": 521913,
+            "tree_lengths_old_median_ns": 534759,
+            "tree_alphabet_median_ns": 354610,
+            "tree_alphabet_old_median_ns": 580258
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 1208990,
+          "lazy_commands": 176564,
+          "optimal_parse": 7901977,
+          "optimal_commands": 182203,
+          "preferred_context": 4837,
+          "recent_distance_scan": 106880,
+          "context_proposals": 27940149,
+          "split_planning": 1754587,
+          "wire": 16795260,
+          "distance_parameters": 1329595,
+          "selection": 131,
+          "other": 61956
+        },
+        "outer_median_ns": 57668802,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 4317,
+            "small_calls": 1572,
+            "fallback_calls": 0,
+            "active_buckets": [
+              21,
+              81,
+              135,
+              268,
+              292,
+              796
+            ],
+            "tree_lengths_median_ns": 2152288,
+            "tree_lengths_old_median_ns": 2192731,
+            "tree_alphabet_median_ns": 1360870,
+            "tree_alphabet_old_median_ns": 4984463
+          },
+          {
+            "origin": "optimal",
+            "command_count": 3828,
+            "small_calls": 1583,
+            "fallback_calls": 0,
+            "active_buckets": [
+              8,
+              51,
+              125,
+              236,
+              341,
+              830
+            ],
+            "tree_lengths_median_ns": 2433434,
+            "tree_lengths_old_median_ns": 2416199,
+            "tree_alphabet_median_ns": 1691083,
+            "tree_alphabet_old_median_ns": 5291635
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 4387609,
+          "lazy_commands": 228866,
+          "optimal_parse": 16081357,
+          "optimal_commands": 236668,
+          "preferred_context": 5462,
+          "recent_distance_scan": 161227,
+          "context_proposals": 13594171,
+          "split_planning": 9910825,
+          "wire": 21103954,
+          "distance_parameters": 2309612,
+          "selection": 137,
+          "other": 72815
+        },
+        "outer_median_ns": 68370341,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 6001,
+            "small_calls": 907,
+            "fallback_calls": 0,
+            "active_buckets": [
+              85,
+              156,
+              114,
+              140,
+              184,
+              313
+            ],
+            "tree_lengths_median_ns": 999729,
+            "tree_lengths_old_median_ns": 1008601,
+            "tree_alphabet_median_ns": 768659,
+            "tree_alphabet_old_median_ns": 1315647
+          },
+          {
+            "origin": "optimal",
+            "command_count": 6014,
+            "small_calls": 839,
+            "fallback_calls": 0,
+            "active_buckets": [
+              70,
+              114,
+              80,
+              131,
+              187,
+              327
+            ],
+            "tree_lengths_median_ns": 1004788,
+            "tree_lengths_old_median_ns": 1018422,
+            "tree_alphabet_median_ns": 764630,
+            "tree_alphabet_old_median_ns": 1323914
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-nci-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 911080,
+          "lazy_commands": 84865,
+          "optimal_parse": 18772036,
+          "optimal_commands": 86529,
+          "preferred_context": 3966,
+          "recent_distance_scan": 41515,
+          "context_proposals": 4537009,
+          "split_planning": 173637,
+          "wire": 2427144,
+          "distance_parameters": 745361,
+          "selection": 142,
+          "other": 22072
+        },
+        "outer_median_ns": 27836885,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 1520,
+            "small_calls": 362,
+            "fallback_calls": 0,
+            "active_buckets": [
+              53,
+              71,
+              99,
+              192,
+              0,
+              0
+            ],
+            "tree_lengths_median_ns": 203201,
+            "tree_lengths_old_median_ns": 199493,
+            "tree_alphabet_median_ns": 150689,
+            "tree_alphabet_old_median_ns": 139270
+          },
+          {
+            "origin": "optimal",
+            "command_count": 1417,
+            "small_calls": 349,
+            "fallback_calls": 0,
+            "active_buckets": [
+              50,
+              54,
+              92,
+              203,
+              0,
+              0
+            ],
+            "tree_lengths_median_ns": 208577,
+            "tree_lengths_old_median_ns": 202076,
+            "tree_alphabet_median_ns": 155848,
+            "tree_alphabet_old_median_ns": 144924
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-ooffice-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 2465241,
+          "lazy_commands": 310180,
+          "optimal_parse": 5602180,
+          "optimal_commands": 265344,
+          "preferred_context": 4628,
+          "recent_distance_scan": 185739,
+          "context_proposals": 34922471,
+          "split_planning": 2879864,
+          "wire": 27106589,
+          "distance_parameters": 2910385,
+          "selection": 67,
+          "other": 58949
+        },
+        "outer_median_ns": 76779310,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 8019,
+            "small_calls": 1596,
+            "fallback_calls": 0,
+            "active_buckets": [
+              12,
+              29,
+              51,
+              136,
+              312,
+              1068
+            ],
+            "tree_lengths_median_ns": 2693256,
+            "tree_lengths_old_median_ns": 2727108,
+            "tree_alphabet_median_ns": 1667187,
+            "tree_alphabet_old_median_ns": 6449597
+          },
+          {
+            "origin": "optimal",
+            "command_count": 6009,
+            "small_calls": 1627,
+            "fallback_calls": 0,
+            "active_buckets": [
+              9,
+              24,
+              49,
+              126,
+              331,
+              1097
+            ],
+            "tree_lengths_median_ns": 2859988,
+            "tree_lengths_old_median_ns": 2935850,
+            "tree_alphabet_median_ns": 1783231,
+            "tree_alphabet_old_median_ns": 6646867
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-osdb-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 1676297,
+          "lazy_commands": 181772,
+          "optimal_parse": 4974428,
+          "optimal_commands": 167363,
+          "preferred_context": 4529,
+          "recent_distance_scan": 105881,
+          "context_proposals": 30266225,
+          "split_planning": 2655884,
+          "wire": 20921785,
+          "distance_parameters": 2149133,
+          "selection": 74,
+          "other": 41062
+        },
+        "outer_median_ns": 63408241,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 4624,
+            "small_calls": 1465,
+            "fallback_calls": 0,
+            "active_buckets": [
+              12,
+              40,
+              41,
+              119,
+              369,
+              896
+            ],
+            "tree_lengths_median_ns": 2130969,
+            "tree_lengths_old_median_ns": 2206699,
+            "tree_alphabet_median_ns": 1462189,
+            "tree_alphabet_old_median_ns": 4951299
+          },
+          {
+            "origin": "optimal",
+            "command_count": 3714,
+            "small_calls": 1475,
+            "fallback_calls": 0,
+            "active_buckets": [
+              11,
+              27,
+              27,
+              113,
+              320,
+              988
+            ],
+            "tree_lengths_median_ns": 2280562,
+            "tree_lengths_old_median_ns": 2345207,
+            "tree_alphabet_median_ns": 1584883,
+            "tree_alphabet_old_median_ns": 5262123
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-reymont-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 3800216,
+          "lazy_commands": 267443,
+          "optimal_parse": 15098141,
+          "optimal_commands": 280630,
+          "preferred_context": 5661,
+          "recent_distance_scan": 171558,
+          "context_proposals": 6743505,
+          "split_planning": 1717038,
+          "wire": 21421438,
+          "distance_parameters": 3112877,
+          "selection": 119,
+          "other": 79871
+        },
+        "outer_median_ns": 52885446,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 6609,
+            "small_calls": 515,
+            "fallback_calls": 0,
+            "active_buckets": [
+              42,
+              69,
+              79,
+              177,
+              190,
+              0
+            ],
+            "tree_lengths_median_ns": 385617,
+            "tree_lengths_old_median_ns": 380492,
+            "tree_alphabet_median_ns": 254048,
+            "tree_alphabet_old_median_ns": 377131
+          },
+          {
+            "origin": "optimal",
+            "command_count": 6519,
+            "small_calls": 566,
+            "fallback_calls": 0,
+            "active_buckets": [
+              38,
+              81,
+              97,
+              193,
+              195,
+              0
+            ],
+            "tree_lengths_median_ns": 425239,
+            "tree_lengths_old_median_ns": 412425,
+            "tree_alphabet_median_ns": 289800,
+            "tree_alphabet_old_median_ns": 407470
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-samba-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 2657228,
+          "lazy_commands": 314132,
+          "optimal_parse": 9356216,
+          "optimal_commands": 301172,
+          "preferred_context": 5281,
+          "recent_distance_scan": 193901,
+          "context_proposals": 9621439,
+          "split_planning": 2118040,
+          "wire": 21801344,
+          "distance_parameters": 3620995,
+          "selection": 154,
+          "other": 90734
+        },
+        "outer_median_ns": 50210224,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 7748,
+            "small_calls": 665,
+            "fallback_calls": 0,
+            "active_buckets": [
+              11,
+              22,
+              51,
+              223,
+              369,
+              0
+            ],
+            "tree_lengths_median_ns": 668088,
+            "tree_lengths_old_median_ns": 656698,
+            "tree_alphabet_median_ns": 416808,
+            "tree_alphabet_old_median_ns": 759317
+          },
+          {
+            "origin": "optimal",
+            "command_count": 6697,
+            "small_calls": 723,
+            "fallback_calls": 0,
+            "active_buckets": [
+              15,
+              20,
+              61,
+              235,
+              407,
+              0
+            ],
+            "tree_lengths_median_ns": 717892,
+            "tree_lengths_old_median_ns": 716742,
+            "tree_alphabet_median_ns": 475631,
+            "tree_alphabet_old_median_ns": 818953
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-sao-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 3395482,
+          "lazy_commands": 239330,
+          "optimal_parse": 4603874,
+          "optimal_commands": 236728,
+          "preferred_context": 36274,
+          "recent_distance_scan": 157623,
+          "context_proposals": 45040534,
+          "split_planning": 1035208,
+          "wire": 27504848,
+          "distance_parameters": 1313584,
+          "selection": 131,
+          "other": 116563
+        },
+        "outer_median_ns": 83641938,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 6337,
+            "small_calls": 1675,
+            "fallback_calls": 0,
+            "active_buckets": [
+              5,
+              22,
+              36,
+              41,
+              84,
+              1492
+            ],
+            "tree_lengths_median_ns": 2930831,
+            "tree_lengths_old_median_ns": 2892197,
+            "tree_alphabet_median_ns": 1718895,
+            "tree_alphabet_old_median_ns": 11365281
+          },
+          {
+            "origin": "optimal",
+            "command_count": 5740,
+            "small_calls": 1654,
+            "fallback_calls": 0,
+            "active_buckets": [
+              4,
+              16,
+              37,
+              31,
+              91,
+              1479
+            ],
+            "tree_lengths_median_ns": 2965170,
+            "tree_lengths_old_median_ns": 2931223,
+            "tree_alphabet_median_ns": 1759234,
+            "tree_alphabet_old_median_ns": 11284848
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-webster-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 2609782,
+          "lazy_commands": 298783,
+          "optimal_parse": 9300341,
+          "optimal_commands": 278777,
+          "preferred_context": 3916,
+          "recent_distance_scan": 185355,
+          "context_proposals": 8977921,
+          "split_planning": 2137472,
+          "wire": 18614649,
+          "distance_parameters": 3449762,
+          "selection": 73,
+          "other": 59031
+        },
+        "outer_median_ns": 46249230,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 7923,
+            "small_calls": 663,
+            "fallback_calls": 0,
+            "active_buckets": [
+              14,
+              23,
+              63,
+              218,
+              359,
+              0
+            ],
+            "tree_lengths_median_ns": 624626,
+            "tree_lengths_old_median_ns": 656576,
+            "tree_alphabet_median_ns": 390241,
+            "tree_alphabet_old_median_ns": 739948
+          },
+          {
+            "origin": "optimal",
+            "command_count": 6663,
+            "small_calls": 674,
+            "fallback_calls": 0,
+            "active_buckets": [
+              20,
+              13,
+              60,
+              234,
+              367,
+              0
+            ],
+            "tree_lengths_median_ns": 649795,
+            "tree_lengths_old_median_ns": 665989,
+            "tree_alphabet_median_ns": 425431,
+            "tree_alphabet_old_median_ns": 753317
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 731561,
+          "lazy_commands": 76252,
+          "optimal_parse": 15040378,
+          "optimal_commands": 70138,
+          "preferred_context": 3359,
+          "recent_distance_scan": 34177,
+          "context_proposals": 6362733,
+          "split_planning": 239211,
+          "wire": 3148596,
+          "distance_parameters": 793374,
+          "selection": 69,
+          "other": 15983
+        },
+        "outer_median_ns": 26520271,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 1334,
+            "small_calls": 541,
+            "fallback_calls": 0,
+            "active_buckets": [
+              28,
+              84,
+              102,
+              194,
+              161,
+              0
+            ],
+            "tree_lengths_median_ns": 366024,
+            "tree_lengths_old_median_ns": 369837,
+            "tree_alphabet_median_ns": 253103,
+            "tree_alphabet_old_median_ns": 342162
+          },
+          {
+            "origin": "optimal",
+            "command_count": 1191,
+            "small_calls": 564,
+            "fallback_calls": 0,
+            "active_buckets": [
+              32,
+              82,
+              127,
+              190,
+              165,
+              0
+            ],
+            "tree_lengths_median_ns": 384207,
+            "tree_lengths_old_median_ns": 394745,
+            "tree_alphabet_median_ns": 262157,
+            "tree_alphabet_old_median_ns": 349990
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-x-ray-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 1830504,
+          "lazy_commands": 381629,
+          "optimal_parse": 2074612,
+          "optimal_commands": 150865,
+          "preferred_context": 33750,
+          "recent_distance_scan": 205962,
+          "context_proposals": 13652947,
+          "split_planning": 2305641,
+          "wire": 36283733,
+          "distance_parameters": 3038866,
+          "selection": 77,
+          "other": 105958
+        },
+        "outer_median_ns": 60389787,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 13237,
+            "small_calls": 635,
+            "fallback_calls": 0,
+            "active_buckets": [
+              3,
+              113,
+              119,
+              38,
+              11,
+              354
+            ],
+            "tree_lengths_median_ns": 832114,
+            "tree_lengths_old_median_ns": 875653,
+            "tree_alphabet_median_ns": 462255,
+            "tree_alphabet_old_median_ns": 2687952
+          },
+          {
+            "origin": "optimal",
+            "command_count": 2952,
+            "small_calls": 685,
+            "fallback_calls": 0,
+            "active_buckets": [
+              6,
+              151,
+              147,
+              36,
+              11,
+              340
+            ],
+            "tree_lengths_median_ns": 877961,
+            "tree_lengths_old_median_ns": 922576,
+            "tree_alphabet_median_ns": 551635,
+            "tree_alphabet_old_median_ns": 2701592
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/brotli-source-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 1617219,
+          "lazy_commands": 176179,
+          "optimal_parse": 10636219,
+          "optimal_commands": 177825,
+          "preferred_context": 3707,
+          "recent_distance_scan": 108283,
+          "context_proposals": 7573095,
+          "split_planning": 1087563,
+          "wire": 13486619,
+          "distance_parameters": 2050431,
+          "selection": 74,
+          "other": 39502
+        },
+        "outer_median_ns": 37113890,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 4332,
+            "small_calls": 618,
+            "fallback_calls": 0,
+            "active_buckets": [
+              21,
+              79,
+              78,
+              140,
+              321,
+              0
+            ],
+            "tree_lengths_median_ns": 510627,
+            "tree_lengths_old_median_ns": 529187,
+            "tree_alphabet_median_ns": 295514,
+            "tree_alphabet_old_median_ns": 584796
+          },
+          {
+            "origin": "optimal",
+            "command_count": 3926,
+            "small_calls": 626,
+            "fallback_calls": 0,
+            "active_buckets": [
+              18,
+              61,
+              78,
+              159,
+              328,
+              0
+            ],
+            "tree_lengths_median_ns": 544479,
+            "tree_lengths_old_median_ns": 575979,
+            "tree_alphabet_median_ns": 331832,
+            "tree_alphabet_old_median_ns": 629856
+          }
+        ]
+      },
+      {
+        "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/validation-schema-json-65536.bin",
+        "stage_medians_ns": {
+          "lazy_parse": 991018,
+          "lazy_commands": 113284,
+          "optimal_parse": 13213527,
+          "optimal_commands": 107960,
+          "preferred_context": 3461,
+          "recent_distance_scan": 65678,
+          "context_proposals": 3190619,
+          "split_planning": 468550,
+          "wire": 6141679,
+          "distance_parameters": 1362020,
+          "selection": 79,
+          "other": 23338
+        },
+        "outer_median_ns": 25754444,
+        "context_details": [
+          {
+            "origin": "lazy",
+            "command_count": 2549,
+            "small_calls": 217,
+            "fallback_calls": 0,
+            "active_buckets": [
+              35,
+              23,
+              69,
+              125,
+              0,
+              0
+            ],
+            "tree_lengths_median_ns": 121087,
+            "tree_lengths_old_median_ns": 118660,
+            "tree_alphabet_median_ns": 91482,
+            "tree_alphabet_old_median_ns": 86147
+          },
+          {
+            "origin": "optimal",
+            "command_count": 2398,
+            "small_calls": 245,
+            "fallback_calls": 0,
+            "active_buckets": [
+              40,
+              26,
+              100,
+              119,
+              0,
+              0
+            ],
+            "tree_lengths_median_ns": 132556,
+            "tree_lengths_old_median_ns": 130639,
+            "tree_alphabet_median_ns": 103129,
+            "tree_alphabet_old_median_ns": 96827
+          }
+        ]
+      }
+    ],
+    "all_old_candidates_and_decisions_equal": true,
+    "actual_tree_and_search_work_unchanged": true,
+    "all_construction_counters_unchanged": true,
+    "runs": 70,
+    "scope": "Instrumented same search/scorer requests, only exact alphabet ordering implementation changes. Nested separate stage medians are nonadditive; profiler clocks cannot prove ordinary speed.",
+    "all_non_time_fields_unchanged": true
+  }
+}

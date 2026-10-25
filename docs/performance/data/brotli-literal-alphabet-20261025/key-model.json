@@ -1,0 +1,7 @@
+{
+  "cases": 1040,
+  "exact_rank_order_equal": true,
+  "key_upper_bound_exclusive": 1099511627776,
+  "unique_keys": true,
+  "scope": "Integer full-frequency key finite model, including u32 high-bit and tie boundaries. Does not replace compiled sorting/caller verification."
+}

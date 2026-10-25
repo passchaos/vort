@@ -1,0 +1,318 @@
+{
+  "valid": true,
+  "rows": [
+    {
+      "case": "small16",
+      "input_sha256": "797c8e4ff68db223cbfa98b1d068cc7e92bb60a250f1861923340c64064f97d5",
+      "reference_median_ns": 3748491,
+      "candidate_median_ns": 4019600,
+      "rounds": [
+        {
+          "reference_ns": 4141130,
+          "candidate_ns": 4041208,
+          "reference_first": true,
+          "mix": 65516382947
+        },
+        {
+          "reference_ns": 3803214,
+          "candidate_ns": 4019600,
+          "reference_first": false,
+          "mix": 65516382947
+        },
+        {
+          "reference_ns": 3742291,
+          "candidate_ns": 3949648,
+          "reference_first": true,
+          "mix": 65516382947
+        },
+        {
+          "reference_ns": 3685067,
+          "candidate_ns": 3931307,
+          "reference_first": false,
+          "mix": 65516382947
+        },
+        {
+          "reference_ns": 3748491,
+          "candidate_ns": 4136408,
+          "reference_first": true,
+          "mix": 65516382947
+        }
+      ],
+      "speedup": 0.9325532391282715
+    },
+    {
+      "case": "threshold64",
+      "input_sha256": "8e8c8aeed4b679152e643614c24d0fb49de2512ddbacda38c43a3f7455eac4fb",
+      "reference_median_ns": 41810163,
+      "candidate_median_ns": 18506217,
+      "rounds": [
+        {
+          "reference_ns": 41530924,
+          "candidate_ns": 18798293,
+          "reference_first": true,
+          "mix": 1062889884461
+        },
+        {
+          "reference_ns": 41810163,
+          "candidate_ns": 18506217,
+          "reference_first": false,
+          "mix": 1062889884461
+        },
+        {
+          "reference_ns": 41800164,
+          "candidate_ns": 18900216,
+          "reference_first": true,
+          "mix": 1062889884461
+        },
+        {
+          "reference_ns": 41837841,
+          "candidate_ns": 18419314,
+          "reference_first": false,
+          "mix": 1062889884461
+        },
+        {
+          "reference_ns": 42315298,
+          "candidate_ns": 18489626,
+          "reference_first": true,
+          "mix": 1062889884461
+        }
+      ],
+      "speedup": 2.259249580830053
+    },
+    {
+      "case": "medium96",
+      "input_sha256": "a8b638b66e36e7fd602c1d78e26cb95392eb0b7422ac060a7da0fc6623c39578",
+      "reference_median_ns": 81453374,
+      "candidate_median_ns": 24081132,
+      "rounds": [
+        {
+          "reference_ns": 81589715,
+          "candidate_ns": 24204592,
+          "reference_first": true,
+          "mix": 3163314115269
+        },
+        {
+          "reference_ns": 81514309,
+          "candidate_ns": 23891802,
+          "reference_first": false,
+          "mix": 3163314115269
+        },
+        {
+          "reference_ns": 81399090,
+          "candidate_ns": 24617378,
+          "reference_first": true,
+          "mix": 3163314115269
+        },
+        {
+          "reference_ns": 81453374,
+          "candidate_ns": 23882182,
+          "reference_first": false,
+          "mix": 3163314115269
+        },
+        {
+          "reference_ns": 80860235,
+          "candidate_ns": 24081132,
+          "reference_first": true,
+          "mix": 3163314115269
+        }
+      ],
+      "speedup": 3.3824561901824217
+    },
+    {
+      "case": "boundary128",
+      "input_sha256": "7b19ad1de6d53b639179004d22697be60164df5499b8709e9d283b754f2166e8",
+      "reference_median_ns": 130965731,
+      "candidate_median_ns": 30231522,
+      "rounds": [
+        {
+          "reference_ns": 132201275,
+          "candidate_ns": 30553092,
+          "reference_first": true,
+          "mix": 7174064401633
+        },
+        {
+          "reference_ns": 132733294,
+          "candidate_ns": 30736614,
+          "reference_first": false,
+          "mix": 7174064401633
+        },
+        {
+          "reference_ns": 130965731,
+          "candidate_ns": 30119795,
+          "reference_first": true,
+          "mix": 7174064401633
+        },
+        {
+          "reference_ns": 129517449,
+          "candidate_ns": 30231522,
+          "reference_first": false,
+          "mix": 7174064401633
+        },
+        {
+          "reference_ns": 129233925,
+          "candidate_ns": 29700620,
+          "reference_first": true,
+          "mix": 7174064401633
+        }
+      ],
+      "speedup": 4.33209188078589
+    },
+    {
+      "case": "dense_mixed",
+      "input_sha256": "d8d0f35876430f938d114f71a5f37eed36a4a50ec7f1445b0f0052d94e8ea55f",
+      "reference_median_ns": 406001281,
+      "candidate_median_ns": 53415417,
+      "rounds": [
+        {
+          "reference_ns": 405539429,
+          "candidate_ns": 54518059,
+          "reference_first": true,
+          "mix": 55339873397876
+        },
+        {
+          "reference_ns": 411784573,
+          "candidate_ns": 53415417,
+          "reference_first": false,
+          "mix": 55339873397876
+        },
+        {
+          "reference_ns": 413078381,
+          "candidate_ns": 53331744,
+          "reference_first": true,
+          "mix": 55339873397876
+        },
+        {
+          "reference_ns": 406001281,
+          "candidate_ns": 53522389,
+          "reference_first": false,
+          "mix": 55339873397876
+        },
+        {
+          "reference_ns": 404390985,
+          "candidate_ns": 53269105,
+          "reference_first": true,
+          "mix": 55339873397876
+        }
+      ],
+      "speedup": 7.600825825248168
+    },
+    {
+      "case": "dense_ties",
+      "input_sha256": "fe12707223d7ad19c121b48374b985ab9466778a4fded71357da28e618611fe2",
+      "reference_median_ns": 23268518,
+      "candidate_median_ns": 18173979,
+      "rounds": [
+        {
+          "reference_ns": 23246776,
+          "candidate_ns": 18145440,
+          "reference_first": true,
+          "mix": 72981459200000
+        },
+        {
+          "reference_ns": 23856523,
+          "candidate_ns": 18547602,
+          "reference_first": false,
+          "mix": 72981459200000
+        },
+        {
+          "reference_ns": 23243706,
+          "candidate_ns": 18516382,
+          "reference_first": true,
+          "mix": 72981459200000
+        },
+        {
+          "reference_ns": 23614426,
+          "candidate_ns": 18173979,
+          "reference_first": false,
+          "mix": 72981459200000
+        },
+        {
+          "reference_ns": 23268518,
+          "candidate_ns": 18122142,
+          "reference_first": true,
+          "mix": 72981459200000
+        }
+      ],
+      "speedup": 1.2803205065880179
+    },
+    {
+      "case": "ascending_weights",
+      "input_sha256": "1b1bf46f7361fb1a83e04af2eb343528850dd1e42106dd3bb07f9b4c0e480cd6",
+      "reference_median_ns": 739149758,
+      "candidate_median_ns": 71357265,
+      "rounds": [
+        {
+          "reference_ns": 738383055,
+          "candidate_ns": 71357265,
+          "reference_first": true,
+          "mix": 37050803200000
+        },
+        {
+          "reference_ns": 740584878,
+          "candidate_ns": 70989994,
+          "reference_first": false,
+          "mix": 37050803200000
+        },
+        {
+          "reference_ns": 739004362,
+          "candidate_ns": 71946353,
+          "reference_first": true,
+          "mix": 37050803200000
+        },
+        {
+          "reference_ns": 740714856,
+          "candidate_ns": 71356457,
+          "reference_first": false,
+          "mix": 37050803200000
+        },
+        {
+          "reference_ns": 739149758,
+          "candidate_ns": 71728777,
+          "reference_first": true,
+          "mix": 37050803200000
+        }
+      ],
+      "speedup": 10.358437336408564
+    },
+    {
+      "case": "sparse_dense_support",
+      "input_sha256": "e7d289dafb22e7577b485a06cae5de19655573ee4a896fd64d5fc984e797fd06",
+      "reference_median_ns": 70348137,
+      "candidate_median_ns": 26280340,
+      "rounds": [
+        {
+          "reference_ns": 70325590,
+          "candidate_ns": 26280340,
+          "reference_first": true,
+          "mix": 6313804165050
+        },
+        {
+          "reference_ns": 70900501,
+          "candidate_ns": 25617961,
+          "reference_first": false,
+          "mix": 6313804165050
+        },
+        {
+          "reference_ns": 70204227,
+          "candidate_ns": 26848429,
+          "reference_first": true,
+          "mix": 6313804165050
+        },
+        {
+          "reference_ns": 70733799,
+          "candidate_ns": 25581257,
+          "reference_first": false,
+          "mix": 6313804165050
+        },
+        {
+          "reference_ns": 70348137,
+          "candidate_ns": 26389413,
+          "reference_first": true,
+          "mix": 6313804165050
+        }
+      ],
+      "speedup": 2.676835117049475
+    }
+  ],
+  "scope": "All8families/32poolslots verified outside timers, sameprocess five alternating rounds complete supported-symbol alphabet collection/rank and checksum calls. Point comparison, not public encoder throughput."
+}

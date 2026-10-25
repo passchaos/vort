@@ -1,0 +1,38 @@
+{
+  "decision": "reject generic PDQ key sort from default implementation; replace experiment with stable frequency-byte radix",
+  "rows": [
+    {
+      "case": "small16",
+      "speedup": 0.8704230583741072
+    },
+    {
+      "case": "threshold64",
+      "speedup": 0.4016555201307927
+    },
+    {
+      "case": "medium96",
+      "speedup": 0.47663579610484047
+    },
+    {
+      "case": "boundary128",
+      "speedup": 0.5271215285807496
+    },
+    {
+      "case": "dense_mixed",
+      "speedup": 0.7892680740032703
+    },
+    {
+      "case": "dense_ties",
+      "speedup": 1.3276980391094726
+    },
+    {
+      "case": "ascending_weights",
+      "speedup": 5.963618747693246
+    },
+    {
+      "case": "sparse_dense_support",
+      "speedup": 0.47955538962401295
+    }
+  ],
+  "reason": "Most tested mixed/random supported collections slower; preserve old/new exact outputs and complete frequency/tie semantics. No public improvement inferred from worst-order control."
+}

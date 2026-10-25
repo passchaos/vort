@@ -1,0 +1,316 @@
+{
+  "profile_path": "/tmp/vort-br-tree-cost-20261025/profile14/samples.json",
+  "profile_sha256": "616bc28a991eb443ed9928fa2d8bb2e354ff1d74ab045b28596f8f690c86cfde",
+  "executable_sha256": "524a62d8c308ab950685aa921eb2714cdf2319d9b83cbbb4bce55343629e98e5",
+  "archived_profile_source_sha_matches_current": {
+    "src/br/encoder/literal_context_split.zig": true,
+    "src/br/encoder/command_plan.zig": true,
+    "src/br/encoder/small_huffman.zig": true,
+    "src/huffman.zig": true
+  },
+  "current_source_sha256": {
+    "src/br/encoder/literal_context_split.zig": "bc8bc8bd60cfe72ba884167cb59ed67e83c217e9046452c7e4db47050abbd4ab",
+    "src/br/encoder/command_plan.zig": "173cf7e6bc7e784fab80201f5cb696b0f870f4843de35e5999179439e6d9d9f9",
+    "src/br/encoder/small_huffman.zig": "b23a30082ccce63b785051b61831ab4a297e09c152db6825bd76eed787c99bf7",
+    "src/huffman.zig": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3"
+  },
+  "rows": [
+    {
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mozilla-65536.bin",
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "outer_median_ns": 63707106,
+      "context_proposals_median_ns": 34748385,
+      "details": [
+        {
+          "origin": "lazy",
+          "command_count": 4317,
+          "literal_count": 6031,
+          "parent_support": 256,
+          "tree_calls": 1593,
+          "tree_active_buckets": [
+            21,
+            81,
+            135,
+            268,
+            292,
+            796
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 215863,
+            "baseline_ns": 14017,
+            "suffix_ns": 5140029,
+            "sparse_ns": 78596,
+            "cluster_ns": 11083654,
+            "cluster_init_ns": 542309,
+            "cluster_prepare_ns": 411181,
+            "cluster_assignment_ns": 3098366,
+            "cluster_finalize_ns": 20153,
+            "cluster_score_ns": 7000586,
+            "tree_alphabet_ns": 4984463,
+            "tree_lengths_ns": 2192731,
+            "tree_weighted_ns": 126179,
+            "tree_prefix_ns": 2034284,
+            "total_ns": 16675659
+          }
+        },
+        {
+          "origin": "optimal",
+          "command_count": 3828,
+          "literal_count": 10155,
+          "parent_support": 256,
+          "tree_calls": 1591,
+          "tree_active_buckets": [
+            8,
+            51,
+            125,
+            236,
+            341,
+            830
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 261385,
+            "baseline_ns": 14258,
+            "suffix_ns": 5309202,
+            "sparse_ns": 83805,
+            "cluster_ns": 12256805,
+            "cluster_init_ns": 552352,
+            "cluster_prepare_ns": 430463,
+            "cluster_assignment_ns": 3517642,
+            "cluster_finalize_ns": 20011,
+            "cluster_score_ns": 7707960,
+            "tree_alphabet_ns": 5291635,
+            "tree_lengths_ns": 2416199,
+            "tree_weighted_ns": 128446,
+            "tree_prefix_ns": 2308178,
+            "total_ns": 18070477
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-ooffice-65536.bin",
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "outer_median_ns": 86347192,
+      "context_proposals_median_ns": 44359872,
+      "details": [
+        {
+          "origin": "lazy",
+          "command_count": 8019,
+          "literal_count": 14568,
+          "parent_support": 256,
+          "tree_calls": 1608,
+          "tree_active_buckets": [
+            12,
+            29,
+            51,
+            136,
+            312,
+            1068
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 367450,
+            "baseline_ns": 14387,
+            "suffix_ns": 5533607,
+            "sparse_ns": 107996,
+            "cluster_ns": 15431264,
+            "cluster_init_ns": 599998,
+            "cluster_prepare_ns": 435525,
+            "cluster_assignment_ns": 5156091,
+            "cluster_finalize_ns": 16563,
+            "cluster_score_ns": 9205003,
+            "tree_alphabet_ns": 6449597,
+            "tree_lengths_ns": 2727108,
+            "tree_weighted_ns": 140462,
+            "tree_prefix_ns": 2390456,
+            "total_ns": 21645315
+          }
+        },
+        {
+          "origin": "optimal",
+          "command_count": 6009,
+          "literal_count": 20566,
+          "parent_support": 256,
+          "tree_calls": 1636,
+          "tree_active_buckets": [
+            9,
+            24,
+            49,
+            126,
+            331,
+            1097
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 417186,
+            "baseline_ns": 14031,
+            "suffix_ns": 5694870,
+            "sparse_ns": 113040,
+            "cluster_ns": 16336710,
+            "cluster_init_ns": 651451,
+            "cluster_prepare_ns": 436167,
+            "cluster_assignment_ns": 5607876,
+            "cluster_finalize_ns": 17774,
+            "cluster_score_ns": 9572800,
+            "tree_alphabet_ns": 6646867,
+            "tree_lengths_ns": 2935850,
+            "tree_weighted_ns": 142066,
+            "tree_prefix_ns": 2569643,
+            "total_ns": 22720556
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-sao-65536.bin",
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "outer_median_ns": 100397869,
+      "context_proposals_median_ns": 63252851,
+      "details": [
+        {
+          "origin": "lazy",
+          "command_count": 6337,
+          "literal_count": 34023,
+          "parent_support": 256,
+          "tree_calls": 1680,
+          "tree_active_buckets": [
+            5,
+            22,
+            36,
+            41,
+            84,
+            1492
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 619213,
+            "baseline_ns": 15097,
+            "suffix_ns": 6135332,
+            "sparse_ns": 165394,
+            "cluster_ns": 24475408,
+            "cluster_init_ns": 821534,
+            "cluster_prepare_ns": 366234,
+            "cluster_assignment_ns": 9540224,
+            "cluster_finalize_ns": 13038,
+            "cluster_score_ns": 13716607,
+            "tree_alphabet_ns": 11365281,
+            "tree_lengths_ns": 2892197,
+            "tree_weighted_ns": 175710,
+            "tree_prefix_ns": 2346595,
+            "total_ns": 31544475
+          }
+        },
+        {
+          "origin": "optimal",
+          "command_count": 5740,
+          "literal_count": 36229,
+          "parent_support": 256,
+          "tree_calls": 1658,
+          "tree_active_buckets": [
+            4,
+            16,
+            37,
+            31,
+            91,
+            1479
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 633826,
+            "baseline_ns": 14641,
+            "suffix_ns": 6271362,
+            "sparse_ns": 164241,
+            "cluster_ns": 24686336,
+            "cluster_init_ns": 818067,
+            "cluster_prepare_ns": 375506,
+            "cluster_assignment_ns": 9749620,
+            "cluster_finalize_ns": 13604,
+            "cluster_score_ns": 13712119,
+            "tree_alphabet_ns": 11284848,
+            "tree_lengths_ns": 2931223,
+            "tree_weighted_ns": 173340,
+            "tree_prefix_ns": 2407247,
+            "total_ns": 31879234
+          }
+        }
+      ]
+    },
+    {
+      "path": "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/brotli-source-65536.bin",
+      "input_sha256": "756844ce2536d939ccf7f698f894a3763530df3c471345f0de90ab8f25e47684",
+      "outer_median_ns": 38266125,
+      "context_proposals_median_ns": 8270697,
+      "details": [
+        {
+          "origin": "lazy",
+          "command_count": 4332,
+          "literal_count": 2127,
+          "parent_support": 88,
+          "tree_calls": 639,
+          "tree_active_buckets": [
+            21,
+            79,
+            78,
+            140,
+            321,
+            0
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 151303,
+            "baseline_ns": 6734,
+            "suffix_ns": 1009542,
+            "sparse_ns": 34272,
+            "cluster_ns": 2655277,
+            "cluster_init_ns": 231841,
+            "cluster_prepare_ns": 93423,
+            "cluster_assignment_ns": 610166,
+            "cluster_finalize_ns": 16565,
+            "cluster_score_ns": 1689955,
+            "tree_alphabet_ns": 584796,
+            "tree_lengths_ns": 529187,
+            "tree_weighted_ns": 29895,
+            "tree_prefix_ns": 470401,
+            "total_ns": 3996699
+          }
+        },
+        {
+          "origin": "optimal",
+          "command_count": 3926,
+          "literal_count": 3636,
+          "parent_support": 88,
+          "tree_calls": 644,
+          "tree_active_buckets": [
+            18,
+            61,
+            78,
+            159,
+            328,
+            0
+          ],
+          "package_merge_calls": 0,
+          "median_ns": {
+            "analysis_ns": 171277,
+            "baseline_ns": 6522,
+            "suffix_ns": 1088293,
+            "sparse_ns": 35184,
+            "cluster_ns": 2832704,
+            "cluster_init_ns": 235794,
+            "cluster_prepare_ns": 95541,
+            "cluster_assignment_ns": 680067,
+            "cluster_finalize_ns": 16512,
+            "cluster_score_ns": 1790896,
+            "tree_alphabet_ns": 629856,
+            "tree_lengths_ns": 575979,
+            "tree_weighted_ns": 30251,
+            "tree_prefix_ns": 532062,
+            "total_ns": 4260117
+          }
+        }
+      ]
+    }
+  ],
+  "no_profile_run_by_this_audit": true
+}
