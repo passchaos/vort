@@ -1,0 +1,8 @@
+{
+  "scope": "terminal original check observation; result/log were not persisted due ENOSPC",
+  "terminal_wrapper_error": "OSError [Errno 28] No space left on device",
+  "original_session_id": 24806,
+  "result_file_bytes": 0,
+  "check_log_bytes": 0,
+  "cause_of_original_build_outcome": "unrecorded; not claimed passing"
+}

@@ -1,0 +1,129 @@
+{
+  "status": "source_ready_functional_gates_passed",
+  "completed_utc": "2026-10-24T20:18:23.716471+00:00",
+  "worktree": "/home/passchaos/project-z/vort-zstd-literal-cost",
+  "declared_base": "da5b8de1",
+  "source_sha256": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/single_cost_cache.zig": "c05b9278a7c918b2a1eaba6567756b702ae77835dbb3f6e7dda0fec87764c667",
+    "src/zstd/literals/single_cost_cache_tests.zig": "20783c072179a367f978ac059c14954a9788af3aaaec062ab255de76c06787a6",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+  },
+  "modified_files": [
+    "src/zstd.zig",
+    "src/zstd/literals/single_cost_cache.zig",
+    "src/zstd/literals/single_cost_cache_tests.zig"
+  ],
+  "readonly_dependency": "src/zstd/literals/cut_histogram.zig",
+  "gates": [
+    {
+      "name": "native_debug",
+      "command": [
+        "taskset",
+        "-c",
+        "2-7,10-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd.zig",
+        "--test-filter",
+        "zstd single literal cost",
+        "-O",
+        "Debug"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+      "exit_code": 0,
+      "tests_passed": 16,
+      "named_functional_tests": 6,
+      "import_tests": 10,
+      "source_sha256": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "c05b9278a7c918b2a1eaba6567756b702ae77835dbb3f6e7dda0fec87764c667",
+        "src/zstd/literals/single_cost_cache_tests.zig": "20783c072179a367f978ac059c14954a9788af3aaaec062ab255de76c06787a6",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "cache_artifact": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/2c91a269be6f1b0e46743b4c6949bf18/test",
+      "artifact_sha256": "bf6c1699d5eda3830e4aa3e569640c04ff1d93b75dbf4c6305f4d3f9c2da4704",
+      "elf_bits": 64,
+      "elf_machine": 62,
+      "evidence_provenance": "actual successful exec/write_stdin outputs; final test cache artifact archived and ELF architecture independently checked; no test protocol interception"
+    },
+    {
+      "name": "native_releasefast",
+      "command": [
+        "taskset",
+        "-c",
+        "2-7,10-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd.zig",
+        "--test-filter",
+        "zstd single literal cost",
+        "-O",
+        "ReleaseFast"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+      "exit_code": 0,
+      "tests_passed": 16,
+      "named_functional_tests": 6,
+      "import_tests": 10,
+      "source_sha256": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "c05b9278a7c918b2a1eaba6567756b702ae77835dbb3f6e7dda0fec87764c667",
+        "src/zstd/literals/single_cost_cache_tests.zig": "20783c072179a367f978ac059c14954a9788af3aaaec062ab255de76c06787a6",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "cache_artifact": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/a13f9bacf0f02615fca4deaabe22b149/test",
+      "artifact_sha256": "7472da6d7f137d5b2878bf3f6b20d9693d48f0a1326193a82866df17608855c7",
+      "elf_bits": 64,
+      "elf_machine": 62,
+      "evidence_provenance": "actual successful exec/write_stdin outputs; final test cache artifact archived and ELF architecture independently checked; no test protocol interception"
+    },
+    {
+      "name": "x86_releasefast",
+      "command": [
+        "taskset",
+        "-c",
+        "2-7,10-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd.zig",
+        "--test-filter",
+        "zstd single literal cost",
+        "-O",
+        "ReleaseFast",
+        "-target",
+        "x86-linux-musl"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+      "exit_code": 0,
+      "tests_passed": 16,
+      "named_functional_tests": 6,
+      "import_tests": 10,
+      "source_sha256": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "c05b9278a7c918b2a1eaba6567756b702ae77835dbb3f6e7dda0fec87764c667",
+        "src/zstd/literals/single_cost_cache_tests.zig": "20783c072179a367f978ac059c14954a9788af3aaaec062ab255de76c06787a6",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "cache_artifact": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/d272a30237e599b6552396207171e3ed/test",
+      "artifact_sha256": "52131f819a49d9fa43155d5853b95e45c4ebd2cba250ec52273b1d71c81de78b",
+      "elf_bits": 32,
+      "elf_machine": 3,
+      "evidence_provenance": "actual successful exec/write_stdin outputs; final test cache artifact archived and ELF architecture independently checked; no test protocol interception"
+    }
+  ],
+  "scope": "only unindexed multi paired-hashed costs with4096<block.len<=131072; no indexed/exact/standalone-single route changes",
+  "state_bound_tested_bytes": 8192,
+  "heap_change": "none; wire and allocation request/freed bytes equal old reference",
+  "tree_cache_added": false,
+  "work_oracle": {
+    "queries": 129,
+    "initial_scanned_bytes": 49152,
+    "next_128_queries_scanned_bytes": 256,
+    "reference_mismatches": 0,
+    "stream_products_bound_per_query": 1024
+  },
+  "public_xml_and_14_baseline_wire_gate": "parent follow-up after frozen source/private probe build",
+  "performance_claim": null,
+  "git_mutations": false
+}

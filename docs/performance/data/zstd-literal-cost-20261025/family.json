@@ -1,0 +1,141 @@
+{
+  "affinity_list": "2-7,10-15",
+  "baseline_artifact_verified": true,
+  "baseline_oracle": "/tmp/vort-zstd-literal-cost-20261025/family/baseline-oracle-1053.json",
+  "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+  "each_group_actual_runs": 1,
+  "end_utc": "2026-10-24T20:44:20.916549+00:00",
+  "evidence": "Original runner fd1 indexed TestMetadata/TestResults, fd2 by-index errors, actual compiler file_system_inputs protocol, actual ELF/object SHA256, source before/after snapshots and recomputed Zig Cache SipHash128(1,3) content digests. No additional metadata execution or duplicate tests.",
+  "full_actual_count_per_target": 1085,
+  "functional_validation_only": true,
+  "git_modified_by_agent": false,
+  "groups": [
+    {
+      "actual_test_count": 1085,
+      "additional_other_named_functions": [
+        "io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input",
+        "io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries",
+        "bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment",
+        "bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries",
+        "bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width",
+        "bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged",
+        "bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors",
+        "bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain",
+        "bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation",
+        "br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries",
+        "br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle"
+      ],
+      "additional_unnamed_functions": [
+        "zstd.literals.cut_histogram.test_0",
+        "bitstream.test_0"
+      ],
+      "affinity_cpus": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/5d55a740d9cff3975b370fcd48821f15/vort-zstd-tests",
+        "sha256": "4ff45c4ca96afc13d5edaa3a9b172913e29d71e1608263bd552be751e3a8dd3f"
+      },
+      "compiled_input_changes": {},
+      "compiled_repo_input_count": 174,
+      "content_bound_count": 174,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1085,
+        "pending": 0,
+        "skip": 0
+      },
+      "duplicate_functions": [],
+      "group": "native",
+      "head_at_start": "c9d552e94029e8494533b502629f7e64b8ac240a",
+      "new_actual_functions": 32,
+      "old_baseline_count": 1053,
+      "old_names_missing": [],
+      "report": "/tmp/vort-zstd-literal-cost-20261025/family/native/result.json",
+      "required_cost_cache_cut_named_count": 19,
+      "root_source_sha256": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a"
+    },
+    {
+      "actual_test_count": 1085,
+      "additional_other_named_functions": [
+        "io.bit_count.test.bit addresses cross the 32-bit bit boundary without allocating input",
+        "io.bit_count.test.bit address rounding and narrowing check geometry at integer boundaries",
+        "bitstream.wide_reader_tests.test.wide bit readers agree on real input reads peeks staged advance and alignment",
+        "bitstream.wide_reader_tests.test.wide bit readers widths one through sixty three agree across chunk and word boundaries",
+        "bitstream.wide_reader_tests.test.wide bit reader partial tails mask synthetic high bits in every padded width",
+        "bitstream.wide_reader_tests.test.wide bit readers failed reads leave output reservoir and cursors unchanged",
+        "bitstream.wide_reader_tests.test.wide bit reader copies rewind prefetched reservoirs and chunk cursors",
+        "bitstream.wide_reader_tests.test.wide bit reader public counters widen while physical cursor types and native layouts remain",
+        "bitstream.wide_reader_tests.test.wide bit reader helper addresses above two to the thirty two need no input allocation",
+        "br.fast_bit_reader.test.Brotli fast bit reader absolute cursors cross narrow bit boundaries",
+        "br.fast_bit_reader.test.Brotli fast bit reader padded peeks match independent logical bit oracle"
+      ],
+      "additional_unnamed_functions": [
+        "zstd.literals.cut_histogram.test_0",
+        "bitstream.test_0"
+      ],
+      "affinity_cpus": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/22da657e74535885b11e83101b504ea9/vort-zstd-tests",
+        "sha256": "309d730e1fee22719323e9404cebf66fde72bb0c5b87704cffa47ee399bcb14b"
+      },
+      "compiled_input_changes": {},
+      "compiled_repo_input_count": 174,
+      "content_bound_count": 174,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1085,
+        "pending": 0,
+        "skip": 0
+      },
+      "duplicate_functions": [],
+      "group": "x86",
+      "head_at_start": "c9d552e94029e8494533b502629f7e64b8ac240a",
+      "new_actual_functions": 32,
+      "old_baseline_count": 1053,
+      "old_names_missing": [],
+      "report": "/tmp/vort-zstd-literal-cost-20261025/family/x86/result.json",
+      "required_cost_cache_cut_named_count": 19,
+      "root_source_sha256": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a"
+    }
+  ],
+  "job_limit_per_group": 2,
+  "live_exec_sessions": [],
+  "new_functions_since_old_baseline": 32,
+  "performance_claims": false,
+  "repository_files_modified_by_agent": false,
+  "required_cost_cache_cut_named_count": 19,
+  "status": "passed",
+  "strict_original_1053_counter_included_in_both": true,
+  "total_failed": 0,
+  "total_passed": 2170,
+  "total_skipped": 0
+}

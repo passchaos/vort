@@ -1,0 +1,130 @@
+{
+  "rows": [
+    {
+      "label": "silesia-dickens",
+      "baseline_ms": 4186.588221,
+      "candidate_ms": 1197.358272,
+      "speedup": 3.4965208984667204,
+      "candidate_over_reference": 0.0002733926909388738,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-mozilla",
+      "baseline_ms": 74.856186,
+      "candidate_ms": 52.114823,
+      "speedup": 1.4363703393946095,
+      "candidate_over_reference": 0.004324316711197504,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-mr",
+      "baseline_ms": 54127.506423,
+      "candidate_ms": 19935.658265,
+      "speedup": 2.7151100657673717,
+      "candidate_over_reference": 1.3235630170449253e-05,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-nci",
+      "baseline_ms": 36.147937,
+      "candidate_ms": 35.686665,
+      "speedup": 1.0129256124101258,
+      "candidate_over_reference": 0.002399075396930478,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-ooffice",
+      "baseline_ms": 17.230429,
+      "candidate_ms": 16.412825,
+      "speedup": 1.0498149465433282,
+      "candidate_over_reference": 0.016275260352803373,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-osdb",
+      "baseline_ms": 11.928607,
+      "candidate_ms": 11.45293,
+      "speedup": 1.0415332146446368,
+      "candidate_over_reference": 0.01937364499739368,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-reymont",
+      "baseline_ms": 7163.660421,
+      "candidate_ms": 2462.88584,
+      "speedup": 2.908644933782233,
+      "candidate_over_reference": 0.00010688599354649747,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-samba",
+      "baseline_ms": 18.67502,
+      "candidate_ms": 17.451499,
+      "speedup": 1.0701097940068072,
+      "candidate_over_reference": 0.015063806266728147,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-sao",
+      "baseline_ms": 16.913834,
+      "candidate_ms": 14.978141,
+      "speedup": 1.129234529171544,
+      "candidate_over_reference": 0.02336064268589807,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-webster",
+      "baseline_ms": 12960.503396,
+      "candidate_ms": 3843.220444,
+      "speedup": 3.372302886303027,
+      "candidate_over_reference": 7.288444784303401e-05,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-xml",
+      "baseline_ms": 63448.242921,
+      "candidate_ms": 12017.306946,
+      "speedup": 5.2797388970845045,
+      "candidate_over_reference": 7.724526003798057e-06,
+      "wire_unchanged": true
+    },
+    {
+      "label": "silesia-x-ray",
+      "baseline_ms": 9.639968,
+      "candidate_ms": 9.352467,
+      "speedup": 1.0307406591223471,
+      "candidate_over_reference": 0.03143555598752714,
+      "wire_unchanged": true
+    },
+    {
+      "label": "brotli-source",
+      "baseline_ms": 15729.36506,
+      "candidate_ms": 5180.813869,
+      "speedup": 3.0360799398948646,
+      "candidate_over_reference": 3.361691896366409e-05,
+      "wire_unchanged": true
+    },
+    {
+      "label": "validation-schema-json",
+      "baseline_ms": 35.620177,
+      "candidate_ms": 29.318906,
+      "speedup": 1.2149217641340369,
+      "candidate_over_reference": 0.003798197654441813,
+      "wire_unchanged": true
+    }
+  ],
+  "speedup_geomean": 1.7945879801745175,
+  "all_wires_unchanged": true,
+  "speedups": 14,
+  "worst_speedup": {
+    "label": "silesia-nci",
+    "baseline_ms": 36.147937,
+    "candidate_ms": 35.686665,
+    "speedup": 1.0129256124101258,
+    "candidate_over_reference": 0.002399075396930478,
+    "wire_unchanged": true
+  },
+  "xml_matched_private_old_ms": 63972.941402,
+  "xml_candidate_ms": 12017.306946,
+  "xml_matched_speedup": 5.3234007993191526
+}

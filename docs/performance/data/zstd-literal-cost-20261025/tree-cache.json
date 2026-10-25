@@ -1,0 +1,154 @@
+{
+  "status": "passed",
+  "completed_utc": "2026-10-24T20:34:09.037180+00:00",
+  "changed_files": [
+    "src/zstd/literals/single_cost_cache.zig",
+    "src/zstd/literals/single_cost_cache_tests.zig"
+  ],
+  "source_before": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+    "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec"
+  },
+  "source_after": {
+    "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+    "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+    "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec"
+  },
+  "source_delta": [],
+  "tests": {
+    "native_debug": {
+      "actual_passed": 19,
+      "named": 9,
+      "imports": 10,
+      "evidence": "successful earlier exec result; no extra protocol interception"
+    },
+    "native_releasefast": {
+      "command": [
+        "taskset",
+        "-c",
+        "2-7,10-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd.zig",
+        "--test-filter",
+        "zstd single literal cost",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-zstd-literal-cost-20261025/tree-cache/native/test"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+      "exit_code": 0,
+      "started_utc": "2026-10-24T20:30:14.750406+00:00",
+      "finished_utc": "2026-10-24T20:30:36.483363+00:00",
+      "source_before": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+        "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "source_after": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+        "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "source_stable": true,
+      "test_count": 19,
+      "named_functional_tests": 9,
+      "import_tests": 10,
+      "all_passed": true,
+      "log_sha256": "79de63fc72ca7274a322c7879ad6659c61eb271bead401654239559c35749d93",
+      "exe_sha256": "b88b3182fe8985c6b7dbeeeb84a3718891e0a71ea4f4ec2eee5612c0f5af94ad",
+      "elf_bits": 64
+    },
+    "x86_releasefast": {
+      "command": [
+        "taskset",
+        "-c",
+        "2-7,10-15",
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd.zig",
+        "--test-filter",
+        "zstd single literal cost",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-zstd-literal-cost-20261025/tree-cache/x86/test",
+        "-target",
+        "x86-linux-musl"
+      ],
+      "cwd": "/home/passchaos/project-z/vort-zstd-literal-cost",
+      "exit_code": 0,
+      "started_utc": "2026-10-24T20:30:14.822544+00:00",
+      "finished_utc": "2026-10-24T20:30:33.085831+00:00",
+      "source_before": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+        "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "source_after": {
+        "src/zstd.zig": "a81d710af4b9644d0ddcfa189f065f59e0ed157641262e98d6a025ffc94dae2a",
+        "src/zstd/literals/single_cost_cache.zig": "648128d3ced0dbb4cf10d897e662635d6d7d201bf13f457f6b78a2e303245e76",
+        "src/zstd/literals/single_cost_cache_tests.zig": "9f1e1f9878a346e550ade23649e8ae9558a5e1f25aa4167dc8f019d2bd5c7652",
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386"
+      },
+      "source_stable": true,
+      "test_count": 19,
+      "named_functional_tests": 9,
+      "import_tests": 10,
+      "all_passed": true,
+      "log_sha256": "79de63fc72ca7274a322c7879ad6659c61eb271bead401654239559c35749d93",
+      "exe_sha256": "ef4f7fe65febc310e98c3e4effba4fdef57f52e78c9080112b34329f79fa8a90",
+      "elf_bits": 32
+    }
+  },
+  "tree_key": [
+    "max_symbol:u8",
+    "max_bit_count:u8",
+    "bit_counts:[256]u8 in byte-symbol order"
+  ],
+  "cache_semantics": "last successful optional tree length; explicit field comparison; successful null cached; errors never published; prior entry retained on error; no heap",
+  "work_oracle": {
+    "same_tree_different_frequencies_queries": 129,
+    "actual_tree_serializations": 1,
+    "cache_hits": 128,
+    "stream_symbol_products": 1548,
+    "reference_mismatches": 0,
+    "state_bound_bytes": 8192
+  },
+  "xml_whole_api": {
+    "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+    "old_wires": {
+      "vort_bytes": 5078,
+      "reference_bytes": 6099,
+      "vort_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+      "reference_sha256": "6a3778c6c1f8eb76779401da99625c17dc551eddcb141c99de3a523eb88ef50a"
+    },
+    "new_wires": {
+      "vort_bytes": 5078,
+      "reference_bytes": 6099,
+      "vort_sha256": "795448b31e4039831d40f1ee39d322865f8d32ef9f673d99d73aca17d4827c92",
+      "reference_sha256": "6a3778c6c1f8eb76779401da99625c17dc551eddcb141c99de3a523eb88ef50a"
+    },
+    "byte_exact_with_initial_and_previous": true,
+    "new_one_round_ns": 11753228007,
+    "previous_one_round_ns": 12964771744,
+    "initial_five_round_median_ns": 63448242921,
+    "new_rounds": 1,
+    "wall_seconds": 23.563466233899817,
+    "strict_gate": "passed",
+    "stable_speedup_claim": false
+  },
+  "executable": "/home/passchaos/project-z/vort-zstd-literal-cost/.zig-cache/o/c14e137aaa8c96d9515329c3199bfecb/vort-zstd-encode-bench",
+  "executable_sha256": "7374a329a6b46d4a0a7d3300908f6ce88ce49e6105dfde77a7d5cbfda4e76b24",
+  "no_source_changes_during_gates": true,
+  "no_full_fourteen_or_family_run": true,
+  "no_git_mutations": true,
+  "tree_key_audit_sha256": "bbd9ddb630349915cf43119a9edaf880ff378c23337880612205b6c8e4abfca0"
+}

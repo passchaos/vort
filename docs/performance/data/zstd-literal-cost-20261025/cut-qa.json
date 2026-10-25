@@ -1,0 +1,124 @@
+{
+  "owned_files": [
+    "src/zstd/literals/cut_histogram.zig",
+    "src/zstd/literals/cut_histogram_tests.zig"
+  ],
+  "source_sha256": {
+    "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+    "src/zstd/literals/cut_histogram_tests.zig": "b4632409693fe01626a46cd89a338a617baba0cf3ddde4eea499dfd673e76024"
+  },
+  "source_stable": true,
+  "named_test_count": 10,
+  "results": {
+    "native_debug": {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd/literals/cut_histogram.zig",
+        "-O",
+        "Debug",
+        "-femit-bin=/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/native_debug"
+      ],
+      "exit": 0,
+      "named_passes": 10,
+      "source_stable": true,
+      "source_sha256": {
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+        "src/zstd/literals/cut_histogram_tests.zig": "b4632409693fe01626a46cd89a338a617baba0cf3ddde4eea499dfd673e76024"
+      },
+      "passed_names": [
+        "Zstd cut histogram fixed state initializes without scanning and rejects oversized blocks",
+        "Zstd cut histogram exhaustive tiny cut pairs and reverse transitions match concatenation oracle",
+        "Zstd cut histogram randomized forward backward and empty transitions match independent quarters",
+        "Zstd cut histogram stream transitions around 1023 and 1024 retain exact seam symbols",
+        "Zstd cut histogram unequal quarter tails and moving seams assign each literal once",
+        "Zstd cut histogram 65535 65536 and 65537 byte inputs retain full u32 frequencies",
+        "Zstd cut histogram 128 KiB repeated symbols and new input binding preserve ownership",
+        "Zstd cut histogram identical cuts scan zero and adjacent moving cuts visit only differences",
+        "Zstd cut histogram invalid cuts and counter overflow leave the complete state unchanged",
+        "Zstd cut histogram physical symmetric differences equal its work counter for tiny transitions"
+      ]
+    },
+    "native_rf": {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd/literals/cut_histogram.zig",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/native_rf"
+      ],
+      "exit": 0,
+      "named_passes": 10,
+      "source_stable": true,
+      "source_sha256": {
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+        "src/zstd/literals/cut_histogram_tests.zig": "b4632409693fe01626a46cd89a338a617baba0cf3ddde4eea499dfd673e76024"
+      },
+      "passed_names": [
+        "Zstd cut histogram fixed state initializes without scanning and rejects oversized blocks",
+        "Zstd cut histogram exhaustive tiny cut pairs and reverse transitions match concatenation oracle",
+        "Zstd cut histogram randomized forward backward and empty transitions match independent quarters",
+        "Zstd cut histogram stream transitions around 1023 and 1024 retain exact seam symbols",
+        "Zstd cut histogram unequal quarter tails and moving seams assign each literal once",
+        "Zstd cut histogram 65535 65536 and 65537 byte inputs retain full u32 frequencies",
+        "Zstd cut histogram 128 KiB repeated symbols and new input binding preserve ownership",
+        "Zstd cut histogram identical cuts scan zero and adjacent moving cuts visit only differences",
+        "Zstd cut histogram invalid cuts and counter overflow leave the complete state unchanged",
+        "Zstd cut histogram physical symmetric differences equal its work counter for tiny transitions"
+      ]
+    },
+    "x86_rf": {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "test",
+        "src/zstd/literals/cut_histogram.zig",
+        "-O",
+        "ReleaseFast",
+        "-femit-bin=/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/x86_rf",
+        "-target",
+        "x86-linux"
+      ],
+      "exit": 0,
+      "named_passes": 10,
+      "source_stable": true,
+      "source_sha256": {
+        "src/zstd/literals/cut_histogram.zig": "c5b3b1eb9d8718db51d00329efe0f1e68448bdd8d6c2451e22c1b9f4fde4c386",
+        "src/zstd/literals/cut_histogram_tests.zig": "b4632409693fe01626a46cd89a338a617baba0cf3ddde4eea499dfd673e76024"
+      },
+      "passed_names": [
+        "Zstd cut histogram fixed state initializes without scanning and rejects oversized blocks",
+        "Zstd cut histogram exhaustive tiny cut pairs and reverse transitions match concatenation oracle",
+        "Zstd cut histogram randomized forward backward and empty transitions match independent quarters",
+        "Zstd cut histogram stream transitions around 1023 and 1024 retain exact seam symbols",
+        "Zstd cut histogram unequal quarter tails and moving seams assign each literal once",
+        "Zstd cut histogram 65535 65536 and 65537 byte inputs retain full u32 frequencies",
+        "Zstd cut histogram 128 KiB repeated symbols and new input binding preserve ownership",
+        "Zstd cut histogram identical cuts scan zero and adjacent moving cuts visit only differences",
+        "Zstd cut histogram invalid cuts and counter overflow leave the complete state unchanged",
+        "Zstd cut histogram physical symmetric differences equal its work counter for tiny transitions"
+      ]
+    }
+  },
+  "work_counter_evidence": {
+    "initial_literal_bytes": 49152,
+    "initial_scanned_bytes": 49152,
+    "adjacent_update_count": 128,
+    "adjacent_scanned_bytes": 256,
+    "identical_cut_added_work": 0
+  },
+  "state_bytes": {
+    "native": 4208,
+    "x86": 4192
+  },
+  "binary_sha256": {
+    "native_debug": "044f4c739d30f1506f2b08abf6a5e1f07a7f7e20130ad304e837641e867e8f33",
+    "native_rf": "fc0839638ecc984ab07cb1cfa08616041e24b192e8c27f6cc978611c24ceddf9",
+    "x86_rf": "1fda85f16de44af594f5660d89719fea44c647af411a9768a45a47516ac5313d"
+  },
+  "binary_file": [
+    "/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/native_debug: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, with debug_info, not stripped",
+    "/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/native_rf:    ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, with debug_info, not stripped",
+    "/tmp/vort-zstd-cut-histogram-qa-20261025-t3vlkrmj/x86_rf:       ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, with debug_info, not stripped"
+  ]
+}

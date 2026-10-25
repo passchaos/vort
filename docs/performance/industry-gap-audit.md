@@ -59,6 +59,15 @@ Vort executable is not a speedup over a competing library.
 | [Current Brotli q8 encode first screen, 2026-10-25](current-codec-encode-x86-20261025.md) | 9/14 smaller outputs, total bytes 2.818% lower; all fourteen throughput rows lose, geometric median-throughput ratio 0.028210x | `d4297483`, i7-10700K, ReleaseFast, CPU8, libbrotli 1.2.0-dev `558fc647` experimental Release build, fourteen frozen 64KiB prefixes, five alternating rounds in one process. Default-policy comparison uses Vort window16/reference lgwin22; no memory or all-tier claim. |
 | [Current Zstd level3 encode first screen, 2026-10-25](current-codec-encode-x86-20261025.md) | 13/14 smaller outputs, total bytes 5.424% lower; all throughput rows lose. XML median is 63448.243ms versus 0.093473ms reference | Same revision/CPU/build/frozen input set, libzstd 1.6.0 `01b7154f`, five alternating rounds in one process. The full public level policy is measured; resolved primary settings are not every internal candidate. Repetition and internal profiling are needed before stable rankings or a hotspot claim. |
 
+The subsequent [exact literal-cost increment](zstd-exact-literal-cost.md)
+retains all fourteen frame hashes while reducing the measured median on every
+row in one follow-up screen. XML improves from 63972.941ms to 12017.307ms in a
+matched private-module comparison (5.3234x); the fourteen-row version comparison
+has a 1.7946x geometric speedup. Small changes are not assigned statistical
+significance, and the slowest rows remain seconds long. Independent XML
+requested-heap event sequences and peak bytes are unchanged. Current throughput
+leadership, broader repeated runs and competitor memory parity remain open.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE
