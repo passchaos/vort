@@ -5894,6 +5894,22 @@ pub fn build(b: *std.Build) void {
     const zstd_multi_duplicate_profile_step = b.step("run-zstd-multi-duplicate-profile", "Count unindexed Zstd multi-duplicate work for 64...128 KiB file inputs");
     zstd_multi_duplicate_profile_step.dependOn(&run_zstd_multi_duplicate_profile.step);
 
+    const single_sequence_cost_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-single-sequence-cost-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/single_cost_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort_zstd", .module = zstd_encode_bench_mod },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_single_sequence_cost_bench = b.addRunArtifact(single_sequence_cost_bench_exe);
+    if (b.args) |args| run_single_sequence_cost_bench.addArgs(args);
+    b.step("run-zstd-single-sequence-cost-bench", "Compare exact general and scalar single-sequence costs").dependOn(&run_single_sequence_cost_bench.step);
+
     const weighted_bound_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-weighted-bound-bench",
         .root_module = b.createModule(.{
@@ -7116,6 +7132,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_multi_duplicate_profile_exe.step);
     check_step.dependOn(&weighted_bound_bench_exe.step);
+    check_step.dependOn(&single_sequence_cost_bench_exe.step);
     check_step.dependOn(&zstd_large_sequence_probe_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
