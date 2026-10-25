@@ -60,5 +60,18 @@
     "Size queries validate structure/entropy/size, not content checksum.",
     "WithOptions Into/Append stage decoded output with an explicit allocator; they do not clone the compressed frame.",
     "Default standard APIs and raw/known-size fast paths retain their prior behavior."
-  ]
+  ],
+  "post_rebase": {
+    "magicless_core_root": {
+      "passed": 130,
+      "total": 130
+    },
+    "zip_regression": {
+      "passed": 44,
+      "total": 44
+    },
+    "source_files_checked": 1912,
+    "evidence_files_checked_before_handoff": 52,
+    "source_unchanged": true
+  }
 }

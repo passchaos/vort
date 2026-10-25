@@ -1,0 +1,11 @@
+Build Summary: 7/7 steps succeeded; 44/44 tests passed
+test-zip-deflate64-stream success
++- run test vort-zip-deflate64-stream-tests 44 pass (44 total) 597ms MaxRSS:11M
+   +- compile test vort-zip-deflate64-stream-tests Debug native cached 7ms MaxRSS:41M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:39M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:39M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
