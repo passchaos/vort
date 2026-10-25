@@ -1,0 +1,14 @@
+{
+  "recorded_utc": "2026-10-25T12:51:34.945537+00:00",
+  "files": {
+    "src/deflate64/encoder.zig": "9e996ca92cd21f45864eff4c19f5fbea5746231b5c14db3d4519d7dae2da6cf1",
+    "src/deflate64/one_shot.zig": "919d7c9d333b68a5409a451a886ebac2d92babd7efc28630fd475d9c84e36738",
+    "src/deflate64/one_shot_tests.zig": "bf6544863a263e7a2c021e8c6d96de503542add05021d5b8350e485eb4d359c4",
+    "src/zip/deflate64_one_shot_writer_tests.zig": "70ea6f7541bae08c41ab9a818c1e0d144f09b326f93fc53c0c3dc094193e4f78",
+    "tools/deflate64_stream_probe.zig": "df2fb9125f1d3575a0795ac6814da06b92274b190d2eb87503f702067c010aa0",
+    "tools/deflate64_stream_diff.py": "af5d02bd2b0c9e5c54274829a06f3d92095478aad70fb12316ae0c29bcdac793"
+  },
+  "zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+  "dependency_head": "5d3f8a1ff19e72a5d50a0c1f5296722d756e938c",
+  "scope": "Final selected source/toolchain identities; full before/after run snapshots retain their own earlier bindings."
+}

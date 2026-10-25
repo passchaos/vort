@@ -1,0 +1,4 @@
+{
+  "all_seven_default_probe_wires_equal_to_final_reference_wires": true,
+  "scope": "Seven initial candidate default-option outputs match final one-shot reference outputs byte identity; does not retroactively claim final allocator measurements or identical options in external probe."
+}

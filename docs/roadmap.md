@@ -23434,3 +23434,20 @@ reuse, so production keeps the simpler independently owned plans.
   distinguishes requested payload from RSS and makes no throughput leadership
   claim. Dynamic Huffman, preset dictionaries, one-shot full-match range and
   broad compression-quality/speed/memory comparisons remain future work.
+
+- 2026-10-25: one-shot raw/ZIP Deflate64 now shares the incremental core's full
+  65536-distance/65538-length matching over borrowed128KiB chunks and prior64KiB
+  history, without complete input/token/history staging. Wholefixed cost uses
+  privateu128 arithmetic and only strictly smaller winners narrow to usize;
+  losing oversized fixed candidates do not prevent globalstored fallback or
+  violate the originalencodedBound. Nice length widens to u32 while preserving
+  old128default/0..2 stopping behavior, stored bytes and Into/Append alias/error
+  atomicity. Finalthree-target codec99/99, fullZIP1992/1992, checks176/176 and
+  CLI7/7 pass; native/x86 public-probe48 artifacts64 members each are independently
+  decoded by Info-ZIP with exact maximum tokens and300000-byte/three-block
+  fixtures. [Functional evidence](performance/deflate64-one-shot-functional-baseline.md)
+  retains initial/final pricing epochs, numerical geometry and old/new default
+  encoded sizes; repeated65539 output improves576->6bytes, while small-input
+  fixed-index requested memory rises and is recorded without memory-lead claims.
+  Dynamic tree/dictionary support, tiny-input resource optimization and broad
+  ratio/speed/memory best-in-industry validation remain open.

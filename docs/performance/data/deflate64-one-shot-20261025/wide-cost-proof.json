@@ -1,0 +1,22 @@
+{
+  "rows": [
+    {
+      "usize_bits": 32,
+      "input_max": 4294967295,
+      "chunk_max": 32768,
+      "fixed_bit_upper": 38655033335,
+      "u128_fits": true,
+      "bound_below_2_to_68": true
+    },
+    {
+      "usize_bits": 64,
+      "input_max": 18446744073709551615,
+      "chunk_max": 140737488355328,
+      "fixed_bit_upper": 166022104038269517815,
+      "u128_fits": true,
+      "bound_below_2_to_68": true
+    }
+  ],
+  "reason": "Every emitted literal <=9bits, every match token <=9*consumed length,10header/EOB bits/chunk. This proves u128 wholefixed pricing covers every usize32/64 input geometry without frequency clamping or approximate candidate costs.",
+  "scope": "Numeric proof only; no physical huge input allocation or encoding."
+}

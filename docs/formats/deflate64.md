@@ -30,14 +30,58 @@ ZIP method 9 extraction uses `decodeDeflate64Into` directly and therefore does
 not require temporary allocation beyond the caller's ZIP output buffer. CRC-32
 and declared uncompressed size are still verified by the ZIP container layer.
 
-The one-shot encoder uses a bounded greedy matcher and chooses the smaller of
-a fixed-Huffman stream and stored blocks. It emits distance codes 30 and 31 for
-matches beyond the ordinary 32 KiB Deflate window. Because Deflate64 assigns a
-16-bit extension to length symbol 285, the encoder represents a 258-byte match
-with symbol 284 instead of emitting ordinary Deflate's incompatible code 285.
+## One-shot encoding
+
+The one-shot encoder uses the incremental encoder's bounded matcher and fixed
+block primitives, with distances through 65,536 bytes and matches through
+65,538 bytes. Length symbol 285 carries Deflate64's 16-bit extension; length
+258 still uses symbol 284 and extra value 31. The encoder borrows input in
+128 KiB chunks and each chunk's preceding 65,536 bytes of history. It retains
+neither a complete input copy nor a complete token plan.
+
+It first measures a complete fixed-Huffman candidate with checked private
+`u128` bit accounting and final-byte padding applied once. Candidate byte cost
+stays wide during comparison; only a strict winner converts to `usize` for
+allocation. A losing fixed candidate can therefore exceed the target's physical
+size range without rejecting a representable stored result. Only a candidate strictly
+smaller than the original whole-input stored representation is emitted into an
+exact output allocation. Ties and larger fixed candidates use the established
+global stored-block encoder, preserving `deflate64EncodedBound` without adding
+per-chunk stored overhead. Match-index workspace is allocated and reused for
+planning and emission; the returned complete output still belongs to the caller.
+
+`Deflate64EncodeOptions.nice_length` is now `u32`, with its default remaining
+128. Values 0...2 preserve stopping after the first eligible match; values above
+65,538 return `InvalidBlockPlan` before allocation. Zero `max_chain` disables
+matching, while fixed literal blocks may still beat stored output; callers
+wanting explicit no-compression output should use the stored APIs.
 `encodeDeflate64StoredAlloc`, `encodeDeflate64StoredAppend`, and
 `encodeDeflate64StoredInto` provide an explicit no-compression path;
 `deflate64EncodedBound` covers both modes.
+
+`encodeDeflate64Into` and `encodeDeflate64Append` finish encoding before writing
+or growing caller output. Too-small output, allocation failure and overlapping
+input/output retain the established atomicity rules. Adaptive one-shot bytes
+may change with the broader matcher and block construction; stored APIs keep
+their established bytes. Incremental strategies, options and input limits are
+unchanged by this one-shot reuse.
+
+The [one-shot functional baseline](../performance/deflate64-one-shot-functional-baseline.md)
+records final native Debug, native ReleaseFast and x86 codec contracts at
+99/99, the complete ZIP suite at 1992/1992, build checks at 176/176 and CLI help
+at 7/7 on stable source after the wide-cost correction. Native and x86 external
+campaigns each verify 48 artifacts, 64 member plaintexts and 90 recorded
+commands. Their complete input/wire/progress manifests match across targets and
+the initial candidate; the private cost widening does not alter those outputs.
+
+At the same default settings, repeated 65,539-byte input shrinks from 576 to
+6 encoded bytes, and a 64 KiB random prefix plus its duplicate shrinks from
+131,087 to 69,098. This does not establish a broad memory win: the separately
+recorded total allocator requests for Tiny16 rise from 131,379 to 393,234 bytes,
+and Pattern12079 rises from 205,181 to 393,269 bytes. These are cumulative
+requests from the size/allocation probe, not peak memory or RSS, and were not
+retraced on the final cost-only revision. Final external wires match that probe.
+No competitor throughput or all-corpus compression-quality lead is claimed.
 
 ZIP writing accepts `.method = .deflate64`, records version-needed 2.1 (or 4.5
 for ZIP64), and uses the same encoder. The differential suite generates method
@@ -47,9 +91,6 @@ intended to exercise references beyond the ordinary 32 KiB Deflate window:
 ```sh
 zig build run-zip-diff
 ```
-
-The one-shot encoder still limits matches to 258 bytes and distances to 65,535.
-The incremental compressed encoder below covers the full Deflate64 match range.
 
 ## Incremental compressed encoding
 

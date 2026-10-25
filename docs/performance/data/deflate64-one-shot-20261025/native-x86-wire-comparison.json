@@ -1,0 +1,6 @@
+{
+  "full_manifest_equal": true,
+  "artifacts_per_target": 48,
+  "members_per_target": 64,
+  "scope": "Final native/x86 actual encoder inputs/wires/progress identical; metadata reports exact outputs while native/x86 executable identity remains distinct."
+}

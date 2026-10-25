@@ -1,0 +1,83 @@
+{
+  "rows": [
+    {
+      "input_len": 0,
+      "global_stored_bytes": 5,
+      "fixed_literal_upper_bytes": 2,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 1,
+      "global_stored_bytes": 6,
+      "fixed_literal_upper_bytes": 3,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 258,
+      "global_stored_bytes": 263,
+      "fixed_literal_upper_bytes": 292,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 65535,
+      "global_stored_bytes": 65540,
+      "fixed_literal_upper_bytes": 73729,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 65536,
+      "global_stored_bytes": 65546,
+      "fixed_literal_upper_bytes": 73730,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 65538,
+      "global_stored_bytes": 65548,
+      "fixed_literal_upper_bytes": 73732,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 131070,
+      "global_stored_bytes": 131080,
+      "fixed_literal_upper_bytes": 147455,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 131072,
+      "global_stored_bytes": 131087,
+      "fixed_literal_upper_bytes": 147458,
+      "chunk_count": 1
+    },
+    {
+      "input_len": 131076,
+      "global_stored_bytes": 131091,
+      "fixed_literal_upper_bytes": 147463,
+      "chunk_count": 2
+    },
+    {
+      "input_len": 262144,
+      "global_stored_bytes": 262169,
+      "fixed_literal_upper_bytes": 294915,
+      "chunk_count": 2
+    },
+    {
+      "input_len": 1000000000,
+      "global_stored_bytes": 1000076300,
+      "fixed_literal_upper_bytes": 1125009538,
+      "chunk_count": 7630
+    },
+    {
+      "input_len": 4294967295,
+      "global_stored_bytes": 4295294980,
+      "fixed_literal_upper_bytes": 4831879167,
+      "chunk_count": 32768
+    },
+    {
+      "input_len": 18446744073709551615,
+      "global_stored_bytes": 18448151470068269060,
+      "fixed_literal_upper_bytes": 20752763004783689727,
+      "chunk_count": 140737488355328
+    }
+  ],
+  "scope": "Unbounded integer cost geometry only; not physical allocation/encoding of these sizes. Wholefixed choice must be checked before narrowing/allocation and retained only if below original globalstored bound."
+}

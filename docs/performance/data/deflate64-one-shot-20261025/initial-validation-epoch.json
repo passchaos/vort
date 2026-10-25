@@ -1,0 +1,8 @@
+{
+  "time_utc": "2026-10-25T12:34:29.939341+00:00",
+  "source_sha256": {
+    "src/deflate64/encoder.zig": "15a48ab6ae0a5241aab75ccb4dfe0eea979d98fd5f876dc6a29470ed1ce27be2",
+    "src/deflate64/one_shot.zig": "b2ca96fc79867fe1b9a0eeab9ed43af24b407332786833917d67a6c4e2abff1e"
+  },
+  "scope": "Initial candidate99-test/fullZIP/globalcheck/reference runs prior to private u128 winner-only-size fix. Results remain separate from final corrected pricing epoch."
+}

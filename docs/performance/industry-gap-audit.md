@@ -34,8 +34,7 @@ closes ZIP method 9's stored-only incremental encoding gap. Its public raw
 128 KiB planning blocks, 65,536-byte history and matches through 65,538 bytes.
 Explicit stored mode disables matching; total input and pending-output limits
 remain caller controls. Failed calls preserve actual committed progress through
-ZIP encryption accounting before the writer becomes poisoned. The existing
-one-shot encoder retains its 258-byte match and 65,535-byte distance boundaries.
+ZIP encryption accounting before the writer becomes poisoned.
 Dynamic-Huffman Deflate64 encoding, preset dictionaries and broad current
 quality/platform/ratio/speed/memory comparisons remain open. Core contracts
 pass 183/183 in native Debug, native ReleaseFast and x86, including 4 MiB across
@@ -50,6 +49,34 @@ old-default assumption without changing production code. The final build check
 passes 176/176 on the source snapshot after that test fix. These results
 do not establish complete interoperability, measured peak-memory leadership or
 competitor throughput parity.
+
+The subsequent [Deflate64 one-shot reuse](../formats/deflate64.md) closes the
+former 258-byte match and 65,535-byte distance boundaries for allocating,
+caller-buffer and append encoding. It borrows 128 KiB input chunks and preceding
+64 KiB history, reusing the streaming matcher/block primitives through distance
+65,536 and length 65,538 without complete-input or token staging. Private checked
+u128 whole-candidate sizing and strict admission against the original global
+stored representation preserve the established encoded bound. Only a winning
+candidate narrows to physical usize allocation size; an oversized losing fixed
+candidate cannot prevent a representable stored result. `nice_length` widens to
+u32 with default 128 and preserves the 0...2 first-match stop behavior. Output
+atomicity and stored-only APIs remain intact, while adaptive encoded bytes may
+change. Incremental policy is unchanged; dynamic-Huffman encoding, preset
+dictionaries and broader competitor quality/platform/ratio/speed/memory claims
+remain open. The [one-shot baseline](deflate64-one-shot-functional-baseline.md)
+records final codec contracts at 99/99 on native Debug, native ReleaseFast and
+x86, complete ZIP tests at 1992/1992, build checks at 176/176 and CLI help at
+7/7 on stable final source. Native/x86 external campaigns each verify
+48 artifacts, 64 member plaintexts and 90 commands; full input/wire/progress
+manifests agree across targets and with the pre-widening candidate. The
+preceding streaming milestone's 183-test aggregate is a different import/test
+scope, not this increment's count. Same-default encoded sizes improve from
+576 to 6 bytes on repeated 65,539-byte input and from 131,087 to 69,098 on a
+random 64 KiB prefix plus its duplicate. Tiny16/Pattern12079 total allocation
+requests instead rise from 131,379/205,181 to 393,234/393,269 bytes. These
+archived cumulative requests are not a final-revision retrace, peak or RSS
+measurement; smaller wires do not establish broad memory or performance
+leadership.
 
 The former LZMA/XZ complete plaintext staging gap is now closed in
 caller-buffer decoding and size queries, while preserving caller output on

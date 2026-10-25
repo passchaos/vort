@@ -1,0 +1,22 @@
+{
+  "time_utc": "2026-10-25T12:35:02.180987+00:00",
+  "reason": "Use independent compilation CPUs for existing full check while final wide-cost correction is pending; no throughput claim.",
+  "results": [
+    {
+      "pid": 655385,
+      "exit_code": 0
+    },
+    {
+      "pid": 655388,
+      "exit_code": 0
+    },
+    {
+      "pid": 656539,
+      "exit_code": 0
+    },
+    {
+      "pid": 657294,
+      "exit_code": 0
+    }
+  ]
+}

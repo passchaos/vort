@@ -1,0 +1,5 @@
+{
+  "initial_manifest_equal_to_final": true,
+  "artifacts": 48,
+  "scope": "Finalu128 pricing changes preserve all initial actual output/input/progress manifest fields. Initial and final executable/source identities remain separate."
+}

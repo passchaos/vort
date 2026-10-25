@@ -1,0 +1,121 @@
+{
+  "rows": [
+    {
+      "case": "tiny",
+      "input_bytes": 16,
+      "old_bytes": 18,
+      "new_bytes": 18,
+      "old_allocation_requests": 5,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 131379,
+      "new_total_requested_bytes": 393234,
+      "new_live_after_encode": 18
+    },
+    {
+      "case": "binary",
+      "input_bytes": 16387,
+      "old_bytes": 16392,
+      "new_bytes": 16392,
+      "old_allocation_requests": 13,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 411649,
+      "new_total_requested_bytes": 409608,
+      "new_live_after_encode": 16392
+    },
+    {
+      "case": "runs",
+      "input_bytes": 70003,
+      "old_bytes": 614,
+      "new_bytes": 10,
+      "old_allocation_requests": 7,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 438364,
+      "new_total_requested_bytes": 393226,
+      "new_live_after_encode": 10
+    },
+    {
+      "case": "empty",
+      "input_bytes": 0,
+      "old_bytes": 2,
+      "new_bytes": 2,
+      "old_allocation_requests": 3,
+      "new_allocation_requests": 1,
+      "old_total_requested_bytes": 131203,
+      "new_total_requested_bytes": 2,
+      "new_live_after_encode": 2
+    },
+    {
+      "case": "pattern",
+      "input_bytes": 12079,
+      "old_bytes": 201,
+      "new_bytes": 53,
+      "old_allocation_requests": 7,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 205181,
+      "new_total_requested_bytes": 393269,
+      "new_live_after_encode": 53
+    },
+    {
+      "case": "long_distance",
+      "input_bytes": 131072,
+      "old_bytes": 131087,
+      "new_bytes": 69098,
+      "old_allocation_requests": 14,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 1984031,
+      "new_total_requested_bytes": 462314,
+      "new_live_after_encode": 69098
+    },
+    {
+      "case": "long_length",
+      "input_bytes": 65539,
+      "old_bytes": 576,
+      "new_bytes": 6,
+      "old_allocation_requests": 7,
+      "new_allocation_requests": 3,
+      "old_total_requested_bytes": 420406,
+      "new_total_requested_bytes": 393222,
+      "new_live_after_encode": 6
+    }
+  ],
+  "runs": [
+    {
+      "label": "old",
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-deflate64-one-shot-20261025/old-allocation-probe",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/tiny.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/binary.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/runs.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/empty.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/pattern.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_distance.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_length.input"
+      ],
+      "exit_code": 0,
+      "executable_sha256": "96e292dc27d481379261006726601f6d454ebca24aa557038630883b1c7f5a2f"
+    },
+    {
+      "label": "new",
+      "command": [
+        "taskset",
+        "-c",
+        "8",
+        "/tmp/vort-deflate64-one-shot-20261025/new-allocation-probe",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/tiny.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/binary.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/runs.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/empty.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/pattern.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_distance.input",
+        "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_length.input"
+      ],
+      "exit_code": 0,
+      "executable_sha256": "783f09bf872ccdf8239071a2cc06eb2b5cf5569fbc4f9167525b5454c212393f"
+    }
+  ],
+  "created_utc": "2026-10-25T12:32:49.935662+00:00",
+  "scope": "Same old/new default options128/chain128, total requested allocator bytes and count; not simultaneous peak, retained RSS, timing or competitor ranking. New initial wide-pricing implementation will be corrected; emit decisions for these inputs unchanged."
+}

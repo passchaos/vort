@@ -1,0 +1,78 @@
+{
+  "files": {
+    "src/deflate64/encoder.zig": "9e996ca92cd21f45864eff4c19f5fbea5746231b5c14db3d4519d7dae2da6cf1",
+    "src/deflate64/one_shot.zig": "919d7c9d333b68a5409a451a886ebac2d92babd7efc28630fd475d9c84e36738",
+    "src/deflate64/one_shot_tests.zig": "bf6544863a263e7a2c021e8c6d96de503542add05021d5b8350e485eb4d359c4",
+    "src/zip.zig": "1d529748e9fac98846dd2142071beca9a672c93982c0aceb589db7305f6c7132",
+    "src/zip/deflate64_one_shot_writer_tests.zig": "70ea6f7541bae08c41ab9a818c1e0d144f09b326f93fc53c0c3dc094193e4f78",
+    "tools/deflate64_stream_probe.zig": "df2fb9125f1d3575a0795ac6814da06b92274b190d2eb87503f702067c010aa0",
+    "tools/deflate64_stream_diff.py": "af5d02bd2b0c9e5c54274829a06f3d92095478aad70fb12316ae0c29bcdac793",
+    "build.zig": "028dbb1a01497a21d4f05438898c305d22114988b9bf2568dfbdb4567559af99"
+  },
+  "runs": [
+    {
+      "group": "final-codec-debug",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [
+        99
+      ],
+      "build_summary": []
+    },
+    {
+      "group": "final-codec-x86",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [
+        99
+      ],
+      "build_summary": []
+    },
+    {
+      "group": "final-codec-releasefast",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [
+        99
+      ],
+      "build_summary": []
+    },
+    {
+      "group": "final-independent-diff",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded"
+      ]
+    },
+    {
+      "group": "final-independent-x86-diff",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded"
+      ]
+    },
+    {
+      "group": "final-zip-complete",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [],
+      "build_summary": [
+        "7/7 steps succeeded; 1992/1992 tests passed"
+      ]
+    },
+    {
+      "group": "final-check",
+      "exit_code": 0,
+      "source_stable": true,
+      "passed_test_counts": [],
+      "build_summary": [
+        "176/176 steps succeeded"
+      ]
+    }
+  ],
+  "scope": "Current finalsrc/tool/build SHA matches each successful final execution before/after; later docs do not alter coding source. Reference files/metadata retain distinct target identities."
+}

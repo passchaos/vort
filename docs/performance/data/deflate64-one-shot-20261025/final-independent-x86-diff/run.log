@@ -1,0 +1,12 @@
+{"report": "/tmp/vort-deflate64-one-shot-20261025/final-reference-x86-fixtures/differential.json", "artifacts_verified": 48, "reference": "/usr/bin/unzip"}
+Build Summary: 7/7 steps succeeded
+run-deflate64-stream-diff success
++- run python3 success 8s
+   +- compile exe vort-deflate64-stream-probe ReleaseFast x86-linux-gnu success 52s MaxRSS:963M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast x86-linux-gnu cached 5ms MaxRSS:40M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast x86-linux-gnu cached 6ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast x86-linux-gnu (reused)
+      +- compile obj vort-zstd-huffman-x2-releasefast ReleaseFast x86-linux-gnu (reused)
+

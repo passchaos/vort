@@ -1,0 +1,79 @@
+[
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/tiny.input",
+    "input_bytes": 16,
+    "input_sha256": "57ccd8b26e2cde8922e4d95414afed768c5715aa4d10f48cd482f3589411d8db",
+    "encoded_bytes": 18,
+    "allocation_requests": 5,
+    "total_requested_bytes": 131379,
+    "freed_before_output_release": 131361,
+    "wire_sha256": "67156065ba536d8289d46e2741ef9c2bf1b75d891539949426eea75823eb3d9f",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/binary.input",
+    "input_bytes": 16387,
+    "input_sha256": "642b711df2896a9f4fb1b37a677b7323a3c85cb155c08d8b60afa6dfd55f42a4",
+    "encoded_bytes": 16392,
+    "allocation_requests": 13,
+    "total_requested_bytes": 411649,
+    "freed_before_output_release": 395257,
+    "wire_sha256": "fe1dfa53ccb659320ef279d9303217fc85eb8dbf8e309092f768a6a9892088c6",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/runs.input",
+    "input_bytes": 70003,
+    "input_sha256": "401e70c191375b6b55df9a6b403a58c794b7a4761bdc2ef5d1c79273cfd4a496",
+    "encoded_bytes": 614,
+    "allocation_requests": 7,
+    "total_requested_bytes": 438364,
+    "freed_before_output_release": 437750,
+    "wire_sha256": "e56ed7e25ed82850d55b722d2a842a0aa3ffd8d51958131d14a150878549bb54",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/empty.input",
+    "input_bytes": 0,
+    "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "encoded_bytes": 2,
+    "allocation_requests": 3,
+    "total_requested_bytes": 131203,
+    "freed_before_output_release": 131201,
+    "wire_sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/pattern.input",
+    "input_bytes": 12079,
+    "input_sha256": "ef6e55b69f3bfe4ce61d6eabfdab59af5ee228364cdd8ef84944ef249fa5e75c",
+    "encoded_bytes": 201,
+    "allocation_requests": 7,
+    "total_requested_bytes": 205181,
+    "freed_before_output_release": 204980,
+    "wire_sha256": "d3ad4546d76d759d2fa3b1badbb660081aea63ac1a74b237ee4b7663ccb54166",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_distance.input",
+    "input_bytes": 131072,
+    "input_sha256": "5180e38b0c72f0a2c322b150385a2529b224be456b025851bc4867cbb8119402",
+    "encoded_bytes": 131087,
+    "allocation_requests": 14,
+    "total_requested_bytes": 1984031,
+    "freed_before_output_release": 1852944,
+    "wire_sha256": "82b101e083a1ac5b5e87872528d9f9d2676d1ef33076fcc6cad6558058ec2b60",
+    "round_trip": true
+  },
+  {
+    "path": "/tmp/vort-deflate64-stream-20261025/reference-fixtures/long_length.input",
+    "input_bytes": 65539,
+    "input_sha256": "1342ae5e830645ad0d79c18c7fd6cd56a2af77245129982225e438ada52ecc8c",
+    "encoded_bytes": 576,
+    "allocation_requests": 7,
+    "total_requested_bytes": 420406,
+    "freed_before_output_release": 419830,
+    "wire_sha256": "81a9d235f2ab080a1d01f4d421917f99a3c0462331f5de150efc1fda9d207f45",
+    "round_trip": true
+  }
+]

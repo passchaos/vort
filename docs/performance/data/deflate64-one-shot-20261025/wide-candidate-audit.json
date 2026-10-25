@@ -1,0 +1,5 @@
+{
+  "time_utc": "2026-10-25T12:32:02.094274+00:00",
+  "finding": "Initial planned fixed byte length narrows to usize before comparing global stored size; may reject an oversized losing candidate on narrow targets despite representable stored fallback.",
+  "action": "Keep complete candidate bit/byte pricing wide; compare before winner-only usize conversion. Full output bound contract must survive a losing candidate larger than usize."
+}

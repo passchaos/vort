@@ -1,0 +1,30 @@
+{
+  "time_utc": "2026-10-25T12:44:21.320290+00:00",
+  "reason": "Use idle compilation CPUs for final complete check; no speed benchmark is being run.",
+  "results": [
+    {
+      "pid": 662591,
+      "exit_code": 0
+    },
+    {
+      "pid": 662595,
+      "exit_code": 0
+    },
+    {
+      "pid": 662624,
+      "exit_code": 0
+    },
+    {
+      "pid": 662627,
+      "exit_code": 0
+    },
+    {
+      "pid": 662756,
+      "exit_code": 0
+    },
+    {
+      "pid": 662757,
+      "exit_code": 0
+    }
+  ]
+}

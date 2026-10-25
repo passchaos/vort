@@ -49,10 +49,12 @@ Reduce factors, Implode, raw-Deflate, Deflate64, DCL Implode, Bzip2, LZMA,
 legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
-same standard Zstandard frame payload. The one-shot Deflate64 writer retains
-its greedy fixed-Huffman-or-stored baseline, with matches through 258 bytes and
-distances through 65,535 bytes; it records version-needed 2.1. Incremental
-Deflate64 uses the broader matching state described below. LZMA entries carry the standard four-byte
+same standard Zstandard frame payload. The one-shot Deflate64 writer plans
+fixed-Huffman blocks with matches through 65,538 bytes and distances through
+65,536 bytes; it records version-needed 2.1. Its complete fixed candidate must
+be smaller than the original global stored representation, retaining the
+established encoded bound. It shares matching and emission with the incremental
+state described below. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
 comments, an archive comment, DOS modification timestamps, creator system,
@@ -510,7 +512,7 @@ forces fixed blocks; `.stored` explicitly disables matching. `max_chain` and
 `nice_length` bound match search, while `max_input_len` and
 `max_pending_output_len` limit total accepted input and one emission's retained
 complete output bytes. These limits do not measure total requested heap or RSS.
-The standalone stored incremental and one-shot APIs retain their existing
+The explicit stored incremental and stored one-shot APIs retain their existing
 behavior. Dynamic-Huffman encoding and preset dictionaries remain outside this
 new incremental encoder's scope.
 `ppmd_options` selects order 2...16, 1...256 MiB ZIP model memory, restart or
