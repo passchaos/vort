@@ -6,7 +6,7 @@ out=base/'post-rebase';out.mkdir(exist_ok=True)
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 def snapshot():
  paths=list((root/'src').rglob('*'))+list((root/'tools').rglob('*'))+[root/'build.zig',root/'build.zig.zon']
- return {str(p.relative_to(root)):sha(p) for p in paths if p.is_file()}
+ return {str(p.relative_to(root)):sha(p) for p in paths if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"}
 before=snapshot()
 command=['taskset','-c','2-7','/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig','test','src/br.zig',str(base/'record-releasefast.o'),'--test-filter','q8 quality profile','-O','ReleaseFast']
 started=datetime.datetime.now(datetime.timezone.utc).isoformat()

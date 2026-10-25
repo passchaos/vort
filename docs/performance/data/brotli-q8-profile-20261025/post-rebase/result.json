@@ -1,7 +1,7 @@
 {
-  "head": "b8a4c86dbf5a53506f40db65d1b14ba4b24d656f",
-  "started_utc": "2026-10-25T09:05:14.298389+00:00",
-  "completed_utc": "2026-10-25T09:05:14.776301+00:00",
+  "head": "f4e18d5c228d68a0d95e14fbc743601e3e423fae",
+  "started_utc": "2026-10-25T09:06:01.669874+00:00",
+  "completed_utc": "2026-10-25T09:06:02.150595+00:00",
   "test_command": [
     "taskset",
     "-c",
@@ -1768,7 +1768,6 @@
     "tools/br/stored_memory_ledger.zig": "307398b22a681aa5befdf40bf933c0d930ed2ce9a06052c46d28a2fec0c30826",
     "tools/br/general_window_cli_gate.py": "b094f647ddc466252d2eb482a5249ebfeedd18132c95b8c485c2421626248f6c",
     "tools/br/compressed_header_profile_gate.py": "1868153ffccfa2381f4be6d946397bd581a1a996911009aa222bba66981d95f7",
-    "tools/br/__pycache__/quality_profile_gate.cpython-310.pyc": "a44a7c2470350c55697c8157f63a8aa73489ec333aa6082b042556287cf60be9",
     "tools/wim/diff.py": "b8ca5341493febdbe5f07acd1810c8fdefd7d490e6f85ed09c0fc84923732320",
     "tools/wim/writer_probe.zig": "5b985a734efc95dc1482a155f5af0847128622b8b6fac4b1a43b8fae8bb6a2b1",
     "tools/wdf/diff.py": "4d0fc3f466a62e416b25f58de07ffc7652885c2b7779b018e9b0272a5975d03c",
@@ -3634,7 +3633,6 @@
     "tools/br/stored_memory_ledger.zig": "307398b22a681aa5befdf40bf933c0d930ed2ce9a06052c46d28a2fec0c30826",
     "tools/br/general_window_cli_gate.py": "b094f647ddc466252d2eb482a5249ebfeedd18132c95b8c485c2421626248f6c",
     "tools/br/compressed_header_profile_gate.py": "1868153ffccfa2381f4be6d946397bd581a1a996911009aa222bba66981d95f7",
-    "tools/br/__pycache__/quality_profile_gate.cpython-310.pyc": "a44a7c2470350c55697c8157f63a8aa73489ec333aa6082b042556287cf60be9",
     "tools/wim/diff.py": "b8ca5341493febdbe5f07acd1810c8fdefd7d490e6f85ed09c0fc84923732320",
     "tools/wim/writer_probe.zig": "5b985a734efc95dc1482a155f5af0847128622b8b6fac4b1a43b8fae8bb6a2b1",
     "tools/wdf/diff.py": "4d0fc3f466a62e416b25f58de07ffc7652885c2b7779b018e9b0272a5975d03c",
