@@ -7,7 +7,7 @@ out.mkdir(parents=True,exist_ok=True)
 names=['profile-executable.json','public-executable.json','input-manifest.json','analysis.json','br-tool-source-bindings.json',
        'profile-review.md','profile-elf.md','profile-elf.json','final-evidence-review.md',
        'next-context-profile-plan.md','tool-build-smoke.json','tool-smoke-gate.json',
-       'tool-paths-smoke.json','tool-file-smoke.json','run_profile.py','run_public.py','analyze_profile.py','run_command.py','archive.py']
+       'tool-paths-smoke.json','tool-file-smoke.json','run_profile.py','run_public.py','analyze_profile.py','run_command.py','run_handoff.py','archive.py']
 for name in names:
  p=base/name
  if p.is_file():shutil.copy2(p,out/name)

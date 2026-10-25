@@ -141,3 +141,10 @@ The [evidence package](data/brotli-q8-profile-20261025/artifact-manifest.json)
 retains frozen input/output identities, ordinary and instrumented raw rounds,
 exclusive timing/event validation, budget/ownership tests, earlier failures,
 ELF/source reviews and final checks.
+
+After pulling with rebase, the linked q8 contract filter passes 25/25 again
+and all five file alias/report smoke cases pass again. A full src/tools/build
+before/after hash snapshot covers these handoff checks. Earlier timing-run
+manifests cover core source and executable identity with supplemental Br-tool
+bindings; the final full snapshot is not retroactively described as having
+existed during those runs. No source changes occur between timing and handoff.

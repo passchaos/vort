@@ -2,7 +2,7 @@
 
 - 源码：`/home/passchaos/project-z/vort-brotli-q8-profile`
 - 当前功能提交：`212f1431 feat(brotli): profile the native q8 candidate pipeline`、`8279c31a tools(brotli): record and validate q8 candidate-stage reports`
-- 复核时间：2026-10-25 17:05（Asia/Shanghai）
+- 复核时间：2026-10-25 17:04:29（Asia/Shanghai）
 - 范围：既有rawprofile/publicsamples、gate/results、freeze源码hash、alias测试产物和真实赢家事件；独立重算perround equations/median/fraction/GM。未编译、执行test/encoder/benchmark、计时或修改源码/Git；唯一写入为本报告。
 
 ## 接受结论与限制
@@ -23,7 +23,7 @@
 
 profile14 08:57:30..08:57:41 UTC，14input×5round共70，在一process中normal/profile交替；source_stable=true、exit0、102compiler观察/withprocess0。newpublic14 08:58:34..08:58:48 UTC、oldbaseline14 08:34:51..08:35:06 UTC，各版本一process、14input×5个vort/reference交替round，exit0/source_stable、withprocess0；newreferences_stable=true。早期tool-build Mozilla单轮smoke存在并行编译，已在profile-review单独限定，不能把它作为这次完整受控窗口数据或与它比较性能。
 
-当前工具输出alias修复源码SHA=`a94eaf4d9ebddcf5d692a8f5c9d002c1980b79f2b847522be84a9b5c02793b9f`。工具源码调用encode_samples.requireDistinctOutputs在读取/编码/写JSON前拒绝同路径、规范化/symlink/hardlink别名。profile14的source snapshot只收集src *.zig，未单独保存tools/br的hash；因此“source_stable”不自动等于工具所有transitivefiles freeze，工具执行身份以实读exehash和alias执行产物绑定，不能假称result中列出了工具sha。
+当前工具输出alias修复源码SHA=`a94eaf4d9ebddcf5d692a8f5c9d002c1980b79f2b847522be84a9b5c02793b9f`。工具源码调用encode_samples.requireDistinctOutputs在读取/编码/写JSON前拒绝同路径、规范化/symlink/hardlink别名。profile14的source snapshot只收集src *.zig，未单独保存tools/br的hash；因此“source_stable”不自动等于工具所有transitivefiles freeze，工具执行身份以实读exehash和alias执行产物绑定。随后补充br-tool-source-bindings.json显式固定tools/br源码与两个exe身份，本审计逐文件核对该sources全部hash与当前相同；它是额外after绑定，不是当时计时执行前的完整manifest，不能改写原result为完整toolsbefore/after核验。
 
 ## 全部70run exclusive独立核算
 
@@ -72,7 +72,7 @@ references为本地libbrotli1.2.0 enc/dec/common，filehash：encoder20155a6e...
 
 完整Brotlifamily：1420/1421 tests passed，1skipped，exit0/source_stable。最终final-check：173/173 steps succeeded，exit0/source_stable，sourcehash仍同冻结核心。不能把1skip改写成1421全部运行通过。
 
-工具outputalias执行记录已从父归档的 `docs/performance/data/brotli-q8-profile-20261025/tool-file-smoke.json`只读取得：五case包括same/spelling/symlink/hardlink均拒绝且inputpreserved，separate_output通过并inputpreserved；exeSHA与上述最终profiletool相同。现有Pythonquality_profile_gate_smoke源码定义6个malformed/valid gate tests，父代理报告6个通过；本审计没有找到独立六测试runlog并未重跑，不把静态6cases当成自己执行的验证。actualprofile14 gate70runs已独立读取和方程核算。
+工具outputalias执行记录已从 `/tmp/vort-brotli-q8-profile-20261025/tool-file-smoke.json`只读取得（与父docs归档一致）：五case包括same/spelling/symlink/hardlink均拒绝且inputpreserved，separate_output通过并inputpreserved；exeSHA与上述最终profiletool相同。Pythonquality_profile_gate_smoke实际result.json为exit0/source_stable，run.log记录“Ran 6 tests...OK”；本审计已读取该执行证据，没有重跑。actualprofile14 gate70runs也已独立读取和方程核算。
 
 工具source aliaspreflight保原文件读写合同，gate只独立核input/exe、eventtopology/math；producerwireequal/roundtripassert是输出正确性证据的一部分，不能把gate读到bool等价成它自行编码解码。
 
@@ -93,3 +93,10 @@ references为本地libbrotli1.2.0 enc/dec/common，filehash：encoder20155a6e...
 - `public14/gate-result.json`: `5594597ed7c54c1d2f29f7ddc028c71bc3b0c11926f7a48d73af093402cce012`
 - `complete-family/result.json`: `15660b6882c3ccbdba15c18908e660ca2334e2d200926916c81ab885c2c707c2`
 - `final-check/result.json`: `125cee39ce70b125eb87eb408647b3b92eff4537c532e02b09086fbb0f49f7eb`
+
+
+补充身份范围：2026-10-25 17:04:29 Asia/Shanghai，五casealias与六Pythongate实际结果已读，Brtools补充manifest逐文件hash相符。未来复验可在执行前记录src+alltools完整manifest并在后比较；它不会追溯消除本次旧snapshot遗漏tools/br的范围短板，不需要据此重跑既有timing。本报告不提供伪造的计时前source身份。
+
+- `br-tool-source-bindings.json`: `594b24523fbc93650817ddfcea3d44d80c532a4c908c81d1fae5f68a7c7273f2`
+- `tool-file-smoke.json`: `905fe1cd985fee14b199310b913cacdfb5aeaf69e46c164586a08a6f630a826f`
+- `python-gates/result.json`: `6fa7fe9182d1748eb3ba7d56ba9b0cc446f189cb0cc0317ad9787a24d3bc5a54`
