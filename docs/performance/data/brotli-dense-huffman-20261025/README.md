@@ -42,3 +42,7 @@ clocks. Requested competitor file identity is not loader dependency closure.
 Local stack reservations/red-zone accesses are not full call-chain memory/RSS.
 No all-quality, platform, streaming, competitor-memory or industry-best claim.
 No binary, object or corpus contents are checked in.
+
+Raw compiler/disassembler text may include trailing spaces and final blank
+lines. Evidence files are retained byte-for-byte; source/document whitespace
+checks exclude these generated artifacts. Their hashes verify original text.

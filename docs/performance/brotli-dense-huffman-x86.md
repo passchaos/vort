@@ -165,6 +165,9 @@ competitor memory leadership.
 The [evidence package](data/brotli-dense-huffman-20261025/artifact-manifest.json)
 retains raw rounds, old/current source identities,
 independent tests, unsuccessful attempts, corrected assertions, dispatch and
-ELF reviews, public/profile comparisons and final handoff validation. The next
+ELF reviews, public/profile comparisons and final handoff validation. After
+pulling with rebase, combined ReleaseFast dense/context/q8 contracts pass
+78/78 again and all five file-alias/report cases pass. Full src/tools/build
+source hashes remain unchanged during those handoff checks. The next
 step is to examine remaining context/entropy coding cost on the current
 ordinary API, while extending quality, streaming, platform and memory coverage.
