@@ -354,6 +354,24 @@ pub fn build(b: *std.Build) void {
     });
     const zip_zstd_stream_step = b.step("test-zip-zstd-stream", "Run ZIP Zstd length-pledge and dictionary streaming compatibility");
     zip_zstd_stream_step.dependOn(&b.addRunArtifact(zip_zstd_stream_tests).step);
+    const zip_deflate64_stream_tests = b.addTest(.{
+        .name = "vort-zip-deflate64-stream-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/zip.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
+        }),
+        .filters = &.{"ZIP Deflate64 stream"},
+    });
+    zip_deflate64_stream_tests.root_module.addObject(br_record_optimal_obj);
+    zip_deflate64_stream_tests.root_module.addObject(zstd_huffman_x2_obj);
+    b.step("test-zip-deflate64-stream", "Run ZIP compressed Deflate64 streaming contracts").dependOn(&b.addRunArtifact(zip_deflate64_stream_tests).step);
+    const zip_codec_tests = b.addTest(.{
+        .name = "vort-zip-codec-tests",
+        .root_module = zip_deflate64_stream_tests.root_module,
+    });
+    b.step("test-zip-codecs", "Run the complete ZIP archive and codec contracts").dependOn(&b.addRunArtifact(zip_codec_tests).step);
     const rar_tests = b.addTest(.{
         .name = "vort-rar-tests",
         .root_module = tests_mod,
@@ -2744,6 +2762,20 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const deflate64_stream_probe = b.addExecutable(.{
+        .name = "vort-deflate64-stream-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate64_stream_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const deflate64_stream_diff = b.addSystemCommand(&.{ "python3", "tools/deflate64_stream_diff.py", "--probe" });
+    deflate64_stream_diff.addArtifactArg(deflate64_stream_probe);
+    deflate64_stream_diff.addArgs(&.{ "--directory", "zig-out/deflate64-stream" });
+    if (b.args) |args| deflate64_stream_diff.addArgs(args);
+    b.step("run-deflate64-stream-diff", "Validate incremental Deflate64 matching and ZIP method 9 with Info-ZIP").dependOn(&deflate64_stream_diff.step);
     const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip/diff.py", "--cli" });
     zip_diff.addArtifactArg(cli_exe);
     zip_diff.addArg("--writer");
@@ -7160,6 +7192,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&zip_writer_probe_exe.step);
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
+    check_step.dependOn(&deflate64_stream_probe.step);
     check_step.dependOn(&tar_incremental_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_compressed_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_auto_reader_probe_exe.step);
