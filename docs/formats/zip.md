@@ -49,9 +49,9 @@ Reduce factors, Implode, raw-Deflate, Deflate64, DCL Implode, Bzip2, LZMA,
 legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
-same standard Zstandard frame payload. The one-shot Deflate64 writer plans
-fixed-Huffman blocks with matches through 65,538 bytes and distances through
-65,536 bytes; it records version-needed 2.1. Its complete fixed candidate must
+same standard Zstandard frame payload. The one-shot Deflate64 writer selects
+fixed/dynamic Huffman blocks with matches through 65,538 bytes and distances
+through 65,536 bytes; it records version-needed 2.1. Its complete compressed candidate must
 be smaller than the original global stored representation, retaining the
 established encoded bound. It shares matching and emission with the incremental
 state described below. LZMA entries carry the standard four-byte
@@ -501,20 +501,27 @@ underlying 13-byte Alone header, and sets general-purpose bit 1.
 payloads, limits, and Delta/BCJ filters. The filter slice is copied at writer
 initialization and need not remain alive afterward.
 `deflate64_options` uses `Deflate64IncrementalEncoder.Options`. Its default
-`.compression = .adaptive` selects fixed-Huffman matching or stored blocks by
-their exact encoded cost; finish includes final-byte padding, and cost ties
-retain stored output. The default and maximum `block_len` are 128 KiB, replacing
+`.compression = .adaptive` selects stored, fixed-Huffman or dynamic-Huffman
+blocks by exact continuous bit cost; finish compares final padded bytes. Strict
+improvements change the choice, so ties prefer stored, then fixed, then dynamic.
+The default and maximum `block_len` are 128 KiB, replacing
 the previous 65,535-byte stored-block default. The
 encoder retains 65,536 bytes of rolling history and admits matches through
 65,538 bytes, including length symbol 285, with distances through 65,536 bytes.
 Existing explicit block sizes such as 4096 remain valid. `.compression = .fixed`
-forces fixed blocks; `.stored` explicitly disables matching. `max_chain` and
+forces fixed blocks, `.dynamic` forces dynamic blocks, and `.stored` explicitly
+disables matching. The raw Deflate64 encoder's `snapshot().dynamic_block_count`
+records emitted dynamic blocks; the ZIP writer keeps its existing archive
+snapshot. `max_chain` and
 `nice_length` bound match search, while `max_input_len` and
 `max_pending_output_len` limit total accepted input and one emission's retained
 complete output bytes. These limits do not measure total requested heap or RSS.
 The explicit stored incremental and stored one-shot APIs retain their existing
-behavior. Dynamic-Huffman encoding and preset dictionaries remain outside this
-new incremental encoder's scope.
+behavior. The [dynamic functional baseline](../performance/deflate64-dynamic-functional-baseline.md)
+records exact histogram/RLE costs, completed native/x86 reference verification
+and the output/resource tradeoff. Preset dictionaries remain unsupported;
+method 9 carries no preset-dictionary ID, so any future history attachment needs
+an explicit compatibility contract.
 `ppmd_options` selects order 2...16, 1...256 MiB ZIP model memory, restart or
 cut-off restoration, and input/pending-output bounds. The two-byte property
 prefix precedes a symbol-progressive range stream with mandatory EOS.
@@ -682,8 +689,8 @@ and supplies them as one logical stream without allocating joined archive
 bytes. PKWARE Strong Encryption has both a bounded incremental writer and the
 known-size/descriptor sequential reader described above.
 
-The [Deflate64 streaming baseline](../performance/deflate64-stream-functional-baseline.md)
-records the new matching encoder separately from the earlier stored-only ZIP
+The earlier fixed/stored [Deflate64 streaming baseline](../performance/deflate64-stream-functional-baseline.md)
+records the matching encoder separately from the earlier stored-only ZIP
 campaign below. Core contracts pass 183/183 in native Debug, native ReleaseFast
 and x86, including 4 MiB/1024-block bounded-ownership and warmed-reuse checks.
 Native Debug and x86 ZIP contracts each pass 41/41, covering successful PKWARE
