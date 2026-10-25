@@ -28,6 +28,36 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
 | XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups, and broad encoder speed/ratio/memory parity remains unproven. |
 
+The [Brotli metadata increment](brotli-metadata-functional-baseline.md) implements
+the complete RFC single-block range 0...16 MiB, shared exact header bounds and
+unchanged plaintext/history behavior across stored/planned/static/HQ and
+incremental APIs. The root and codec expose the same maximum constant. A real
+static reusable alias bug is fixed by capturing metadata, input and descriptors
+before output clear; pre-snapshot OOM preserves old output/state, while later
+errors keep their existing contract. Temporary metadata pointers are cleared
+after use. Native Debug/ReleaseFast and x86 ReleaseFast each pass 130/130
+executions (30 metadata plus 100 public-root tests). Each native/x86 reference
+campaign verifies 194 target encodes, 18 reference streams, 84 pre-allocation
+rejects and 10 malformed cases with 307 commands; target wires/headers/progress
+agree across architectures. The known system 1.0.9 defect observation retains
+its actual loaded common-library provenance and is not an isolated reference
+ranking. A legacy gate matches 384/384 complete old/new wires, 192 per target,
+within the old supported range, with 768 independent full-content checks. Its
+representative quality/API coverage is not an exhaustive output guarantee.
+Codec `e49fce24` and the subsequent test-only `b502fc50` source epochs remain
+separate; the latter corrects an obsolete length-65,537 rejection fixture.
+The complete native ReleaseFast family reports 1430 passed and one skipped out
+of 1431; the skipped 32-bit host-overflow gate is outside the metadata/root
+filter. Its separate actual x86 ReleaseFast run passes 20/20 executions including
+imports. Final build verification passes 180/180 on the test-only revision,
+while the codec and external runtime reports retain their `e49fce24` identity.
+Event emission still borrows caller bytes and retains metadata-sized pending
+output; no constant-memory or performance-lead claim follows. General
+long-window match history and broader encoder quality remain separate work,
+and dated performance results are not refreshed by this increment. Subsequent
+functional candidates are retained Large Window history, core Zstd magicless
+APIs and bounded XZ worker encoding, each with separate validation requirements.
+
 The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes
 the owned split writer's whole-archive staging requirement. These container

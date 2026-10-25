@@ -1,0 +1,3 @@
+{"target_finished": "native", "rows": 192, "failures": 0}
+{"target_finished": "x86", "rows": 192, "failures": 0}
+{"report": "/tmp/vort-br-metadata-full-range-20261025/legacy-wire-comparison.json", "sha256": "ac733d19be2ca5fed8349d94201776310b4a1d5e1d1adb203af807d9d26d4b6a", "comparisons": 384, "matched": 384, "wire_mismatches": 0, "legacy_probe_failures": 0, "new_probe_failures": 0, "existing_report_comparisons": 216, "supplemental_comparisons": 168, "all_rows_matched": true}

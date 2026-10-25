@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded; 20/20 tests passed
+test-br success
++- run test vort-br-tests 20 pass (20 total) 1ms MaxRSS:8M
+   +- compile test vort-br-tests ReleaseFast x86-linux-gnu success 11s MaxRSS:377M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu (reused)
+

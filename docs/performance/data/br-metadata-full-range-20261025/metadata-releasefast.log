@@ -1,0 +1,32 @@
+test-br-metadata
++- run test vort-br-metadata-tests 29 pass, 1 fail (30 total)
+error: 'br.test.Brotli metadata full-range public contracts' failed:
+       slices differ. first difference occurs at index 0 (0x0)
+       
+       ============ expected this output: =============  len: 61 (0x3D)
+       
+       42 72 6F 74 6C 69 20 6D  65 74 61 64 61 74 61 20  Brotli metadata 
+       6C 65 61 76 65 73 20 70  6C 61 69 6E 74 65 78 74  leaves plaintext
+       20 69 6E 74 61 63 74 20  61 62 63 64 65 66 67 68   intact abcdefgh
+       61 62 63 64 65 66 67 68  2D 74 61 69 6C           abcdefgh-tail
+       
+       ============= instead found this: ==============  len: 61 (0x3D)
+       
+       10 00 42 72 6F 74 6C 69  20 6D 65 74 61 64 61 74  ..Brotli metadat
+       61 20 6C 65 61 76 65 73  20 70 6C 61 69 6E 74 65  a leaves plainte
+       78 74 20 69 6E 74 61 63  74 20 61 62 63 64 65 66  xt intact abcdef
+       67 68 61 62 63 64 65 66  67 68 2D 74 61           ghabcdefgh-ta
+       
+       ================================================
+failed command: ./.zig-cache/o/ec91534c4d5e2a63f2797d68b2a97629/vort-br-metadata-tests --cache-dir=./.zig-cache --seed=0x5c37ebb7 --listen=-
+
+Build Summary: 3/5 steps succeeded (1 failed); 29/30 tests passed (1 failed)
+test-br-metadata transitive failure
++- run test vort-br-metadata-tests 29 pass, 1 fail (30 total)
+   +- compile test vort-br-metadata-tests ReleaseFast native success 54s MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/ba768612e3c9a62cef0813122e2ddd16/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x5c37ebb7 -Zfc589e5e2933e390 test-br-metadata -Doptimize=ReleaseFast -j3 --summary all

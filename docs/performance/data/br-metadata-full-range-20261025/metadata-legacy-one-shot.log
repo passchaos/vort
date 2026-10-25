@@ -1,0 +1,27 @@
+test-br
++- run test vort-br-tests
+   +- compile test vort-br-tests ReleaseFast native 1 errors
+src/br/encoder/metadata_header.zig:24:15: error: 'alignToByte' is not marked 'pub'
+        writer.alignToByte();
+        ~~~~~~^~~~~~~~~~~~
+src/br.zig:3903:5: note: declared here
+    fn alignToByte(self: *BitWriter) void {
+    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    writeMetadataMetaBlock: src/br.zig:12800:21
+    encodeCommandPlanWithOptionsWriteInternal [inlined]: src/br.zig:11874:66
+    encodeCommandPlanWithOptionsWrite: src/br.zig:11307:53
+    1 reference(s) hidden; use '-freference-trace=4' to see all references
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/a975e198daf1c08dc02b311878b81563/vort-br-record-optimal.o -OReleaseFast -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/br.zig --test-filter "br one-shot planned metadata" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/5 steps succeeded (1 failed)
+test-br transitive failure
++- run test vort-br-tests transitive failure
+   +- compile test vort-br-tests ReleaseFast native 1 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/ba768612e3c9a62cef0813122e2ddd16/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x21befe6f -Z3c49ff46bdb7e7d1 test-br -Dbr-test-filter=br one-shot planned metadata -Doptimize=ReleaseFast -j3 --summary all

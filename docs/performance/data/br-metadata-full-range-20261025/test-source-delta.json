@@ -1,0 +1,12 @@
+{
+  "schema": "vort.source-delta.v1",
+  "codec_commit": "e49fce241781ec4849672ffae410bbad89c701ab",
+  "final_test_commit": "b502fc50d81be96dc622ab4ba3998a53403c618c",
+  "changed_files": [
+    {
+      "path": "src/tests/wide_bit_resources.zig",
+      "sha256": "3931c127da0c6ed4b336860d4f4ac53c63a6f840fdc8d549088994bf2d04309e"
+    }
+  ],
+  "note": "Only the legacy invalid metadata test changes from 65537 to max+1; no codec/tool source or public options change."
+}

@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded; 25/25 tests passed
+test-br success
++- run test vort-br-tests 25 pass (25 total) 43ms MaxRSS:8M
+   +- compile test vort-br-tests ReleaseFast native success 50s MaxRSS:1G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+

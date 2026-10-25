@@ -1,0 +1,22 @@
+test-br
++- run test vort-br-tests
+   +- compile test vort-br-tests Debug native 1 errors
+src/br_metadata_tests.zig:239:19: error: local constant shadows declaration of 'oversized'
+            const oversized = anchor[0..].ptr[0 .. maximum + 1]; // Length-only immutable sentinel, never read.
+                  ^~~~~~~~~
+src/br_metadata_tests.zig:237:9: note: declared here
+        fn oversized() !void {
+        ^~
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/b0d047ba2b114a510a29fad6255d7eaf/vort-br-record-optimal.o -ODebug -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/br.zig --test-filter "Brotli metadata header" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-br-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 2/5 steps succeeded (1 failed)
+test-br transitive failure
++- run test vort-br-tests transitive failure
+   +- compile test vort-br-tests Debug native 1 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:40M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/ba768612e3c9a62cef0813122e2ddd16/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x51b84247 -Zd866a537bc078f43 test-br -Dbr-test-filter=Brotli metadata header -j3 --summary all

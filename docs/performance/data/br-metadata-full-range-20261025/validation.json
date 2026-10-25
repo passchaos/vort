@@ -1,0 +1,89 @@
+{
+  "schema": "vort.br.metadata.validation.v1",
+  "codec_source_commit": "e49fce241781ec4849672ffae410bbad89c701ab",
+  "final_test_commit": "b502fc50d81be96dc622ab4ba3998a53403c618c",
+  "codec_manifest_sha256": "c101fde1fd958114c19cc1619694ae0e37763f0e0b1be911306a24f0015c16fd",
+  "final_test_manifest_sha256": "d849e88b4e4418e10240f075fdc00614d2bcbfcf32e8ddf06d7e6ff4dc50226e",
+  "zig": "0.16.0",
+  "metadata_native_debug": {
+    "passed": 30,
+    "total": 30
+  },
+  "metadata_native_releasefast": {
+    "passed": 30,
+    "total": 30
+  },
+  "metadata_x86_releasefast": {
+    "passed": 30,
+    "total": 30
+  },
+  "public_root_each": {
+    "passed": 100,
+    "total": 100
+  },
+  "wide_resource_followup_native": {
+    "passed": 20,
+    "total": 20
+  },
+  "wide_resource_followup_x86": {
+    "passed": 20,
+    "total": 20
+  },
+  "legacy_one_shot": {
+    "passed": 25,
+    "total": 25
+  },
+  "external_each": {
+    "target_encodes": 194,
+    "native_reference_streams": 18,
+    "preallocation_rejects": 84,
+    "malformed": 10,
+    "known_reference_encoder_defects": 1,
+    "commands": 307
+  },
+  "full_brotli_final": {
+    "passed": 1430,
+    "total": 1431,
+    "skipped": 1,
+    "skip_scope": "32-bit-only overflow gate; separately verified by actual x86 host-overflow filter"
+  },
+  "check_initial": {
+    "steps": 180
+  },
+  "check_final": {
+    "steps": 180,
+    "source_commit": "b502fc50d81be96dc622ab4ba3998a53403c618c"
+  },
+  "cli_help": {
+    "steps": 7
+  },
+  "timing_performed": false,
+  "notes": [
+    "Metadata tests and root tests have different import scopes; 130 executions does not mean 130 independent metadata fixtures.",
+    "Final test follow-up changes only a legacy invalid metadata expectation; codec/tool source remains identical.",
+    "One system 1.0.9 native single-byte metadata encoder defect is recorded separately from valid 1.2.0 frames."
+  ],
+  "legacy_wire": {
+    "comparison_rows": 384,
+    "native_matches": 192,
+    "x86_matches": 192,
+    "primary_rows": 216,
+    "positive_65536_supplement_rows": 168,
+    "independent_reference_verified_streams": 768,
+    "counterexamples": 0,
+    "quality_scope": [
+      0,
+      1,
+      4,
+      8,
+      10,
+      11
+    ]
+  },
+  "host_overflow_x86": {
+    "passed": 20,
+    "total": 20,
+    "filter": "Brotli general large window encoded bounds detect host integer overflow",
+    "note": "20 aggregate executions include the actual 32-bit-only named test; full native family retains its single skip."
+  }
+}

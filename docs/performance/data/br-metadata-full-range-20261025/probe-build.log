@@ -1,0 +1,7 @@
+Build Summary: 4/4 steps succeeded
+build-br-metadata-probe success
++- compile exe vort-br-metadata-probe ReleaseFast native success 50s MaxRSS:1G
+   +- WriteFile cached
+   +- compile obj vort-br-record-optimal-releasefast ReleaseFast native cached 5ms MaxRSS:41M
+   +- compile obj vort-br-record-optimal-releasefast ReleaseFast native (reused)
+

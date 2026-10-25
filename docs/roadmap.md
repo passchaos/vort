@@ -23495,3 +23495,36 @@ reuse, so production keeps the simpler independently owned plans.
   define dictionary/history compatibility explicitly: ZIPmethod9 has no preset
   dictionaryID and must not silently depend on hidden history. Broader codec
   comparisons and Brotli/Zstd throughput work remain separate priorities.
+
+- 2026-10-25/26: Brotli metadata
+  implements the full RFC
+  single-meta-block body range0...16777216 inclusive, with one shared header
+  plan for validation, wire emission and exact bounds. Minimal MSKIPBYTES0/1/2/3
+  and alignment preserve metadata's exclusion from plaintext/history; empty
+  options omit emission while explicit empty writeMetadata produces a block.
+  Over-limit setters reject before snapshot mutation and never autosplit.
+  Stored/planned q0...q11, static/HQ, chunks/reusable and incremental paths keep
+  their allocator authority and retry checkpoints. Full event emission can
+  retain metadata-sized pending output, so this is not a constant-memory16MiB
+  streaming claim. Static reusable metadata/source/descriptor aliases now
+  snapshot before clear: Debug undefined filling exposed a real bug, and
+  snapshot OOM preserves old output/state. Temporary metadata pointers clear
+  before snapshot release; later failures keep the original retry contract.
+  [Functional evidence](performance/brotli-metadata-functional-baseline.md)
+  records Debug/ReleaseFast/x86ReleaseFast130/130 executions (metadata30 plus
+  publicroot100), and eachnative/x86 reference194target/18upstream/84prealloc/
+  10malformed with307commands and equal wire/header/progress across targets.
+  Reference1.2.0 loaded-library owners are recorded; the knownsystem1.0.9
+  byte1 defect is not an isolated dependency-closed reference ranking. A
+  384/384 legacy wire gate (192pertarget) with768independent decodes preserves
+  the old supported range in a bounded representativequality/API matrix.
+  Codece49fce24 remains distinct from test-onlyb502fc50, which corrects the old
+  65537invalid-length resource fixture; narrowgeometryRF/x86 pass20/20. Final
+  nativeReleaseFast family passes1430/1431 with one32bit-only overflow skip;
+  the skipped namedgate passes independently in actualx86ReleaseFast20/20
+  executions includingimports, outside metadata130. Finalbuild180/180 completes
+  the b502testrevision, while codec/runtime evidence retains e49sourceidentity.
+  No throughput improvement or constant-memory claim is assigned. Next
+  functional slices are non-HQ Large Window retained history, core Zstd
+  magicless APIs and bounded XZ worker encoding, before broader performance
+  optimization and best-library claims.

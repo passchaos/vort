@@ -1,0 +1,292 @@
+{
+  "schema": "vort.brotli.alias-source-epochs.v1",
+  "generated_at_utc": "2026-10-25T16:07:08.202405+00:00",
+  "generated_at_local": "2026-10-26T00:07:08.202405+08:00",
+  "workspace": "/home/passchaos/project-z/vort-brotli-context-cache",
+  "scope": "Independent audit artifact only; no repository/code edits, compilation, test execution, or Git operations were performed during this audit task.",
+  "reconstruction": {
+    "method": "In-memory only: remove staticSourceAliases function and its contracts hook from the current QA to recover dbd8; remove staticSurfaces and its hook to recover 1dc; insert the original staticSurfaces text extracted from the structured command completion to recover 086eba. No reconstructed source file was written.",
+    "qa_versions": [
+      {
+        "epoch": "before_static",
+        "bytes": 19570,
+        "sha256": "1dc34d78eb09bbc0734a8de6b3862d7b80080a379a2106a76acc9036851f1cd4",
+        "verified_in_memory": true
+      },
+      {
+        "epoch": "transient_simultaneous_alias",
+        "bytes": 25281,
+        "sha256": "086eba319666aa550def96fc0a36f27e49c60dea2052a1dad18f0d3b64fbbaf2",
+        "verified_in_memory": true
+      },
+      {
+        "epoch": "metadata_only",
+        "bytes": 25152,
+        "sha256": "dbd8aabb7f9ae74738c1f3c79309b262f77fd33e44943ee5352f764afa508a4a",
+        "verified_in_memory": true
+      },
+      {
+        "epoch": "fixed_extended_qa",
+        "bytes": 30959,
+        "sha256": "89ae639f95eebb54630a96ae649d6bd4d79a5458c11f2f191fe9a181b52401a8",
+        "verified_in_memory": true
+      }
+    ],
+    "structured_command_source": {
+      "path": "/home/passchaos/.trae/cli/sessions/2026/10/24/rollout-2026-10-24T00-03-42-01a16980-fa90-75c0-b6c7-1bb2f61aeaf8.jsonl",
+      "insertion_completion_line": 10209,
+      "correction_completion_line": 10222,
+      "content_copied_to_artifacts": false
+    },
+    "transient_insertion_command_completed_at_utc": "2026-10-25T15:48:51.726Z",
+    "transient_insertion_command_completed_at_local": "2026-10-25T23:48:51.726+08:00",
+    "metadata_only_correction_command_completed_at_utc": "2026-10-25T15:49:52.367Z",
+    "metadata_only_correction_command_completed_at_local": "2026-10-25T23:49:52.367+08:00",
+    "timestamp_precision_note": "These are command-completion timestamps, not claims about the instant that every compiler read a file."
+  },
+  "failures": {
+    "transient_releasefast_source_alias": {
+      "qa_sha256": "086eba319666aa550def96fc0a36f27e49c60dea2052a1dad18f0d3b64fbbaf2",
+      "binaries": [
+        {
+          "target": "native",
+          "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/ec91534c4d5e2a63f2797d68b2a97629/vort-br-metadata-tests",
+          "sha256": "039f6df94a116b446cc0d5e0325fcb7856c3e766568446696954d3deb1d2682d",
+          "bytes": 12176352,
+          "failure_log": "/tmp/vort-br-metadata-full-range-20261025/metadata-releasefast.log",
+          "dwarf_observations": [
+            {
+              "name": "borrowed_chunks",
+              "decl_line": 315
+            },
+            {
+              "name": "old_state",
+              "decl_line": 328
+            },
+            {
+              "name": "next_chunks",
+              "decl_line": 331
+            }
+          ],
+          "qa_epoch_identification": "Unique variable names and declaration lines match the reconstructed transient QA; the complete producer-source digest for these old binaries was not independently recovered."
+        },
+        {
+          "target": "x86-linux-gnu",
+          "path": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/6e49d98b341fa322646be802dc8cfa50/vort-br-metadata-tests",
+          "sha256": "2b5e673ee7b9651e16f6dda0500af9e92a5f989d8bcab0c0fd958a31405579de",
+          "bytes": 9798520,
+          "failure_log": "/tmp/vort-br-metadata-full-range-20261025/metadata-x86.log",
+          "dwarf_observations": [
+            {
+              "name": "borrowed_chunks",
+              "decl_line": 315
+            },
+            {
+              "name": "old_state",
+              "decl_line": 328
+            },
+            {
+              "name": "next_chunks",
+              "decl_line": 331
+            }
+          ],
+          "qa_epoch_identification": "Unique variable names and declaration lines match the reconstructed transient QA; the complete producer-source digest for these old binaries was not independently recovered."
+        }
+      ],
+      "historical_api_route": {
+        "function": "Suite(Br).staticSurfaces",
+        "encode_line": 317,
+        "compare_line": 323,
+        "call": "encoder.encodeChunksScratchWithOptions(&borrowed_chunks, large_options)"
+      },
+      "metadata_length": 65537,
+      "plain_ascii": "Brotli metadata leaves plaintext intact abcdefghabcdefgh-tail",
+      "plain_length": 61,
+      "independent_prefix_packing": {
+        "standard_window_bits": 16,
+        "standard_prefix_hex": "6c 00 80 00",
+        "standard_payload_offset": 4,
+        "large_window_bits": 25,
+        "large_prefix_hex": "11 99 0d 00 10 00",
+        "large_payload_offset": 6,
+        "metadata_mskipbytes": 3,
+        "metadata_len_minus_one": 65536
+      },
+      "actual_output_hex": "10 00 42 72 6f 74 6c 69 20 6d 65 74 61 64 61 74 61 20 6c 65 61 76 65 73 20 70 6c 61 69 6e 74 65 78 74 20 69 6e 74 61 63 74 20 61 62 63 64 65 66 67 68 61 62 63 64 65 66 67 68 2d 74 61",
+      "actual_relation": "10 00 + plain[:-2], still 61 bytes",
+      "causal_explanation": "The metadata body was copied into independent pending before output publication, but source chunks still addressed the old output at metadata offset 4. Publishing the Large25 prefix/body rewrote that old address range to prefix bytes 10 00 followed by plaintext shifted by two bytes. Later source consumption therefore read the exact failed output shown in both old ReleaseFast logs.",
+      "runtime_stack_limit": "Old ReleaseFast logs have no per-stage stack. The route identification rests on the recovered transient source, matching DWARF names/lines, and the exact independently derived 61-byte output match."
+    },
+    "metadata_only_debug_poison": {
+      "qa_sha256": "dbd8aabb7f9ae74738c1f3c79309b262f77fd33e44943ee5352f764afa508a4a",
+      "producer_sha256": "44e99f37159bd6a4b0d10f0d686746ec81eca3ba932eade540d02fb3735639d1",
+      "failure_log": "/tmp/vort-br-metadata-full-range-20261025/metadata-final-debug.log",
+      "failed_binary": "/home/passchaos/project-z/vort-brotli-context-cache/.zig-cache/o/6a3aa22b6035f158bdc9824383595a58/vort-br-metadata-tests",
+      "stack": {
+        "qa_checkPrefix_line": 48,
+        "qa_staticSurfaces_line": 315,
+        "qa_contracts_line": 25
+      },
+      "reported_metadata_length": 65537,
+      "displayed_actual_prefix": "The log prints the first 256 bytes as AA and truncates the remaining metadata display.",
+      "stdlib": {
+        "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/std/array_list.zig",
+        "function_line": 1194,
+        "poison_line": 1195,
+        "length_reset_line": 1196,
+        "implementation": "@memset(self.items, undefined); self.items.len = 0;"
+      },
+      "pre_fix_wrapper_clear_line": 2117,
+      "causal_explanation": "The wrapper called clearRetainingCapacity on old output before writePrefix copied the borrowed metadata to independent pending. Zig Debug filled the invalidated old elements with AA. The later metadata copy copied those poisoned bytes. No early free is required to explain this failure.",
+      "corrected_inference": "The earlier argument that clearRetainingCapacity changed only logical length was wrong and is explicitly withdrawn.",
+      "pre_fix_releasefast_passes_are_safety_evidence": false
+    }
+  },
+  "fixed_epoch": {
+    "producer_sha256": "6c9c59c945ff39b0eb2493f5ce3572a456143ab57d0398c168999436f55a3bdc",
+    "qa_sha256": "89ae639f95eebb54630a96ae649d6bd4d79a5458c11f2f191fe9a181b52401a8",
+    "wire_oracle_sha256": "70d63b0088f8d82a8650be068913e6f7488ec4646f49ac4569da51a5061ee555",
+    "mechanism": "Full validateChunks admission first; stored_alias.protect covers output.allocatedSlice(), source chunks/descriptors and metadata before clear/reset; protected input and metadata replace borrowed call inputs; snapshots live until the complete encode returns. Snapshot refusal leaves old output and incremental state intact; unrelated inputs require no snapshot allocations.",
+    "original_metadata_only_qa_preserved": {
+      "removed_only_new_function": "staticSourceAliases",
+      "removed_only_new_hook": "try Cases.staticSourceAliases();",
+      "recovered_bytes": 25152,
+      "recovered_sha256": "dbd8aabb7f9ae74738c1f3c79309b262f77fd33e44943ee5352f764afa508a4a",
+      "matches_original_dbd8": true
+    },
+    "added_cases": [
+      "simultaneous metadata and source-data aliases",
+      "source descriptors inside initialized old output",
+      "forced moving output growth after exact old-wire allocation",
+      "independent complete wire plus exact prefix offsets 4 and 6",
+      "all three snapshot allocation refusals preserve bytes/pointer/capacity/incremental snapshot/live bytes",
+      "warm unrelated public input requires no new allocations"
+    ],
+    "native_validation": {
+      "Debug": {
+        "passed": 130,
+        "metadata": 30,
+        "metadata_root": 100,
+        "log": "/tmp/vort-br-metadata-full-range-20261025/metadata-fixed-debug.log"
+      },
+      "ReleaseFast": {
+        "passed": 130,
+        "metadata": 30,
+        "metadata_root": 100,
+        "log": "/tmp/vort-br-metadata-full-range-20261025/metadata-fixed-releasefast.log"
+      }
+    },
+    "static_total_heap_cap_support_added": false
+  },
+  "logs": [
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-releasefast.log",
+      "epoch": "transient_simultaneous_alias",
+      "target": "native",
+      "mode": "ReleaseFast",
+      "passed": 29,
+      "failed": 1,
+      "total": 30,
+      "summary": "Build Summary: 3/5 steps succeeded (1 failed); 29/30 tests passed (1 failed)",
+      "sha256": "daa9d5ccb8a7eb9113cd090b2072a4a898d1e94f5c772da815554005bead9c01",
+      "bytes": 2016,
+      "log_mtime_utc": "2026-10-25T15:50:38.020073+00:00"
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-x86.log",
+      "epoch": "transient_simultaneous_alias",
+      "target": "x86-linux-gnu",
+      "mode": "ReleaseFast",
+      "passed": 29,
+      "failed": 1,
+      "total": 30,
+      "summary": "Build Summary: 3/5 steps succeeded (1 failed); 29/30 tests passed (1 failed)",
+      "sha256": "6e91e479ee75cf56204c8d31ee9e6863eebc6ac497e92ab7d2c8be4e07f61595",
+      "bytes": 2062,
+      "log_mtime_utc": "2026-10-25T15:50:33.263119+00:00"
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-final-debug.log",
+      "epoch": "metadata_only",
+      "target": "native",
+      "mode": "Debug",
+      "passed": 29,
+      "failed": 1,
+      "total": 30,
+      "summary": "Build Summary: 3/5 steps succeeded (1 failed); 29/30 tests passed (1 failed)",
+      "sha256": "abf8b8f647f8446fcabfc265da178a8d8a434bae1e21dd5c57b31a58c73f6673",
+      "bytes": 5013,
+      "log_mtime_utc": "2026-10-25T15:53:36.129350+00:00"
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-final-releasefast.log",
+      "epoch": "metadata_only",
+      "target": "native",
+      "mode": "ReleaseFast",
+      "passed": 30,
+      "failed": 0,
+      "total": 30,
+      "summary": "Build Summary: 5/5 steps succeeded; 30/30 tests passed",
+      "sha256": "39c3f6135f5271d06aa7ea1943b111ea579a0f24c702c8d8de3d558027e6d162",
+      "bytes": 415,
+      "log_mtime_utc": "2026-10-25T15:51:53.944338+00:00"
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-final-x86.log",
+      "epoch": "metadata_only",
+      "target": "x86-linux-gnu",
+      "mode": "ReleaseFast",
+      "passed": 30,
+      "failed": 0,
+      "total": 30,
+      "summary": "Build Summary: 5/5 steps succeeded; 30/30 tests passed",
+      "sha256": "ae97765a5fa4f886860b18080725427db1782f9d7545b9db49c49cf8404d210a",
+      "bytes": 438,
+      "log_mtime_utc": "2026-10-25T15:51:50.813368+00:00"
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-fixed-debug.log",
+      "epoch": "fixed_extended_qa",
+      "target": "native",
+      "mode": "Debug",
+      "passed": 130,
+      "failed": 0,
+      "total": 130,
+      "summary": "Build Summary: 9/9 steps succeeded; 130/130 tests passed",
+      "sha256": "9ee21143b5405ad802034056e85ed30c634c01821cc2cf381706b52cddde9d7d",
+      "bytes": 889,
+      "log_mtime_utc": "2026-10-25T16:02:26.143993+00:00",
+      "groups": {
+        "metadata": 30,
+        "metadata_root": 100
+      }
+    },
+    {
+      "path": "/tmp/vort-br-metadata-full-range-20261025/metadata-fixed-releasefast.log",
+      "epoch": "fixed_extended_qa",
+      "target": "native",
+      "mode": "ReleaseFast",
+      "passed": 130,
+      "failed": 0,
+      "total": 130,
+      "summary": "Build Summary: 9/9 steps succeeded; 130/130 tests passed",
+      "sha256": "a88b64a80a0e44d917ee96c30a179514d7ad8d0913058b59a252f77dc7f4eb50",
+      "bytes": 933,
+      "log_mtime_utc": "2026-10-25T16:03:08.351754+00:00",
+      "groups": {
+        "metadata": 30,
+        "metadata_root": 100
+      }
+    }
+  ],
+  "additional_parent_gates": {
+    "status_at_parent_assignment": "running; no completion claim in this audit",
+    "paths": [
+      "/tmp/vort-br-metadata-full-range-20261025/metadata-fixed-x86.log",
+      "/tmp/vort-br-metadata-full-range-20261025/br-full.log",
+      "/tmp/vort-br-metadata-full-range-20261025/check.log",
+      "/tmp/vort-br-metadata-full-range-20261025/native-final-diff.log",
+      "/tmp/vort-br-metadata-full-range-20261025/x86-final-diff.log"
+    ]
+  }
+}

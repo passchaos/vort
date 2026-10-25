@@ -1,0 +1,8 @@
+Build Summary: 5/5 steps succeeded; 30/30 tests passed
+test-br-metadata success
++- run test vort-br-metadata-tests 30 pass (30 total) 1s MaxRSS:52M
+   +- compile test vort-br-metadata-tests ReleaseFast x86-linux-gnu success 50s MaxRSS:977M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal ReleaseFast x86-linux-gnu (reused)
+

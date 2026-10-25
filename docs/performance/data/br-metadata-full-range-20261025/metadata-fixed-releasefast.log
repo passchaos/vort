@@ -1,0 +1,16 @@
+Build Summary: 9/9 steps succeeded; 130/130 tests passed
+test-br-metadata success
++- run test vort-br-metadata-tests 30 pass (30 total) 1s MaxRSS:53M
+|  +- compile test vort-br-metadata-tests ReleaseFast native success 52s MaxRSS:1G
+|     +- WriteFile cached
+|     +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:36M
+|     +- compile obj vort-br-record-optimal ReleaseFast native (reused)
++- run test vort-br-metadata-root-tests 100 pass (100 total) 2ms MaxRSS:8M
+   +- compile test vort-br-metadata-root-tests ReleaseFast native success 23s MaxRSS:633M
+      +- WriteFile (reused)
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:36M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)
+

@@ -1,0 +1,9 @@
+{"report": "/tmp/vort-br-metadata-full-range-20261025/x86-final/differential.json", "target_encodes": 194, "reference_decoder_fixtures": 18, "native_reference_encodes": 18, "known_reference_encoder_defects": 1, "preallocation_rejects": 84, "malformed_rejects": 10}
+Build Summary: 5/5 steps succeeded
+run-br-metadata-diff success
++- run python3 success 13s
+   +- compile exe vort-br-metadata-probe ReleaseFast x86-linux-gnu success 1m MaxRSS:971M
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast x86-linux-gnu cached 5ms MaxRSS:41M
+      +- compile obj vort-br-record-optimal-releasefast ReleaseFast x86-linux-gnu (reused)
+
