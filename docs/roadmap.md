@@ -23417,3 +23417,20 @@ reuse, so production keeps the simpler independently owned plans.
   streaming/platform ratio/speed/memory leadership remains incomplete. Next
   optimize unchanged cluster assignment/context-prefix and wire coding costs,
   alongside the current cross-library comparison matrix.
+
+- 2026-10-25: Deflate64 now has a bounded compressed incremental encoder and
+  ZIP method9 adapter, covering actual65536 distances and65538 lengths with
+  fixed/stored exact bit-cost arbitration, continuous bit packing and64KiB
+  history. Old stored and one-shot APIs remain available; the ZIP incremental
+  default moves from stored-only65535 blocks to adaptive128KiB, with explicit
+  smaller/fixed/stored options. Sticky step errors preserve first failed-call
+  progress; ZIP direct encryption and PKWARE bridges account only delivered
+  bytes. Three-target Deflate64 suites pass183/183, ZIP narrow tests41/41 and
+  full ZIP/codec tests1988/1988; final checks176/176 and CLI7/7. Native/x86 public
+  probes each produce28 raw/ZIP artifacts42 members accepted by independent
+  token inspection and Info-ZIP, without hand-authored boundary streams. A4MiB
+  reused-input test verifies unchanged encoder allocations after warmup without
+  retaining complete input/output. [Functional evidence](performance/deflate64-stream-functional-baseline.md)
+  distinguishes requested payload from RSS and makes no throughput leadership
+  claim. Dynamic Huffman, preset dictionaries, one-shot full-match range and
+  broad compression-quality/speed/memory comparisons remain future work.

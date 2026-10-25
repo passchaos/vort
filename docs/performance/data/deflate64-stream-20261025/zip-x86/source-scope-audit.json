@@ -1,0 +1,12 @@
+{
+  "codec_and_test_source_stable": true,
+  "build_source_stable": false,
+  "changed_paths": [
+    "build.zig"
+  ],
+  "test_exit_code": 0,
+  "test_summary": [
+    "7/7 steps succeeded; 39/39 tests passed"
+  ],
+  "reason": "Added independent complete ZIP test route after narrow compilation had already started; no codec/test files changed. Final narrow+complete routes will be verified under stable full snapshot."
+}

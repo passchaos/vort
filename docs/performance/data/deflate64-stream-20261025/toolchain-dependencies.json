@@ -1,0 +1,27 @@
+{
+  "recorded_utc": "2026-10-25T12:06:44.317501+00:00",
+  "vort_base": "0cf32f1ffcb2bbf1dd414103e6949a5eec6681fa",
+  "zig_path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+  "zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+  "vail_crypto_path": "/home/passchaos/project-z/vail/archive_crypto",
+  "vail_repository_head": "5d3f8a1ff19e72a5d50a0c1f5296722d756e938c",
+  "vail_crypto_sources": {
+    "src/pkware_strong_decrypt_stream.zig": "7f3f065f7b854e7418e694536a4de243c5df3f9ac8f12d8b26698da8a8332720",
+    "src/root.zig": "5a6b07bd211b83b4ba0191139bf37e6cd84b1ce94b2c4132ea1e3b330256ff31",
+    "src/seven_zip.zig": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5",
+    "src/pkware_strong_tests.zig": "d80f8079f858c585610fcfb5383894c9a2878e763336ece59e103ba4fd6f8778",
+    "src/android_ota.zig": "c157fd3c7225397953c8a76bbaa1e8aa4dbf079c6a68873e80df7c5fe688949a",
+    "src/zipcrypto.zig": "a3a2174462c066703fa5b660b618354d9d834ee053ab6aff41b2ac3f97289a01",
+    "src/winzip_aes.zig": "5e6b20b72ac2c99b920409b5c88f7b7f7ebedda0ccfa15acae2bc881d2c72705",
+    "src/rar_legacy.zig": "19d602012a0532b10ec1054d6e0e867a6b404510a161b7cb65f0e051ac3fda18",
+    "src/esd.zig": "c78caaf54109cef9a35de2455ce26bfa1d433b9574d4b8432ff013622f51d0fd",
+    "src/pkware_strong_stream.zig": "37da19446af4191dea8b5cb501ba82dc2cc9e1832e9d1bd56b03bfa56636ecfc",
+    "src/aes192.zig": "9326c8f8208080b331ae126a7117294e82a6f6f6dc69edee344c6e00d9726d40",
+    "src/rar4.zig": "472df23c20d2a74879277a6c5cdc2f5fe3bdbe871d00f2d597b3c36f24144ff9",
+    "src/pkware_strong.zig": "92f1a721eb6dedc004ff055ac60eb430677bae587b53dcdee4abf3c9bd88feb1",
+    "src/cryptoapi_rsa.zig": "e92270ad6abcb392187d46f8b5b5bb054545482ac2309ec8c014a316579d7155",
+    "src/arj.zig": "6bfd778e7c845baae559c505aef417a43e527d2a53333232b4f4751efa584f81",
+    "src/rar5.zig": "9294b80ef63f81bc9aaec96ee3cbe90f6b691c7f023c0321e9774f4563ea247b"
+  },
+  "scope": "Supplemental final dependency identities; not retroactive before/after evidence or runtime loader closure verification."
+}

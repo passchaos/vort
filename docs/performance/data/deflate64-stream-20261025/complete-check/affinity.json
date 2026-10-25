@@ -1,0 +1,38 @@
+{
+  "time_utc": "2026-10-25T11:56:04.660996+00:00",
+  "reason": "Use independent compilation CPUs for six-job full check; no benchmark speed claim.",
+  "results": [
+    {
+      "pid": 633186,
+      "exit_code": 0
+    },
+    {
+      "pid": 633189,
+      "exit_code": 0
+    },
+    {
+      "pid": 633206,
+      "exit_code": 0
+    },
+    {
+      "pid": 633208,
+      "exit_code": 0
+    },
+    {
+      "pid": 633209,
+      "exit_code": 0
+    },
+    {
+      "pid": 633211,
+      "exit_code": 0
+    },
+    {
+      "pid": 633334,
+      "exit_code": 0
+    },
+    {
+      "pid": 633345,
+      "exit_code": 0
+    }
+  ]
+}

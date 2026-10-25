@@ -49,9 +49,10 @@ Reduce factors, Implode, raw-Deflate, Deflate64, DCL Implode, Bzip2, LZMA,
 legacy/current Zstandard, XZ, or PPMd
 members. Select
 `.zstandard_legacy` for method 20 and `.zstandard` for method 93; both carry the
-same standard Zstandard frame payload. Deflate64 uses a greedy
-fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
-version-needed 2.1. LZMA entries carry the standard four-byte
+same standard Zstandard frame payload. The one-shot Deflate64 writer retains
+its greedy fixed-Huffman-or-stored baseline, with matches through 258 bytes and
+distances through 65,535 bytes; it records version-needed 2.1. Incremental
+Deflate64 uses the broader matching state described below. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
 comments, an archive comment, DOS modification timestamps, creator system,
@@ -469,7 +470,7 @@ output working state. Bzip2 retains one configured RLE/BWT block plus bounded
 encoded pending output. The public slice accepts Stored (`method 0`), raw
 Deflate (`method 8`), Bzip2 (`method 12`), legacy Zstandard (`method 20`), and
 current Zstandard (`method 93`), plus LZMA (`method 14`) entries.
-XZ (`method 95`) and stored-block Deflate64 (`method 9`) entries use the same
+XZ (`method 95`) and match-producing Deflate64 (`method 9`) entries use the same
 streaming archive state machine.
 PPMd (`method 98`), Shrink (`method 1`), Reduce (`methods 2...5`), traditional
 Implode (`method 6`), and DCL Implode (`method 10`) are also streamed through
@@ -497,9 +498,21 @@ underlying 13-byte Alone header, and sets general-purpose bit 1.
 `xz_options` selects checks, block/dictionary sizes, parser, stored/compressed
 payloads, limits, and Delta/BCJ filters. The filter slice is copied at writer
 initialization and need not remain alive afterward.
-`deflate64_options` selects stored-block/input bounds. Match-producing fixed
-Deflate64 remains available through the one-shot writer and is a later
-incremental ratio enhancement rather than a wire-compatibility gap.
+`deflate64_options` uses `Deflate64IncrementalEncoder.Options`. Its default
+`.compression = .adaptive` selects fixed-Huffman matching or stored blocks by
+their exact encoded cost; finish includes final-byte padding, and cost ties
+retain stored output. The default and maximum `block_len` are 128 KiB, replacing
+the previous 65,535-byte stored-block default. The
+encoder retains 65,536 bytes of rolling history and admits matches through
+65,538 bytes, including length symbol 285, with distances through 65,536 bytes.
+Existing explicit block sizes such as 4096 remain valid. `.compression = .fixed`
+forces fixed blocks; `.stored` explicitly disables matching. `max_chain` and
+`nice_length` bound match search, while `max_input_len` and
+`max_pending_output_len` limit total accepted input and one emission's retained
+complete output bytes. These limits do not measure total requested heap or RSS.
+The standalone stored incremental and one-shot APIs retain their existing
+behavior. Dynamic-Huffman encoding and preset dictionaries remain outside this
+new incremental encoder's scope.
 `ppmd_options` selects order 2...16, 1...256 MiB ZIP model memory, restart or
 cut-off restoration, and input/pending-output bounds. The two-byte property
 prefix precedes a symbol-progressive range stream with mandatory EOS.
@@ -616,7 +629,9 @@ LZMA retains its configured dictionary, bounded input/lookahead and pending
 range output; it never retains the complete entry.
 XZ retains one configured plaintext block, bounded encoded output and compact
 Index records until its Footer is emitted.
-Deflate64 retains one stored block and bounded pending output.
+Deflate64 retains one configured planning block, bounded pending output,
+65,536-byte rolling history and bounded match indexes, rather than a complete
+entry. Its storage is allocated lazily and released with the current entry.
 PPMd retains one configured model arena and bounded pending range bytes.
 Shrink retains one fixed-capacity 8,192-code dictionary and bounded pending
 output.
@@ -640,6 +655,16 @@ changes the phase to `.poisoned`; subsequent mutating calls return
 deinitialize the writer. This does not change `zipEncodeAppend`'s existing
 whole-operation transactional guarantee.
 
+For Deflate64, the adapter reads the encoder's `failedProgress()` and preserves
+the failed call's actual accepted input, CRC and caller-output accounting in
+the ZIP snapshot. Already-drained ZipCrypto/WinZip AES bytes are encrypted
+before their sizes are recorded. PKWARE Strong Encryption records accepted
+input and retains any produced codec-bridge bytes, while archive/compressed
+sizes count only ciphertext delivered to the caller. The writer remains
+poisoned and cannot resume the unfinished archive. Invalid Deflate64 options
+and an expected size beyond the codec input limit or physical `usize` range
+are rejected by `beginEntry` before entry allocation or header publication.
+
 The incremental writer's additive error set is exported as
 `ZipIncrementalWriterError`; the established `ZipError` used by existing
 one-shot and reader APIs is unchanged.
@@ -655,13 +680,34 @@ and supplies them as one logical stream without allocating joined archive
 bytes. PKWARE Strong Encryption has both a bounded incremental writer and the
 known-size/descriptor sequential reader described above.
 
-The incremental differential uses forty-five entries: known Stored data containing a
+The [Deflate64 streaming baseline](../performance/deflate64-stream-functional-baseline.md)
+records the new matching encoder separately from the earlier stored-only ZIP
+campaign below. Core contracts pass 183/183 in native Debug, native ReleaseFast
+and x86, including 4 MiB/1024-block bounded-ownership and warmed-reuse checks.
+Native Debug and x86 ZIP contracts each pass 41/41, covering successful PKWARE
+Strong Encryption and failed-call progress for all three encryption families.
+Native and x86 independent campaigns each validate 28 raw/ZIP artifacts and
+42 members through raw token parsing and 58 commands using the recorded
+Info-ZIP UnZip 6.00 binary: 56 artifacts and 84 member plaintext checks total.
+They verify actual 65,538-byte matches and 65,536-byte distances, identical wire
+for two input chunk patterns, and known/unknown-size method-9 entries. The
+complete ZIP suite passes 1988/1988 on stable source after the legacy stored-only
+fixture explicitly selects stored compression; production behavior is unchanged
+by that test correction. The final build check passes 176/176 with a stable
+source snapshot taken after the fixture fix. The native external campaign
+used an earlier QA-helper snapshot with the same codec core; the x86 campaign
+uses the final helper snapshot. These are interoperability and bounded-state
+results, without competitor throughput or actual RSS/peak-memory
+leadership claims.
+
+The earlier incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
 sequences, a known Deflate entry larger than 32 KiB that crosses an actual
 planning-block boundary, a UTF-8-path cross-block unknown Deflate entry, empty
 Stored, empty Deflate, known/unknown/empty Bzip2, known-current/unknown-legacy/
 empty-current Zstandard, known/unknown/empty LZMA, and known/unknown/empty XZ.
-It also contains known/unknown/empty stored-block Deflate64 members.
+It also contains known/unknown/empty stored-block Deflate64 members from the
+earlier encoder policy.
 Known/unknown/empty PPMd members use order 12, a 1 MiB model, and cut-off
 restoration. Known/unknown/empty Shrink members cover pledged, descriptor-sized,
 and empty method-1 payloads. Known/unknown/empty DCL Implode members cover the

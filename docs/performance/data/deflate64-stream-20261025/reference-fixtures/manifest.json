@@ -1,0 +1,610 @@
+{
+  "schema": "vort.deflate64.stream-fixtures.v1",
+  "generator": "public Deflate64IncrementalEncoder and ZipIncrementalWriter",
+  "zig_version": "0.16.0",
+  "optimize": "ReleaseFast",
+  "compression": "fixed",
+  "block_len": 131072,
+  "known_unknown_zip_entries": [
+    "known.bin",
+    "unknown.bin"
+  ],
+  "boundary_contract": "actual encoder output must contain length65538 and distance65536; Python token gate verifies presence",
+  "cases": [
+    {
+      "name": "empty",
+      "input_file": "empty.input",
+      "input_bytes": 0,
+      "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "crc32": 0,
+      "artifacts": [
+        {
+          "file": "empty-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 2,
+          "sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+          "progress": {
+            "steps": 3,
+            "input_read": 0,
+            "output_written": 2,
+            "zero_input_offers": 3,
+            "zero_output_offers": 0,
+            "need_input": 0,
+            "need_output": 2,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "empty-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 282,
+          "sha256": "563a64b3903563bb022ab3589c8f6609860a931517339d0ea8572c191ef6a587",
+          "progress": {
+            "steps": 284,
+            "input_read": 0,
+            "output_written": 282,
+            "zero_input_offers": 282,
+            "zero_output_offers": 2,
+            "need_input": 2,
+            "need_output": 281,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "empty-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 2,
+          "sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+          "progress": {
+            "steps": 4,
+            "input_read": 0,
+            "output_written": 2,
+            "zero_input_offers": 4,
+            "zero_output_offers": 2,
+            "need_input": 0,
+            "need_output": 3,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "empty-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 282,
+          "sha256": "563a64b3903563bb022ab3589c8f6609860a931517339d0ea8572c191ef6a587",
+          "progress": {
+            "steps": 70,
+            "input_read": 0,
+            "output_written": 282,
+            "zero_input_offers": 68,
+            "zero_output_offers": 20,
+            "need_input": 2,
+            "need_output": 67,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "tiny",
+      "input_file": "tiny.input",
+      "input_bytes": 16,
+      "input_sha256": "57ccd8b26e2cde8922e4d95414afed768c5715aa4d10f48cd482f3589411d8db",
+      "crc32": 3872135919,
+      "artifacts": [
+        {
+          "file": "tiny-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 18,
+          "sha256": "67156065ba536d8289d46e2741ef9c2bf1b75d891539949426eea75823eb3d9f",
+          "progress": {
+            "steps": 35,
+            "input_read": 16,
+            "output_written": 18,
+            "zero_input_offers": 19,
+            "zero_output_offers": 0,
+            "need_input": 16,
+            "need_output": 18,
+            "first_output_input_offset": 16,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "tiny-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 314,
+          "sha256": "3aa7e7505ed9f535609716633e097e9213d11e357f0070018f15df3748899d41",
+          "progress": {
+            "steps": 348,
+            "input_read": 32,
+            "output_written": 314,
+            "zero_input_offers": 234,
+            "zero_output_offers": 2,
+            "need_input": 34,
+            "need_output": 313,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "tiny-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 18,
+          "sha256": "67156065ba536d8289d46e2741ef9c2bf1b75d891539949426eea75823eb3d9f",
+          "progress": {
+            "steps": 14,
+            "input_read": 16,
+            "output_written": 18,
+            "zero_input_offers": 9,
+            "zero_output_offers": 4,
+            "need_input": 7,
+            "need_output": 6,
+            "first_output_input_offset": 16,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "tiny-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 314,
+          "sha256": "3aa7e7505ed9f535609716633e097e9213d11e357f0070018f15df3748899d41",
+          "progress": {
+            "steps": 89,
+            "input_read": 32,
+            "output_written": 314,
+            "zero_input_offers": 65,
+            "zero_output_offers": 27,
+            "need_input": 10,
+            "need_output": 78,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "pattern",
+      "input_file": "pattern.input",
+      "input_bytes": 12079,
+      "input_sha256": "ef6e55b69f3bfe4ce61d6eabfdab59af5ee228364cdd8ef84944ef249fa5e75c",
+      "crc32": 1625396164,
+      "artifacts": [
+        {
+          "file": "pattern-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 53,
+          "sha256": "31598fc03389ee86e1d2808cc39db2111c8fe8e373f2d71e19030e204868b26c",
+          "progress": {
+            "steps": 12133,
+            "input_read": 12079,
+            "output_written": 53,
+            "zero_input_offers": 54,
+            "zero_output_offers": 0,
+            "need_input": 12079,
+            "need_output": 53,
+            "first_output_input_offset": 12079,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "pattern-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 384,
+          "sha256": "75152ffb7821f8726a70e28100a2f94c353a7581189a6d8364d417e85b7f380a",
+          "progress": {
+            "steps": 24544,
+            "input_read": 24158,
+            "output_written": 384,
+            "zero_input_offers": 304,
+            "zero_output_offers": 2,
+            "need_input": 24160,
+            "need_output": 383,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "pattern-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 53,
+          "sha256": "31598fc03389ee86e1d2808cc39db2111c8fe8e373f2d71e19030e204868b26c",
+          "progress": {
+            "steps": 1988,
+            "input_read": 12079,
+            "output_written": 53,
+            "zero_input_offers": 506,
+            "zero_output_offers": 568,
+            "need_input": 1976,
+            "need_output": 11,
+            "first_output_input_offset": 12079,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "pattern-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 384,
+          "sha256": "75152ffb7821f8726a70e28100a2f94c353a7581189a6d8364d417e85b7f380a",
+          "progress": {
+            "steps": 5633,
+            "input_read": 24158,
+            "output_written": 384,
+            "zero_input_offers": 1464,
+            "zero_output_offers": 1610,
+            "need_input": 4348,
+            "need_output": 1284,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "binary",
+      "input_file": "binary.input",
+      "input_bytes": 16387,
+      "input_sha256": "642b711df2896a9f4fb1b37a677b7323a3c85cb155c08d8b60afa6dfd55f42a4",
+      "crc32": 901247393,
+      "artifacts": [
+        {
+          "file": "binary-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 17287,
+          "sha256": "ad1254110fdd8c8fe4966a6297a7f7c015eaa4d8c73b88a46ce29c412f3ca826",
+          "progress": {
+            "steps": 33675,
+            "input_read": 16387,
+            "output_written": 17287,
+            "zero_input_offers": 17288,
+            "zero_output_offers": 0,
+            "need_input": 16387,
+            "need_output": 17287,
+            "first_output_input_offset": 16387,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "binary-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 34852,
+          "sha256": "a6aa9dc4b52b8fd8b4dde22787840a25b1ff2a5383d7f0d742c37f3858bdaf12",
+          "progress": {
+            "steps": 67628,
+            "input_read": 32774,
+            "output_written": 34852,
+            "zero_input_offers": 34772,
+            "zero_output_offers": 2,
+            "need_input": 32776,
+            "need_output": 34851,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "binary-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 17287,
+          "sha256": "ad1254110fdd8c8fe4966a6297a7f7c015eaa4d8c73b88a46ce29c412f3ca826",
+          "progress": {
+            "steps": 6853,
+            "input_read": 16387,
+            "output_written": 17287,
+            "zero_input_offers": 4843,
+            "zero_output_offers": 1958,
+            "need_input": 2680,
+            "need_output": 4172,
+            "first_output_input_offset": 16387,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "binary-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 34852,
+          "sha256": "a6aa9dc4b52b8fd8b4dde22787840a25b1ff2a5383d7f0d742c37f3858bdaf12",
+          "progress": {
+            "steps": 15904,
+            "input_read": 32774,
+            "output_written": 34852,
+            "zero_input_offers": 10270,
+            "zero_output_offers": 4544,
+            "need_input": 5884,
+            "need_output": 10019,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "runs",
+      "input_file": "runs.input",
+      "input_bytes": 70003,
+      "input_sha256": "401e70c191375b6b55df9a6b403a58c794b7a4761bdc2ef5d1c79273cfd4a496",
+      "crc32": 585165401,
+      "artifacts": [
+        {
+          "file": "runs-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 10,
+          "sha256": "1d769ff9988019d3fc632196e15df5aae920e6171312f47601247f4c93e3ed35",
+          "progress": {
+            "steps": 70014,
+            "input_read": 70003,
+            "output_written": 10,
+            "zero_input_offers": 11,
+            "zero_output_offers": 0,
+            "need_input": 70003,
+            "need_output": 10,
+            "first_output_input_offset": 70003,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "runs-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 298,
+          "sha256": "11cf6e7c5c97fc1739efbb94e0ffa01698aca063442a14a3d4620233a69fb111",
+          "progress": {
+            "steps": 140306,
+            "input_read": 140006,
+            "output_written": 298,
+            "zero_input_offers": 218,
+            "zero_output_offers": 2,
+            "need_input": 140008,
+            "need_output": 297,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "runs-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 10,
+          "sha256": "1d769ff9988019d3fc632196e15df5aae920e6171312f47601247f4c93e3ed35",
+          "progress": {
+            "steps": 11437,
+            "input_read": 70003,
+            "output_written": 10,
+            "zero_input_offers": 2863,
+            "zero_output_offers": 3268,
+            "need_input": 11432,
+            "need_output": 4,
+            "first_output_input_offset": 70003,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "runs-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 298,
+          "sha256": "11cf6e7c5c97fc1739efbb94e0ffa01698aca063442a14a3d4620233a69fb111",
+          "progress": {
+            "steps": 32072,
+            "input_read": 140006,
+            "output_written": 298,
+            "zero_input_offers": 8058,
+            "zero_output_offers": 9165,
+            "need_input": 25138,
+            "need_output": 6933,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "long_length",
+      "input_file": "long_length.input",
+      "input_bytes": 65539,
+      "input_sha256": "1342ae5e830645ad0d79c18c7fd6cd56a2af77245129982225e438ada52ecc8c",
+      "crc32": 242665795,
+      "artifacts": [
+        {
+          "file": "long_length-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 6,
+          "sha256": "c1cfce70a1e9478cf250f88d719844e34dc964907a84d4adde97807b83674966",
+          "progress": {
+            "steps": 65546,
+            "input_read": 65539,
+            "output_written": 6,
+            "zero_input_offers": 7,
+            "zero_output_offers": 0,
+            "need_input": 65539,
+            "need_output": 6,
+            "first_output_input_offset": 65539,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "long_length-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 290,
+          "sha256": "a69a24d0d48adcd4503ccb47f92180627893c3870e45873e8ee4409b89f8544d",
+          "progress": {
+            "steps": 131370,
+            "input_read": 131078,
+            "output_written": 290,
+            "zero_input_offers": 210,
+            "zero_output_offers": 2,
+            "need_input": 131080,
+            "need_output": 289,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "long_length-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 6,
+          "sha256": "c1cfce70a1e9478cf250f88d719844e34dc964907a84d4adde97807b83674966",
+          "progress": {
+            "steps": 10709,
+            "input_read": 65539,
+            "output_written": 6,
+            "zero_input_offers": 2681,
+            "zero_output_offers": 3060,
+            "need_input": 10704,
+            "need_output": 4,
+            "first_output_input_offset": 65539,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "long_length-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 290,
+          "sha256": "a69a24d0d48adcd4503ccb47f92180627893c3870e45873e8ee4409b89f8544d",
+          "progress": {
+            "steps": 30037,
+            "input_read": 131078,
+            "output_written": 290,
+            "zero_input_offers": 7543,
+            "zero_output_offers": 8582,
+            "need_input": 23546,
+            "need_output": 6490,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    },
+    {
+      "name": "long_distance",
+      "input_file": "long_distance.input",
+      "input_bytes": 131072,
+      "input_sha256": "5180e38b0c72f0a2c322b150385a2529b224be456b025851bc4867cbb8119402",
+      "crc32": 209551782,
+      "artifacts": [
+        {
+          "file": "long_distance-one.raw",
+          "kind": "incremental_raw",
+          "pattern": "one",
+          "bytes": 69098,
+          "sha256": "c6d31c72c762e910e7e00962f2c0f5a269ebf83b013c4e2ebc37c1673b460368",
+          "progress": {
+            "steps": 200171,
+            "input_read": 131072,
+            "output_written": 69098,
+            "zero_input_offers": 69099,
+            "zero_output_offers": 0,
+            "need_input": 131072,
+            "need_output": 69098,
+            "first_output_input_offset": 131072,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "long_distance-one.zip",
+          "kind": "incremental_zip",
+          "pattern": "one",
+          "bytes": 138474,
+          "sha256": "2d646041845828d18ed092d3640fe638623e16e3757703c516318f1039fc89b9",
+          "progress": {
+            "steps": 400620,
+            "input_read": 262144,
+            "output_written": 138474,
+            "zero_input_offers": 138394,
+            "zero_output_offers": 2,
+            "need_input": 262146,
+            "need_output": 138473,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        },
+        {
+          "file": "long_distance-mixed.raw",
+          "kind": "incremental_raw",
+          "pattern": "mixed",
+          "bytes": 69098,
+          "sha256": "c6d31c72c762e910e7e00962f2c0f5a269ebf83b013c4e2ebc37c1673b460368",
+          "progress": {
+            "steps": 38080,
+            "input_read": 131072,
+            "output_written": 69098,
+            "zero_input_offers": 22030,
+            "zero_output_offers": 10880,
+            "need_input": 21400,
+            "need_output": 16679,
+            "first_output_input_offset": 131072,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": true
+        },
+        {
+          "file": "long_distance-mixed.zip",
+          "kind": "incremental_zip",
+          "pattern": "mixed",
+          "bytes": 138474,
+          "sha256": "2d646041845828d18ed092d3640fe638623e16e3757703c516318f1039fc89b9",
+          "progress": {
+            "steps": 93350,
+            "input_read": 262144,
+            "output_written": 138474,
+            "zero_input_offers": 48396,
+            "zero_output_offers": 26673,
+            "need_input": 47076,
+            "need_output": 46273,
+            "first_output_input_offset": 0,
+            "caller_guards_verified": true
+          },
+          "self_decode_verified": false
+        }
+      ]
+    }
+  ]
+}

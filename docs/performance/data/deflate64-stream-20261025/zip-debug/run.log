@@ -1,0 +1,28 @@
+test-zip-deflate64-stream
++- run test vort-zip-deflate64-stream-tests
+   +- compile test vort-zip-deflate64-stream-tests Debug native 1 errors
+src/zip/deflate64_stream_writer_tests.zig:253:33: error: value with comptime-only type 'comptime_int' depends on runtime control flow
+            const placeholder = if (entry.zip64) std.math.maxInt(u32) else 0;
+                                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/zip/deflate64_stream_writer_tests.zig:253:42: note: runtime control flow here
+            const placeholder = if (entry.zip64) std.math.maxInt(u32) else 0;
+                                    ~~~~~^~~~~~
+referenced by:
+    test.ZIP Deflate64 stream known and unknown sizes preserve ZIP32 ZIP64 descriptors and fixed compression: src/zip/deflate64_stream_writer_tests.zig:57:41
+    test_0: src/zip/deflate64_stream_writer_tests.zig:13:12
+error: 1 compilation errors
+failed command: /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig test .zig-cache/o/b0d047ba2b114a510a29fad6255d7eaf/vort-br-record-optimal.o .zig-cache/o/d5037e170b7cab0e7d7bdc7c26ae6ce6/vort-zstd-huffman-x2.o -ODebug -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d --dep vail_archive_crypto -Mroot=/home/passchaos/project-z/vort-brotli-context-cache/src/zip.zig -ODebug -Mvail_archive_crypto=/home/passchaos/project-z/vail/archive_crypto/src/root.zig --test-filter "ZIP Deflate64 stream" --cache-dir .zig-cache --global-cache-dir /home/passchaos/.cache/zig --name vort-zip-deflate64-stream-tests --zig-lib-dir /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib/ --listen=-
+
+Build Summary: 4/7 steps succeeded (1 failed)
+test-zip-deflate64-stream transitive failure
++- run test vort-zip-deflate64-stream-tests transitive failure
+   +- compile test vort-zip-deflate64-stream-tests Debug native 1 errors
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal Debug native cached 5ms MaxRSS:35M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 Debug native cached 5ms MaxRSS:35M
+      +- compile obj vort-br-record-optimal Debug native (reused)
+      +- compile obj vort-zstd-huffman-x2 Debug native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/8980fda3bfcf197785899bce9452ad2c/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0xba79f587 -Zad683ca751b4db1d test-zip-deflate64-stream -j2 --summary all

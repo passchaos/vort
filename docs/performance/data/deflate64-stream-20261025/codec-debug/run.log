@@ -1,0 +1,9 @@
+src/deflate64/stream_encoder.zig:34:19: error: ambiguous reference
+    fatal_error: ?Error = null,
+                  ^~~~~
+src/deflate64/stream_encoder.zig:47:9: note: declared here
+    pub const Error = stream_encoder.Error;
+    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/deflate64/stream_encoder.zig:11:5: note: also declared here
+pub const Error = core.Error || std.mem.Allocator.Error;
+~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

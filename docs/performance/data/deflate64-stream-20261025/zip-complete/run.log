@@ -1,0 +1,33 @@
+test-zip-codecs
++- run test vort-zip-codec-tests 1987 pass, 1 fail (1988 total)
+validated RLE prefix model=4294967296 actual-final-input=7 wire-tail=4 bytes
+error: 'zip.incremental_writer_tests.test.ZIP incremental writer emits multi-block Deflate64 stored streams' failed:
+       four-byte optimal frame audit: changed=0 larger=0 total=590165/590165 worst_extra=0
+       fastest optimal budget audit: changed=3 larger=0 smaller=3 total=230779/230784 worst_extra=0
+       single beam audit: changed=1 larger=0 smaller=1 total=658597/658600 worst_extra=0
+       single beam JSON audit: changed=20 total=12581/12534 worst_extra=3
+       level three single beam audit: changed=0 larger=0 smaller=0 total=1574138/1574138 worst_extra=0 absolute_selected=0 absolute_larger=0 absolute_worst_extra=0 proxy_selected=0 proxy_larger=0 proxy_worst_extra=0
+       level three single beam JSON audit: changed=0 larger=0 total=10104/10104 worst_extra=0
+       level three large single beam audit: selected=20 changed=20 larger=20 total=19576/19524 worst_extra=4 absolute_selected=24 absolute_larger=20 absolute_total=19576 absolute_worst_extra=4 proxy_selected=24 proxy_larger=20 proxy_total=19576 proxy_worst_extra=4
+       level three structured-family audit: screened=16 eligible=0 changed=0 larger=0 smaller=0 total=100138/100138 worst_extra=0 proxy_eligible=0 proxy_larger=0 proxy_smaller=0 proxy_total=100138 proxy_worst_extra=0
+       four-byte optimal plan audit: improved=2 total=30487549/30487553
+       cut-histogram state-bytes=4208 initial-scan=49152 adjacent128-scan=256
+       large-distance finder=hc3 window=67108865 distance=67108865 length=64 matcher_heap=1074790432 dictionary_heap=67108865 seeded=67108865
+       large-distance finder=bt4 window=67108865 distance=67108865 length=64 matcher_heap=1612185648 dictionary_heap=67108865 seeded=67108865
+       large-distance legacy_and_advanced distance=67108865 consumed=64 legacy_peak_bound=268699396 payload_bytes=10 model_rep0=67108864
+       expected 0, found 2
+failed command: ./.zig-cache/o/e6003574eab6541fc55ef23ecee70bf6/vort-zip-codec-tests --cache-dir=./.zig-cache --seed=0x38cb5da7 --listen=-
+
+Build Summary: 5/7 steps succeeded (1 failed); 1987/1988 tests passed (1 failed)
+test-zip-codecs transitive failure
++- run test vort-zip-codec-tests 1987 pass, 1 fail (1988 total)
+   +- compile test vort-zip-codec-tests ReleaseFast native success 4m MaxRSS:4G
+      +- WriteFile cached
+      +- compile obj vort-br-record-optimal ReleaseFast native success 144ms MaxRSS:110M
+      +- WriteFile cached
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native success 404ms MaxRSS:119M
+      +- compile obj vort-br-record-optimal ReleaseFast native (reused)
+      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/adca541c91f1a5858164de00981e5587/build /home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig /home/passchaos/Temp/zig-x86_64-linux-0.16.0/lib /home/passchaos/project-z/vort-brotli-context-cache .zig-cache /home/passchaos/.cache/zig --seed 0x38cb5da7 -Z881e47898d1af6e7 test-zip-codecs -Doptimize=ReleaseFast -j2 --summary all

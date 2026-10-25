@@ -15,7 +15,7 @@ encoder quality and throughput are separate claims.
 | Family | Implemented public functionality | Remaining gap |
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
-| [ZIP container](../formats/zip.md) | ZIP32/ZIP64, local/central metadata and descriptors; Stored, Shrink, Reduce, Implode, Deflate/Deflate64, DCL Implode, Bzip2, LZMA, legacy/current Zstandard, XZ and PPMd methods; borrowed/owned and incremental I/O, split-volume adapters, ZipCrypto, WinZip AES and password-based PKWARE AES Strong Encryption | Certificate recipients, other Strong Encryption ciphers and encrypted central directories remain unsupported. Incremental Deflate64 writes stored blocks; match-producing encoding is available through the one-shot writer, so incremental ratio remains a gap. Broad archive interoperability and a current cross-library archive ratio/throughput/memory matrix are not established. |
+| [ZIP container](../formats/zip.md) | ZIP32/ZIP64, local/central metadata and descriptors; Stored, Shrink, Reduce, Implode, Deflate/Deflate64, DCL Implode, Bzip2, LZMA, legacy/current Zstandard, XZ and PPMd methods; borrowed/owned and incremental I/O, match-producing adaptive Deflate64, split-volume adapters, ZipCrypto, WinZip AES and password-based PKWARE AES Strong Encryption | Certificate recipients, other Strong Encryption ciphers and encrypted central directories remain unsupported. Broad archive interoperability and a current cross-library archive ratio/throughput/memory matrix are not established. |
 | Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; signed native acceleration, independent chain depth and actual work profiles; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | Native chain/lazy defaults and accelerated search differ from liblz4's single-hash fast parser. Empty raw input retains the legacy API-only empty-slice convention. Full corpus/platform fast/HC ratio, throughput and memory leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
@@ -23,10 +23,33 @@ encoder quality and throughput are separate claims.
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
 | XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; presets 0...9/extreme, five real HC/BT matchers, fast/normal and legacy modes, explicit nice/depth and budgets across public/incremental APIs; 4 KiB...1.5 GiB custom dictionaries, full 2 MiB compressed plaintext chunks with bounded 64 KiB payload and stored packets; progressive and bounded checked decoding | Preset parameter parity does not establish full liblzma parsing, quality or throughput parity. Normal search retains eight state/rep paths per position. Default XZ blocks remain independent 1 MiB groups, and broad encoder speed/ratio/memory parity remains unproven. |
 
-The [ZIP contract](../formats/zip.md) lists its entry methods, encryption limits
-and incremental Deflate64 tradeoff. Split incremental writing already removes
+The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
+limits. Split incremental writing already removes
 the owned split writer's whole-archive staging requirement. These container
 features do not establish archive-wide competitor performance leadership.
+
+The [Deflate64 streaming increment](deflate64-stream-functional-baseline.md)
+closes ZIP method 9's stored-only incremental encoding gap. Its public raw
+`IncrementalEncoder` and ZIP adapter default to adaptive fixed/stored output,
+128 KiB planning blocks, 65,536-byte history and matches through 65,538 bytes.
+Explicit stored mode disables matching; total input and pending-output limits
+remain caller controls. Failed calls preserve actual committed progress through
+ZIP encryption accounting before the writer becomes poisoned. The existing
+one-shot encoder retains its 258-byte match and 65,535-byte distance boundaries.
+Dynamic-Huffman Deflate64 encoding, preset dictionaries and broad current
+quality/platform/ratio/speed/memory comparisons remain open. Core contracts
+pass 183/183 in native Debug, native ReleaseFast and x86, including 4 MiB across
+1024 blocks and warmed reuse without further heap growth. Native Debug/x86 ZIP
+contracts each pass 41/41 on stable source. Native and x86 independent Info-ZIP
+UnZip 6.00 campaigns each check 28 raw/ZIP artifacts and 42 members with
+58 commands, verifying actual length 65,538 and distance 65,536 plus identical
+wires across two chunk
+patterns. The complete ZIP suite passes 1988/1988 on stable source after an
+existing stored-only fixture explicitly selects stored mode; this corrects its
+old-default assumption without changing production code. The final build check
+passes 176/176 on the source snapshot after that test fix. These results
+do not establish complete interoperability, measured peak-memory leadership or
+competitor throughput parity.
 
 The former LZMA/XZ complete plaintext staging gap is now closed in
 caller-buffer decoding and size queries, while preserving caller output on
