@@ -337,9 +337,29 @@
       "sha256": "867beeb1bcae2cde4ab3f0456fa08a56bc95f1043cbfde66699a384a5b559d38"
     },
     {
+      "path": "post-rebase-hashes.json",
+      "bytes": 275,
+      "sha256": "3fdeda757d81175e649e25a34cade8f5727640b7c19bb81c006fc052308fdaff"
+    },
+    {
+      "path": "post-rebase-history.log",
+      "bytes": 430,
+      "sha256": "ecba1ffd7549e59cca12c47ed309b1d673f41a5936a6d06bebdfaa3f028c4e57"
+    },
+    {
+      "path": "post-rebase-metadata.log",
+      "bytes": 889,
+      "sha256": "ddf3407e1ec39bd6edcdebf68319b730b7df9a860e2bf3af0079d22d1464edc4"
+    },
+    {
       "path": "probe-first.log",
       "bytes": 355,
       "sha256": "30d0a55facc4e92ac9d64d474b83b90d084fb82da5f4d31bae7739e92aa8a9bf"
+    },
+    {
+      "path": "rebase.log",
+      "bytes": 147,
+      "sha256": "3c07444b54103021ff46e9d41c19ada3ca2783f974814445ab7c5aae2cdf30e1"
     },
     {
       "path": "size-examples/native-far70000-q2-incremental-w25-b32768-old.br",
@@ -518,8 +538,8 @@
     },
     {
       "path": "validation.json",
-      "bytes": 2589,
-      "sha256": "dc1aec17842c71573acacbf89efd8e0db3bb6c58e412c1364f1dcaf7f4ca3b12"
+      "bytes": 2883,
+      "sha256": "279b26ebdc8d86630b7f6ca6be7e12513bede0658d4aeef30a69768ced72841a"
     },
     {
       "path": "x86-diff.log",

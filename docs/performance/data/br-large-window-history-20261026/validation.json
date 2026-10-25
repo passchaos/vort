@@ -76,5 +76,18 @@
   "final_test_commit": "2adbe60b64767220acc037317ff5bda48d8d0276",
   "final_test_source_files": 1902,
   "final_test_manifest_sha256": "124606e1cd3bfc8bd165c86d5123232c47cfad2e00d8c3177fdf73828eee6a74",
-  "codec_manifest_sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b"
+  "codec_manifest_sha256": "c5826893636702133534c07f2f82c9fa3a77729682a94bf1d16ca660b2a9766b",
+  "post_rebase": {
+    "history_contracts": {
+      "passed": 27,
+      "total": 27
+    },
+    "metadata_and_root_regression": {
+      "passed": 130,
+      "total": 130
+    },
+    "source_files_checked": 1902,
+    "evidence_files_checked_before_handoff": 114,
+    "source_unchanged": true
+  }
 }
