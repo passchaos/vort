@@ -35,6 +35,9 @@ pub const Encoder = struct {
         properties: writer.Properties = .{},
         match_options: ?writer.MatchOptions = null,
         filters: []const writer.Filter = &.{},
+        /// Declare exact packed and unpacked sizes in every complete Block
+        /// Header, using the same block writer as the one-shot APIs.
+        include_block_sizes: bool = false,
         payload_encoding: writer.PayloadEncoding = .compressed,
         max_input_len: usize = std.math.maxInt(usize),
         max_pending_output_len: usize = 16 * 1024 * 1024,
@@ -60,6 +63,7 @@ pub const Encoder = struct {
                 .properties = self.properties,
                 .match_options = self.match_options,
                 .filters = self.filters,
+                .include_block_sizes = self.include_block_sizes,
             };
         }
     };

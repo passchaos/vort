@@ -183,3 +183,61 @@ test "LZMA CLI chunk size and large dictionary override presets independently of
     try too_large.controls.apply(&rejected, "parser", null);
     try std.testing.expectError(error.InvalidBlockPlan, rejected.validate());
 }
+
+test "XZ block sizes CLI parses exact booleans and rejects conflicting flags" {
+    const defaults = try parse(&.{}, 0);
+    try std.testing.expect(defaults.controls.include_block_sizes == null);
+    const shorthand = try parse(&.{ "crc64", "--block-sizes" }, 1);
+    try std.testing.expectEqualStrings("crc64", shorthand.positionals[0].?);
+    try std.testing.expectEqual(@as(?bool, true), shorthand.controls.include_block_sizes);
+    const enabled = try parse(&.{"--block-sizes=true"}, 0);
+    const disabled = try parse(&.{"--block-sizes=false"}, 0);
+    try std.testing.expectEqual(@as(?bool, true), enabled.controls.include_block_sizes);
+    try std.testing.expectEqual(@as(?bool, false), disabled.controls.include_block_sizes);
+
+    try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ "--block-sizes", "--block-sizes" }, 0));
+    try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ "--block-sizes", "--block-sizes=false" }, 0));
+    try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ "--block-sizes=false", "--block-sizes" }, 0));
+    try std.testing.expectError(error.DuplicateLzmaOption, parse(&.{ "--block-sizes=true", "--block-sizes=false" }, 0));
+    try std.testing.expectError(error.MissingLzmaOptionValue, parse(&.{"--block-sizes="}, 0));
+    for ([_][]const u8{ "--block-sizes=TRUE", "--block-sizes=False", "--block-sizes=1", "--block-sizes=yes" }) |flag| {
+        try std.testing.expectError(error.InvalidBoolean, parse(&.{flag}, 0));
+    }
+    try std.testing.expectError(error.UnexpectedLzmaArgument, parse(&.{ "--block-sizes", "crc64" }, 1));
+}
+
+test "XZ block sizes CLI applies after presets and rejects other formats even when false" {
+    const unchanged = try parse(&.{}, 0);
+    var defaults = try unchanged.controls.baseOptions(vort.XzEncodeOptions);
+    try unchanged.controls.apply(&defaults, "parser", null);
+    try std.testing.expect(!defaults.include_block_sizes);
+    defaults.include_block_sizes = true;
+    try unchanged.controls.apply(&defaults, "parser", null);
+    try std.testing.expect(defaults.include_block_sizes);
+
+    const first = try parse(&.{ "--preset=6", "--block-sizes" }, 0);
+    const second = try parse(&.{ "--block-sizes=true", "--preset=6" }, 0);
+    var a = try first.controls.baseOptions(vort.XzEncodeOptions);
+    var b = try second.controls.baseOptions(vort.XzEncodeOptions);
+    try first.controls.apply(&a, "parser", null);
+    try second.controls.apply(&b, "parser", null);
+    try std.testing.expectEqualDeep(a, b);
+    try std.testing.expect(a.include_block_sizes);
+    try std.testing.expect(a.parallel == null);
+    const disabled = try parse(&.{"--block-sizes=false"}, 0);
+    try disabled.controls.apply(&a, "parser", null);
+    try std.testing.expect(!a.include_block_sizes);
+    a.include_block_sizes = true;
+    try std.testing.expectEqualDeep(a, b);
+
+    inline for (.{ vort.LzmaEncodeOptions, vort.RawLzma2EncodeOptions, vort.MicroLzmaEncodeOptions }) |Target| {
+        inline for (.{ "--block-sizes", "--block-sizes=false" }) |flag| {
+            const parsed = try parse(&.{ flag, "--dict-size=8192" }, 0);
+            var options: Target = .{};
+            const original = options;
+            const mode_field = if (@hasField(Target, "parser")) "parser" else "mode";
+            try std.testing.expectError(error.UnsupportedXzBlockSizesOption, parsed.controls.apply(&options, mode_field, null));
+            try std.testing.expectEqualDeep(original, options);
+        }
+    }
+}

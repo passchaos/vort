@@ -11,6 +11,7 @@ pub const Controls = struct {
     depth: ?u32 = null,
     dictionary_size: ?u32 = null,
     chunk_size: ?usize = null,
+    include_block_sizes: ?bool = null,
     mode: ?Mode = null,
     lc: ?u4 = null,
     lp: ?u3 = null,
@@ -25,6 +26,11 @@ pub const Controls = struct {
     /// Apply explicit flags after the preset and legacy positional arguments.
     /// Profile storage is owned by the command and survives the encoder call.
     pub fn apply(self: Controls, options: anytype, comptime mode_field: []const u8, profile: ?*vort.LzmaEncodeWorkProfile) !void {
+        if (self.include_block_sizes) |value| {
+            if (@hasField(@TypeOf(options.*), "include_block_sizes")) {
+                options.include_block_sizes = value;
+            } else return error.UnsupportedXzBlockSizesOption;
+        }
         if (self.chunk_size) |value| {
             if (@hasField(@TypeOf(options.*), "chunk_size")) {
                 options.chunk_size = @intCast(value);
@@ -55,6 +61,10 @@ pub const Controls = struct {
     }
 
     fn parseFlag(self: *Controls, arg: []const u8) !void {
+        if (std.mem.eql(u8, arg, "--block-sizes")) {
+            try assign(self, "include_block_sizes", true);
+            return;
+        }
         if (std.mem.eql(u8, arg, "--extreme")) {
             if (self.extreme) return error.DuplicateLzmaOption;
             self.extreme = true;
@@ -71,6 +81,14 @@ pub const Controls = struct {
         if (value.len == 0) return error.MissingLzmaOptionValue;
         if (std.mem.eql(u8, name, "--preset")) {
             try assign(self, "preset", try std.fmt.parseInt(u32, value, 10));
+        } else if (std.mem.eql(u8, name, "--block-sizes")) {
+            const enabled = if (std.mem.eql(u8, value, "true"))
+                true
+            else if (std.mem.eql(u8, value, "false"))
+                false
+            else
+                return error.InvalidBoolean;
+            try assign(self, "include_block_sizes", enabled);
         } else if (std.mem.eql(u8, name, "--match-finder")) {
             try assign(self, "finder", std.meta.stringToEnum(vort.LzmaMatchFinder, value) orelse return error.InvalidLzmaMatchFinder);
         } else if (std.mem.eql(u8, name, "--nice-len")) {

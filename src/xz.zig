@@ -81,6 +81,9 @@ test {
     _ = @import("xz/parallel/resources_tests.zig");
     _ = @import("xz/parallel/memory_tests.zig");
     _ = @import("xz/parallel/encoder.zig");
+    _ = @import("xz/block_sizes/contracts_tests.zig");
+    _ = @import("xz/block_sizes/resources_tests.zig");
+    _ = @import("xz/block_sizes/streams_tests.zig");
     _ = container;
     _ = incremental_decoder;
     _ = incremental_encoder;

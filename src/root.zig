@@ -2435,6 +2435,10 @@ test "root Zstd magicless consumer contracts" {
 test "root XZ parallel consumer contracts" {
     try @import("tests/xz_parallel_consumers.zig").contracts(@This());
 }
+
+test "root XZ block sizes consumer contracts" {
+    try @import("tests/xz_block_sizes_consumers.zig").contracts(@This());
+}
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
 pub const zstdMinCompressionLevel = zstd.min_compression_level;
 pub const zstdMaxCompressionLevel = zstd.max_compression_level;

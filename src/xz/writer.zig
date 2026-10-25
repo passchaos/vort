@@ -6,6 +6,8 @@ const lzma_encoder = @import("../lzma/encoder.zig");
 const lzma2_writer = @import("lzma2_writer.zig");
 const parallel_types = @import("parallel/types.zig");
 const parallel_stream = @import("parallel/stream.zig");
+const block_header = @import("writer/block_header.zig");
+const chunk_encoder = @import("encoder/chunk.zig");
 
 pub const Error = container.Error || lzma_encoder.Error || std.Thread.SpawnError;
 pub const Check = container.Check;
@@ -24,6 +26,9 @@ const lazy_text_section = switch (builtin.object_format) {
 
 pub const EncodeOptions = struct {
     check: Check = .crc64,
+    /// Declare exact LZMA2 payload and original input sizes in every Block
+    /// Header. Independent of parallel mode; false preserves legacy framing.
+    include_block_sizes: bool = false,
     block_size: usize = 1024 * 1024,
     dictionary_size: usize = lzma2_writer.dictionary_size,
     chunk_size: usize = lzma2_writer.max_stored_chunk_len,
@@ -247,22 +252,34 @@ pub fn appendBlock(
     const original_len = output.items.len;
     errdefer output.shrinkRetainingCapacity(original_len);
     if (input.len == 0 or input.len > options.block_size) return error.InvalidBlockPlan;
+    // Header and payload growth may relocate the allocation before filtering
+    // or hashing the original input. Preserve an aliased source beforehand.
+    var owned_input: ?[]u8 = null;
+    defer if (owned_input) |bytes| allocator.free(bytes);
+    const source = if (try chunk_encoder.inputOverlapsOutputAllocation(input, output)) blk: {
+        const bytes = try allocator.dupe(u8, input);
+        owned_input = bytes;
+        break :blk bytes;
+    } else input;
     try filters.validateChain(options.filters);
     const dictionary_property = try lzma2_writer.dictionaryProperty(options.dictionary_size);
     const check_size = try checkSize(options.check);
+    if (options.include_block_sizes)
+        return appendSizedBlock(allocator, output, source, options, payload_encoding, dictionary_property, check_size);
     const block_start = output.items.len;
-    const header_size = try appendBlockHeader(
+    const header_size = try block_header.append(
         allocator,
         output,
         options.filters,
         dictionary_property,
+        null,
     );
     var filtered_storage: ?[]u8 = null;
     defer if (filtered_storage) |bytes| allocator.free(bytes);
     const filtered = if (options.filters.len == 0)
-        input
+        source
     else blk: {
-        const bytes = try allocator.dupe(u8, input);
+        const bytes = try allocator.dupe(u8, source);
         filtered_storage = bytes;
         filters.encodeChain(bytes, options.filters);
         break :blk bytes;
@@ -278,7 +295,7 @@ pub fn appendBlock(
     };
     const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
     try output.appendNTimes(allocator, 0, padding_len);
-    try appendCheck(allocator, output, options.check, input);
+    try appendCheck(allocator, output, options.check, source);
     const unpadded_size = std.math.add(
         u64,
         @as(u64, @intCast(header_size + packed_size)),
@@ -287,7 +304,58 @@ pub fn appendBlock(
     std.debug.assert(output.items.len > block_start);
     return .{
         .unpadded_size = unpadded_size,
-        .uncompressed_size = try usizeToVli(input.len),
+        .uncompressed_size = try usizeToVli(source.len),
+    };
+}
+
+fn appendSizedBlock(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+    payload_encoding: PayloadEncoding,
+    dictionary_property: u8,
+    check_size: u64,
+) !BlockRecord {
+    const unpacked_size = try usizeToVli(input.len);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var filtered_storage: ?[]u8 = null;
+    defer if (filtered_storage) |bytes| allocator.free(bytes);
+    const filtered = if (options.filters.len == 0)
+        input
+    else blk: {
+        const bytes = try allocator.dupe(u8, input);
+        filtered_storage = bytes;
+        filters.encodeChain(bytes, options.filters);
+        break :blk bytes;
+    };
+    const packed_size = switch (payload_encoding) {
+        .stored => try lzma2_writer.appendStoredPayload(allocator, &payload, filtered),
+        .compressed => try lzma2_writer.appendCompressedPayloadWithAdvancedOptions(
+            allocator,
+            &payload,
+            filtered,
+            options.lzma2Options(),
+        ),
+    };
+    std.debug.assert(payload.items.len == packed_size);
+    if (filtered_storage) |bytes| {
+        allocator.free(bytes);
+        filtered_storage = null;
+    }
+    const header_size = try block_header.append(allocator, output, options.filters, dictionary_property, .{
+        .compressed_size = try usizeToVli(packed_size),
+        .uncompressed_size = unpacked_size,
+    });
+    try output.appendSlice(allocator, payload.items);
+    const body_size = std.math.add(usize, header_size, packed_size) catch return error.IntegerOverflow;
+    const padding_len = (4 - body_size % 4) % 4;
+    try output.appendNTimes(allocator, 0, padding_len);
+    try appendCheck(allocator, output, options.check, input);
+    return .{
+        .unpadded_size = std.math.add(u64, @intCast(body_size), check_size) catch return error.IntegerOverflow,
+        .uncompressed_size = unpacked_size,
     };
 }
 
@@ -331,37 +399,6 @@ pub fn appendStreamEnd(
     try appendU32(allocator, output, std.hash.Crc32.hash(&footer_fields));
     try output.appendSlice(allocator, &footer_fields);
     try output.appendSlice(allocator, &stream_footer_magic);
-}
-
-fn appendBlockHeader(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    filter_chain: []const Filter,
-    dictionary_property: u8,
-) !usize {
-    var header: std.ArrayList(u8) = .empty;
-    defer header.deinit(allocator);
-    try header.append(allocator, 0);
-    try header.append(allocator, @intCast(filter_chain.len));
-    for (filter_chain) |filter| {
-        try appendVli(allocator, &header, filters.id(filter));
-        const properties_len = filters.propertiesSize(filter);
-        try appendVli(allocator, &header, properties_len);
-        if (properties_len != 0) {
-            var properties: [4]u8 = undefined;
-            filters.writeProperties(filter, properties[0..properties_len]);
-            try header.appendSlice(allocator, properties[0..properties_len]);
-        }
-    }
-    try appendVli(allocator, &header, 0x21);
-    try appendVli(allocator, &header, 1);
-    try header.append(allocator, dictionary_property);
-    while (header.items.len % 4 != 0) try header.append(allocator, 0);
-    if (header.items.len / 4 > std.math.maxInt(u8)) return error.IntegerOverflow;
-    header.items[0] = @intCast(header.items.len / 4);
-    try output.appendSlice(allocator, header.items);
-    try appendU32(allocator, output, std.hash.Crc32.hash(header.items));
-    return header.items.len + 4;
 }
 
 fn appendCheck(

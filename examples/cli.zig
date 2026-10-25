@@ -2948,6 +2948,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Explicit options override the preset regardless of flag order
         \\                              --profile requires a preset, matcher option, or fast/normal mode
         \\  XZ-only option: --chunk-size=1...2097152 (default 65536)
+        \\  XZ-only option: --block-sizes[=true|false] (default false)
+        \\                              Include exact sizes in Block Headers; --block-sizes enables it
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
         \\  decode-xz-concat-file <in> <out> [max_output]

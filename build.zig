@@ -113,6 +113,17 @@ pub fn build(b: *std.Build) void {
     xz_parallel_wasm_run.addArtifactArg(xz_parallel_wasm);
     const xz_parallel_wasm_step = b.step("test-xz-parallel-wasm", "Execute the public bounded XZ parallel serial fallback in WebAssembly");
     xz_parallel_wasm_step.dependOn(&xz_parallel_wasm_run.step);
+    const xz_block_sizes_wasm = b.addExecutable(.{
+        .name = "vort-xz-block-sizes-wasm",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/tests/xz_block_sizes_wasm.zig"), .target = wasm_target, .optimize = optimize, .single_threaded = true, .imports = &.{.{ .name = "xz", .module = xz_parallel_wasm_mod }} }),
+    });
+    xz_block_sizes_wasm.entry = .disabled;
+    xz_block_sizes_wasm.rdynamic = true;
+    xz_block_sizes_wasm.stack_size = 8 * 1024 * 1024;
+    const xz_block_sizes_wasm_run = b.addSystemCommand(&.{ "node", "tools/xz/block_sizes_wasm_gate.js" });
+    xz_block_sizes_wasm_run.addArtifactArg(xz_block_sizes_wasm);
+    const xz_block_sizes_wasm_step = b.step("test-xz-block-sizes-wasm", "Execute XZ declared block sizes, aliases and quota contracts in WebAssembly");
+    xz_block_sizes_wasm_step.dependOn(&xz_block_sizes_wasm_run.step);
     const br_public_wasm = b.addExecutable(.{
         .name = "vort-br-public-wasm",
         .root_module = b.createModule(.{
@@ -904,6 +915,13 @@ pub fn build(b: *std.Build) void {
     xz_parallel_test_step.dependOn(&b.addRunArtifact(xz_parallel_tests).step);
     const xz_parallel_root_tests = b.addTest(.{ .name = "vort-xz-parallel-root-tests", .root_module = tests_mod, .filters = &.{"root XZ parallel"} });
     xz_parallel_test_step.dependOn(&b.addRunArtifact(xz_parallel_root_tests).step);
+    const xz_block_sizes_consumer_tests = b.addTest(.{ .name = "vort-xz-block-sizes-consumer-tests", .root_module = tests_mod, .filters = &.{"root XZ block sizes"} });
+    const xz_block_sizes_consumer_step = b.step("test-xz-block-sizes-consumers", "Run public XZ declared block sizes and ZIP/TAR/CPIO consumer contracts");
+    xz_block_sizes_consumer_step.dependOn(&b.addRunArtifact(xz_block_sizes_consumer_tests).step);
+    const xz_block_sizes_tests = b.addTest(.{ .name = "vort-xz-block-sizes-tests", .root_module = xz_tests_mod, .filters = &.{"XZ block sizes"} });
+    const xz_block_sizes_step = b.step("test-xz-block-sizes", "Run declared XZ sizes, stream transitions, VLI, aliases and resource contracts");
+    xz_block_sizes_step.dependOn(&b.addRunArtifact(xz_block_sizes_tests).step);
+    xz_block_sizes_step.dependOn(xz_block_sizes_consumer_step);
     const xz_single_thread_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = target, .optimize = optimize, .single_threaded = true });
     const xz_parallel_single_tests = b.addTest(.{ .name = "vort-xz-parallel-single-tests", .root_module = xz_single_thread_mod, .filters = &.{"XZ parallel"} });
     const xz_parallel_single_step = b.step("test-xz-parallel-single", "Run the complete XZ parallel contracts through the single-thread fallback");
@@ -2459,6 +2477,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzma_controls_cli_gate.addArgs(args);
     const lzma_controls_cli_step = b.step("test-lzma-xz-cli-controls", "Validate public LZMA/XZ CLI encoder settings and failed-output preservation");
     lzma_controls_cli_step.dependOn(&lzma_controls_cli_gate.step);
+    const xz_block_sizes_cli_mod = b.createModule(.{ .root_source_file = b.path("examples/cli/lzma_controls.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} });
+    const xz_block_sizes_cli_tests = b.addTest(.{ .name = "vort-xz-block-sizes-cli-tests", .root_module = xz_block_sizes_cli_mod, .filters = &.{ "LZMA CLI", "XZ block sizes CLI" } });
+    const xz_block_sizes_cli_step = b.step("test-xz-block-sizes-cli", "Run XZ-specific CLI flag parsing and format restrictions");
+    xz_block_sizes_cli_step.dependOn(&b.addRunArtifact(xz_block_sizes_cli_tests).step);
+    const xz_block_sizes_cli_probe_step = b.step("build-xz-block-sizes-cli-probe", "Build the existing public LZMA/XZ CLI module validation surface");
+    xz_block_sizes_cli_probe_step.dependOn(&b.addInstallArtifact(lzma_controls_cli_probe, .{}).step);
+    const xz_block_sizes_cli_gate = b.addSystemCommand(&.{ "python3", "tools/xz/block_sizes_cli.py", "--cli" });
+    xz_block_sizes_cli_gate.addArtifactArg(lzma_controls_cli_probe);
+    if (b.args) |args| xz_block_sizes_cli_gate.addArgs(args);
+    const xz_block_sizes_cli_diff_step = b.step("run-xz-block-sizes-cli", "Validate XZ size CLI flags and failed-output preservation against liblzma");
+    xz_block_sizes_cli_diff_step.dependOn(&xz_block_sizes_cli_gate.step);
 
     const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
     const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
@@ -2964,6 +2993,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xz_parallel_diff.addArgs(args);
     const xz_parallel_diff_step = b.step("run-xz-parallel-diff", "Validate bounded XZ parallel encoding, serial wire parity and liblzma interoperability");
     xz_parallel_diff_step.dependOn(&xz_parallel_diff.step);
+    const xz_block_sizes_probe = b.addExecutable(.{
+        .name = "vort-xz-block-sizes-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/xz/block_sizes_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xz", .module = xz_tests_mod }} }),
+    });
+    const xz_block_sizes_probe_build = b.step("build-xz-block-sizes-probe", "Build the public XZ declared size and reference decoder worker probe");
+    xz_block_sizes_probe_build.dependOn(&b.addInstallArtifact(xz_block_sizes_probe, .{}).step);
+    const xz_block_sizes_diff = b.addSystemCommand(&.{ "python3", "tools/xz/block_sizes_diff.py", "--probe" });
+    xz_block_sizes_diff.addArtifactArg(xz_block_sizes_probe);
+    if (b.args) |args| xz_block_sizes_diff.addArgs(args);
+    const xz_block_sizes_diff_step = b.step("run-xz-block-sizes-diff", "Validate XZ declared sizes against liblzma and actual MT decoder worker calls");
+    xz_block_sizes_diff_step.dependOn(&xz_block_sizes_diff.step);
 
     const xz_encode_bench_exe = b.addExecutable(.{
         .name = "vort-xz-encode-bench",
@@ -7256,6 +7296,11 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&xz_parallel_probe.step);
     check_step.dependOn(&xz_parallel_root_tests.step);
     check_step.dependOn(&xz_parallel_wasm.step);
+    check_step.dependOn(&xz_block_sizes_consumer_tests.step);
+    check_step.dependOn(&xz_block_sizes_probe.step);
+    check_step.dependOn(&xz_block_sizes_wasm.step);
+    check_step.dependOn(&xz_block_sizes_tests.step);
+    check_step.dependOn(&xz_block_sizes_cli_tests.step);
     check_step.dependOn(&zstd_magicless_tests.step);
     check_step.dependOn(&zstd_magicless_root_tests.step);
     check_step.dependOn(&zstd_magicless_probe.step);
