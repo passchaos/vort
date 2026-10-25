@@ -10,7 +10,7 @@ pub const BuildProfile = struct {
     output_ns: u64 = 0,
 };
 
-/// Unbounded Huffman tree for at most 128 active symbols. `frequencies` must be
+/// Unbounded Huffman tree for at most 256 active symbols. `frequencies` must be
 /// ordered from highest to lowest weight, with the caller's deterministic tie
 /// order preserved. Observed ratio-mode literal trees reach the mid-80s while
 /// remaining comfortably below Brotli's 15-bit limit. Returns false if an
@@ -38,7 +38,8 @@ fn buildInternal(
     io: if (profiled) std.Io else void,
     profile: if (profiled) *BuildProfile else void,
 ) bool {
-    std.debug.assert(capacity <= 128 and frequencies.len <= capacity);
+    comptime std.debug.assert(capacity > 0 and capacity <= 256);
+    std.debug.assert(frequencies.len <= capacity);
     if (profiled) profile.calls += 1;
     if (frequencies.len > 1) {
         for (frequencies[1..], frequencies[0 .. frequencies.len - 1]) |frequency, previous|
@@ -48,6 +49,14 @@ fn buildInternal(
         if (profiled) profile.failures += 1;
         return false;
     }
+    // The new dense path replaces package merge, which omits zero-weight
+    // entries. An invalid active prefix containing zero must retain fallback.
+    if (comptime capacity > 128) {
+        if (frequencies[frequencies.len - 1] == 0) {
+            if (profiled) profile.failures += 1;
+            return false;
+        }
+    }
     if (frequencies.len == 1) {
         lengths[0] = 1;
         return true;
@@ -55,15 +64,16 @@ fn buildInternal(
     // Leaves always precede generated parents, so node indexes are also the
     // stable tie-break serials used by the reference heap. Keeping weights and
     // parents in parallel compact arrays avoids dragging a padded 16-byte Node
-    // through both queues. The largest legal node index is 254, so every
-    // non-root parent fits in u8; the <=64 specialization retains signed bytes
-    // for identical generated layout. All non-root nodes receive a parent during
+    // through both queues. Keep <=64 signed-byte and <=128 unsigned-byte
+    // specializations; 256 symbols need u16 for indexes up to 510. All non-root
+    // nodes receive a parent during
     // construction, and the reverse traversal deliberately excludes the root.
     const leaf_order_start = if (profiled) std.Io.Clock.awake.now(io) else {};
-    const Parent = if (capacity <= 64) i8 else u8;
+    const Index = if (capacity <= 128) u8 else u16;
+    const Parent = if (capacity <= 64) i8 else if (capacity <= 128) u8 else u16;
     var weights: [2 * capacity - 1]u64 = undefined;
     var parents: [2 * capacity - 1]Parent = undefined;
-    var leaves: [capacity]u8 = undefined;
+    var leaves: [capacity]Index = undefined;
     var node_len = frequencies.len;
     for (frequencies, 0..) |frequency, i| {
         weights[i] = frequency;
@@ -89,9 +99,9 @@ fn buildInternal(
     var parent_i = frequencies.len;
     var remaining = frequencies.len;
     while (remaining > 1) {
-        const first = queuePop(weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
-        const second = queuePop(weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
-        const parent: u8 = @intCast(node_len);
+        const first = queuePop(Index, weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
+        const second = queuePop(Index, weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
+        const parent: Index = @intCast(node_len);
         weights[node_len] = weights[first] + weights[second];
         parents[first] = @intCast(parent);
         parents[second] = @intCast(parent);
@@ -102,6 +112,9 @@ fn buildInternal(
     // Parents are appended after both children. Walking nodes backwards makes
     // every parent depth available before its children, so all leaf depths are
     // recovered in O(nodes) instead of following each leaf-to-root chain.
+    // Reject the first depth beyond 15 before writing it or reading any
+    // remaining descendant depth. Every previously stored depth is <=15,
+    // so the u5 addition is at most 16 even for a deeply skewed natural tree.
     const depth_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     var depths: [2 * capacity - 1]u5 = undefined;
     depths[node_len - 1] = 0;
@@ -109,18 +122,19 @@ fn buildInternal(
     while (index != 0) {
         index -= 1;
         const parent = parents[index];
-        depths[index] = depths[@intCast(parent)] + 1;
-    }
-    if (profiled) profile.depth_ns +%= elapsedNs(depth_start, io);
-    const output_start = if (profiled) std.Io.Clock.awake.now(io) else {};
-    for (frequencies, 0..) |_, symbol| {
-        if (depths[symbol] > 15) {
+        const depth = depths[@intCast(parent)] + 1;
+        if (depth > 15) {
             if (profiled) {
-                profile.output_ns +%= elapsedNs(output_start, io);
+                profile.depth_ns +%= elapsedNs(depth_start, io);
                 profile.failures += 1;
             }
             return false;
         }
+        depths[index] = depth;
+    }
+    if (profiled) profile.depth_ns +%= elapsedNs(depth_start, io);
+    const output_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    for (frequencies, 0..) |_, symbol| {
         lengths[symbol] = @intCast(depths[symbol]);
     }
     if (profiled) profile.output_ns +%= elapsedNs(output_start, io);
@@ -138,9 +152,9 @@ fn less(comptime Node: type, nodes: []const Node, left_index: u8, right_index: u
     return left.weight < right.weight or (left.weight == right.weight and left.serial < right.serial);
 }
 
-inline fn queuePop(weights: []const u64, leaves: []const u8, leaf_i: *usize, parent_i: *usize, parent_end: usize) u8 {
+inline fn queuePop(comptime Index: type, weights: []const u64, leaves: []const Index, leaf_i: *usize, parent_i: *usize, parent_end: usize) Index {
     if (leaf_i.* >= leaves.len) {
-        const result: u8 = @intCast(parent_i.*);
+        const result: Index = @intCast(parent_i.*);
         parent_i.* += 1;
         return result;
     }
@@ -151,7 +165,7 @@ inline fn queuePop(weights: []const u64, leaves: []const u8, leaf_i: *usize, par
         leaf_i.* += 1;
         return result;
     }
-    const result: u8 = @intCast(parent_i.*);
+    const result: Index = @intCast(parent_i.*);
     parent_i.* += 1;
     return result;
 }
@@ -195,6 +209,10 @@ fn siftDown(comptime Node: type, nodes: []const Node, heap: anytype, len: usize,
         std.mem.swap(u8, &heap[root], &heap[child]);
         root = child;
     }
+}
+
+test "dense Huffman exact tree lengths and bounded fallback contracts" {
+    try @import("dense_huffman_tests.zig").contracts(@This());
 }
 
 test "small Huffman builds complete tree" {

@@ -3238,6 +3238,25 @@ pub fn build(b: *std.Build) void {
     const run_br_quality_stage_profile = b.addRunArtifact(br_quality_stage_profile_exe);
     if (b.args) |args| run_br_quality_stage_profile.addArgs(args);
     b.step("run-br-quality-stage-profile", "Record actual native q8 candidate stages and wires").dependOn(&run_br_quality_stage_profile.step);
+    const br_dense_huffman_bench = b.addExecutable(.{
+        .name = "vort-br-dense-huffman-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/dense_huffman_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "command_plan", .module = b.createModule(.{
+                    .root_source_file = b.path("src/br_prefix_bench.zig"),
+                    .target = target,
+                    .optimize = .ReleaseFast,
+                }) },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_dense_huffman_bench = b.addRunArtifact(br_dense_huffman_bench);
+    if (b.args) |args| run_br_dense_huffman_bench.addArgs(args);
+    b.step("run-br-dense-huffman-bench", "Compare exact dense Brotli prefix lengths with package merge").dependOn(&run_br_dense_huffman_bench.step);
     if (b.args) |args| run_br_planned_encode_bench.addArgs(args);
     const br_planned_encode_bench_step = b.step("run-br-planned-encode-bench", "Compare planner-backed Brotli encode with libbrotli");
     br_planned_encode_bench_step.dependOn(&run_br_planned_encode_bench.step);
@@ -7140,6 +7159,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_quality_command_state_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
     check_step.dependOn(&br_literal_context_profile_exe.step);
+    check_step.dependOn(&br_dense_huffman_bench.step);
     check_step.dependOn(&br_record_optimal_audit_exe.step);
     check_step.dependOn(&br_record_optimal_shape_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);

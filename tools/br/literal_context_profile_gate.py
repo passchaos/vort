@@ -157,8 +157,8 @@ def main() -> int:
         minimum_entries = sum(count * minimum for count, minimum in zip(active_buckets, (1, 5, 17, 33, 65, 129)))
         maximum_entries = sum(count * maximum for count, maximum in zip(active_buckets, (4, 16, 32, 64, 128, 256)))
         assert minimum_entries <= integer(row, "tree_active_entries") <= maximum_entries, row
-        assert integer(row, "small_huffman_calls") == sum(active_buckets[1:5]), row
-        assert integer(row, "package_merge_calls") == active_buckets[5] + integer(row, "small_huffman_failures"), row
+        assert integer(row, "small_huffman_calls") == sum(active_buckets[1:]), row
+        assert integer(row, "package_merge_calls") == integer(row, "small_huffman_failures"), row
         assert integer(row, "complex_prefix_calls") == integer(row, "tree_complex_scores"), row
         assert integer(row, "complex_prefix_rle_tokens") >= integer(row, "complex_prefix_calls"), row
         assert integer(row, "complex_prefix_calls") <= integer(row, "complex_prefix_code_length_active") <= 18 * integer(row, "complex_prefix_calls"), row

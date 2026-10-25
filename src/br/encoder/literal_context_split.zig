@@ -1169,7 +1169,7 @@ test "literal context profile reports stable stage accounting" {
     try std.testing.expectEqual(profile.tree_score_calls, bucket_total);
     try std.testing.expectEqual(
         profile.tree_active_buckets[1] + profile.tree_active_buckets[2] +
-            profile.tree_active_buckets[3] + profile.tree_active_buckets[4],
+            profile.tree_active_buckets[3] + profile.tree_active_buckets[4] + profile.tree_active_buckets[5],
         profile.small_huffman_calls,
     );
     try std.testing.expectEqual(profile.tree_complex_scores, profile.complex_prefix_calls);

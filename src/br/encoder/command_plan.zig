@@ -2,6 +2,7 @@ const std = @import("std");
 const lz77 = @import("../../lz77.zig");
 const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
+pub const CodeLengthsBuildProfile = small_huffman.BuildProfile;
 const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
 const literal_context = @import("literal_context.zig");
@@ -119,7 +120,13 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
         len: usize = 0,
 
         pub fn codeLengths(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
-            return self.codeLengthsInternal(false, frequencies, {}, {});
+            return self.codeLengthsInternal(false, true, frequencies, {}, {});
+        }
+
+        /// Preserve the legacy dense package-merge path as an exact full
+        /// PrefixAlphabet reference; the <=128 routes retain their policy.
+        pub fn codeLengthsReference(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
+            return self.codeLengthsInternal(false, false, frequencies, {}, {});
         }
 
         pub fn codeLengthsProfiled(
@@ -128,12 +135,13 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
             io: std.Io,
             profile: *small_huffman.BuildProfile,
         ) ![capacity]u4 {
-            return self.codeLengthsInternal(true, frequencies, io, profile);
+            return self.codeLengthsInternal(true, true, frequencies, io, profile);
         }
 
         fn codeLengthsInternal(
             self: *const Self,
             comptime profiled: bool,
+            comptime dense_fast: bool,
             frequencies: *const [capacity]u32,
             io: if (profiled) std.Io else void,
             profile: if (profiled) *small_huffman.BuildProfile else void,
@@ -183,8 +191,24 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                             self.fillTreeLengths(frequencies, 256, &lengths);
                         }
                     } else if (self.len <= 256) {
-                        if (profiled) profile.package_merge_calls += 1;
-                        self.fillTreeLengths(frequencies, 256, &lengths);
+                        if (comptime dense_fast) {
+                            var compact_lengths: [256]u4 = undefined;
+                            var compact_frequencies: [256]u32 = undefined;
+                            for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
+                            const built = if (profiled)
+                                small_huffman.buildProfiled(256, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                            else
+                                small_huffman.build(256, compact_frequencies[0..self.len], &compact_lengths);
+                            if (built) {
+                                for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+                            } else {
+                                if (profiled) profile.package_merge_calls += 1;
+                                self.fillTreeLengths(frequencies, 256, &lengths);
+                            }
+                        } else {
+                            if (profiled) profile.package_merge_calls += 1;
+                            self.fillTreeLengths(frequencies, 256, &lengths);
+                        }
                     } else {
                         if (profiled) profile.package_merge_calls += 1;
                         self.fillTreeLengths(frequencies, max_prefix_symbols, &lengths);
@@ -300,6 +324,10 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
 }
 
 pub const PrefixAlphabet = PrefixAlphabetFor(max_prefix_symbols);
+
+test "dense Huffman PrefixAlphabet exact arrays and fallback contracts" {
+    try @import("dense_huffman_tests.zig").commandIntegration(@This(), small_huffman);
+}
 
 test "prefix alphabet capacity controls scratch footprint" {
     // Both symbol arrays end on the native length field's alignment. The
