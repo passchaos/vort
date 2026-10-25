@@ -101,6 +101,22 @@ the old choices; it does not establish industry-best throughput or RSS.
 The final build check passes 169/169; post-rebase winner tests and CLI help
 also pass with unchanged source manifests.
 
+The following [wide-frequency reduction](zstd-wide-frequency-reduction.md)
+preserves complete frequency validation and specializes certificate analysis
+with numeric u32-to-u64 widening. Focused native/x86 checks compare complete
+analysis errors/fields against the old scalar path and an independent u128
+oracle. A same-process microbenchmark measures approximately 4.6x faster
+analysis on its two valid pools, while its immediately-invalid pool is slower
+because the wide path completes all 256 entries before reporting the cap
+error. That kernel measurement is separate from whole-encoder throughput.
+The subsequent matched fourteen-row five-round public control preserves all
+frame hashes and gives a 1.11958x geometric version speedup. XML/source/MR
+medians are 993.477/385.181/780.514ms; NCI/schema-JSON point ratios are
+0.99845x/0.98851x and no significance is assigned. Throughput still loses on
+all fourteen reference rows (geometric ratio 0.00330414x). All recorded XML/MR
+candidate work fields remain identical. Complete Zstd tests pass 1093/1093
+and build checks pass 170/170. The remaining performance gap is substantial.
+
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
 competitor results and subsequent internal improvements separately. DEFLATE

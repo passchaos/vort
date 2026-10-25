@@ -1,0 +1,32 @@
+{
+  "schema": "vort.zstd.kernel-sample-verification.v1",
+  "rows": [
+    {
+      "case": "medium_support",
+      "scalar_ns_per_query": 248.208968,
+      "wide_ns_per_query": 53.785156,
+      "speedup": 4.614822870458905
+    },
+    {
+      "case": "dense_support",
+      "scalar_ns_per_query": 248.09722,
+      "wide_ns_per_query": 53.618748,
+      "speedup": 4.627061042156374
+    },
+    {
+      "case": "invalid_totals",
+      "scalar_ns_per_query": 6.156556,
+      "wide_ns_per_query": 51.15962,
+      "speedup": 0.12034014326142375
+    }
+  ],
+  "executable_sha256": "a3424c92856f905642cd5e6bcbf27c061302048c77e5fe1dad2c40bec035a54b",
+  "samples_sha256": "18ba7bf4a9e6053db93ae8108a57fe39f265c1f29fec2974841a83ab18441fec",
+  "bound_sources_from_stable_build": {
+    "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b",
+    "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+    "src/zstd/literals/weighted_reduction_tests.zig": "0c7fb8c19c78f707363d46370de39bb9e2d68d1dede4da3fbd694a9ff15f6363",
+    "tools/zstd/weighted_bound_bench.zig": "283e6eb7a2964904573a481443ad8494cf1f7937e562d8e7df25529688a69b6e"
+  },
+  "scope": "Retrospective sample/schema/median/mix and executable identity checks. Direct kernel run occurred after its known compilations finished; no external compiler-presence monitor was attached to that subsecond run."
+}

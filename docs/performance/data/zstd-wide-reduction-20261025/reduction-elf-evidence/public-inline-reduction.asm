@@ -1,0 +1,79 @@
+115c182: test %r14b,%r14b
+115c185: mov 0x18(%rsp),%rdx
+115c18a: je 115c384 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x19e4>
+115c190: cmp $0x2,%rbx
+115c194: jb 115c325 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x1985>
+115c19a: cmp $0x40,%r15
+115c19e: jb 115c325 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x1985>
+115c1a4: cmpb $0x0,0x22c0(%rsp)
+115c1ac: mov $0x0,%esi
+115c1b1: mov $0xffffffffffffffff,%rdi
+115c1b8: vpxor %xmm10,%xmm10,%xmm10
+115c1bd: je 115c345 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x19a5>
+115c1c3: vpxor %xmm2,%xmm2,%xmm2
+115c1c7: mov $0xfffffffffffffff8,%rcx
+115c1ce: xor %eax,%eax
+115c1d0: vpxor %xmm3,%xmm3,%xmm3
+115c1d4: vpxor %xmm0,%xmm0,%xmm0
+115c1d8: vpxor %xmm1,%xmm1,%xmm1
+115c1dc: vpmovzxdq 0x24b0(%rsp,%rcx,4),%ymm4
+115c1e6: vpaddq %ymm4,%ymm3,%ymm3
+115c1ea: vpmovzxdq 0x24a0(%rsp,%rcx,4),%ymm4
+115c1f4: vpaddq %ymm4,%ymm2,%ymm2
+115c1f8: vmovdqu 0x24a0(%rsp,%rcx,4),%ymm4
+115c201: vmovdqu 0x24c0(%rsp,%rcx,4),%ymm5
+115c20a: vmovdqu 0x1ed8(%rsp,%rcx,4),%ymm6
+115c213: vmovdqu 0x1ef8(%rsp,%rcx,4),%ymm7
+115c21c: vpmaxud %ymm4,%ymm6,%ymm8
+115c221: vpsubd %ymm4,%ymm8,%ymm8
+115c225: vextracti128 $0x1,%ymm8,%xmm9
+115c22b: vpmovzxdq %xmm9,%ymm9
+115c230: vpaddq %ymm1,%ymm9,%ymm1
+115c234: vpmovzxdq %xmm8,%ymm8
+115c239: vpaddq %ymm0,%ymm8,%ymm0
+115c23d: vpcmpeqd %ymm4,%ymm10,%ymm4
+115c241: vpcmpeqd %ymm6,%ymm10,%ymm6
+115c245: vpxor %ymm4,%ymm6,%ymm4
+115c249: vmovmskps %ymm4,%edx
+115c24d: or %al,%dl
+115c24f: vpmovzxdq 0x24c0(%rsp,%rcx,4),%ymm4
+115c259: vpaddq %ymm4,%ymm2,%ymm2
+115c25d: vpmovzxdq 0x24d0(%rsp,%rcx,4),%ymm4
+115c267: vpaddq %ymm4,%ymm3,%ymm3
+115c26b: vpmaxud %ymm5,%ymm7,%ymm4
+115c270: vpsubd %ymm5,%ymm4,%ymm4
+115c274: vpmovzxdq %xmm4,%ymm6
+115c279: vpaddq %ymm6,%ymm0,%ymm0
+115c27d: vextracti128 $0x1,%ymm4,%xmm4
+115c283: vpmovzxdq %xmm4,%ymm4
+115c288: vpaddq %ymm4,%ymm1,%ymm1
+115c28c: vpcmpeqd %ymm5,%ymm10,%ymm4
+115c290: vpcmpeqd %ymm7,%ymm10,%ymm5
+115c294: vpxor %ymm4,%ymm5,%ymm4
+115c298: vmovmskps %ymm4,%eax
+115c29c: or %dl,%al
+115c29e: add $0x10,%rcx
+115c2a2: cmp $0xf8,%rcx
+115c2a9: jb 115c1dc <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x183c>
+115c2af: vpaddq %ymm3,%ymm2,%ymm2
+115c2b3: vextracti128 $0x1,%ymm2,%xmm3
+115c2b9: vpaddq %xmm3,%xmm2,%xmm2
+115c2bd: vpshufd $0xee,%xmm2,%xmm3
+115c2c2: vpaddq %xmm3,%xmm2,%xmm2
+115c2c6: vmovq %xmm2,%rdx
+115c2cb: cmp $0x20000,%rdx
+115c2d2: ja 115c307 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x1967>
+115c2d4: vpaddq %ymm1,%ymm0,%ymm0
+115c2d8: vextracti128 $0x1,%ymm0,%xmm1
+115c2de: vpaddq %xmm1,%xmm0,%xmm0
+115c2e2: vpshufd $0xee,%xmm0,%xmm1
+115c2e7: vpaddq %xmm1,%xmm0,%xmm0
+115c2eb: vmovq %xmm0,%rcx
+115c2f0: test %al,%al
+115c2f2: sete 0x2880(%rsp)
+115c2fa: mov %rcx,%rax
+115c2fd: shr $0x20,%rax
+115c301: je 115cd72 <zstd.emitMultiDuplicateMatchCompressedBlockWithFirst+0x23d2>
+115c307: mov 0x18(%rsp),%rdx
+115c30c: mov 0x22f8(%rsp),%rax
+115c314: inc %rax

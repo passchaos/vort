@@ -1,0 +1,33 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8",
+    "/home/passchaos/project-z/vort-zstd-wide-reduction/.zig-cache/o/f96614240e0405d3f5eaa4610cb38bfa/vort-zstd-multi-duplicate-profile",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-xml-65536.bin",
+    "/tmp/vort-wide-bit-final-20261025/next-performance-audit/corpus-preparation/silesia-mr-65536.bin"
+  ],
+  "exe_sha256": "8574e75d91fb8a54c9a5f379d27caa9eb45d6813798bdc49881332c3c9adf05b",
+  "source_before": {
+    "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+    "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b"
+  },
+  "source_after": {
+    "src/zstd/literals/weighted_bound.zig": "e45b292daca0a33a5840f21543cf0ae93396db65072ab9aa4562def89ab4a890",
+    "src/zstd/literals/frequency_reduction.zig": "34ee2d73fb003ae301e9642a9cd61ef366aaccefa856baff2cae56166347eb2b"
+  },
+  "source_stable": true,
+  "checks": [
+    {
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "wire_unchanged": true,
+      "work_all_fields_unchanged": true
+    },
+    {
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "wire_unchanged": true,
+      "work_all_fields_unchanged": true
+    }
+  ],
+  "scope": "Work/correctness diagnostic run during unrelated builds; elapsed values excluded from performance claims."
+}
