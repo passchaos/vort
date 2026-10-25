@@ -2776,6 +2776,25 @@ pub fn build(b: *std.Build) void {
     deflate64_stream_diff.addArgs(&.{ "--directory", "zig-out/deflate64-stream" });
     if (b.args) |args| deflate64_stream_diff.addArgs(args);
     b.step("run-deflate64-stream-diff", "Validate incremental Deflate64 matching and ZIP method 9 with Info-ZIP").dependOn(&deflate64_stream_diff.step);
+    const deflate64_index_probe = b.addExecutable(.{
+        .name = "vort-deflate64-index-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate64_index_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "codec", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate64.zig"),
+                    .target = target,
+                    .optimize = .ReleaseFast,
+                }) },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_deflate64_index_probe = b.addRunArtifact(deflate64_index_probe);
+    if (b.args) |args| run_deflate64_index_probe.addArgs(args);
+    b.step("run-deflate64-index-probe", "Measure requested allocation and complete Deflate64 output identities").dependOn(&run_deflate64_index_probe.step);
     const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip/diff.py", "--cli" });
     zip_diff.addArtifactArg(cli_exe);
     zip_diff.addArg("--writer");
@@ -7193,6 +7212,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zip_writer_probe_exe.step);
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
     check_step.dependOn(&deflate64_stream_probe.step);
+    check_step.dependOn(&deflate64_index_probe.step);
     check_step.dependOn(&tar_incremental_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_compressed_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_auto_reader_probe_exe.step);
