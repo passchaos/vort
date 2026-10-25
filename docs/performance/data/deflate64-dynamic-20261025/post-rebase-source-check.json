@@ -1,0 +1,10 @@
+{
+  "schema": "vort.source-handoff-check.v1",
+  "head": "c5b6af1351261e69b973d55cd4af1544e7e9e798",
+  "remote_main": "d69caf3d0de0afbcf773fea0524ad20060db8a32",
+  "source_manifest_commit": "02b6498aa2e24fdf7e09eb1f194bc680aeac7b7f",
+  "source_files_verified": 1890,
+  "evidence_files_verified": 289,
+  "source_manifest_sha256": "5c39685857351c98b13d969d73fa80a7ea19ecadadfc710ecb5401be289cd2bc",
+  "source_identical": true
+}

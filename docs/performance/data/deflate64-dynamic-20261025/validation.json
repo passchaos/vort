@@ -50,5 +50,19 @@
     "dynamic_blocks": 35
   },
   "timing_performed": false,
-  "notes": "Source/test scopes and historical snapshots are distinct. Resource metric is codec requested live heap including returned wire, excluding RSS/stack and caller input/collectors."
+  "notes": "Source/test scopes and historical snapshots are distinct. Resource metric is codec requested live heap including returned wire, excluding RSS/stack and caller input/collectors.",
+  "post_rebase": {
+    "head_before_handoff_record": "c5b6af1351261e69b973d55cd4af1544e7e9e798",
+    "source_identical": true,
+    "codec_native_releasefast": {
+      "passed": 108,
+      "total": 108
+    },
+    "zip_focused_debug": {
+      "passed": 44,
+      "total": 44
+    },
+    "source_files_checked": 1890,
+    "evidence_files_checked_before_handoff": 289
+  }
 }

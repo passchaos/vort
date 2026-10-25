@@ -747,6 +747,26 @@
       "sha256": "d6f44962bba46f8cf25525fa7d22110fff63d84fab8cc5aa95a9f5953711974e"
     },
     {
+      "path": "post-rebase-codec.log",
+      "bytes": 9970,
+      "sha256": "d3173c39d593c699bfaa4b84d43b5478d116f51c296b9e479a3c74c171314e50"
+    },
+    {
+      "path": "post-rebase-source-check.json",
+      "bytes": 425,
+      "sha256": "4f11af5cc1cbfb9a52346575dc311dfdc6dbfe936fe3dc03b5c14e17e26e9bd2"
+    },
+    {
+      "path": "post-rebase-zip.log",
+      "bytes": 595,
+      "sha256": "af509f0a6e21c4b1611bf403c33b8dfa0c4cb92abb602cef1c673f789db2b112"
+    },
+    {
+      "path": "rebase.log",
+      "bytes": 141,
+      "sha256": "962d55d66f78b637b8cff2173fb80eb098c14003765af46315e520f182d3e734"
+    },
+    {
       "path": "resource-comparison-notes.md",
       "bytes": 3353,
       "sha256": "029ef67934f5bef85f4658445193f09e9e1c1bdee8b48706a722b7d10e867639"
@@ -768,8 +788,8 @@
     },
     {
       "path": "validation.json",
-      "bytes": 1320,
-      "sha256": "2aaa6a6ef337645d2c4b6ac339f1f9b0bd71b1c187f7fd62041a5bb2728d34d6"
+      "bytes": 1688,
+      "sha256": "e378881eaf2df70d6021008839fbaefe9ff324419cd1c0ce5452ea9542609f60"
     },
     {
       "path": "x86-final/binary-adaptive-mixed-reference.zip",
