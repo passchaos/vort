@@ -34,6 +34,7 @@ const literal_copy = @import("zstd/literals/copy.zig");
 const single_literal_cost = @import("zstd/literals/single_cost_cache.zig");
 const winner_literal_cost = @import("zstd/literals/winner_cost_cache.zig");
 const single_sequence_cost = @import("zstd/sequence/single_cost.zig");
+const paired_anchor_cache = @import("zstd/match/paired_anchor_cache.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
@@ -19516,6 +19517,35 @@ pub fn benchmarkNativeMultiDuplicateProfileMode(
     };
 }
 
+/// Isolated diagnostic experiment. Its caller allocator owns the optional
+/// anchor storage, and allocation/preparation are included in the tool timer.
+pub fn benchmarkNativeMultiDuplicateAnchorProfile(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    profile: *NativeMultiDuplicateProfile,
+    mode: winner_literal_cost.Mode,
+) Error!bool {
+    if (block.len <= duplicate_index_max_input_len or block.len > std.compress.zstd.block_size_max)
+        return error.InvalidBlockPlan;
+    profile.* = .{};
+    const anchor_count = block.len - 7;
+    const hashes = try allocator.alloc(u16, anchor_count);
+    defer allocator.free(hashes);
+    const lengths = try allocator.alloc(u32, anchor_count);
+    defer allocator.free(lengths);
+    var anchors = paired_anchor_cache.Cache.init(block, hashes, lengths, duplicateHash8) catch return error.InvalidBlockPlan;
+    defer {
+        profile.*.anchor_cache = anchors.work;
+        profile.*.anchor_storage_bytes = hashes.len * @sizeOf(u16) + lengths.len * @sizeOf(u32);
+    }
+    var first: ?DuplicateMatch = null;
+    return switch (mode) {
+        .shadow => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .shadow, true, allocator, out, block, true, null, &first, profile, &anchors),
+        .prune => emitMultiDuplicateMatchCompressedBlockWithAnchors(true, true, .prune, true, allocator, out, block, true, null, &first, profile, &anchors),
+    };
+}
+
 pub const NativeMatchStageScratch = struct {
     candidate: std.ArrayList(u8) = .empty,
     greedy_tokens: std.ArrayList(lz77.Token) = .empty,
@@ -23278,6 +23308,10 @@ fn emitMultiDuplicateMatchCompressedBlockProfiled(comptime cache_costs: bool, co
 }
 
 fn emitMultiDuplicateMatchCompressedBlockProfiledMode(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockWithAnchors(cache_costs, profile_work, mode, false, allocator, out, block, last, duplicate_index, first_match, profile, null);
+}
+
+fn emitMultiDuplicateMatchCompressedBlockWithAnchors(comptime cache_costs: bool, comptime profile_work: bool, comptime mode: winner_literal_cost.Mode, comptime reuse_anchors: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch, profile: ?*NativeMultiDuplicateProfile, anchors: ?*paired_anchor_cache.Cache) Error!bool {
     first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
     const ActiveCostCache = if (mode == .shadow) SingleLiteralShadowCache else SingleLiteralWinnerCache;
@@ -23304,7 +23338,7 @@ fn emitMultiDuplicateMatchCompressedBlockProfiledMode(comptime cache_costs: bool
         const match = if (duplicate_index) |index|
             try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
         else if (cost_cache) |*cache|
-            try findBestDuplicateMatchHashedImpl(true, block, literal_start, cache) orelse break
+            try findBestDuplicateMatchHashedWithAnchors(true, reuse_anchors, block, literal_start, cache, anchors) orelse break
         else
             try findBestDuplicateMatchIn(block, literal_start) orelse break;
         const literal_len = match.second_start - literal_start;
@@ -30422,6 +30456,10 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
 }
 
 fn findBestDuplicateMatchHashedImpl(comptime cache_costs: bool, block: []const u8, start_min: usize, cost_cache: anytype) Error!?DuplicateMatch {
+    return findBestDuplicateMatchHashedWithAnchors(cache_costs, false, block, start_min, cost_cache, null);
+}
+
+fn findBestDuplicateMatchHashedWithAnchors(comptime cache_costs: bool, comptime reuse_anchors: bool, block: []const u8, start_min: usize, cost_cache: anytype, anchors: ?*paired_anchor_cache.Cache) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
     var paired_predecessors: [duplicate_hash_table_len]u32 = undefined;
@@ -30432,7 +30470,7 @@ fn findBestDuplicateMatchHashedImpl(comptime cache_costs: bool, block: []const u
     var index = start_min;
     while (index + 8 <= block.len) : (index += 1) {
         if (best) |current| if (block.len - index < current.len) break;
-        const hash = duplicateHash8(block[index..][0..8]);
+        const hash = if (reuse_anchors) anchors.?.hash(index) else duplicateHash8(block[index..][0..8]);
         if (!pending[hash]) {
             paired_predecessors[hash] = @intCast(index);
             pending[hash] = true;
@@ -30442,7 +30480,7 @@ fn findBestDuplicateMatchHashedImpl(comptime cache_costs: bool, block: []const u
         pending[hash] = false;
         if (candidate_start < start_min or candidate_start >= index) continue;
         if (best) |current_best| if (block.len - index <= current_best.len) continue;
-        const len = duplicateMatchLength(block, candidate_start, index);
+        const len = if (reuse_anchors) anchors.?.cachedLength(candidate_start, index, duplicateMatchLength) else duplicateMatchLength(block, candidate_start, index);
         if (len < 8) continue;
 
         const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
@@ -31124,6 +31162,44 @@ const SingleLiteralCostCodec = struct {
 const SingleLiteralCostCache = single_literal_cost.Cache(SingleLiteralCostCodec);
 const SingleLiteralShadowCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .shadow);
 const SingleLiteralWinnerCache = winner_literal_cost.Cache(SingleLiteralCostCodec, .prune);
+
+const PairedAnchorFinderTestCodec = struct {
+    pub const CostCodec = SingleLiteralCostCodec;
+    pub const referenceCost = singleBestSequencePayloadLen;
+    pub const hash = duplicateHash8;
+    pub const extension = duplicateMatchLength;
+    pub fn finder(comptime reuse: bool, block: []const u8, start: usize, cost: anytype, anchors: ?*paired_anchor_cache.Cache) Error!?DuplicateMatch {
+        return findBestDuplicateMatchHashedWithAnchors(true, reuse, block, start, cost, anchors);
+    }
+};
+
+test "zstd paired anchor finder preserves every suffix winner and pricing trace" {
+    try @import("zstd/match/paired_anchor_finder_tests.zig").contracts(PairedAnchorFinderTestCodec);
+}
+
+test "zstd paired anchor diagnostic allocation failures preserve caller output" {
+    const block = try std.testing.allocator.alloc(u8, 65536);
+    defer std.testing.allocator.free(block);
+    @memset(block, 'a');
+    for (0..2) |failed_at| {
+        var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = failed_at });
+        var out: std.ArrayList(u8) = .empty;
+        defer out.deinit(std.testing.allocator);
+        try out.appendSlice(std.testing.allocator, "caller prefix");
+        var profile: NativeMultiDuplicateProfile = .{ .finder_calls = 7 };
+        try std.testing.expectError(error.OutOfMemory, benchmarkNativeMultiDuplicateAnchorProfile(failing.allocator(), &out, block, &profile, .prune));
+        try std.testing.expectEqualStrings("caller prefix", out.items);
+        try std.testing.expectEqual(@as(u64, 0), profile.finder_calls);
+        try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+    }
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    var profile: NativeMultiDuplicateProfile = .{};
+    try std.testing.expect(!try benchmarkNativeMultiDuplicateAnchorProfile(std.testing.allocator, &out, block, &profile, .prune));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try std.testing.expectEqual(@as(u64, 65529), profile.anchor_cache.build_hashes);
+    try std.testing.expectEqual(@as(u64, 0), profile.anchor_cache.query_hashes);
+}
 
 const SingleSequenceCostRules = struct {
     pub const Error = zstd.Error;

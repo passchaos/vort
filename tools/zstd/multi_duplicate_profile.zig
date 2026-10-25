@@ -15,7 +15,16 @@ pub fn main(init: std.process.Init) !void {
     try stdout.interface.writeAll(",\"rows\":[");
     var row_count: usize = 0;
     var shadow = false;
+    var use_anchors = false;
     while (args.next()) |path| {
+        if (std.mem.eql(u8, path, "--anchors")) {
+            use_anchors = true;
+            continue;
+        }
+        if (std.mem.eql(u8, path, "--no-anchors")) {
+            use_anchors = false;
+            continue;
+        }
         if (std.mem.eql(u8, path, "--shadow")) {
             shadow = true;
             continue;
@@ -33,7 +42,10 @@ pub fn main(init: std.process.Init) !void {
         defer out.deinit(init.gpa);
         var profile: zstd.NativeMultiDuplicateProfile = .{};
         const before = std.Io.Clock.awake.now(init.io);
-        const available = try zstd.benchmarkNativeMultiDuplicateProfileMode(init.gpa, &out, payload, &profile, if (shadow) .shadow else .prune);
+        const available = if (use_anchors)
+            try zstd.benchmarkNativeMultiDuplicateAnchorProfile(init.gpa, &out, payload, &profile, if (shadow) .shadow else .prune)
+        else
+            try zstd.benchmarkNativeMultiDuplicateProfileMode(init.gpa, &out, payload, &profile, if (shadow) .shadow else .prune);
         const elapsed = before.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
         var input_hash: [32]u8 = undefined;
         var wire_hash: [32]u8 = undefined;
@@ -42,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
         if (row_count != 0) try stdout.interface.writeByte(',');
         try stdout.interface.writeAll("{\"path\":");
         try std.json.Stringify.value(path, .{}, &stdout.interface);
-        try stdout.interface.print(",\"input_bytes\":{d},\"input_sha256\":\"{s}\",\"mode\":\"{s}\",\"available\":{s},\"encoded_bytes\":{d},\"wire_sha256\":\"{s}\",\"profiled_ns\":{d},\"work\":", .{ payload.len, std.fmt.bytesToHex(input_hash, .lower), if (shadow) "shadow" else "prune", if (available) "true" else "false", out.items.len, std.fmt.bytesToHex(wire_hash, .lower), elapsed });
+        try stdout.interface.print(",\"input_bytes\":{d},\"input_sha256\":\"{s}\",\"mode\":\"{s}\",\"anchors\":{s},\"available\":{s},\"encoded_bytes\":{d},\"wire_sha256\":\"{s}\",\"profiled_ns\":{d},\"work\":", .{ payload.len, std.fmt.bytesToHex(input_hash, .lower), if (shadow) "shadow" else "prune", if (use_anchors) "true" else "false", if (available) "true" else "false", out.items.len, std.fmt.bytesToHex(wire_hash, .lower), elapsed });
         try std.json.Stringify.value(profile, .{}, &stdout.interface);
         try stdout.interface.writeAll("}");
         try stdout.interface.flush();
