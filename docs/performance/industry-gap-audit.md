@@ -851,3 +851,22 @@ wire-identical target: time lives inside the DP inner loop
 (match-length extension + per-length prefix minima), not in index
 construction (0.13 ms) or candidate count selection alone; hash-index
 sharing saves at most the single 0.13 ms build and is not the lever.
+
+**Level-3 chain-depth counterfactual, 2026-10-26.** libzstd's per-level
+table (`clevels.h`) uses dfast (a single direct-hash pass, no chains) at
+level 3 for srcSize <=128 KiB; Vort instead runs five hash-chain
+candidate families with max_chain=128. Sweeping that depth across 4/8/
+16/32 (shared by all native matchers) gives level-3 aggregate speedups
+of 8.64x/8.69x/8.72x/8.67x on the fourteen frozen 64 KiB inputs, but
+changes wires on eleven inputs at every depth (dickens 25,898->26,255,
+reymont 18,720->18,790, samba 22,048->22,389, sao 49,140->49,311,
+brotli-source 12,111->12,168, etc.); the XML, MR and nci rows stay
+byte-identical even at chain=4 (XML 72x). The depth reduction is
+therefore a speed/ratio policy knob, not a wire-identical optimization,
+and was not adopted. Combined with the earlier candidate-family
+counterfactuals, the evidence shows the level-1..3 over-search is the
+ratio advantage measured against libzstd 1.6.0 (frozen XML 5,078 vs
+6,099 bytes); moving materially closer to reference throughput means
+either exposing faster public selections or accepting measured ratio
+loss, not removing redundant work - the redundant-work slice was
+captured by the committed multi-duplicate gate (36f50c96).
