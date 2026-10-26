@@ -1,0 +1,97 @@
+{
+  "schema": "vort.zstd.parallel-frame-package.v1",
+  "created_utc": "2026-10-26T00:27:44.068883+00:00",
+  "files": [
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/archive-verification.json",
+      "bytes": 2903,
+      "sha256": "44c70e784c9a41accc7a97060280bb42d56914de31f7c9d01b8cdb1f2b0abf4e",
+      "file": "archive-verification.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/build-provenance.json",
+      "bytes": 395270,
+      "sha256": "21ba20a8720571866b0ace5eed2533dd0b3bd8ede9726d065522f6af3103f99c",
+      "file": "build-provenance.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/campaigns.tar.xz",
+      "bytes": 2284524,
+      "sha256": "4b322f90b40c210efc17a92f18667dca4deac672b447af9c977f4792adabdccd",
+      "file": "campaigns.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/cross-target.json",
+      "bytes": 437545,
+      "sha256": "646af6660c1d8333a481f6b1f60472745bd1c59526e014809813bcfad22995c1",
+      "file": "cross-target.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/environment.json",
+      "bytes": 10474,
+      "sha256": "a491e65ca07ae61e8995b5f52280ce1bec53f975dc6cb0c45d0e5e080775b15e",
+      "file": "environment.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/evidence-manifest.json",
+      "bytes": 989409,
+      "sha256": "9802ab8125f35594761835c973dd7fe0dd9597341451b3b6262bc9181145175f",
+      "file": "evidence-manifest.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/final-sources.tar.xz",
+      "bytes": 786180,
+      "sha256": "38b49027ba7face1e800f2776230b915e1ff445d51f6260b7f55f37d6ddb329c",
+      "file": "final-sources.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/history-and-local.tar.xz",
+      "bytes": 4544184,
+      "sha256": "8a300f6e64e16d12b014394d32017579ddfb751e553791fc63a4be7b54fb639e",
+      "file": "history-and-local.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/probes-and-failed-elfs.tar.xz",
+      "bytes": 35883956,
+      "sha256": "b4cdb7d61887ab8ad64944d8b95c4128a0b3d9b26db7dc698715068d549c19f1",
+      "file": "probes-and-failed-elfs.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/reference.tar.xz",
+      "bytes": 4036336,
+      "sha256": "1b39e1e44134c469ed198183f60777bd77e37f9b7160b1d6b42d6184b5e29086",
+      "file": "reference.tar.xz"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/source-manifest.json",
+      "bytes": 365530,
+      "sha256": "0dd4361e53d2c3bb0b37e4092f93d1dbe929b7be962115dcd26ad8780d74d48a",
+      "file": "source-manifest.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/source-verification.json",
+      "bytes": 664,
+      "sha256": "84968f9237d4085e5775b2dc92366e65f02aa311755117ab8112050600aaf8a0",
+      "file": "source-verification.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/validation-summary.json",
+      "bytes": 18632,
+      "sha256": "d7914c9cd9931dbf6ec9ab2291240cd3fa768d8ecbbf6780087a88563d2ded63",
+      "file": "validation-summary.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/wasm-report.json",
+      "bytes": 3678,
+      "sha256": "f815471a185e6fcbf2a26e2a9baeeab9fdfdb5b8bcc4fe91511e92c3ef86561b",
+      "file": "wasm-report.json"
+    },
+    {
+      "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/wasm.tar.xz",
+      "bytes": 1049640,
+      "sha256": "e531f6c02f6792879381cbddb0db233a6db69f37f6ea022271323146de1830ce",
+      "file": "wasm.tar.xz"
+    }
+  ],
+  "scope": "Immutable logical evidence package before parent post-rebase work; no future validation or push claim."
+}

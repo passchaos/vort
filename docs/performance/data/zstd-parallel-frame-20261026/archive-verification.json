@@ -1,0 +1,74 @@
+{
+  "schema": "vort.zstd.parallel-frame-archive-verification.v1",
+  "verified_utc": "2026-10-26T00:27:44.068665+00:00",
+  "archives": [
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/campaigns.tar.xz",
+        "bytes": 2284524,
+        "sha256": "4b322f90b40c210efc17a92f18667dca4deac672b447af9c977f4792adabdccd"
+      },
+      "member_count": 2164,
+      "hardlinked_members": 1701,
+      "all_logical_member_sizes_and_sha256_verified": true
+    },
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/history-and-local.tar.xz",
+        "bytes": 4544184,
+        "sha256": "8a300f6e64e16d12b014394d32017579ddfb751e553791fc63a4be7b54fb639e"
+      },
+      "member_count": 173,
+      "hardlinked_members": 73,
+      "all_logical_member_sizes_and_sha256_verified": true
+    },
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/probes-and-failed-elfs.tar.xz",
+        "bytes": 35883956,
+        "sha256": "b4cdb7d61887ab8ad64944d8b95c4128a0b3d9b26db7dc698715068d549c19f1"
+      },
+      "member_count": 9,
+      "hardlinked_members": 0,
+      "all_logical_member_sizes_and_sha256_verified": true
+    },
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/reference.tar.xz",
+        "bytes": 4036336,
+        "sha256": "1b39e1e44134c469ed198183f60777bd77e37f9b7160b1d6b42d6184b5e29086"
+      },
+      "member_count": 31,
+      "hardlinked_members": 11,
+      "all_logical_member_sizes_and_sha256_verified": true
+    },
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/wasm.tar.xz",
+        "bytes": 1049640,
+        "sha256": "e531f6c02f6792879381cbddb0db233a6db69f37f6ea022271323146de1830ce"
+      },
+      "member_count": 1,
+      "hardlinked_members": 0,
+      "all_logical_member_sizes_and_sha256_verified": true
+    },
+    {
+      "archive": {
+        "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/final-sources.tar.xz",
+        "bytes": 786180,
+        "sha256": "38b49027ba7face1e800f2776230b915e1ff445d51f6260b7f55f37d6ddb329c"
+      },
+      "member_count": 216,
+      "hardlinked_members": 0,
+      "all_logical_member_sizes_and_sha256_verified": true
+    }
+  ],
+  "all_raw_and_latest_local_logical_files_preserved": true,
+  "actual_final_and_old_failed_elf_hashes_verified": true,
+  "current_191_file_campaign_scan_verified": true,
+  "reference_epoch_not_rebuilt": true,
+  "all_archive_members_match_original_paths_at_freeze": true,
+  "archive_process_stdout_excluded": true,
+  "broader_source_scan_files_match_at_freeze": 1980,
+  "node_gate_matches_successful_wasm_report": true
+}

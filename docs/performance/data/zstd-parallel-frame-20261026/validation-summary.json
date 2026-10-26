@@ -1,0 +1,449 @@
+{
+  "schema": "vort.zstd.parallel-frame-validation.v1",
+  "created_utc": "2026-10-26T00:25:18.982171+00:00",
+  "campaigns": [
+    {
+      "directory": "native",
+      "report": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/native/differential.json",
+        "bytes": 1114169,
+        "sha256": "73e13754a7d83b42c48c43e4ac61648fd1a0c811d64ee81f106d9bb369d8be82"
+      },
+      "source_epoch": "heap-workspace-functional-final-tool-20261026",
+      "source_digest": "53739b465229879489d3a6a55ed4a985cd8aad0b0a8407da8a91f470c6672d64",
+      "counts": {
+        "cases": 111,
+        "passed": 103,
+        "failed": 8,
+        "target_encode_cases": 101,
+        "native_mt_reference_cases": 6,
+        "observed_peak_active_workers": 3,
+        "dictionary_error_cases": 4,
+        "large_sequence_cases": 1,
+        "maximum_independent_sequence_count": 1248
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "x86",
+      "report": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/x86/differential.json",
+        "bytes": 1110966,
+        "sha256": "977be970d947879945ee178648bc82a57f5ebca5d85b37008d5ea4f1c500f050"
+      },
+      "source_epoch": "heap-workspace-functional-final-tool-20261026",
+      "source_digest": "53739b465229879489d3a6a55ed4a985cd8aad0b0a8407da8a91f470c6672d64",
+      "counts": {
+        "cases": 111,
+        "passed": 103,
+        "failed": 8,
+        "target_encode_cases": 101,
+        "native_mt_reference_cases": 6,
+        "observed_peak_active_workers": 3,
+        "dictionary_error_cases": 4,
+        "large_sequence_cases": 1,
+        "maximum_independent_sequence_count": 1248
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "native-final",
+      "report": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/native-final/differential.json",
+        "bytes": 1160812,
+        "sha256": "46a2e35261f4f6bc573d7faecd4d97f9c08446ead2de89f91f37f6e6ab5802da"
+      },
+      "source_epoch": "heap-workspace-raw-dictionary-probe-fix-20261026",
+      "source_digest": "6d6de048492b01722ca27c4cc4a08f69e5f8e2e01526ebbaecc21a18ed8a2c6a",
+      "counts": {
+        "cases": 111,
+        "passed": 111,
+        "failed": 0,
+        "target_encode_cases": 101,
+        "native_mt_reference_cases": 6,
+        "observed_peak_active_workers": 3,
+        "dictionary_error_cases": 4,
+        "large_sequence_cases": 1,
+        "maximum_independent_sequence_count": 1248
+      },
+      "sources_preserved": true
+    },
+    {
+      "directory": "x86-final",
+      "report": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/x86-final/differential.json",
+        "bytes": 1157534,
+        "sha256": "b0833c2b7978c5e8b9da273c96460fccdb934179dfcbfa5dd4e7c68dce1fab01"
+      },
+      "source_epoch": "heap-workspace-raw-dictionary-probe-fix-20261026",
+      "source_digest": "6d6de048492b01722ca27c4cc4a08f69e5f8e2e01526ebbaecc21a18ed8a2c6a",
+      "counts": {
+        "cases": 111,
+        "passed": 111,
+        "failed": 0,
+        "target_encode_cases": 101,
+        "native_mt_reference_cases": 6,
+        "observed_peak_active_workers": 3,
+        "dictionary_error_cases": 4,
+        "large_sequence_cases": 1,
+        "maximum_independent_sequence_count": 1248
+      },
+      "sources_preserved": true
+    }
+  ],
+  "final_partition_per_target": {
+    "complete_target_encodes": 92,
+    "expected_encoder_rejections": 9,
+    "native_mt_input_decodes": 6,
+    "dictionary_rejections": 4
+  },
+  "final_native_counts": {
+    "cases": 111,
+    "passed": 111,
+    "failed": 0,
+    "target_encode_cases": 101,
+    "native_mt_reference_cases": 6,
+    "observed_peak_active_workers": 3,
+    "dictionary_error_cases": 4,
+    "large_sequence_cases": 1,
+    "maximum_independent_sequence_count": 1248
+  },
+  "final_x86_counts": {
+    "cases": 111,
+    "passed": 111,
+    "failed": 0,
+    "target_encode_cases": 101,
+    "native_mt_reference_cases": 6,
+    "observed_peak_active_workers": 3,
+    "dictionary_error_cases": 4,
+    "large_sequence_cases": 1,
+    "maximum_independent_sequence_count": 1248
+  },
+  "checks": {
+    "core_and_root_contracts": "122/122 in Debug, ReleaseFast native and x86",
+    "single_thread_contracts": "34 passed, 1 expected skip of 35",
+    "full_zstd_releasefast": "1128/1128",
+    "check_and_help": "207 steps; unfiltered global root tests compiled, not executed",
+    "atomic_helper": "2 named tests; scalar single-thread path passed one and skipped worker test; instrumentation checks, not codec metrics",
+    "single_beam": "11 original single-state contracts"
+  },
+  "wasm": {
+    "status": "ok",
+    "build_steps": 5,
+    "worker_scope": "Real unsupported-target synchronous fallback, zero OS workers"
+  },
+  "logs": [
+    {
+      "file": "check-help-debug.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/check-help-debug.log",
+        "bytes": 236258,
+        "sha256": "b25c16ae1239ffaf6514c1537cbc47ee77268594a3777af7211d7047851905de"
+      },
+      "build_summaries": [
+        "Build Summary: 207/207 steps succeeded"
+      ]
+    },
+    {
+      "file": "full-zstd-releasefast.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/full-zstd-releasefast.log",
+        "bytes": 2712,
+        "sha256": "a1453bcc08ef0ad256858f2ba7399ea2837584fd6d7513ec13422988239015b3"
+      },
+      "build_summaries": [
+        "Build Summary: 5/5 steps succeeded; 1128/1128 tests passed"
+      ]
+    },
+    {
+      "file": "heap-workspace-debug.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/heap-workspace-debug.log",
+        "bytes": 5090,
+        "sha256": "5c65497cdf6dac1f488cf874648b9d0a4e9d02b2cad3d3ab7cadd97054df3b5f"
+      },
+      "build_summaries": [
+        "Build Summary: 15/15 steps succeeded; 156/157 tests passed (1 skipped)"
+      ]
+    },
+    {
+      "file": "heap-workspace-wasm.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/heap-workspace-wasm.log",
+        "bytes": 5250,
+        "sha256": "e8e0e1012d2c7f1565c435198565237ff57372391d87605f3eaa5072bf98d798"
+      },
+      "build_summaries": [
+        "Build Summary: 5/5 steps succeeded"
+      ]
+    },
+    {
+      "file": "initial-debug.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/initial-debug.log",
+        "bytes": 7721,
+        "sha256": "569ad5674d85e807e5a7e65b459583536aa4777aa6c21b94297cd2ce786b0f5b"
+      },
+      "build_summaries": [
+        "Build Summary: 11/15 steps succeeded (2 failed); 147/153 tests passed (1 skipped, 1 failed, 4 crashed)"
+      ]
+    },
+    {
+      "file": "initial-wasm.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/initial-wasm.log",
+        "bytes": 3407,
+        "sha256": "91b6ca41b1e3108392099ea01ff343f913a4b9ced5cfe81b1610743cef83117e"
+      },
+      "build_summaries": [
+        "Build Summary: 2/5 steps succeeded (1 failed)"
+      ]
+    },
+    {
+      "file": "native-differential.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/native-differential.log",
+        "bytes": 1968,
+        "sha256": "dca00466da346bb2a165123af71a88ae3eecaec16c9516b937bde9fcdb4c858f"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "native-final-differential.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/native-final-differential.log",
+        "bytes": 354,
+        "sha256": "d5d2ba348f77defdb49b37dfaafb2e4c229fe1d7f3afec4965bda3daacdcfe43"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "native-probe-fixed-build.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/native-probe-fixed-build.log",
+        "bytes": 1421,
+        "sha256": "e3b34800903eaa51e0452f56a1ad72abdde46a74a5845acd05a6e90de79c9d6d"
+      },
+      "build_summaries": [
+        "Build Summary: 5/5 steps succeeded"
+      ]
+    },
+    {
+      "file": "native-releasefast.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/native-releasefast.log",
+        "bytes": 4155,
+        "sha256": "6b30d9eb41548d20eb787c4adf1ca9248dd474f9cca98f228ceddd6a1fc3138b"
+      },
+      "build_summaries": [
+        "Build Summary: 12/12 steps succeeded; 122/122 tests passed"
+      ]
+    },
+    {
+      "file": "queue-debug-epoch5.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/queue-debug-epoch5.log",
+        "bytes": 593,
+        "sha256": "ddf904fe7b4c7b96a6275e1a270feca792e14c6525340d8a94eb7ff7ecb69ca2"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "queue-debug-initial.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/queue-debug-initial.log",
+        "bytes": 325,
+        "sha256": "3c7069324141c0eec8c1116934ef2e90a001bbdcf9a6f28e954db8fa1c226bb3"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "single-beam-atomic-regression.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/single-beam-atomic-regression.log",
+        "bytes": 995,
+        "sha256": "5fbebf229451c7ac401dbeaebebd589f8bc9704b7471dca615d0b22b2e2a4c83"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "wasm-shadow-fix.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/wasm-shadow-fix.log",
+        "bytes": 5250,
+        "sha256": "87f497acbdce772932660a905257192291a2207ba269a2127e476def1edc22a5"
+      },
+      "build_summaries": [
+        "Build Summary: 5/5 steps succeeded"
+      ]
+    },
+    {
+      "file": "x86-differential.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/x86-differential.log",
+        "bytes": 1965,
+        "sha256": "c60e12ebe564f1e593719f6b0c2c2590a024746c40962a9bb3ddd0be59db3a5e"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "x86-final-differential.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/x86-final-differential.log",
+        "bytes": 351,
+        "sha256": "ad6e0b6bcdc603bee88d69b094c55d2eafe626c5fe39481a1cc8b66c032ee67f"
+      },
+      "build_summaries": []
+    },
+    {
+      "file": "x86-probe-fixed-build.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/x86-probe-fixed-build.log",
+        "bytes": 1550,
+        "sha256": "d22a7cd474fa103ef2bdb495f64980e5f3798ab182d8683de6ae70cc6090c7dc"
+      },
+      "build_summaries": [
+        "Build Summary: 5/5 steps succeeded"
+      ]
+    },
+    {
+      "file": "x86-releasefast.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/x86-releasefast.log",
+        "bytes": 4488,
+        "sha256": "0e6977e2ef53e4c6ef389663860f2be186c8024b1390f5b4547e8162879f0601"
+      },
+      "build_summaries": [
+        "Build Summary: 12/12 steps succeeded; 122/122 tests passed"
+      ]
+    },
+    {
+      "file": "xz-shared-memory-debug.log",
+      "identity": {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/logs/xz-shared-memory-debug.log",
+        "bytes": 3989,
+        "sha256": "41a50cd9aef386782fcaf33fe3ea48588845287c757989081d2cdf76eee00d1e"
+      },
+      "build_summaries": []
+    }
+  ],
+  "failure_history": {
+    "initial_semantic_attempts": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd.zig",
+        "-ODebug",
+        "-fno-emit-bin",
+        "--test-filter",
+        "Zstd parallel frame"
+      ],
+      "workdir": "/home/passchaos/project-z/vort",
+      "attempts": [
+        {
+          "name": "initial-ambiguity",
+          "exit_code": 1,
+          "log": "semantic-initial-ambiguity.log",
+          "log_source": "exact stderr text exported from actual tool output; no shell log redirect was used",
+          "source_before": null,
+          "source_after": null,
+          "reconstructed_source": false
+        },
+        {
+          "name": "second-overflow",
+          "exit_code": 1,
+          "log": "semantic-second-overflow.log",
+          "log_source": "exact stderr text exported from actual tool output; no shell log redirect was used",
+          "source_before": null,
+          "source_after": "post-second-before-future-fix",
+          "source_before_is_missing": true
+        }
+      ],
+      "captured_after_second_terminal": "2026-10-25T23:40:44.230896+00:00",
+      "owned_source_hashes": {
+        "src/zstd.zig": "b335a8ea2a4548d985dec6db258a6aff7af8197bdb8a04034f200422f8b6574e",
+        "src/root.zig": "7b6dd1184f278d273408837bf99a772c642f22aea057c1e35e10e0ab7b6f7283",
+        "src/zstd/parallel/codec.zig": "8de9b53f5bc9bb0f0081c4a251e34eafcf7eabedbc3aae271c53df4440cbfc4c",
+        "src/zstd/parallel/job_codec.zig": "1bd21486930500b656996e3ee554ea6cd7c366ddf58357350e76cd258da5788e",
+        "src/zstd/parallel/codec_job_encode.zig": "e1df2ac089c3ff16a076668c98c9d3957b45ca6c6851291fccea9df5052fc6fd",
+        "src/zstd/parallel/codec_public.zig": "a5f517cc6c17b14ca8cd85dc479d681c25041ed7cdd07cddb8fcff72953cc8de"
+      },
+      "note": "No source files changed after the second attempt started. Initial ambiguity-source snapshots were not captured. This snapshot records the current owned sources after the second attempt; it is not represented as an initial compile input."
+    },
+    "first_debug_runtime": "Four real SIGSEGVs plus an instrumentation expectation failure; original core/single/root ELF identities retained.",
+    "gdb_stack_guard_proof": {
+      "timestamp_utc": "2026-10-25T23:59:18.581356+00:00",
+      "workdir": "/home/passchaos/project-z/vort",
+      "executable": "/home/passchaos/project-z/vort/.zig-cache/o/ab4778edfbc69916db2611368fbc3263/vort-zstd-parallel-frame-tests",
+      "executable_sha256": "b35ab5aa0f3ee78a8829cf7ae32aa5a8d00a44d6b538cd4f5d7e327294f12346",
+      "debugger": "GNU gdb 12.1",
+      "run_arguments": [
+        "--cache-dir=/home/passchaos/project-z/vort/.zig-cache",
+        "--seed=0xbaa03273"
+      ],
+      "run_protocol_note": "Frozen failed ELF run directly under GDB terminal test protocol; original build used --listen=- IPC. Same compiled fixtures and seed, first SEGV reproduced three times. No source changes or recompilation.",
+      "signal": "SIGSEGV",
+      "crash_function": "zstd.MixedMatchCandidateCache.initWithDuplicateIndex",
+      "pc": "0x14c86dd",
+      "pc_offset": 13,
+      "fault_instruction": "test %esp,-0x1000(%rsp,%r10,1)",
+      "rsp": "0x7ffff7736520",
+      "rbp": "0x7ffff78115b0",
+      "r10": "0xa8090",
+      "siginfo_fault_address": "0x7ffff77dd5b0",
+      "computed_probe_address": "0x7ffff77dd5b0",
+      "guard_mapping": {
+        "start": "0x7ffff77dd000",
+        "end": "0x7ffff77de000",
+        "permissions": "---p"
+      },
+      "worker_rw_mapping": {
+        "start": "0x7ffff77de000",
+        "end": "0x7ffff7a5f000",
+        "permissions": "rw-p",
+        "mapped_bytes": 2625536
+      },
+      "configured_worker_stack_bytes": 2097152,
+      "rsp_below_rw_mapping_bytes": 686816,
+      "fault_inside_guard": true,
+      "actual_function_stack_reservations": {
+        "bestMixedMatchLookaheadPlan": 1454384,
+        "MixedMatchCandidateCache.initWithDuplicateIndex": 897168,
+        "combined_without_other_callers": 2351552
+      },
+      "gdb_reported_local_type_sizes": {
+        "candidate_cache": 448532,
+        "candidate_cache.entries": 110592,
+        "candidate_cache.owned_duplicate_index": 335852,
+        "huffman_bit_prefix": 524560,
+        "literal_histogram": 1048,
+        "plan": 4248,
+        "best": 4248
+      },
+      "type_size_note": "Sizes are GDB DWARF-reported local types; a future heap allocation must use Zig @sizeOf and alignment, not these values as a quota constant.",
+      "conclusion": "Confirmed worker stack exhaustion during compiler-generated stack probing before cache function body; not a decoded buffer access or a queue deadlock.",
+      "proposed_fix": "Opt-in lazy worker-owned mixed lookahead workspace in existing NativeBlockEncodeScratch, allocate through worker Slot/Control; move cache + Huffman prefix and initialize them in place; pass workspace to original mixed search while retaining its candidates/budgets. Preserve original serial default allocation/wire path. No fix applied yet.",
+      "owned_source_hashes": {
+        "src/zstd.zig": "da4823de92e1552a522220fc34e681a1e61da6577847645bbbafb4ef56fa90c3",
+        "src/root.zig": "7b6dd1184f278d273408837bf99a772c642f22aea057c1e35e10e0ab7b6f7283",
+        "src/zstd/parallel/codec.zig": "8de9b53f5bc9bb0f0081c4a251e34eafcf7eabedbc3aae271c53df4440cbfc4c",
+        "src/zstd/parallel/codec_job_encode.zig": "b201923b6dadc8b58a7183327969a81e77e418133bd52e5bc4e285e8d639526d",
+        "src/zstd/parallel/job_codec.zig": "1bd21486930500b656996e3ee554ea6cd7c366ddf58357350e76cd258da5788e",
+        "src/zstd/parallel/codec_public.zig": "a5f517cc6c17b14ca8cd85dc479d681c25041ed7cdd07cddb8fcff72953cc8de"
+      },
+      "owned_sources_match_pre_runtime_epoch": true,
+      "logs": {
+        "initial-dwarf-types.log": "fd90d57dd61ae7ba1a1a9219356947438098332569d76ce50ac0a46eefe09711",
+        "initial-local-scratch-types.log": "59135e76f1206846b0341e05192a6f4745bf4ffe9c39821d85ba149ddf6ed033",
+        "initial-failed-elf.log": "de4a2780848dd03c33c447abf31fcaeaec1f4b5b48db5fa0723a07c9c11dcf7c",
+        "initial-stack-probes.log": "e7b332dd5ce0cf652616daaa9c0f244b4e0c51b8d3af84570f3b6ef2ea7dc843"
+      },
+      "failed_queries_note": "Some direct type/function queries in early logs could not resolve namespace names; successful local-frame sizeof and quoted disassembly are recorded in initial-local-scratch-types.log."
+    },
+    "heap_workspace_fix": "Worker-slot-owned heap workspace removed measured large automatic stack reservations while preserving parser candidates/settings.",
+    "initial_external": "103/111; 8 raw-ID0 cases failed eager catalog validation in probe setup outside operation catch. Production catalog contract was not relaxed.",
+    "final_external": "111/111 including 13 expected rejects; not 111 complete encoded streams.",
+    "capture_scope": "Early syntax source_before fields are null; later explicit before/after and post-terminal captures keep their own labels. They are not promoted to a compiler-extracted dependency closure."
+  },
+  "scope": "Functional correctness and compiler evidence; no throughput/RSS or industry-leading claim."
+}

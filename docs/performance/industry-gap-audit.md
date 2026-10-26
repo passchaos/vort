@@ -27,7 +27,7 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
 | [ZIP container](../formats/zip.md) | ZIP32/ZIP64, local/central metadata and descriptors; Stored, Shrink, Reduce, Implode, Deflate/Deflate64, DCL Implode, Bzip2, LZMA, legacy/current Zstandard, XZ and PPMd methods; borrowed/owned and incremental I/O, match-producing adaptive Deflate64, split-volume adapters, ZipCrypto, WinZip AES and password-based PKWARE AES Strong Encryption | Certificate recipients, other Strong Encryption ciphers and encrypted central directories remain unsupported. Broad archive interoperability and a current cross-library archive ratio/throughput/memory matrix are not established. |
-| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
+| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams; explicit native one-shot single-frame job MT with checked re-emission and transactional publication | Reference algorithm, quality and throughput parity remains unproven. Persistent incremental single-frame jobs remain absent; existing candidate and seekable-frame MT are separate capabilities. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; signed native acceleration, independent chain depth and actual work profiles; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | Native chain/lazy defaults and accelerated search differ from liblz4's single-hash fast parser. Empty raw input retains the legacy API-only empty-slice convention. Full corpus/platform fast/HC ratio, throughput and memory leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching remains fragment-local. Explicit Large Window q2+ and legacy non-fragment history grows to the advertised bound, while shared near matching retains its 65535-byte suffix. Far matching still uses bounded chain/stride candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
@@ -176,7 +176,7 @@ probe campaign. Only parallel options provide a whole-operation heap cap;
 incremental pending bytes and inner matcher limits do not cap complete payload
 storage. No throughput, RSS or full MT feature-parity result is assigned, and
 earlier evidence stays historical. The subsequent persistent incremental slice
-has separate pending evidence below; broader performance remains open.
+has separate completed evidence below; broader performance remains open.
 
 The [persistent incremental XZ parallel increment](xz-incremental-parallel-functional-baseline.md)
 has independent functional validation. Explicit parallel options retain a stable
@@ -206,6 +206,34 @@ The [ZIP contract](../formats/zip.md) lists its entry methods and encryption
 limits. Split incremental writing already removes
 the owned split writer's whole-archive staging requirement. These container
 features do not establish archive-wide competitor performance leadership.
+
+The [native Zstd parallel-frame increment](zstd-parallel-frame-functional-baseline.md)
+has independent functional validation. Explicit one-shot jobs build one standard/
+magicless frame through stable bounded queue state, with actual-span admission
+and independently initialized job priors. Coordinator interpretation/re-emission
+preserves global physical distances, recent offsets and Huffman/FSE dependencies,
+one header/last Block/checksum and a checked raw upper bound. Complete output and
+replacement staging use a shared heap cap, intersected with the native total cap;
+caller publication waits for joined work and retains alias/failure contracts.
+Actual wire Block counts and private worker work are distinct from planned spans.
+Existing candidate threads and independent seekable frames are separate APIs.
+Native Debug/ReleaseFast and actual x86 ReleaseFast each pass 122/122 filtered
+executions (35 core plus 87 root/consumer); single-thread passes 34 with one
+partial-spawn skip. Native/x86 external campaigns each pass 111/111: 92 complete
+target frames, nine expected encoder rejects, six MT-configured reference inputs
+decoded by Vort and four dictionary rejects. Actual target worker peak is three;
+an independent parser observes a 1248-sequence Block. Real Wasm covers four
+fallback/resource groups in five build/run steps; complete native Zstd ReleaseFast
+passes 1128/1128 and final check/actual help 207 steps. Initial stack crashes are
+reproduced against the original ELF and corrected with opt-in heap workspace,
+in-place initialization and unchanged planner/default serial behavior. Fixture,
+test-counter, semantic and raw-ID-zero probe corrections retain separate failed
+epochs. Internal published-job diagnostics remain distinct from successful
+caller emitted counts; observed retained job-output capacity is not total active
+output peak. Feature `fb441359`, shared heap `a0a3eb0e` and helper `d948c9da`
+retain separate scopes, and no earlier Brotli/Zstd performance data is refreshed.
+Persistent incremental single-frame jobs, CLI controls and industry-best
+speed/ratio/memory remain open.
 
 The earlier [Deflate64 streaming increment](deflate64-stream-functional-baseline.md)
 closes ZIP method 9's stored-only incremental encoding gap. Its public raw

@@ -1,0 +1,241 @@
+{
+  "schema": "vort.zstd.parallel-frame-environment.v1",
+  "created_utc": "2026-10-26T00:25:18.982171+00:00",
+  "parent_reported_feature_commit": "fb441359",
+  "parent_reported_base": "698",
+  "earlier_separate_commits": {
+    "shared_heap": "a0a3eb0e",
+    "helper_single_beam": "d948c9da"
+  },
+  "initial_environment": {
+    "created_utc": "2026-10-26T00:05:00.837847+00:00",
+    "host": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "python": "3.10.12",
+    "zig": {
+      "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "version": "0.16.0"
+    },
+    "reference": {
+      "library": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      },
+      "version": "1.6.0",
+      "header": {
+        "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+        "bytes": 182200,
+        "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+      },
+      "source_commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+      "source_worktree_status": "",
+      "scope": "functional reference; previous build is reused, compiler command not recaptured or asserted as a new build"
+    },
+    "vail_dependency": {
+      "root": "/home/passchaos/project-z/vail/archive_crypto",
+      "repo_commit": "5d3f8a1ff19e72a5d50a0c1f5296722d756e938c",
+      "repo_status": "?? vail\n",
+      "scope": "external archive_crypto source/package read-only scan; unrelated untracked executable is not edited or committed",
+      "files": [
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/build.zig",
+          "bytes": 730,
+          "sha256": "2d5de228457254fccf8c0fc4c49a740287bc982144b4290c0a641e404c4d11cf"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/build.zig.zon",
+          "bytes": 251,
+          "sha256": "284ce6f58b6f49fda8462a95de76cef9a807b14bd4e00f9f82cbec5ec381a10b"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/aes192.zig",
+          "bytes": 5430,
+          "sha256": "9326c8f8208080b331ae126a7117294e82a6f6f6dc69edee344c6e00d9726d40"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/android_ota.zig",
+          "bytes": 14526,
+          "sha256": "c157fd3c7225397953c8a76bbaa1e8aa4dbf079c6a68873e80df7c5fe688949a"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/arj.zig",
+          "bytes": 2622,
+          "sha256": "6bfd778e7c845baae559c505aef417a43e527d2a53333232b4f4751efa584f81"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/cryptoapi_rsa.zig",
+          "bytes": 8744,
+          "sha256": "e92270ad6abcb392187d46f8b5b5bb054545482ac2309ec8c014a316579d7155"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/esd.zig",
+          "bytes": 3656,
+          "sha256": "c78caaf54109cef9a35de2455ce26bfa1d433b9574d4b8432ff013622f51d0fd"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/pkware_strong.zig",
+          "bytes": 16922,
+          "sha256": "92f1a721eb6dedc004ff055ac60eb430677bae587b53dcdee4abf3c9bd88feb1"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/pkware_strong_decrypt_stream.zig",
+          "bytes": 14067,
+          "sha256": "7f3f065f7b854e7418e694536a4de243c5df3f9ac8f12d8b26698da8a8332720"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/pkware_strong_stream.zig",
+          "bytes": 12604,
+          "sha256": "37da19446af4191dea8b5cb501ba82dc2cc9e1832e9d1bd56b03bfa56636ecfc"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/pkware_strong_tests.zig",
+          "bytes": 11176,
+          "sha256": "d80f8079f858c585610fcfb5383894c9a2878e763336ece59e103ba4fd6f8778"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/rar4.zig",
+          "bytes": 13276,
+          "sha256": "472df23c20d2a74879277a6c5cdc2f5fe3bdbe871d00f2d597b3c36f24144ff9"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/rar5.zig",
+          "bytes": 12535,
+          "sha256": "9294b80ef63f81bc9aaec96ee3cbe90f6b691c7f023c0321e9774f4563ea247b"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/rar_legacy.zig",
+          "bytes": 12058,
+          "sha256": "19d602012a0532b10ec1054d6e0e867a6b404510a161b7cb65f0e051ac3fda18"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/root.zig",
+          "bytes": 1038,
+          "sha256": "5a6b07bd211b83b4ba0191139bf37e6cd84b1ce94b2c4132ea1e3b330256ff31"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/seven_zip.zig",
+          "bytes": 13873,
+          "sha256": "6cff048cbb528332077f6e1d966df741bae99a250c3d6dc64d8c496f3ffa36c5"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/winzip_aes.zig",
+          "bytes": 15656,
+          "sha256": "5e6b20b72ac2c99b920409b5c88f7b7f7ebedda0ccfa15acae2bc881d2c72705"
+        },
+        {
+          "path": "/home/passchaos/project-z/vail/archive_crypto/src/zipcrypto.zig",
+          "bytes": 5836,
+          "sha256": "a3a2174462c066703fa5b660b618354d9d834ee053ab6aff41b2ac3f97289a01"
+        }
+      ]
+    },
+    "measurement_scope": "functional validation and requested-allocation counters; no compression/decompression throughput or RSS measurements"
+  },
+  "final_probe_identities": {
+    "native": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/native-probe/bin/vort-zstd-parallel-frame-probe",
+      "bytes": 9573912,
+      "sha256": "7e2d702c23c3ed2c9fb3fb6547a97233d6face24946f9faccd401a1e22bf24aa"
+    },
+    "x86": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/x86-probe/bin/vort-zstd-parallel-frame-probe",
+      "bytes": 7609188,
+      "sha256": "d31fc84b1abb04bda070a1fb21a1ee7938700f57e7af5041f917fec7cfd74a2f"
+    },
+    "native-final": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/native-probe-fixed/bin/vort-zstd-parallel-frame-probe",
+      "bytes": 9574664,
+      "sha256": "ee17de555e1f9d8d6b6507ff1f42773080ecccebd922006a8013b422e918618f"
+    },
+    "x86-final": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/x86-probe-fixed/bin/vort-zstd-parallel-frame-probe",
+      "bytes": 7610972,
+      "sha256": "6a1beaa4c13e35ab72810873e1e2a10c461d15d349085f456915eaf8315eb629"
+    }
+  },
+  "reference_summary": {
+    "schema": "vort.zstd.singleframe-mt-reference-evidence.v1",
+    "created_utc": "2026-10-26T00:08:18.844072+00:00",
+    "source_commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+    "source_files": 132,
+    "source_digest": "5f5ff41634650336679fa32ee93e2aefb3f5219ed585be729499e1f9827eb590",
+    "source_clean_before_after": true,
+    "library": {
+      "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+      "bytes": 896992,
+      "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+    },
+    "header": {
+      "path": "/home/passchaos/Work/zstd/lib/zstd.h",
+      "bytes": 182200,
+      "sha256": "17d279cd45a6881e87eb1801e08d2d29be200ff47811a1ff3168947cad2029bd"
+    },
+    "actual_symbol_owners": {
+      "compress2": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      },
+      "CCtx_setParameter": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      },
+      "CCtx_getParameter": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      },
+      "decompressStream": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      },
+      "DCtx_setParameter": {
+        "path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "bytes": 896992,
+        "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+      }
+    },
+    "mt_checks": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/reference-mt-checks.json",
+      "bytes": 15103,
+      "sha256": "b6891b38c305f022b8f10e1e57132b130a9aac2bf3f280a54f076de32fd4808a"
+    },
+    "reference_only_commands": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/commands.json",
+      "bytes": 2501,
+      "sha256": "113d5313ddfdd7d00610989279d7d0b3db2961c148587aec9d0f7bc60b8e654c"
+    },
+    "archives": [
+      {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/reference-sources.tar.xz",
+        "bytes": 534056,
+        "sha256": "a16b3e6e7de84a5fd5f3a6d74f53ceb292604912d6145e06c4202f57c7c2c5a6"
+      },
+      {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/reference-elf-and-metadata.tar.xz",
+        "bytes": 312836,
+        "sha256": "9cb0286b64c98bb569cb92dd928dd01e52d8dbbd225f34e2cc06bc85d1c6b8e7"
+      },
+      {
+        "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/reference-mt-checks.tar.xz",
+        "bytes": 2064188,
+        "sha256": "711b271c089f4e1eecc3b15b093e491a24a4701e6a16713ae5ce9b0e75b77c35"
+      }
+    ],
+    "compile_provenance_limit": {
+      "path": "/tmp/vort-zstd-singleframe-parallel-20261026/reference/build-metadata.json",
+      "bytes": 2055,
+      "sha256": "dc161271261a4d2a5bd4ceeda7b5fc7b2a7a15d38ac79ce667913d3316844c7d"
+    },
+    "target_probe_runs": 0,
+    "reference_rebuilds": 0,
+    "performance_measurements": 0,
+    "scope": "Existing reference ELF, clean relevant tracked source, real MT options/full contents and explicit missing historical build flags; not a target campaign or reference worker execution counter."
+  },
+  "external_vail_files_verified": 18,
+  "handoff": "Post-rebase verification and remote push remain parent work; not claimed in these artifacts."
+}

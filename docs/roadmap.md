@@ -23695,3 +23695,42 @@ reuse, so production keeps the simpler independently owned plans.
   one-shot/header evidence stays historical. All five core families still lack
   a complete industry-best functionality/performance result; prioritize current
   symmetric competitor measurements and Brotli/Zstd encoder throughput next.
+
+- 2026-10-26: explicit native Zstd single-frame job MT adds V1.B
+  Alloc/Append/Into, dictionary/set and checked-bound APIs with required caller
+  I/O. Stable bounded queue state borrows immutable input/dictionaries until
+  joined completion, without a full-input descriptor list. Rounded effective
+  jobs charge actual span bytes; ceiling slots admit full jobs plus fitting short
+  tails, and an over-cap first job rejects without shrinking its boundary.
+  Workers retain independent dictionary-initialized priors and native settings;
+  coordinator decoding of physical distances and global reps/Huffman/FSE
+  re-emission creates one standard/magicless header, global last Block and
+  checksum within the raw upper bound. Actual wire Block counts replace planned
+  span ceilings. Shared requested heap includes control/codecs/job outputs and
+  complete frame/replacement staging, taking the minimum native/parallel cap;
+  transactional caller publication follows stop/join and preserves aliases and
+  failures. Synchronous fallback keeps job geometry/wire and zero OS worker
+  activity; spawn failures join and propagate. Work profiles remain private,
+  without counting original emitted output twice. [Functional evidence](performance/zstd-parallel-frame-functional-baseline.md)
+  records native Debug/ReleaseFast and actual x86 ReleaseFast each 122/122
+  filtered executions (35 core plus 87 root/consumer), single-thread 34 pass/
+  one partial-spawn skip and final native/x86 matrices each 111/111: 92 complete
+  target frames, nine expected encoder rejects, six MT-configured reference
+  decode inputs and four dictionary rejects. Target active-worker peak three
+  and independent 1248-sequence evidence do not imply reference worker counts
+  or a speed lead. Real Wasm executes four groups in five steps; full native
+  Zstd ReleaseFast passes 1128/1128 and final check/actual help 207 steps.
+  Failed Debug stack crashes are reproduced on the original ELF: nested
+  reservations total 2351552 bytes and hit the 2 MiB worker guard. Opt-in lazy
+  heap mixed workspace/initInto reuses the original planner and retains serial
+  default allocation behavior. Earlier syntax/semantic, fixture, test-counter
+  and raw-ID-zero probe failures remain recorded with their corrected epochs.
+  Feature `fb441359`, shared-heap `a0a3eb0e` and helper/single-beam `d948c9da`
+  stay separate; prior regression scopes are not independent new codec cases.
+  Pipeline published counters describe internal staging, while caller emitted
+  counts require successful publication. Job-output capacity is an observed
+  retained peak; requested heap includes active storage. Existing candidate
+  MT/seekable frames and dated Brotli/Zstd performance epochs remain separate.
+  Persistent incremental single-frame jobs and CLI worker flags are follow-ups;
+  no constant-memory, libzstd MT algorithm or speed/ratio/RSS equivalence is
+  assigned.

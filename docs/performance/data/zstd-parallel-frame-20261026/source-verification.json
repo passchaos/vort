@@ -1,0 +1,14 @@
+{
+  "schema": "vort.zstd.parallel-frame-source-verification.v1",
+  "parent_reported_feature_commit": "fb441359",
+  "broader_source_files": 1980,
+  "broader_source_digest": "8f330935d30b165642d2fba14df00b7cbcaec46b27a70ef9967c4ec88166ee84",
+  "campaign_recorded_files": 191,
+  "campaign_source_digest": "6d6de048492b01722ca27c4cc4a08f69e5f8e2e01526ebbaecc21a18ed8a2c6a",
+  "native_x86_source_sets_identical": true,
+  "campaign_source_current_files_match": true,
+  "external_vail_files": 18,
+  "external_vail_files_match_initial_identities": true,
+  "compiler_dependency_extraction_claimed": false,
+  "early_null_and_late_explicit_snapshot_labels_preserved": true
+}

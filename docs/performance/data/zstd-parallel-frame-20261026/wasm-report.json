@@ -1,0 +1,110 @@
+{
+  "schema": "vort-zstd-parallel-frame-wasm-v1",
+  "status": "ok",
+  "utc": "2026-10-26T00:11:39.640Z",
+  "node_version": "v26.10.0",
+  "wasm_path": "/home/passchaos/project-z/vort/.zig-cache/o/1c7f32d034614684d9aeab7ecf21d905/vort-zstd-parallel-frame-wasm.wasm",
+  "wasm_sha256": "36f0b4760fa927915a79c58c407831248f831b7dc7bcf2a600d2f93d3b1f71d4",
+  "consumer_source_sha256": "079f835c94a59e3592380e44a0af4be0b465e73b5b516b8d3536d05a19046425",
+  "node_gate_sha256": "1011cf884838fb8562df545a24de4a319cbf0c40f7842920fa9adf15c05b0ccf",
+  "imports": [],
+  "allocator": "FixedBufferAllocator",
+  "backing_capacity_bytes": "8388608",
+  "heap_limit_bytes": "4194304",
+  "max_inflight_jobs": "2",
+  "max_inflight_plain_bytes": "1024",
+  "requested_workers": "2",
+  "job_size_bytes": "512",
+  "block_size_bytes": "256",
+  "parallel_io": "std.Io.failing",
+  "pointer_bits": "32",
+  "cases": [
+    {
+      "mode": "raw_or_rle",
+      "input_bytes": "2048",
+      "wire_bytes": "1063",
+      "jobs": "4",
+      "published_blocks": "8",
+      "heap_peak": "4076",
+      "heap_live_after_operation": "0",
+      "peak_inflight_jobs": "2",
+      "peak_inflight_plain_bytes": "1024",
+      "serial_fallback": true,
+      "effective_workers": "1",
+      "workers_started": "0",
+      "workers_live": "0",
+      "peak_active_workers": "0",
+      "one_frame_and_terminal_block_checked": true,
+      "whole_content_xxh64_low32_checked": true,
+      "public_full_decode_equal": true
+    },
+    {
+      "mode": "controlled_fast",
+      "input_bytes": "2048",
+      "wire_bytes": "326",
+      "jobs": "4",
+      "published_blocks": "8",
+      "heap_peak": "4670",
+      "heap_live_after_operation": "0",
+      "peak_inflight_jobs": "2",
+      "peak_inflight_plain_bytes": "1024",
+      "serial_fallback": true,
+      "effective_workers": "1",
+      "workers_started": "0",
+      "workers_live": "0",
+      "peak_active_workers": "0",
+      "one_frame_and_terminal_block_checked": true,
+      "whole_content_xxh64_low32_checked": true,
+      "public_full_decode_equal": true
+    },
+    {
+      "mode": "magicless_dictionary",
+      "input_bytes": "1024",
+      "wire_bytes": "43",
+      "jobs": "2",
+      "published_blocks": "4",
+      "heap_peak": "3737",
+      "heap_live_after_operation": "0",
+      "peak_inflight_jobs": "2",
+      "peak_inflight_plain_bytes": "1024",
+      "serial_fallback": true,
+      "effective_workers": "1",
+      "workers_started": "0",
+      "workers_live": "0",
+      "peak_active_workers": "0",
+      "one_frame_and_terminal_block_checked": true,
+      "whole_content_xxh64_low32_checked": true,
+      "public_full_decode_equal": true
+    }
+  ],
+  "controlled_fast": {
+    "history_sequences": "7",
+    "max_distance": "256",
+    "same_geometry_mt_one_worker_wire_equal": true
+  },
+  "dictionary": {
+    "id": "77",
+    "dictionary_sequences": "1",
+    "raw_dictionary_bytes": "256",
+    "set_wire_equal": true,
+    "magicless_equals_standard_without_magic": true
+  },
+  "publication": {
+    "append_additional_bytes_and_prefix_checked": true,
+    "into_input_alias_checked": true
+  },
+  "quotas": {
+    "measured_peak_bytes": "4076",
+    "exact_cap_wire_bytes": "1063",
+    "exact_cap_same_wire": true,
+    "refused_cases": [
+      "max_working_memory=0",
+      "measured peak minus one",
+      "max_inflight_bytes=511 < first job length 512"
+    ],
+    "refusals": "3",
+    "caller_output_untouched": true,
+    "zero_and_credit_refusals_before_backing_allocation": true
+  },
+  "scope": "Real bounded one-shot jobs form one Zstd frame. Inputs remain alive and immutable for the call; no incremental overwrite promise, OS worker startup, RSS or performance claim."
+}
