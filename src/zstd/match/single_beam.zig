@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const lz77 = @import("../../lz77.zig");
+const test_counter = if (builtin.is_test) @import("../../testing/atomic_counter.zig") else struct {};
 
 const text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_single_beam",
@@ -241,7 +242,7 @@ fn firstIndexedMatch(
                         profile.indexed_matches += 1;
                         profile.indexed_length_histogram[matchLengthBucket(length)] += 1;
                     }
-                    if (comptime builtin.is_test) test_first_shifted_indexed_match_hits += 1;
+                    if (comptime builtin.is_test) test_counter.add(&test_first_shifted_indexed_match_hits, 1);
                     return .{
                         .length = @intCast(length),
                         .distance = previous.distance,
@@ -576,7 +577,7 @@ test "single-state fused index matches prebuilt predecessor chains" {
 }
 
 test "single-state shifted indexed matches preserve full-extension plans" {
-    test_first_shifted_indexed_match_hits = 0;
+    if (builtin.single_threaded) test_first_shifted_indexed_match_hits = 0 else @atomicStore(usize, &test_first_shifted_indexed_match_hits, 0, .monotonic);
     var shifted: Scratch = .{};
     defer shifted.deinit(std.testing.allocator);
     var reference: Scratch = .{};
