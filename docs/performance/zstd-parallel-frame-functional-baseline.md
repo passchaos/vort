@@ -193,7 +193,7 @@ Evidence is archived in [the repository bundle](data/zstd-parallel-frame-2026102
 | Archive members, capture scope and artifact hashes | [archive-verification.json](data/zstd-parallel-frame-20261026/archive-verification.json), [evidence-manifest.json](data/zstd-parallel-frame-20261026/evidence-manifest.json), [artifact-manifest.json](data/zstd-parallel-frame-20261026/artifact-manifest.json), [SHA256SUMS](data/zstd-parallel-frame-20261026/SHA256SUMS) |
 
 Six archives preserve all logical raw/local evidence members, including repeated
-hardlinked content with verified size/hash: 2164 campaign members, 174 history/
+hardlinked content with verified size/hash: 2164 campaign members, 173 history/
 local records, nine ELF files, 31 reference records, one Wasm executable and 216
 final source members. The broader source scan has 1980 files and digest
 `8f330935d30b165642d2fba14df00b7cbcaec46b27a70ef9967c4ec88166ee84`; its
