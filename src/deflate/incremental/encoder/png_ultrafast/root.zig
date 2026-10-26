@@ -249,8 +249,7 @@ pub const Encoder = struct {
         while (input.len - offset >= 8 and offset < 4096 and writer.output.len - writer.used >= 24) {
             const word = std.mem.readInt(u64, input[offset..][0..8], .little);
             if (word == 0) {
-                const zeros: usize = if (input.len - offset >= 64 and offset <= 4096 - 64 and
-                    zero_scan.followingWordsAreZero(input[offset..][0..64])) 64 else 8;
+                const zeros = zero_scan.leadingZeroWords(input[offset..@min(input.len, 4096)]);
                 adler.zero(zeros);
                 run += zeros;
                 offset += zeros;

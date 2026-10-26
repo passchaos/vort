@@ -66,3 +66,22 @@ recurrence within the same4096-byte/NMAX bound. A native-lane conversion preserv
 byte order on big-endian targets. No fields, owned buffers or heap allocations
 are added. Frozen published52byte/schedule/snapshot controls and independent
 fdeflate/zlib tests cover this path alongside the original scalar reference.
+
+Zero-word prefixes now scan once up to the current 4096-byte Adler batch limit,
+using complete 64-byte folds followed by complete scalar words. The first
+nonzero word and partial tail remain with the normal token/carry logic. A single
+equivalent `b += n*a` recurrence covers the proven prefix. Encoder fields,
+reported progress, token decisions, flush framing and requested heap stay exact.
+The incremental test registry imports this owning module explicitly. Debug and
+ReleaseFast run all fourteen core/reference/boundary checks; baseline x86 and
+big-endian PowerPC compile the same controls. The independent fdeflate/zlib
+producer additionally passes 544 cases and 1727 partition/flush checks.
+
+Five paired process-CPU rounds through the unchanged imx batch-row consumer
+measure 1.156058x geomean and 1.137714x aggregate complete-encode speedup over
+the fused-word core, with all thirty PNG buffers and allocator records exact.
+Transparency/Up improves 2.212539x and the 128-pixel icon/Up 1.247436x; the
+smallest case ratio is 1.009652x. This is the complete real-corpus fastest-stream
+scope, not a result for every compression level or platform. Frozen samples,
+source/binary hashes and original reference reports are retained under
+`/nav_env/Temp/imx-png-small-up/`; imx's evidence records default integration.

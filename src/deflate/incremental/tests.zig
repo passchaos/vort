@@ -21,6 +21,7 @@ test {
     _ = sync_recovery_tests;
     _ = wrapper_continuation_tests;
     _ = zlib_dictionary_tests;
+    _ = @import("encoder/png_ultrafast/root.zig");
 }
 
 test "raw deflate incremental stored encoder splits flushes and resumes" {
