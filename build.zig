@@ -375,6 +375,14 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const seven_zip_aes_tests = b.addTest(.{
+        .name = "vort-seven-zip-aes-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "7z source entry decoder streams AES filters", "7z split sources parse and stream encrypted solid entries" },
+    });
+    const run_seven_zip_aes_tests = b.addRunArtifact(seven_zip_aes_tests);
+    const seven_zip_aes_test_step = b.step("test-seven-zip-aes", "Focused 7z AES entry decoder tests");
+    seven_zip_aes_test_step.dependOn(&run_seven_zip_aes_tests.step);
     const tar_incremental_writer_tests = b.addTest(.{
         .name = "vort-tar-incremental-writer-tests",
         .root_module = tests_mod,

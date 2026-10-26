@@ -350,6 +350,16 @@ pub const LinearDecoder = struct {
                 if (self.input_len == self.input_buffer.len)
                     return error.OutputLimitExceeded;
                 try self.compactInput();
+                // Encrypted feeds advance one CBC block at a time. If the codec
+                // consumed nothing and compaction still leaves no room for a
+                // complete block while packed bytes remain, this input buffer
+                // is too small to unblock the stream rather than merely full.
+                if (self.decryptor != null and
+                    self.packed_remaining != 0 and
+                    self.input_buffer.len - self.input_len < crypto.block_len)
+                {
+                    return error.OutputLimitExceeded;
+                }
                 continue;
             }
             if (self.packed_remaining != 0) continue;
@@ -369,8 +379,14 @@ pub const LinearDecoder = struct {
         if (available == 0) return 0;
         var count = @min(available, self.packed_remaining);
         if (self.decryptor != null) {
+            // Encrypted packed bytes feed in whole CBC blocks. A tail with
+            // fewer than block_len free slots must not fail immediately: the
+            // codec may first consume the unconsumed plaintext already in the
+            // buffer, after which compaction frees a full block. Read nothing
+            // this round; the no-progress branch below raises
+            // OutputLimitExceeded only if the buffer is genuinely full.
             count &= ~(crypto.block_len - 1);
-            if (count == 0) return error.OutputLimitExceeded;
+            if (count == 0) return 0;
         }
         const destination = self.input_buffer[self.input_len..][0..count];
         try self.source.readExact(self.stream_offset, destination);
