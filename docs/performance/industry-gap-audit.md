@@ -748,3 +748,39 @@ The [final verification record](br-zstd-window-verification-20261024.md) include
 156 standard Debug build checks, actual complete CLI help and post-rebase
 native/x86/WebAssembly runtime gates. The cancelled extra whole-project
 ReleaseFast optimization attempt is preserved separately from passing checks.
+
+### Zstd level-3 XML hotspot dissection, 2026-10-26 (uncommitted investigation)
+
+A read-only profiling pass on the frozen silesia-xml 64 KiB prefix
+(`e32aff2b...`, i7-10700K fixed CPU 8, Zig 0.16.0 ReleaseFast, libzstd 1.6.0
+`01b7154f`) pinned the level-3 one-shot encode at a stable 553-558 ms median
+(11 alternating pairs each, reference 0.13 ms; output/checksum unchanged at
+5,078 bytes / checksum 11177). The entire cost sits in one candidate family,
+`zstd.emitMultiDuplicateMatchCompressedBlockWithFirst`: 28.6% of cycles in
+`huffman.treeCodeLengthsMediumKnownActive` (29,499 exact length-limited
+package-merge plans per block, 1,085 distinct trees, 28,413 repeated
+bit-count keys), ~4% package-merge sorting, ~2.5% plan finalization, ~51%
+finder/pricing self time; the frame is 1,473,017 winner-cost queries of
+which 1,443,518 are rejected by the weighted certificate (0 violations).
+
+Two output-preserving experiments were evaluated and withdrawn without
+committing: (1) maintaining cut-histogram totals and witness deltas
+incrementally instead of two 256-entry AVX scans gave 0.96-1.14x across
+variants and a clean 0.985x median - the vectorized scans are not the
+bottleneck and per-byte stamp bookkeeping costs more than it saves; (2) a
+heap-backed u32 wide `DuplicateMatchIndex` extending the paired index from
+65,535 to the 128 KiB block maximum eliminated 128 suffix hash rescans but
+was a 1.00x wash on XML (553 ms), needs ~1.3 MiB retained scratch, and the
+global alternating pairing changes multi-duplicate wire bytes on
+64-128 KiB blocks versus the fresh-pairing rescan. An intermediate variant
+without winner-bound pricing on indexed rows regressed catastrophically
+(indexed rows each ran an exact Huffman plan); the prune-bound cache is
+required for any indexed wide finder.
+
+The next evidence-aligned target is the exact package-merge count, not
+hash rescanning: 96.3% of plans reproduce the previous bit-count vector, and
+508,945 bound checks already hit the same-support zero-negative-delta tight
+case. A tie-safe reuse certificate that proves the prior length vector
+(not merely its weighted cost) remains optimal for the new frequencies
+could remove most of the ~36% tree-construction share; it must reproduce
+package-merge tie-breaking byte-for-byte.
