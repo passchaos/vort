@@ -55,6 +55,19 @@ peak covers all tracked allocations and is a separate metric.
 
 ## Completed validation
 
+The separate [post-rebase record](data/zstd-parallel-frame-20261026/post-rebase.json)
+binds `e9fd944f`: the final documentation member-count correction was committed,
+then `git pull --rebase origin main` completed without incoming changes or
+conflicts. Native/x86 ReleaseFast each re-execute 122/122. The combined Debug
+command re-executes 285 passed and one genuine thread-dependent skip out of 286,
+including the XZ shared-heap regression, actual Wasm and CLI help, with 217/217
+build steps. Distinct explicit test seeds force new test-run cache keys while
+reusing compiled artifacts. Verbose invocation paths and executable hashes are
+preserved in a separate post-rebase archive. All 1980 source-scan files, 18
+external Vail sources and sixteen pre-rebase artifact checksums still match.
+The unfiltered global root suite remains compile-only in `check`; no new codec
+performance measurement is assigned.
+
 | Gate | Completed result | Scope |
 | --- | --- | --- |
 | Native Debug, native ReleaseFast and actual x86 Linux GNU ReleaseFast | Each 122/122 executions | 35 filtered core/queue plus 87 root/consumer executions, including imports |

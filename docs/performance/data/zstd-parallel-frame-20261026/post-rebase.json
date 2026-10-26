@@ -1,0 +1,171 @@
+{
+  "schema": "vort.zstd.parallel-frame-post-rebase.v1",
+  "created_utc": "2026-10-26T00:33:13.592139+00:00",
+  "rebase": {
+    "command": [
+      "git",
+      "pull",
+      "--rebase",
+      "origin",
+      "main"
+    ],
+    "exit_code": 0,
+    "result": "Current branch main is up to date.",
+    "verified_head": "e9fd944f0e2f9bea0ae85f00773aec5e5c16bd69",
+    "origin_main": "698d6da619b5ff5bbcec13e398259dcf2e8c6744",
+    "conflicts": false,
+    "preceding_attempt": {
+      "exit_code": 1,
+      "reason": "A final documentation archive-member-count correction arrived after staging; rebase refused dirty worktree. The one-line correction was saved as e9fd944f, then the rebase command succeeded.",
+      "source_code_changed": false
+    },
+    "scope": "Parent sessions 66904 then 93347; terminal success before post-rebase test invocations."
+  },
+  "tests": [
+    {
+      "name": "debug",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-zstd-parallel-frame",
+        "test-zstd-parallel-frame-single",
+        "test-zstd-parallel-frame-wasm",
+        "test-xz-parallel-incremental",
+        "check",
+        "run",
+        "-Doptimize=Debug",
+        "--seed",
+        "2026102611",
+        "--summary",
+        "all",
+        "--verbose",
+        "--",
+        "--help"
+      ],
+      "started_utc": "2026-10-26T00:31:46.673928+00:00",
+      "ended_utc": "2026-10-26T00:31:57.525591+00:00",
+      "exit_code": 0,
+      "head": "e9fd944f0e2f9bea0ae85f00773aec5e5c16bd69",
+      "scope": "post-rebase functional execution with new explicit seed; compiler/test MaxRSS not codec benchmark",
+      "summary": "Build Summary: 217/217 steps succeeded; 285/286 tests passed (1 skipped)",
+      "executed_test_lines": [
+        "+- run test vort-zstd-parallel-frame-tests 35 pass (35 total) 6s MaxRSS:52M",
+        "+- run test vort-zstd-parallel-frame-root-tests 87 pass (87 total) 65ms MaxRSS:52M",
+        "+- run test vort-zstd-parallel-frame-single-tests 34 pass, 1 skip (35 total) 9s MaxRSS:52M",
+        "+- run test vort-xz-parallel-incremental-tests 36 pass (36 total) 1s MaxRSS:31M",
+        "+- run test vort-xz-parallel-incremental-root-tests 93 pass (93 total) 44ms MaxRSS:31M"
+      ]
+    },
+    {
+      "name": "native-releasefast",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-zstd-parallel-frame",
+        "-Doptimize=ReleaseFast",
+        "--seed",
+        "2026102612",
+        "--summary",
+        "all",
+        "--verbose"
+      ],
+      "started_utc": "2026-10-26T00:31:46.632181+00:00",
+      "ended_utc": "2026-10-26T00:31:47.380526+00:00",
+      "exit_code": 0,
+      "head": "e9fd944f0e2f9bea0ae85f00773aec5e5c16bd69",
+      "scope": "post-rebase functional execution with new explicit seed; compiler/test MaxRSS not codec benchmark",
+      "summary": "Build Summary: 9/9 steps succeeded; 122/122 tests passed",
+      "executed_test_lines": [
+        "+- run test vort-zstd-parallel-frame-tests 35 pass (35 total) 620ms MaxRSS:9M",
+        "+- run test vort-zstd-parallel-frame-root-tests 87 pass (87 total) 34ms MaxRSS:9M"
+      ]
+    },
+    {
+      "name": "x86-releasefast",
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-zstd-parallel-frame",
+        "-Dtarget=x86-linux-gnu",
+        "-Doptimize=ReleaseFast",
+        "--seed",
+        "2026102613",
+        "--summary",
+        "all",
+        "--verbose"
+      ],
+      "started_utc": "2026-10-26T00:31:46.715450+00:00",
+      "ended_utc": "2026-10-26T00:31:47.247518+00:00",
+      "exit_code": 0,
+      "head": "e9fd944f0e2f9bea0ae85f00773aec5e5c16bd69",
+      "scope": "post-rebase functional execution with new explicit seed; compiler/test MaxRSS not codec benchmark",
+      "summary": "Build Summary: 9/9 steps succeeded; 122/122 tests passed",
+      "executed_test_lines": [
+        "+- run test vort-zstd-parallel-frame-tests 35 pass (35 total) 400ms MaxRSS:9M",
+        "+- run test vort-zstd-parallel-frame-root-tests 87 pass (87 total) 32ms MaxRSS:9M"
+      ]
+    }
+  ],
+  "source_verification": {
+    "source_files": 1980,
+    "external_source_files": 18,
+    "mismatches": [],
+    "archive_checks": 16
+  },
+  "execution_scope": "Distinct explicit --seed values changed test-run cache keys; verbose test invocations and terminal counts show actual execution while compile artifacts reuse cache. Whole root tests compiled by check, not executed. Node and CLI help actually executed.",
+  "archive": {
+    "path": "/home/passchaos/project-z/vort/docs/performance/data/zstd-parallel-frame-20261026/post-rebase.tar.xz",
+    "bytes": 19184,
+    "sha256": "457eafd6efa8ef261be01b859a92eb9531010c5c618b457c2115e2f9d891f4a8"
+  },
+  "archive_members_verified": true,
+  "files": [
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/debug.json",
+      "bytes": 691,
+      "sha256": "07f136fab61924ce7ae2df8b7d5e883b66a98e47723ff28ff47ce0a8e3ffe826"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/debug.log",
+      "bytes": 245123,
+      "sha256": "4ea588f9fefc67fda25e0df10cf4dfe10d1863984a15bcd6d35cd31902b964ef"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/executables.json",
+      "bytes": 4480,
+      "sha256": "94022c523e9c9e28b47a6e62e8bf181d2df1a642118a1fc98e6a4c77fb8d5784"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/native-releasefast.json",
+      "bytes": 550,
+      "sha256": "ccae313c51483f2fbc9f0722d891807e5c8c025ff94e494ed0226572c6ce91aa"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/native-releasefast.log",
+      "bytes": 3096,
+      "sha256": "8dcd3248b002c2f868114b0f462b3fd852c2b251958cd9a9b505bcc7ca4cbf28"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/rebase.json",
+      "bytes": 693,
+      "sha256": "7f6539950193d1448d3d16a46dc15075535dc40631394c674411948690d73c07"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/source-verification.json",
+      "bytes": 3613,
+      "sha256": "760448fe6a167d431c00e2176730e5e9dbbbe704e6dc6c923167f5a391a37ec9"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/x86-releasefast.json",
+      "bytes": 577,
+      "sha256": "65a36e3252caf364d0895073e394f0023bd739eedd89263fc35a153f097a7202"
+    },
+    {
+      "path": "/tmp/vort-zstd-singleframe-parallel-post-rebase-20261026/x86-releasefast.log",
+      "bytes": 3337,
+      "sha256": "36fe2bf85d4e55953d5755273c31085572de76932b104c3ed92059aede4a1975"
+    }
+  ],
+  "performance_scope": "No codec throughput, ratio or RSS campaign; build/test MaxRSS is excluded from codec performance evidence.",
+  "publish_state_at_capture": "Verified; final record commit and remote push still pending."
+}
