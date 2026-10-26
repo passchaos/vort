@@ -839,3 +839,15 @@ must stay: it is the sole winner on silesia-mr (16,806 vs 17,225 bytes
 without it). These counterfactuals narrow the residual work to: (1)
 making the fixed-cost optimal parser cheaper while byte-identical, and
 (2) sharing hash-chain indexes across the candidate families.
+
+Isolated candidate-family stage timings (silesia-xml 64 KiB, level-3
+budget 64, ReleaseFast, five-round medians, benchmark excludes index
+setup): double_fast 1.74 ms (1,695 seqs), greedy 2.10 ms, lazy 3.12 ms
+(1,214 seqs, 5,071-byte block), optimal 7.31 ms search per encode
+(127,477 match-length calls, 850,728 chain nodes, 333,177 prefix-bound
+rejections, 0.13 ms index build). The frame-level output stays 5,078
+bytes (lazy-equivalent plan after arbitration). Conclusion for the next
+wire-identical target: time lives inside the DP inner loop
+(match-length extension + per-length prefix minima), not in index
+construction (0.13 ms) or candidate count selection alone; hash-index
+sharing saves at most the single 0.13 ms build and is not the lever.
