@@ -398,6 +398,17 @@ const lazy_match_min_search_budget = 32;
 // 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
 // not rebuild its 1 MiB candidate table repeatedly for the fastest level.
 const multi_duplicate_min_search_budget = 32;
+// Industry greedy/lazy block compressors (libzstd's level <=3 strategies)
+// parse once with cheap length heuristics and never rescan suffixes for a
+// global-best multi-copy plan. Blocks above the 65,535-byte precomputed pair
+// index cannot share its rows, so the iterative finder rebuilds a 32 KiB hash
+// table per suffix and prices up to 1.5M candidates with 29k length-limited
+// package-merge builds (553 ms for a 64 KiB XML block); single-pass
+// greedy/lazy/optimal candidates already win every frozen level 2/3 block of
+// that size. The bounded index keeps the family cheap and available for
+// smaller blocks, where crafted duplicated segments genuinely win. Require
+// the richer mixed-search budget before paying for the unindexed rescans.
+const multi_duplicate_unindexed_required_search_budget = mixed_match_min_search_budget;
 // On exact <=4 KiB blocks, the legacy multi-duplicate planner rebuilds its hash
 // table for every suffix and is dominated by the linear/DP match families in
 // the retained generated corpus. Preserve it as a diagnostic stage and for
@@ -19677,7 +19688,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         else
             try findBestDuplicateMatch(block);
     }
-    const multi_duplicate_ok = if (shouldSearchMultiDuplicate(block.len, match_search_budget, beam_is_decisive))
+    const multi_duplicate_ok = if (shouldSearchMultiDuplicate(block.len, match_search_budget, beam_is_decisive, duplicate_index_ptr != null))
         try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, candidate, block, last, duplicate_index_ptr, &first_duplicate)
     else
         false;
@@ -19733,10 +19744,18 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
     return true;
 }
 
-fn shouldSearchMultiDuplicate(block_len: usize, match_search_budget: usize, beam_is_decisive: bool) bool {
-    return !beam_is_decisive and
-        match_search_budget >= multi_duplicate_min_search_budget and
-        block_len >= multi_duplicate_min_input_len;
+fn shouldSearchMultiDuplicate(
+    block_len: usize,
+    match_search_budget: usize,
+    beam_is_decisive: bool,
+    has_precomputed_index: bool,
+) bool {
+    if (beam_is_decisive or block_len < multi_duplicate_min_input_len) return false;
+    // The unindexed suffix-rescanning variant is reserved for the richer
+    // mixed/optimal budgets; below that threshold only precomputed rows run.
+    if (!has_precomputed_index and
+        match_search_budget < multi_duplicate_unindexed_required_search_budget) return false;
+    return match_search_budget >= multi_duplicate_min_search_budget;
 }
 
 fn shouldQueryDecisiveSingleDuplicate(early_single_tested: bool, beam_is_decisive: bool, is_rle: bool) bool {
@@ -37580,10 +37599,17 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
     try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);
     try std.testing.expectEqual(@as(usize, 4097), multi_duplicate_min_input_len);
-    try std.testing.expect(!shouldSearchMultiDuplicate(4096, 64, false));
-    try std.testing.expect(shouldSearchMultiDuplicate(4097, 64, false));
-    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 31, false));
-    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 64, true));
+    // Precomputed rows keep the family available at every level 2+ budget.
+    try std.testing.expect(!shouldSearchMultiDuplicate(4096, 32, false, true));
+    try std.testing.expect(shouldSearchMultiDuplicate(4097, 32, false, true));
+    // Without rows, low greedy/lazy budgets skip the suffix-rescanning family;
+    // it begins at the 96-state mixed budget.
+    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 64, false, false));
+    try std.testing.expect(shouldSearchMultiDuplicate(4097, 96, false, false));
+    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 95, false, false));
+    try std.testing.expect(shouldSearchMultiDuplicate(65536, 32, false, true));
+    try std.testing.expect(!shouldSearchMultiDuplicate(65536, 64, false, false));
+    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 96, true, true));
 }
 
 test "zstd small blocks defer dominated multi-duplicate search" {

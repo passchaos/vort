@@ -784,3 +784,24 @@ case. A tie-safe reuse certificate that proves the prior length vector
 (not merely its weighted cost) remains optimal for the new frequencies
 could remove most of the ~36% tree-construction share; it must reproduce
 package-merge tie-breaking byte-for-byte.
+
+**Resolution, same day.** The iterative multi-duplicate family is now gated
+behind the richer 96-state mixed-search budget when no precomputed paired
+index exists (`multi_duplicate_unindexed_required_search_budget`). Blocks up
+to 65,535 bytes still use the cheap bounded u16 index at level 2+, preserving
+crafted inputs whose winner is the multi-sequence block (a two-segment
+8+8 KiB duplicate fixture stays byte-identical at 8,486 bytes). On the
+fourteen frozen 64 KiB prefixes (i7-10700K CPU 8, ReleaseFast, libzstd
+1.6.0, three alternating rounds), every level 1/2/3 frame hash and byte
+size is unchanged, while aggregate level-2 encode time drops 3.16x and
+level-3 7.41x: the XML row goes 554.7 ms to 10.3 ms (53.8x), silesia-mr
+484.3 to 31.6 ms (15.3x), webster 230.4 to 16.1 ms (14.3x),
+brotli-source 217.5 to 13.5 ms (16.1x), dickens 102.5 to 19.9 ms (5.2x).
+Level 4/5 spot checks (XML, MR, brotli-source) are byte-identical, since the
+family still runs at budgets >= 96; five synthetic copy-heavy shapes
+(eightfold segment copies, mutated copies, duplicated halves, JSON lines,
+tight repeats) are identical across levels 1-22. The complete 1,174-test
+zstd module passes in both Debug and ReleaseFast. Remaining level-3 gap on
+XML is roughly 80x (10.3 ms vs 0.13 ms), now dominated by the independent
+greedy/lazy/optimal candidate arbitrations rather than repeated exact
+Huffman pricing.
