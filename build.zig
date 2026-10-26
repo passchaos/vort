@@ -222,6 +222,30 @@ pub fn build(b: *std.Build) void {
     zstd_hq_search_wasm_run.addArtifactArg(zstd_hq_search_wasm);
     const zstd_hq_search_wasm_step = b.step("test-zstd-hq-search-wasm", "Execute HQ complete search, admission and retry contracts in WebAssembly");
     zstd_hq_search_wasm_step.dependOn(&zstd_hq_search_wasm_run.step);
+    const zstd_parallel_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/zstd.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    zstd_parallel_wasm_mod.addObject(wasm_zstd_huffman_x2_obj);
+    const zstd_parallel_frame_wasm = b.addExecutable(.{
+        .name = "vort-zstd-parallel-frame-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/zstd_parallel_frame_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "zstd", .module = zstd_parallel_wasm_mod }},
+        }),
+    });
+    zstd_parallel_frame_wasm.entry = .disabled;
+    zstd_parallel_frame_wasm.rdynamic = true;
+    zstd_parallel_frame_wasm.stack_size = 8 * 1024 * 1024;
+    const zstd_parallel_frame_wasm_run = b.addSystemCommand(&.{ "node", "tools/zstd/parallel_frame_wasm_gate.js" });
+    zstd_parallel_frame_wasm_run.addArtifactArg(zstd_parallel_frame_wasm);
+    const zstd_parallel_frame_wasm_step = b.step("test-zstd-parallel-frame-wasm", "Execute single-frame parallel Zstd fallback and heap contracts in WebAssembly");
+    zstd_parallel_frame_wasm_step.dependOn(&zstd_parallel_frame_wasm_run.step);
     const br_stored_memory_wasm = b.addExecutable(.{
         .name = "vort-br-stored-memory-wasm",
         .root_module = b.createModule(.{
@@ -616,6 +640,49 @@ pub fn build(b: *std.Build) void {
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_parallel_frame_tests = b.addTest(.{
+        .name = "vort-zstd-parallel-frame-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd parallel frame", "Zstd parallel queue" },
+    });
+    const zstd_parallel_frame_root_tests = b.addTest(.{
+        .name = "vort-zstd-parallel-frame-root-tests",
+        .root_module = tests_mod,
+        .filters = &.{"root Zstd parallel frame consumer contracts"},
+    });
+    const zstd_parallel_frame_test_step = b.step("test-zstd-parallel-frame", "Run single-frame parallel Zstd wire, queue, resource and public consumer contracts");
+    zstd_parallel_frame_test_step.dependOn(&b.addRunArtifact(zstd_parallel_frame_tests).step);
+    zstd_parallel_frame_test_step.dependOn(&b.addRunArtifact(zstd_parallel_frame_root_tests).step);
+    const zstd_parallel_single_mod = b.createModule(.{
+        .root_source_file = b.path("src/zstd.zig"),
+        .target = target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    zstd_parallel_single_mod.addObject(zstd_huffman_x2_obj);
+    const zstd_parallel_frame_single_tests = b.addTest(.{
+        .name = "vort-zstd-parallel-frame-single-tests",
+        .root_module = zstd_parallel_single_mod,
+        .filters = &.{ "Zstd parallel frame", "Zstd parallel queue" },
+    });
+    const zstd_parallel_frame_single_step = b.step("test-zstd-parallel-frame-single", "Run single-frame parallel Zstd contracts through synchronous fallback");
+    zstd_parallel_frame_single_step.dependOn(&b.addRunArtifact(zstd_parallel_frame_single_tests).step);
+    const zstd_parallel_frame_probe = b.addExecutable(.{
+        .name = "vort-zstd-parallel-frame-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/parallel_frame_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zstd", .module = zstd_tests_mod }},
+        }),
+    });
+    const zstd_parallel_frame_probe_step = b.step("build-zstd-parallel-frame-probe", "Build the public single-frame parallel Zstd interoperability probe");
+    zstd_parallel_frame_probe_step.dependOn(&b.addInstallArtifact(zstd_parallel_frame_probe, .{}).step);
+    const zstd_parallel_frame_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/parallel_frame_diff.py", "--probe" });
+    zstd_parallel_frame_diff.addArtifactArg(zstd_parallel_frame_probe);
+    if (b.args) |args| zstd_parallel_frame_diff.addArgs(args);
+    const zstd_parallel_frame_diff_step = b.step("run-zstd-parallel-frame-diff", "Validate single-frame parallel Zstd against the selected libzstd");
+    zstd_parallel_frame_diff_step.dependOn(&zstd_parallel_frame_diff.step);
     const zstd_magicless_tests = b.addTest(.{
         .name = "vort-zstd-magicless-tests",
         .root_module = zstd_tests_mod,
@@ -7321,6 +7388,11 @@ pub fn build(b: *std.Build) void {
     competitor_gap_report_smoke_step.dependOn(&competitor_gap_report_smoke.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
+    check_step.dependOn(&zstd_parallel_frame_tests.step);
+    check_step.dependOn(&zstd_parallel_frame_root_tests.step);
+    check_step.dependOn(&zstd_parallel_frame_single_tests.step);
+    check_step.dependOn(&zstd_parallel_frame_probe.step);
+    check_step.dependOn(&zstd_parallel_frame_wasm.step);
     check_step.dependOn(&xz_parallel_tests.step);
     check_step.dependOn(&xz_parallel_single_tests.step);
     check_step.dependOn(&xz_parallel_probe.step);

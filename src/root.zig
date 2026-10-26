@@ -2446,6 +2446,25 @@ test "root XZ parallel incremental consumer contracts" {
     try @import("tests/xz_parallel_incremental_consumers.zig").contracts(@This());
 }
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
+pub const ZstdParallelOptions = zstd.ParallelOptions;
+pub const ZstdParallelProfile = zstd.ParallelProfile;
+pub const ZstdParallelError = zstd.ParallelError;
+pub const zstdEncodedNativeParallelFrameBound = zstd.encodedNativeParallelFrameBound;
+pub const zstdEncodedNativeParallelFrameBoundWithDictionary = zstd.encodedNativeParallelFrameBoundWithDictionary;
+pub const zstdEncodedNativeParallelFrameBoundWithDictionarySet = zstd.encodedNativeParallelFrameBoundWithDictionarySet;
+pub const zstdEncodeNativeParallelFrameAlloc = zstd.encodeNativeParallelFrameAlloc;
+pub const zstdEncodeNativeParallelFrameWithDictionaryAlloc = zstd.encodeNativeParallelFrameWithDictionaryAlloc;
+pub const zstdEncodeNativeParallelFrameWithDictionarySetAlloc = zstd.encodeNativeParallelFrameWithDictionarySetAlloc;
+pub const zstdEncodeNativeParallelFrameAppend = zstd.encodeNativeParallelFrameAppend;
+pub const zstdEncodeNativeParallelFrameAppendWithDictionary = zstd.encodeNativeParallelFrameAppendWithDictionary;
+pub const zstdEncodeNativeParallelFrameAppendWithDictionarySet = zstd.encodeNativeParallelFrameAppendWithDictionarySet;
+pub const zstdEncodeNativeParallelFrameIntoSlice = zstd.encodeNativeParallelFrameIntoSlice;
+pub const zstdEncodeNativeParallelFrameIntoSliceWithDictionary = zstd.encodeNativeParallelFrameIntoSliceWithDictionary;
+pub const zstdEncodeNativeParallelFrameIntoSliceWithDictionarySet = zstd.encodeNativeParallelFrameIntoSliceWithDictionarySet;
+
+test "root Zstd parallel frame consumer contracts" {
+    try @import("tests/zstd_parallel_frame_consumers.zig").contracts(@This());
+}
 pub const zstdMinCompressionLevel = zstd.min_compression_level;
 pub const zstdMaxCompressionLevel = zstd.max_compression_level;
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const test_atomic_counter = if (builtin.is_test) @import("testing/atomic_counter.zig") else struct {};
 const core = @import("core.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
@@ -251,7 +252,7 @@ noinline fn decodeFseRleRleRawSequencePairs(
             literal_offset += 16;
             sequence_match_copy.appendNonOverlapping48(output, written, written.* - match_offset);
         }
-        if (builtin.is_test) test_fse_rle_rle_pair_hits += 1;
+        if (builtin.is_test) test_atomic_counter.add(&test_fse_rle_rle_pair_hits, 1);
     }
     return literal_offset;
 }
@@ -324,7 +325,7 @@ noinline fn decodeFseFseRleRawSequencePairs(
         written.* += 16;
         literal_offset += 16;
         sequence_match_copy.appendNonOverlapping48(output, written, written.* - match_offset);
-        if (builtin.is_test) test_fse_fse_rle_pair_hits += 1;
+        if (builtin.is_test) test_atomic_counter.add(&test_fse_fse_rle_pair_hits, 1);
     }
     return literal_offset;
 }
@@ -597,6 +598,23 @@ pub const NativeFrameOptions = struct {
 pub const FrameSelection = NativeFrameSelection;
 pub const AdvancedFrameOptions = NativeFrameOptions;
 pub const EncodeMemoryProfile = @import("zstd/encode/total_budget.zig").EncodeMemoryProfile;
+pub const ParallelOptions = @import("zstd/parallel/types.zig").Options;
+pub const ParallelProfile = @import("zstd/parallel/types.zig").Profile;
+pub const ParallelError = Error || std.Thread.SpawnError;
+
+const parallel_frame_public = @import("zstd/parallel/codec_public.zig").Public(@import("zstd/parallel/codec.zig").Codec);
+pub const encodedNativeParallelFrameBound = parallel_frame_public.bound;
+pub const encodedNativeParallelFrameBoundWithDictionary = parallel_frame_public.boundWithDictionary;
+pub const encodedNativeParallelFrameBoundWithDictionarySet = parallel_frame_public.boundWithDictionarySet;
+pub const encodeNativeParallelFrameAlloc = parallel_frame_public.encodeAlloc;
+pub const encodeNativeParallelFrameWithDictionaryAlloc = parallel_frame_public.encodeWithDictionaryAlloc;
+pub const encodeNativeParallelFrameWithDictionarySetAlloc = parallel_frame_public.encodeWithDictionarySetAlloc;
+pub const encodeNativeParallelFrameAppend = parallel_frame_public.append;
+pub const encodeNativeParallelFrameAppendWithDictionary = parallel_frame_public.appendWithDictionary;
+pub const encodeNativeParallelFrameAppendWithDictionarySet = parallel_frame_public.appendWithDictionarySet;
+pub const encodeNativeParallelFrameIntoSlice = parallel_frame_public.into;
+pub const encodeNativeParallelFrameIntoSliceWithDictionary = parallel_frame_public.intoWithDictionary;
+pub const encodeNativeParallelFrameIntoSliceWithDictionarySet = parallel_frame_public.intoWithDictionarySet;
 
 const IncrementalEncoderCodec = struct {
     pub const Error = zstd.Error;
@@ -849,6 +867,92 @@ const ControlledEncoderCodec = struct {
 };
 const ControlledFrameEncoder = controlled_encoder.Encoder(ControlledEncoderCodec);
 
+/// Internal bridges for the independent Job decoder/emitter. The public
+/// parallel API uses the same format and planner authority as serial encoding.
+pub const ParallelCodecSupport = struct {
+    pub const Error = ParallelError;
+    pub const Options = NativeFrameOptions;
+    pub const Dictionary = NativeDictionary;
+    pub const DictionarySet = NativeDictionarySet;
+    pub const Profile = EncoderControlProfile;
+    pub const EncoderState = LiteralOnlyEncoderState;
+    pub const DecodeState = SequenceFrameState;
+    pub const SequenceScratch = LargeSequenceScratch;
+    pub const BlockScratch = NativeBlockEncodeScratch;
+    pub const RepBeamScratch = lz77.RepBeamScratch;
+    pub const Record = controlled_source.Record;
+    pub const HistoryIndex = incremental_history_index.Index;
+    pub const HistoryView = incremental_history.View;
+    pub const Section = LiteralOnlySection;
+    pub const SequenceSpec = SequenceModeSpec;
+    pub const max_small_sequence_count = max_native_sequence_count;
+    pub const max_sequence_count = max_large_native_sequence_count;
+    pub const default_window_len = std.compress.zstd.default_window_len;
+    pub const initialDecodeState = initialSequenceFrameState;
+    pub const ensureEncoderState = ensureEncoderSequenceState;
+    pub const parseLiterals = parseLiteralsSection;
+    pub const parseSequenceModes = parseSequenceModeSpec;
+    pub const resolveSequenceModes = resolveSequenceModeSpec;
+    pub const initSequenceDecoder = initSequenceDecodeState;
+    pub const readSequence = readModeSequence;
+    pub const initReverseReader = ReverseBitReader.init;
+    pub const initHuffmanState = initHuffmanLiteralDecodeState;
+    pub const copyHuffmanLiterals = copyLiteralsFromHuffmanState;
+    pub const validateHuffmanEnd = validateHuffmanLiteralsConsumed;
+    pub const blockSize = nativeBlockSizeMax;
+    pub const encoderWindow = nativeEncoderWindowLen;
+    pub const windowForBlock = nativeMatchWindowLenForBlock;
+    pub const visibleDictionary = dictionaryVisibleAtOffset;
+    pub const largeLegacyOptions = nativeLargeLegacyFastOptions;
+    pub const controlled = encode_controls.active;
+    pub const Controlled = ControlledFrameEncoder;
+    pub const findRle = findRleRun;
+    pub const rle = rleByte;
+    pub const emitRaw = emitRawBlock;
+    pub const emitRle = emitRleBlock;
+    pub const emitBlock = zstd.emitBlock;
+    pub const emitHuffman = emitSmallHuffmanLiteralBlock;
+    pub const replaceSequences = replaceSequenceCandidateWithFrameState;
+    pub const emitLargeSequences = emitLargeSequenceCompressedBlockWithState;
+    pub const commitSequences = appendSequenceCandidateAndCommit;
+    pub const emitEntropy = emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl;
+    pub const emitFast = emitFastCompressedBlockWithScratch;
+    pub const frameHeader = emitFrameHeader;
+    pub const frameChecksum = emitContentChecksum;
+    pub const checkedU64 = checkedUsizeToU64;
+    pub const rawBound = encodedNativeFrameBoundWithOptions;
+
+    pub fn matchWindow(options: NativeFrameOptions, offset: usize, block_len: usize, last: bool) ParallelError!usize {
+        return (try nativeMatchWindowLenForBlock(options, offset, block_len, last)) orelse try nativeEncoderWindowLen(options);
+    }
+    pub fn sequenceTables(spec: *const SequenceSpec) SequenceTables {
+        return spec.tables();
+    }
+    pub fn deinitScratch(scratch: *SequenceScratch, allocator: std.mem.Allocator) void {
+        scratch.deinit(allocator);
+    }
+    pub fn deinitBlockScratch(scratch: *BlockScratch, allocator: std.mem.Allocator) void {
+        scratch.deinit(allocator);
+    }
+    pub fn prepareOptions(options: NativeFrameOptions, dictionary: ?NativeDictionary) ParallelError!NativeFrameOptions {
+        var inner = optionsWithNativeDictionary(options, dictionary);
+        inner.control_profile = null;
+        inner.memory_profile = null;
+        inner.max_total_working_memory = null;
+        try inner.validate();
+        _ = try initialSequenceFrameState(dictionary);
+        const controlled_options = (try nativeLargeLegacyFastOptions(inner)) orelse inner;
+        if (dictionary == null and controlled_options.dictionary_id != 0 and encode_controls.active(controlled_options))
+            return error.NeedDictionary;
+        return inner;
+    }
+    pub fn profileOptions(options: NativeFrameOptions, profile: *EncoderControlProfile) void {
+        profile.available = true;
+        profile.recordWindowPolicy(nativeExplicitWindowSize(options) catch unreachable, nativeEncoderWindowLen(options) catch unreachable);
+        profile.recordEffectiveHq(encode_controls.effectiveHq(options) catch unreachable);
+    }
+};
+
 const zstd = @This();
 
 test "Zstd magicless public contracts" {
@@ -973,6 +1077,10 @@ test "Zstd HQ incremental header allocation failure retains no partial magic bef
 }
 
 test {
+    _ = @import("zstd/parallel/tests/contracts.zig").run(@This());
+    _ = @import("zstd/parallel/tests/resources.zig").run(@This());
+    _ = @import("zstd/parallel/tests/large_sequences.zig").run(@This());
+    _ = @import("zstd/parallel/queue.zig");
     _ = allocation_test_oracle;
     _ = double_fast_match;
     _ = @import("tests/zstd_stream_counter_contracts.zig");
@@ -10474,7 +10582,7 @@ noinline fn tryDecodeCachedSmallHuffmanBlock(
         &cached_tree.tree.narrow_lookup,
         true,
     );
-    if (builtin.is_test) test_small_mixed_cached_block_hits += 1;
+    if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_cached_block_hits, 1);
     return true;
 }
 
@@ -10614,7 +10722,7 @@ inline fn decodeLargeFourStreamHuffmanImpl(
             @enumFromInt(vortZstdHuffmanX2Decode(&request));
         switch (status) {
             .success => {
-                if (builtin.is_test) test_x2_huffman_decode_hits += 1;
+                if (builtin.is_test) test_atomic_counter.add(&test_x2_huffman_decode_hits, 1);
                 return true;
             },
             .unsupported => {},
@@ -11545,7 +11653,7 @@ inline fn decodeHuffmanWeightsFseBounded(
                 even_state = even.baseline + even_bits;
                 odd_state = odd.baseline + odd_bits;
                 if (even_state >= table_len or odd_state >= table_len) return error.CorruptFrame;
-                if (builtin.is_test) test_huffman_weight_pair_group_hits += 1;
+                if (builtin.is_test) test_atomic_counter.add(&test_huffman_weight_pair_group_hits, 1);
             }
             reservoir.reload();
         }
@@ -12295,7 +12403,7 @@ fn readFseSequenceTableInto(
         var no_low_probability = true;
         for (normalized) |value| no_low_probability = no_low_probability and value != 0;
         if (no_low_probability) {
-            if (builtin.is_test) test_large_fse_no_low_builder_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_large_fse_no_low_builder_hits, 1);
             large_fse_table.buildNoLowProbabilityAssumeValid(
                 normalized,
                 table.entries[0..decoded.table_len],
@@ -13102,13 +13210,13 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         const available_in_frame = written.* - frame_output_start;
         if (sequence.match_len == 56 and sequence.match_offset >= 56 and sequence.match_offset <= available_in_frame) {
             if (output.len - written.* < 56) return error.OutputTooSmall;
-            if (builtin.is_test) test_reusable_match_56_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_reusable_match_56_hits, 1);
             sequence_match_copy.appendNonOverlapping56(output, written, written.* - sequence.match_offset);
         } else if ((sequence.match_len == 6 or sequence.match_len == 7) and
             sequence.match_offset >= sequence.match_len and sequence.match_offset <= available_in_frame)
         {
             if (output.len - written.* < sequence.match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_reusable_match_6_7_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_reusable_match_6_7_hits, 1);
             sequence_match_copy.appendNonOverlapping6Or7(
                 output,
                 written,
@@ -13293,7 +13401,7 @@ noinline fn decodeAllFseRawSequences(
                 state.ml_state = sequenceSymbolNextState(ml_word) + ml_transition;
                 state.of_state = sequenceSymbolNextState(of_word);
                 remaining -= 1;
-                if (builtin.is_test) test_all_fse_raw_short_pair_hits += 1;
+                if (builtin.is_test) test_atomic_counter.add(&test_all_fse_raw_short_pair_hits, 1);
                 if (ml_shape == 0x0100_0000_0000_0008)
                     sequence_match_copy.appendOverlapping8Offset7(output, written)
                 else
@@ -13326,7 +13434,7 @@ noinline fn decodeAllFseRawSequences(
             ll_additional_bits + transition_bits;
         var field_group = sequence_field_group.Group.init(&reader, total_bits);
         const fields_are_grouped = field_group != null;
-        if (builtin.is_test and fields_are_grouped) test_all_fse_raw_field_group_hits += 1;
+        if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_all_fse_raw_field_group_hits, 1);
         const offset_extra = if (fields_are_grouped)
             field_group.?.read(of_additional_bits)
         else
@@ -13405,7 +13513,7 @@ noinline fn decodeAllFseRawSequences(
                 written.* += literal_len;
                 literal_offset += literal_len;
             }
-            if (builtin.is_test) test_all_fse_raw_wildcopy_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_all_fse_raw_wildcopy_hits, 1);
             if (comptime adaptive_match_copy)
                 _ = sequence_match_copy.appendForwardWildcopy(output, written, written.* - match_offset, match_len)
             else
@@ -13853,7 +13961,7 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
     var literals: [split_huffman_literal_capacity + 16]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
     @memset(literals[section.regenerated_size..][0..16], 0);
-    if (builtin.is_test) test_split_huffman_decode_hits += 1;
+    if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_decode_hits, 1);
 
     const spec = state.spec;
     var reader = state.reader;
@@ -13889,7 +13997,7 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
             ll_additional_bits + transition_bits;
         var field_group = sequence_field_group.Group.init(&reader, total_bits);
         const fields_are_grouped = field_group != null;
-        if (builtin.is_test and fields_are_grouped) test_split_huffman_field_group_hits += 1;
+        if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
         const offset_extra = if (fields_are_grouped)
             field_group.?.read(of_additional_bits)
         else
@@ -14030,7 +14138,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
     var literals: [literal_capacity + 16]u8 = undefined;
     if (!try decodeLargeFourStreamHuffman(section, literals[0..section.regenerated_size])) return false;
     @memset(literals[section.regenerated_size..][0..16], 0);
-    if (builtin.is_test) test_split_huffman_decode_hits += 1;
+    if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_decode_hits, 1);
     var literal_offset: usize = 0;
     var wide_reader: ReverseBitReader = if (use_grouped_fields) state.reader else undefined;
     var remaining = state.remaining;
@@ -14125,16 +14233,16 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     if (!allow_wildcopy and match_offset > written.* - frame_output_start) return error.InvalidMatch;
                     if (!allow_wildcopy and output.len - written.* < match_len) return error.OutputTooSmall;
                     if (match_len == 71 and match_offset >= 71) {
-                        if (builtin.is_test) test_split_huffman_common_sequence_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
                         sequence_match_copy.appendNonOverlapping71OverlapTail(output, written, written.* - match_offset);
                     } else if (match_len == 70 and match_offset >= 70) {
-                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         if (comptime builtin.cpu.arch == .x86_64 and allow_wildcopy and pair_index == 0)
                             sequence_match_copy.appendNonOverlapping70PairHead(output, written, written.* - match_offset)
                         else
                             sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, 70);
                     } else if (match_len >= 68 and match_len <= 69 and match_offset >= match_len) {
-                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
                             written,
@@ -14146,12 +14254,12 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     }
                 }
                 if (builtin.is_test) {
-                    test_split_huffman_compact_literal_rep0_hits += 2;
-                    test_split_huffman_positive_rep0_hits += 2;
-                    test_split_huffman_field_group_hits += 2;
-                    test_split_huffman_single_literal_hits += 2;
-                    test_split_huffman_compact_direct_hits += 2;
-                    test_split_huffman_compact_pair_hits += 1;
+                    test_atomic_counter.add(&test_split_huffman_compact_literal_rep0_hits, 2);
+                    test_atomic_counter.add(&test_split_huffman_positive_rep0_hits, 2);
+                    test_atomic_counter.add(&test_split_huffman_field_group_hits, 2);
+                    test_atomic_counter.add(&test_split_huffman_single_literal_hits, 2);
+                    test_atomic_counter.add(&test_split_huffman_compact_direct_hits, 2);
+                    test_atomic_counter.add(&test_split_huffman_compact_pair_hits, 1);
                 }
                 continue;
             }
@@ -14201,18 +14309,18 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
                     if (output.len - written.* < match_len) return error.OutputTooSmall;
                     if (builtin.is_test) {
-                        test_split_huffman_compact_literal_rep0_hits += 1;
-                        test_split_huffman_positive_rep0_hits += 1;
-                        test_split_huffman_field_group_hits += 1;
-                        test_split_huffman_single_literal_hits += @intFromBool(literal_len == 1);
-                        test_split_huffman_compact_direct_hits += @intFromBool(literal_len == 1);
-                        test_split_huffman_short_rep0_fast_hits += @intFromBool(literal_len > 1);
+                        test_atomic_counter.add(&test_split_huffman_compact_literal_rep0_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_positive_rep0_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_single_literal_hits, @intFromBool(literal_len == 1));
+                        test_atomic_counter.add(&test_split_huffman_compact_direct_hits, @intFromBool(literal_len == 1));
+                        test_atomic_counter.add(&test_split_huffman_short_rep0_fast_hits, @intFromBool(literal_len > 1));
                     }
                     if (match_len == 71 and match_offset >= 71) {
-                        if (builtin.is_test) test_split_huffman_common_sequence_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
                         sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
                     } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
-                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
                             written,
@@ -14263,17 +14371,17 @@ inline fn decodeAllFseSplitHuffmanSequences(
                     if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
                     if (output.len - written.* < match_len) return error.OutputTooSmall;
                     if (builtin.is_test) {
-                        test_split_huffman_direct_offset_hits += 1;
-                        test_split_huffman_direct_offset_single_literal_hits += 1;
-                        test_split_huffman_direct_offset_match_68_71_hits += @intFromBool(match_len >= 68 and match_len <= 71);
-                        test_split_huffman_direct_offset_fast_hits += 1;
-                        test_split_huffman_field_group_hits += 1;
-                        test_split_huffman_single_literal_hits += 1;
+                        test_atomic_counter.add(&test_split_huffman_direct_offset_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_direct_offset_single_literal_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_direct_offset_match_68_71_hits, @intFromBool(match_len >= 68 and match_len <= 71));
+                        test_atomic_counter.add(&test_split_huffman_direct_offset_fast_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
+                        test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
                     }
                     if (match_len == 71 and match_offset >= 71) {
                         sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
                     } else if (match_len >= 68 and match_len <= 70 and match_offset >= match_len) {
-                        if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+                        if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
                         sequence_match_copy.appendNonOverlapping68To70(
                             output,
                             written,
@@ -14302,7 +14410,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const compact_literal_rep0 = !use_wide_copies and
             literal_base_value == 1 and ll_additional_bits == 0 and
             of_additional_bits == 0;
-        if (builtin.is_test and compact_literal_rep0) test_split_huffman_compact_literal_rep0_hits += 1;
+        if (builtin.is_test and compact_literal_rep0) test_atomic_counter.add(&test_split_huffman_compact_literal_rep0_hits, 1);
         const transition_bits: u8 = if (remaining == 1)
             0
         else
@@ -14311,7 +14419,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             ll_additional_bits + transition_bits;
         var field_group: ?sequence_field_group.Group = if (use_grouped_fields) sequence_field_group.Group.init(&wide_reader, total_bits) else null;
         const fields_are_grouped = field_group != null;
-        if (builtin.is_test and fields_are_grouped) test_split_huffman_field_group_hits += 1;
+        if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
         const offset_extra = if (compact_literal_rep0)
             0
         else if (use_grouped_fields)
@@ -14339,7 +14447,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             else
                 try state.reader.readSequenceField(ll_additional_bits);
         const match_offset = if (compact_literal_rep0) blk: {
-            if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_positive_rep0_hits, 1);
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else if (use_grouped_fields and of_additional_bits > 1) blk: {
             const offset = offset_base_value + offset_extra;
@@ -14347,13 +14455,13 @@ inline fn decodeAllFseSplitHuffmanSequences(
             const previous_1 = state.repeated_offsets[1];
             state.repeated_offsets = .{ offset, previous_0, previous_1 };
             if (builtin.is_test) {
-                test_split_huffman_direct_offset_hits += 1;
-                test_split_huffman_direct_offset_single_literal_hits += @intFromBool(literal_len == 1);
-                test_split_huffman_direct_offset_match_68_71_hits += @intFromBool(match_len >= 68 and match_len <= 71);
+                test_atomic_counter.add(&test_split_huffman_direct_offset_hits, 1);
+                test_atomic_counter.add(&test_split_huffman_direct_offset_single_literal_hits, @intFromBool(literal_len == 1));
+                test_atomic_counter.add(&test_split_huffman_direct_offset_match_68_71_hits, @intFromBool(match_len >= 68 and match_len <= 71));
             }
             break :blk offset;
         } else if (of_additional_bits == 0 and literal_len != 0) blk: {
-            if (builtin.is_test) test_split_huffman_positive_rep0_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_positive_rep0_hits, 1);
             break :blk try large_offset.positiveLiteralRep0(&state.repeated_offsets);
         } else try resolveSequenceOffset(offset_base_value, of_additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         // Keep the measured 68--71-byte compact kernels, but otherwise mirror
@@ -14391,10 +14499,10 @@ inline fn decodeAllFseSplitHuffmanSequences(
             output[written.*] = literals[literal_offset];
             written.* += 1;
             literal_offset += 1;
-            if (builtin.is_test) test_split_huffman_single_literal_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
             if (match_offset > written.* - frame_output_start) return error.InvalidMatch;
             if (output.len - written.* < 71) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_common_sequence_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_common_sequence_hits, 1);
             sequence_match_copy.appendNonOverlapping71(output, written, written.* - match_offset);
             continue;
         }
@@ -14482,12 +14590,12 @@ inline fn decodeAllFseSplitHuffmanSequences(
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
         if (literal_len == 1) {
-            if (builtin.is_test) test_split_huffman_single_literal_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_single_literal_hits, 1);
             output[written.*] = literals[literal_offset];
             written.* += 1;
             literal_offset += 1;
         } else if (use_wide_copies and literal_len >= 2 and literal_len <= 15) {
-            if (builtin.is_test) test_split_huffman_short_literal_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_short_literal_hits, 1);
             literal_copy.append2To15(output, written, &literals, &literal_offset, literal_len);
         } else if (literal_len != 0) {
             @memcpy(output[written.*..][0..literal_len], literals[literal_offset..][0..literal_len]);
@@ -14504,7 +14612,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             match_offset <= written.* - frame_output_start)
         {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping4To7(
                 output,
                 written,
@@ -14518,7 +14626,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             match_offset <= written.* - frame_output_start)
         {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping6Or7(
                 output,
                 written,
@@ -14531,7 +14639,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             match_offset <= written.* - frame_output_start)
         {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping8To15(
                 output,
                 written,
@@ -14545,7 +14653,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             match_offset <= written.* - frame_output_start)
         {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping16To31(
                 output,
                 written,
@@ -14558,7 +14666,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             match_offset <= written.* - frame_output_start)
         {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_6_63_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_6_63_hits, 1);
             sequence_match_copy.appendNonOverlapping32To63(
                 output,
                 written,
@@ -14567,7 +14675,7 @@ inline fn decodeAllFseSplitHuffmanSequences(
             );
         } else if (!use_wide_copies and match_len >= 68 and match_len <= 70 and match_offset >= match_len and match_offset <= written.* - frame_output_start) {
             if (output.len - written.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_split_huffman_match_68_70_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_split_huffman_match_68_70_hits, 1);
             sequence_match_copy.appendNonOverlapping68To70(output, written, written.* - match_offset, match_len);
         } else {
             try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
@@ -18214,6 +18322,8 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
 
 const NativeBlockEncodeScratch = struct {
     force_serial_mixed: bool = false,
+    heap_mixed_workspace: bool = false,
+    mixed_workspace: ?*MixedMatchLookaheadWorkspace = null,
     candidate: std.ArrayList(u8) = .empty,
     best: std.ArrayList(u8) = .empty,
     match_candidate: std.ArrayList(u8) = .empty,
@@ -18222,6 +18332,13 @@ const NativeBlockEncodeScratch = struct {
     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
     optimal: lz77.OptimalScratch = .{},
     single_sequence_emit: SingleSequenceEmitScratch = .{},
+
+    fn mixedWorkspace(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) Error!?*MixedMatchLookaheadWorkspace {
+        if (!self.heap_mixed_workspace) return null;
+        if (self.mixed_workspace == null)
+            self.mixed_workspace = try MixedMatchLookaheadWorkspace.create(allocator);
+        return self.mixed_workspace;
+    }
 
     fn clearRetainingCapacity(self: *NativeBlockEncodeScratch) void {
         self.candidate.clearRetainingCapacity();
@@ -18238,6 +18355,7 @@ const NativeBlockEncodeScratch = struct {
     }
 
     fn deinit(self: *NativeBlockEncodeScratch, allocator: std.mem.Allocator) void {
+        if (self.mixed_workspace) |workspace| workspace.destroy(allocator);
         self.single_sequence_emit.deinit(allocator);
         self.optimal.deinit(allocator);
         self.lazy_tokens.deinit(allocator);
@@ -18307,7 +18425,7 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
     var match_tested = false;
 
     const dictionary_ok = if (visible_dictionary) |dict|
-        try emitDictionaryMatchCompressedBlock(allocator, candidate, block, last, dict, frame_offset, match_search_budget, window_len)
+        try emitDictionaryMatchCompressedBlockWithScratch(allocator, candidate, block, last, dict, frame_offset, match_search_budget, window_len, scratch)
     else
         false;
     const dictionary_ready = dictionary_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, large_sequence_scratch);
@@ -18510,9 +18628,9 @@ fn emitFastCompressedBlockWithScratch(
     const match_ok = match_result.match_ok;
     const use_fast_large_planner = match_result.use_fast_large_planner;
     if (comptime builtin.is_test) {
-        test_fast_large_direct_transition_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_direct_transitions);
-        test_fast_large_cached_planner_hits += @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_cached_planner);
-        test_fast_sequence_record_hits += @intFromBool(match_ok and match_result.used_sequence_records and use_fast_large_planner);
+        test_atomic_counter.add(&test_fast_large_direct_transition_hits, @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_direct_transitions));
+        test_atomic_counter.add(&test_fast_large_cached_planner_hits, @intFromBool(match_ok and use_fast_large_planner and !test_disable_fast_large_cached_planner));
+        test_atomic_counter.add(&test_fast_sequence_record_hits, @intFromBool(match_ok and match_result.used_sequence_records and use_fast_large_planner));
     }
     const match_ready = match_ok and try prepareSequenceCandidateForFrameWithScratch(
         allocator,
@@ -18524,7 +18642,7 @@ fn emitFastCompressedBlockWithScratch(
     );
     if (match_ready and (best.items.len == 0 or candidate.items.len < best.items.len)) {
         if (!builtin.is_test or !test_disable_fast_direct_match_commit) {
-            if (comptime builtin.is_test) test_fast_direct_match_commit_hits += 1;
+            if (comptime builtin.is_test) test_atomic_counter.add(&test_fast_direct_match_commit_hits, 1);
             state.previous_huffman_plan = null;
             const can_commit_known_offsets = !last and
                 match_ok and use_fast_large_planner and
@@ -18533,7 +18651,7 @@ fn emitFastCompressedBlockWithScratch(
                 std.meta.eql(state.sequence_state.repeated_offsets, initial_repeated_offsets) and
                 (!builtin.is_test or !test_disable_fast_large_known_offsets_commit);
             if (can_commit_known_offsets) {
-                if (comptime builtin.is_test) test_fast_large_known_offsets_commit_hits += 1;
+                if (comptime builtin.is_test) test_atomic_counter.add(&test_fast_large_known_offsets_commit_hits, 1);
                 try appendSequenceCandidateAndCommitKnownOffsets(
                     allocator,
                     out,
@@ -18660,7 +18778,7 @@ fn emitNativeMatchCompressedBlockImpl(
 
             var mixed: std.ArrayList(u8) = .empty;
             defer mixed.deinit(allocator);
-            const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed, block, last, match_search_budget, null, null);
+            const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, &mixed, block, last, match_search_budget, null, null, block_scratch);
             // Mixed historically ran first, so retain its equal-length tie.
             if (mixed_ok and (!non_mixed_ok or mixed.items.len <= out.items.len)) {
                 out.clearRetainingCapacity();
@@ -18761,7 +18879,7 @@ noinline fn emitAbsoluteDecisiveBeamFirst(
         var duplicate_index: DuplicateMatchIndex = undefined;
         duplicate_index.buildBounded(block);
         if (try findBestDuplicateMatchIndexed(block, 0, &duplicate_index) != null) return null;
-    } else if (comptime builtin.is_test) test_decisive_single_lower_bound_hits += 1;
+    } else if (comptime builtin.is_test) test_atomic_counter.add(&test_decisive_single_lower_bound_hits, 1);
 
     mixed_dominated.* = true;
     try out.appendSlice(allocator, beam.items);
@@ -19278,7 +19396,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
         }
     }
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
-        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, candidate, block, last, match_search_budget, duplicate_index_ptr, null)
+        try emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, candidate, block, last, match_search_budget, duplicate_index_ptr, null, block_scratch)
     else
         false;
     try retainShortestCandidate(allocator, mixed_ok, candidate.items, best);
@@ -19316,15 +19434,15 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             if (boundedSingleMatchCannotBeatWithSummary(block, strict_single_limit, &single_max_byte_frequency)) {
                 skip_level_one_single = true;
                 early_single_tested = true;
-                if (comptime builtin.is_test) test_precomputed_beam_single_index_prune_hits += 1;
+                if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_single_index_prune_hits, 1);
             } else {
-                if (comptime builtin.is_test) test_precomputed_beam_single_index_fallbacks += 1;
+                if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_single_index_fallbacks, 1);
                 duplicate_index.buildBounded(block);
                 duplicate_index_ptr = &duplicate_index;
                 try evaluateEarlySingle(block, duplicate_index_ptr, &early_single_match, &early_single_tested, &skip_level_one_single);
             }
         } else {
-            if (comptime builtin.is_test) test_precomputed_beam_single_index_fallbacks += 1;
+            if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_single_index_fallbacks, 1);
             duplicate_index.buildBounded(block);
             duplicate_index_ptr = &duplicate_index;
             try evaluateEarlySingle(block, duplicate_index_ptr, &early_single_match, &early_single_tested, &skip_level_one_single);
@@ -19519,7 +19637,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeamImpl(
             const estimated_total_len = std.math.add(usize, match.payload_len, 3) catch return error.IntegerOverflow;
             single_len = estimated_total_len;
             if (best.items.len != 0 and estimated_total_len >= best.items.len) {
-                if (comptime builtin.is_test) test_small_single_emit_prune_hits += 1;
+                if (comptime builtin.is_test) test_atomic_counter.add(&test_small_single_emit_prune_hits, 1);
                 break :blk false;
             }
             break :blk try emitSingleMatchCompressedBlockFromMatch(allocator, candidate, block, last, match);
@@ -19564,7 +19682,7 @@ noinline fn findBestDecisiveSingleDuplicate(
     {
         const dominance_limit = std.math.mul(usize, rep_beam_len.?, decisive_mixed_dominance_ratio) catch std.math.maxInt(usize);
         if (indexedSingleMatchDominatedBy(block, index, dominance_limit)) {
-            if (comptime builtin.is_test) test_decisive_single_lower_bound_hits += 1;
+            if (comptime builtin.is_test) test_atomic_counter.add(&test_decisive_single_lower_bound_hits, 1);
             return null;
         }
     }
@@ -20287,7 +20405,7 @@ noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
         try ensureReusableHashTokenCapacity(tokens, allocator, block.len);
         const stats = try lz77.hashGreedyPlanAutoTinyReuse(tokens, allocator, block, parser_options);
         if (try hashTokenSequenceCannotBeat(block, tokens.items, stats, best_len)) {
-            if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+            if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_greedy_prune_hits, 1);
             if (single_max_byte_frequency != null and
                 (!builtin.is_test or !test_disable_precomputed_beam_repeated_prune))
             {
@@ -20302,7 +20420,7 @@ noinline fn emitGreedyHashMatchCompressedBlockReuseUnlessDominated(
     const plan = try lz77.hashGreedyPlanAutoAlloc(allocator, block, parser_options);
     defer plan.deinit(allocator);
     if (try hashTokenSequenceCannotBeat(block, plan.tokens, plan.stats, best_len)) {
-        if (comptime builtin.is_test) test_precomputed_beam_greedy_prune_hits += 1;
+        if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_greedy_prune_hits, 1);
         if (single_max_byte_frequency != null and
             (!builtin.is_test or !test_disable_precomputed_beam_repeated_prune))
         {
@@ -22210,7 +22328,7 @@ fn hashTokenSequenceCannotBeat(
     if (comptime builtin.is_test) if (test_disable_hash_token_lower_bound) return false;
     const lower_bound = (try hashTokenSequenceBlockLowerBound(block, tokens, stats)) orelse return false;
     const cannot_beat = lower_bound > best_len;
-    if (comptime builtin.is_test) test_hash_token_lower_bound_hits += @intFromBool(cannot_beat);
+    if (comptime builtin.is_test) test_atomic_counter.add(&test_hash_token_lower_bound_hits, @intFromBool(cannot_beat));
     return cannot_beat;
 }
 
@@ -22604,9 +22722,23 @@ fn emitDictionaryMatchCompressedBlock(
     match_search_budget: usize,
     window_len: ?usize,
 ) Error!bool {
+    return emitDictionaryMatchCompressedBlockWithScratch(allocator, out, block, last, dictionary, frame_offset, match_search_budget, window_len, null);
+}
+
+fn emitDictionaryMatchCompressedBlockWithScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    dictionary: NativeDictionary,
+    frame_offset: Count,
+    match_search_budget: usize,
+    window_len: ?usize,
+    scratch: ?*NativeBlockEncodeScratch,
+) Error!bool {
     var mixed_block: std.ArrayList(u8) = .empty;
     defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset, match_search_budget, window_len);
+    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlockWithScratch(allocator, &mixed_block, block, last, dictionary, frame_offset, match_search_budget, window_len, scratch);
 
     var multi_block: std.ArrayList(u8) = .empty;
     defer multi_block.deinit(allocator);
@@ -22838,11 +22970,31 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     match_search_budget: usize,
     window_len: ?usize,
 ) Error!bool {
-    const plan = try bestMixedMatchLookaheadPlan(dictionary.content, block, frame_offset, .{
+    return emitMixedDictionaryDuplicateMatchCompressedBlockWithScratch(allocator, out, block, last, dictionary, frame_offset, match_search_budget, window_len, null);
+}
+
+fn emitMixedDictionaryDuplicateMatchCompressedBlockWithScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    dictionary: NativeDictionary,
+    frame_offset: Count,
+    match_search_budget: usize,
+    window_len: ?usize,
+    scratch: ?*NativeBlockEncodeScratch,
+) Error!bool {
+    if (match_search_budget == 0) return false;
+    const workspace = if (scratch) |owner| try owner.mixedWorkspace(allocator) else null;
+    const allowed: MixedMatchKindSet = .{
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null, null) orelse return false;
+    };
+    const plan = (if (workspace) |heap|
+        try bestMixedMatchLookaheadPlanWithWorkspace(dictionary.content, block, frame_offset, allowed, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null, null, heap)
+    else
+        try bestMixedMatchLookaheadPlan(dictionary.content, block, frame_offset, allowed, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null, null)) orelse return false;
     if (window_len) |limit|
         for (plan.kinds[0..plan.count], plan.offsets[0..plan.count]) |kind, offset|
             if (kind == .dictionary and offset > limit) return false;
@@ -22864,11 +23016,30 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     duplicate_index: ?*DuplicateMatchIndex,
     cancelled: ?*const std.atomic.Value(bool),
 ) Error!bool {
-    const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
+    return emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(allocator, out, block, last, match_search_budget, duplicate_index, cancelled, null);
+}
+
+fn emitMixedDuplicateRepeatedMatchCompressedBlockWithScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
+    scratch: ?*NativeBlockEncodeScratch,
+) Error!bool {
+    if (match_search_budget == 0) return false;
+    const workspace = if (scratch) |owner| try owner.mixedWorkspace(allocator) else null;
+    const allowed: MixedMatchKindSet = .{
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index, cancelled) orelse return false;
+    };
+    const plan = (if (workspace) |heap|
+        try bestMixedMatchLookaheadPlanWithWorkspace(&.{}, block, 0, allowed, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index, cancelled, heap)
+    else
+        try bestMixedMatchLookaheadPlan(&.{}, block, 0, allowed, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index, cancelled)) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -23009,13 +23180,17 @@ const MixedMatchCandidateCache = struct {
         // enclosing value with `.{}` can otherwise zero or copy megabytes of
         // dead storage before the externally prepared index is installed.
         var cache: MixedMatchCandidateCache = undefined;
-        cache.slots = @splat(mixed_candidate_cache_invalid);
-        cache.duplicate_index = duplicate_index;
-        cache.cancelled = cancelled;
-        cache.len = 0;
-        cache.lookup_count = 0;
-        cache.hit_count = 0;
+        cache.initInto(duplicate_index, cancelled);
         return cache;
+    }
+
+    fn initInto(self: *MixedMatchCandidateCache, duplicate_index: ?*DuplicateMatchIndex, cancelled: ?*const std.atomic.Value(bool)) void {
+        self.slots = @splat(mixed_candidate_cache_invalid);
+        self.duplicate_index = duplicate_index;
+        self.cancelled = cancelled;
+        self.len = 0;
+        self.lookup_count = 0;
+        self.hit_count = 0;
     }
 
     fn candidatesAt(
@@ -23063,6 +23238,8 @@ const MixedMatchCandidateCache = struct {
     }
 };
 
+const MixedMatchLookaheadWorkspace = @import("zstd/match/mixed_workspace.zig").Workspace(MixedMatchCandidateCache, MixedHuffmanBitPrefix, MixedLiteralHistogram);
+
 fn bestMixedCandidateLookaheadPlan(
     dictionary: []const u8,
     block: []const u8,
@@ -23079,7 +23256,7 @@ fn bestMixedCandidateLookaheadPlan(
     );
 }
 
-fn bestMixedMatchLookaheadPlan(
+noinline fn bestMixedMatchLookaheadPlan(
     dictionary: []const u8,
     block: []const u8,
     frame_offset: Count,
@@ -23091,8 +23268,45 @@ fn bestMixedMatchLookaheadPlan(
     cancelled: ?*const std.atomic.Value(bool),
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
-    var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     var candidate_cache = MixedMatchCandidateCache.initWithDuplicateIndex(duplicate_index, cancelled);
+    var literal_histogram: MixedLiteralHistogram = undefined;
+    var huffman_bit_prefix: MixedHuffmanBitPrefix = undefined;
+    return bestMixedMatchLookaheadPlanBody(dictionary, block, frame_offset, allowed, required_first, required_second, match_search_budget, &candidate_cache, &literal_histogram, &huffman_bit_prefix, cancelled);
+}
+
+fn bestMixedMatchLookaheadPlanWithWorkspace(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: Count,
+    allowed: MixedMatchKindSet,
+    required_first: MixedMatchRequirement,
+    required_second: MixedMatchRequirement,
+    match_search_budget: usize,
+    duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
+    workspace: *MixedMatchLookaheadWorkspace,
+) Error!?MixedMatchLookaheadPlan {
+    if (match_search_budget == 0) return null;
+    workspace.cache.initInto(duplicate_index, cancelled);
+    return bestMixedMatchLookaheadPlanBody(dictionary, block, frame_offset, allowed, required_first, required_second, match_search_budget, &workspace.cache, &workspace.histogram, &workspace.prefix, cancelled);
+}
+
+/// The shared search body contains no large fallback storage. Its stack and
+/// heap entrypoints supply the identical cache and pricing geometry explicitly.
+fn bestMixedMatchLookaheadPlanBody(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: Count,
+    allowed: MixedMatchKindSet,
+    required_first: MixedMatchRequirement,
+    required_second: MixedMatchRequirement,
+    match_search_budget: usize,
+    candidate_cache: *MixedMatchCandidateCache,
+    literal_histogram: *MixedLiteralHistogram,
+    huffman_bit_prefix: *MixedHuffmanBitPrefix,
+    cancelled: ?*const std.atomic.Value(bool),
+) Error!?MixedMatchLookaheadPlan {
+    var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
     if (first_count == 0) return null;
 
@@ -23103,8 +23317,10 @@ fn bestMixedMatchLookaheadPlan(
     var plan: MixedMatchLookaheadPlan = .{};
     var best: MixedMatchLookaheadPlan = .{};
     var have_best = false;
-    var literal_histogram = MixedLiteralHistogram.init(block);
-    var huffman_bit_prefix: MixedHuffmanBitPrefix = .{};
+    literal_histogram.* = MixedLiteralHistogram.init(block);
+    huffman_bit_prefix.bit_counts = @splat(0);
+    huffman_bit_prefix.block_len = 0;
+    huffman_bit_prefix.valid = false;
     for (first_candidates[0..first_count]) |candidate| {
         // Preserve the historical contract: each top-level alternative gets
         // the caller's complete bounded search budget.
@@ -23116,7 +23332,7 @@ fn bestMixedMatchLookaheadPlan(
             frame_offset,
             allowed,
             requirements,
-            &candidate_cache,
+            candidate_cache,
             candidate,
             &plan,
             0,
@@ -23124,12 +23340,99 @@ fn bestMixedMatchLookaheadPlan(
             &seen,
             &best,
             &have_best,
-            &literal_histogram,
-            &huffman_bit_prefix,
+            literal_histogram,
+            huffman_bit_prefix,
             cancelled,
         );
     }
     return if (have_best) best else null;
+}
+
+test "Zstd parallel frame mixed workspace preserves stack reference plans and candidate wire" {
+    const allocator = std.testing.allocator;
+    const payload =
+        "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
+        "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
+        "cccfeggbcddfechbcecececececece";
+    var reversed: [payload.len]u8 = undefined;
+    for (&reversed, 0..) |*byte, index| byte.* = payload[payload.len - index - 1];
+    var scratch: NativeBlockEncodeScratch = .{ .heap_mixed_workspace = true };
+    defer scratch.deinit(allocator);
+    const workspace = (try scratch.mixedWorkspace(allocator)).?;
+    var compared: usize = 0;
+    for ([_][]const u8{ payload, &reversed, payload }) |block| {
+        for ([_][]const u8{ "", payload[0..48] }) |dictionary| {
+            const with_dictionary = dictionary.len != 0;
+            const allowed: MixedMatchKindSet = .{ .dictionary = with_dictionary, .duplicate = true, .repeated = true };
+            const first: MixedMatchRequirement = .{ .kind = if (with_dictionary) .dictionary else .duplicate };
+            const second: MixedMatchRequirement = if (with_dictionary) .non_dictionary else .{ .kind = .repeated };
+            for ([_]usize{ 0, mixed_match_min_search_budget, mixed_match_path_search_budget }) |budget| {
+                const expected = try bestMixedMatchLookaheadPlan(dictionary, block, 0, allowed, first, second, budget, null, null);
+                const actual = try bestMixedMatchLookaheadPlanWithWorkspace(dictionary, block, 0, allowed, first, second, budget, null, null, workspace);
+                try std.testing.expectEqual(expected == null, actual == null);
+                const reference = expected orelse continue;
+                const result = actual.?;
+                compared += 1;
+                try std.testing.expectEqual(reference.count, result.count);
+                try std.testing.expectEqual(reference.tail_start, result.tail_start);
+                try std.testing.expectEqual(reference.payload_len, result.payload_len);
+                try std.testing.expectEqualSlices(usize, reference.literal_lens[0..reference.count], result.literal_lens[0..result.count]);
+                try std.testing.expectEqualSlices(usize, reference.offsets[0..reference.count], result.offsets[0..result.count]);
+                try std.testing.expectEqualSlices(usize, reference.match_lens[0..reference.count], result.match_lens[0..result.count]);
+                try std.testing.expectEqualSlices(usize, reference.literal_ends[0..reference.count], result.literal_ends[0..result.count]);
+                try std.testing.expectEqualSlices(MixedMatchKind, reference.kinds[0..reference.count], result.kinds[0..result.count]);
+                var expected_wire: std.ArrayList(u8) = .empty;
+                defer expected_wire.deinit(allocator);
+                var actual_wire: std.ArrayList(u8) = .empty;
+                defer actual_wire.deinit(allocator);
+                const expected_ok = try emitBestSequenceCompressedBlockFromLookaheadPlan(allocator, &expected_wire, block, true, reference);
+                const actual_ok = try emitBestSequenceCompressedBlockFromLookaheadPlan(allocator, &actual_wire, block, true, result);
+                try std.testing.expectEqual(expected_ok, actual_ok);
+                try std.testing.expectEqualSlices(u8, expected_wire.items, actual_wire.items);
+            }
+        }
+    }
+    try std.testing.expect(compared != 0);
+    try std.testing.expect(workspace == (try scratch.mixedWorkspace(allocator)).?);
+    var cancelled: std.atomic.Value(bool) = .init(true);
+    const allowed: MixedMatchKindSet = .{ .duplicate = true, .repeated = true };
+    try std.testing.expect((try bestMixedMatchLookaheadPlanWithWorkspace("", payload, 0, allowed, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget, null, &cancelled, workspace)) == null);
+}
+
+test "Zstd parallel frame mixed workspace quota OOM and retained lifetime are exact" {
+    const allocator = std.testing.allocator;
+    var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0 });
+    var disabled: NativeBlockEncodeScratch = .{};
+    try std.testing.expect((try disabled.mixedWorkspace(failing.allocator())) == null);
+    try std.testing.expectEqual(@as(usize, 0), failing.allocated_bytes);
+    var missing: NativeBlockEncodeScratch = .{ .heap_mixed_workspace = true };
+    try std.testing.expectError(error.OutOfMemory, missing.mixedWorkspace(failing.allocator()));
+    try std.testing.expect(missing.mixed_workspace == null);
+    missing.deinit(failing.allocator());
+
+    const shared = @import("io/threaded_working_memory.zig");
+    const bytes = @sizeOf(MixedMatchLookaheadWorkspace);
+    const control = try shared.Control.create(allocator, shared.control_bytes + bytes - 1, 0);
+    var bounded: NativeBlockEncodeScratch = .{ .heap_mixed_workspace = true };
+    try std.testing.expectError(error.OutOfMemory, bounded.mixedWorkspace(control.allocator()));
+    try std.testing.expectEqual(error.WorkingMemoryLimitExceeded, control.coordinator.mapError(@as(std.mem.Allocator.Error, error.OutOfMemory)));
+    try std.testing.expect(bounded.mixed_workspace == null);
+    try control.changeLimit(shared.control_bytes + bytes);
+    try std.testing.expect((try bounded.mixedWorkspace(control.allocator())) != null);
+    try std.testing.expectEqual(shared.control_bytes + bytes, control.snapshot().live_requested_bytes);
+    bounded.deinit(control.allocator());
+    try std.testing.expectEqual(shared.control_bytes, control.snapshot().live_requested_bytes);
+    control.destroy();
+
+    var backing = std.testing.FailingAllocator.init(allocator, .{});
+    {
+        var owned: NativeBlockEncodeScratch = .{ .heap_mixed_workspace = true };
+        defer owned.deinit(backing.allocator());
+        const first = (try owned.mixedWorkspace(backing.allocator())).?;
+        try std.testing.expect(first == (try owned.mixedWorkspace(backing.allocator())).?);
+        try std.testing.expectEqual(bytes, backing.allocated_bytes);
+    }
+    try std.testing.expectEqual(backing.allocated_bytes, backing.freed_bytes);
 }
 
 fn bestMixedCandidateLookaheadPlanFromFirst(
@@ -23703,7 +24006,7 @@ fn emitBestSequenceCompressedBlockWithScratch(
     if (literal_lens.len == 1 and offsets.len == 1 and match_lens.len == 1 and
         (!builtin.is_test or !test_disable_single_sequence_winner_only))
     {
-        if (comptime builtin.is_test) test_single_sequence_winner_only_hits += 1;
+        if (comptime builtin.is_test) test_atomic_counter.add(&test_single_sequence_winner_only_hits, 1);
         const rle_payload_len = try rleSequencePayloadLenForValuesWithLiteralsLen(
             literal_lens,
             offsets,
@@ -23836,8 +24139,8 @@ noinline fn emitBestMultiSequenceCompressedBlockWinnerOnly(
     const selected = winner orelse return false;
     if (best_payload_len >= block.len) return false;
     if (comptime builtin.is_test) {
-        test_multi_sequence_winner_only_hits += 1;
-        test_multi_sequence_winner_hits[@intFromEnum(selected)] += 1;
+        test_atomic_counter.add(&test_multi_sequence_winner_only_hits, 1);
+        test_atomic_counter.add(&test_multi_sequence_winner_hits[@intFromEnum(selected)], 1);
     }
 
     const output_start = out.items.len;
@@ -31700,10 +32003,10 @@ fn emitRepeatedPatternCompressedBlockWithScratch(allocator: std.mem.Allocator, o
             best_len,
             scratch.repeated_prune_max_byte_frequency,
         )) {
-            if (comptime builtin.is_test) test_precomputed_beam_repeated_prune_hits += 1;
+            if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_repeated_prune_hits, 1);
             return false;
         }
-        if (comptime builtin.is_test) test_precomputed_beam_repeated_prune_fallbacks += @intFromBool(best_len != 0);
+        if (comptime builtin.is_test) test_atomic_counter.add(&test_precomputed_beam_repeated_prune_fallbacks, @intFromBool(best_len != 0));
     }
     if (try emitMultiRepeatedPatternCompressedBlock(allocator, out, block, last)) return true;
     const pattern = findRepeatedPatternSegment(block) orelse return false;
@@ -45791,7 +46094,7 @@ fn copySmallMixedHuffmanLiterals(
                 active.reload();
                 output_index += 8;
                 decoded.* += 8;
-                if (builtin.is_test) test_small_mixed_reservoir_literal_hits += 8;
+                if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_reservoir_literal_hits, 8);
             }
             cursor.reader.remaining_bits = active.remainingBits();
         }
@@ -45860,7 +46163,7 @@ fn copySmallMixedHuffmanLiteralsComplete(
                 active.reload();
                 output_index += 8;
                 decoded.* += 8;
-                if (builtin.is_test) test_small_mixed_reservoir_literal_hits += 8;
+                if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_reservoir_literal_hits, 8);
             }
             cursor.reader.remaining_bits = active.remainingBits();
         }
@@ -45901,7 +46204,7 @@ noinline fn decodePredefinedOffsetFse32Huffman(
     prepared_tree: ?*const StdZstdHuffmanTree,
     prepared_lookup: ?*const NarrowHuffmanLiteralLookup,
 ) linksection(small_sequence_decode_text_section) Error!void {
-    if (builtin.is_test) test_small_offset_fse_table_hits += 1;
+    if (builtin.is_test) test_atomic_counter.add(&test_small_offset_fse_table_hits, 1);
     var offset = table_offset;
     var offset_fse: SmallSequenceFseTable = undefined;
     try readOffsetFseTable32Into(&offset_fse, block, &offset);
@@ -46055,7 +46358,7 @@ inline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(
             ll_symbol.additional_bits + transition_bits;
         const sequence: DecodedSequence = if (total_bits <= 56 and reader.remaining_bits >= 64) grouped: {
             var fields = sequence_field_group.Group.init(&reader, total_bits) orelse unreachable;
-            if (builtin.is_test) test_small_mixed_field_group_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_field_group_hits, 1);
             const offset_extra = fields.read(of_symbol.additional_bits);
             const match_len = std.math.add(usize, ml_symbol.base, fields.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
             const literal_len = std.math.add(usize, ll_symbol.base, fields.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
@@ -46095,7 +46398,7 @@ inline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(
             huffman_cursor.reader.skipBulkHuffman(entry.bit_count);
             output[output_cursor.*] = entry.symbol;
             huffman_decoded += 1;
-            if (builtin.is_test) test_small_mixed_single_literal_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_single_literal_hits, 1);
             if (huffman_decoded == section.regenerated_size) try huffman_cursor.expectEnd();
         } else {
             const use_reservoir = literal_len >= 16 and switch (huffman_cursor.streams) {
@@ -46146,15 +46449,15 @@ inline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(
                     );
             }
         }
-        if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += literal_len;
+        if (comptime builtin.is_test) test_atomic_counter.add(&test_small_mixed_fse_fast_literal_hits, literal_len);
         output_cursor.* += literal_len;
         if (match_len == 56 and match_offset >= 56 and match_offset <= output_cursor.* - frame_output_start) {
             if (output.len - output_cursor.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_small_mixed_fse_match_56_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_fse_match_56_hits, 1);
             sequence_match_copy.appendNonOverlapping56(output, output_cursor, output_cursor.* - match_offset);
         } else if ((match_len == 6 or match_len == 7) and match_offset >= match_len and match_offset <= output_cursor.* - frame_output_start) {
             if (output.len - output_cursor.* < match_len) return error.OutputTooSmall;
-            if (builtin.is_test) test_small_mixed_fse_match_6_7_hits += 1;
+            if (builtin.is_test) test_atomic_counter.add(&test_small_mixed_fse_match_6_7_hits, 1);
             sequence_match_copy.appendNonOverlapping6Or7(output, output_cursor, output_cursor.* - match_offset, match_len);
         } else {
             try copyMatchFromHistory(output, output_cursor, frame_output_start, &.{}, match_offset, match_len);
@@ -46185,7 +46488,7 @@ inline fn decodePredefinedOffsetFsePredefinedHuffmanPreparedImpl(
             section.regenerated_size,
             output[output_cursor.*..][0..last_literals],
         );
-    if (comptime builtin.is_test) test_small_mixed_fse_fast_literal_hits += last_literals;
+    if (comptime builtin.is_test) test_atomic_counter.add(&test_small_mixed_fse_fast_literal_hits, last_literals);
     output_cursor.* += last_literals;
 }
 
