@@ -805,3 +805,22 @@ zstd module passes in both Debug and ReleaseFast. Remaining level-3 gap on
 XML is roughly 80x (10.3 ms vs 0.13 ms), now dominated by the independent
 greedy/lazy/optimal candidate arbitrations rather than repeated exact
 Huffman pricing.
+
+**Post-fix residual, 2026-10-26.** After the unindexed multi-duplicate gate,
+the level-3 XML encode is 10.3 ms; perf attribution of the frozen silesia-xml
+64 KiB block shows 35% of process cycles in the fixed-cost optimal parser
+(`emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch` ->
+`lz77.optimalPlanReuse`; isolated optimal stage: 7.43 ms search, 0.14 ms
+index, 127,477 priced match candidates, 1.78 M length-choice updates,
+850,728 chain nodes, 333,177 prefix-bound rejections). A counterfactual
+gate of the optimal DP below the 96-state mixed budget keeps the five
+XML-like rows byte-identical but regresses eleven of the other thirteen
+frozen inputs at level 3 (dickens 25,898 -> 26,255, webster 22,669 ->
+22,905, brotli-source 12,111 -> 12,168, etc.) and eleven of fourteen at
+level 1 (nci -16%); it was withdrawn. The DP is the source of Vort's
+current level-3 ratio lead over libzstd 1.6.0 (XML 5,078 vs 6,099), so
+the residual ~80x gap is a speed/ratio policy point: Vort runs an
+O(positions x chain) integer optimal parser where libzstd levels 2-3 run
+one lazy2 hash-chain pass (DP begins at btopt). Further wire-identical
+gains must come from DP internals or sharing one hash index across
+candidate families; dropping the DP trades measured ratio for speed.
