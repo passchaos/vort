@@ -870,3 +870,23 @@ ratio advantage measured against libzstd 1.6.0 (frozen XML 5,078 vs
 either exposing faster public selections or accepting measured ratio
 loss, not removing redundant work - the redundant-work slice was
 captured by the committed multi-duplicate gate (36f50c96).
+
+**Pre-existing native-library-bench smoke failures, 2026-10-27.** While
+verifying the post-fix tree, `run-native-library-bench-releasefast-*`
+was found already red at f1db734d (independent of the committed level-3
+work). Two distinct pre-existing issues in
+`tools/native_library_bench.zig`, neither covered by `zig build test`:
+(1) roughly ten LZ4/Zstd direct-output smokes assert whole-frame
+`direct_output`/`need_output` semantics after a no-size header but
+omit `input_policy = .prevalidated_frame`, stale since 1f864ccf changed
+the native default to bounded block streaming (same class as the root
+contracts fixed in b29b1d4d); (2) `smokeZstdAllCompressedSequenceTables`
+fails on the two-block repeat-tables fixture: the one-shot decoder
+(`zstdDecodeNativeFrameInto`, size, chunks) reproduces the 240-byte and
+repeat expected streams byte-exactly, but the default bounded
+block-stream incremental path returns SizeMismatch, indicating a
+real defect in cross-block repeat LL/OF/ML-table or repeat-Huffman
+propagation in the block-stream sequence state. Verified pre-existing
+against f1db734d. The bench tool was reverted to its committed state;
+both issues remain open as a follow-up and do not affect the green
+`zig build test` suite (4958 pass / 2 skip).
