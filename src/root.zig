@@ -7609,6 +7609,8 @@ test "root native incremental decoders use expected size after skippable no-size
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -7644,6 +7646,8 @@ test "root native incremental decoders use expected size after skippable no-size
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -7679,6 +7683,8 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     var lz4_too_small = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len - 1,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_too_small.deinit();
     // Without a content-size field, `expected_output_len` is the only exact-size
@@ -7691,6 +7697,8 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     var lz4_too_large = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len + 1,
         .max_decoded_buffer_len = lz4_payload.len + 1,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_too_large.deinit();
     const lz4_initial = try lz4_too_large.step(lz4_stream, lz4_output[0..0]);
@@ -7718,6 +7726,8 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     var zstd_too_small = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len - 1,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_too_small.deinit();
     try std.testing.expectError(error.SizeMismatch, zstd_too_small.step(zstd_stream, zstd_output[0..0]));
@@ -7727,6 +7737,8 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     var zstd_too_large = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len + 1,
         .max_decoded_buffer_len = zstd_payload.len + 1,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_too_large.deinit();
     const zstd_initial = try zstd_too_large.step(zstd_stream, zstd_output[0..0]);
@@ -7750,6 +7762,8 @@ test "root native incremental reset recovers after extra input size mismatch" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -7775,6 +7789,8 @@ test "root native incremental reset recovers after extra input size mismatch" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -7803,6 +7819,8 @@ test "root native incremental finish reports direct-output not drained" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [1]u8 = undefined;
@@ -7824,6 +7842,8 @@ test "root native incremental finish reports direct-output not drained" {
     var lz4_partial_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_partial_decoder.deinit();
     var lz4_partial_output: [lz4_payload.len]u8 = undefined;
@@ -7844,6 +7864,8 @@ test "root native incremental finish reports direct-output not drained" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [1]u8 = undefined;
@@ -7865,6 +7887,8 @@ test "root native incremental finish reports direct-output not drained" {
     var zstd_partial_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_partial_decoder.deinit();
     var zstd_partial_output: [zstd_payload.len]u8 = undefined;
@@ -7893,6 +7917,8 @@ test "root native incremental direct-output waits across split block boundaries"
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -7939,6 +7965,8 @@ test "root native incremental direct-output waits across split block boundaries"
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -7988,6 +8016,8 @@ test "root native incremental direct-output reports checksum mismatches" {
     var lz4_block_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_block_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8007,6 +8037,8 @@ test "root native incremental direct-output reports checksum mismatches" {
     var lz4_content_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_content_decoder.deinit();
     const lz4_ready = try lz4_content_decoder.step(lz4_bad_content, lz4_output[0..0]);
@@ -8030,6 +8062,8 @@ test "root native incremental direct-output reports checksum mismatches" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8062,6 +8096,8 @@ test "root native incremental direct-output advances across exact frame output b
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_expected.len,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_expected.len]u8 = undefined;
@@ -8102,6 +8138,8 @@ test "root native incremental direct-output advances across exact frame output b
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_expected.len,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_expected.len]u8 = undefined;
@@ -8150,6 +8188,8 @@ test "root native incremental direct-output reports checksum mismatches in later
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_expected.len,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_expected.len]u8 = undefined;
@@ -8189,6 +8229,8 @@ test "root native incremental direct-output reports checksum mismatches in later
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_expected.len,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_expected.len]u8 = undefined;
@@ -8222,6 +8264,8 @@ test "root native incremental direct-output paths round trip" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8248,6 +8292,8 @@ test "root native incremental direct-output paths round trip" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8283,6 +8329,8 @@ test "root native no-size incremental direct-output paths round trip" {
 
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8308,6 +8356,8 @@ test "root native no-size incremental direct-output paths round trip" {
 
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8337,6 +8387,8 @@ test "root native no-size dictionary direct-output paths round trip" {
 
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
         .expected_output_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8364,6 +8416,8 @@ test "root native no-size dictionary direct-output paths round trip" {
 
     var lz4_missing = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_missing.deinit();
     try std.testing.expectError(error.NeedDictionary, lz4_missing.step(lz4_frame, lz4_output[0..0]));
@@ -8385,6 +8439,8 @@ test "root native no-size dictionary direct-output paths round trip" {
 
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
         .expected_output_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8412,6 +8468,8 @@ test "root native no-size dictionary direct-output paths round trip" {
 
     var zstd_missing = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_missing.deinit();
     try std.testing.expectError(error.NeedDictionary, zstd_missing.step(zstd_frame.frame, zstd_output[0..0]));
@@ -8445,6 +8503,8 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
         .expected_output_len = lz4_expected.len,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_expected.len]u8 = undefined;
@@ -8497,6 +8557,8 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
         .expected_output_len = zstd_expected.len,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_expected.len]u8 = undefined;
@@ -8552,6 +8614,8 @@ test "root native no-size dictionary-set streams diagnose expected size mismatch
     var lz4_too_small = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
         .expected_output_len = lz4_expected.len - 1,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_too_small.deinit();
     // The first frame fits, then the second dictionary-selected no-size frame
@@ -8566,6 +8630,8 @@ test "root native no-size dictionary-set streams diagnose expected size mismatch
     var lz4_too_large = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
         .expected_output_len = lz4_expected.len + 1,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_too_large.deinit();
     const lz4_large_initial = try lz4_too_large.step(lz4_stream.items, lz4_output[0..0]);
@@ -8604,6 +8670,8 @@ test "root native no-size dictionary-set streams diagnose expected size mismatch
     var zstd_too_small = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
         .expected_output_len = zstd_expected.len - 1,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_too_small.deinit();
     const zstd_initial = try zstd_too_small.step(zstd_stream.items, zstd_output[0..0]);
@@ -8615,6 +8683,8 @@ test "root native no-size dictionary-set streams diagnose expected size mismatch
     var zstd_too_large = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
         .expected_output_len = zstd_expected.len + 1,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_too_large.deinit();
     const zstd_large_initial = try zstd_too_large.step(zstd_stream.items, zstd_output[0..0]);
@@ -8656,6 +8726,8 @@ test "root native no-size dictionary-set streams diagnose missing later dictiona
     var lz4_missing = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_missing_set, .{
         .expected_output_len = lz4_expected.len,
         .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_missing.deinit();
     // The first dictionary is available, so callers can drain the first no-size
@@ -8700,6 +8772,8 @@ test "root native no-size dictionary-set streams diagnose missing later dictiona
     var zstd_missing = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_missing_set, .{
         .expected_output_len = zstd_expected.len,
         .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_missing.deinit();
     const zstd_initial = try zstd_missing.step(zstd_stream.items, zstd_output[0..0]);
@@ -8736,6 +8810,8 @@ test "root lz4 linked direct-output switches to cursor for small output" {
     var decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     var output: [lz4_payload.len]u8 = undefined;
@@ -8776,6 +8852,8 @@ test "root zstd multi-block direct-output switches for small output" {
     var decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     var output: [payload.len]u8 = undefined;
@@ -8808,6 +8886,8 @@ test "root native dictionary direct-output handles small output" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8839,6 +8919,8 @@ test "root native dictionary direct-output handles small output" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8872,6 +8954,8 @@ test "root native dictionary-set direct-output handles small output" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8905,6 +8989,8 @@ test "root native dictionary-set direct-output handles small output" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -8968,6 +9054,8 @@ test "root native dictionary incremental direct-output paths round trip" {
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
         .expected_output_len = lz4_payload.len,
         .max_decoded_buffer_len = lz4_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -8997,6 +9085,8 @@ test "root native dictionary incremental direct-output paths round trip" {
     var lz4_set_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
         .expected_output_len = lz4_expected.len,
         .max_decoded_buffer_len = @max(lz4_payload.len, lz4_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer lz4_set_decoder.deinit();
     var lz4_set_output: [lz4_expected.len]u8 = undefined;
@@ -9057,6 +9147,8 @@ test "root native dictionary incremental direct-output paths round trip" {
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
         .expected_output_len = zstd_payload.len,
         .max_decoded_buffer_len = zstd_payload.len,
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;
@@ -9086,6 +9178,8 @@ test "root native dictionary incremental direct-output paths round trip" {
     var zstd_set_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
         .expected_output_len = zstd_expected.len,
         .max_decoded_buffer_len = @max(zstd_payload.len, zstd_second_payload.len),
+
+        .input_policy = .prevalidated_frame,
     });
     defer zstd_set_decoder.deinit();
     var zstd_set_output: [zstd_expected.len]u8 = undefined;

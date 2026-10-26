@@ -5566,11 +5566,13 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.phase == .done) {
             if (self.options.stop_after_first_frame) return .{ .status = .done };
             if (input.len == 0) return .{ .status = .done };
-            // Output pledges constrain data emitted by subsequent members;
-            // metadata and empty members may still follow a completed frame.
             // Fresh bytes after a completed frame are interpreted as the next
-            // member of the same caller-driven concatenated stream.  Keep the
-            // cumulative counters intact; `reset()` starts a new logical stream.
+            // member of the same caller-driven concatenated stream. A fulfilled
+            // output pledge still permits metadata (skippable frames, fed one
+            // byte at a time) and complete zero-byte data members; a new data
+            // member that cannot be empty is rejected as SizeMismatch, including
+            // its first byte. Keep cumulative counters intact; `reset()` starts
+            // a new logical stream.
             self.phase = .frame;
             self.decoded_scratch.clearRetainingCapacity();
             self.decoded_offset = 0;
@@ -5626,6 +5628,14 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 .progress = .{ .input_read = input_read, .output_written = output_written_step },
                                 .status = .done,
                             };
+                        }
+                        // A fulfilled output pledge allows further metadata
+                        // (skippable frames, possibly split byte by byte) and
+                        // complete zero-byte data members, but the first byte
+                        // of a new non-empty data member exceeds the pledge.
+                        if (self.fulfilledPledgeStartsDataMember()) {
+                            self.recordError(.frame, error.SizeMismatch);
+                            return error.SizeMismatch;
                         }
                         if (self.frame_scratch.items.len >= self.options.max_compressed_buffer_len) {
                             const block_stream_supported = self.beginBlockStreamIfSupported() catch |err| {
@@ -6272,6 +6282,24 @@ pub const NativeIncrementalFrameDecoder = struct {
             return error.SizeMismatch;
         }
         return self.output_written < expected;
+    }
+
+    /// Whether buffered bytes start a new non-empty data member while the
+    /// caller's exact output pledge is already fulfilled. Skippable metadata
+    /// (magic bytes 0x50-0x5f in standard framing) remains permitted, even when
+    /// fed one byte at a time; the standard data magic's first byte is
+    /// classified immediately under whole-frame prevalidation, where a
+    /// fulfilled pledge means no further data member can be valid. Bounded
+    /// block streaming keeps deferring instead: zero-output compressed blocks
+    /// can only be proven empty as they arrive, and non-zero members fail the
+    /// existing output pledge check during block emission.
+    fn fulfilledPledgeStartsDataMember(self: *const NativeIncrementalFrameDecoder) bool {
+        if (self.options.format != .standard) return false;
+        if (self.options.input_policy != .prevalidated_frame) return false;
+        const expected = self.options.expected_output_len orelse return false;
+        if (self.output_written != expected) return false;
+        const first = self.frame_scratch.items[0];
+        return first == frame_magic[0];
     }
 
     fn stopAfterDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
