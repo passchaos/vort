@@ -824,3 +824,18 @@ O(positions x chain) integer optimal parser where libzstd levels 2-3 run
 one lazy2 hash-chain pass (DP begins at btopt). Further wire-identical
 gains must come from DP internals or sharing one hash index across
 candidate families; dropping the DP trades measured ratio for speed.
+
+A second candidate-family gate (skipping the periodic-pattern emitter at
+level 2/3 budgets) showed identical wires on the fourteen frozen 64 KiB
+prefixes and generated copy shapes (level-2 aggregate 3.36x, level-3
+7.58x in the combined counterfactual) but was withdrawn: the reusable
+seekable encoder emits 1,024-byte frames of a 34-byte periodic payload at
+those budgets, and that test (`reusable seekable encoder retains frame
+and table scratch`) regressed - the repeated-pattern family genuinely
+wins small periodic frames, where its scan is cheap anyway. Its encoder
+share on 64 KiB blocks is only ~2% (findRepeatedPatternSegmentIn);
+gating it was not worth the regression risk. The greedy family likewise
+must stay: it is the sole winner on silesia-mr (16,806 vs 17,225 bytes
+without it). These counterfactuals narrow the residual work to: (1)
+making the fixed-cost optimal parser cheaper while byte-identical, and
+(2) sharing hash-chain indexes across the candidate families.
