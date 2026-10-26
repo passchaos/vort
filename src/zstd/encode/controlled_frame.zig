@@ -26,12 +26,12 @@ pub fn Encoder(comptime Codec: type) type {
             const block_size = try Codec.blockSize(options);
             var state: Codec.State = .{};
             if (input.len == 0) {
-                try writeBlockImpl(false, is_baseline, allocator, out, input, true, options, &state, dictionary, &.{}, 0, records, scratch, block_scratch);
+                try writeBlockImpl(false, is_baseline, allocator, out, input, true, options, &state, dictionary, &.{}, 0, records, scratch, block_scratch, null);
             } else {
                 var offset: usize = 0;
                 while (offset != input.len) {
                     const end = offset + @min(block_size, input.len - offset);
-                    try writeBlockImpl(false, is_baseline, allocator, out, input[offset..end], end == input.len, options, &state, dictionary, input[0..offset], offset, records, scratch, block_scratch);
+                    try writeBlockImpl(false, is_baseline, allocator, out, input[offset..end], end == input.len, options, &state, dictionary, input[0..offset], offset, records, scratch, block_scratch, null);
                     offset = end;
                 }
             }
@@ -39,10 +39,14 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
-            return writeBlockImpl(true, false, allocator, out, block, last, options, state, dictionary, history, frame_offset, records, scratch, block_scratch);
+            return writeBlockBounded(allocator, out, block, last, options, state, dictionary, history, frame_offset, records, scratch, block_scratch, null);
         }
 
-        fn writeBlockImpl(comptime guard_block: bool, comptime is_baseline: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+        pub fn writeBlockBounded(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch, window_limit: ?usize) Codec.Error!void {
+            return writeBlockImpl(true, false, allocator, out, block, last, options, state, dictionary, history, frame_offset, records, scratch, block_scratch, window_limit);
+        }
+
+        fn writeBlockImpl(comptime guard_block: bool, comptime is_baseline: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch, window_limit: ?usize) Codec.Error!void {
             // Dictionary initialization belongs to the block transaction too.
             const original_state = state.*;
             errdefer state.* = original_state;
@@ -69,7 +73,9 @@ pub fn Encoder(comptime Codec: type) type {
                 countBlock(profile, out.items[output_start..]);
                 return;
             }
-            const window = try Codec.matchWindow(options, frame_offset, block.len, last);
+            // Bounded streams know the actual frame window/FCS intersection;
+            // legacy callers retain their conservative per-block estimate.
+            const window = window_limit orelse try Codec.matchWindow(options, frame_offset, block.len, last);
             const source = try source_mod.Source.initChecked(if (dictionary) |dict| dict.content else &.{}, history, block, window);
             const parameters: source_mod.Parameters = .{ .strategy = selected, .acceleration = acceleration, .search_budget = options.match_search_budget, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .profile = profile };
             switch (selected) {

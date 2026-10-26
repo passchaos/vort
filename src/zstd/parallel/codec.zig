@@ -5,6 +5,7 @@ const types = @import("types.zig");
 const support = zstd.ParallelCodecSupport;
 const adapter = @import("job_codec.zig").Adapter(support);
 const job_encoder = @import("codec_job_encode.zig").Encoder(support);
+const View = @import("job_view.zig").View;
 
 pub const Codec = struct {
     pub const Error = zstd.ParallelError;
@@ -13,6 +14,7 @@ pub const Codec = struct {
     pub const DictionarySet = zstd.NativeDictionarySet;
     pub const Profile = zstd.EncoderControlProfile;
     pub const State = adapter.State;
+    pub const JobView = View;
     pub const blockSize = support.blockSize;
     pub const prepareOptions = support.prepareOptions;
     pub const profileOptions = support.profileOptions;
@@ -32,6 +34,13 @@ pub const Codec = struct {
     }
     pub fn encodeJob(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, start: usize, end: usize, options: Options, dictionary: ?Dictionary, work: *Profile) Error!void {
         try job_encoder.encode(allocator, out, input, start, end, options, dictionary, work);
+    }
+    pub fn encodeOwnedJob(allocator: std.mem.Allocator, out: *std.ArrayList(u8), view: View, options: Options, dictionary: ?Dictionary, work: *Profile) Error!void {
+        try job_encoder.encodeOwned(allocator, out, view, options, dictionary, work);
+    }
+    pub const encodeOwned = encodeOwnedJob;
+    pub fn appendOwnedJob(allocator: std.mem.Allocator, out: *std.ArrayList(u8), bytes: []const u8, view: View, options: Options, dictionary: ?Dictionary, state: *State, work: *Profile) Error!void {
+        try adapter.appendOwned(allocator, out, bytes, view, options, dictionary, state, work);
     }
     pub fn appendJob(allocator: std.mem.Allocator, out: *std.ArrayList(u8), bytes: []const u8, input: []const u8, start: usize, end: usize, options: Options, dictionary: ?Dictionary, state: *State, work: *Profile, _: *types.Profile) Error!void {
         try adapter.append(allocator, out, bytes, input, start, end, options, dictionary, state, work);

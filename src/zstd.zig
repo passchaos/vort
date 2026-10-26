@@ -881,6 +881,7 @@ pub const ParallelCodecSupport = struct {
     pub const BlockScratch = NativeBlockEncodeScratch;
     pub const RepBeamScratch = lz77.RepBeamScratch;
     pub const Record = controlled_source.Record;
+    pub const Source = controlled_source.Source;
     pub const HistoryIndex = incremental_history_index.Index;
     pub const HistoryView = incremental_history.View;
     pub const Section = LiteralOnlySection;
@@ -921,8 +922,11 @@ pub const ParallelCodecSupport = struct {
     pub const frameChecksum = emitContentChecksum;
     pub const checkedU64 = checkedUsizeToU64;
     pub const rawBound = encodedNativeFrameBoundWithOptions;
+    pub const writeStreamHeader = IncrementalEncoderCodec.writeHeader;
+    pub const writeStreamChecksum = IncrementalEncoderCodec.writeChecksum;
+    pub const writeSkippable = IncrementalEncoderCodec.writeSkippable;
 
-    pub fn matchWindow(options: NativeFrameOptions, offset: usize, block_len: usize, last: bool) ParallelError!usize {
+    pub fn matchWindow(options: NativeFrameOptions, offset: Count, block_len: usize, last: bool) ParallelError!usize {
         return (try nativeMatchWindowLenForBlock(options, offset, block_len, last)) orelse try nativeEncoderWindowLen(options);
     }
     pub fn sequenceTables(spec: *const SequenceSpec) SequenceTables {
@@ -951,6 +955,37 @@ pub const ParallelCodecSupport = struct {
         profile.recordWindowPolicy(nativeExplicitWindowSize(options) catch unreachable, nativeEncoderWindowLen(options) catch unreachable);
         profile.recordEffectiveHq(encode_controls.effectiveHq(options) catch unreachable);
     }
+    pub fn validateStream(options: NativeFrameOptions, expected: ?Count, dictionary_id: ?u32) ParallelError!void {
+        var inner = options;
+        inner.control_profile = null;
+        inner.memory_profile = null;
+        inner.max_total_working_memory = null;
+        try IncrementalEncoderCodec.validate(inner, expected, dictionary_id);
+    }
+    pub fn streamWindowLimit(options: NativeFrameOptions, expected: ?Count) ParallelError!usize {
+        const configured = try nativeEncoderWindowLen(options);
+        if (expected) |size| {
+            if (options.include_content_size and try nativeFrameUsesSingleSegment(@intCast(size), options))
+                return stream_count.bounded(size, configured);
+        }
+        return configured;
+    }
+    pub fn streamBlockSize(options: NativeFrameOptions, expected: ?Count) ParallelError!usize {
+        // Validate the same strategy/settings without using its retained
+        // history budget as the wire Block size for the new stream route.
+        _ = try nativeBlockSizeMax(options);
+        _ = try nativeMatchSearchBudget(options);
+        const strategy_limit = if (encode_controls.strategy(options) == .optimal) encode_controls.optimal_block_limit else std.compress.zstd.block_size_max;
+        const requested = @min(options.block_size_max, strategy_limit);
+        var format_window: u64 = (try nativeExplicitWindowSize(options)) orelse native_dictionary_window_len;
+        if (expected) |size| {
+            // An empty frame still needs nonzero Job geometry and one terminal
+            // raw block. All nonempty Single Segment Blocks obey its true FCS.
+            if (options.include_content_size and size != 0 and try nativeFrameUsesSingleSegment(@intCast(size), options))
+                format_window = @intCast(size);
+        }
+        return stream_count.bounded(@intCast(format_window), requested);
+    }
 };
 
 const zstd = @This();
@@ -959,6 +994,39 @@ test "Zstd magicless public contracts" {
     try @import("zstd_magicless_tests.zig").contracts(@This());
 }
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
+pub const IncrementalParallelOptions = @import("zstd/incremental_parallel/types.zig").ParallelOptions;
+pub const IncrementalParallelProfile = @import("zstd/incremental_parallel/types.zig").Profile;
+pub const IncrementalParallelSnapshot = @import("zstd/incremental_parallel/types.zig").Snapshot;
+pub const NativeIncrementalParallelFrameEncoder = @import("zstd/incremental_parallel/encoder.zig").Encoder(@import("zstd/parallel/incremental_codec.zig").IncrementalCodec);
+
+test "Zstd parallel incremental bounded codec preserves actual prefix matches across wide positions" {
+    const allocator = std.testing.allocator;
+    const codec = @import("zstd/parallel/incremental_codec.zig").IncrementalCodec;
+    var bytes: [1024 + 128]u8 = undefined;
+    var random: u32 = 0x537d_9821;
+    for (bytes[0..1024]) |*byte| {
+        random = random *% 1664525 +% 1013904223;
+        byte.* = @truncate(random >> 24);
+    }
+    @memcpy(bytes[1024..], bytes[768..896]);
+    const dictionary = NativeDictionary.init(0x5312, bytes[0..128]);
+    const options: NativeFrameOptions = .{ .include_content_size = false, .content_checksum = false, .window_log = 10, .max_match_history_len = 1024, .block_size_max = 128, .strategy = .fast };
+    const view: codec.JobView = .{ .bytes = &bytes, .prefix_len = 1024, .frame_offset = (@as(Count, 1) << 32) + 37, .final = true, .window_limit = 1024 };
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    var worker: EncoderControlProfile = .{};
+    try codec.encodeOwnedJob(allocator, &encoded, view, options, dictionary, &worker);
+    var actual = try codec.initialState(dictionary);
+    defer codec.deinitState(allocator, &actual);
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(allocator);
+    var work: EncoderControlProfile = .{};
+    try codec.appendOwnedJob(allocator, &output, encoded.items, view, options, dictionary, &actual, &work);
+    try std.testing.expect(work.history_sequences != 0);
+    try std.testing.expectEqual(@as(u64, 0), work.dictionary_sequences);
+    try std.testing.expect(work.max_distance <= 1024);
+    try std.testing.expectEqual(@as(usize, 1), try codec.blockCount(output.items));
+}
 
 test "Zstd HQ exact offset wire retains direct value when a repeat has the same distance" {
     const allocator = std.testing.allocator;
@@ -1077,6 +1145,11 @@ test "Zstd HQ incremental header allocation failure retains no partial magic bef
 }
 
 test {
+    _ = @import("zstd/incremental_parallel/tests/helpers.zig").run(@This());
+    _ = @import("zstd/incremental_parallel/tests/contracts.zig").run(@This());
+    _ = @import("zstd/incremental_parallel/tests/resources.zig").run(@This());
+    _ = @import("zstd/incremental_parallel/tests/movement.zig").run(@This());
+    _ = @import("zstd/incremental_parallel/queue.zig");
     _ = @import("zstd/parallel/tests/contracts.zig").run(@This());
     _ = @import("zstd/parallel/tests/resources.zig").run(@This());
     _ = @import("zstd/parallel/tests/large_sequences.zig").run(@This());

@@ -246,6 +246,23 @@ pub fn build(b: *std.Build) void {
     zstd_parallel_frame_wasm_run.addArtifactArg(zstd_parallel_frame_wasm);
     const zstd_parallel_frame_wasm_step = b.step("test-zstd-parallel-frame-wasm", "Execute single-frame parallel Zstd fallback and heap contracts in WebAssembly");
     zstd_parallel_frame_wasm_step.dependOn(&zstd_parallel_frame_wasm_run.step);
+    const zstd_incremental_parallel_wasm = b.addExecutable(.{
+        .name = "vort-zstd-incremental-parallel-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/zstd_incremental_parallel_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "zstd", .module = zstd_parallel_wasm_mod }},
+        }),
+    });
+    zstd_incremental_parallel_wasm.entry = .disabled;
+    zstd_incremental_parallel_wasm.rdynamic = true;
+    zstd_incremental_parallel_wasm.stack_size = 8 * 1024 * 1024;
+    const zstd_incremental_parallel_wasm_run = b.addSystemCommand(&.{ "node", "tools/zstd/incremental_parallel_wasm_gate.js" });
+    zstd_incremental_parallel_wasm_run.addArtifactArg(zstd_incremental_parallel_wasm);
+    const zstd_incremental_parallel_wasm_step = b.step("test-zstd-parallel-incremental-wasm", "Execute owned incremental Zstd worker fallback, progress and quota contracts in WebAssembly");
+    zstd_incremental_parallel_wasm_step.dependOn(&zstd_incremental_parallel_wasm_run.step);
     const br_stored_memory_wasm = b.addExecutable(.{
         .name = "vort-br-stored-memory-wasm",
         .root_module = b.createModule(.{
@@ -667,6 +684,42 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_parallel_frame_single_step = b.step("test-zstd-parallel-frame-single", "Run single-frame parallel Zstd contracts through synchronous fallback");
     zstd_parallel_frame_single_step.dependOn(&b.addRunArtifact(zstd_parallel_frame_single_tests).step);
+    const zstd_incremental_parallel_tests = b.addTest(.{
+        .name = "vort-zstd-incremental-parallel-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{"Zstd parallel incremental"},
+    });
+    const zstd_incremental_parallel_root_tests = b.addTest(.{
+        .name = "vort-zstd-incremental-parallel-root-tests",
+        .root_module = tests_mod,
+        .filters = &.{"root Zstd parallel incremental consumer contracts"},
+    });
+    const zstd_incremental_parallel_step = b.step("test-zstd-parallel-incremental", "Run persistent owned Zstd workers, state transitions and ZIP consumer contracts");
+    zstd_incremental_parallel_step.dependOn(&b.addRunArtifact(zstd_incremental_parallel_tests).step);
+    zstd_incremental_parallel_step.dependOn(&b.addRunArtifact(zstd_incremental_parallel_root_tests).step);
+    const zstd_incremental_parallel_single_tests = b.addTest(.{
+        .name = "vort-zstd-incremental-parallel-single-tests",
+        .root_module = zstd_parallel_single_mod,
+        .filters = &.{"Zstd parallel incremental"},
+    });
+    const zstd_incremental_parallel_single_step = b.step("test-zstd-parallel-incremental-single", "Run persistent incremental Zstd contracts with synchronous fallback");
+    zstd_incremental_parallel_single_step.dependOn(&b.addRunArtifact(zstd_incremental_parallel_single_tests).step);
+    const zstd_incremental_parallel_probe = b.addExecutable(.{
+        .name = "vort-zstd-incremental-parallel-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/incremental_parallel_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zstd", .module = zstd_tests_mod }},
+        }),
+    });
+    const zstd_incremental_parallel_probe_step = b.step("build-zstd-incremental-parallel-probe", "Build the public owned incremental Zstd interoperability probe");
+    zstd_incremental_parallel_probe_step.dependOn(&b.addInstallArtifact(zstd_incremental_parallel_probe, .{}).step);
+    const zstd_incremental_parallel_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/incremental_parallel_diff.py", "--probe" });
+    zstd_incremental_parallel_diff.addArtifactArg(zstd_incremental_parallel_probe);
+    if (b.args) |args| zstd_incremental_parallel_diff.addArgs(args);
+    const zstd_incremental_parallel_diff_step = b.step("run-zstd-incremental-parallel-diff", "Validate owned incremental Zstd frames, caller progress and resource limits against libzstd");
+    zstd_incremental_parallel_diff_step.dependOn(&zstd_incremental_parallel_diff.step);
     const zstd_parallel_frame_probe = b.addExecutable(.{
         .name = "vort-zstd-parallel-frame-probe",
         .root_module = b.createModule(.{
@@ -7393,6 +7446,11 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_parallel_frame_single_tests.step);
     check_step.dependOn(&zstd_parallel_frame_probe.step);
     check_step.dependOn(&zstd_parallel_frame_wasm.step);
+    check_step.dependOn(&zstd_incremental_parallel_tests.step);
+    check_step.dependOn(&zstd_incremental_parallel_root_tests.step);
+    check_step.dependOn(&zstd_incremental_parallel_single_tests.step);
+    check_step.dependOn(&zstd_incremental_parallel_probe.step);
+    check_step.dependOn(&zstd_incremental_parallel_wasm.step);
     check_step.dependOn(&xz_parallel_tests.step);
     check_step.dependOn(&xz_parallel_single_tests.step);
     check_step.dependOn(&xz_parallel_probe.step);

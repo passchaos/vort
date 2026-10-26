@@ -23734,3 +23734,34 @@ reuse, so production keeps the simpler independently owned plans.
   Persistent incremental single-frame jobs and CLI worker flags are follow-ups;
   no constant-memory, libzstd MT algorithm or speed/ratio/RSS equivalence is
   assigned.
+
+- 2026-10-26: a separate native incremental parallel Frame encoder
+  takes native frame options (unknown-size default) and required persistent
+  parallel policy, preserving the old serial class. Full jobs stay filling until
+  valid following input/flush/finish seals nonfinal/nonfinal/final output. The
+  Header drains before startup/input; owned prefix/plaintext includes all accepted
+  queued predecessors, permits next-step caller overwrite and keeps moved worker
+  state heap-stable. Global Count/local prefix/finality/window are independent
+  views, and transactional original-job decode/global-state re-emission keeps
+  actual frame entropy/repcodes with original strategies/HQ/budgets. Rolling
+  H-byte history and O(H+J) snapshots per bounded slot plus one front unit replace
+  full plaintext/frame staging. Plaintext credits last until each job's final
+  caller output byte; prefix/codec/history/output/control storage counts as heap.
+  Explicit partial flush can fit a cap below job size without automatic splitting.
+  Cumulative input/output, whole pending unit and per-frame job limits support
+  recoverable preadmission/retry, while worker/spawn/heap and short-finish pledge
+  errors stop/join with sticky precise failed-step progress. Native emitted
+  statistics commit only fully delivered jobs, separate from internal publication.
+  Reset preserves captured settings/four runtime caps without allocation;
+  transactional next-frame keeps stream totals while clearing frame history/hash.
+  Dictionary derivation/raw zero, standard-only skippables and ZIP explicit
+  `zstd_parallel_options` pass dedicated contracts, including direct ZipCrypto/
+  WinZip AES failure output and retained PKWARE Strong bridge bytes. Raw/RLE jobs
+  retain zero match history without treating that as an invalid format window;
+  runtime zero Job caps reject before progress and reset preserves the last legal
+  value. [Functional evidence](performance/zstd-incremental-parallel-functional-baseline.md)
+  records native Debug/ReleaseFast 156/156 each, synchronous 62 pass/one skip,
+  four Wasm32 operations, a fixed-libzstd 171/171 matrix with peak two active
+  workers, stable 4 MiB long-input capacities, and 92/92 saved one-shot wires.
+  The prior one-shot/reference/performance epochs are not refreshed. CLI worker
+  flags and industry-best speed/ratio/RSS claims are not added by this increment.

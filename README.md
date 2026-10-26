@@ -108,7 +108,7 @@ The library is under active development. Its current capabilities include:
   workflows; [the FastCover baseline](docs/performance/fast-cover-training-x86.md)
   records functional coverage and the remaining training-time/output gaps,
   standardized seekable-stream encoding with output-bound, caller-owned-buffer, reusable encoder, and deterministic caller-selected parallel frame APIs, plus zero-allocation terminal seek-table parsing/iteration and bounded range decode (including preset-dictionary encoding, dictionary-set frame selection, optional per-frame checksum verification, decompressed-offset lookup, and a reusable caller-owned cumulative index with O(1) entry access and O(log n) offset lookup),
-  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
+  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, a persistent bounded single-frame parallel encoder with owned caller input, flush/finish, dictionaries, skippables, exact failed progress and explicit ZIP integration, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;

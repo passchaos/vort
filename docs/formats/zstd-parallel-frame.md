@@ -149,8 +149,13 @@ active workers three and independently parse a 1248-sequence Block. Same-geometr
 worker-one output, full reference content and exact consumption are checked.
 These are functional observations, not a libzstd MT performance/algorithm claim.
 
-This increment provides one-shot native single-frame jobs. Persistent incremental
-single-frame job encoding and CLI worker flags are not added. Existing candidate
+This increment provides one-shot native single-frame jobs. Its subsequent
+[persistent incremental class](zstd-incremental-parallel.md) is under independent
+validation, with owned prefix/plaintext, full-job sealing, one front job and
+final-byte delivery credit. [New runtime evidence](../performance/zstd-incremental-parallel-functional-baseline.md)
+passes native Debug/ReleaseFast, synchronous and Wasm32 execution, a 171-case
+fixed-libzstd differential and the earlier 92 saved one-shot wires.
+CLI worker flags are not added. Existing candidate
 MT and independent seekable-frame MT remain separate capabilities. Real Wasm
 fallback and full native Zstd 1128/1128 validation retain their own scopes in the
 baseline. No throughput, ratio or RSS leadership follows from these gates.

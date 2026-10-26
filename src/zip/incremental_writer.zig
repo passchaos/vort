@@ -56,6 +56,9 @@ pub const Options = struct {
     /// Zstandard block/window/parser policy. Content-size signaling is derived
     /// from each entry's `expected_size`.
     zstd_options: codecs.ZstdOptions = .{},
+    /// Explicit persistent parallel Zstandard policy. Null retains serial
+    /// encoding; content-size signaling still follows each entry's pledge.
+    zstd_parallel_options: ?codecs.ZstdParallelOptions = null,
     /// Borrowed preset history used by every Zstandard entry. The descriptor
     /// and its bytes must remain stable until `deinit`.
     zstd_dictionary: ?zstd.NativeDictionary = null,
@@ -998,6 +1001,7 @@ pub const Writer = struct {
             .implode = self.options.implode_options,
             .bzip2 = self.options.bzip2_options,
             .zstd = self.options.zstd_options,
+            .zstd_parallel = self.options.zstd_parallel_options,
             .zstd_dictionary = self.options.zstd_dictionary,
             .lzma = self.options.lzma_options,
             .xz = self.options.xz_options,

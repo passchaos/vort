@@ -2748,6 +2748,14 @@ pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResu
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
 pub const ZstdLevelFrameEncoder = zstd.LevelFrameEncoder;
 pub const ZstdNativeIncrementalFrameEncoder = zstd.NativeIncrementalFrameEncoder;
+pub const ZstdNativeIncrementalParallelFrameEncoder = zstd.NativeIncrementalParallelFrameEncoder;
+pub const ZstdIncrementalParallelOptions = zstd.IncrementalParallelOptions;
+pub const ZstdIncrementalParallelProfile = zstd.IncrementalParallelProfile;
+pub const ZstdIncrementalParallelSnapshot = zstd.IncrementalParallelSnapshot;
+
+test "root Zstd parallel incremental consumer contracts" {
+    try @import("tests/zstd_parallel_incremental_consumers.zig").contracts(@This());
+}
 
 test "root Zstd incremental encoder continues frames" {
     var encoder = try ZstdNativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, 3);

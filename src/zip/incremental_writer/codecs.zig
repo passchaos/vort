@@ -14,6 +14,7 @@ const reduce_encoder = @import("../reduce/incremental_encoder.zig");
 const shrink = @import("../shrink.zig");
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
+const zstd_codec = @import("zstd_codec.zig");
 const xz = @import("../../xz.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
@@ -23,6 +24,7 @@ pub const DclImplodeOptions = dcl_implode_encoder.Encoder.Options;
 pub const ImplodeOptions = implode_encoder.Encoder.Options;
 pub const Bzip2Options = bzip2.IncrementalEncoder.Options;
 pub const ZstdOptions = zstd.NativeFrameOptions;
+pub const ZstdParallelOptions = zstd_codec.ParallelOptions;
 pub const LzmaOptions = lzma_codec.Options;
 pub const XzOptions = xz.IncrementalEncoder.Options;
 pub const XzFilter = xz.Filter;
@@ -30,7 +32,7 @@ pub const PpmdOptions = ppmd_codec.Options;
 pub const ReduceOptions = reduce_encoder.Encoder.Options;
 pub const ShrinkOptions = shrink.IncrementalEncoder.Options;
 
-pub const Error = deflate.Error || deflate64.Error || dcl_implode.Error || implode.Error || reduce.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || deflate64.Error || dcl_implode.Error || implode.Error || reduce.Error || bzip2.IncrementalEncoder.Error || zstd_codec.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -42,6 +44,7 @@ pub const Options = struct {
     implode: ImplodeOptions,
     bzip2: Bzip2Options,
     zstd: ZstdOptions,
+    zstd_parallel: ?ZstdParallelOptions = null,
     zstd_dictionary: ?zstd.NativeDictionary,
     lzma: LzmaOptions,
     xz: XzOptions,
@@ -57,7 +60,7 @@ pub const State = union(enum) {
     dcl_implode: dcl_implode_encoder.Encoder,
     implode: implode_encoder.Encoder,
     bzip2: bzip2.IncrementalEncoder,
-    zstd: zstd.NativeIncrementalFrameEncoder,
+    zstd: zstd_codec.State,
     lzma: lzma_codec.State,
     xz: xz.IncrementalEncoder,
     ppmd: ppmd_codec.State,
@@ -130,35 +133,7 @@ pub const State = union(enum) {
                     allocator,
                     options.bzip2,
                 ) },
-            .zstandard_legacy, .zstandard => zstd_state: {
-                var zstd_options = try resolvedZstdOptions(options);
-                zstd_options.include_content_size = expected_size != null;
-                break :zstd_state .{ .zstd = if (options.zstd_dictionary) |dictionary|
-                    if (expected_size) |expected|
-                        try zstd.NativeIncrementalFrameEncoder.initExactSizeWithPresetDictionary(
-                            allocator,
-                            zstd_options,
-                            @intCast(expected),
-                            dictionary,
-                        )
-                    else
-                        try zstd.NativeIncrementalFrameEncoder.initWithPresetDictionary(
-                            allocator,
-                            zstd_options,
-                            dictionary,
-                        )
-                else if (expected_size) |expected|
-                    try zstd.NativeIncrementalFrameEncoder.initExactSize(
-                        allocator,
-                        zstd_options,
-                        @intCast(expected),
-                    )
-                else
-                    try zstd.NativeIncrementalFrameEncoder.init(
-                        allocator,
-                        zstd_options,
-                    ) };
-            },
+            .zstandard_legacy, .zstandard => .{ .zstd = try zstd_codec.State.init(allocator, options.zstd, options.zstd_parallel, options.zstd_dictionary, expected_size) },
             .lzma => .{ .lzma = try lzma_codec.State.init(
                 allocator,
                 options.lzma,
@@ -264,6 +239,7 @@ pub const State = union(enum) {
         return switch (self.*) {
             .deflate64 => |*encoder| encoder.failedProgress(),
             .xz => |*encoder| encoder.failedProgress(),
+            .zstd => |*encoder| encoder.failedProgress(),
             else => null,
         };
     }
@@ -307,8 +283,7 @@ pub fn validate(
             try validateExpectedSize(expected_size, options.bzip2.max_input_len);
         },
         .zstandard_legacy, .zstandard => {
-            _ = try resolvedZstdOptions(options);
-            try validateExpectedSize(expected_size, std.math.maxInt(usize));
+            try zstd_codec.validate(options.zstd, options.zstd_parallel, options.zstd_dictionary, expected_size);
         },
         .lzma => {
             if (options.lzma.dictionary_size < 4096 or
@@ -337,22 +312,6 @@ pub fn validate(
     }
 }
 
-fn resolvedZstdOptions(options: Options) Error!ZstdOptions {
-    var resolved = options.zstd;
-    if (resolved.format != .standard) return error.InvalidBlockPlan;
-    if (options.zstd_dictionary) |dictionary| {
-        if (resolved.dictionary_id != 0 and
-            resolved.dictionary_id != dictionary.id)
-        {
-            return error.InvalidBlockPlan;
-        }
-        resolved.dictionary_id = dictionary.id;
-    } else if (resolved.dictionary_id != 0) {
-        return error.InvalidBlockPlan;
-    }
-    return resolved;
-}
-
 pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
     return switch (method) {
         .deflate => options.deflate.max_input_len,
@@ -360,7 +319,7 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
         .dcl_implode => options.dcl_implode.max_input_len,
         .implode => options.implode.max_input_len,
         .bzip2 => options.bzip2.max_input_len,
-        .zstandard_legacy, .zstandard => std.math.maxInt(usize),
+        .zstandard_legacy, .zstandard => if (options.zstd_parallel == null) std.math.maxInt(usize) else null,
         .lzma => options.lzma.max_input_len,
         .xz => options.xz.max_input_len,
         .ppmd => options.ppmd.max_input_len,
