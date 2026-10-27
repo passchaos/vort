@@ -25,6 +25,28 @@ const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/f
 const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
 const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
+const best_candidates = @import("deflate/best_candidates.zig");
+const candidate_root = @This();
+const CandidateCodec = struct {
+    pub const Options = candidate_root.CompressionOptions;
+    pub const GzipHeader = candidate_root.GzipHeaderOptions;
+    pub const BitWriter = bitstream.BitWriter;
+    pub const storedFast = candidate_root.usesStoredFastPath;
+    pub const rawStored = candidate_root.encodeRawStoredAlloc;
+    pub const zlibStored = candidate_root.encodeZlibStoredAlloc;
+    pub const zlibDictionaryStored = candidate_root.encodeZlibStoredWithDictionaryAlloc;
+    pub const gzipStored = candidate_root.encodeGzipStoredWithHeaderAlloc;
+    pub const dynamicStats = candidate_root.usesOneShotDynamicStats;
+    pub const rawStats = candidate_root.encodeRawBestWithStatsAlloc;
+    pub const zlibStats = candidate_root.encodeZlibBestWithStatsAlloc;
+    pub const gzipStats = candidate_root.encodeGzipBestWithStatsAlloc;
+    pub const plan = candidate_root.planTokensAlloc;
+    pub const dictionaryPlan = candidate_root.planTokensWithDictionaryAlloc;
+    pub const rawTokens = candidate_root.writeBestTokensBlock;
+    pub const zlibTokens = candidate_root.encodeZlibBestTokensAlloc;
+    pub const gzipTokens = candidate_root.encodeGzipBestTokensWithHeaderAlloc;
+};
+const candidate_encoding = @import("deflate/best_encoding.zig").Codec(CandidateCodec);
 
 const incompressible_classifier_text_section = switch (builtin.object_format) {
     .elf => ".vort_deflate_incompressible",
@@ -889,32 +911,6 @@ pub fn resolveDeflateParams(params: DeflateParams) ParamsError!ResolvedDeflatePa
     };
 }
 
-const BestFallbackCandidates = struct {
-    items: [2]CompressionOptions = undefined,
-    len: usize = 0,
-
-    fn append(self: *BestFallbackCandidates, options: CompressionOptions) void {
-        self.items[self.len] = options;
-        self.len += 1;
-    }
-
-    fn slice(self: *const BestFallbackCandidates) []const CompressionOptions {
-        return self.items[0..self.len];
-    }
-};
-
-fn bestFallbackCandidates(options: CompressionOptions) BestFallbackCandidates {
-    const normalized = normalizeOptionsForStrategy(options);
-    var candidates = BestFallbackCandidates{};
-    if (normalized.strategy == .default and normalized.parser == .optimal) {
-        candidates.append(optionsForLevel(.default));
-        var filtered = options;
-        filtered.strategy = .filtered;
-        candidates.append(filtered);
-    }
-    return candidates;
-}
-
 pub const OwnedDecodeResult = struct {
     bytes: []u8,
     input_read: usize,
@@ -1091,26 +1087,10 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
-    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
-        return @call(.never_inline, encodeRawBestWithStatsAlloc, .{ allocator, input, options });
-    }
-    const plan = try planTokensAlloc(allocator, input, options);
-    defer plan.deinit(allocator);
-    var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
-    try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
-    const encoded = try writer.toOwnedSlice(allocator);
-    errdefer allocator.free(encoded);
-    for (bestFallbackCandidates(options).slice()) |fallback_options| {
-        const fallback = try encodeRawBestAlloc(allocator, input, fallback_options);
-        errdefer allocator.free(fallback);
-        if (fallback.len < encoded.len) {
-            allocator.free(encoded);
-            return fallback;
-        }
-        allocator.free(fallback);
-    }
-    return encoded;
+    var selected = try candidate_encoding.raw(allocator, input, options);
+    errdefer allocator.free(selected);
+    try best_candidates.compete(allocator, &selected, options, comptime optionsForLevel(.default), candidate_encoding.raw, .{ allocator, input });
+    return selected;
 }
 
 fn encodeRawBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -1191,23 +1171,10 @@ fn sampledHistoryMatch(input: []const u8, history: []const u8) bool {
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
-    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
-    defer plan.deinit(allocator);
-    var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
-    try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
-    const encoded = try writer.toOwnedSlice(allocator);
-    errdefer allocator.free(encoded);
-    for (bestFallbackCandidates(options).slice()) |fallback_options| {
-        const fallback = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
-        errdefer allocator.free(fallback);
-        if (fallback.len < encoded.len) {
-            allocator.free(encoded);
-            return fallback;
-        }
-        allocator.free(fallback);
-    }
-    return encoded;
+    var selected = try candidate_encoding.rawDictionary(allocator, input, dictionary, options);
+    errdefer allocator.free(selected);
+    try best_candidates.compete(allocator, &selected, options, comptime optionsForLevel(.default), candidate_encoding.rawDictionary, .{ allocator, input, dictionary });
+    return selected;
 }
 
 pub fn encodeRawLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
@@ -7661,23 +7628,10 @@ fn encodeZlibDynamicSplitDirectAlloc(allocator: std.mem.Allocator, input: []cons
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
-    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
-        return @call(.never_inline, encodeZlibBestWithStatsAlloc, .{ allocator, input, options });
-    }
-    const plan = try planTokensAlloc(allocator, input, options);
-    defer plan.deinit(allocator);
-    const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
-    errdefer allocator.free(encoded);
-    for (bestFallbackCandidates(options).slice()) |fallback_options| {
-        const fallback = try encodeZlibBestAlloc(allocator, input, fallback_options);
-        errdefer allocator.free(fallback);
-        if (fallback.len < encoded.len) {
-            allocator.free(encoded);
-            return fallback;
-        }
-        allocator.free(fallback);
-    }
-    return encoded;
+    var selected = try candidate_encoding.zlib(allocator, input, options);
+    errdefer allocator.free(selected);
+    try best_candidates.compete(allocator, &selected, options, comptime optionsForLevel(.default), candidate_encoding.zlib, .{ allocator, input });
+    return selected;
 }
 
 fn encodeZlibBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -7702,20 +7656,10 @@ pub fn encodeZlibPngUltraFastAlloc(
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
-    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
-    defer plan.deinit(allocator);
-    const encoded = try encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
-    errdefer allocator.free(encoded);
-    for (bestFallbackCandidates(options).slice()) |fallback_options| {
-        const fallback = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
-        errdefer allocator.free(fallback);
-        if (fallback.len < encoded.len) {
-            allocator.free(encoded);
-            return fallback;
-        }
-        allocator.free(fallback);
-    }
-    return encoded;
+    var selected = try candidate_encoding.zlibDictionary(allocator, input, dictionary, options);
+    errdefer allocator.free(selected);
+    try best_candidates.compete(allocator, &selected, options, comptime optionsForLevel(.default), candidate_encoding.zlibDictionary, .{ allocator, input, dictionary });
+    return selected;
 }
 
 pub fn encodeZlibLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
@@ -16463,23 +16407,10 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 
 pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
-    if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
-        return @call(.never_inline, encodeGzipBestWithStatsAlloc, .{ allocator, input, options, header_options });
-    }
-    const plan = try planTokensAlloc(allocator, input, options);
-    defer plan.deinit(allocator);
-    const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
-    errdefer allocator.free(encoded);
-    for (bestFallbackCandidates(options).slice()) |fallback_options| {
-        const fallback = try encodeGzipBestWithHeaderAlloc(allocator, input, fallback_options, header_options);
-        errdefer allocator.free(fallback);
-        if (fallback.len < encoded.len) {
-            allocator.free(encoded);
-            return fallback;
-        }
-        allocator.free(fallback);
-    }
-    return encoded;
+    var selected = try candidate_encoding.gzip(allocator, input, header_options, options);
+    errdefer allocator.free(selected);
+    try best_candidates.compete(allocator, &selected, options, comptime optionsForLevel(.default), candidate_encoding.gzip, .{ allocator, input, header_options });
+    return selected;
 }
 
 fn encodeGzipBestWithStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
@@ -23426,4 +23357,20 @@ test "PNG ultrafast zlib streams round trip through general decoder" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+}
+
+test "best selection compares short paired repeats against every complete candidate" {
+    try @import("deflate/tests/best_selection.zig").pairs(@This());
+}
+test "best selection preserves stored fixed blocks in raw zlib and gzip" {
+    try @import("deflate/tests/best_selection.zig").fixed(@This());
+}
+test "best selection preserves dictionary lookback window" {
+    try @import("deflate/tests/best_selection.zig").dictionary(@This());
+}
+test "best selection retains custom search match and block bounds" {
+    try @import("deflate/tests/best_selection.zig").bounds(@This());
+}
+test "best selection releases all failed candidates and winning buffers" {
+    try @import("deflate/tests/best_selection.zig").ownership(@This());
 }

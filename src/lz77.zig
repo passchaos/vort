@@ -4,6 +4,7 @@ const scan_lazy = @import("lz77/scan/lazy.zig");
 const scan_indexed_match = @import("lz77/scan/indexed_match.zig");
 const scan_prefix_match = @import("lz77/scan/prefix_match.zig");
 const optimal_length_minima = @import("lz77/optimal/length_minima.zig");
+const optimal_storage = @import("lz77/optimal/storage.zig");
 const optimal_prefix_jumps = @import("lz77/optimal/prefix_jumps.zig");
 const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
 const core = @import("core.zig");
@@ -417,8 +418,8 @@ fn buildOptimalCompactHashIndex(
     head_initialized: *[hash_head_init_words]u64,
 ) !void {
     if (input.len > optimal_compact_index_empty) return error.InvalidBlockPlan;
-    try head.resize(allocator, hash_head_table_size);
-    try prev.resize(allocator, input.len);
+    try optimal_storage.resizeFresh(head, allocator, hash_head_table_size);
+    try optimal_storage.resizeFresh(prev, allocator, input.len);
     @memset(head_initialized, 0);
     for (0..input.len) |position| {
         const hash = hashAtInput(input, position, head.items.len, .three) orelse continue;
@@ -1542,8 +1543,8 @@ fn optimalPlanReuseInternalProfiled(
     // packed length-choice key's shift defined.
     if (comptime packed_optimal_length_choices)
         if (n > (std.math.maxInt(usize) >> optimal_length_bits) / 9) return error.InvalidBlockPlan;
-    try scratch.costs.resize(allocator, n + 1);
-    try scratch.steps.resize(allocator, n);
+    try optimal_storage.resizeFresh(&scratch.costs, allocator, n + 1);
+    try optimal_storage.resizeFresh(&scratch.steps, allocator, n);
     scratch.tokens.clearRetainingCapacity();
     if (enable_prefix_bound and input.len <= optimal_compact_index_empty) {
         const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
@@ -4812,4 +4813,20 @@ fn acceptsEveryHashMatchReference(options: GreedyOptions) bool {
         if (match_cost > literal_min_cost or options.min_savings_bits > literal_min_cost - match_cost) return false;
     }
     return true;
+}
+
+test "optimal fresh geometry uses exact initial capacities and reuses every owner" {
+    var input: [4096]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @intCast(i % 7);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const options: GreedyOptions = .{ .max_chain = 16, .max_candidates = 8 };
+    _ = try optimalPlanReuse(&scratch, std.testing.allocator, &input, options);
+    try std.testing.expectEqual(@as(usize, input.len + 1), scratch.costs.capacity);
+    try std.testing.expectEqual(@as(usize, input.len), scratch.steps.capacity);
+    try std.testing.expectEqual(@as(usize, input.len), scratch.compact_prev.capacity);
+    try std.testing.expectEqual(@as(usize, hash_head_table_size), scratch.compact_head.capacity);
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    _ = try optimalPlanReuse(&scratch, failing.allocator(), &input, options);
+    try std.testing.expect(!failing.has_induced_failure);
 }
