@@ -3884,6 +3884,21 @@ pub fn build(b: *std.Build) void {
     br_ratio_stage_profile_gate.step.dependOn(&run_br_ratio_stage_profile_csv.step);
     const br_ratio_stage_profile_gate_step = b.step("run-br-ratio-stage-profile-gate", "Validate Brotli ratio stage profile coverage and counters");
     br_ratio_stage_profile_gate_step.dependOn(&br_ratio_stage_profile_gate.step);
+    const br_literal_context_search_bench = b.addExecutable(.{
+        .name = "vort-br-literal-context-search-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/literal_context_search_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "context_bench", .module = b.createModule(.{ .root_source_file = b.path("src/br_context_bench.zig"), .target = target, .optimize = .ReleaseFast }) },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_literal_context_search_bench = b.addRunArtifact(br_literal_context_search_bench);
+    if (b.args) |args| run_br_literal_context_search_bench.addArgs(args);
+    b.step("run-br-literal-context-search-bench", "Measure ordinary literal-context search with exhaustive proposal equality").dependOn(&run_br_literal_context_search_bench.step);
     const br_literal_context_profile_exe = b.addExecutable(.{
         .name = "vort-br-literal-context-profile",
         .root_module = b.createModule(.{

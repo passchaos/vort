@@ -1,0 +1,380 @@
+{
+  "schema": "vort.brotli.literal-context-comparison.v1",
+  "baseline": "head",
+  "executables": {
+    "head": "/tmp/vort-br-fused-20261027-yjsv4vll/head/search",
+    "fused": "/tmp/vort-br-fused-20261027-yjsv4vll/fused/search",
+    "candidate": "/tmp/vort-br-fused-20261027-yjsv4vll/candidate/search"
+  },
+  "blocks": 5,
+  "rounds_per_block": 9,
+  "aggregation": "median across blocks of minimum ordinary search time per block",
+  "cases": 36,
+  "all_proposals_equal": true,
+  "geometric_ratios": {
+    "fused": 0.939160347118237,
+    "candidate": 0.9451146981033637
+  },
+  "rows": [
+    {
+      "case": "dickens",
+      "input_bytes": 4096,
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "head_ns": 3363111,
+      "fused_ns": 3145884,
+      "fused_over_baseline": 0.9354089115702693,
+      "candidate_ns": 3161349,
+      "candidate_over_baseline": 0.9400073324966081
+    },
+    {
+      "case": "dickens",
+      "input_bytes": 16384,
+      "input_sha256": "626287fc08506a3f5c970220e11a187237abd7a24c86e907699a781b1e6ef88d",
+      "head_ns": 3915839,
+      "fused_ns": 3601090,
+      "fused_over_baseline": 0.9196215676895807,
+      "candidate_ns": 3630285,
+      "candidate_over_baseline": 0.9270771857576371
+    },
+    {
+      "case": "dickens",
+      "input_bytes": 65536,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "head_ns": 5094450,
+      "fused_ns": 4824280,
+      "fused_over_baseline": 0.9469677786610919,
+      "candidate_ns": 4835685,
+      "candidate_over_baseline": 0.9492064894149516
+    },
+    {
+      "case": "mozilla",
+      "input_bytes": 4096,
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "head_ns": 5897307,
+      "fused_ns": 5464680,
+      "fused_over_baseline": 0.9266399052991475,
+      "candidate_ns": 5507729,
+      "candidate_over_baseline": 0.9339396778902641
+    },
+    {
+      "case": "mozilla",
+      "input_bytes": 16384,
+      "input_sha256": "227bb1ae54a92c0d7199598e77e6e1c5ca3cdbeca784e106c9c68639a70bae21",
+      "head_ns": 8088767,
+      "fused_ns": 7721041,
+      "fused_over_baseline": 0.9545386830897713,
+      "candidate_ns": 7721886,
+      "candidate_over_baseline": 0.9546431489496483
+    },
+    {
+      "case": "mozilla",
+      "input_bytes": 65536,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "head_ns": 13692245,
+      "fused_ns": 13264100,
+      "fused_over_baseline": 0.9687308399754752,
+      "candidate_ns": 13387404,
+      "candidate_over_baseline": 0.977736229522624
+    },
+    {
+      "case": "mr",
+      "input_bytes": 4096,
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "head_ns": 4923263,
+      "fused_ns": 4567181,
+      "fused_over_baseline": 0.9276735774627518,
+      "candidate_ns": 4586933,
+      "candidate_over_baseline": 0.9316855508226962
+    },
+    {
+      "case": "mr",
+      "input_bytes": 16384,
+      "input_sha256": "c00aabad04d794e4ee24d15b8f3df85f9987c715be4283e9620a6a79b13708fa",
+      "head_ns": 6650644,
+      "fused_ns": 6241483,
+      "fused_over_baseline": 0.9384779879963504,
+      "candidate_ns": 6232042,
+      "candidate_over_baseline": 0.937058426221581
+    },
+    {
+      "case": "mr",
+      "input_bytes": 65536,
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "head_ns": 7575551,
+      "fused_ns": 7116976,
+      "fused_over_baseline": 0.9394664493711414,
+      "candidate_ns": 7255116,
+      "candidate_over_baseline": 0.9577014266025006
+    },
+    {
+      "case": "nci",
+      "input_bytes": 4096,
+      "input_sha256": "ba4b093b246232b6fca2836587cee3afb07f8b243a01e549a5afca66559bd8b1",
+      "head_ns": 1974578,
+      "fused_ns": 1871814,
+      "fused_over_baseline": 0.9479564747505543,
+      "candidate_ns": 1879744,
+      "candidate_over_baseline": 0.9519725227365037
+    },
+    {
+      "case": "nci",
+      "input_bytes": 16384,
+      "input_sha256": "de22c94d1e89528f08d92f7defe874f107950dd5a007af9f6f5f3f71d0eb18e7",
+      "head_ns": 2441531,
+      "fused_ns": 2191174,
+      "fused_over_baseline": 0.8974590123983681,
+      "candidate_ns": 2193744,
+      "candidate_over_baseline": 0.8985116306121036
+    },
+    {
+      "case": "nci",
+      "input_bytes": 65536,
+      "input_sha256": "b01b411ac3b5ce2fbf37242c0c59d2d236d2f7039937c1b1a0f18f4cc02549fe",
+      "head_ns": 3163517,
+      "fused_ns": 2882731,
+      "fused_over_baseline": 0.9112424557857599,
+      "candidate_ns": 2883852,
+      "candidate_over_baseline": 0.911596808235897
+    },
+    {
+      "case": "ooffice",
+      "input_bytes": 4096,
+      "input_sha256": "e5c705e97c5069fd0e0f58a98dc73c6103f4cb2ad8097c64c82534e701a8326a",
+      "head_ns": 3493177,
+      "fused_ns": 3451919,
+      "fused_over_baseline": 0.9881889752508962,
+      "candidate_ns": 3508868,
+      "candidate_over_baseline": 1.0044918994943572
+    },
+    {
+      "case": "ooffice",
+      "input_bytes": 16384,
+      "input_sha256": "848ac05888dbf7de7059e2fdb72f83e131234eb81acb076814791eadbb3f426b",
+      "head_ns": 10622647,
+      "fused_ns": 10172732,
+      "fused_over_baseline": 0.9576456790854483,
+      "candidate_ns": 10108928,
+      "candidate_over_baseline": 0.9516392665594555
+    },
+    {
+      "case": "ooffice",
+      "input_bytes": 65536,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "head_ns": 16787834,
+      "fused_ns": 16318377,
+      "fused_over_baseline": 0.9720358802690091,
+      "candidate_ns": 16374886,
+      "candidate_over_baseline": 0.9754019488160295
+    },
+    {
+      "case": "osdb",
+      "input_bytes": 4096,
+      "input_sha256": "d7d2353e029d7745a76dfa82a69084ad3896c16dd07eb7397916a2f2838ec38c",
+      "head_ns": 8694325,
+      "fused_ns": 8273086,
+      "fused_over_baseline": 0.9515501203371165,
+      "candidate_ns": 8363936,
+      "candidate_over_baseline": 0.9619994651683713
+    },
+    {
+      "case": "osdb",
+      "input_bytes": 16384,
+      "input_sha256": "a0ade42dfe00837c696794bb4edfcad1c54c5a76951c4d04c1858a8b94a65716",
+      "head_ns": 11276281,
+      "fused_ns": 10754314,
+      "fused_over_baseline": 0.953711068392141,
+      "candidate_ns": 10821271,
+      "candidate_over_baseline": 0.9596489303521258
+    },
+    {
+      "case": "osdb",
+      "input_bytes": 65536,
+      "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+      "head_ns": 16274151,
+      "fused_ns": 15838940,
+      "fused_over_baseline": 0.9732575296861876,
+      "candidate_ns": 15698432,
+      "candidate_over_baseline": 0.964623715240199
+    },
+    {
+      "case": "reymont",
+      "input_bytes": 4096,
+      "input_sha256": "849382ed7bd61eddf344a7ab603377c5bc5cfcc6a4ae6a2dc3d62936bbaea7ba",
+      "head_ns": 2885699,
+      "fused_ns": 2639892,
+      "fused_over_baseline": 0.9148189052288545,
+      "candidate_ns": 2689987,
+      "candidate_over_baseline": 0.9321786506492881
+    },
+    {
+      "case": "reymont",
+      "input_bytes": 16384,
+      "input_sha256": "70823c4a173b66ac4a1caa8344635af23c4b07bddd97702938bcbd421e7a192a",
+      "head_ns": 3503495,
+      "fused_ns": 3238506,
+      "fused_over_baseline": 0.9243643847072709,
+      "candidate_ns": 3267743,
+      "candidate_over_baseline": 0.9327094801048668
+    },
+    {
+      "case": "reymont",
+      "input_bytes": 65536,
+      "input_sha256": "a5ecaaabb133f1adf8de6062be6381d143e87f9f8050eea9b5be6f92b88c3c22",
+      "head_ns": 4548471,
+      "fused_ns": 4280667,
+      "fused_over_baseline": 0.9411221924906193,
+      "candidate_ns": 4290840,
+      "candidate_over_baseline": 0.9433587682542112
+    },
+    {
+      "case": "samba",
+      "input_bytes": 4096,
+      "input_sha256": "12ba8dcff0666f96815a671f3940d6cda6407e8227d336e9009c12f630fb5ec6",
+      "head_ns": 2912531,
+      "fused_ns": 2651821,
+      "fused_over_baseline": 0.9104867896685048,
+      "candidate_ns": 2648573,
+      "candidate_over_baseline": 0.909371608405198
+    },
+    {
+      "case": "samba",
+      "input_bytes": 16384,
+      "input_sha256": "25fae21136b3d2d46b3a84e41873ca16627a418d5c6af084dd460d0ff220845e",
+      "head_ns": 3435993,
+      "fused_ns": 3164756,
+      "fused_over_baseline": 0.921060083649763,
+      "candidate_ns": 3176042,
+      "candidate_over_baseline": 0.9243447236359329
+    },
+    {
+      "case": "samba",
+      "input_bytes": 65536,
+      "input_sha256": "3e0420984c0f260ea7350734600cea9d8500b745e2e4b7dbd4d1da1d1adac421",
+      "head_ns": 6656576,
+      "fused_ns": 6337152,
+      "fused_over_baseline": 0.9520137680393043,
+      "candidate_ns": 6390895,
+      "candidate_over_baseline": 0.9600874383466815
+    },
+    {
+      "case": "sao",
+      "input_bytes": 4096,
+      "input_sha256": "92e08af9eee68c2457011bc93bee210576ba580a9692b659d552919be74b75cb",
+      "head_ns": 10566945,
+      "fused_ns": 10183997,
+      "fused_over_baseline": 0.9637598189448322,
+      "candidate_ns": 10304231,
+      "candidate_over_baseline": 0.9751381312195719
+    },
+    {
+      "case": "sao",
+      "input_bytes": 16384,
+      "input_sha256": "87fc2512664a93d8fcae73c6acd7677095cd4ee028cc9af8a74a8bda0263ab9e",
+      "head_ns": 16144015,
+      "fused_ns": 15443620,
+      "fused_over_baseline": 0.9566158108748041,
+      "candidate_ns": 15612628,
+      "candidate_over_baseline": 0.9670845821191321
+    },
+    {
+      "case": "sao",
+      "input_bytes": 65536,
+      "input_sha256": "17cbd7166a47786139f60ba33b4e771ce0154f6fa56986883d129bc23f78ebee",
+      "head_ns": 23814242,
+      "fused_ns": 23208880,
+      "fused_over_baseline": 0.9745798333619017,
+      "candidate_ns": 23340201,
+      "candidate_over_baseline": 0.980094222608471
+    },
+    {
+      "case": "webster",
+      "input_bytes": 4096,
+      "input_sha256": "0f1c23dda964a6e7ef0ce5ab7440d320ab99b2925c7d3a910c30803462718e6b",
+      "head_ns": 3207350,
+      "fused_ns": 2912250,
+      "fused_over_baseline": 0.9079925795438601,
+      "candidate_ns": 2950457,
+      "candidate_over_baseline": 0.9199049059192168
+    },
+    {
+      "case": "webster",
+      "input_bytes": 16384,
+      "input_sha256": "a483d242ad86dedad4025c937f50d26e484a349e0dd3e9596b0cb8d0ba27281e",
+      "head_ns": 4111308,
+      "fused_ns": 3817379,
+      "fused_over_baseline": 0.9285071806831305,
+      "candidate_ns": 3831421,
+      "candidate_over_baseline": 0.9319226387320045
+    },
+    {
+      "case": "webster",
+      "input_bytes": 65536,
+      "input_sha256": "262258811321382f9e4f44d2184b6b7fed0336cf831446d8336c47d6ccc2b32e",
+      "head_ns": 6300284,
+      "fused_ns": 6000298,
+      "fused_over_baseline": 0.9523853210426705,
+      "candidate_ns": 5995377,
+      "candidate_over_baseline": 0.9516042451419651
+    },
+    {
+      "case": "x-ray",
+      "input_bytes": 4096,
+      "input_sha256": "6873e82888ca6fe7f1a60bd40f8cdbb087e0ce2f0bdfd48de8685604815c6901",
+      "head_ns": 5116878,
+      "fused_ns": 4699442,
+      "fused_over_baseline": 0.918419786440091,
+      "candidate_ns": 4788834,
+      "candidate_over_baseline": 0.9358898140624029
+    },
+    {
+      "case": "x-ray",
+      "input_bytes": 16384,
+      "input_sha256": "22060074497a51b2c6b0072d5d58f7a991a62258b4797d4df8765dca2cd0641b",
+      "head_ns": 5562322,
+      "fused_ns": 5286050,
+      "fused_over_baseline": 0.9503315342046001,
+      "candidate_ns": 5338127,
+      "candidate_over_baseline": 0.9596939911065918
+    },
+    {
+      "case": "x-ray",
+      "input_bytes": 65536,
+      "input_sha256": "b5a07146616bcd7c2d10071d41e07d204de0ac629c4ca37d8e867ff00574d0d8",
+      "head_ns": 6394163,
+      "fused_ns": 6111713,
+      "fused_over_baseline": 0.9558269002526211,
+      "candidate_ns": 6178382,
+      "candidate_over_baseline": 0.9662534408334601
+    },
+    {
+      "case": "xml",
+      "input_bytes": 4096,
+      "input_sha256": "69395e24d385f078cc45aaf0cc440a900b739f02a2a6415acd246cde64384742",
+      "head_ns": 3096351,
+      "fused_ns": 2774743,
+      "fused_over_baseline": 0.8961332226223706,
+      "candidate_ns": 2817067,
+      "candidate_over_baseline": 0.909802215575689
+    },
+    {
+      "case": "xml",
+      "input_bytes": 16384,
+      "input_sha256": "8af3e8eebb5386b540baa90b8ad66843e167e6dc7b3fe19f6b70c171e1fad6f6",
+      "head_ns": 3271849,
+      "fused_ns": 2984243,
+      "fused_over_baseline": 0.9120967990882219,
+      "candidate_ns": 3000583,
+      "candidate_over_baseline": 0.9170909170930566
+    },
+    {
+      "case": "xml",
+      "input_bytes": 65536,
+      "input_sha256": "e32aff2bebf00105a17dd57f5490c1986d17543cee837b42eb56b3e0e6f8e7f1",
+      "head_ns": 4151481,
+      "fused_ns": 3855646,
+      "fused_over_baseline": 0.9287398882471098,
+      "candidate_ns": 3856537,
+      "candidate_over_baseline": 0.9289545104506078
+    }
+  ]
+}

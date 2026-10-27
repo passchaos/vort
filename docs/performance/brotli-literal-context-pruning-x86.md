@@ -1,6 +1,7 @@
 # Brotli literal-context proposal pruning and shared tree memo
 
-Date: 2026-10-27. Baseline: `ba275bb6`. CPU: Intel i7-10700K, 16 threads,
+Date: 2026-10-27/28. Initial baseline: `ba275bb6`; fused-pass
+follow-up baseline: `71855833`. CPU: Intel i7-10700K, 16 threads,
 Zig 0.16.0 ReleaseFast. The objective of industry-best functionality and
 performance remains incomplete.
 
@@ -42,10 +43,11 @@ Two bounds are available for one tree:
 - The entropy bound uses the weighted Shannon sum
   `total*log2(total) - sum frequency*log2(frequency)` in f64, rounded down
   after a fixed 1.0-bit/tree safety margin. Each term is below 2^37 and the
-  f64 error over at most 256 symbols is far below 0.1 bit, so the one-bit
-  margin is a strict, platform-independent floor. `frequency*log2(frequency)`
-  is lazily tabulated once per distinct frequency (`WeightTable`), making
-  each bound evaluation a pass of f64 multiplies. The table is a direct
+  strict f64 error over at most 256 symbols is far below one bit when
+  `log2` has a few-ulp error. This is the numeric assumption behind the margin;
+  the Zig builtin does not document a universal ULP contract. `frequency*log2(frequency)`
+  is lazily tabulated once per distinct frequency (`WeightTable`), so the
+  fused per-symbol work is one table lookup plus f64 add. The table is a direct
   indexed allocation up to 131072 frequencies (1 MiB) and a fixed
   4096-slot open-addressing memo above that, so peak added memory stays
   bounded at the 2^24-byte meta-block limit.
@@ -59,18 +61,29 @@ separate <=16-tree incumbents: a >16-tree full winner cannot reject a
 bounded candidate, which was caught by the differential suite during
 development.
 
-Suffix cutoffs use both tiers: the integer bound runs first (it is free
-besides symbol work already in scope), then the entropy bound only once a
-suffix incumbent worth at least two gates exists and only when the integer
-bound is within one literal-count of the threshold — a proven necessary
-condition, since the entropy bound tightens the integer bound by less than
-one bit per literal. A pruned cutoff invalidates the payload memo because its
-histogram changed even when the newly merged context was empty.
+Suffix cutoffs compute both bounds for the two cumulative trees in a single
+pass over the shared support (`suffixPayloadBounds`): the per-symbol floor
+log2 term and the `frequency*log2(frequency)` accumulation interleave, so the
+tighter entropy bound costs table lookups and f64 adds instead of a second
+256-entry scan. A cutoff is pruned when either bound strictly exceeds the
+threshold. An earlier revision gated the entropy pass behind a strong
+incumbent and a within-one-literal proximity test, but its second support
+scan added work on mr 16 KiB despite zero successful prunes. The fused pass
+reduces that work without relaxing any rejection threshold. A pruned cutoff
+invalidates the payload memo because its histogram changed even when the
+newly merged context was empty.
 
 Clustered maps use only the zero-extra-work check
 `context_map.bit_cost > threshold`: the map is planned for every scored-cache
 miss anyway. Per-tree lower-bound scans over clustered maps were measured as
 a net regression on text (see below) and are not shipped.
+
+The follow-up removes the 128-entry histogram entropy cache and its heap
+allocation. Exact score replacement stays in `literal_tree_score_cache.zig`;
+frequency memoization and strict floating arithmetic now live in
+`literal_entropy.zig`, and the fused suffix floors in
+`literal_context_bounds.zig`. The zero/one-count entropy case returns zero
+without taking `log2(0)`.
 
 ## Validation
 
@@ -83,35 +96,54 @@ injection. New coverage:
   layouts) with byte-exact proposal equality.
 - 400 randomized frequency vectors asserting the Shannon floor never exceeds
   the exact tree cost, including uniform, power-of-two, skewed and noisy
-  weights.
+  weights. Both backends now receive the same randomized vectors, and the
+  comparison uses exact weighted payload **without tree headers**.
+- 96 direct fused suffix-bound comparisons with independent exact tree costs,
+  including totals of 2^24, separate left/right supports, and poisoned entries
+  outside the parent support.
+- Cross-mode cost 55 rejects a cost-56 cutoff, including following empty
+  contexts; later cheaper map costs recover the exact scorer. Cost equality
+  retains the first score and never prunes it.
+- Dense/fallback weight equality under collision pressure, singleton payload
+  zero through `maxInt(u32)`, and exact balanced two-code entropy near 2^24.
 - Four-way memo unit coverage: cold/conflict classification, LRU eviction,
   owner-mode reporting and same-set vector-collision rejection.
 
-The focused Brotli filter passes 76/76 in Debug, and the profile CSV/gate
+The final focused filter passes 79/79 in Debug, and the profile CSV/gate
 exposes `suffix_lb_pruned`, `cluster_lb_checks` and `cluster_maps_pruned`
 with counter-conservation assertions.
 
-## Point measurements
+## Retained ordinary-call measurements
 
-Twelve Silesia files (`/home/passchaos/Work/corpora/silesia-20261025`),
-4/16/64 KiB prefixes, one insert command, min of nine single-threaded
-ReleaseFast iterations per row; baseline is `ba275bb6`. All selected
-proposals match exactly. Geometric mean of the 36 total-search ratios:
+The follow-up compares current frozen candidate code with `71855833` on the
+Intel i7-10700K in Zig 0.16.0 ReleaseFast, single-threaded and pinned to CPU 2.
+Other validation jobs exclude CPU 2 and its sibling 10. Twelve Silesia files
+(`/home/passchaos/Work/corpora/silesia-20261025/files`), 4/16/64 KiB prefixes,
+produce 36 cases. The component benchmark uses one insert command, warms up
+outside timing, and checks every result against exhaustive and profiled
+searches outside the ordinary-call timer. Five interleaved version blocks,
+nine samples each, are reduced to the median of each block's minimum.
 
-| Configuration | total_ns geometric ratio |
-| --- | ---: |
-| Set-associative shared memo only (pruning off) | 0.983 |
-| Final: memo + gated suffix lower bounds | 0.976 |
-| Withdrawn: dense global-support per-tree cluster bounds | 1.00 |
-| Withdrawn: sparse-marker per-tree cluster bounds | 1.044 |
-| Withdrawn: f64 entropy bounds on every map/cutoff | 1.090 |
+| Surface | Candidate/baseline geometric time ratio | Output check |
+| --- | ---: | --- |
+| Ordinary literal-context proposal search | 0.9451 | All 36 complete proposals equal |
+| Public q8 one-shot encoding | 0.9908 | All 36 wire SHA-256 values, sizes and settings equal |
 
-Representative final ratios (total search): dickens 16/64 KiB 0.918/0.923,
-samba 16/64 KiB 0.968/0.929, osdb 64 KiB 0.932, sao 64 KiB 0.930, and the
-already-context-separated `x-ray` medical image 0.902/0.874/0.896 with
-179/217/221 of 252 suffix evaluations pruned. Most 4 KiB rows are flat (no
-strong incumbent, no bound work). One measured row, mr 16 KiB, regresses
-~7% with zero successful prunes; the entropy pass there costs more than it
-saves, and a follow-up should target a cheaper fixed-point entropy pass
-rather than loosen the provable gates. These are point measurements without a
-statistical-significance claim; system noise affects the 4 KiB rows most.
+The encoding surface uses the existing public `planned_encode_bench` with
+q8/generic, ten ordinary samples per version and case, interleaved with
+libbrotli q8 and reversed version order in the second sweep. The reference
+files are explicitly named and hashed (libbrotli 1.0.9). Vort's default
+lgwin16 and libbrotli's lgwin22 are recorded; these measurements establish the
+Vort before/after effect, without assigning a matched-window competitor
+ranking. Native and libbrotli round-trip checks run outside timed calls.
+
+The search improvement is about 5.5%; the complete encoding improvement is
+about 0.9% in this point measurement. Most encoder cost remains elsewhere.
+These samples do not establish statistical significance, an all-corpus gain,
+or industry-best ratio/speed/memory. The retained intermediate fused code
+runs at 0.9392 on the component surface; the final module split and strict
+numeric helpers run at 0.9451. The previous committed gated-bound measurement
+of 0.976 versus `ba275bb6` is a separate earlier epoch.
+
+[Raw samples, per-row results and reproduction commands](data/brotli-fused-suffix-20261027/README.md)
+retain input/executable/library identities, exact commands and source files.

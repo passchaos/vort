@@ -23765,3 +23765,25 @@ reuse, so production keeps the simpler independently owned plans.
   workers, stable 4 MiB long-input capacities, and 92/92 saved one-shot wires.
   The prior one-shot/reference/performance epochs are not refreshed. CLI worker
   flags and industry-best speed/ratio/RSS claims are not added by this increment.
+
+- 2026-10-28: Brotli literal-context suffix rejection fuses integer floors and
+  weighted-Shannon accumulation into one parent-support pass. A redundant
+  histogram entropy memo and heap allocation are removed; exact-score LRU,
+  bounded frequency weights and conservative suffix floors now have separate
+  modules. Strict f64 arithmetic documents the few-ULP log2 assumption;
+  zero/one-count entropy avoids log2(0), and u32-total invariants bound the
+  integer conversion. Existing randomized tests now compare pure weighted
+  payload without headers and use identical vectors across memo backends.
+  Direct fused-bound checks cover 2^24 totals and poisoned unsupported entries;
+  cross-mode incumbent tests execute empty-context pruning, cheaper-map
+  recovery and equality retention. Focused Debug passes 79/79 and the full
+  pre-Wasm-wrapper ReleaseFast family passes 1436 with one platform skip.
+  A new ordinary-call component benchmark retains exhaustive/profiled proposal
+  equality outside timers. Fixed-CPU Silesia 4/16/64 KiB prefixes yield 36
+  matching cases: ordinary search 0.9451x and public q8 encoding 0.9908x
+  versus 71855833, with identical wires/settings. Raw rounds, library/input/
+  executable hashes, source epochs and commands are retained in
+  [fused suffix evidence](performance/brotli-literal-context-pruning-x86.md).
+  These are point measurements; unequal lgwin16/22 reference settings do not
+  prove competitor leadership. Optimize the remaining q8 encoder stages and
+  establish matched-window speed/ratio/memory comparisons next.
