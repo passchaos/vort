@@ -1,4 +1,5 @@
 const std = @import("std");
+const byte_scan = @import("lz77/byte_scan.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -3382,8 +3383,14 @@ fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCan
     var candidate = pos;
     while (candidate > start and checked < options.max_chain) {
         candidate -= 1;
-        if (input[candidate] != input[pos]) continue;
+        if (input[candidate] != input[pos])
+            candidate = byte_scan.previous(input, start, candidate, input[pos]) orelse break;
         checked += 1;
+        // The historical budget counts matching first bytes, including
+        // candidates whose remaining minimum prefix cannot match. Reject
+        // those after spending the same slot, before extending a full word.
+        if (std.mem.readInt(u16, input[candidate + 1 ..][0..2], .little) !=
+            std.mem.readInt(u16, input[pos + 1 ..][0..2], .little)) continue;
         const length = matchLength(input, candidate, pos, max_len);
         if (length >= minimum and length > best.length) {
             best = .{ .length = length, .distance = pos - candidate };
@@ -3391,6 +3398,54 @@ fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCan
         }
     }
     return best;
+}
+
+test "scan-vector match candidates preserve the original scalar budget and tie decisions" {
+    const Reference = struct {
+        fn find(input: []const u8, pos: usize, options: GreedyOptions) MatchCandidate {
+            const minimum = minMatch(options);
+            if (input.len - pos < minimum) return .{};
+            const start = pos -| @min(options.window_len, default_window_len);
+            const maximum = @min(maxMatch(options), input.len - pos);
+            var best = MatchCandidate{};
+            var checked: usize = 0;
+            var candidate = pos;
+            while (candidate > start and checked < options.max_chain) {
+                candidate -= 1;
+                if (input[candidate] != input[pos]) continue;
+                checked += 1;
+                const length = matchLength(input, candidate, pos, maximum);
+                if (length >= minimum and length > best.length) {
+                    best = .{ .length = length, .distance = pos - candidate };
+                    if (length >= options.nice_len) break;
+                }
+            }
+            return best;
+        }
+    };
+    var input: [257]u8 = undefined;
+    var state: u32 = 0x45f4b193;
+    for (0..4) |kind| {
+        for (&input, 0..) |*byte, i| {
+            state = state *% 1664525 +% 1013904223;
+            byte.* = switch (kind) {
+                0 => 0,
+                1 => @intCast(i % 7),
+                2 => if (i < 192) 0 else @truncate(state >> 24),
+                else => @truncate(state >> 24),
+            };
+        }
+        for ([_]usize{ 0, 1, 31, 32, 33, 256, 32768 }) |window| {
+            for ([_]usize{ 0, 1, 6, 160 }) |chain| {
+                for ([_]usize{ 3, 4 }) |minimum| for ([_]usize{ 4, 16, 80 }) |nice| {
+                    const options = GreedyOptions{ .window_len = window, .max_chain = chain, .min_match = minimum, .nice_len = nice };
+                    for (0..input.len + 1) |pos| {
+                        try std.testing.expectEqual(Reference.find(&input, pos, options), findBestMatch(&input, pos, options));
+                    }
+                };
+            }
+        }
+    }
 }
 
 test "literal-only LZ77 planner emits no matches" {
