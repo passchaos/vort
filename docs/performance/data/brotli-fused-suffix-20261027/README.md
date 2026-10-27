@@ -82,3 +82,5 @@ zig build -j2 run-br-literal-context-search-bench -- \
 
 Focused final Debug validation passes 79/79. The retained final validation logs
 record the broader checks and the separate public Wasm Debug stack regression.
+[The independent stack fix](../../brotli-large-writer-stack-wasm.md) preserves
+the original 8 MiB gate and has a separate source epoch.

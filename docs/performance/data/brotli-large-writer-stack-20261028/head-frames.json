@@ -1,0 +1,20 @@
+[
+  {
+    "name": "br.encodeCommandPlanWithOptionsWrite",
+    "index": 1783,
+    "frame_bytes": 2156336,
+    "code_bytes": 190846
+  },
+  {
+    "name": "br.encodeCommandPlanWithLargeWindowWrite",
+    "index": 1838,
+    "frame_bytes": 5656208,
+    "code_bytes": 517644
+  },
+  {
+    "name": "br.writeHqPlannedStreamMetaBlock",
+    "index": 3078,
+    "frame_bytes": 164032,
+    "code_bytes": 18960
+  }
+]

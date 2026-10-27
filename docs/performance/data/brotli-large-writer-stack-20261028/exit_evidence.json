@@ -1,0 +1,33 @@
+{
+  "source": "Observed exec/write_stdin completion results; success is recorded only after an explicit exit_code.",
+  "commands": {
+    "head_debug_gate": {
+      "session_id": 81432,
+      "exit_code": 1
+    },
+    "fixed_debug_gate": {
+      "session_id": 38955,
+      "exit_code": 0
+    },
+    "native_large_window": {
+      "session_id": 56725,
+      "exit_code": 0
+    },
+    "native_complete_lengths_wire": {
+      "session_id": 41132,
+      "exit_code": 0
+    },
+    "wire_parity": {
+      "session_id": 20991,
+      "exit_code": 0
+    },
+    "head_stack_probe": {
+      "session_id": 2481,
+      "exit_code": 1
+    },
+    "fixed_stack_probe": {
+      "session_id": 10408,
+      "exit_code": 0
+    }
+  }
+}

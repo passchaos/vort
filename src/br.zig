@@ -11531,8 +11531,24 @@ noinline fn encodeCommandPlanWithWideDistanceWrite(
 
 noinline fn encodeCommandPlanWithLargeWindowWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (options.adaptive_literal_split != null or options.adaptive_command_split != null or options.adaptive_distance_split != null)
-        return encodeCommandPlanWithOptionsWriteInternal(true, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
-    return encodeCommandPlanWithOptionsWriteInternal(false, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
+        return encodeCommandPlanWithLargeWindowWriteBody(true, allocator, writer, input, commands, io, stats, options);
+    return encodeCommandPlanWithLargeWindowWriteBody(false, allocator, writer, input, commands, io, stats, options);
+}
+
+// Give each large-window specialization its own frame. In Debug, forcing both
+// large writer bodies into the dispatcher keeps both sets of scratch alive and
+// overflows the public wasm consumer's 8 MiB stack along the HQ call chain.
+noinline fn encodeCommandPlanWithLargeWindowWriteBody(
+    comptime allow_adaptive_split: bool,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error!void {
+    return encodeCommandPlanWithOptionsWriteInternal(allow_adaptive_split, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
 }
 
 inline fn encodeCommandPlanWithOptionsWriteInternal(

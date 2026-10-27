@@ -1,0 +1,43 @@
+{
+  "fusion_commit": "3c5e3cb671ad32339e90ccf02fe9d63c4e5771cb",
+  "stack_fix_patch": "large-writer.patch.xz",
+  "scope": "current working tree, fused suffix plus large writer frame split",
+  "source_sha256": {
+    "src/br.zig": "b3df9cbd5077f726d38aa2681778ab405537d6fe458c806a8e368ecc108d4028",
+    "src/br/encoder/literal_context_split.zig": "f48690e2e3d6c51b39fe831e9cd588d8595415c9fd15cd90a50af93b0dd95400",
+    "src/br/encoder/literal_context_bounds.zig": "427cc39352be9b6418ef4b05a5af6b75e54b9cadb4e0c0efcdf224c4792b353f",
+    "src/br/encoder/literal_entropy.zig": "2f3b22b46da30a35a9d9c4238e0a5f571a7c128a5b619d229910dacd2d8f1fbb",
+    "src/br/encoder/literal_tree_score_cache.zig": "a6930f5e7db59b63bb38b7fb5fa372c6b2c59555d66d52fd06938b6b64f89a85",
+    "build.zig": "e24242ab646017019ce2d1a3bf87d1abace7b2c485d17f8d2cc827dd4b621c00",
+    "tools/br/wasm_public_gate.js": "b03409a241a43fdb140cdb8bdc45aa4e2a6e023cbe55338e5246353f28e53192"
+  },
+  "checks": [
+    {
+      "command": "taskset -c 0,1,3-9,11-15 zig build -j2 test-br-public-wasm --summary all",
+      "session_id": 57313,
+      "exit_code": 0,
+      "stack_bytes": 8388608,
+      "optimize": "Debug"
+    },
+    {
+      "command": "zig build -j2 check check-wasm --summary all",
+      "session_id": 84719,
+      "exit_code": 0,
+      "steps": 210
+    },
+    {
+      "command": "taskset -c 0,1,3-9,11-15 zig build -j2 run -- --help",
+      "session_id": 25832,
+      "exit_code": 0
+    },
+    {
+      "command": "zig build -j6 test-br -Dbr-test-filter='literal context' check check-wasm --summary all",
+      "session_id": 80022,
+      "exit_code": 0,
+      "steps": 213,
+      "focused_tests_passed": 79,
+      "source_hashes_match": true,
+      "phase": "after git pull --rebase origin main"
+    }
+  ]
+}

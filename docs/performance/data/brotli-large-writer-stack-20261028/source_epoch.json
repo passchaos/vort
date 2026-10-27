@@ -1,0 +1,40 @@
+{
+  "baseline_commit": "718558333bd1bab3202c461f56d8d02762def614",
+  "source_files_checked": 1469,
+  "candidate_changed_source_files": [
+    "src/br.zig"
+  ],
+  "baseline_src_br_zig_sha256": "df800cdf2b6274765c1fe979d6a1acf8f95d843f5aa327cc203b168d6e5d1904",
+  "candidate_src_br_zig_sha256": "b3df9cbd5077f726d38aa2681778ab405537d6fe458c806a8e368ecc108d4028",
+  "build_zig_sha256": "1775b523d4f7840cedd844cc2fce762a115f10a862bfb2ade66cb3ca871c62cb",
+  "gate_js_sha256": "b03409a241a43fdb140cdb8bdc45aa4e2a6e023cbe55338e5246353f28e53192",
+  "head_wasm_sha256": "fb9206f0f7cdc13be5b2ca07c622b96a770271200186822f13f384460cf1bbd1",
+  "fixed_wasm_sha256": "25e0d802fecd1879f97e621d6ccb4c231f735c03426688e548621ad08f1c24c7",
+  "zig_version": "0.16.0",
+  "node_version": "v26.10.0",
+  "target": "wasm32-wasi",
+  "optimize": "Debug",
+  "stack_bytes": 8388608,
+  "cpu_affinity": "0,1,3-9,11-15",
+  "baseline_command": "zig build -j3 test-br-public-wasm --cache-dir /tmp/vort-br-wasm-review-lguhmche/cache --verbose",
+  "candidate_command": "zig build -j3 test-br-public-wasm --cache-dir /tmp/vort-br-wasm-review-lguhmche/fixed-cache --verbose",
+  "observed_exit_codes": {
+    "head_debug_gate": 1,
+    "head_stack_trace": 1,
+    "native_large_window": 0,
+    "native_complete_lengths_wire": 0,
+    "fixed_debug_gate": 0,
+    "wire_parity": 0,
+    "fixed_stack_trace": 0
+  },
+  "initial_stack_pointer": 8388608,
+  "trap_stack_pointer_signed": -466528,
+  "trap_stack_pointer_unsigned": 4294500768,
+  "native_commands": [
+    "taskset -c 0,1,3-9,11-15 zig build -j3 test-br-large-window -Doptimize=ReleaseFast --cache-dir /tmp/vort-br-wasm-review-lguhmche/native-cache --verbose",
+    "taskset -c 0,1,3-9,11-15 zig build -j2 test-br -Dbr-test-filter='Brotli HQ complete lengths actual public wire' -Doptimize=ReleaseFast --cache-dir /tmp/vort-br-wasm-review-lguhmche/native-complete-cache --verbose"
+  ],
+  "verification_observed_at_utc": "2026-10-27T16:07:07Z",
+  "candidate_source_scope": "Baseline commit sources plus only the large-window writer frame split in src/br.zig; fused suffix changes excluded.",
+  "stack_probe_scope": "Only export section changed to expose existing mutable global 0; original stack size, code, data and global initial value preserved. Probe calls only CompleteLengthsSmoke; full gate uses unmodified Wasm."
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "br.encodeCommandPlanWithOptionsWrite",
+    "index": 1783,
+    "frame_bytes": 2156336,
+    "code_bytes": 190846
+  },
+  {
+    "name": "br.encodeCommandPlanWithLargeWindowWrite",
+    "index": 1838,
+    "frame_bytes": 384,
+    "code_bytes": 365
+  },
+  {
+    "name": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_41959",
+    "index": 2300,
+    "frame_bytes": 3425600,
+    "code_bytes": 317399
+  },
+  {
+    "name": "br.encodeCommandPlanWithLargeWindowWriteBody__anon_41960",
+    "index": 2301,
+    "frame_bytes": 2230288,
+    "code_bytes": 189610
+  },
+  {
+    "name": "br.writeHqPlannedStreamMetaBlock",
+    "index": 3080,
+    "frame_bytes": 164032,
+    "code_bytes": 18960
+  }
+]

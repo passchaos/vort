@@ -23787,3 +23787,18 @@ reuse, so production keeps the simpler independently owned plans.
   These are point measurements; unequal lgwin16/22 reference settings do not
   prove competitor leadership. Optimize the remaining q8 encoder stages and
   establish matched-window speed/ratio/memory comparisons next.
+
+- 2026-10-28: the public 8 MiB Wasm Debug HQ gate exposed an existing
+  large-window writer stack underflow on 71855833. Its dispatcher previously
+  forced adaptive and ordinary giant writer bodies into one 5,656,208-byte
+  frame. Separate noinline specializations reduce the dispatcher to 384 bytes,
+  with independent 3,425,600/2,230,288-byte bodies. Compiled prologues and a
+  diagnostic stack global show the baseline's negative stack pointer; the
+  unchanged complete 8 MiB Debug gate passes after this structural fix. Native
+  large-window and complete-length public-wire contracts pass, and 32 separate
+  q10/q11, standard/large, bounded/whole, sampled/complete output comparisons
+  remain byte-identical. [Stack regression evidence](performance/brotli-large-writer-stack-wasm.md)
+  isolates this fix from the simultaneous fused-suffix performance epoch.
+  There is no throughput claim or general maximum-stack measurement; reducing
+  remaining large scratch frames and widening platform/memory evidence remain
+  follow-ups.
