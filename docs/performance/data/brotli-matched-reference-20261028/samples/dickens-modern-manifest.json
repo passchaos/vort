@@ -1,0 +1,9 @@
+{
+  "input_sets": [
+    {
+      "input_bytes": 65536,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "frozen_path": "/tmp/vort-br-reference-20261028-h2e55o0o/dickens-gate-input.bin"
+    }
+  ]
+}

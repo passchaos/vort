@@ -3582,6 +3582,25 @@ pub fn build(b: *std.Build) void {
     });
     const run_br_planned_encode_bench = b.addRunArtifact(br_planned_encode_bench_exe);
 
+    const br_reference_parameter_tests = b.addTest(.{
+        .name = "vort-br-reference-parameter-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/planned_encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort_br", .module = br_encode_bench_mod },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const br_reference_parameter_step = b.step("test-br-reference-parameters", "Validate Brotli reference parameters, actual wire windows and legacy samples");
+    br_reference_parameter_step.dependOn(&b.addRunArtifact(br_reference_parameter_tests).step);
+    br_reference_parameter_step.dependOn(&b.addSystemCommand(&.{ "python3", "tools/br/planned_encode_reference_gate_test.py" }).step);
+    br_reference_parameter_step.dependOn(&b.addSystemCommand(&.{ "python3", "tools/br/planned_encode_path_gate_test.py" }).step);
+    br_reference_parameter_step.dependOn(&b.addSystemCommand(&.{ "python3", "tools/codec_bench/sample_gate_smoke.py" }).step);
+
     const br_quality_stage_profile_exe = b.addExecutable(.{
         .name = "vort-br-quality-stage-profile",
         .root_module = b.createModule(.{
@@ -3770,6 +3789,7 @@ pub fn build(b: *std.Build) void {
     });
     br_planned_encode_path_gate.addArg("--executable");
     br_planned_encode_path_gate.addArtifactArg(br_planned_encode_bench_exe);
+    br_planned_encode_path_gate.addArg("--require-ratio-no-worse-than-reference");
     br_planned_encode_path_gate.addArgs(&.{
         "--input", "corpus/native-library-bench-small.txt",
         "--limit", "32768",
@@ -7721,6 +7741,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
+    ci_smoke_step.dependOn(br_reference_parameter_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);

@@ -1,0 +1,67 @@
+{
+  "baseline_commit": "3dd417597de62232050f15041c6ce48b87dd9065",
+  "src_files": 1472,
+  "src_tree_sha256": "8317d335174ad5a021407d56907cf35f18a840d03f276740c3d845d2102d6b09",
+  "src_archive_sha256": "2d7334bdced5d979516a958abe41489d7551ef79c6f9413a38580ddfe72bc839",
+  "tool_sha256": {
+    "tools/br/libbrotli_runtime.zig": "0dca0909d63f9c5ac5d3c463d7a5c69fb71d2e6322e95be327ab38892fe52e93",
+    "tools/br/planned_encode_bench.zig": "e18e8078c5da19cfed9d1a9009d9d825a41f69346990dcc8027c06831199f32a",
+    "tools/br/encode_samples.zig": "296c9c0f11fc494262c772deb86d9a6f77d4ad43fd4dd9ff823200a6e128dc7a",
+    "tools/br/reference_encode_options.zig": "fc78ff9aa488ca85682b180ee251e2d2166db766ccfbcbd0dc4d166a70621d47",
+    "tools/br/planned_encode_reference_tests.zig": "1c09b2400af53c5d5e70e0ba941b19ddd913460ab35e5e4f58d48b3eea8076cb",
+    "tools/br/planned_encode_reference_gate_test.py": "d0b66f0b33bc2217a3b63037420b28bca1fc4da76f904ab9c0cdf5d8a503e4dd",
+    "tools/br/planned_encode_bench_gate.py": "53e1fc51da3dd05a39de5424eb66cee736585b6ef4ba7abb9063934e4f806715",
+    "tools/br/planned_encode_path_gate.py": "7f2dcaca204f504bc84266d7a2564349d7d76fca1486c99deda8a8de22c2670e",
+    "tools/codec_bench/sample_gate.py": "956e8f7af67d76361e89483e02443671c77dacaf612b420473b98fa8e8e1b86b",
+    "tools/codec_bench/sample_gate_smoke.py": "2e8fd1f8132f57464affc0f868dccb8f2307af11b3ce339f956497748b64ea30",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "tools/benchmark_provenance_gate.py": "a9307d48e60169deb912d627bfa297206100be8a1613072090841f2de2f3771f",
+    "tools/br/q8_records_fixture.zig": "4d692a07162c37d1d9cbbaee1788c0a2d9dd3d18d92d3babdfad7401e5b94c63"
+  },
+  "zig_version": "0.16.0",
+  "optimize": "ReleaseFast",
+  "cpu_affinity": "0,1,3-9,11-15",
+  "executable_sha256": "9d93b38e76ef5ead45682ea44e0cdb135281cbd6df6642d372698fd0df3e3f62",
+  "original_executable_sha256": "88dd12ca41e325763ec66cd43444c05ea2ddd42d33bb49be3b3e6b328f484186",
+  "record_object_sha256": "860fe1432d23db7774dfb2c8aa919fcf5f4732d29f4e6a2795d6688847696f4d",
+  "reference_version": 16777225,
+  "reference_libraries": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlienc.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlidec.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": 16777225,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": null,
+      "successful_open_argument": "libbrotlicommon.so.1",
+      "canonical_file_path": null,
+      "file_sha256": null,
+      "file_bytes": null,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "unknown"
+    }
+  ],
+  "scope": "3dd41759 src snapshot plus the recorded benchmark/tool overlays. Current compression edits excluded. Single-iteration runs validate behavior; no throughput claim."
+}

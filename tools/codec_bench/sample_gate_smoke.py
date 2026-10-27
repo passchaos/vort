@@ -164,6 +164,82 @@ class SampleGateTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(EvidenceError):
                 validate(report, self.manifest, csv_rows=[dict(csv_row, **{field: value})])
 
+    def matched_brotli_report(self) -> dict:
+        report = self.report("brotli")
+        report["rows"][0]["settings"].update(reference_lgwin=16,
+                                              vort_wire_window_bits=16,
+                                              reference_wire_window_bits=16,
+                                              parameters_match=True)
+        return report
+
+    def test_brotli_json_match_uses_actual_windows_quality_and_mode(self) -> None:
+        validate(self.matched_brotli_report(), self.manifest)
+        for change in ({"reference_wire_window_bits": 18}, {"vort_wire_window_bits": 18},
+                       {"reference_quality": 7}, {"reference_mode": 1}, {"planned_quality": None}):
+            report = self.matched_brotli_report()
+            report["rows"][0]["settings"].update(change)
+            with self.subTest(change=change), self.assertRaises(EvidenceError):
+                validate(report, self.manifest)
+            report["rows"][0]["settings"]["parameters_match"] = False
+            validate(report, self.manifest)
+        report = self.matched_brotli_report()
+        report["rows"][0]["settings"].update(planned_quality=0, reference_quality=0,
+                                              reference_wire_window_bits=18, parameters_match=False)
+        validate(report, self.manifest)
+        report["rows"][0]["settings"]["parameters_match"] = True
+        with self.assertRaises(EvidenceError):
+            validate(report, self.manifest)
+
+    def test_brotli_json_rejects_invalid_partial_window_evidence(self) -> None:
+        changes = ({"vort_wire_window_bits": 9}, {"reference_wire_window_bits": 31},
+                   {"reference_wire_window_bits": "16"}, {"vort_wire_window_bits": True},
+                   {"parameters_match": "true"}, {"parameters_match": None},
+                   {"reference_lgwin": 9}, {"reference_mode": 3})
+        for change in changes:
+            report = self.matched_brotli_report()
+            report["rows"][0]["settings"].update(change)
+            with self.subTest(change=change), self.assertRaises(EvidenceError):
+                validate(report, self.manifest)
+        for field in ("vort_wire_window_bits", "reference_wire_window_bits", "parameters_match"):
+            report = self.matched_brotli_report()
+            del report["rows"][0]["settings"][field]
+            with self.subTest(field=field), self.assertRaises(EvidenceError):
+                validate(report, self.manifest)
+        historical = self.report("brotli")
+        validate(historical, self.manifest)
+        historical["rows"][0]["settings"].update(vort_wire_window_bits=None,
+                                                  reference_wire_window_bits=None, parameters_match=None)
+        validate(historical, self.manifest)
+
+    def test_brotli_csv_compares_all_new_parameters_with_json(self) -> None:
+        report = self.matched_brotli_report()
+        row = report["rows"][0]
+        csv_row = {"case": "frozen", "quality": "8", "planned_quality": "8", "planned_mode": "generic",
+                   "reference_version": "1000009", "input_bytes": str(row["input_bytes"]),
+                   "input_sha256": row["input_sha256"], "iterations": "2",
+                   "reference_lgwin": "16", "reference_mode": "0", "vort_wire_window_bits": "16",
+                   "reference_wire_window_bits": "16", "parameters_match": "true",
+                   **{key: str(value) for key, value in report["provenance"].items()}}
+        for implementation, ns, size in (("vort", 10, 7), ("reference", 11, 9)):
+            csv_row.update({f"{implementation}_ns": str(ns), f"{implementation}_bytes": str(size),
+                            f"{implementation}_mib_s": f"{row['input_bytes'] * 2 * 1e9 / (1048576 * ns):.6f}"})
+        validate(report, self.manifest, csv_rows=[csv_row])
+        for field, value in (("reference_lgwin", "22"), ("reference_mode", "1"),
+                             ("vort_wire_window_bits", "18"), ("reference_wire_window_bits", "18"),
+                             ("reference_wire_window_bits", "invalid"),
+                             ("parameters_match", "false")):
+            with self.subTest(field=field), self.assertRaises(EvidenceError):
+                validate(report, self.manifest, csv_rows=[dict(csv_row, **{field: value})])
+            partial = dict(csv_row)
+            del partial[field]
+            with self.subTest(missing=field), self.assertRaises(EvidenceError):
+                validate(report, self.manifest, csv_rows=[partial])
+        old_csv = {key: value for key, value in csv_row.items()
+                   if key not in {"reference_lgwin", "reference_mode", "vort_wire_window_bits", "reference_wire_window_bits", "parameters_match"}}
+        with self.assertRaises(EvidenceError):
+            validate(report, self.manifest, csv_rows=[old_csv])
+        validate(self.report("brotli"), self.manifest, csv_rows=[old_csv])
+
 
 if __name__ == "__main__":
     unittest.main()

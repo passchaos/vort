@@ -4,6 +4,7 @@ const libbrotli = @import("libbrotli_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 const q8_records_fixture = @import("q8_records_fixture.zig");
 const encode_samples = @import("encode_samples.zig");
+const reference_options = @import("reference_encode_options.zig");
 
 const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48;
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
@@ -30,6 +31,7 @@ const Options = struct {
     csv_path: ?[]const u8 = null,
     samples_json_path: ?[]const u8 = null,
     reference_paths: encode_samples.PathOptions = .{},
+    reference_parameters: reference_options.Options = .{},
     case_filter: ?[]const u8 = null,
     quality_override: ?c_int = null,
     planned_quality: ?u4 = null,
@@ -43,7 +45,7 @@ const Options = struct {
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
-    fn deinit(options: *Options, allocator: std.mem.Allocator) void {
+    pub fn deinit(options: *Options, allocator: std.mem.Allocator) void {
         for (options.paths.items) |path| allocator.free(path);
         options.paths.deinit(allocator);
     }
@@ -127,13 +129,14 @@ pub fn main(init: std.process.Init) !void {
     }
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.print("case,reference_version,quality,planned_quality,planned_mode,input_bytes,input_sha256,extended_dictionary_probes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum,{s}\n", .{benchmark_provenance.csv_columns});
+    try csv.writer.print("case,reference_version,quality,planned_quality,planned_mode,input_bytes,input_sha256,extended_dictionary_probes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum,{s},reference_lgwin,reference_mode,vort_wire_window_bits,reference_wire_window_bits,parameters_match\n", .{benchmark_provenance.csv_columns});
     var selected_cases: usize = 0;
     for (cases.items) |case| {
         if (options.case_filter) |filter|
             if (!std.mem.eql(u8, filter, case.name)) continue;
         selected_cases += 1;
         const quality = options.quality_override orelse case.quality orelse 3;
+        const reference_settings = try options.reference_parameters.resolve(quality);
         const vort_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
             .level = .fast,
             .quality = options.planned_quality,
@@ -141,7 +144,7 @@ pub fn main(init: std.process.Init) !void {
             .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
         });
         defer init.gpa.free(vort_encoded);
-        const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, quality);
+        const reference_encoded = try reference.encodeWithOptionsAlloc(init.gpa, case.payload, reference_settings);
         defer init.gpa.free(reference_encoded);
         const lazy_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
         defer init.gpa.free(lazy_encoded);
@@ -164,6 +167,14 @@ pub fn main(init: std.process.Init) !void {
             try reference.decode(encoded, decoded);
             if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
         }
+        try reference.decode(reference_encoded, decoded);
+        if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
+        const reference_decoded = try br.decodeStreamAllocExactSize(init.gpa, reference_encoded, case.payload.len);
+        defer init.gpa.free(reference_decoded);
+        if (!std.mem.eql(u8, case.payload, reference_decoded)) return error.SizeMismatch;
+        const vort_window = (try br.summarizeStreamAlloc(init.gpa, vort_encoded)).window_bits;
+        const reference_window = (try br.summarizeStreamAlloc(init.gpa, reference_encoded)).window_bits;
+        const parameters_match = reference_options.match(options.planned_quality, @tagName(options.planned_mode), vort_window, reference_settings, reference_window);
         const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
         // These are the already constructed, validated wires. Recording their
         // identities never hashes a result inside the measured encode loop.
@@ -173,7 +184,7 @@ pub fn main(init: std.process.Init) !void {
             .vort_sha256 = benchmark_provenance.sha256Hex(vort_encoded),
             .reference_sha256 = benchmark_provenance.sha256Hex(reference_encoded),
         } else null;
-        const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options, quality);
+        const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options, reference_settings);
         const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced, 0, false, false, null, null);
         const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio, extended_dictionary_probes, options.adaptive_command_split, options.adaptive_literal_split, options.adaptive_distance_split, options.distance_parameter_search);
         const total_bytes = case.payload.len * options.iterations;
@@ -183,7 +194,6 @@ pub fn main(init: std.process.Init) !void {
         const ratio_rate = mibPerSecond(total_bytes, ratio_sample.ns);
         if (recorded_wires) |wires| {
             try samples.validate(options.iterations, wires.vort_bytes, wires.reference_bytes);
-            const reference_settings = libbrotli.Runtime.OneShotOptions{ .quality = quality };
             try sample_rows.append(init.gpa, .{
                 .case = case.name,
                 .input_bytes = case.payload.len,
@@ -204,6 +214,11 @@ pub fn main(init: std.process.Init) !void {
                     .reference_case_quality = case.quality,
                     .reference_lgwin = reference_settings.lgwin,
                     .reference_mode = reference_settings.mode,
+                    .reference_lgwin_override_requested = options.reference_parameters.lgwin,
+                    .reference_mode_override_requested = options.reference_parameters.mode,
+                    .vort_wire_window_bits = vort_window,
+                    .reference_wire_window_bits = reference_window,
+                    .parameters_match = parameters_match,
                     .auxiliary_ratio_extended_dictionary_probes_requested = options.extended_dictionary_probes,
                     .auxiliary_ratio_extended_dictionary_probes_effective = extended_dictionary_probes,
                     .auxiliary_ratio_adaptive_command_split = options.adaptive_command_split,
@@ -249,6 +264,7 @@ pub fn main(init: std.process.Init) !void {
             samples.vort.mix +% lazy_sample.mix +% ratio_sample.mix +% samples.reference.mix,
         });
         try provenance.writeCsvFields(&csv.writer);
+        try csv.writer.print(",{d},{d},{d},{d},{}", .{ reference_settings.lgwin, reference_settings.mode, vort_window, reference_window, parameters_match });
         try csv.writer.writeByte('\n');
     }
     if (selected_cases == 0) return error.InvalidBlockPlan;
@@ -287,12 +303,12 @@ fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8,
     return best;
 }
 
-fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options, quality: c_int) !encode_samples.Interleaved {
+fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options, reference_settings: libbrotli.Runtime.OneShotOptions) !encode_samples.Interleaved {
     var rounds: [encode_samples.round_count]encode_samples.Round = undefined;
     for (&rounds, 0..) |*record, round| {
         const vort_first = round & 1 == 0;
-        const first = if (vort_first) try measureVort(io, allocator, payload, options) else try measureReference(io, allocator, reference, payload, options.iterations, quality);
-        const second = if (vort_first) try measureReference(io, allocator, reference, payload, options.iterations, quality) else try measureVort(io, allocator, payload, options);
+        const first = if (vort_first) try measureVort(io, allocator, payload, options) else try measureReference(io, allocator, reference, payload, options.iterations, reference_settings);
+        const second = if (vort_first) try measureReference(io, allocator, reference, payload, options.iterations, reference_settings) else try measureVort(io, allocator, payload, options);
         const vort_sample = if (vort_first) first else second;
         const reference_sample = if (vort_first) second else first;
         record.* = .{
@@ -344,11 +360,11 @@ fn measureVortLegacy(io: std.Io, allocator: std.mem.Allocator, payload: []const 
     return .{ .ns = elapsed(start, io), .mix = mix };
 }
 
-fn measureReference(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, iterations: usize, quality: c_int) !Sample {
+fn measureReference(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, iterations: usize, reference_settings: libbrotli.Runtime.OneShotOptions) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try reference.encodeAlloc(allocator, payload, quality);
+        const encoded = try reference.encodeWithOptionsAlloc(allocator, payload, reference_settings);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
@@ -399,6 +415,7 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     var options = Options{};
     errdefer options.deinit(allocator);
     while (args.next()) |arg| {
+        if (try options.reference_parameters.parse(arg, args)) continue;
         if (std.mem.eql(u8, arg, "--samples-json")) {
             options.samples_json_path = args.next() orelse return error.MissingCorpusPath;
             continue;
@@ -506,6 +523,14 @@ test "Brotli encode benchmark accepts explicit three library paths without sampl
     try std.testing.expectEqualStrings("enc.so", paths.encoder);
     try std.testing.expectEqualStrings("dec.so", paths.decoder);
     try std.testing.expectEqualStrings("com.so", paths.common);
+}
+
+test "Brotli reference benchmark parameters and actual wires" {
+    try @import("planned_encode_reference_tests.zig").contracts(parseOptions);
+}
+
+test "Brotli reference benchmark actual C parameters wire windows and cross decode" {
+    try @import("planned_encode_reference_tests.zig").actualWires();
 }
 
 test "Brotli encode benchmark validates sample output and incomplete paths before timing" {

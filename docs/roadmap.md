@@ -23802,3 +23802,16 @@ reuse, so production keeps the simpler independently owned plans.
   There is no throughput claim or general maximum-stack measurement; reducing
   remaining large scratch frames and widening platform/memory evidence remain
   follow-ups.
+
+- 2026-10-28: Brotli reference encoding now accepts explicit RFC lgwin and
+  generic/text/font mode for both validated and timed C API calls. Actual wire
+  windows and an explicit-quality/mode/window match flag appear in JSON/CSV;
+  low-quality reference window promotion is recorded as unmatched. The shared
+  sample gate validates these fields without CSV and cross-checks all new
+  columns when CSV is present, retaining historical missing/null metadata.
+  The file gate's auxiliary ratio-versus-reference requirement is explicit;
+  the original built-in fixture still enforces it. Actual C parity/dual decode,
+  old/new metadata and negative controls are exercised by the dedicated
+  test-br-reference-parameters build step.
+  [Reference parameter evidence](performance/brotli-matched-reference-parameters.md)
+  separates the 1.0.9 functional tool epoch from current 1.2.0 performance.

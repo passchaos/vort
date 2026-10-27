@@ -6,19 +6,45 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
-COLUMNS = ["case", "reference_version", "quality", "planned_quality", "planned_mode", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
+LEGACY_COLUMNS = ["case", "reference_version", "quality", "planned_quality", "planned_mode", "input_bytes", "input_sha256", "extended_dictionary_probes", "vort_bytes", "lazy_bytes", "ratio_bytes", "ratio_dictionary_copies", "ratio_dictionary_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "ratio_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "ratio_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "ratio_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "ratio_size_over_reference", "checksum"] + PROVENANCE_COLUMNS
+REFERENCE_COLUMNS = ["reference_lgwin", "reference_mode", "vort_wire_window_bits", "reference_wire_window_bits", "parameters_match"]
+COLUMNS = LEGACY_COLUMNS + REFERENCE_COLUMNS
 CASES = {"json", "source", "log", "dictionary", "mixed", "uppercase", "incompressible", "records_q8", "source32k"}
 DICTIONARY_CASES = {"dictionary", "mixed", "uppercase"}
 MAX_LAZY_BYTES = {"json": 62, "source": 84, "log": 82}
 MAX_RATIO_BYTES = {"dictionary": 24, "mixed": 29, "uppercase": 11, "incompressible": 38}
 
+
+def validate_columns(columns):
+    assert columns in (LEGACY_COLUMNS, COLUMNS), columns
+
+
+def validate_reference_parameters(row):
+    present = set(REFERENCE_COLUMNS).intersection(row)
+    if not present:
+        # Historical rows used 22/generic and did not record actual windows.
+        return
+    assert present == set(REFERENCE_COLUMNS), row
+    lgwin = int(row["reference_lgwin"])
+    mode = int(row["reference_mode"])
+    vort_window = int(row["vort_wire_window_bits"])
+    reference_window = int(row["reference_wire_window_bits"])
+    assert 10 <= lgwin <= 24 and 0 <= mode <= 2, row
+    assert 10 <= vort_window <= 24 and 10 <= reference_window <= 24, row
+    planned = row["planned_quality"]
+    expected = (bool(planned) and int(planned) == int(row["quality"])
+                and {"generic": 0, "text": 1, "font": 2}[row["planned_mode"]] == mode
+                and vort_window == reference_window)
+    assert row["parameters_match"] == str(expected).lower(), row
+
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--csv", type=Path, required=True); p.add_argument("--executable", type=Path); a=p.parse_args()
-    with a.csv.open(newline="") as f: r=csv.DictReader(f); assert r.fieldnames == COLUMNS; rows=list(r)
+    with a.csv.open(newline="") as f: r=csv.DictReader(f); validate_columns(r.fieldnames); rows=list(r)
     assert {x["case"] for x in rows} == CASES and len(rows) == len(CASES)
     validate_provenance(rows, executable=a.executable, codec_thread_policy="single")
     by_case = {row["case"]: row for row in rows}
     for row in rows:
+        validate_reference_parameters(row)
         assert row["planned_quality"] == "", row
         assert row["planned_mode"] == "generic", row
         for key in ("input_bytes","vort_bytes","lazy_bytes","ratio_bytes","reference_bytes","iterations","vort_ns","lazy_ns","ratio_ns","reference_ns","checksum"):

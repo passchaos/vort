@@ -96,6 +96,12 @@ pub const Settings = struct {
     reference_case_quality: ?c_int,
     reference_lgwin: c_int = 22,
     reference_mode: c_int = 0,
+    reference_lgwin_override_requested: ?c_int = null,
+    reference_mode_override_requested: ?c_int = null,
+    vort_wire_window_bits: ?u5 = null,
+    reference_wire_window_bits: ?u5 = null,
+    /// Null preserves historical rows that did not verify actual wire windows.
+    parameters_match: ?bool = null,
     auxiliary_lazy_level: []const u8 = "balanced",
     auxiliary_ratio_level: []const u8 = "ratio",
     auxiliary_ratio_extended_dictionary_probes_requested: u16,
@@ -407,6 +413,29 @@ test "Brotli encode samples JSON preserves raw rounds hashes escaped cases and u
     try std.testing.expectEqual(@as(usize, 5), row.get("rounds").?.array.items.len);
     try std.testing.expectEqual(@as(i64, 12), row.get("summary").?.object.get("vort_median_ns").?.integer);
     try std.testing.expect(std.meta.activeTag(row.get("settings").?.object.get("planned_quality").?) == .null);
+    const settings = row.get("settings").?.object;
+    try std.testing.expectEqual(@as(i64, 22), settings.get("reference_lgwin").?.integer);
+    try std.testing.expectEqual(@as(i64, 0), settings.get("reference_mode").?.integer);
+    try std.testing.expect(std.meta.activeTag(settings.get("parameters_match").?) == .null);
+    var configured = rows;
+    configured[0].settings.reference_lgwin = 16;
+    configured[0].settings.reference_mode = 1;
+    configured[0].settings.reference_lgwin_override_requested = 16;
+    configured[0].settings.reference_mode_override_requested = 1;
+    configured[0].settings.vort_mode = "text";
+    configured[0].settings.planned_quality = 3;
+    configured[0].settings.vort_wire_window_bits = 16;
+    configured[0].settings.reference_wire_window_bits = 16;
+    configured[0].settings.parameters_match = true;
+    const configured_json = try jsonAlloc(std.testing.allocator, &configured, refs, .{});
+    defer std.testing.allocator.free(configured_json);
+    const configured_parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, configured_json, .{});
+    defer configured_parsed.deinit();
+    const actual_settings = configured_parsed.value.object.get("rows").?.array.items[0].object.get("settings").?.object;
+    try std.testing.expectEqual(@as(i64, 16), actual_settings.get("reference_lgwin").?.integer);
+    try std.testing.expectEqual(@as(i64, 1), actual_settings.get("reference_mode").?.integer);
+    try std.testing.expectEqual(@as(i64, 16), actual_settings.get("reference_wire_window_bits").?.integer);
+    try std.testing.expect(actual_settings.get("parameters_match").?.bool);
     const library = object.get("references").?.array.items[0].object;
     try std.testing.expect(std.meta.activeTag(library.get("canonical_file_path").?) == .null);
     try std.testing.expect(std.meta.activeTag(library.get("file_sha256").?) == .null);

@@ -1,0 +1,51 @@
+{
+  "original_zig_session_id": 5583,
+  "final_build_session_id": 99358,
+  "exit_codes": {
+    "zig-tests-original": 0,
+    "build-final": 0,
+    "python-reference-unit": 0,
+    "python-json-csv-unit": 0,
+    "encode-default": 0,
+    "json-gate-default": 0,
+    "json-csv-gate-default": 0,
+    "encode-matched": 0,
+    "json-gate-matched": 0,
+    "json-csv-gate-matched": 0,
+    "encode-adjusted": 0,
+    "json-gate-adjusted": 0,
+    "json-csv-gate-adjusted": 0,
+    "encode-modes": 0,
+    "json-gate-modes": 0,
+    "json-csv-gate-modes": 0,
+    "encode-path": 0,
+    "path-gate-new": 0,
+    "path-gate-historical": 0
+  },
+  "zig_tests_passed": 12,
+  "reference_python_tests_passed": 4,
+  "json_csv_python_tests_passed": 9,
+  "path_gate_followup_exit_codes": {
+    "python-path-policy-unit": 0,
+    "python-reference-unit-path-followup": 0,
+    "path-modern-batch-general": 0,
+    "path-modern-batch-explicit-performance": 1,
+    "path-modern-dickens-general": 0,
+    "path-modern-dickens-explicit-performance": 1,
+    "json-csv-modern-dickens": 0,
+    "path-fixture-explicit-current": 0,
+    "path-fixture-explicit-historical": 0
+  },
+  "path_gate_followup_expected_exit_codes": {
+    "python-path-policy-unit": 0,
+    "python-reference-unit-path-followup": 0,
+    "path-modern-batch-general": 0,
+    "path-modern-batch-explicit-performance": 1,
+    "path-modern-dickens-general": 0,
+    "path-modern-dickens-explicit-performance": 1,
+    "json-csv-modern-dickens": 0,
+    "path-fixture-explicit-current": 0,
+    "path-fixture-explicit-historical": 0
+  },
+  "path_policy_tests_passed": 5
+}

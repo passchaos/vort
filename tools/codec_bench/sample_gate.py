@@ -89,6 +89,46 @@ def wire_header(value: object, label: str, input_bytes: int) -> None:
     require(type(value["content_checksum"]) is bool, f"{label}: invalid checksum flag")
 
 
+BROTLI_WIRE_PARAMETERS = ("vort_wire_window_bits", "reference_wire_window_bits", "parameters_match")
+BROTLI_CSV_PARAMETERS = ("reference_lgwin", "reference_mode") + BROTLI_WIRE_PARAMETERS
+
+
+def validate_brotli_wire_parameters(settings: dict) -> None:
+    present = set(BROTLI_WIRE_PARAMETERS).intersection(settings)
+    if not present:
+        return  # Historical reports did not record actual window evidence.
+    require(present == set(BROTLI_WIRE_PARAMETERS), "Brotli settings: incomplete wire parameter evidence")
+    values = [settings[field] for field in BROTLI_WIRE_PARAMETERS]
+    if all(value is None for value in values):
+        return  # Historical rows serialized through the newer nullable model.
+    require(all(value is not None for value in values), "Brotli settings: partial wire parameter evidence")
+    for field in BROTLI_WIRE_PARAMETERS[:2]:
+        value = integer(settings[field], f"settings.{field}")
+        require(10 <= value <= 30, f"Brotli settings: invalid {field}")
+    require(type(settings["parameters_match"]) is bool, "Brotli settings: invalid parameters_match")
+    expected = (settings["planned_quality"] is not None
+                and settings["planned_quality"] == settings["reference_quality"]
+                and {"generic": 0, "text": 1, "font": 2}[settings["vort_mode"]] == settings["reference_mode"]
+                and settings["vort_wire_window_bits"] == settings["reference_wire_window_bits"])
+    require(settings["parameters_match"] == expected, "Brotli settings: parameters_match differs from actual quality/mode/windows")
+
+
+def validate_brotli_csv_parameters(settings: dict, row: dict, key: tuple) -> None:
+    present = set(BROTLI_CSV_PARAMETERS).intersection(row)
+    if not present:
+        require(settings.get("parameters_match") is None, f"CSV: {key} missing wire parameter evidence")
+        return
+    require(present == set(BROTLI_CSV_PARAMETERS), f"CSV: {key} incomplete reference parameters")
+    require(type(settings.get("parameters_match")) is bool, f"CSV: {key} missing JSON wire parameter evidence")
+    for field in BROTLI_CSV_PARAMETERS[:-1]:
+        try:
+            value = int(row[field])
+        except (TypeError, ValueError) as error:
+            raise EvidenceError(f"CSV: {key} invalid {field}") from error
+        require(value == settings[field], f"CSV: {key} {field} differs")
+    require(row["parameters_match"] == str(settings["parameters_match"]).lower(), f"CSV: {key} parameters_match differs")
+
+
 def validate_settings(codec: str, settings: dict, input_bytes: int) -> None:
     if codec == "brotli":
         required = {"planned_quality", "vort_api", "vort_level", "vort_mode",
@@ -110,6 +150,9 @@ def validate_settings(codec: str, settings: dict, input_bytes: int) -> None:
         integer(settings["vort_metadata_bytes"], "settings.vort_metadata_bytes")
         integer(settings["reference_lgwin"], "settings.reference_lgwin", positive=True)
         integer(settings["reference_mode"], "settings.reference_mode")
+        require(10 <= settings["reference_lgwin"] <= 30 and settings["reference_mode"] <= 2,
+                "Brotli settings: invalid reference window/mode")
+        validate_brotli_wire_parameters(settings)
         return
     required = {"level", "api", "requested_strategy", "requested_fast_acceleration",
                 "requested_native_selection", "resolved_primary", "internal_candidate_settings",
@@ -196,6 +239,7 @@ def validate_csv(report: dict, csv_rows: list[dict[str, str]]) -> None:
             settings = row["settings"]
             require(int(actual["quality"]) == settings["reference_quality"], f"CSV: {key} reference quality differs")
             require(actual["planned_mode"] == settings["vort_mode"], f"CSV: {key} planned mode differs")
+            validate_brotli_csv_parameters(settings, actual, key)
         for implementation in ("vort", "reference"):
             ns = row["summary"][f"{implementation}_min_ns"]
             size = row["wires"][f"{implementation}_bytes"]

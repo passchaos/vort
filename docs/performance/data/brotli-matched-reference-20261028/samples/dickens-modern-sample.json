@@ -1,0 +1,169 @@
+{
+  "schema": "vort.codec_encode_samples",
+  "version": 1,
+  "codec": "brotli",
+  "round_count": 5,
+  "timing": {
+    "clock": "awake",
+    "unit": "nanoseconds",
+    "round_order": "vort_first_on_even_zero_based_rounds",
+    "csv_statistic": "minimum",
+    "median_statistic": "integer_floor",
+    "mix": "sum_of_encoded_lengths_wrapping_target_usize",
+    "vort_warmup": "one_untimed_encode_before_each_primary_vort_round",
+    "reference_warmup": "none",
+    "timed_work": "encoding_allocation_and_free",
+    "metadata_outside_timing": true
+  },
+  "reference_version": 16785408,
+  "reference_decoder_version": 16785408,
+  "references": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "file_sha256": "79433e774220027a191eaac4dd4437afc687837ad080dfd4d15b9243565ff70d",
+      "file_bytes": 855824,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "file_sha256": "0377077412584221d95fd9f3e14a4572275cd606a0e878c671fbfe05651036d8",
+      "file_bytes": 60304,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "file_sha256": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+      "file_bytes": 143776,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    }
+  ],
+  "provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "cce4b146e1ef864f6f2ead979812549ba94439d4568d14ad1431b498a866ce6e",
+    "command": "/tmp/vort-br-q8-next-20261028-jewk_a_x/bench-matched-candidate --quality 8 --planned-quality=8 --planned-mode=generic --reference-lgwin=16 --reference-mode=generic --iterations 3 --limit 65536 --samples-json /tmp/vort-br-q8-next-20261028-jewk_a_x/matched/candidate-2-65536.json --csv /tmp/vort-br-q8-next-20261028-jewk_a_x/matched/candidate-2-65536.csv --libbrotli-encoder /tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0 --libbrotli-decoder /tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0 --libbrotli-common /tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0 --path /home/passchaos/Work/corpora/silesia-20261025/files/dickens --path /home/passchaos/Work/corpora/silesia-20261025/files/mozilla --path /home/passchaos/Work/corpora/silesia-20261025/files/mr --path /home/passchaos/Work/corpora/silesia-20261025/files/nci --path /home/passchaos/Work/corpora/silesia-20261025/files/ooffice --path /home/passchaos/Work/corpora/silesia-20261025/files/osdb --path /home/passchaos/Work/corpora/silesia-20261025/files/reymont --path /home/passchaos/Work/corpora/silesia-20261025/files/samba --path /home/passchaos/Work/corpora/silesia-20261025/files/sao --path /home/passchaos/Work/corpora/silesia-20261025/files/webster --path /home/passchaos/Work/corpora/silesia-20261025/files/x-ray --path /home/passchaos/Work/corpora/silesia-20261025/files/xml"
+  },
+  "rows": [
+    {
+      "case": "file0_dickens",
+      "input_bytes": 65536,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "iterations": 3,
+      "rounds": [
+        {
+          "index": 0,
+          "vort_first": true,
+          "vort_ns": 165090632,
+          "reference_ns": 7894572,
+          "vort_mix": 74169,
+          "reference_mix": 75495
+        },
+        {
+          "index": 1,
+          "vort_first": false,
+          "vort_ns": 164187812,
+          "reference_ns": 7977083,
+          "vort_mix": 74169,
+          "reference_mix": 75495
+        },
+        {
+          "index": 2,
+          "vort_first": true,
+          "vort_ns": 165219747,
+          "reference_ns": 7964298,
+          "vort_mix": 74169,
+          "reference_mix": 75495
+        },
+        {
+          "index": 3,
+          "vort_first": false,
+          "vort_ns": 166048582,
+          "reference_ns": 7720112,
+          "vort_mix": 74169,
+          "reference_mix": 75495
+        },
+        {
+          "index": 4,
+          "vort_first": true,
+          "vort_ns": 165825402,
+          "reference_ns": 7970676,
+          "vort_mix": 74169,
+          "reference_mix": 75495
+        }
+      ],
+      "summary": {
+        "vort_min_ns": 164187812,
+        "reference_min_ns": 7720112,
+        "vort_median_ns": 165219747,
+        "reference_median_ns": 7964298
+      },
+      "wires": {
+        "vort_bytes": 24723,
+        "reference_bytes": 25165,
+        "vort_sha256": "2d5a260a0e470c49372ad983dc6ef7ffb5a50658a16a2839e1dddc83381d9342",
+        "reference_sha256": "906ab199ad598db5d2fc91200ef7a7448a97ccaff1738a4d4f6a42c790a87074"
+      },
+      "settings": {
+        "vort_api": "one_shot_quality_preset",
+        "vort_level": "fast",
+        "planned_quality": 8,
+        "vort_mode": "generic",
+        "vort_command_state_max_input_kib": 255,
+        "vort_command_state_override_requested": null,
+        "vort_window_bits": null,
+        "vort_default_window_bits": 16,
+        "vort_large_window": false,
+        "vort_metadata_bytes": 0,
+        "vort_max_total_working_memory": null,
+        "vort_memory_profile_enabled": false,
+        "vort_hq_enabled": false,
+        "reference_quality": 8,
+        "reference_quality_override_requested": 8,
+        "reference_case_quality": null,
+        "reference_lgwin": 16,
+        "reference_mode": 0,
+        "reference_lgwin_override_requested": 16,
+        "reference_mode_override_requested": 0,
+        "vort_wire_window_bits": 16,
+        "reference_wire_window_bits": 16,
+        "parameters_match": true,
+        "auxiliary_lazy_level": "balanced",
+        "auxiliary_ratio_level": "ratio",
+        "auxiliary_ratio_extended_dictionary_probes_requested": 0,
+        "auxiliary_ratio_extended_dictionary_probes_effective": 0,
+        "auxiliary_ratio_adaptive_command_split": false,
+        "auxiliary_ratio_adaptive_literal_split": false,
+        "auxiliary_ratio_adaptive_distance_split": null,
+        "auxiliary_ratio_distance_parameter_search": null
+      }
+    }
+  ]
+}

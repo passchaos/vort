@@ -1,0 +1,42 @@
+{
+  "default": {
+    "planned_quality": null,
+    "vort_mode": "generic",
+    "reference_quality": 3,
+    "reference_lgwin": 22,
+    "reference_mode": 0,
+    "vort_wire_window_bits": 16,
+    "reference_wire_window_bits": 22,
+    "parameters_match": false
+  },
+  "matched": {
+    "planned_quality": 8,
+    "vort_mode": "generic",
+    "reference_quality": 8,
+    "reference_lgwin": 16,
+    "reference_mode": 0,
+    "vort_wire_window_bits": 16,
+    "reference_wire_window_bits": 16,
+    "parameters_match": true
+  },
+  "adjusted": {
+    "planned_quality": 0,
+    "vort_mode": "generic",
+    "reference_quality": 0,
+    "reference_lgwin": 16,
+    "reference_mode": 0,
+    "vort_wire_window_bits": 16,
+    "reference_wire_window_bits": 18,
+    "parameters_match": false
+  },
+  "modes": {
+    "planned_quality": 8,
+    "vort_mode": "text",
+    "reference_quality": 8,
+    "reference_lgwin": 16,
+    "reference_mode": 2,
+    "vort_wire_window_bits": 16,
+    "reference_wire_window_bits": 16,
+    "parameters_match": false
+  }
+}

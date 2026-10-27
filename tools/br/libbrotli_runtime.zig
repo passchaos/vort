@@ -274,6 +274,15 @@ pub const Runtime = struct {
         lgwin: c_int = 22,
         /// BrotliEncoderMode: generic=0, text=1, font=2.
         mode: c_int = 0,
+
+        pub fn validate(self: OneShotOptions) !void {
+            // The public one-shot API also supports the explicit Large Window
+            // extension. Preserve that range for existing compatibility probes.
+            if (self.quality < 0 or self.quality > 11 or
+                self.lgwin < 10 or self.lgwin > 30 or
+                self.mode < 0 or self.mode > 2)
+                return error.InvalidReferenceParameters;
+        }
     };
 
     /// One-shot libbrotli encoder with the wire-shaping parameters used by
@@ -285,6 +294,7 @@ pub const Runtime = struct {
         input: []const u8,
         options: OneShotOptions,
     ) ![]u8 {
+        try options.validate();
         const bound = self.max_compressed_size(input.len);
         if (bound == 0) return error.ReferenceEncodeFailed;
         const output = try allocator.alloc(u8, bound);

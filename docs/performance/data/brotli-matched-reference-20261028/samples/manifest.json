@@ -1,0 +1,9 @@
+{
+  "input_sets": [
+    {
+      "frozen_path": "/home/passchaos/project-z/vort/docs/performance/data/brotli-matched-reference-20261028/samples/input.txt",
+      "input_bytes": 2640,
+      "input_sha256": "0d6239d44e1f465d045e5179cc2a5bf0997a95bdd8ad70a11eb2f3d3f4796941"
+    }
+  ]
+}
