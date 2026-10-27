@@ -67,6 +67,7 @@ pub fn supported(options: anytype, has_exact_commands: bool) bool {
 }
 
 pub const Prepared = struct {
+    payload_extra_bits: @import("../../io/bit_count.zig").BitCount = undefined,
     command_frequencies: [command_capacity]u32 = undefined,
     distance_frequencies: [distance_capacity]u32 = undefined,
     command_alphabet: command_plan.PrefixAlphabet = undefined,

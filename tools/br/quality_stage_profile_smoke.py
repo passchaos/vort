@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check q8 profile file ownership and equivalent input/output aliases."""
+"""Check q8 profile aliases and exact evaluated-candidate emission reports."""
 import argparse
 import hashlib
 import json
@@ -33,12 +33,45 @@ def run(executable: Path) -> dict:
         result = subprocess.run([str(executable), "--rounds", "1", "--path", str(source), "--json", str(output)], capture_output=True)
         assert result.returncode == 0, result.stderr
         report = json.loads(output.read_text())
+        assert report["schema"] == "vort.brotli.q8-candidate-profile.v2"
+        profile = report["rows"][0]["rounds"][0]["profile"]
+        assert "evaluation_attempts" in profile and "evaluate" in profile["exclusive_ns"]
         gate = validate(report, executable)
         assert gate["validated_runs"] == 1 and source.read_bytes() == contents
         cases.append({"case": "separate_output", "accepted": True, "input_preserved": True,
                       "timing_and_identity_validated": True})
+        evaluated_source = root / "evaluated-input.bin"
+        state = 0x243F6A88
+        letters = bytearray()
+        for _ in range(6000):
+            state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+            letters.append(97 + ((state >> 24) % 26))
+        evaluated_contents = b"".join(
+            b'{"index":%d,"value":"%s","kind":"generic"}\n' %
+            (index, letters[index * 24:(index + 1) * 24])
+            for index in range(250))
+        evaluated_source.write_bytes(evaluated_contents)
+        evaluated_output = root / "evaluated-report.json"
+        result = subprocess.run([str(executable), "--rounds", "1", "--path", str(evaluated_source),
+                                 "--json", str(evaluated_output)], capture_output=True)
+        assert result.returncode == 0, result.stderr
+        evaluated_report = json.loads(evaluated_output.read_text())
+        assert evaluated_report["schema"] == "vort.brotli.q8-candidate-profile.v2"
+        gate = validate(evaluated_report, executable)
+        profile = evaluated_report["rows"][0]["rounds"][0]["profile"]
+        assert gate["validated_runs"] == 1 and profile["evaluation_attempts"] > 0
+        emissions = [event for event in profile["events"]
+                     if event["stage"] == "wire" and event["evaluation_event_id"] is not None]
+        assert emissions and evaluated_source.read_bytes() == evaluated_contents
+        returned = next(event for event in profile["events"]
+                        if event["id"] == profile["returned_wire_event_id"])
+        assert returned["stage"] == "wire"
+        cases.append({"case": "evaluated_candidates", "accepted": True, "input_preserved": True,
+                      "evaluation_attempts": profile["evaluation_attempts"],
+                      "linked_emissions": len(emissions), "returned_real_wire": True,
+                      "timing_and_identity_validated": True})
     return {"executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(), "cases": cases,
-            "scope": "Isolated temporary file aliases and one tiny input report; no benchmark timing claim."}
+            "scope": "Isolated temporary file aliases, a tiny input report, and deterministic JSON candidate evaluation/emission links; no benchmark timing claim."}
 
 
 def main():

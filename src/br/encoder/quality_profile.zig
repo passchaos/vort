@@ -6,8 +6,11 @@ const context_profile = @import("literal_context_profile.zig");
 pub const event_capacity = 512;
 const stack_capacity = 32;
 
-pub const Stage = enum { outer, lazy_parse, lazy_commands, optimal_parse, optimal_commands, preferred_context, recent_distance_scan, context_proposals, split_planning, wire, distance_parameters, selection, other };
+pub const Stage = enum { outer, lazy_parse, lazy_commands, optimal_parse, optimal_commands, preferred_context, recent_distance_scan, context_proposals, split_planning, wire, evaluate, distance_parameters, selection, other };
 pub const Origin = enum { other, lazy, optimal };
+/// Exact candidate length, optionally linked to a recorded evaluation or wire.
+/// Selection depends only on bytes, including when event storage is truncated.
+pub const CandidateRef = struct { bytes: usize, id: ?usize = null };
 pub const Request = struct {
     max_total_working_memory: ?usize = null,
     memory_profile: ?*total.EncodeMemoryProfile = null,
@@ -23,6 +26,7 @@ pub const Exclusive = struct {
     context_proposals: u64 = 0,
     split_planning: u64 = 0,
     wire: u64 = 0,
+    evaluate: u64 = 0,
     distance_parameters: u64 = 0,
     selection: u64 = 0,
     other: u64 = 0,
@@ -104,6 +108,8 @@ pub const Event = struct {
     input_bytes: usize = 0,
     command_count: usize = 0,
     wire_bytes: ?usize = null,
+    evaluated_wire_bytes: ?usize = null,
+    evaluation_event_id: ?usize = null,
     error_name: []const u8 = "",
     accepted: ?bool = null,
     gain_bytes: usize = 0,
@@ -128,6 +134,7 @@ pub const Profile = struct {
     events_total: usize = 0,
     events_truncated: bool = false,
     wire_attempts: usize = 0,
+    evaluation_attempts: usize = 0,
     /// The first slice fully traces the lazy/optimal/context/split candidates.
     /// Native dictionary auxiliaries on inputs <=4096 remain coarse `other`
     /// work and explicitly mark their detailed wire coverage incomplete.
@@ -168,6 +175,7 @@ pub const Profile = struct {
             .events_total = self.events_total,
             .events_truncated = self.events_truncated,
             .wire_attempts = self.wire_attempts,
+            .evaluation_attempts = self.evaluation_attempts,
             .wire_attempt_coverage_complete = self.wire_attempt_coverage_complete,
             .timing_complete = self.timing_complete,
             .outer_elapsed_ns = self.outer_elapsed_ns,
@@ -195,8 +203,14 @@ pub const Disabled = struct {
     pub fn begin(_: Disabled, _: Stage, _: usize, _: usize) EmptyScope {
         return .{};
     }
-    pub fn prefer(_: Disabled, candidate: []const u8, incumbent: []const u8) bool {
-        return candidate.len < incumbent.len;
+    pub fn reference(_: Disabled, wire: []const u8) CandidateRef {
+        return .{ .bytes = wire.len };
+    }
+    pub fn preferReferences(_: Disabled, candidate: CandidateRef, incumbent: CandidateRef) bool {
+        return candidate.bytes < incumbent.bytes;
+    }
+    pub fn prefer(self: Disabled, candidate: []const u8, incumbent: []const u8) bool {
+        return self.preferReferences(self.reference(candidate), self.reference(incumbent));
     }
     pub fn incompleteWires(_: Disabled) void {}
     pub fn returned(_: Disabled, _: []const u8) void {}
@@ -206,6 +220,10 @@ pub const Disabled = struct {
 pub const EmptyScope = struct {
     pub fn finish(_: *EmptyScope) void {}
     pub fn wire(_: *EmptyScope, _: []const u8) void {}
+    pub fn evaluated(_: *EmptyScope, bytes: usize) CandidateRef {
+        return .{ .bytes = bytes };
+    }
+    pub fn emissionOf(_: *EmptyScope, _: CandidateRef) void {}
     pub fn failure(_: *EmptyScope, _: anyerror) void {}
     pub fn config(_: *EmptyScope, _: anytype) void {}
 };
@@ -258,6 +276,7 @@ pub const Active = struct {
         const parent = if (p.depth == 0) null else p.stack[p.depth - 1].id;
         const slot = self.append(.{ .id = id, .parent_id = parent, .stage = stage, .origin = self.origin, .variant = self.is_variant, .input_bytes = input, .command_count = commands });
         if (stage == .wire) p.wire_attempts +|= 1;
+        if (stage == .evaluate) p.evaluation_attempts +|= 1;
         const frame: ?usize = if (p.depth < stack_capacity) p.depth else null;
         if (frame) |index| {
             p.stack[index] = .{ .id = id };
@@ -275,20 +294,26 @@ pub const Active = struct {
         }
         return null;
     }
+    pub fn reference(self: Active, wire: []const u8) CandidateRef {
+        return .{ .bytes = wire.len, .id = self.wireId(wire) };
+    }
     pub fn prefer(self: Active, candidate: []const u8, incumbent: []const u8) bool {
-        const accepted = candidate.len < incumbent.len;
+        return self.preferReferences(self.reference(candidate), self.reference(incumbent));
+    }
+    pub fn preferReferences(self: Active, candidate: CandidateRef, incumbent: CandidateRef) bool {
+        const accepted = candidate.bytes < incumbent.bytes;
         _ = self.append(.{
             .id = self.profile.events_total,
             .parent_id = if (self.profile.depth == 0) null else self.profile.stack[self.profile.depth - 1].id,
             .stage = .selection,
             .origin = self.origin,
             .variant = self.is_variant,
-            .wire_bytes = candidate.len,
-            .incumbent_bytes = incumbent.len,
+            .wire_bytes = candidate.bytes,
+            .incumbent_bytes = incumbent.bytes,
             .accepted = accepted,
-            .gain_bytes = if (accepted) incumbent.len - candidate.len else 0,
-            .candidate_event_id = self.wireId(candidate),
-            .incumbent_event_id = self.wireId(incumbent),
+            .gain_bytes = if (accepted) incumbent.bytes - candidate.bytes else 0,
+            .candidate_event_id = candidate.id,
+            .incumbent_event_id = incumbent.id,
         });
         return accepted;
     }
@@ -313,10 +338,42 @@ pub const Scope = struct {
     frame: ?usize,
     start: std.Io.Timestamp,
     pub fn wire(self: *Scope, bytes: []const u8) void {
+        std.debug.assert(self.stage != .evaluate);
         if (self.slot) |index| {
-            self.recorder.profile.events[index].wire_bytes = bytes.len;
-            self.recorder.profile.wire_addresses[index] = @intFromPtr(bytes.ptr);
-            self.recorder.profile.wire_live[index] = self.stage == .wire;
+            const p = self.recorder.profile;
+            if (p.events[index].evaluated_wire_bytes) |expected| std.debug.assert(expected == bytes.len);
+            p.events[index].wire_bytes = bytes.len;
+            if (self.stage == .wire) {
+                p.wire_addresses[index] = @intFromPtr(bytes.ptr);
+                p.wire_live[index] = true;
+            }
+        }
+    }
+    /// Record exact evaluation size without registering a physical wire.
+    pub fn evaluated(self: *Scope, bytes: usize) CandidateRef {
+        std.debug.assert(self.stage == .evaluate);
+        var result: CandidateRef = .{ .bytes = bytes };
+        if (self.slot) |index| {
+            const event = &self.recorder.profile.events[index];
+            event.evaluated_wire_bytes = bytes;
+            result.id = event.id;
+        }
+        return result;
+    }
+    /// An emitted wire can link to its evaluation even after selection. The
+    /// expected length is retained independently of whether that event fit.
+    pub fn emissionOf(self: *Scope, candidate: CandidateRef) void {
+        std.debug.assert(self.stage == .wire);
+        if (self.slot) |index| {
+            const p = self.recorder.profile;
+            if (candidate.id) |id| {
+                std.debug.assert(id < p.event_count);
+                std.debug.assert(p.events[id].id == id and p.events[id].stage == .evaluate);
+                std.debug.assert(p.events[id].evaluated_wire_bytes == candidate.bytes);
+            }
+            if (p.events[index].wire_bytes) |bytes| std.debug.assert(bytes == candidate.bytes);
+            p.events[index].evaluation_event_id = candidate.id;
+            p.events[index].evaluated_wire_bytes = candidate.bytes;
         }
     }
     pub fn failure(self: *Scope, err: anyerror) void {
@@ -368,4 +425,8 @@ fn addTime(profile: *Profile, target: *u64, amount: u64) void {
         profile.timing_complete = false;
         break :blk std.math.maxInt(u64);
     };
+}
+
+test "q8 trace candidate references preserve evaluation emission and truncation" {
+    try @import("quality_profile_reference_tests.zig").run(@This());
 }

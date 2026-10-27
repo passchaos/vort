@@ -1,0 +1,6 @@
+{
+  "wire_equal": true,
+  "context_non_time_fields_equal": true,
+  "ordered_selection_decisions_equal": true,
+  "scope": "three inputs x three rounds; IDs and physical wire attempts intentionally differ"
+}

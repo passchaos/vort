@@ -39,7 +39,7 @@ pub fn main(init: std.process.Init) !void {
     defer info.deinit(init.gpa);
     var json = std.Io.Writer.Allocating.init(init.gpa);
     defer json.deinit();
-    try json.writer.writeAll("{\"schema\":\"vort.brotli.q8-candidate-profile.v1\",\"provenance\":");
+    try json.writer.writeAll("{\"schema\":\"vort.brotli.q8-candidate-profile.v2\",\"provenance\":");
     try std.json.Stringify.value(info, .{}, &json.writer);
     try json.writer.print(",\"quality\":8,\"mode\":\"generic\",\"window_bits\":16,\"profile_state_bytes\":{d},\"rows\":[", .{@sizeOf(br.QualityQ8Profile)});
     const profile = try init.gpa.create(br.QualityQ8Profile);
@@ -82,6 +82,7 @@ pub fn main(init: std.process.Init) !void {
                 .events_total = profile.events_total,
                 .events_truncated = profile.events_truncated,
                 .wire_attempts = profile.wire_attempts,
+                .evaluation_attempts = profile.evaluation_attempts,
                 .wire_attempt_coverage_complete = profile.wire_attempt_coverage_complete,
                 .timing_complete = profile.timing_complete,
                 .outer_elapsed_ns = profile.outer_elapsed_ns,

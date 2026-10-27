@@ -23877,3 +23877,20 @@ reuse, so production keeps the simpler independently owned plans.
   These points do not establish significance or industry-best results. Next
   reduce loser materialization with exact count/select/emit, real new peaks,
   budget refusal and evaluation-to-wire trace linkage; retain the full goal.
+
+- 2026-10-28: ordinary preferred Brotli context groups now retain the primary
+  wire, count exact adaptive headers/payloads, and emit the final accepted
+  alternative once. Physical BitWriter has no counting branch. Fixed keyed
+  preparation, strict ties, 80% early return, proposal-zero cutoff and explicit
+  baseline preference preserve outputs. v2 diagnostics link evaluations to
+  real emitted wires and retain v1 reader compatibility. Forty count/emit
+  combinations pass 21/21 and eighteen ownership/policy scenarios pass 20/20
+  on Debug/ReleaseFast/x86; context tests pass 82/82, profile/resource 25/25,
+  compile/help 212/212 and actual counted Wasm five steps.
+  [Counted-context evidence](performance/brotli-counted-context.md) retains
+  final three-sweep 36-prefix time ratio 0.984920 versus 289110eb, unchanged
+  wires/settings, and five small regressing points. Four measured heap peaks
+  stay unchanged; three Silesia allocation/remap request counts fall. Profile
+  caller storage grows 16,400 bytes. Tuned reference time ratio remains 37.1483
+  at size ratio 0.99556. Points do not establish significance or industry-best
+  results; continue context planning/primary cost reduction and the full goal.

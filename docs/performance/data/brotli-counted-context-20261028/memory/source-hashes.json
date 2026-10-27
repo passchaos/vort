@@ -1,0 +1,17 @@
+{
+  "candidate": {
+    "source_root": "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/candidate/src",
+    "tree_sha256": "31ea9dcbe25d33dcf703e1daf112315b33b24e4660a313402f0c16e17024eb66",
+    "br_zig_sha256": "8a2af34def5929a00e2a3df9889affc085383511b37e3409c615d6a75a20432f"
+  },
+  "baseline": {
+    "source_root": "/tmp/vort-br-counted-20261028-iws2jiy4/baseline/src",
+    "tree_sha256": "54c1676a753032c443e8a2e09ad20330005fbd21e39b2f5b41c73e44d54de1d9",
+    "br_zig_sha256": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd"
+  },
+  "probe": {
+    "candidate_memory_probe.zig": "829361ff30320b6cc106a9649ed6aa175db7b39586b4043a0cf4b360025f3478",
+    "candidate_memory_tracker.zig": "44a8e585b2f6667bf4769e7246f37c85460edf1a1b80e2bbaaed1a43afe9fc68"
+  },
+  "record_o_sha256": "b8804c46848c07070c57fd95ff5fdc3aa02f7c8f951412b0eea9165ed077ed6e"
+}

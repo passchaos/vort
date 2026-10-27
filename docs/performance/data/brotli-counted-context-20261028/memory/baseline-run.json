@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/baseline-probe",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-dickens-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-mozilla-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-ooffice-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/deterministic-json-8192.bin",
+    "--json",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/baseline-memory.json"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 1.0440561771392822,
+  "executable_sha256": "ec3004021e4ccef0a45ffbf7b5a38baeadc589cd25271bb5aaf22b3bee7baddb"
+}

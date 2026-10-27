@@ -1,0 +1,10 @@
+{
+  "command": [
+    "zig",
+    "fmt",
+    "--check",
+    "tools/br/candidate_memory_probe.zig",
+    "tools/br/candidate_memory_tracker.zig"
+  ],
+  "exit_code": 0
+}

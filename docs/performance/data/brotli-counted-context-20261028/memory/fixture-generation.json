@@ -1,0 +1,10 @@
+{
+  "generator": "python3 stdlib json.dumps compact separators ensure_ascii; 48 deterministic records, trailing JSON whitespace to 8192 bytes",
+  "fixture_sha256": "36a1d8121bbf5c62e6fc6fee8123c5c3c8e84e1872de95322339b5a8214911eb",
+  "fixture_bytes": 8192,
+  "corpus_sources": [
+    "/tmp/vort-encode-corpus/silesia-dickens.bin",
+    "/tmp/vort-encode-corpus/silesia-mozilla.bin",
+    "/tmp/vort-encode-corpus/silesia-ooffice.bin"
+  ]
+}

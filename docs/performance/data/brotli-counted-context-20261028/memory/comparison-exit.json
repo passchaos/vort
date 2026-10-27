@@ -1,0 +1,7 @@
+{
+  "command": [
+    "python3",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/compare.py"
+  ],
+  "exit_code": 0
+}

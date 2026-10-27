@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/candidate-probe",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-dickens-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-mozilla-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-ooffice-65536.bin",
+    "--path",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/deterministic-json-8192.bin",
+    "--json",
+    "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/candidate-memory.json"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 1.479794979095459,
+  "executable_sha256": "39c1bb6ee8f159f8a59d4f94bb633990a0f49fe052e986b8efa3adcb848accc5"
+}

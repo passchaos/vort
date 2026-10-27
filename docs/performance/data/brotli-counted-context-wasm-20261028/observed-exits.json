@@ -1,0 +1,31 @@
+{
+  "archive_frozen_replay": {
+    "exit_code": 0,
+    "log": "logs/archive-frozen-replay.log.xz",
+    "report": "replay-summary.json",
+    "source": "Unified exec returned explicit exit_code=0 for replay.py; Node child exit_code=0 is recorded in the frozen replay log."
+  },
+  "archive_source_restoration": {
+    "exit_code": 0,
+    "report": "source-restore-result.json",
+    "source": "Unified exec returned explicit exit_code=0 for restore_sources.py."
+  },
+  "archive_v2_profile_validation": {
+    "exit_code": 0,
+    "report": "profiles/replayed-v2-gate.json.xz",
+    "source": "Independent frozen Python gate completed during the successful replay process.",
+    "validated_runs": 9
+  },
+  "main_final_wasm_gate": {
+    "exit_code": 0,
+    "log": "logs/wasm-counted-final.log.xz",
+    "source": "Parent observed unified exec session 77367 completion with explicit exit_code=0; archived log contains Build Summary 5/5 succeeded."
+  },
+  "original_v2_profile_gate": {
+    "exit_code": 0,
+    "producer_sha256": "821cfb90dc53f9d563c76df918a6452191bc3e168f03a5b964e9e88bcf426c09",
+    "report": "profiles/final-stage-original-gate.json.xz",
+    "source": "Archive agent executed tools/br/quality_profile_gate.py with --json final-stage.json and the exact native producer executable; unified exec returned exit_code=0.",
+    "validated_runs": 9
+  }
+}

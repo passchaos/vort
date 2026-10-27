@@ -1,0 +1,50 @@
+{
+  "observed_exits": [
+    {
+      "session_id": 58051,
+      "exit_code": 0,
+      "scope": "public q8 profile/resource 25/25"
+    },
+    {
+      "session_id": 45702,
+      "exit_code": 0,
+      "scope": "literal context ReleaseFast 82/82"
+    },
+    {
+      "session_id": 2940,
+      "exit_code": 0,
+      "scope": "compile native/Wasm and help 212/212"
+    },
+    {
+      "session_id": 77367,
+      "exit_code": 0,
+      "scope": "public counted Wasm gate 5/5"
+    },
+    {
+      "session_id": 9211,
+      "exit_code": 0,
+      "scope": "final current stage producer"
+    },
+    {
+      "session_id": 67524,
+      "exit_code": 0,
+      "scope": "baseline stage build"
+    },
+    {
+      "session_id": 42179,
+      "exit_code": 0,
+      "scope": "baseline stage run"
+    },
+    {
+      "session_id": 48390,
+      "exit_code": 0,
+      "scope": "exploratory matrix"
+    },
+    {
+      "session_id": 42019,
+      "exit_code": 0,
+      "scope": "formal three-sweep matrix"
+    }
+  ],
+  "worker_verification": "native Debug/RF/x86 counting/lifecycle 21/21 and policy/ownership 20/20; independent trace tests and v2 gates exit0; memory artifact exit metadata preserved separately"
+}

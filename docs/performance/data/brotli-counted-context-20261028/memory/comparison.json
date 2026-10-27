@@ -1,0 +1,130 @@
+{
+  "schema": "vort.brotli.q8-candidate-memory-comparison.v1",
+  "measurement": "requested_encoder_owned_heap_only",
+  "baseline_profile_state_bytes": 161840,
+  "candidate_profile_state_bytes": 178240,
+  "rows": [
+    {
+      "path": "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-dickens-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "wire_bytes": 24723,
+      "wire_sha256": "2d5a260a0e470c49372ad983dc6ef7ffb5a50658a16a2839e1dddc83381d9342",
+      "baseline_peak": 3210608,
+      "candidate_peak": 3210608,
+      "peak_change_bytes": 0,
+      "baseline_alloc_resize_remap": [
+        291,
+        0,
+        166
+      ],
+      "candidate_alloc_resize_remap": [
+        265,
+        0,
+        144
+      ],
+      "baseline_wire_attempts": 18,
+      "candidate_wire_attempts": 16,
+      "baseline_evaluation_attempts": null,
+      "candidate_evaluation_attempts": 4,
+      "baseline_linked_emissions": 0,
+      "candidate_linked_emissions": 2,
+      "wire_equal": true,
+      "ordinary_profile_and_cap_ledger_checks": true,
+      "all_cleanup_verified": true
+    },
+    {
+      "path": "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-mozilla-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "wire_bytes": 14216,
+      "wire_sha256": "0edaa9cf782d41223ce9cca5f4811d94e2bcfe58185ab88a513d297b210f6209",
+      "baseline_peak": 2658114,
+      "candidate_peak": 2658114,
+      "peak_change_bytes": 0,
+      "baseline_alloc_resize_remap": [
+        248,
+        0,
+        136
+      ],
+      "candidate_alloc_resize_remap": [
+        231,
+        0,
+        120
+      ],
+      "baseline_wire_attempts": 18,
+      "candidate_wire_attempts": 16,
+      "baseline_evaluation_attempts": null,
+      "candidate_evaluation_attempts": 4,
+      "baseline_linked_emissions": 0,
+      "candidate_linked_emissions": 2,
+      "wire_equal": true,
+      "ordinary_profile_and_cap_ledger_checks": true,
+      "all_cleanup_verified": true
+    },
+    {
+      "path": "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/silesia-ooffice-65536.bin",
+      "input_bytes": 65536,
+      "input_sha256": "9d30521922187d0a26f56cf2df85001f9585d0d4ec6a0a8797466afcc367f825",
+      "wire_bytes": 30895,
+      "wire_sha256": "336f1816d7513e399c951f648edd9343d9aa72102994711a6df35cf5e1ea1079",
+      "baseline_peak": 3236657,
+      "candidate_peak": 3236657,
+      "peak_change_bytes": 0,
+      "baseline_alloc_resize_remap": [
+        291,
+        0,
+        166
+      ],
+      "candidate_alloc_resize_remap": [
+        265,
+        0,
+        144
+      ],
+      "baseline_wire_attempts": 18,
+      "candidate_wire_attempts": 16,
+      "baseline_evaluation_attempts": null,
+      "candidate_evaluation_attempts": 4,
+      "baseline_linked_emissions": 0,
+      "candidate_linked_emissions": 2,
+      "wire_equal": true,
+      "ordinary_profile_and_cap_ledger_checks": true,
+      "all_cleanup_verified": true
+    },
+    {
+      "path": "/tmp/vort-br-candidate-memory-20261028-q90v4sn6/deterministic-json-8192.bin",
+      "input_bytes": 8192,
+      "input_sha256": "36a1d8121bbf5c62e6fc6fee8123c5c3c8e84e1872de95322339b5a8214911eb",
+      "wire_bytes": 615,
+      "wire_sha256": "c6f640277be23f072d99347ce184661d690066bc4f288c8dfe34d87161d9c7c3",
+      "baseline_peak": 446878,
+      "candidate_peak": 446878,
+      "peak_change_bytes": 0,
+      "baseline_alloc_resize_remap": [
+        47,
+        0,
+        31
+      ],
+      "candidate_alloc_resize_remap": [
+        47,
+        0,
+        31
+      ],
+      "baseline_wire_attempts": 5,
+      "candidate_wire_attempts": 5,
+      "baseline_evaluation_attempts": null,
+      "candidate_evaluation_attempts": 0,
+      "baseline_linked_emissions": 0,
+      "candidate_linked_emissions": 0,
+      "wire_equal": true,
+      "ordinary_profile_and_cap_ledger_checks": true,
+      "all_cleanup_verified": true
+    }
+  ],
+  "artifacts_sha256": {
+    "baseline-probe": "ec3004021e4ccef0a45ffbf7b5a38baeadc589cd25271bb5aaf22b3bee7baddb",
+    "candidate-probe": "39c1bb6ee8f159f8a59d4f94bb633990a0f49fe052e986b8efa3adcb848accc5",
+    "baseline-memory.json": "a4fa8beb62f006a6e1442d498598f6b2292178eb3669ae71970425e43babcffc",
+    "candidate-memory.json": "6a2632fabd8dc4578a0380b9191d2e7f970ce5b11e6fd88dfe660b49be353cf5"
+  }
+}

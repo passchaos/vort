@@ -1,0 +1,287 @@
+{
+  "base_commit": "289110eb515edf7af24a5a72d88c80bfc164b9d8",
+  "base_references": [
+    {
+      "bytes": 454359,
+      "git_blob": "08184453b20c8751a95390681232891bd791b5e0",
+      "path": "build.zig",
+      "sha256": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4"
+    },
+    {
+      "bytes": 463,
+      "git_blob": "0bbfada80859503bc557a5bb4e10057834718a47",
+      "path": "build.zig.zon",
+      "sha256": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480"
+    },
+    {
+      "bytes": 66986,
+      "git_blob": "9668514f363f58718f583a162c8f09b6a56c176a",
+      "path": "src/br/encoder/command_plan.zig",
+      "sha256": "173cf7e6bc7e784fab80201f5cb696b0f870f4843de35e5999179439e6d9d9f9"
+    },
+    {
+      "bytes": 6382,
+      "git_blob": "1f8b12e2fe5ed415463eb152bd627ec1bdda1b9d",
+      "path": "src/br/encoder/compound_wire.zig",
+      "sha256": "6257bed458d20153a16a72e00b0938a78cfc66c6151caebc2693889c0bd477d5"
+    },
+    {
+      "bytes": 12895,
+      "git_blob": "a0c9bbc81b1073b4ca466a5c9849784a5f1935ae",
+      "path": "src/br/encoder/distance.zig",
+      "sha256": "c6f90212894307c2b51b803dbb527088262271b4ad137eda0a2224ed7970d9d8"
+    },
+    {
+      "bytes": 5899,
+      "git_blob": "5e2002e7de713404392cabdd74eae40a255d7156",
+      "path": "src/br/encoder/literal_context.zig",
+      "sha256": "ed77ac8c494be94e940338d7652cf3fff3710fe244b0fc34730b3a8aeae876fd"
+    },
+    {
+      "bytes": 9785,
+      "git_blob": "7475f1986d457b40a195aa822fe830e1442c1974",
+      "path": "src/br/encoder/literal_context_profile.zig",
+      "sha256": "58ca213b133af66a3c3f9958a1ee7142794c36503e5a9c06fc42bcfe338bd262"
+    },
+    {
+      "bytes": 87729,
+      "git_blob": "7c01ffd1791d80325a2544b8dcfa27fc2a2c4932",
+      "path": "src/br/encoder/literal_context_split.zig",
+      "sha256": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0"
+    },
+    {
+      "bytes": 2088,
+      "git_blob": "8e38b3715d6a17003eda646133845fbf15fb3a00",
+      "path": "src/br/encoder/record_classifier.zig",
+      "sha256": "a203be921b6d948f596cd92d1384e575318180933965fc1966dbe479ddf7eb78"
+    },
+    {
+      "bytes": 422,
+      "git_blob": "c56ecef1defb776423183234b153ba62dd2ad110",
+      "path": "src/br/encoder/record_optimal_abi.zig",
+      "sha256": "449b15935e3cdf5f1cf183458abe90aaa2f0000089cc2ddc63bbfd64e57b8803"
+    },
+    {
+      "bytes": 12916,
+      "git_blob": "b208e43074e144da4030b5b0b48fbc073cb99ba3",
+      "path": "src/br/encoder/record_optimal_object.zig",
+      "sha256": "4c6104f462b988a719dee1227518b22ab4abeb2261aba2f86b93921a3a6df9c6"
+    },
+    {
+      "bytes": 152,
+      "git_blob": "d1968d96ab35297afa892827b6a49e117bff5d64",
+      "path": "src/br_prepared_command_distance_wasm.zig",
+      "sha256": "3aee09b0fc12f9250a65b2716e2660ff11c171755ed092e83e3ebe504d936e98"
+    },
+    {
+      "bytes": 4486,
+      "git_blob": "19564e5ba1a8f39e49e35649341a0c2b2bba2917",
+      "path": "src/core.zig",
+      "sha256": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3"
+    },
+    {
+      "bytes": 136007,
+      "git_blob": "bf4812dfef7be077e14fd93278fd7ef80d087144",
+      "path": "src/huffman.zig",
+      "sha256": "2bfc756f0d0380eeab5f6bc9e268ef14294aa5816dbdb1e039390bdabb682aa3"
+    },
+    {
+      "bytes": 3582,
+      "git_blob": "2f43b8d6bdcfbb2b4b3d90878e4a97767f1ecc71",
+      "path": "src/io/bit_count.zig",
+      "sha256": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2"
+    },
+    {
+      "bytes": 837184,
+      "git_blob": "92f2b31b043bc2bc9840a2168f2b11b902de7013",
+      "path": "src/root.zig",
+      "sha256": "a15ac28d6957a85c2e552e7568baaa174ddf89a6dde1f1ab490e464f0524aaa4"
+    },
+    {
+      "bytes": 11470,
+      "git_blob": "e134a43fdd9af52c076ea9e4c82b35b2ccdcc63c",
+      "path": "tools/benchmark_provenance.zig",
+      "sha256": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1"
+    },
+    {
+      "bytes": 24974,
+      "git_blob": "c5c842c350a364f148373f2bca7eb8d5e2214b8e",
+      "path": "tools/br/encode_samples.zig",
+      "sha256": "296c9c0f11fc494262c772deb86d9a6f77d4ad43fd4dd9ff823200a6e128dc7a"
+    }
+  ],
+  "base_tree": "8c42eeae22260e6c8ee736906f70aef0a200a32a",
+  "captured_at_utc": "2026-10-27T22:43:05.918132+00:00",
+  "overlays": [
+    {
+      "base_blob": "07ee596ed6ffcc55a9ceca911f9b2bd0c7be1f4f",
+      "base_sha256": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+      "bytes": 2482305,
+      "kind": "modified",
+      "path": "src/br.zig",
+      "sha256": "8a2af34def5929a00e2a3df9889affc085383511b37e3409c615d6a75a20432f"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 5449,
+      "kind": "untracked",
+      "path": "src/br/encoder/context_candidate_group.zig",
+      "sha256": "51c517c547827b42fbc36ef726f8dd13c7b39189b178daea11aa0ef2414f46da"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 19095,
+      "kind": "untracked",
+      "path": "src/br/encoder/context_candidate_group_tests.zig",
+      "sha256": "7e91baec550ca98e1a94742a3d233c3870fda3bbae56bf9972f1f8f388c8432e"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 3374,
+      "kind": "untracked",
+      "path": "src/br/encoder/counting_writer.zig",
+      "sha256": "ca7ef25d92f225a0de47999af4ff1abc4c8f3e2384c763f62525b7bbac48b768"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 7608,
+      "kind": "untracked",
+      "path": "src/br/encoder/counting_writer_tests.zig",
+      "sha256": "d682bc47fd248af925b033ca893e8c20286fba38b1ae8021c5e6cbf762d5b5d8"
+    },
+    {
+      "base_blob": "2580d4239db2c43444f5608188e49549667e267b",
+      "base_sha256": "410d27059c8bcc3208b6da71f71a4ce7edd71883b589e2221205ac5baff5b7bb",
+      "bytes": 11542,
+      "kind": "modified",
+      "path": "src/br/encoder/prepared_command_distance.zig",
+      "sha256": "85cc3922fadf7df5f105587c5c832a2493e5973d0056ca4638d623157b691561"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 4358,
+      "kind": "untracked",
+      "path": "src/br/encoder/prepared_literal.zig",
+      "sha256": "2a2718d191cd953ba2c8647863f431767cbdac00f1e2d03ba63f8c345bcb2d72"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 4521,
+      "kind": "untracked",
+      "path": "src/br/encoder/prepared_literal_emission.zig",
+      "sha256": "f76d0873df11370d4db4b5eaf8562f3a71cf65a1251870cac11fe05ab0eb5663"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 15135,
+      "kind": "untracked",
+      "path": "src/br/encoder/prepared_literal_tests.zig",
+      "sha256": "af6e7726e81b5eb00403b3c857fde747b2202ebce26de14b6e2441cc411f254a"
+    },
+    {
+      "base_blob": "d83f62c727a2af20ec41575ec5eddc6dfbf665d6",
+      "base_sha256": "8b8fcaf9465ef87d197bf73db2142124aa20823be7947a3fd76969a6bd506bba",
+      "bytes": 18846,
+      "kind": "modified",
+      "path": "src/br/encoder/quality_profile.zig",
+      "sha256": "2a31b2b22d8636b2aae7e206bfca71f25857c7fa350f113efde98e102edb0d93"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 6274,
+      "kind": "untracked",
+      "path": "src/br/encoder/quality_profile_reference_tests.zig",
+      "sha256": "fe652bb509ebf2a57889c4d291e07a1e3b3c0e2eb12a080bdd8f3d92d8b7d003"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 2132,
+      "kind": "untracked",
+      "path": "src/br/encoder/weighted_payload.zig",
+      "sha256": "11522ab3a37cea98ff74059526bd22a445f733e987dee002f4d88138bc38cde2"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 7172,
+      "kind": "untracked",
+      "path": "src/br/encoder/weighted_payload_tests.zig",
+      "sha256": "36d37525f4e838b59dcd1a6f1986b459bb3d9d748b1b723464eec44f982fb78a"
+    },
+    {
+      "base_blob": "912b4c0716636dbfb9eecc23e3b42a43b72e8a2a",
+      "base_sha256": "fcb140b5778c2b465582b2b0aec5b317c46b24ce9d8f5aeba02630fd5fd61623",
+      "bytes": 7413,
+      "kind": "modified",
+      "path": "src/tests/br_prepared_command_distance_wasm.zig",
+      "sha256": "c076742cd75cf0605775a11827b69f12629b02c1fe9f5f507839feb2559676e8"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 12809,
+      "kind": "untracked",
+      "path": "tools/br/candidate_memory_probe.zig",
+      "sha256": "829361ff30320b6cc106a9649ed6aa175db7b39586b4043a0cf4b360025f3478"
+    },
+    {
+      "base_blob": null,
+      "base_sha256": null,
+      "bytes": 5793,
+      "kind": "untracked",
+      "path": "tools/br/candidate_memory_tracker.zig",
+      "sha256": "44a8e585b2f6667bf4769e7246f37c85460edf1a1b80e2bbaaed1a43afe9fc68"
+    },
+    {
+      "base_blob": "e2d321a49991a6db50a760bcabe50dff5708658f",
+      "base_sha256": "0d9bd356e0a486b4c5b2d60ae3dca68fa6ae25f8576e88aef7aa8de4cb3d8c06",
+      "bytes": 3702,
+      "kind": "modified",
+      "path": "tools/br/prepared_command_distance_wasm_gate.js",
+      "sha256": "6acdaa42c3d8f8d67ccf1781ba3a40934f7d8ad2800d604f7fb98ab26119b721"
+    },
+    {
+      "base_blob": "5914ff8f3e844e8c8cbc8b943652a6b433a7e0cc",
+      "base_sha256": "c8f93feba143890e10e3e313df548ca2b4bab4da397ba4fedd8093caeae1c6c2",
+      "bytes": 14872,
+      "kind": "modified",
+      "path": "tools/br/quality_profile_gate.py",
+      "sha256": "e897a20189f44f06611d73bf5f19b02c8b779c86e62abf82ac6529388896109f"
+    },
+    {
+      "base_blob": "8512c6557dd2a4b9cc5a61416ed5cc7c38349bcf",
+      "base_sha256": "2d2bf415f914b361f42e0f96cf11f36f06efa2d75122056f878650f4d8f577e7",
+      "bytes": 11414,
+      "kind": "modified",
+      "path": "tools/br/quality_profile_gate_smoke.py",
+      "sha256": "e1dda6ef9e54f326a12ab30b753f4ec70b088c6ea57532c11706363b3cb14f9d"
+    },
+    {
+      "base_blob": "d665915ce8a1f2687b1a525b5b18b11d99b3e10e",
+      "base_sha256": "a80e469945a0429dcf13537b046b24b48ec8deb373417191a058cd0edf1117cd",
+      "bytes": 7146,
+      "kind": "modified",
+      "path": "tools/br/quality_stage_profile.zig",
+      "sha256": "bc752fe5223c8d998c54b939420ed1631bb85aadd0faaa71e09c4e0b1eb4c994"
+    },
+    {
+      "base_blob": "9ece0f5e80a216e7d3b13149839f8fd0a08d96ea",
+      "base_sha256": "882186c94dc479a866d7760d5a50ea85ea546a26291eb13cdc76cd2c1850d0dc",
+      "bytes": 4670,
+      "kind": "modified",
+      "path": "tools/br/quality_stage_profile_smoke.py",
+      "sha256": "bcb481963855a3d5bbe753652b7709d1c083e73cffe2a5c06b623329c50b7db5"
+    }
+  ],
+  "restore_contract": "Restore the immutable Git base commit, then apply overlays. The small base-reference archive is a convenience subset, not a complete dependency snapshot. Commands and input remain borrowed and immutable within each preparation group.",
+  "schema": "vort.brotli.counted-context-source.v1"
+}

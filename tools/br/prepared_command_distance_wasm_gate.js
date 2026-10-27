@@ -45,6 +45,8 @@ function run(path) {
             complex_command_trees: api.brPreparedComplexCommandTrees(),
             recent_copy_count: api.brPreparedRecentCopies(),
             shared_candidate_groups: api.brPreparedSharedGroupWitnesses(),
+            evaluation_attempts: api.brPreparedEvaluationAttempts ? api.brPreparedEvaluationAttempts() : null,
+            linked_emissions: api.brPreparedLinkedEmissions ? api.brPreparedLinkedEmissions() : null,
             ordinary_profile_wire_equal: true,
             zig_decode_checked: true,
             node_native_decode_checked: true,
@@ -55,6 +57,7 @@ function run(path) {
 
 const baseline = run(process.argv[2]);
 const candidate = run(process.argv[3]);
+assert.ok(candidate.report.evaluation_attempts > 0);
 assert.deepEqual(candidate.input, baseline.input);
 assert.deepEqual(candidate.wire, baseline.wire);
 if (process.argv[4]) {

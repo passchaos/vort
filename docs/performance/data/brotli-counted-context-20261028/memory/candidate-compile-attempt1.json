@@ -1,0 +1,18 @@
+{
+  "command": [
+    "zig",
+    "build-exe",
+    "-O",
+    "ReleaseFast",
+    "--dep",
+    "vort_br",
+    "-Mroot=/tmp/vort-br-candidate-memory-20261028-q90v4sn6/probe/candidate_memory_probe.zig",
+    "-O",
+    "ReleaseFast",
+    "-Mvort_br=/tmp/vort-br-candidate-memory-20261028-q90v4sn6/candidate/src/br.zig",
+    "/tmp/vort-br-counted-20261028-iws2jiy4/record.o",
+    "-femit-bin=/tmp/vort-br-candidate-memory-20261028-q90v4sn6/candidate-probe"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 3.984945297241211
+}

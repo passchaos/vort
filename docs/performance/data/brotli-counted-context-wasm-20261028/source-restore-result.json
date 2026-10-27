@@ -1,0 +1,7 @@
+{
+  "base_commit": "289110eb515edf7af24a5a72d88c80bfc164b9d8",
+  "exit_code": 0,
+  "observation": "Unified exec source-restoration process returned explicit exit_code=0. No source build was run.",
+  "output": "/tmp/vort-br-counted-wasm-archive-source-20261028",
+  "overlays_checked": 21
+}

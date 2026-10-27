@@ -22,8 +22,17 @@ def integer(value, name: str) -> int:
     return value
 
 
+def candidate_bytes(event: dict) -> int:
+    require(event.get("error_name", "") == "", "failed candidate reference")
+    stage = event["stage"]
+    require(stage in {"wire", "evaluate"}, "wrong candidate reference stage")
+    field = "evaluated_wire_bytes" if stage == "evaluate" else "wire_bytes"
+    return integer(event.get(field), "candidate reference bytes")
+
+
 def validate(report: dict, executable: Path | None = None) -> dict:
-    require(report.get("schema") == "vort.brotli.q8-candidate-profile.v1", "wrong schema")
+    require(report.get("schema") in {"vort.brotli.q8-candidate-profile.v1", "vort.brotli.q8-candidate-profile.v2"}, "wrong schema")
+    evaluated_schema = report["schema"].endswith(".v2")
     require(report.get("quality") == 8 and report.get("mode") == "generic", "wrong policy")
     require(report.get("window_bits") == 16, "wrong window")
     if executable is not None:
@@ -49,6 +58,8 @@ def validate(report: dict, executable: Path | None = None) -> dict:
             require(not profile["events_truncated"], "event report truncated")
             require(profile["events_total"] == len(events), "missing event")
             exclusive = profile["exclusive_ns"]
+            if evaluated_schema:
+                require("evaluate" in exclusive and "evaluation_attempts" in profile, "missing evaluation accounting")
             total = sum(integer(n, "exclusive duration") for n in exclusive.values())
             outer = integer(profile["outer_elapsed_ns"], "outer duration")
             require(total <= outer and profile["unaccounted_ns"] == outer - total, "exclusive accounting")
@@ -56,6 +67,7 @@ def validate(report: dict, executable: Path | None = None) -> dict:
             by_stage = {stage: 0 for stage in exclusive}
             children = {}
             wires = []
+            evaluations = []
             outer_events = []
             for event in events:
                 identifier = integer(event["id"], "event id")
@@ -70,14 +82,35 @@ def validate(report: dict, executable: Path | None = None) -> dict:
                 require(exclusive_ns <= inclusive_ns, "event accounting")
                 by_id[identifier] = event
                 stage = event["stage"]
+                if evaluated_schema:
+                    require("evaluated_wire_bytes" in event and "evaluation_event_id" in event, "missing evaluation event fields")
                 if stage == "outer":
                     outer_events.append(event)
                 else:
                     require(stage in by_stage, "unknown stage")
                     by_stage[stage] += exclusive_ns
-                if stage == "wire":
-                    wires.append(event)
+                if stage in {"wire", "evaluate"}:
                     require(event["config"]["window_bits"] == 16 and not event["config"]["large_window"], "wire format")
+                evaluated = event.get("evaluated_wire_bytes")
+                evaluation_id = event.get("evaluation_event_id")
+                if stage == "evaluate":
+                    evaluations.append(event)
+                    require(event["wire_bytes"] is None and evaluation_id is None, "evaluation masquerades as emission")
+                    if event.get("error_name", "") == "":
+                        integer(evaluated, "evaluated wire bytes")
+                elif stage == "wire":
+                    wires.append(event)
+                    if evaluated is not None:
+                        integer(evaluated, "emission evaluated bytes")
+                        if event.get("error_name", "") == "":
+                            require(event["wire_bytes"] == evaluated, "emission length differs from evaluation")
+                    if evaluation_id is not None:
+                        integer(evaluation_id, "emission evaluation id")
+                        referenced = by_id.get(evaluation_id)
+                        require(referenced is not None and referenced["stage"] == "evaluate", "wrong emission evaluation link")
+                        require(candidate_bytes(referenced) == evaluated, "wrong emission evaluation length")
+                else:
+                    require(evaluated is None and evaluation_id is None, "evaluation fields on unrelated stage")
                 if event["accepted"] is not None:
                     require(stage == "selection" and event["incumbent_bytes"] is not None and event["wire_bytes"] is not None, "invalid selection")
                     accepted = event["wire_bytes"] < event["incumbent_bytes"]
@@ -85,11 +118,13 @@ def validate(report: dict, executable: Path | None = None) -> dict:
                     require(event["gain_bytes"] == (event["incumbent_bytes"] - event["wire_bytes"] if accepted else 0), "wrong gain")
                     for key, length in [("candidate_event_id", event["wire_bytes"]), ("incumbent_event_id", event["incumbent_bytes"])]:
                         if event[key] is not None:
+                            integer(event[key], key)
                             referenced = by_id.get(event[key])
-                            require(referenced is not None and referenced["stage"] == "wire" and referenced["wire_bytes"] == length, "wrong wire reference")
+                            require(referenced is not None and candidate_bytes(referenced) == length, "wrong candidate reference")
             require(len(outer_events) == 1 and outer_events[0]["inclusive_ns"] == outer, "outer event")
             require(by_stage == exclusive, "stage totals differ from events")
             require(len(wires) == profile["wire_attempts"], "wire attempt count")
+            require(len(evaluations) == integer(profile.get("evaluation_attempts", 0), "evaluation attempts"), "evaluation attempt count")
             if "context_details" in profile:
                 require(not profile.get("context_details_truncated", False), "context detail truncated")
                 details = profile["context_details"]
@@ -148,11 +183,13 @@ def validate(report: dict, executable: Path | None = None) -> dict:
                 require(by_id[identifier]["exclusive_ns"] == by_id[identifier]["inclusive_ns"] - duration, "parent subtraction")
             returned = profile["returned_wire_event_id"]
             if returned is not None:
-                require(returned in by_id and by_id[returned]["stage"] == "wire" and by_id[returned]["wire_bytes"] == wire_bytes, "returned winner link")
+                integer(returned, "returned winner id")
+                require(returned in by_id and by_id[returned]["stage"] == "wire" and candidate_bytes(by_id[returned]) == wire_bytes, "returned winner link")
             if row["input_bytes"] > 4096:
                 require(profile["wire_attempt_coverage_complete"], "unexpected incomplete large-input wire coverage")
                 require(returned is not None, "large-input winner missing")
             summaries.append({"path": str(path), "round": index, "outer_ns": outer, "wire_attempts": len(wires),
+                              "evaluation_attempts": len(evaluations),
                               "exclusive_ns": exclusive, "unaccounted_ns": profile["unaccounted_ns"],
                               "classified_fraction": (total - exclusive["other"]) / outer if outer else None,
                               "wire_coverage_complete": profile["wire_attempt_coverage_complete"]})

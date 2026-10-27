@@ -1,0 +1,20 @@
+[
+  {
+    "archive_path": "profiles/inputs/0-silesia-mozilla.bin.xz",
+    "bytes": 65536,
+    "original_path": "/tmp/vort-encode-corpus/silesia-mozilla.bin",
+    "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996"
+  },
+  {
+    "archive_path": "profiles/inputs/1-silesia-dickens.bin.xz",
+    "bytes": 65536,
+    "original_path": "/tmp/vort-encode-corpus/silesia-dickens.bin",
+    "sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293"
+  },
+  {
+    "archive_path": "profiles/inputs/2-silesia-mr.bin.xz",
+    "bytes": 65536,
+    "original_path": "/tmp/vort-encode-corpus/silesia-mr.bin",
+    "sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651"
+  }
+]

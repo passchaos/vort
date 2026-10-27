@@ -47,6 +47,86 @@ class EvidenceTests(unittest.TestCase):
     def test_valid(self):
         self.assertEqual(1, validate(self.report)["validated_runs"])
 
+    def evaluation_report(self):
+        report = copy.deepcopy(self.report)
+        report["schema"] = "vort.brotli.q8-candidate-profile.v2"
+        profile = self.profile(report)
+        profile["exclusive_ns"].update(wire=60, evaluate=20)
+        profile.update(evaluation_attempts=1, wire_attempts=2, event_count=5,
+                       events_total=5, returned_wire_event_id=4, unaccounted_ns=20)
+        for event in profile["events"]:
+            event.update(evaluated_wire_bytes=None, evaluation_event_id=None, error_name="")
+        profile["events"][0]["exclusive_ns"] = 20
+        profile["events"][1]["wire_bytes"] = 9
+        base = profile["events"][1]
+        evaluation = dict(base, id=2, stage="evaluate", wire_bytes=None,
+                          evaluated_wire_bytes=7, inclusive_ns=20, exclusive_ns=20)
+        selection = dict(base, id=3, stage="selection", inclusive_ns=0, exclusive_ns=0,
+                         wire_bytes=7, incumbent_bytes=9, accepted=True, gain_bytes=2,
+                         candidate_event_id=2, incumbent_event_id=1)
+        emission = dict(base, id=4, wire_bytes=7, evaluated_wire_bytes=7,
+                        evaluation_event_id=2, inclusive_ns=20, exclusive_ns=20)
+        profile["events"].extend([evaluation, selection, emission])
+        return report
+
+    def test_evaluation_selection_and_real_emission(self):
+        result = validate(self.evaluation_report())
+        self.assertEqual(1, result["rows"][0]["evaluation_attempts"])
+        self.assertEqual(2, result["rows"][0]["wire_attempts"])
+        # A v2 full-wire-only report remains valid with zero evaluations.
+        report = copy.deepcopy(self.report)
+        report["schema"] = "vort.brotli.q8-candidate-profile.v2"
+        profile = self.profile(report)
+        profile["evaluation_attempts"] = 0
+        profile["exclusive_ns"]["evaluate"] = 0
+        for event in profile["events"]:
+            event.update(evaluated_wire_bytes=None, evaluation_event_id=None)
+        validate(report)
+
+    def test_evaluation_rejects_masquerading_or_bad_accounting(self):
+        changes = [
+            lambda p: p["events"][2].update(wire_bytes=7),
+            lambda p: p["events"][2].update(evaluation_event_id=1),
+            lambda p: p["events"][2].update(evaluated_wire_bytes=None),
+            lambda p: p.update(evaluation_attempts=2),
+            lambda p: p.update(evaluation_attempts=True),
+            lambda p: p["exclusive_ns"].pop("evaluate"),
+        ]
+        for mutation in changes:
+            report = self.evaluation_report()
+            mutation(self.profile(report))
+            with self.subTest(mutation=changes.index(mutation)), self.assertRaises(ValueError):
+                validate(report)
+
+    def test_evaluation_rejects_wrong_selection_or_emission_link(self):
+        changes = [
+            lambda p: p["events"][3].update(candidate_event_id=0),
+            lambda p: p["events"][3].update(candidate_event_id=4),
+            lambda p: p["events"][3].update(candidate_event_id=True),
+            lambda p: p["events"][3].update(wire_bytes=8, gain_bytes=1),
+            lambda p: p["events"][4].update(evaluation_event_id=1),
+            lambda p: p["events"][4].update(evaluated_wire_bytes=8),
+            lambda p: p.update(returned_wire_event_id=2),
+            lambda p: p["events"][2].update(error_name="InvalidBlockPlan"),
+        ]
+        for mutation in changes:
+            report = self.evaluation_report()
+            mutation(self.profile(report))
+            with self.subTest(mutation=changes.index(mutation)), self.assertRaises(ValueError):
+                validate(report)
+
+    def test_evaluation_ties_keep_incumbent(self):
+        report = self.evaluation_report()
+        selection = self.profile(report)["events"][3]
+        selection.update(incumbent_bytes=7, incumbent_event_id=2, accepted=False, gain_bytes=0)
+        validate(report)
+        selection["accepted"] = True
+        with self.assertRaises(ValueError):
+            validate(report)
+
+    def test_returned_winner_id_rejects_boolean(self):
+        self.rejected(lambda r: self.profile(r).update(returned_wire_event_id=True))
+
     def test_bad_parent_accounting(self):
         self.rejected(lambda r: self.profile(r)["events"][0].update(exclusive_ns=100))
 

@@ -14,6 +14,8 @@ var command_entries: u32 = 0;
 var complex_command_trees: u32 = 0;
 var recent_copies: u32 = 0;
 var shared_group_witnesses: u32 = 0;
+var evaluation_attempts: u32 = 0;
+var linked_emissions: u32 = 0;
 
 fn fillInput() void {
     var state: u32 = 0x243f_6a88;
@@ -91,11 +93,18 @@ export fn brPreparedEncodeSmoke() callconv(.c) u32 {
     if (profile.events_truncated or !profile.wire_attempt_coverage_complete) return 11;
     shared_group_witnesses = 0;
     const events = profile.recordedEvents();
+    evaluation_attempts = @intCast(profile.evaluation_attempts);
+    linked_emissions = 0;
+    for (events) |event| {
+        if (event.stage == .wire and event.evaluation_event_id != null and event.error_name.len == 0)
+            linked_emissions += 1;
+    }
     for (events) |group| {
         if (group.stage != .preferred_context or group.command_count <= 128) continue;
         var eligible: usize = 0;
+        var real_wires: usize = 0;
         for (events) |event| {
-            if (event.stage != .wire or event.parent_id != group.id) continue;
+            if ((event.stage != .wire and event.stage != .evaluate) or event.parent_id != group.id) continue;
             const config = event.config;
             if (event.command_count != group.command_count or !config.use_recent_distances or config.large_window or
                 config.npostfix != 0 or config.ndirect_high != 15 or config.context_trees < 2 or
@@ -103,10 +112,11 @@ export fn brPreparedEncodeSmoke() callconv(.c) u32 {
                 config.command_split or config.adaptive_command_split or config.distance_split or config.adaptive_distance_split)
                 continue;
             eligible += 1;
+            if (event.stage == .wire and event.wire_bytes != null) real_wires += 1;
         }
-        if (eligible >= 2) shared_group_witnesses += 1;
+        if (eligible >= 2 and real_wires > 0) shared_group_witnesses += 1;
     }
-    if (shared_group_witnesses == 0) return 12;
+    if (shared_group_witnesses == 0 or evaluation_attempts == 0) return 12;
     wire = encoded;
     retained = true;
     return 0;
@@ -141,6 +151,12 @@ export fn brPreparedRecentCopies() callconv(.c) u32 {
 }
 export fn brPreparedSharedGroupWitnesses() callconv(.c) u32 {
     return shared_group_witnesses;
+}
+export fn brPreparedEvaluationAttempts() callconv(.c) u32 {
+    return evaluation_attempts;
+}
+export fn brPreparedLinkedEmissions() callconv(.c) u32 {
+    return linked_emissions;
 }
 
 test "Brotli prepared public wasm fixture exercises actual complex and shared candidate groups" {
