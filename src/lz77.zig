@@ -4,6 +4,8 @@ const scan_lazy = @import("lz77/scan/lazy.zig");
 const scan_indexed_match = @import("lz77/scan/indexed_match.zig");
 const scan_prefix_match = @import("lz77/scan/prefix_match.zig");
 const optimal_length_minima = @import("lz77/optimal/length_minima.zig");
+const optimal_prefix_jumps = @import("lz77/optimal/prefix_jumps.zig");
+const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -357,6 +359,7 @@ pub const OptimalScratch = struct {
     index: HashIndex = .{},
     compact_head: std.ArrayList(u32) = .empty,
     compact_prev: std.ArrayList(u32) = .empty,
+    prefix_jumps: optimal_prefix_jumps.Index = .{},
     tokens: std.ArrayList(Token) = .empty,
 
     pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
@@ -365,6 +368,7 @@ pub const OptimalScratch = struct {
         self.index.deinit(allocator);
         self.compact_head.deinit(allocator);
         self.compact_prev.deinit(allocator);
+        self.prefix_jumps.deinit(allocator);
         self.tokens.deinit(allocator);
         self.* = .{};
     }
@@ -1579,6 +1583,30 @@ inline fn optimalPlanReuseWithIndex(
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
+    const can_jump = enable_prefix_bound and !modeled and @TypeOf(prev[0]) == u32;
+    if (comptime can_jump) {
+        if (minMatch(options) == 3 and options.window_len <= default_window_len and input.len >= 1024 and
+            options.max_chain >= 16 and normalizedMaxCandidates(options) >= 8 and optimal_prefix_jumps.useful(input, prev))
+            return optimalPlanReuseWithIndexBackend(scratch, allocator, input, options, prev, empty, enable_prefix_bound, collect_profile, modeled, io, profile, model, true);
+    }
+    return optimalPlanReuseWithIndexBackend(scratch, allocator, input, options, prev, empty, enable_prefix_bound, collect_profile, modeled, io, profile, model, false);
+}
+
+inline fn optimalPlanReuseWithIndexBackend(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    prev: anytype,
+    comptime empty: @TypeOf(prev[0]),
+    comptime enable_prefix_bound: bool,
+    comptime collect_profile: bool,
+    comptime modeled: bool,
+    io: if (collect_profile) std.Io else void,
+    profile: if (collect_profile) *OptimalSearchProfile else void,
+    model: if (modeled) OptimalCostModel else void,
+    comptime enable_jumps: bool,
+) !PlanStats {
     const n = input.len;
     const costs = scratch.costs.items;
     const steps = scratch.steps.items;
@@ -1589,6 +1617,18 @@ inline fn optimalPlanReuseWithIndex(
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
     const use_minima = enable_prefix_bound and !modeled;
+    const use_jumps = enable_jumps;
+    const jumps_active = enable_jumps;
+    if (comptime use_jumps) {
+        if (jumps_active) {
+            const jump_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
+            try scratch.prefix_jumps.build(allocator, input, prev);
+            if (comptime collect_profile) {
+                profile.index_bytes += scratch.prefix_jumps.bytes();
+                profile.index_ns += elapsedNs(jump_start, io);
+            }
+        }
+    }
     var minima: if (use_minima) optimal_length_minima.Set(fixed_length_costs) else void =
         if (use_minima) optimal_length_minima.Set(fixed_length_costs).init(minimum, maxMatch(options)) else {};
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
@@ -1610,10 +1650,20 @@ inline fn optimalPlanReuseWithIndex(
         var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
+        var jumps = optimal_candidate_cursor.Cursor{};
 
-        while (chain_i != empty and checked < options.max_chain) : (checked += 1) {
+        while (chain_i != empty and checked < options.max_chain) {
+            var candidate: usize = @intCast(chain_i);
+            if (comptime use_jumps) {
+                if (coverage.through >= 8) {
+                    const jumped = jumps.next(input, prev, &scratch.prefix_jumps, rev_i, candidate, coverage.through, options.window_len, options.max_chain, candidate_limit) orelse break;
+                    candidates_seen = jumped.prefix_count - 1;
+                    checked = jumped.raw_count - 1;
+                    candidate = jumped.position;
+                }
+            }
+            checked += 1;
             if (comptime collect_profile) profile.chain_nodes += 1;
-            const candidate: usize = @intCast(chain_i);
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
@@ -2046,6 +2096,22 @@ test "optimal sliding length minima preserve every clipped scalar cost and longe
 
 test "optimal range minima preserve all scalar costs steps tokens and length boundaries" {
     try @import("lz77/optimal/tests/parser.zig").compare(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
+}
+
+test "optimal prefix jumps preserve hash and exact prefix ordinals across complete windows" {
+    try @import("lz77/optimal/tests/prefix_jumps.zig").verify(buildOptimalCompactHashIndex);
+}
+
+test "optimal rarest jumps preserve all DP state at both candidate budget boundaries" {
+    try @import("lz77/optimal/tests/parser.zig").denseComparisons(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
+}
+
+test "optimal rarest jump owners release every allocation failure and retain reusable capacity" {
+    try @import("lz77/optimal/tests/parser.zig").ownership(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
+}
+
+test "optimal rarest jumps preserve complete DP state beyond u16 positions" {
+    try @import("lz77/optimal/tests/parser.zig").widePositions(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
 }
 
 test "compile-time fixed length costs match scalar range" {
