@@ -50,3 +50,10 @@ The imx evidence retains complete sizes, per-case allocator records, independent
 observers, source/executable hashes and paired CPU measurements. Numeric-level
 throughput leadership, smaller decisions/indices, broader ratio/decode frontiers
 and full-library functionality/performance remain under the active goal.
+
+Final imx paired CPU timing covers sixty original-raster level-8/9 cases.
+Current/previous throughput is 1.009179x geomean and
+1.007412x aggregate, minimum 0.974814x, with every
+native output byte exact. Aggregate speed remains 0.125204x
+image-png. Further matching, optimal parsing and compact index/decision state
+remain necessary.
