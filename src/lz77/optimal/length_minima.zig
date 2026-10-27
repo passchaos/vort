@@ -1,5 +1,6 @@
 //! Exact fixed-cost length choices over bounded sliding suffix ranges.
 const std = @import("std");
+const suffix_costs = @import("suffix_costs.zig");
 const capacity = 128;
 const mask = capacity - 1;
 
@@ -31,7 +32,7 @@ const Queue = struct {
     hi: usize,
     cost: usize,
 
-    fn advance(self: *Queue, costs: []const usize, pos: usize) void {
+    fn advance(self: *Queue, costs: anytype, pos: usize) void {
         if (self.lo > self.hi) return;
         const available = costs.len - 1 - pos;
         const upper = pos + @min(self.hi, available);
@@ -42,7 +43,7 @@ const Queue = struct {
         if (self.lo > available) return;
         const next = pos + self.lo;
         // Equal-cost older positions remain first to preserve longest ties.
-        while (self.len > 0 and costs[self.positions[(self.head + self.len - 1) & mask]] > costs[next]) self.len -= 1;
+        while (self.len > 0 and suffix_costs.get(costs, self.positions[(self.head + self.len - 1) & mask]) > suffix_costs.get(costs, next)) self.len -= 1;
         std.debug.assert(self.len < capacity);
         self.positions[(self.head + self.len) & mask] = next;
         self.len += 1;
@@ -82,19 +83,19 @@ pub fn Set(comptime length_costs: [259]u8) type {
             return result;
         }
 
-        pub fn advance(self: *Self, costs: []const usize, pos: usize) void {
+        pub fn advance(self: *Self, costs: anytype, pos: usize) void {
             std.debug.assert(pos < costs.len and (self.position == std.math.maxInt(usize) or pos + 1 == self.position));
             for (&self.queues) |*queue| queue.advance(costs, pos);
             self.position = pos;
         }
 
-        pub fn best(self: *const Self, costs: []const usize, pos: usize, maximum: usize) Choice {
+        pub fn best(self: *const Self, costs: anytype, pos: usize, maximum: usize) Choice {
             std.debug.assert(self.position == pos and maximum >= self.minimum and maximum <= self.maximum and maximum < costs.len - pos);
             var result = Choice{ .cost = std.math.maxInt(usize), .length = 0 };
             for (&self.queues) |*queue| {
                 if (queue.lo > queue.hi or maximum < queue.lo) continue;
                 const suffix = queue.best(pos + @min(maximum, queue.hi)) orelse continue;
-                const cost = costs[suffix] + queue.cost;
+                const cost = suffix_costs.get(costs, suffix) + queue.cost;
                 const length: u16 = @intCast(suffix - pos);
                 if (cost < result.cost or (cost == result.cost and length > result.length)) result = .{ .cost = cost, .length = length };
             }

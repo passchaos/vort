@@ -349,6 +349,9 @@ The library is under active development. Its current capabilities include:
   within the caller's window, match and block limits. Fresh optimal state uses
   exact initial capacity; [selection and memory evidence](docs/png-best-selection.md)
   records complete wire, dictionary, scalar-DP and allocation controls;
+  fixed-cost one-shot optimal parsing uses a 512-slot suffix cost view, retaining
+  full reusable scratch and all decisions. [Cost-window evidence](docs/png-cost-window.md)
+  records exact DP, public diagnostics and complete PNG heap controls;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while
