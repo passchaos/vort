@@ -8,6 +8,7 @@ const optimal_storage = @import("lz77/optimal/storage.zig");
 const optimal_suffix_costs = @import("lz77/optimal/suffix_costs.zig");
 const optimal_prefix_jumps = @import("lz77/optimal/prefix_jumps.zig");
 const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
+const match_length = @import("lz77/match/length.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -3306,25 +3307,7 @@ fn findBestCombinedHashMatchLazy(dict: []const u8, input: []const u8, current: u
 }
 
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
-    var len: usize = 0;
-    // Long matches dominate the optimal and repeat-aware Zstd parsers. Compare
-    // four words at once, then use the equality mask to preserve the exact
-    // first-mismatch offset before falling through to the word/scalar tails.
-    while (len + 32 <= max_len) : (len += 32) {
-        const left: @Vector(32, u8) = input[a + len ..][0..32].*;
-        const right: @Vector(32, u8) = input[b + len ..][0..32].*;
-        const differing: u32 = ~@as(u32, @bitCast(left == right));
-        if (differing != 0) return len + @ctz(differing);
-    }
-    while (len + 8 <= max_len) : (len += 8) {
-        const left = std.mem.readInt(u64, input[a + len ..][0..8], .little);
-        const right = std.mem.readInt(u64, input[b + len ..][0..8], .little);
-        if (left != right) {
-            return len + @ctz(left ^ right) / 8;
-        }
-    }
-    while (len < max_len and input[a + len] == input[b + len]) len += 1;
-    return len;
+    return match_length.find(input, a, b, max_len);
 }
 
 test "shared match length vector path matches byte reference" {

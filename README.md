@@ -352,6 +352,9 @@ The library is under active development. Its current capabilities include:
   fixed-cost one-shot optimal parsing uses a 512-slot suffix cost view, retaining
   full reusable scratch and all decisions. [Cost-window evidence](docs/png-cost-window.md)
   records exact DP, public diagnostics and complete PNG heap controls;
+  the shared match-length kernel validates its first word before constructing a
+  larger vector mask; [short-match evidence](docs/png-match-length.md) records
+  complete scalar/PNG exactness and full-encoder CPU comparisons;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while
