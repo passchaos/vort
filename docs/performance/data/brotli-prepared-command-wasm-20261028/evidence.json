@@ -1,0 +1,177 @@
+{
+  "successful_epoch": "public-q8-mixed-65536-named-key-options",
+  "source_archives": {
+    "baseline": {
+      "sha256": "90af3af2c2fffdc3e727fe2b896cbcaa36b78d55e0117c569b938cc4c79809b3",
+      "file_count": 1479,
+      "manifest_sha256": "fdb13cb782041344b71b75d5779d2958a61e2b0622c1c2cf55f0b443310127bf"
+    },
+    "candidate": {
+      "sha256": "3ae745f26e72876e1e07ee78e3dd97c7ebe53bc4294dbfd7658605cebd440a8c",
+      "file_count": 1480,
+      "manifest_sha256": "6b6f6b67f3ceba86bc4479a525edb0cbed3b3b8a77c9a9cd49a1c554efbc8eed"
+    }
+  },
+  "commands": {
+    "record-wasm": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-obj",
+      "-OReleaseFast",
+      "-target",
+      "wasm32-wasi",
+      "-Mroot=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate/src/br/encoder/record_optimal_object.zig",
+      "-femit-bin=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/record-wasm.o",
+      "--cache-dir",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/cache"
+    ],
+    "record-native": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-obj",
+      "-OReleaseFast",
+      "-Mroot=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate/src/br/encoder/record_optimal_object.zig",
+      "-femit-bin=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/record-native.o",
+      "--cache-dir",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/cache"
+    ],
+    "baseline-build": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-exe",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/record-wasm.o",
+      "-fno-entry",
+      "-rdynamic",
+      "--stack",
+      "8388608",
+      "-fsingle-threaded",
+      "-OReleaseFast",
+      "-target",
+      "wasm32-wasi",
+      "-Mroot=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/baseline/src/prepared_wasm_root.zig",
+      "-femit-bin=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/baseline.wasm",
+      "--cache-dir",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/cache"
+    ],
+    "candidate-build": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-exe",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/record-wasm.o",
+      "-fno-entry",
+      "-rdynamic",
+      "--stack",
+      "8388608",
+      "-fsingle-threaded",
+      "-OReleaseFast",
+      "-target",
+      "wasm32-wasi",
+      "-Mroot=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate/src/prepared_wasm_root.zig",
+      "-femit-bin=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate.wasm",
+      "--cache-dir",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/cache"
+    ],
+    "native-candidate": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "test",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/record-native.o",
+      "-OReleaseFast",
+      "-Mroot=/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate/src/prepared_wasm_root.zig",
+      "--test-filter",
+      "Brotli prepared public wasm fixture",
+      "--cache-dir",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/cache"
+    ],
+    "wasm-run": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "node",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/gate.js",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/baseline.wasm",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/candidate.wasm",
+      "/tmp/vort-br-prepared-wasm-20261028-vkhesxzb/wires"
+    ]
+  },
+  "exit_codes": {
+    "record-wasm": 0,
+    "record-native": 0,
+    "baseline-build": 0,
+    "candidate-build": 0,
+    "native-candidate": 0,
+    "wasm-run": 0
+  },
+  "completion_chunks": {
+    "record-wasm": "70b10a",
+    "record-native": "dcc945",
+    "baseline-build": "7ba7fd",
+    "candidate-build": "1f8a22",
+    "native-candidate": "f4c22b",
+    "wasm-run": "63c0c9"
+  },
+  "gate_frozen_sha256": "237880dd2ba7041ea0e31ecdc4ede4b9b980669ea215b1123661a41894af7667",
+  "gate_ci_sha256": "0d9bd356e0a486b4c5b2d60ae3dca68fa6ae25f8576e88aef7aa8de4cb3d8c06",
+  "ci_compressed_baseline_sha256": "eef827c8d1f329796311d1a67cac30ffce17f7115a1cef179ce2ccfe2521904d",
+  "result": {
+    "node_version": "v26.10.0",
+    "baseline": {
+      "wasm_sha256": "fb3ea213835c177711dcd14293c765cb7872a76297cac45286be44c7c701d3bf",
+      "input_bytes": 65536,
+      "input_sha256": "af1a093e1380b98ce3fd749e06b2618b02d80c9b1234fe0018e0a3bc95eb1c25",
+      "wire_bytes": 14362,
+      "wire_sha256": "b6eb2991d9848de02c4079a698b23328d122550b2af0dc119326219da6f96762",
+      "wire_crc32": 2351097254,
+      "command_count": 1299,
+      "command_active_entries": 88,
+      "complex_command_trees": 1,
+      "recent_copy_count": 152,
+      "shared_candidate_groups": 2,
+      "ordinary_profile_wire_equal": true,
+      "zig_decode_checked": true,
+      "node_native_decode_checked": true,
+      "wide_key_above_2_32_checked": true
+    },
+    "candidate": {
+      "wasm_sha256": "497ab12545869602f87b8a5e777495213dd5770d75aeea5fdf5eaf24190dee36",
+      "input_bytes": 65536,
+      "input_sha256": "af1a093e1380b98ce3fd749e06b2618b02d80c9b1234fe0018e0a3bc95eb1c25",
+      "wire_bytes": 14362,
+      "wire_sha256": "b6eb2991d9848de02c4079a698b23328d122550b2af0dc119326219da6f96762",
+      "wire_crc32": 2351097254,
+      "command_count": 1299,
+      "command_active_entries": 88,
+      "complex_command_trees": 1,
+      "recent_copy_count": 152,
+      "shared_candidate_groups": 2,
+      "ordinary_profile_wire_equal": true,
+      "zig_decode_checked": true,
+      "node_native_decode_checked": true,
+      "wide_key_above_2_32_checked": true
+    },
+    "full_wire_equal": true
+  },
+  "encoding_scope": "Public q8/generic, standard window16; current snapshot shared preparation vs d5e8e780 baseline.",
+  "diagnostic_scope": "Earlier compile/coverage failures are separate epochs and excluded from successful counts.",
+  "replay_exit_codes": {
+    "frozen": 0,
+    "ci-compressed-baseline": 0,
+    "record-wasm": 0,
+    "record-native": 0,
+    "build-baseline": 0,
+    "build-candidate": 0,
+    "rebuilt": 0,
+    "native": 0
+  },
+  "replay_script_sha256": "5815a94a268519a9412c1ad93f83e71860efc3d2f5d01d23a67957b9efa4ec67"
+}

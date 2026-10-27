@@ -1,0 +1,98 @@
+{
+  "pull_rebase": {
+    "remote": "origin",
+    "branch": "main",
+    "observed_exit_code": 0,
+    "result": "Current branch main is up to date.",
+    "upstream_commit": "d5e8e780f4c28f362c64b152e71988a52351667c"
+  },
+  "source_unchanged_after_validation": true,
+  "tested_commit_is_before_documentation_amend": true,
+  "checks": [
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=prepared command distance",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.3261454990133643,
+      "finished_at_utc": "2026-10-27T21:24:45.531042+00:00",
+      "tested_commit": "f0a282ab8b60c404985a4ed4acd45d8380044366",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/prepared_command_distance.zig": "410d27059c8bcc3208b6da71f71a4ce7edd71883b589e2221205ac5baff5b7bb",
+        "build.zig": "482dd240072eb9b5f9049f342af0a35339a31e71ab7f6c97d2962692a46fdb36"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=prepared command distance",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 28.967899904120713,
+      "finished_at_utc": "2026-10-27T21:25:13.171118+00:00",
+      "tested_commit": "f0a282ab8b60c404985a4ed4acd45d8380044366",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/prepared_command_distance.zig": "410d27059c8bcc3208b6da71f71a4ce7edd71883b589e2221205ac5baff5b7bb",
+        "build.zig": "482dd240072eb9b5f9049f342af0a35339a31e71ab7f6c97d2962692a46fdb36"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=Brotli q8 quality profile",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.179608988109976,
+      "finished_at_utc": "2026-10-27T21:24:48.382861+00:00",
+      "tested_commit": "f0a282ab8b60c404985a4ed4acd45d8380044366",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/prepared_command_distance.zig": "410d27059c8bcc3208b6da71f71a4ce7edd71883b589e2221205ac5baff5b7bb",
+        "build.zig": "482dd240072eb9b5f9049f342af0a35339a31e71ab7f6c97d2962692a46fdb36"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "check",
+        "check-wasm",
+        "test-br-prepared-command-wasm",
+        "run",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.4473932520486414,
+      "finished_at_utc": "2026-10-27T21:24:45.650613+00:00",
+      "tested_commit": "f0a282ab8b60c404985a4ed4acd45d8380044366",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/prepared_command_distance.zig": "410d27059c8bcc3208b6da71f71a4ce7edd71883b589e2221205ac5baff5b7bb",
+        "build.zig": "482dd240072eb9b5f9049f342af0a35339a31e71ab7f6c97d2962692a46fdb36"
+      }
+    }
+  ]
+}

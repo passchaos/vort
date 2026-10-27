@@ -1,0 +1,54 @@
+{
+  "observation": "Terminal host exec exit_code results retained across the active task continuation; compressed logs contain corresponding build summaries.",
+  "exits": [
+    {
+      "session_id": 54409,
+      "exit_code": 0,
+      "scope": "initial 36-case matrix"
+    },
+    {
+      "session_id": 42257,
+      "exit_code": 0,
+      "scope": "gated 36-case matrix"
+    },
+    {
+      "session_id": 79095,
+      "exit_code": 0,
+      "scope": "check check-wasm 210/210"
+    },
+    {
+      "session_id": 50364,
+      "exit_code": 0,
+      "scope": "public ReleaseFast Wasm 7/7"
+    },
+    {
+      "session_id": 22065,
+      "exit_code": 0,
+      "scope": "Node interoperability and profile gate"
+    },
+    {
+      "session_id": 45543,
+      "exit_code": 0,
+      "scope": "integrated prepared Wasm gate 5/5"
+    },
+    {
+      "session_id": 80537,
+      "exit_code": 0,
+      "scope": "baseline diagnostic build"
+    },
+    {
+      "session_id": 84203,
+      "exit_code": 0,
+      "scope": "baseline diagnostic run"
+    },
+    {
+      "session_id": 84306,
+      "exit_code": 0,
+      "scope": "quality profile resource Debug filter 75/75"
+    }
+  ],
+  "focused_logs": [
+    "codec-tests-rf.log.xz",
+    "final-direct-tests.log.xz"
+  ]
+}

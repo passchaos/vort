@@ -1,0 +1,10 @@
+{
+  "frozen": 0,
+  "ci-compressed-baseline": 0,
+  "record-wasm": 0,
+  "record-native": 0,
+  "build-baseline": 0,
+  "build-candidate": 0,
+  "rebuilt": 0,
+  "native": 0
+}

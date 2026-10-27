@@ -20,6 +20,7 @@ const br_length = @import("br/length.zig");
 const command_encoding = @import("br/encoder/command_encoding.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
+const prepared_command_distance = @import("br/encoder/prepared_command_distance.zig");
 const fast_fragment = @import("br/encoder/fast_fragment.zig");
 const fast_fragment_one_pass = @import("br/encoder/fast_fragment_one_pass.zig");
 const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
@@ -6648,6 +6649,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 }
 
 const CommandPlanEncodeOptions = struct {
+    prepared_common: ?*prepared_command_distance.Prepared = null,
     large_window: bool = false,
     hq_model_output: ?*@import("br/encoder/hq_codec.zig").Model = null,
     use_recent_distances: bool = false,
@@ -10278,7 +10280,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         literal_context_split.Candidate.suffix(options.preferred_literal_context_mode orelse literal_context.mode_utf8, 56, 0)
     else
         null;
-    const primary_options = CommandPlanEncodeOptions{
+    var primary_options = CommandPlanEncodeOptions{
         .use_recent_distances = use_recent_distances,
         .literal_context_candidate = primary_context,
         .large_window = options.large_window,
@@ -10288,6 +10290,11 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
     };
+    var prepared_common: prepared_command_distance.Prepared = undefined;
+    if (input.len >= 8 * 1024 and try_literal_contexts and options.try_clustered_literal_contexts and use_recent_distances and !options.large_window) {
+        prepared_common = prepared_command_distance.Prepared.init(primary_options, commands);
+        primary_options.prepared_common = &prepared_common;
+    }
     const initial_stats = stats.*;
     var primary_stats = initial_stats;
     var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &primary_stats, primary_options);
@@ -10326,6 +10333,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
             if (!duplicate) {
                 var adaptive_stats = initial_stats;
                 const adaptive = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &adaptive_stats, .{
+                    .prepared_common = primary_options.prepared_common,
                     .use_recent_distances = use_recent_distances,
                     .literal_context_candidate = adaptive_context,
                     .large_window = options.large_window,
@@ -11427,6 +11435,11 @@ noinline fn encodeCommandPlanWithLargeWindowWriteBody(
     return encodeCommandPlanWithOptionsWriteInternal(allow_adaptive_split, large_max_distance_alphabet_size, allocator, writer, input, commands, io, stats, options);
 }
 
+fn commandsHaveExactEncoding(commands: []const command_plan.Command) bool {
+    for (commands) |command| if (command.hq_encoding != null) return true;
+    return false;
+}
+
 inline fn encodeCommandPlanWithOptionsWriteInternal(
     comptime allow_adaptive_split: bool,
     comptime distance_capacity: usize,
@@ -11452,9 +11465,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     } else if (distance_capacity == large_max_distance_alphabet_size or
         ((options.distance_parameters.alphabetSize() > planned_distance_alphabet_size) !=
             (distance_capacity == planned_wide_distance_alphabet_size))) return error.InvalidBlockPlan;
-    const has_exact_commands = for (commands) |command| {
-        if (command.hq_encoding != null) break true;
-    } else false;
+    const has_exact_commands = if (options.prepared_common) |cache| blk: {
+        if (cache.key.matches(options, commands)) break :blk cache.has_exact_commands;
+        break :blk commandsHaveExactEncoding(commands);
+    } else commandsHaveExactEncoding(commands);
     const adaptive_command_split: ?*const block_split_plan.Plan = if (allow_adaptive_split)
         options.adaptive_command_split
     else
@@ -11629,6 +11643,13 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         null;
     defer if (adaptive_distance_block_frequencies) |frequencies| allocator.free(frequencies);
     if (adaptive_distance_block_frequencies) |frequencies| @memset(frequencies, @splat(0));
+    const common: ?*prepared_command_distance.Prepared = if (comptime distance_capacity == planned_distance_alphabet_size) blk: {
+        const cache = options.prepared_common orelse break :blk null;
+        if (!prepared_command_distance.supported(options, has_exact_commands) or !cache.key.matches(options, commands))
+            break :blk null;
+        break :blk cache;
+    } else null;
+    const common_ready = common != null and common.?.ready;
     const optimize_same_last_distance = !has_exact_commands and options.optimize_same_last_distance and !options.use_recent_distances and options.command_split == null and adaptive_command_split == null and options.distance_split == null and adaptive_distance_split == null;
     var same_last_shape_counts: [24][24]u32 = @splat(@splat(0));
     var same_last_distance_frequencies: [distance_capacity]u32 = @splat(0);
@@ -11653,133 +11674,151 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     var adaptive_command_block_end: usize = if (adaptive_command_split) |split| split.lengths[0] else 0;
     var adaptive_distance_block_index: usize = 0;
     var adaptive_distance_block_end: usize = if (adaptive_distance_split) |split| split.lengths[0] else 0;
-    for (commands, 0..) |command, command_index| {
-        const wire_distance = if (command.has_copy) try commandWireDistance(
-            command,
-            options.window_bits,
-            options.compound_dictionary_size,
-            options.initial_output_pos,
-        ) else 0;
-        const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
-        const recent_symbol = if (exact_selection) |selected|
-            selected.recent_symbol
-        else if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
-            recentDistanceSymbol(wire_distance, &last_distances)
-        else
-            null;
-        const use_last_distance = recent_symbol == 0;
-        const encoding = if (exact_selection) |selected| selected.command else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
-            commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
-        if (same_last_shape) |shape| {
-            has_same_last_candidate = true;
-            same_last_shape_counts[shape.insert_code][shape.copy_code] += 1;
-        }
-        if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
-        if (options.command_split) |split| {
-            command_block_frequencies[split.blockIndex(command_index)][encoding.symbol] += 1;
-        } else if (adaptive_command_split) |split| {
-            while (command_index >= adaptive_command_block_end) {
-                adaptive_command_block_index += 1;
-                if (adaptive_command_block_index >= split.blockCount()) return error.InvalidBlockPlan;
-                adaptive_command_block_end = std.math.add(
-                    usize,
-                    adaptive_command_block_end,
-                    split.lengths[adaptive_command_block_index],
-                ) catch return error.IntegerOverflow;
-            }
-            adaptive_command_block_frequencies.?[split.types[adaptive_command_block_index]][encoding.symbol] += 1;
-        } else try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
-        for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
-            if (options.literal_split) |split| {
-                literal_block_frequencies[split.blockIndex(literal_index)][literal] += 1;
-                literal_index += 1;
-            } else if (adaptive_literal_split) |split| {
-                while (literal_index >= adaptive_literal_block_end) {
-                    adaptive_literal_block_index += 1;
-                    if (adaptive_literal_block_index >= split.blockCount()) return error.InvalidBlockPlan;
-                    adaptive_literal_block_end = std.math.add(
-                        usize,
-                        adaptive_literal_block_end,
-                        split.lengths[adaptive_literal_block_index],
-                    ) catch return error.IntegerOverflow;
-                }
-                const block_type: usize = split.types[adaptive_literal_block_index];
-                if (options.literal_entropy_plan) |joint| {
-                    const history = literalContextHistory(
-                        input,
-                        position,
-                        options.initial_previous,
-                    );
-                    const context = literal_context.value(
-                        joint.context_modes[block_type],
-                        history[0],
-                        history[1],
-                    );
-                    const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
-                        error.IntegerOverflow => return error.IntegerOverflow,
-                        else => return error.InvalidBlockPlan,
-                    };
-                    joint_literal_tree_frequencies.?[tree][literal] += 1;
-                } else {
-                    adaptive_literal_block_frequencies.?[block_type][literal] += 1;
-                }
-                literal_index += 1;
-            } else {
+    if (common_ready) {
+        const cached = common.?;
+        command_frequencies = cached.command_frequencies;
+        command_alphabet = cached.command_alphabet;
+        @memcpy(distance_frequencies[0..prepared_command_distance.distance_capacity], &cached.distance_frequencies);
+        if (cache_command_symbols) command_symbols = cached.command_symbols;
+        for (commands) |command| {
+            for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
                 if (context_candidate) |candidate| {
-                    const history = literalContextHistory(
-                        input,
-                        position,
-                        options.initial_previous,
-                    );
-                    const context = literal_context.value(
-                        candidate.mode,
-                        history[0],
-                        history[1],
-                    );
+                    const history = literalContextHistory(input, position, options.initial_previous);
+                    const context = literal_context.value(candidate.mode, history[0], history[1]);
                     literal_context_frequencies[candidate.treeFor(context)][literal] += 1;
                 }
             }
         }
-        if (!command.has_copy) continue;
-        if (encoding.command.distance_code == -1) {
-            const distance = if (exact_selection) |selected|
-                selected.distance orelse return error.InvalidBlockPlan
-            else if (recent_symbol) |symbol|
-                encoder_distance.Encoding{ .symbol = symbol }
+    } else {
+        for (commands, 0..) |command, command_index| {
+            const wire_distance = if (command.has_copy) try commandWireDistance(
+                command,
+                options.window_bits,
+                options.compound_dictionary_size,
+                options.initial_output_pos,
+            ) else 0;
+            const exact_selection = try resolveHqCommand(command, wire_distance, options.distance_parameters, last_distances, distance_format);
+            const recent_symbol = if (exact_selection) |selected|
+                selected.recent_symbol
+            else if (options.use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
+                recentDistanceSymbol(wire_distance, &last_distances)
             else
-                encoder_distance.encodeWithFormat(
-                    wire_distance,
-                    options.distance_parameters,
-                    distance_format,
-                ) orelse return error.InvalidBlockPlan;
-            if (distance.symbol >= distance_capacity) return error.InvalidBlockPlan;
-            if (same_last_shape != null) {
-                same_last_distance_frequencies[distance.symbol] += 1;
-                same_last_distance_extra_bits += distance.extra_bits;
+                null;
+            const use_last_distance = recent_symbol == 0;
+            const encoding = if (exact_selection) |selected| selected.command else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+                commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+            const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
+            if (same_last_shape) |shape| {
+                has_same_last_candidate = true;
+                same_last_shape_counts[shape.insert_code][shape.copy_code] += 1;
             }
-            if (options.distance_split) |split| {
-                distance_block_frequencies[split.blockIndex(distance_index)][distance.symbol] += 1;
-                distance_index += 1;
-            } else if (adaptive_distance_split) |split| {
-                while (distance_index >= adaptive_distance_block_end) {
-                    adaptive_distance_block_index += 1;
-                    if (adaptive_distance_block_index >= split.blockCount()) return error.InvalidBlockPlan;
-                    adaptive_distance_block_end = std.math.add(
+            if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
+            if (options.command_split) |split| {
+                command_block_frequencies[split.blockIndex(command_index)][encoding.symbol] += 1;
+            } else if (adaptive_command_split) |split| {
+                while (command_index >= adaptive_command_block_end) {
+                    adaptive_command_block_index += 1;
+                    if (adaptive_command_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    adaptive_command_block_end = std.math.add(
                         usize,
-                        adaptive_distance_block_end,
-                        split.lengths[adaptive_distance_block_index],
+                        adaptive_command_block_end,
+                        split.lengths[adaptive_command_block_index],
                     ) catch return error.IntegerOverflow;
                 }
-                adaptive_distance_block_frequencies.?[split.types[adaptive_distance_block_index]][distance.symbol] += 1;
-                distance_index += 1;
-            } else distance_frequencies[distance.symbol] += 1;
+                adaptive_command_block_frequencies.?[split.types[adaptive_command_block_index]][encoding.symbol] += 1;
+            } else try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
+            for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
+                if (options.literal_split) |split| {
+                    literal_block_frequencies[split.blockIndex(literal_index)][literal] += 1;
+                    literal_index += 1;
+                } else if (adaptive_literal_split) |split| {
+                    while (literal_index >= adaptive_literal_block_end) {
+                        adaptive_literal_block_index += 1;
+                        if (adaptive_literal_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                        adaptive_literal_block_end = std.math.add(
+                            usize,
+                            adaptive_literal_block_end,
+                            split.lengths[adaptive_literal_block_index],
+                        ) catch return error.IntegerOverflow;
+                    }
+                    const block_type: usize = split.types[adaptive_literal_block_index];
+                    if (options.literal_entropy_plan) |joint| {
+                        const history = literalContextHistory(
+                            input,
+                            position,
+                            options.initial_previous,
+                        );
+                        const context = literal_context.value(
+                            joint.context_modes[block_type],
+                            history[0],
+                            history[1],
+                        );
+                        const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
+                            error.IntegerOverflow => return error.IntegerOverflow,
+                            else => return error.InvalidBlockPlan,
+                        };
+                        joint_literal_tree_frequencies.?[tree][literal] += 1;
+                    } else {
+                        adaptive_literal_block_frequencies.?[block_type][literal] += 1;
+                    }
+                    literal_index += 1;
+                } else {
+                    try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
+                    if (context_candidate) |candidate| {
+                        const history = literalContextHistory(
+                            input,
+                            position,
+                            options.initial_previous,
+                        );
+                        const context = literal_context.value(
+                            candidate.mode,
+                            history[0],
+                            history[1],
+                        );
+                        literal_context_frequencies[candidate.treeFor(context)][literal] += 1;
+                    }
+                }
+            }
+            if (!command.has_copy) continue;
+            if (encoding.command.distance_code == -1) {
+                const distance = if (exact_selection) |selected|
+                    selected.distance orelse return error.InvalidBlockPlan
+                else if (recent_symbol) |symbol|
+                    encoder_distance.Encoding{ .symbol = symbol }
+                else
+                    encoder_distance.encodeWithFormat(
+                        wire_distance,
+                        options.distance_parameters,
+                        distance_format,
+                    ) orelse return error.InvalidBlockPlan;
+                if (distance.symbol >= distance_capacity) return error.InvalidBlockPlan;
+                if (same_last_shape != null) {
+                    same_last_distance_frequencies[distance.symbol] += 1;
+                    same_last_distance_extra_bits += distance.extra_bits;
+                }
+                if (options.distance_split) |split| {
+                    distance_block_frequencies[split.blockIndex(distance_index)][distance.symbol] += 1;
+                    distance_index += 1;
+                } else if (adaptive_distance_split) |split| {
+                    while (distance_index >= adaptive_distance_block_end) {
+                        adaptive_distance_block_index += 1;
+                        if (adaptive_distance_block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                        adaptive_distance_block_end = std.math.add(
+                            usize,
+                            adaptive_distance_block_end,
+                            split.lengths[adaptive_distance_block_index],
+                        ) catch return error.IntegerOverflow;
+                    }
+                    adaptive_distance_block_frequencies.?[split.types[adaptive_distance_block_index]][distance.symbol] += 1;
+                    distance_index += 1;
+                } else distance_frequencies[distance.symbol] += 1;
+            }
+            if (exact_selection) |selected|
+                last_distances = selected.repeated_distances
+            else if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+                pushLastDistance(&last_distances, wire_distance);
         }
-        if (exact_selection) |selected|
-            last_distances = selected.repeated_distances
-        else if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
-            pushLastDistance(&last_distances, wire_distance);
     }
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
@@ -11878,7 +11917,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     } else if (adaptive_command_block_alphabets) |alphabets| {
         for (alphabets, adaptive_command_block_frequencies.?) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(704, alphabet, frequencies);
-    } else if (!has_same_last_candidate)
+    } else if (!has_same_last_candidate and !common_ready)
         try command_alphabet.sortByFrequencies(&command_frequencies);
     if (options.distance_split != null) {
         for (distance_block_alphabets[0..options.distance_split.?.typeCount()], distance_block_frequencies[0..options.distance_split.?.typeCount()]) |*alphabet, *frequencies|
@@ -11886,6 +11925,10 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     } else if (adaptive_distance_block_alphabets) |alphabets| {
         for (alphabets, adaptive_distance_block_frequencies.?) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(distance_capacity, alphabet, frequencies);
+    } else if (common_ready) {
+        const cached = common.?;
+        distance_alphabet.len = cached.distance_alphabet.len;
+        @memcpy(distance_alphabet.symbols[0..distance_alphabet.len], cached.distance_alphabet.symbols[0..distance_alphabet.len]);
     } else if (!has_same_last_candidate)
         try command_plan.alphabetFromFrequenciesInto(distance_capacity, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = if (options.literal_split) |split| blk: {
@@ -11971,7 +12014,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             tree_lengths.* = try alphabet.codeLengths(frequencies);
     }
     const command_lengths = if (options.command_split == null and adaptive_command_split == null)
-        if (has_same_last_candidate)
+        if (common_ready) common.?.command_lengths else if (has_same_last_candidate)
             prepared_command_lengths
         else if (command_alphabet.len <= 4)
             @as([704]u4, @splat(0))
@@ -11995,7 +12038,11 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
     }
     const distance_lengths = if (options.distance_split == null and adaptive_distance_split == null)
-        if (has_same_last_candidate)
+        if (common_ready) blk: {
+            var lengths: [distance_capacity]u4 = @splat(0);
+            @memcpy(lengths[0..prepared_command_distance.distance_capacity], &common.?.distance_lengths);
+            break :blk lengths;
+        } else if (has_same_last_candidate)
             prepared_distance_lengths
         else if (distance_alphabet.len <= 4)
             @as([distance_capacity]u4, @splat(0))
@@ -12166,7 +12213,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         for (encoders, joint_literal_tree_alphabets.?, joint_literal_tree_lengths.?) |*encoder, *alphabet, *lengths|
             encoder.* = try initPlannedLiteralEncoder(lengths, alphabet);
     }
-    const command_encoder = if (options.command_split != null or adaptive_command_split != null or command_alphabet.len <= 4)
+    const command_encoder = if (common_ready) common.?.command_encoder else if (options.command_split != null or adaptive_command_split != null or command_alphabet.len <= 4)
         huffman.HuffmanTable(704).Encoder{}
     else if (command_alphabet.len <= 64)
         try huffman.HuffmanTable(704).Encoder.initSparseTrusted(&command_lengths, command_alphabet.symbols[0..command_alphabet.len])
@@ -12193,7 +12240,12 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             else
                 try huffman.HuffmanTable(704).Encoder.init(lengths);
     }
-    const distance_encoder = if (options.distance_split != null or adaptive_distance_split != null or distance_alphabet.len <= 4)
+    const distance_encoder = if (common_ready) blk: {
+        var encoder: huffman.HuffmanTable(distance_capacity).Encoder = .{};
+        @memcpy(encoder.codes[0..prepared_command_distance.distance_capacity], &common.?.distance_encoder.codes);
+        @memcpy(encoder.bits[0..prepared_command_distance.distance_capacity], &common.?.distance_encoder.bits);
+        break :blk encoder;
+    } else if (options.distance_split != null or adaptive_distance_split != null or distance_alphabet.len <= 4)
         huffman.HuffmanTable(distance_capacity).Encoder{}
     else if (distance_alphabet.len <= 64)
         try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
@@ -12219,6 +12271,24 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
             else
                 try huffman.HuffmanTable(distance_capacity).Encoder.init(lengths);
+    }
+    if (common) |cached| {
+        if (!cached.ready) {
+            @memset(&cached.command_frequencies, 0);
+            for (command_alphabet.symbols[0..command_alphabet.len]) |symbol|
+                cached.command_frequencies[symbol] = command_frequencies[symbol];
+            cached.command_alphabet = command_alphabet;
+            @memcpy(&cached.distance_frequencies, distance_frequencies[0..prepared_command_distance.distance_capacity]);
+            cached.distance_alphabet.len = distance_alphabet.len;
+            @memcpy(cached.distance_alphabet.symbols[0..distance_alphabet.len], distance_alphabet.symbols[0..distance_alphabet.len]);
+            cached.command_lengths = command_lengths;
+            @memcpy(&cached.distance_lengths, distance_lengths[0..prepared_command_distance.distance_capacity]);
+            cached.command_encoder = command_encoder;
+            @memcpy(&cached.distance_encoder.codes, distance_encoder.codes[0..prepared_command_distance.distance_capacity]);
+            @memcpy(&cached.distance_encoder.bits, distance_encoder.bits[0..prepared_command_distance.distance_capacity]);
+            if (cache_command_symbols) cached.command_symbols = command_symbols;
+            cached.ready = true;
+        }
     }
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -40573,4 +40643,8 @@ fn writeCodeLengthSymbol(
 ) Error!void {
     const encoder = try huffman.HuffmanTable(code_length_alphabet_size).Encoder.init(lengths);
     try writer.writeBits(allocator, encoder.codes[symbol], encoder.bits[symbol]);
+}
+
+test "Brotli prepared command distance context wire and resource parity" {
+    try @import("br/encoder/prepared_command_distance_tests.zig").run(CommandPlanEncodeOptions, PlannedEncodeStats, encodeCommandPlanWithOptionsAlloc, encodeCommandPlanWithOptionsInto);
 }

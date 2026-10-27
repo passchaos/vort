@@ -1,0 +1,32 @@
+{
+  "initial-key-fixture-error": {
+    "fixture_bytes": 8192,
+    "kind": "compile_error",
+    "exit_code": 1,
+    "meaning": "Anonymous inferred Options contained comptime fields; execution never started.",
+    "source_snapshot_retained": false
+  },
+  "first-fixture-no-recent": {
+    "fixture_bytes": 8192,
+    "kind": "coverage_failure",
+    "probe_status": 5,
+    "exit_code": 1,
+    "command_count": 178,
+    "recent_copies": 0,
+    "meaning": "Strict probe stopped before complex/shared witnesses.",
+    "source_snapshot_retained": false
+  },
+  "8192-below-recent-gate": {
+    "fixture_bytes": 8192,
+    "kind": "coverage_failure",
+    "probe_status": 12,
+    "exit_code": 1,
+    "command_count": 162,
+    "command_active_entries": 40,
+    "complex_command_trees": 1,
+    "recent_copies": 15,
+    "shared_groups": 0,
+    "meaning": "Grouped fixture still did not cross the production recent-distance gate.",
+    "source_snapshot_retained": false
+  }
+}

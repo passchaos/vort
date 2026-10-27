@@ -172,6 +172,22 @@ pub fn build(b: *std.Build) void {
     br_bit_writer_wasm_run.addArg("src/br/encoder/bit_writer.zig");
     const br_bit_writer_wasm_test = b.step("test-br-bit-writer-wasm", "Execute bit-writer width, alignment and output-guard reference comparisons");
     br_bit_writer_wasm_test.dependOn(&br_bit_writer_wasm_run.step);
+
+    const br_prepared_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/br_prepared_command_distance_wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseFast,
+        .single_threaded = true,
+    });
+    br_prepared_wasm_mod.addObject(wasm_br_record_optimal_obj);
+    const br_prepared_wasm = b.addExecutable(.{ .name = "vort-br-prepared-command-wasm", .root_module = br_prepared_wasm_mod });
+    br_prepared_wasm.entry = .disabled;
+    br_prepared_wasm.rdynamic = true;
+    br_prepared_wasm.stack_size = 8 * 1024 * 1024;
+    const br_prepared_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/prepared_command_distance_wasm_gate.js", "src/br/encoder/testdata/prepared-command-distance-baseline.wasm.br" });
+    br_prepared_wasm_run.addArtifactArg(br_prepared_wasm);
+    const br_prepared_wasm_test = b.step("test-br-prepared-command-wasm", "Compare public q8 prepared command/distance output with its frozen baseline");
+    br_prepared_wasm_test.dependOn(&br_prepared_wasm_run.step);
     const lz4_fast_wasm = b.addExecutable(.{
         .name = "vort-lz4-fast-controls-wasm",
         .root_module = b.createModule(.{
@@ -7760,6 +7776,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
     ci_smoke_step.dependOn(br_bit_writer_wasm_test);
+    ci_smoke_step.dependOn(br_prepared_wasm_test);
     ci_smoke_step.dependOn(br_reference_parameter_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);

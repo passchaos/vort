@@ -23844,3 +23844,20 @@ reuse, so production keeps the simpler independently owned plans.
   changed wires; these small points do not establish significance. Shared
   command/distance preparation in the preferred context group is the next
   substantial writer target before count-only evaluation and winner emission.
+
+- 2026-10-28: preferred Brotli q8 literal-context groups now reuse ordinary
+  command/distance frequencies, alphabets, lengths and encoders in fixed
+  call-local storage. Every candidate still emits its complete wire and keeps
+  the existing exact byte arbitration, strict ties and early return. The
+  producer gate starts at 8 KiB after the first experiment showed small-input
+  regressions. Independent cached/plain contracts preserve wires, semantic
+  stats, allocations, failed progress and key fallback; Debug/ReleaseFast
+  focused gates pass 25/25. Compile checks pass 210/210, and a new five-step CI
+  Wasm gate compares a complex-command/recent-copy public 64 KiB fixture with
+  its frozen baseline. [Preparation evidence](performance/brotli-prepared-command-distance.md)
+  retains both 36-case epochs: final same-q8/generic/actual-lgwin16 time ratio
+  0.985545 versus d5e8e780, with identical wires/settings. Tuned Brotli 1.2.0
+  still has a 37.19x geometric encoding-time advantage at Vort/reference size
+  ratio 0.99556. These points do not establish significance or industry-best
+  results. Reduce repeated emission next while retaining byte and resource
+  contracts; the full ten-format optimization objective remains active.
