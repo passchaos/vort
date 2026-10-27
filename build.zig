@@ -154,6 +154,24 @@ pub fn build(b: *std.Build) void {
     br_public_wasm_run.addArtifactArg(br_public_wasm);
     const br_public_wasm_test = b.step("test-br-public-wasm", "Execute public Brotli HQ encode and decode routes in WebAssembly");
     br_public_wasm_test.dependOn(&br_public_wasm_run.step);
+
+    const br_bit_writer_wasm = b.addExecutable(.{
+        .name = "vort-br-bit-writer-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/br_bit_writer_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+        }),
+    });
+    br_bit_writer_wasm.entry = .disabled;
+    br_bit_writer_wasm.rdynamic = true;
+    br_bit_writer_wasm.stack_size = 1024 * 1024;
+    const br_bit_writer_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/bit_writer_wasm_gate.js" });
+    br_bit_writer_wasm_run.addArtifactArg(br_bit_writer_wasm);
+    br_bit_writer_wasm_run.addArg("src/br/encoder/bit_writer.zig");
+    const br_bit_writer_wasm_test = b.step("test-br-bit-writer-wasm", "Execute bit-writer width, alignment and output-guard reference comparisons");
+    br_bit_writer_wasm_test.dependOn(&br_bit_writer_wasm_run.step);
     const lz4_fast_wasm = b.addExecutable(.{
         .name = "vort-lz4-fast-controls-wasm",
         .root_module = b.createModule(.{
@@ -7741,6 +7759,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
+    ci_smoke_step.dependOn(br_bit_writer_wasm_test);
     ci_smoke_step.dependOn(br_reference_parameter_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);

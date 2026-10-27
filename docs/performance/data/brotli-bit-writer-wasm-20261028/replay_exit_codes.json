@@ -1,0 +1,9 @@
+{
+  "frozen-debug": 0,
+  "build-debug": 0,
+  "rebuilt-debug": 0,
+  "frozen-releasefast": 0,
+  "build-releasefast": 0,
+  "rebuilt-releasefast": 0,
+  "native-test": 0
+}

@@ -1,0 +1,24 @@
+{
+  "source_sha256": {
+    "src/br/encoder/bit_writer.zig": "cb80b5a99e25df2fac9fa7586dfb555e4907f636657f6a9f9b7d7202ea78981a",
+    "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+    "src/tests/br_bit_writer_wasm.zig": "9c970a0e7fbbe8d787b6b12b4d9dfd7bd138b66affa53df04721add4d28af955"
+  },
+  "snapshot": "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl",
+  "gate_sha256": "11b78edfea2494dbb19495a84c37e04d99818038a7bf18e851bffccf8f10a709",
+  "cpu_affinity": "0,1,3-9,11-15",
+  "stack_bytes": 1048576,
+  "zig_version": "0.16.0",
+  "exit_codes": {
+    "debug_build": 0,
+    "releasefast_build": 0,
+    "debug_run": 0,
+    "releasefast_run": 0,
+    "native_probe_test": 0
+  },
+  "expected_fingerprint_hex": "72a93b45",
+  "scope": "Successful fully reserved general and Huffman writes; independent per-bit reference and whole backing-buffer comparison. Allocation/bounded failures remain in the separate scalar-reference tests.",
+  "current_writer_matches_snapshot": true,
+  "debug_wasm_sha256": "9f4f75b783d62532f5b1b1f39f59160b65e5ead2df64a233a3e26cabf576bcdf",
+  "releasefast_wasm_sha256": "01f23120a3a54c29381f9f024dccf4527fb00bfed47ce828188e9c4f9e7de61e"
+}

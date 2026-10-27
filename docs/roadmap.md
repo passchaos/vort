@@ -23828,3 +23828,19 @@ reuse, so production keeps the simpler independently owned plans.
   retains raw rounds and diagnostic stages; point measurements do not prove
   statistical significance or industry-best results. Prioritize reuse of q8
   writer preparation and reduced repeated emission with exact byte arbitration.
+
+- 2026-10-28: Brotli's private BitWriter and reference tests now form a small
+  encoder module. Already-reserved general bit fields use exact-span
+  little-endian word stores after merging the old partial byte; capacity
+  growth uses the original byte loop and preserves allocator requests/failed
+  progress. Independent scalar tests cover offsets, all general/Huffman widths,
+  complete backing buffers and failing ledgers. A real 1 MiB Wasm consumer
+  independently checks 49152 general and 11520 Huffman cases with 2016 ninth-byte
+  spills, exact/spare capacities and output guards. The probe has a dedicated
+  build/CI step. Huffman batch variants are withdrawn after weak ordinary-call
+  results; original narrow writes remain. [Reserved-writer evidence](performance/brotli-bit-writer-reserved.md)
+  keeps all five 36-case same-quality/mode/actual-window matrices. Retained
+  q8/q3 point time ratios are 0.996839/0.998432 without added heap storage or
+  changed wires; these small points do not establish significance. Shared
+  command/distance preparation in the preferred context group is the next
+  substantial writer target before count-only evaluation and winner emission.

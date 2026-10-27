@@ -1,0 +1,116 @@
+{
+  "origin_snapshot": "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl",
+  "zig_version": "0.16.0",
+  "node_version": "v26.10.0",
+  "target": "wasm32-wasi",
+  "stack_bytes": 1048576,
+  "cpu_affinity": "0,1,3-9,11-15",
+  "source_sha256": {
+    "bit_writer_wasm_gate.js": "11b78edfea2494dbb19495a84c37e04d99818038a7bf18e851bffccf8f10a709",
+    "src/br/encoder/bit_writer.zig": "cb80b5a99e25df2fac9fa7586dfb555e4907f636657f6a9f9b7d7202ea78981a",
+    "src/io/bit_count.zig": "bf4dcac62fa3258687146bfb9f733d2a6e20624a65a7789e08f736948484b1f2",
+    "src/probe_root.zig": "ca1b9f513375d0c6e2eb57018c7b0f8fef3ce9784eaedb418a9fe9eb300e483b",
+    "src/tests/br_bit_writer_wasm.zig": "9c970a0e7fbbe8d787b6b12b4d9dfd7bd138b66affa53df04721add4d28af955"
+  },
+  "commands": {
+    "debug-build": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-exe",
+      "-fno-entry",
+      "-rdynamic",
+      "--stack",
+      "1048576",
+      "-fsingle-threaded",
+      "-ODebug",
+      "-target",
+      "wasm32-wasi",
+      "-Mroot=/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/src/probe_root.zig",
+      "-femit-bin=/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/debug.wasm",
+      "--cache-dir",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/cache"
+    ],
+    "releasefast-build": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "build-exe",
+      "-fno-entry",
+      "-rdynamic",
+      "--stack",
+      "1048576",
+      "-fsingle-threaded",
+      "-OReleaseFast",
+      "-target",
+      "wasm32-wasi",
+      "-Mroot=/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/src/probe_root.zig",
+      "-femit-bin=/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/releasefast.wasm",
+      "--cache-dir",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/cache"
+    ],
+    "debug-run": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "node",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/bit_writer_wasm_gate.js",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/debug.wasm",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/src/br/encoder/bit_writer.zig"
+    ],
+    "releasefast-run": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "node",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/bit_writer_wasm_gate.js",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/releasefast.wasm",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/src/br/encoder/bit_writer.zig"
+    ],
+    "native-test": [
+      "taskset",
+      "-c",
+      "0,1,3-9,11-15",
+      "zig",
+      "test",
+      "-OReleaseFast",
+      "-Mroot=/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/src/probe_root.zig",
+      "--test-filter",
+      "Brotli bit writer wasm probe",
+      "--cache-dir",
+      "/tmp/vort-br-bit-writer-wasm-20261028-tirsipwl/cache"
+    ]
+  },
+  "exit_codes": {
+    "debug-build": 0,
+    "releasefast-build": 0,
+    "debug-run": 0,
+    "releasefast-run": 0,
+    "native-test": 0
+  },
+  "completion_chunks": {
+    "debug-build": "d4d7cf",
+    "releasefast-build": "2843c4",
+    "debug-run": "ae64bc",
+    "releasefast-run": "16cd2d",
+    "native-test": "3ed3bb"
+  },
+  "general_cases": 49152,
+  "huffman_cases": 11520,
+  "nine_byte_spill_cases": 2016,
+  "fingerprint_hex": "72a93b45",
+  "writer_design": "General bulk stores merge the old first byte before writing; Huffman retains the original implementation.",
+  "scope": "Successful fully reserved writes, exact/spare capacity, bounded/growable storage, full backing-buffer guards. Failure states belong to the main scalar-reference tests.",
+  "replay_exit_codes": {
+    "frozen-debug": 0,
+    "build-debug": 0,
+    "rebuilt-debug": 0,
+    "frozen-releasefast": 0,
+    "build-releasefast": 0,
+    "rebuilt-releasefast": 0,
+    "native-test": 0
+  },
+  "replay_script_sha256": "14f9ec056a0a7f63b762db9d1785359dc3a36fc588f7a7e59b530532d8f33f20"
+}

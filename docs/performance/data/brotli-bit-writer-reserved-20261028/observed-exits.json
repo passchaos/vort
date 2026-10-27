@@ -1,0 +1,36 @@
+{
+  "public_wasm_rf": {
+    "session_id": 31457,
+    "exit_code": 0
+  },
+  "node_and_profile_compatibility": {
+    "session_id": 9925,
+    "exit_code": 0
+  },
+  "compile_checks": {
+    "session_id": 87216,
+    "exit_code": 0
+  },
+  "kernel_wasm_debug": {
+    "session_id": 63001,
+    "exit_code": 0
+  },
+  "all_public_measurements": {
+    "both_rmw": 53032,
+    "general_rmw": 39070,
+    "both_merged": 55790,
+    "general_merged": 12411,
+    "general_merged_q3": 55333,
+    "exit_code": 0
+  },
+  "post_rebase": {
+    "exit_code": 0,
+    "steps": 8,
+    "scalar_tests": 26,
+    "independent_general_cases": 49152,
+    "independent_huffman_cases": 11520
+  },
+  "cli_help": {
+    "exit_code": 0
+  }
+}

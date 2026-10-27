@@ -1,0 +1,21 @@
+{
+  "baseline": "905a4640",
+  "current_sources": {
+    "src/br.zig": "1e414ba7dda2b891d47d469c3077ceb7c86b75c6d183d9ee4575989d452f7c10",
+    "src/br/encoder/bit_writer.zig": "cb80b5a99e25df2fac9fa7586dfb555e4907f636657f6a9f9b7d7202ea78981a",
+    "src/br/encoder/bit_writer_tests.zig": "a1f651fb5a9060f16a8bab053bcb2e6710ef040296160c98c51d59d16b2d2059",
+    "src/tests/br_bit_writer_wasm.zig": "9c970a0e7fbbe8d787b6b12b4d9dfd7bd138b66affa53df04721add4d28af955",
+    "tools/br/bit_writer_wasm_gate.js": "11b78edfea2494dbb19495a84c37e04d99818038a7bf18e851bffccf8f10a709"
+  },
+  "main_candidate": "/tmp/vort-br-writer-20261028-6k27lq8z/bench-general-merged",
+  "candidate_sha256": "2d5dd3059d0b3dde7e7664abcf244db1e1d7678f962cd9e3d23620742d23f55e",
+  "baseline_sha256": "8b3f240f37d976605661797824903745fd468feaa0217272fa426281a9bb607a",
+  "reference_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build",
+  "reference_version": "1.2.0",
+  "reference_flags": "-O3 -DNDEBUG -march=native",
+  "cpu": "Intel i7-10700K",
+  "affinity": "2",
+  "zig": "0.16.0",
+  "optimize": "ReleaseFast",
+  "target": "x86_64 skylake+pku+sgx"
+}
