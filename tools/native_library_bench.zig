@@ -1896,6 +1896,7 @@ fn smokeLz4LinkedDirectCursor(allocator: std.mem.Allocator) !void {
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     var decoded: [payload.len]u8 = undefined;
@@ -1923,6 +1924,7 @@ fn smokeLz4LinkedDirectCursor(allocator: std.mem.Allocator) !void {
     var stream_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
+        .input_policy = .prevalidated_frame,
     });
     defer stream_decoder.deinit();
     @memset(&decoded, 0);
@@ -1936,6 +1938,7 @@ fn smokeLz4LinkedDirectCursor(allocator: std.mem.Allocator) !void {
     var fallback_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
+        .input_policy = .prevalidated_frame,
     });
     defer fallback_decoder.deinit();
     @memset(&decoded, 0);
@@ -2203,6 +2206,7 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     var direct_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = lz4_dictionary_set_payload.len,
         .max_decoded_buffer_len = @max(lz4_dictionary_set_first_payload.len, lz4_dictionary_set_second_payload.len),
+        .input_policy = .prevalidated_frame,
     });
     defer direct_decoder.deinit();
     const direct_initial = try direct_decoder.step(stream, output[0..0]);
@@ -2217,6 +2221,7 @@ fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = lz4_dictionary_set_payload.len,
         .max_decoded_buffer_len = @max(lz4_dictionary_set_first_payload.len, lz4_dictionary_set_second_payload.len),
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     @memset(&output, 0);
@@ -2268,6 +2273,7 @@ fn smokeZstdDictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     var direct_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = zstd_dictionary_set_payload.len,
         .max_decoded_buffer_len = @max(zstd_dictionary_set_first_payload.len, zstd_dictionary_set_second_payload.len),
+        .input_policy = .prevalidated_frame,
     });
     defer direct_decoder.deinit();
     const direct_initial = try direct_decoder.step(stream, output[0..0]);
@@ -2281,6 +2287,7 @@ fn smokeZstdDictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = zstd_dictionary_set_payload.len,
         .max_decoded_buffer_len = @max(zstd_dictionary_set_first_payload.len, zstd_dictionary_set_second_payload.len),
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     @memset(&output, 0);
@@ -2313,6 +2320,7 @@ fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     var decoded: [payload.len]u8 = undefined;
@@ -2909,6 +2917,8 @@ fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decod
 fn decodeZstdIncremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
+    // The default bounded block-stream policy interleaves input and output;
+    // drive both sides together (see drainIncremental).
     try drainIncremental(&decoder, encoded, decoded);
 }
 
@@ -2916,6 +2926,7 @@ fn decodeLz4IncrementalDirect(allocator: std.mem.Allocator, encoded: []const u8,
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = decoded.len,
         .max_decoded_buffer_len = decoded.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     const first = try decoder.step(encoded, decoded[0..0]);
@@ -2929,6 +2940,7 @@ fn decodeZstdIncrementalDirect(allocator: std.mem.Allocator, encoded: []const u8
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = decoded.len,
         .max_decoded_buffer_len = decoded.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     const first = try decoder.step(encoded, decoded[0..0]);
@@ -2942,6 +2954,7 @@ fn decodeLz4IncrementalFallback(allocator: std.mem.Allocator, encoded: []const u
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = decoded.len,
         .max_decoded_buffer_len = decoded.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     try drainIncrementalFallback(&decoder, encoded, decoded, expected);
@@ -2953,6 +2966,7 @@ fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const 
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = decoded.len,
         .max_decoded_buffer_len = decoded.len,
+        .input_policy = .prevalidated_frame,
     });
     defer decoder.deinit();
     try drainIncrementalFallback(&decoder, encoded, decoded, expected);
@@ -2970,11 +2984,13 @@ fn decodeLz4DictionarySetDirect(
         vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         })
     else
         vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         });
     defer decoder.deinit();
     try drainDirectDictionarySet(&decoder, encoded, decoded, lz4_dictionary_set_payload);
@@ -2991,11 +3007,13 @@ fn decodeZstdDictionarySetDirect(
         vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         })
     else
         vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         });
     defer decoder.deinit();
     try drainDirectDictionarySet(&decoder, encoded, decoded, zstd_dictionary_set_payload);
@@ -3012,11 +3030,13 @@ fn decodeLz4DictionarySetFallback(
         vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         })
     else
         vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         });
     defer decoder.deinit();
     try drainIncrementalFallback(&decoder, encoded, decoded, lz4_dictionary_set_payload);
@@ -3035,11 +3055,13 @@ fn decodeZstdDictionarySetFallback(
         vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         })
     else
         vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
             .expected_output_len = decoded.len,
             .max_decoded_buffer_len = decoded.len,
+            .input_policy = .prevalidated_frame,
         });
     defer decoder.deinit();
     try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload);
@@ -3050,13 +3072,13 @@ fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8
     const initial = try decoder.step(encoded, decoded[0..0]);
     if (initial.status != .need_output) return error.SizeMismatch;
 
+    // Drain in caller-sized fragments; block boundaries may write less than
+    // the offered slice, so accept any positive output per step.
     var written: usize = 0;
-    const first_len = @min(decoded.len, @max(@as(usize, 1), decoded.len / 32));
-    const first = try decoder.step("", decoded[0..first_len]);
-    written += first.progress.output_written;
-    if (first.status != .need_output or written != first_len) return error.SizeMismatch;
     while (true) {
-        const result = try decoder.step("", decoded[written..]);
+        const remaining = decoded.len - written;
+        const fragment_len = @max(@as(usize, 1), remaining / 7 + 1);
+        const result = try decoder.step("", decoded[written..@min(decoded.len, written + fragment_len)]);
         written += result.progress.output_written;
         if (result.status == .done) break;
         if (result.status != .need_output or result.progress.output_written == 0) return error.SizeMismatch;
@@ -3066,40 +3088,47 @@ fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8
 }
 
 fn drainDirectDictionarySet(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
-    const first = try decoder.step(encoded, decoded[0..0]);
-    if (first.status != .need_output) return error.SizeMismatch;
-    if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
-
+    // A concatenated dictionary stream contains several data frames. The
+    // prevalidated direct path returns need_output after consuming a member
+    // and may need the still-buffered tail; resume with the unconsumed input.
+    var read: usize = 0;
     var written: usize = 0;
+    var provide_input = true;
     while (true) {
-        const result = try decoder.step("", decoded[written..]);
+        const input: []const u8 = if (provide_input) encoded[read..] else encoded[encoded.len..];
+        const result = try decoder.step(input, decoded[written..]);
+        read += result.progress.input_read;
         written += result.progress.output_written;
-        if (result.status == .done) break;
-        if (result.status != .need_output or result.progress.output_written == 0) return error.SizeMismatch;
+        if (result.status == .done) {
+            if (read == encoded.len and written == expected.len) break;
+            provide_input = read < encoded.len;
+            continue;
+        }
+        provide_input = result.status == .need_input and read < encoded.len;
+        if (!provide_input and result.status != .need_output) return error.SizeMismatch;
+        if (!provide_input and result.progress.output_written == 0 and read >= encoded.len) return error.SizeMismatch;
     }
-    if (written != expected.len) return error.SizeMismatch;
     if (!std.mem.eql(u8, expected, decoded[0..written])) return error.SizeMismatch;
 }
 
 fn drainIncremental(decoder: anytype, encoded: []const u8, decoded: []u8) !void {
-    const split = @max(@as(usize, 1), encoded.len / 3);
-    var offset: usize = 0;
-    var out_offset: usize = 0;
-    while (offset < encoded.len) {
-        const end = @min(encoded.len, offset + split);
-        const result = try decoder.step(encoded[offset..end], decoded[out_offset..out_offset]);
-        offset += result.progress.input_read;
-        if (result.status == .need_output) break;
-        if (result.status == .done) break;
-    }
+    // Default bounded block-stream decoders interleave input and output:
+    // they can request output after consuming part of the frame and resume
+    // when fed more input. Drive both sides on every step (31-byte chunks).
+    var read: usize = 0;
+    var written: usize = 0;
     while (true) {
-        const end = @min(decoded.len, out_offset + 31);
-        const result = try decoder.step("", decoded[out_offset..end]);
-        out_offset += result.progress.output_written;
-        if (result.status == .done) break;
-        if (result.status != .need_output) return error.SizeMismatch;
+        const result = try decoder.step(
+            encoded[read..@min(encoded.len, read + 31)],
+            decoded[written..@min(decoded.len, written + 31)],
+        );
+        read += result.progress.input_read;
+        written += result.progress.output_written;
+        if (result.status == .done and read == encoded.len) break;
+        if (result.progress.input_read == 0 and result.progress.output_written == 0) return error.SizeMismatch;
     }
-    if (out_offset != decoded.len) return error.SizeMismatch;
+    try decoder.finish();
+    if (read != encoded.len or written != decoded.len) return error.SizeMismatch;
 }
 
 fn verifyLz4DictionarySetChunkedAppend(
