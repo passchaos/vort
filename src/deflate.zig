@@ -1761,7 +1761,6 @@ const DynamicCodingPlan = struct {
         if (stats.literal_frequencies[256] == 0) fixed_bits += huffman.fixed_literal_encoder.bits[256];
         for (stats.distanceSymbols()) |symbol|
             fixed_bits += @as(usize, stats.distance_frequencies[symbol]) * huffman.fixed_distance_encoder.bits[symbol];
-        for (280..285) |symbol| fixed_bits -= stats.literal_frequencies[symbol];
         return initFromStatsKnownActive(
             lit_freqs,
             stats.distance_frequencies,
@@ -1808,7 +1807,6 @@ const DynamicCodingPlan = struct {
         for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits| {
             fixed_bits += @as(usize, frequency) * code_bits;
         }
-        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
         if (literal_active < 240) {
             return initFromStatsCore(
                 lit_freqs,
@@ -1920,12 +1918,6 @@ const DynamicCodingPlan = struct {
         for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits| {
             fixed_bits += @as(usize, frequency) * code_bits;
         }
-        // Preserve lz77.fixedBitCost's historical planning model exactly.
-        // Length symbols 280...284 are charged one bit below their emitted
-        // fixed-code-plus-extra cost there. Correcting that model could change
-        // block selection and is deliberately left to a separate size/ratio
-        // change; this optimization only removes redundant token scans.
-        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
         var literal_active: usize = 0;
         for (lit_freqs) |frequency| literal_active += @intFromBool(frequency != 0);
         var distance_active: usize = 0;
@@ -2537,6 +2529,10 @@ fn writeFixedTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, 
     try writeFixedBlockHeader(allocator, writer, final);
     try writeFixedTokenSequence(allocator, writer, tokens);
     try writeFixedBlockEnd(allocator, writer);
+}
+
+test "fixed bit planning matches every emitted length and distance boundary" {
+    try @import("deflate/tests/fixed_cost.zig").verify(lz77.Token, lz77.fixedBitCost, writeFixedTokens);
 }
 
 fn writeFixedBlockHeader(

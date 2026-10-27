@@ -3,6 +3,7 @@ const byte_scan = @import("lz77/byte_scan.zig");
 const scan_lazy = @import("lz77/scan/lazy.zig");
 const scan_indexed_match = @import("lz77/scan/indexed_match.zig");
 const scan_prefix_match = @import("lz77/scan/prefix_match.zig");
+const optimal_length_minima = @import("lz77/optimal/length_minima.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -1587,6 +1588,9 @@ inline fn optimalPlanReuseWithIndex(
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
+    const use_minima = enable_prefix_bound and !modeled;
+    var minima: if (use_minima) optimal_length_minima.Set(fixed_length_costs) else void =
+        if (use_minima) optimal_length_minima.Set(fixed_length_costs).init(minimum, maxMatch(options)) else {};
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
@@ -1595,10 +1599,14 @@ inline fn optimalPlanReuseWithIndex(
         costs[rev_i] = (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
+        if (comptime use_minima) minima.advance(costs, rev_i);
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
-        var choices_built_through = minimum - 1;
+        var coverage = struct { through: usize, distance_cost: usize }{
+            .through = minimum - 1,
+            .distance_cost = std.math.maxInt(usize),
+        };
         var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
@@ -1623,68 +1631,100 @@ inline fn optimalPlanReuseWithIndex(
                 continue;
             }
 
+            if (comptime use_minima) {
+                if (minimum == 3) {
+                    const candidate_prefix = std.mem.readInt(u24, input[candidate..][0..3], .little);
+                    const current_prefix = std.mem.readInt(u24, input[rev_i..][0..3], .little);
+                    if (candidate_prefix != current_prefix) {
+                        if (comptime collect_profile) {
+                            profile.prefix_rejections += 1;
+                            profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
+                        }
+                        chain_i = prev[candidate];
+                        continue;
+                    }
+                }
+            }
+
             const distance_cost = distance_costs[distance];
-            if (enable_prefix_bound and
-                minimum == 4 and
-                choices_built_through >= minimum and
-                choices_built_through < max_len and
-                input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
-                optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost >= costs[rev_i])
-            {
-                if (comptime collect_profile) {
-                    profile.bound_rejections += 1;
-                    profile.bound_length_histogram[optimalBoundLengthBucket(choices_built_through)] += 1;
-                    profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
-                    const slack = optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost - costs[rev_i];
-                    profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
+            if (comptime use_minima) {
+                // A validated prefix spends the same candidate slot. If it
+                // cannot extend covered lengths and costs no less than the
+                // covering distance, it cannot improve any suffix choice.
+                if (minimum <= 4 and coverage.through >= minimum and coverage.through < max_len and
+                    distance_cost >= coverage.distance_cost and
+                    std.mem.readInt(u32, input[candidate + coverage.through - 3 ..][0..4], .little) !=
+                        std.mem.readInt(u32, input[rev_i + coverage.through - 3 ..][0..4], .little))
+                {
+                    if (comptime collect_profile) {
+                        profile.bound_rejections += 1;
+                        profile.bound_length_histogram[optimalBoundLengthBucket(coverage.through)] += 1;
+                        profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
+                        const covered = minima.best(costs, rev_i, coverage.through);
+                        const slack = covered.cost + distance_cost - costs[rev_i];
+                        profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
+                    }
+                    candidates_seen += 1;
+                    if (candidates_seen >= candidate_limit) {
+                        if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                        break;
+                    }
+                    chain_i = prev[candidate];
+                    continue;
                 }
-                candidates_seen += 1;
-                if (candidates_seen >= candidate_limit) {
-                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
-                    break;
-                }
-                chain_i = prev[candidate];
-                continue;
             }
 
             if (comptime collect_profile) profile.match_length_calls += 1;
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
                 if (comptime collect_profile) {
-                    const added_choices = length -| choices_built_through;
+                    const added_choices = length -| coverage.through;
                     profile.valid_match_candidates += 1;
                     profile.length_choices_built += added_choices;
                     profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                 }
-                if (comptime modeled) {
-                    extendModeledOptimalLengthChoices(
-                        costs,
-                        rev_i,
-                        minimum,
-                        choices_built_through,
-                        length,
-                        model.length,
-                        &scratch.index.best_length_choices,
-                        &scratch.index.best_lengths,
-                    );
+                if (comptime use_minima) {
+                    if (length > coverage.through or distance_cost < coverage.distance_cost) {
+                        const choice = minima.best(costs, rev_i, length);
+                        const cost = choice.cost + distance_cost;
+                        if (cost < costs[rev_i]) {
+                            costs[rev_i] = cost;
+                            steps[rev_i] = .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } };
+                        }
+                    }
+                    if (length > coverage.through) coverage.distance_cost = distance_cost else if (length == coverage.through)
+                        coverage.distance_cost = @min(coverage.distance_cost, distance_cost);
                 } else {
-                    extendOptimalLengthChoices(
-                        costs,
-                        rev_i,
-                        minimum,
-                        choices_built_through,
-                        length,
-                        &scratch.index.best_length_choices,
-                        &scratch.index.best_lengths,
-                    );
+                    if (comptime modeled) {
+                        extendModeledOptimalLengthChoices(
+                            costs,
+                            rev_i,
+                            minimum,
+                            coverage.through,
+                            length,
+                            model.length,
+                            &scratch.index.best_length_choices,
+                            &scratch.index.best_lengths,
+                        );
+                    } else {
+                        extendOptimalLengthChoices(
+                            costs,
+                            rev_i,
+                            minimum,
+                            coverage.through,
+                            length,
+                            &scratch.index.best_length_choices,
+                            &scratch.index.best_lengths,
+                        );
+                    }
+                    const choice = scratch.index.best_length_choices[length];
+                    const cost = optimalLengthChoiceCost(choice) + distance_cost;
+                    if (cost < costs[rev_i]) {
+                        costs[rev_i] = cost;
+                        steps[rev_i] = .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } };
+                    }
                 }
-                choices_built_through = @max(choices_built_through, length);
-                const choice = scratch.index.best_length_choices[length];
-                const cost = optimalLengthChoiceCost(choice) + distance_cost;
-                if (cost < costs[rev_i]) {
-                    costs[rev_i] = cost;
-                    steps[rev_i] = .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } };
-                }
+                coverage.through = @max(coverage.through, length);
                 candidates_seen += 1;
                 if (length == max_len) break;
                 if (length >= options.nice_len and candidates_seen >= candidate_limit) {
@@ -1729,7 +1769,7 @@ fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
 }
 
 fn optimalBoundLengthBucket(length: usize) usize {
-    std.debug.assert(length >= 4 and length <= max_match_len);
+    std.debug.assert(length >= 3 and length <= max_match_len);
     return if (length < 8) 0 else if (length < 16) 1 else if (length < 32) 2 else if (length < 64) 3 else if (length < 128) 4 else 5;
 }
 
@@ -1984,8 +2024,9 @@ fn fixedLengthSymbolCost(length: usize) usize {
     if (length <= 18) return 8;
     if (length <= 34) return 9;
     if (length <= 66) return 10;
-    if (length <= 130) return 11;
-    if (length <= 257) return 12;
+    if (length <= 114) return 11;
+    if (length <= 130) return 12;
+    if (length <= 257) return 13;
     return 8; // 258 is the fixed-Huffman code 285 with no extra bits.
 }
 
@@ -1998,6 +2039,14 @@ fn fixedLengthCostTable() [max_match_len + 1]u8 {
 }
 
 const fixed_length_costs = fixedLengthCostTable();
+
+test "optimal sliding length minima preserve every clipped scalar cost and longest tie" {
+    try optimal_length_minima.compare(fixed_length_costs);
+}
+
+test "optimal range minima preserve all scalar costs steps tokens and length boundaries" {
+    try @import("lz77/optimal/tests/parser.zig").compare(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
+}
 
 test "compile-time fixed length costs match scalar range" {
     for (min_match_len..max_match_len + 1) |length| {
@@ -3697,6 +3746,8 @@ test "optimal prefix bound preserves reference tokens" {
         const bounded_stats = try optimalPlanReuseInternal(&bounded, std.testing.allocator, &input, options, true);
         try std.testing.expectEqual(reference_stats, bounded_stats);
         try std.testing.expectEqualSlices(Token, reference.tokens.items, bounded.tokens.items);
+        try std.testing.expectEqualSlices(usize, reference.costs.items, bounded.costs.items);
+        try std.testing.expectEqualSlices(Token, reference.steps.items, bounded.steps.items);
     }
 }
 
