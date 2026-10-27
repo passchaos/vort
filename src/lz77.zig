@@ -9,6 +9,7 @@ const optimal_suffix_costs = @import("lz77/optimal/suffix_costs.zig");
 const optimal_prefix_jumps = @import("lz77/optimal/prefix_jumps.zig");
 const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
 const match_length = @import("lz77/match/length.zig");
+const optimal_match_reuse = @import("lz77/optimal/match_reuse.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -1695,6 +1696,7 @@ inline fn optimalPlanReuseWithIndexBackend(
         break :init optimal_length_minima.Set(fixed_length_costs).init(minimum, maxMatch(options));
     } else {};
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
+    var match_cache: if (enable_jumps) optimal_match_reuse.Cache else void = if (enable_jumps) .{} else {};
 
     while (rev_i > 0) {
         rev_i -= 1;
@@ -1796,7 +1798,7 @@ inline fn optimalPlanReuseWithIndexBackend(
             }
 
             if (comptime collect_profile) profile.match_length_calls += 1;
-            const length = matchLength(input, candidate, rev_i, max_len);
+            const length = if (comptime enable_jumps) match_cache.find(input, candidate, rev_i, max_len) else matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
                 if (comptime collect_profile) {
                     const added_choices = length -| coverage.through;

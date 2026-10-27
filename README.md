@@ -355,6 +355,9 @@ The library is under active development. Its current capabilities include:
   the shared match-length kernel validates its first word before constructing a
   larger vector mask; [short-match evidence](docs/png-match-length.md) records
   complete scalar/PNG exactness and full-encoder CPU comparisons;
+  dense-prefix optimal parsing reuses validated adjacent match queries;
+  [reverse-match evidence](docs/png-match-reuse.md) records full DP/PNG
+  exactness, complete CPU gains and remaining performance deficits;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while
