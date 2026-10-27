@@ -970,7 +970,8 @@ fn treeBitCostCached(
 ) !u64 {
     const prior_cold = if (profiled) cache.cold_misses else 0;
     const prior_conflict = if (profiled) cache.conflict_misses else 0;
-    const cached = cache.get(profiled, frequencies);
+    const hash = treeHistogramHash(frequencies);
+    const cached = cache.getHashed(profiled, frequencies, hash);
     if (profiled) {
         const counts: literal_context_profile.TreeCacheCounts = .{
             .requests = 1,
@@ -984,7 +985,7 @@ fn treeBitCostCached(
     }
     if (cached) |hit| return hit.bit_cost;
     const computed = try treeBitCostProfiled(profiled, allocator, frequencies, active_symbols, profiler);
-    cache.put(frequencies, computed, mode);
+    cache.putHashed(frequencies, hash, computed, mode);
     return computed;
 }
 

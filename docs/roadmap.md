@@ -23815,3 +23815,16 @@ reuse, so production keeps the simpler independently owned plans.
   test-br-reference-parameters build step.
   [Reference parameter evidence](performance/brotli-matched-reference-parameters.md)
   separates the 1.0.9 functional tool epoch from current 1.2.0 performance.
+
+- 2026-10-28: one tree-frequency hash now serves cache lookup and publication
+  across unchanged pure Huffman scoring. Complete-vector checks, exact LRU
+  state, owner modes, cache counters, scores and allocator operations remain
+  identical, without added cache storage. Two new collision-heavy hash tests
+  and full q8 context-counter equality support the change. Fixed-CPU ordinary
+  q8/generic/actual-lgwin16 encoding of 36 Silesia prefixes records 0.990625x
+  time versus 3dd41759 with identical wires/settings. Local Brotli 1.2.0
+  (558fc64, native GCC -O3) reveals a remaining 40.2x geometric encoding-time
+  gap with size ratio 0.99556. [Hash reuse evidence](performance/brotli-tree-hash-reuse.md)
+  retains raw rounds and diagnostic stages; point measurements do not prove
+  statistical significance or industry-best results. Prioritize reuse of q8
+  writer preparation and reduced repeated emission with exact byte arbitration.

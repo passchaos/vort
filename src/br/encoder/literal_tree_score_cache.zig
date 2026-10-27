@@ -39,7 +39,12 @@ pub const Cache = struct {
     /// Returns the owner recorded by the publishing score so callers can
     /// classify cross-mode memo reuse. A hit requires the complete vector.
     pub fn get(self: *Cache, comptime classify_misses: bool, histogram: *const [256]u32) ?Hit {
-        const hash = histogramHash(histogram);
+        return self.getHashed(classify_misses, histogram, histogramHash(histogram));
+    }
+
+    /// Lookup and publication may share the hash when scoring leaves the
+    /// histogram unchanged. Hash equality still requires full-vector equality.
+    pub fn getHashed(self: *Cache, comptime classify_misses: bool, histogram: *const [256]u32, hash: u64) ?Hit {
         const set = &self.sets[setForHash(hash)];
         var has_invalid_way = false;
         for (set) |*entry| {
@@ -64,7 +69,12 @@ pub const Cache = struct {
     /// Publish only a completed successful score. The caller invokes the
     /// unchanged scorer on a miss; errors never reach this publication point.
     pub fn put(self: *Cache, histogram: *const [256]u32, bit_cost: u64, owner_mode: u8) void {
-        const hash = histogramHash(histogram);
+        self.putHashed(histogram, histogramHash(histogram), bit_cost, owner_mode);
+    }
+
+    /// Use the hash obtained before a pure score computation, avoiding another
+    /// 256-frequency scan. Callers must retain the same histogram until publish.
+    pub fn putHashed(self: *Cache, histogram: *const [256]u32, hash: u64, bit_cost: u64, owner_mode: u8) void {
         const set = &self.sets[setForHash(hash)];
         var victim: *Entry = &set[0];
         for (set) |*entry| {
@@ -99,4 +109,53 @@ pub fn histogramHash(histogram: *const [256]u32) u64 {
     var hash: u64 = 0xcbf2_9ce4_8422_2325;
     for (histogram) |frequency| hash = (hash ^ @as(u64, frequency)) *% 0x0000_0100_0000_01b3;
     return hash;
+}
+
+test "literal context reused hash preserves cache publication and replacement" {
+    const legacy = try std.testing.allocator.create(Cache);
+    defer std.testing.allocator.destroy(legacy);
+    const reused = try std.testing.allocator.create(Cache);
+    defer std.testing.allocator.destroy(reused);
+    legacy.* = .{};
+    reused.* = .{};
+    var pool: [16][256]u32 = @splat(@splat(0));
+    for (&pool, 0..) |*histogram, index| {
+        histogram[17] = @intCast(index + 1);
+        // Force set conflicts while keeping the complete vectors distinct.
+        while (histogramHash(histogram) & (set_count - 1) != 7) histogram[0] += 1;
+    }
+    var state: u32 = 0x243f_6a88;
+    for (0..1024) |request| {
+        state = state *% 1664525 +% 1013904223;
+        const index = if (request % 3 == 0) 0 else state >> 28;
+        const histogram = &pool[index];
+        const hash = histogramHash(histogram);
+        const expected = legacy.get(true, histogram);
+        const actual = reused.getHashed(true, histogram, hash);
+        try std.testing.expectEqualDeep(expected, actual);
+        if (expected == null) {
+            const cost = 100 + @as(u64, index);
+            const mode: u8 = @intCast(request % 4);
+            legacy.put(histogram, cost, mode);
+            reused.putHashed(histogram, hash, cost, mode);
+        }
+    }
+    try std.testing.expectEqualDeep(legacy.*, reused.*);
+    try std.testing.expect(reused.hits > 0 and reused.conflict_misses > 0);
+}
+
+test "literal context supplied hash collisions still require full vectors" {
+    const cache = try std.testing.allocator.create(Cache);
+    defer std.testing.allocator.destroy(cache);
+    cache.* = .{};
+    var first: [256]u32 = @splat(0);
+    first[2] = 128;
+    var second = first;
+    second[255] = 1;
+    const collision_hash: u64 = 0x17;
+    cache.putHashed(&first, collision_hash, 200, 0);
+    try std.testing.expectEqual(@as(?Hit, null), cache.getHashed(true, &second, collision_hash));
+    cache.putHashed(&second, collision_hash, 300, 1);
+    try std.testing.expectEqual(@as(u64, 200), cache.getHashed(false, &first, collision_hash).?.bit_cost);
+    try std.testing.expectEqual(@as(u64, 300), cache.getHashed(false, &second, collision_hash).?.bit_cost);
 }

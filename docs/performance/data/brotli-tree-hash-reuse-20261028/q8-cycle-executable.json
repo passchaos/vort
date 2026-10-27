@@ -1,0 +1,6 @@
+{
+  "command": "perf record -e cycles:u -g -- taskset -c 2 q8-baseline corpus/mozilla-65536.bin 128",
+  "sha256": "d463fe9842a69f6bee3b6de87f05cf62b7799a8f365fb17342be65e17d84fffc",
+  "source": "q8-only.zig",
+  "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996"
+}

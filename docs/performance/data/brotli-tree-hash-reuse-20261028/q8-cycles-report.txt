@@ -1,0 +1,37 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 27K of event 'cycles:u'
+# Event count (approx.): 31686416171
+#
+# Overhead  Command      Shared Object         Symbol
+# ........  ...........  ....................  .........................................................................
+#
+    18.75%  q8-baseline  q8-baseline           [.] br.encoder.literal_context_split.chooseModeFromHistograms__anon_55140
+    14.52%  q8-baseline  q8-baseline           [.] lz77.optimalPlanAlloc
+     7.56%  q8-baseline  q8-baseline           [.] br.encodeCommandPlanWithOptionsWrite
+     6.86%  q8-baseline  q8-baseline           [.] br.encodeCommandPlanWithAdaptiveSplitWrite
+     5.36%  q8-baseline  q8-baseline           [.] br.encoder.small_huffman.build__anon_47180
+     5.01%  q8-baseline  q8-baseline           [.] br.encoder.literal_alphabet.buildLargeSupport__anon_81654
+     4.23%  q8-baseline  q8-baseline           [.] br.encoder.literal_context_split.treeBitCostProfiled__anon_54966
+     2.68%  q8-baseline  q8-baseline           [.] br.encoder.complex_prefix.codeLengthCodeLengths
+     2.50%  q8-baseline  q8-baseline           [.] compiler_rt.memset
+     2.22%  q8-baseline  q8-baseline           [.] br.encoder.context_map.build
+     2.03%  q8-baseline  q8-baseline           [.] br.encoder.command_plan.PrefixAlphabetFor(704).recordFrequency
+     2.01%  q8-baseline  q8-baseline           [.] br.commandEntryForLengthsAndDistance
+     1.91%  q8-baseline  q8-baseline           [.] br.encoder.literal_context.value
+     1.82%  q8-baseline  q8-baseline           [.] br.encoder.distance.encodeWithFormat
+     1.63%  q8-baseline  q8-baseline           [.] br.commandWireDistance
+     1.62%  q8-baseline  q8-baseline           [.] lz77.findBestHashMatchWithLayout__anon_81979
+     1.40%  q8-baseline  q8-baseline           [.] br.length.codeForValue__anon_51218
+     1.27%  q8-baseline  q8-baseline           [.] br.chooseAdaptiveLiteralSplitAlloc
+     1.25%  q8-baseline  q8-baseline           [.] br.length.codeForValue__anon_51219
+     1.22%  q8-baseline  q8-baseline           [.] br.encoder.small_huffman.build__anon_47163
+     1.06%  q8-baseline  q8-baseline           [.] br.decoder.distance_history.symbolForDistance
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

@@ -1,0 +1,40 @@
+{
+  "native_wasm_compile": {
+    "session_id": 42009,
+    "exit_code": 0,
+    "command": "zig build -j6 check check-wasm --summary all"
+  },
+  "focused_tests_and_fixture": {
+    "session_id": 10569,
+    "exit_code": 0,
+    "command": "zig build -j2 test-br -Dbr-test-filter='literal context' run-br-planned-encode-path-gate test-br-reference-parameters --summary all"
+  },
+  "parameter_and_fixture_repeat": {
+    "session_id": 52330,
+    "exit_code": 0
+  },
+  "matched_measurement": {
+    "session_id": 18383,
+    "exit_code": 0
+  },
+  "matched_sample_reports": {
+    "exit_code": 0,
+    "reports": 18
+  },
+  "wasm_hash_protocol": {
+    "exit_code": 0,
+    "requests": 1024
+  },
+  "post_rebase": {
+    "session_id": 24194,
+    "exit_code": 0,
+    "steps": 17,
+    "zig_tests": 93,
+    "python_tests": 18,
+    "wasm_protocol_requests": 1024
+  },
+  "cli_help": {
+    "session_id": 32011,
+    "exit_code": 0
+  }
+}

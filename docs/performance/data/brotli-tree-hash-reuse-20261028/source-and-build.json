@@ -1,0 +1,37 @@
+{
+  "baseline_commit": "3dd417597de62232050f15041c6ce48b87dd9065",
+  "candidate_source_sha256": {
+    "src/br/encoder/literal_tree_score_cache.zig": "b5eb82bdbe2061aaa7762238579617a91082f422cfa42db8e1f78b983fac8c16",
+    "src/br/encoder/literal_context_split.zig": "977cf3119ce4c4595332cafa30e68d17378bb96240da2ac55aea2e7bc70d6b24",
+    "tools/br/planned_encode_bench.zig": "e18e8078c5da19cfed9d1a9009d9d825a41f69346990dcc8027c06831199f32a",
+    "tools/br/libbrotli_runtime.zig": "0dca0909d63f9c5ac5d3c463d7a5c69fb71d2e6322e95be327ab38892fe52e93",
+    "tools/br/reference_encode_options.zig": "fc78ff9aa488ca85682b180ee251e2d2166db766ccfbcbd0dc4d166a70621d47",
+    "tools/br/encode_samples.zig": "296c9c0f11fc494262c772deb86d9a6f77d4ad43fd4dd9ff823200a6e128dc7a"
+  },
+  "cpu": "Intel i7-10700K",
+  "affinity": "2",
+  "build": "Zig 0.16.0 ReleaseFast native x86_64 skylake+pku+sgx",
+  "reference_git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+  "reference_version": "1.2.0",
+  "reference_build_flags": "-O3 -DNDEBUG -march=native",
+  "reference_files": {
+    "libbrotlienc.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "sha256": "79433e774220027a191eaac4dd4437afc687837ad080dfd4d15b9243565ff70d"
+    },
+    "libbrotlidec.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "sha256": "0377077412584221d95fd9f3e14a4572275cd606a0e878c671fbfe05651036d8"
+    },
+    "libbrotlicommon.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "sha256": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb"
+    }
+  },
+  "executables": {
+    "q8-baseline": "d463fe9842a69f6bee3b6de87f05cf62b7799a8f365fb17342be65e17d84fffc",
+    "q8-candidate": "9a17f290e8ec1a0a2920cce5cab21fc6e22bf74ea5cacdedb997dcb6bbfe2c5b",
+    "bench-matched-baseline": "5b49e35936ba14373972d2a4ac8acdc4d29ed2f67a70a459ca2696aa389b8988",
+    "bench-matched-candidate": "cce4b146e1ef864f6f2ead979812549ba94439d4568d14ad1431b498a866ce6e"
+  }
+}

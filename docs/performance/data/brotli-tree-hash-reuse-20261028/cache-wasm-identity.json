@@ -1,0 +1,10 @@
+{
+  "source_sha256": "7e35b9c4c33d154ba768fc5c5a92eae915039cf716e8630c958458781b6c4995",
+  "cache_source_sha256": "b5eb82bdbe2061aaa7762238579617a91082f422cfa42db8e1f78b983fac8c16",
+  "wasm_sha256": "5d99bfd1babb02f795e1fe0e6e059b8d3e592fde7b84df5f8b08e0cf07f25fc3",
+  "target": "wasm32-wasi",
+  "optimize": "ReleaseFast",
+  "stack_bytes": 2097152,
+  "requests": 1024,
+  "exit_code": 0
+}
