@@ -61,8 +61,8 @@ loop remains a test oracle.
 The ReleaseFast LZ77 root passes 111 tests, including complete scalar-DP state,
 candidate-budget, wide-position, custom-cost, reuse and allocation-failure
 controls. The selected DEFLATE best/optimal/numeric/dictionary gates pass
-111 tests; focused best-selection gates pass 13 in Debug. The owning imx bounded
-PNG encoder passes 87 tests in both modes. Baseline x86_64 and big-endian
+112 tests after pulling; focused best-selection gates pass 13 in Debug. The
+owning imx bounded PNG encoder passes 87 tests in both modes. Baseline x86_64 and big-endian
 PowerPC64 compile optimal controls. System zlib 1.3 independently decodes raw,
 zlib, gzip and limited-dictionary results.
 
@@ -76,3 +76,11 @@ The imx evidence records the original 15-raster matrix, explicit levels,
 independent observers and paired complete-encoder timing. Compression
 throughput, optimal-state storage beyond initial slack, entropy-model costs and
 broader format/API performance remain under the active goal.
+
+Final imx complete-encoder timing covers sixty original-raster level-8/9 cases.
+The current/released throughput ratio is 0.969219x geomean and
+0.983153x aggregate, minimum 0.725477x. Lohengrin/Up
+spends additional CPU comparing the filtered candidate while reducing size by
+about 4.22%. Current aggregate throughput remains 0.124370x
+image-png. Initial requested-heap savings and candidate-quality correctness
+do not establish numeric-level throughput leadership.
