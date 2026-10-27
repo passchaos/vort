@@ -1616,7 +1616,15 @@ inline fn optimalPlanReuseWithIndexBackend(
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
-    const use_minima = enable_prefix_bound and !modeled;
+    const compact_u32 = @TypeOf(prev[0]) == u32;
+    const use_bound = enable_prefix_bound and !modeled;
+    // The non-jump compact-index backend serves sparse minimum-three chains:
+    // their measured extensions are a few choices per candidate, so the
+    // minima queues' per-queue binary searches cost more than a linear running
+    // minimum. Dense jump chains, longer-minimum parses (for example the
+    // .filtered fallback, minimum five) and generic indexes keep the queues.
+    const linear_choices = compact_u32 and !enable_jumps;
+    const sparse_linear = linear_choices and minimum == 3 and optimal_prefix_jumps.sparseLinearUseful(input, prev);
     const use_jumps = enable_jumps;
     const jumps_active = enable_jumps;
     if (comptime use_jumps) {
@@ -1629,8 +1637,10 @@ inline fn optimalPlanReuseWithIndexBackend(
             }
         }
     }
-    var minima: if (use_minima) optimal_length_minima.Set(fixed_length_costs) else void =
-        if (use_minima) optimal_length_minima.Set(fixed_length_costs).init(minimum, maxMatch(options)) else {};
+    var minima: if (use_bound) optimal_length_minima.Set(fixed_length_costs) else void = if (use_bound) init: {
+        if (sparse_linear) break :init undefined;
+        break :init optimal_length_minima.Set(fixed_length_costs).init(minimum, maxMatch(options));
+    } else {};
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
@@ -1639,7 +1649,12 @@ inline fn optimalPlanReuseWithIndexBackend(
         costs[rev_i] = (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
-        if (comptime use_minima) minima.advance(costs, rev_i);
+        // Runtime minimum selects the strategy: the dense/long-minimum
+        // instance keeps the queues, the sparse minimum-three instance uses
+        // the linear running minimum.
+        if (comptime use_bound) {
+            if (!sparse_linear) minima.advance(costs, rev_i);
+        }
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
@@ -1681,7 +1696,7 @@ inline fn optimalPlanReuseWithIndexBackend(
                 continue;
             }
 
-            if (comptime use_minima) {
+            if (comptime use_bound) {
                 if (minimum == 3) {
                     const candidate_prefix = std.mem.readInt(u24, input[candidate..][0..3], .little);
                     const current_prefix = std.mem.readInt(u24, input[rev_i..][0..3], .little);
@@ -1697,7 +1712,7 @@ inline fn optimalPlanReuseWithIndexBackend(
             }
 
             const distance_cost = distance_costs[distance];
-            if (comptime use_minima) {
+            if (comptime use_bound) {
                 // A validated prefix spends the same candidate slot. If it
                 // cannot extend covered lengths and costs no less than the
                 // covering distance, it cannot improve any suffix choice.
@@ -1710,8 +1725,11 @@ inline fn optimalPlanReuseWithIndexBackend(
                         profile.bound_rejections += 1;
                         profile.bound_length_histogram[optimalBoundLengthBucket(coverage.through)] += 1;
                         profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
-                        const covered = minima.best(costs, rev_i, coverage.through);
-                        const slack = covered.cost + distance_cost - costs[rev_i];
+                        const covered_cost = if (sparse_linear)
+                            optimalLengthChoiceCost(scratch.index.best_length_choices[coverage.through])
+                        else
+                            minima.best(costs, rev_i, coverage.through).cost;
+                        const slack = covered_cost + distance_cost - costs[rev_i];
                         profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
                     }
                     candidates_seen += 1;
@@ -1733,13 +1751,31 @@ inline fn optimalPlanReuseWithIndexBackend(
                     profile.length_choices_built += added_choices;
                     profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                 }
-                if (comptime use_minima) {
-                    if (length > coverage.through or distance_cost < coverage.distance_cost) {
-                        const choice = minima.best(costs, rev_i, length);
-                        const cost = choice.cost + distance_cost;
+                if (comptime use_bound) {
+                    if (sparse_linear) {
+                        extendOptimalLengthChoices(
+                            costs,
+                            rev_i,
+                            minimum,
+                            coverage.through,
+                            length,
+                            &scratch.index.best_length_choices,
+                            &scratch.index.best_lengths,
+                        );
+                        const choice = scratch.index.best_length_choices[length];
+                        const cost = optimalLengthChoiceCost(choice) + distance_cost;
                         if (cost < costs[rev_i]) {
                             costs[rev_i] = cost;
-                            steps[rev_i] = .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } };
+                            steps[rev_i] = .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } };
+                        }
+                    } else {
+                        if (length > coverage.through or distance_cost < coverage.distance_cost) {
+                            const choice = minima.best(costs, rev_i, length);
+                            const cost = choice.cost + distance_cost;
+                            if (cost < costs[rev_i]) {
+                                costs[rev_i] = cost;
+                                steps[rev_i] = .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } };
+                            }
                         }
                     }
                     if (length > coverage.through) coverage.distance_cost = distance_cost else if (length == coverage.through)
@@ -2094,7 +2130,7 @@ test "optimal sliding length minima preserve every clipped scalar cost and longe
     try optimal_length_minima.compare(fixed_length_costs);
 }
 
-test "optimal range minima preserve all scalar costs steps tokens and length boundaries" {
+test "optimal range minima and sparse linear choices preserve all scalar DP state" {
     try @import("lz77/optimal/tests/parser.zig").compare(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal);
 }
 
