@@ -58,18 +58,29 @@ fn validateCounts(profile: anytype) !void {
     try std.testing.expectEqual(@as(usize, 1), profile.tree_score_uncached_scope_calls[0]);
     try std.testing.expectEqual(profile.suffix_payload_scores * 2, profile.tree_score_uncached_scope_calls[1]);
     try std.testing.expectEqual(@as(usize, 0), profile.tree_score_uncached_scope_calls[2]);
-    // Baseline and suffix no longer consult the cache. Its bounded lifetime
-    // covers only clustering within one RFC mode.
-    for (profile.tree_score_scope_counts[0..2]) |counts| try std.testing.expectEqual(@as(usize, 0), counts.requests);
-    for (profile.tree_score_scope_counts) |counts| {
-        try std.testing.expectEqual(@as(usize, 0), counts.cross_scope_hits);
+    // Baseline and suffix score directly; one shared cache serves all four
+    // modes' clustering, so an entry published by one mode may be reused by
+    // another. Lower-bound pruning never reaches the cache.
+    for (profile.tree_score_scope_counts[0..2]) |counts| {
+        try std.testing.expectEqual(@as(usize, 0), counts.requests);
         try std.testing.expectEqual(@as(usize, 0), counts.cross_mode_hits);
     }
+    for (profile.tree_score_scope_counts) |counts| {
+        try std.testing.expectEqual(@as(usize, 0), counts.cross_scope_hits);
+        try std.testing.expect(counts.cross_mode_hits <= counts.hits);
+    }
+    try std.testing.expect(profile.cluster_maps_pruned <= profile.cluster_lb_checks);
+    var mode_cross_mode: usize = 0;
     for (profile.tree_score_mode_counts) |scopes| {
         try std.testing.expectEqual(@as(usize, 0), scopes[0].requests);
         try std.testing.expectEqual(@as(usize, 0), scopes[1].requests);
-        for (scopes) |counts| try std.testing.expectEqual(counts.requests, counts.hits + counts.misses);
+        for (scopes) |counts| {
+            try std.testing.expectEqual(counts.requests, counts.hits + counts.misses);
+            try std.testing.expectEqual(@as(usize, 0), counts.cross_scope_hits);
+            mode_cross_mode += counts.cross_mode_hits;
+        }
     }
+    try std.testing.expectEqual(profile.tree_score_scope_counts[2].cross_mode_hits, mode_cross_mode);
     var uncached_modes: usize = 0;
     for (profile.tree_score_uncached_mode_calls) |scopes| {
         // The one baseline is global; it must not be attributed four times.
@@ -176,6 +187,67 @@ fn modeContexts(comptime Codec: type) !void {
     _ = try runCase(Codec, input, &scattered);
 }
 
+/// Stress the lower-bound pruning proof: across many distributions the
+/// pruned production search must return byte-identical proposals to the
+/// exhaustive reference, including the bounded-16 slot under strong >16-tree
+/// incumbents.
+fn randomizedEquivalence(comptime Codec: type) !void {
+    const lengths = [_]usize{ 128, 129, 200, 511, 1024, 4095, 4096, 8192 };
+    const case_count = 16 * lengths.len;
+    var state: u32 = 0x9e37_79b9;
+    const case_inputs = [_]struct { commands: u8 }{
+        .{ .commands = 1 },
+        .{ .commands = 1 },
+        .{ .commands = 3 },
+    };
+    for (0..case_count) |case| {
+        const distribution: u2 = @intCast(case % 4);
+        const length = lengths[(case / 4) % lengths.len];
+        const input = try std.testing.allocator.alloc(u8, length);
+        defer std.testing.allocator.free(input);
+        var previous: u8 = 0;
+        for (input, 0..) |*byte, index| {
+            state = state *% 1664525 +% 1013904223;
+            const random = @as(u8, @truncate(state >> 24));
+            byte.* = switch (distribution) {
+                0 => random,
+                1 => @as(u8, @truncate(@as(u32, random) *% 6 >> 8)),
+                2 => blk: {
+                    state = state *% 1664525 +% 1013904223;
+                    previous +%= @as(u8, @truncate(state >> 28));
+                    break :blk previous;
+                },
+                3 => blk: {
+                    if (index % 17 == 0) {
+                        previous = random & 0x07;
+                    } else {
+                        state = state *% 1664525 +% 1013904223;
+                        previous = 32 +% (@as(u8, @truncate(state >> 27)) % 26);
+                    }
+                    break :blk previous;
+                },
+            };
+        }
+        const layout = case_inputs[case % case_inputs.len];
+        var commands_storage: [3]command_plan.Command = undefined;
+        var boundaries: [4]usize = .{ 0, 0, 0, length };
+        for (1..layout.commands) |part| {
+            state = state *% 1664525 +% 1013904223;
+            boundaries[part] = (length * (@as(usize, @truncate(state >> 24)) + part * 255) /
+                (@as(usize, layout.commands) * 256));
+        }
+        boundaries[0] = 0;
+        boundaries[layout.commands] = length;
+        for (0..layout.commands) |part| {
+            commands_storage[part] = .{
+                .insert_start = boundaries[part],
+                .insert_len = boundaries[part + 1] - boundaries[part],
+            };
+        }
+        _ = try runCase(Codec, input, commands_storage[0..layout.commands]);
+    }
+}
+
 fn allocationFailures(comptime Codec: type) !void {
     const input = ("the quick brown fox jumps over the lazy dog\n" ** 16) ++ ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 16);
     const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
@@ -211,5 +283,6 @@ fn allocationFailures(comptime Codec: type) !void {
 pub fn contracts(comptime Codec: type) !void {
     try simpleAndThresholds(Codec);
     try modeContexts(Codec);
+    try randomizedEquivalence(Codec);
     try allocationFailures(Codec);
 }

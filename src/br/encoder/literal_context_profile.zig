@@ -35,8 +35,16 @@ pub const Profile = struct {
 
     suffix_payload_scores: usize = 0,
     suffix_payload_reuses: usize = 0,
+    /// Suffix cutoffs whose payload lower bound could not beat the gate or an
+    /// incumbent, so neither exact tree score was built.
+    suffix_lb_pruned: usize = 0,
     cluster_trials: usize = 0,
     cluster_rounds: usize = 0,
+    /// Converged cluster maps scored only through the provable lower bound.
+    cluster_lb_checks: usize = 0,
+    /// Converged cluster maps whose lower bound could not win, so exact tree
+    /// scores and prefix serialization were skipped.
+    cluster_maps_pruned: usize = 0,
     assignment_contexts: usize = 0,
     assignment_comparisons: usize = 0,
     score_cache_hits: usize = 0,
@@ -148,8 +156,11 @@ pub const Profile = struct {
         inline for (.{
             "suffix_payload_scores",
             "suffix_payload_reuses",
+            "suffix_lb_pruned",
             "cluster_trials",
             "cluster_rounds",
+            "cluster_lb_checks",
+            "cluster_maps_pruned",
             "assignment_contexts",
             "assignment_comparisons",
             "score_cache_hits",

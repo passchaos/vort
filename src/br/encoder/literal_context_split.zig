@@ -134,8 +134,9 @@ const ScoredMapCache = struct {
         self.len += 1;
     }
 };
-const tree_score_cache_capacity = literal_tree_score_cache.capacity;
 const TreeScoreCache = literal_tree_score_cache.Cache;
+const EntropyCache = literal_tree_score_cache.EntropyCache;
+const WeightTable = literal_tree_score_cache.WeightTable;
 const treeHistogramHash = literal_tree_score_cache.histogramHash;
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
@@ -166,13 +167,14 @@ pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, co
 }
 
 pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
-    return chooseProposalsCore(false, allocator, input, commands, {});
+    return chooseProposalsCore(false, true, allocator, input, commands, {});
 }
 
-/// The original per-mode memo and uncached suffix scores remain an exact
-/// reference policy; tree costs and proposal arbitration are shared.
+/// The original exhaustive policy: every suffix cutoff and converged cluster
+/// map gets an exact tree score, with no lower-bound rejection. It remains the
+/// differential oracle for the pruned production search.
 pub noinline fn chooseProposalsReference(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
-    return chooseProposalsCore(false, allocator, input, commands, {});
+    return chooseProposalsCore(false, false, allocator, input, commands, {});
 }
 
 /// Profile and return this search's actual proposals, with one Analysis.
@@ -180,13 +182,13 @@ pub noinline fn chooseProposalsProfiled(allocator: std.mem.Allocator, input: []c
     profile.* = .{ .input_bytes = input.len, .iterations = 1 };
     var profiler = ProfileTimer{ .io = io, .profile = profile };
     const total_start = profiler.now();
-    const proposals = try chooseProposalsCore(true, allocator, input, commands, &profiler);
+    const proposals = try chooseProposalsCore(true, true, allocator, input, commands, &profiler);
     profile.total_ns = profiler.elapsedNs(total_start);
     setProfileShape(profile, proposals);
     return proposals;
 }
 
-fn chooseProposalsCore(comptime profiled: bool, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, profiler: if (profiled) *ProfileTimer else void) !Proposals {
+fn chooseProposalsCore(comptime profiled: bool, comptime prune: bool, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, profiler: if (profiled) *ProfileTimer else void) !Proposals {
     const analysis_start = if (profiled) profiler.now() else {};
     const analysis = try collectAnalysis(allocator, input, commands) orelse {
         if (profiled) profiler.profile.analysis_ns = profiler.elapsedNs(analysis_start);
@@ -208,11 +210,23 @@ fn chooseProposalsCore(comptime profiled: bool, allocator: std.mem.Allocator, in
         profiler.profile.active_symbols = active_symbols.len;
         profiler.profile.baseline_ns = profiler.elapsedNs(baseline_start);
     }
+    // One set-associative memo serves all four modes. Tree scores are pure
+    // functions of their frequency vectors under the shared parent support,
+    // so identical cluster histograms never need a second exact score.
+    const tree_score_cache = try allocator.create(TreeScoreCache);
+    defer allocator.destroy(tree_score_cache);
+    tree_score_cache.* = .{};
+    const entropy_cache = try allocator.create(EntropyCache);
+    defer allocator.destroy(entropy_cache);
+    entropy_cache.* = .{};
+    var entropy_weights = try WeightTable.init(allocator, @intCast(analysis.literal_count));
+    defer entropy_weights.deinit(allocator);
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_start = if (profiled) profiler.now() else {};
         const mode_proposals = try chooseModeFromHistograms(
             profiled,
+            prune,
             allocator,
             @intCast(mode_value),
             by_context,
@@ -223,6 +237,10 @@ fn chooseProposalsCore(comptime profiled: bool, allocator: std.mem.Allocator, in
             &precomputed_suffix_map_costs,
             true,
             max_trees,
+            tree_score_cache,
+            entropy_cache,
+            &entropy_weights,
+            &proposals,
             profiler,
         );
         if (profiled) profiler.profile.mode_ns[mode_value] +%= profiler.elapsedNs(mode_start);
@@ -411,8 +429,18 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&total, &active_symbols);
     const baseline_bits = try treeBitCostWithSupport(allocator, &total, &active_symbols);
+    const tree_score_cache = try allocator.create(TreeScoreCache);
+    defer allocator.destroy(tree_score_cache);
+    tree_score_cache.* = .{};
+    const entropy_cache = try allocator.create(EntropyCache);
+    defer allocator.destroy(entropy_cache);
+    entropy_cache.* = .{};
+    var entropy_weights = try WeightTable.init(allocator, @intCast(literal_count));
+    defer entropy_weights.deinit(allocator);
+    var cross_mode: Proposals = .{};
     return chooseModeFromHistograms(
         false,
+        true,
         allocator,
         mode,
         &by_context,
@@ -423,12 +451,17 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         &precomputed_suffix_map_costs,
         include_clusters,
         max_tree_count,
+        tree_score_cache,
+        entropy_cache,
+        &entropy_weights,
+        &cross_mode,
         {},
     );
 }
 
 fn chooseModeFromHistograms(
     comptime profiled: bool,
+    comptime prune: bool,
     allocator: std.mem.Allocator,
     mode: u2,
     by_context: *const ContextHistograms,
@@ -439,6 +472,10 @@ fn chooseModeFromHistograms(
     suffix_map_costs: *const SuffixMapCosts,
     include_clusters: bool,
     max_tree_count: usize,
+    tree_score_cache: *TreeScoreCache,
+    entropy_cache: *EntropyCache,
+    entropy_weights: *WeightTable,
+    cross_mode: *const Proposals,
     profiler: if (profiled) *ProfileTimer else void,
 ) !Proposals {
     const suffix_start = if (profiled) profiler.now() else {};
@@ -455,6 +492,39 @@ fn chooseModeFromHistograms(
         left_count += context_count;
         if (left_count == 0 or left_count == literal_count) continue;
         if (context_count != 0 or payload_bits == null) {
+            if (comptime prune) {
+                // A provable lower bound can reject the cutoff before either
+                // exact Huffman tree is built. The integer bound is free, and
+                // the tighter entropy bound is only consulted once an
+                // incumbent exists. A pruned cutoff adds context to `left`, so
+                // invalidate the cached payload for the next cutoff.
+                const threshold = pruneThresholdBits(baseline_bits, &.{ best, cross_mode.suffix });
+                const integer_bound = suffixIntegerPayloadBound(active_symbols, total, &left, left_count, literal_count - left_count) +
+                    suffix_map_costs[cutoff];
+                if (integer_bound > threshold) {
+                    payload_bits = null;
+                    if (profiled) profiler.profile.suffix_lb_pruned += 1;
+                    continue;
+                }
+                // The entropy bound tightens the integer bound by less than
+                // one bit per literal, so it can only move a decision within
+                // that margin; require a real incumbent before paying for the
+                // f64 pass. Both gates are performance-only: they never change
+                // the selected proposal.
+                const incumbent_savings = if (best) |candidate| candidate.savings_bits else 0;
+                const cross_savings = if (cross_mode.suffix) |candidate| candidate.savings_bits else 0;
+                if (@max(incumbent_savings, cross_savings) >= 2 * min_payload_savings_bits and
+                    integer_bound +| literal_count > threshold)
+                {
+                    const entropy_bound = suffixEntropyPayloadBound(active_symbols, total, &left, left_count, literal_count - left_count, entropy_cache, entropy_weights) +
+                        suffix_map_costs[cutoff];
+                    if (entropy_bound > threshold) {
+                        payload_bits = null;
+                        if (profiled) profiler.profile.suffix_lb_pruned += 1;
+                        continue;
+                    }
+                }
+            }
             payload_bits = if (profiled)
                 try suffixPayloadBitCostProfiled(allocator, total, &left, active_symbols, mode, profiler)
             else
@@ -480,21 +550,37 @@ fn chooseModeFromHistograms(
     buildSparseContexts(by_context, &sparse_contexts);
     if (profiled) profiler.profile.sparse_ns +%= profiler.elapsedNs(sparse_start);
     var score_cache: ScoredMapCache = .{};
-    // Both caches are mode-local, with the original post-suffix lifetime.
-    var tree_score_cache: TreeScoreCache = .{};
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
+            // A trial prunes only when it can win neither slot it may enter.
+            // The bounded slot competes solely with <=16-tree incumbents: a
+            // >16-tree full winner is ineligible there, so its tighter
+            // threshold must not reject a bounded candidate.
+            const full_threshold = pruneThresholdBits(baseline_bits, &.{
+                proposals.full,
+                cross_mode.full,
+            });
+            const bounded_threshold = pruneThresholdBits(baseline_bits, &.{
+                proposals.up_to_16,
+                cross_mode.up_to_16,
+            });
+            const threshold_bits = if (requested_tree_count <= 16)
+                @max(full_threshold, bounded_threshold)
+            else
+                full_threshold;
             const cluster_start = if (profiled) profiler.now() else {};
             const clustered_optional = try clusterContexts(
                 profiled,
+                prune,
                 allocator,
                 mode,
                 &sparse_contexts,
                 active_symbols,
                 &score_cache,
-                &tree_score_cache,
+                tree_score_cache,
                 baseline_bits,
+                threshold_bits,
                 requested_tree_count,
                 seed,
                 profiler,
@@ -509,6 +595,95 @@ fn chooseModeFromHistograms(
         }
     }
     return proposals;
+}
+
+/// Tightest exact candidate bit cost that any new proposal may have and still
+/// be accepted: it must clear the 128-bit savings gate and strictly beat every
+/// retained incumbent. Lower bounds greater than this value are safe to prune.
+fn pruneThresholdBits(baseline_bits: u64, incumbents: []const ?Candidate) u64 {
+    var threshold = baseline_bits -| min_payload_savings_bits;
+    for (incumbents) |optional| {
+        if (optional) |candidate|
+            threshold = @min(threshold, baseline_bits -| candidate.savings_bits);
+    }
+    return threshold;
+}
+
+/// floor(log2(total / frequency)) using only bit scans: with a = floor(log2
+/// total) and b = floor(log2 frequency), the result is a-b-1 plus a carry when
+/// frequency * 2^(a-b) <= total.
+inline fn floorLog2Ratio(total: u32, frequency: u32) u5 {
+    std.debug.assert(frequency != 0 and frequency <= total);
+    const diff: u5 = @intCast(std.math.log2_int(u32, total) - std.math.log2_int(u32, frequency));
+    const shifted_le_total = (@as(u64, frequency) << @intCast(diff)) <= @as(u64, total);
+    const carry: u5 = @intFromBool(shifted_le_total);
+    return diff -% 1 +% carry;
+}
+
+/// Minimal declared-prefix overhead for a tree with `symbol_count` live codes.
+/// It is exact for the <=4-symbol simple prefix and a 2-bit lower bound for the
+/// complex prefix's HSKIP marker.
+fn treeHeaderLowerBound(symbol_count: usize) u64 {
+    if (symbol_count <= 4)
+        return 4 + @as(u64, symbol_count) * 8 + @intFromBool(symbol_count == 4);
+    return 2;
+}
+
+/// Near-free integer lower bound for the two cumulative-suffix trees scored at
+/// one cutoff.
+fn suffixIntegerPayloadBound(
+    active_symbols: *const ActiveSymbols,
+    total: *const [256]u32,
+    left: *const [256]u32,
+    left_total: usize,
+    right_total: usize,
+) u64 {
+    var left_bits: u64 = 0;
+    var right_bits: u64 = 0;
+    var left_symbols: usize = 0;
+    var right_symbols: usize = 0;
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+        const left_frequency = left[symbol];
+        if (left_frequency != 0) {
+            left_symbols += 1;
+            left_bits += @as(u64, left_frequency) *
+                @as(u64, floorLog2Ratio(@intCast(left_total), left_frequency));
+        }
+        const right_frequency = total[symbol] - left_frequency;
+        if (right_frequency != 0) {
+            right_symbols += 1;
+            right_bits += @as(u64, right_frequency) *
+                @as(u64, floorLog2Ratio(@intCast(right_total), right_frequency));
+        }
+    }
+    return left_bits + treeHeaderLowerBound(left_symbols) +
+        right_bits + treeHeaderLowerBound(right_symbols);
+}
+
+/// Entropy-based bound for both suffix trees. Only called once a suffix
+/// incumbent exists, when the tighter bound can actually change a decision.
+fn suffixEntropyPayloadBound(
+    active_symbols: *const ActiveSymbols,
+    total: *const [256]u32,
+    left: *const [256]u32,
+    left_total: usize,
+    right_total: usize,
+    entropy_cache: *EntropyCache,
+    entropy_weights: *WeightTable,
+) u64 {
+    var left_symbols: usize = 0;
+    var right_symbols: usize = 0;
+    var right: [256]u32 = @splat(0);
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+        if (left[symbol] != 0) left_symbols += 1;
+        const right_frequency = total[symbol] - left[symbol];
+        right[symbol] = right_frequency;
+        if (right_frequency != 0) right_symbols += 1;
+    }
+    return entropy_cache.bound(left, @intCast(left_total), entropy_weights) +
+        treeHeaderLowerBound(left_symbols) +
+        entropy_cache.bound(&right, @intCast(right_total), entropy_weights) +
+        treeHeaderLowerBound(right_symbols);
 }
 
 fn suffixPayloadBitCost(
@@ -561,6 +736,7 @@ const Seed = enum { ordered, interleaved };
 
 fn clusterContexts(
     comptime profiled: bool,
+    comptime prune: bool,
     allocator: std.mem.Allocator,
     mode: u2,
     sparse_contexts: *const SparseContexts,
@@ -568,6 +744,7 @@ fn clusterContexts(
     score_cache: *ScoredMapCache,
     tree_score_cache: *TreeScoreCache,
     baseline_bits: u64,
+    threshold_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
     profiler: if (profiled) *ProfileTimer else void,
@@ -671,13 +848,22 @@ fn clusterContexts(
     const score_start = if (profiled) profiler.now() else {};
     const prior_cache_hits = if (profiled) score_cache.hits else 0;
     const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
-        var bits: u64 = 0;
+        const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
+        if (comptime prune) {
+            // The context-map declaration is planned for every miss anyway; if
+            // it alone cannot beat the gate or an incumbent, every tree score
+            // is provably wasted.
+            if (profiled) profiler.profile.cluster_lb_checks += 1;
+            if (@as(u64, @intCast(map_plan.bit_cost)) > threshold_bits) {
+                if (profiled) profiler.profile.cluster_maps_pruned += 1;
+                return null;
+            }
+        }
+        var bits: u64 = @intCast(map_plan.bit_cost);
         for (tree_histograms[0..tree_count]) |*histogram| {
             const tree_bits = try treeBitCostCached(profiled, allocator, histogram, active_symbols, tree_score_cache, mode, profiler);
             bits += tree_bits;
         }
-        const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
-        bits += map_plan.bit_cost;
         score_cache.put(&context_map, tree_count, bits);
         break :blk bits;
     };
@@ -864,9 +1050,10 @@ fn treeBitCostUncached(
     return computed;
 }
 
-/// Cluster memo entries have the original mode-local lifetime and one fixed
-/// parent support. A hit requires a complete matching frequency vector. Only
-/// successful scores are published; all origins are this same mode/scope.
+/// Cluster memo entries share one cross-mode cache with one fixed parent
+/// support. A hit requires a complete matching frequency vector; the publishing
+/// mode is reported so cross-mode reuse stays visible to the profile. Only
+/// successful scores are published.
 fn treeBitCostCached(
     comptime profiled: bool,
     allocator: std.mem.Allocator,
@@ -886,12 +1073,13 @@ fn treeBitCostCached(
             .misses = @intFromBool(cached == null),
             .cold_misses = cache.cold_misses - prior_cold,
             .conflict_misses = cache.conflict_misses - prior_conflict,
+            .cross_mode_hits = if (cached) |hit| @intFromBool(hit.owner_mode != @as(u8, mode)) else 0,
         };
         profiler.profile.recordTreeCache(.cluster, mode, counts);
     }
-    if (cached) |cost| return cost;
+    if (cached) |hit| return hit.bit_cost;
     const computed = try treeBitCostProfiled(profiled, allocator, frequencies, active_symbols, profiler);
-    cache.put(frequencies, computed);
+    cache.put(frequencies, computed, mode);
     return computed;
 }
 
@@ -1383,18 +1571,6 @@ test "literal context scored map cache hits and rejects collisions" {
     var tree_cache: TreeScoreCache = .{};
     const first = try clusterContexts(
         false,
-        std.testing.allocator,
-        literal_context.mode_lsb6,
-        &sparse_contexts,
-        &active_symbols,
-        &cache,
-        &tree_cache,
-        baseline_bits,
-        4,
-        .interleaved,
-        {},
-    ) orelse return error.TestUnexpectedResult;
-    const second = try clusterContexts(
         false,
         std.testing.allocator,
         literal_context.mode_lsb6,
@@ -1403,6 +1579,22 @@ test "literal context scored map cache hits and rejects collisions" {
         &cache,
         &tree_cache,
         baseline_bits,
+        std.math.maxInt(u64),
+        4,
+        .interleaved,
+        {},
+    ) orelse return error.TestUnexpectedResult;
+    const second = try clusterContexts(
+        false,
+        false,
+        std.testing.allocator,
+        literal_context.mode_lsb6,
+        &sparse_contexts,
+        &active_symbols,
+        &cache,
+        &tree_cache,
+        baseline_bits,
+        std.math.maxInt(u64),
         4,
         .interleaved,
         {},
@@ -1422,52 +1614,103 @@ test "literal context scored map cache hits and rejects collisions" {
     try std.testing.expectEqual(@as(usize, 0), collision.hits);
 }
 
-test "literal context tree score cache hits and rejects collisions" {
+test "literal context tree score cache keeps four ways and rejects collisions" {
+    const set_mask: u64 = literal_tree_score_cache.set_count - 1;
     var histogram_a: [256]u32 = @splat(0);
     histogram_a[3] = 17;
     histogram_a[29] = 41;
     histogram_a[201] = 9;
     var cache: TreeScoreCache = .{};
-    try std.testing.expectEqual(@as(?u64, null), cache.get(true, &histogram_a));
+    try std.testing.expectEqual(@as(?literal_tree_score_cache.Hit, null), cache.get(true, &histogram_a));
     const expected = try treeBitCost(std.testing.allocator, &histogram_a);
-    cache.put(&histogram_a, expected);
-    try std.testing.expectEqual(@as(?u64, expected), cache.get(true, &histogram_a));
+    cache.put(&histogram_a, expected, 2);
+    const first_hit = cache.get(true, &histogram_a).?;
+    try std.testing.expectEqual(expected, first_hit.bit_cost);
+    try std.testing.expectEqual(@as(u8, 2), first_hit.owner_mode);
     try std.testing.expectEqual(@as(usize, 1), cache.hits);
     try std.testing.expectEqual(@as(usize, 1), cache.misses);
     try std.testing.expectEqual(@as(usize, 1), cache.cold_misses);
     try std.testing.expectEqual(@as(usize, 0), cache.conflict_misses);
 
-    var high_slot_histogram = histogram_a;
-    while (treeHistogramHash(&high_slot_histogram) & (tree_score_cache_capacity - 1) < 64)
-        high_slot_histogram[0] += 1;
-    var high_slot_cache: TreeScoreCache = .{};
-    const high_slot_cost = try treeBitCost(std.testing.allocator, &high_slot_histogram);
-    high_slot_cache.put(&high_slot_histogram, high_slot_cost);
-    try std.testing.expect(high_slot_cache.occupied[1] != 0);
-    try std.testing.expectEqual(
-        @as(?u64, high_slot_cost),
-        high_slot_cache.get(true, &high_slot_histogram),
-    );
+    // Five distinct vectors adjusted into one set. Each carries a different
+    // symbol-7 count, so the full-vector compare must keep costs independent.
+    const target_set = treeHistogramHash(&histogram_a) & set_mask;
+    var same_set: [literal_tree_score_cache.ways + 1][256]u32 = undefined;
+    for (&same_set, 0..) |*histogram, index| {
+        histogram.* = @splat(0);
+        histogram[7] = @intCast(index + 1);
+        while (treeHistogramHash(histogram) & set_mask != target_set) histogram[0] += 1;
+    }
+    var shared: TreeScoreCache = .{};
+    for (same_set[0..literal_tree_score_cache.ways], 0..) |*histogram, index| {
+        try std.testing.expectEqual(@as(?literal_tree_score_cache.Hit, null), shared.get(true, histogram));
+        shared.put(histogram, 100 + index, @intCast(index));
+    }
+    try std.testing.expectEqual(@as(usize, 0), shared.hits);
+    try std.testing.expectEqual(@as(usize, 4), shared.misses);
+    try std.testing.expectEqual(@as(usize, 4), shared.cold_misses);
+    // Hits in way order refresh recency, leaving way 0 least recently used.
+    for (same_set[0..literal_tree_score_cache.ways], 0..) |*histogram, index| {
+        const hit = shared.get(true, histogram).?;
+        try std.testing.expectEqual(@as(u64, 100 + index), hit.bit_cost);
+        try std.testing.expectEqual(@as(u8, @intCast(index)), hit.owner_mode);
+    }
+    // The fifth vector is a conflict miss and evicts the least recent way.
+    try std.testing.expectEqual(@as(?literal_tree_score_cache.Hit, null), shared.get(true, &same_set[4]));
+    try std.testing.expectEqual(@as(usize, 1), shared.conflict_misses);
+    shared.put(&same_set[4], 104, 3);
+    try std.testing.expectEqual(@as(?literal_tree_score_cache.Hit, null), shared.get(false, &same_set[0]));
+    for (same_set[1..], 1..) |*histogram, index| {
+        const hit = shared.get(false, histogram).?;
+        try std.testing.expectEqual(@as(u64, 100 + index), hit.bit_cost);
+    }
 
-    var histogram_b = histogram_a;
-    histogram_b[29] -= 1;
-    histogram_b[30] += 1;
-    const hash_b = treeHistogramHash(&histogram_b);
-    const slot: usize = @intCast(hash_b & (tree_score_cache_capacity - 1));
-    const word = slot >> 6;
-    const bit: u6 = @truncate(slot);
-    var collision: TreeScoreCache = .{};
-    collision.entries[slot] = .{
-        .hash = hash_b,
-        .histogram = histogram_a,
-        .bit_cost = expected,
-    };
-    collision.occupied[word] = @as(u64, 1) << bit;
-    try std.testing.expectEqual(@as(?u64, null), collision.get(true, &histogram_b));
-    try std.testing.expectEqual(@as(usize, 0), collision.hits);
-    try std.testing.expectEqual(@as(usize, 1), collision.misses);
-    try std.testing.expectEqual(@as(usize, 0), collision.cold_misses);
-    try std.testing.expectEqual(@as(usize, 1), collision.conflict_misses);
+    // A different vector hashing into the now-full set is a conflict miss and
+    // never returns a stored cost; every resident way stays intact.
+    var collision_vector = same_set[4];
+    collision_vector[201] = 7;
+    while (treeHistogramHash(&collision_vector) & set_mask != target_set) collision_vector[0] += 1;
+    try std.testing.expectEqual(@as(?literal_tree_score_cache.Hit, null), shared.get(true, &collision_vector));
+    try std.testing.expectEqual(@as(usize, 2), shared.conflict_misses);
+    for (same_set[1..], 1..) |*histogram, index| {
+        const hit = shared.get(false, histogram).?;
+        try std.testing.expectEqual(@as(u64, 100 + index), hit.bit_cost);
+    }
+}
+
+test "literal context shannon lower bound never exceeds exact tree cost" {
+    var state: u32 = 0x1234_5678;
+    var entropy_cache: EntropyCache = .{};
+    // Exercise both the direct dense table and the large-block open-addressing
+    // fallback with the same histograms.
+    for ([_]u32{ 1 << 17, WeightTable.dense_capacity + 1 }) |table_capacity| {
+        var entropy_weights = try WeightTable.init(std.testing.allocator, table_capacity);
+        defer entropy_weights.deinit(std.testing.allocator);
+        for (0..400) |round| {
+            var frequencies: [256]u32 = @splat(0);
+            state = state *% 1664525 +% 1013904223;
+            const symbol_count: usize = 1 + @as(usize, @truncate(state >> 24)) % 256;
+            var total: u32 = 0;
+            for (0..symbol_count) |symbol| {
+                state = state *% 1664525 +% 1013904223;
+                const frequency: u32 = switch (round % 5) {
+                    0 => 1, // uniform over live symbols
+                    1 => @as(u32, 1) << @intCast(@as(u5, @truncate(state >> 24)) % 18),
+                    2 => 1 + @as(u32, @truncate(state >> 24)) % 4,
+                    3 => if (symbol == 0) 4095 else 1, // one dominant symbol
+                    else => 1 + @as(u32, @truncate(state >> 16)) % 7000,
+                };
+                frequencies[symbol] = frequency;
+                total += frequency;
+            }
+            const exact = try treeBitCost(std.testing.allocator, &frequencies);
+            const bound = literal_tree_score_cache.shannonPayloadLowerBound(&frequencies, total, &entropy_weights);
+            try std.testing.expect(bound <= exact);
+            // The memoized value is identical for the same frequency vector.
+            const memoized = entropy_cache.bound(&frequencies, total, &entropy_weights);
+            try std.testing.expectEqual(bound, memoized);
+        }
+    }
 }
 
 test "literal context sparse tree aggregation matches dense reference" {

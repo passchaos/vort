@@ -126,7 +126,9 @@ def validate(report: dict, executable: Path | None = None) -> dict:
                             require(direct_scopes[0] == int(active), "uncached baseline calls")
                             require(direct_scopes[1] == 2 * stats["suffix_payload_scores"] and direct_scopes[2] == 0, "uncached suffix calls")
                             require(all(s["requests"] == 0 for s in scopes[:2]), "default cached baseline or suffix")
-                            require(all(s["cross_scope_hits"] == 0 and s["cross_mode_hits"] == 0 for s in scopes), "default cross-scope cache")
+                            # Only clustering shares its memo across modes.
+                            require(all(s["cross_scope_hits"] == 0 and s["cross_mode_hits"] == 0 for s in scopes[:2]), "default cross-scope cache")
+                            require(sum(m[2]["cross_mode_hits"] for m in stats["tree_score_mode_counts"]) == scopes[2]["cross_mode_hits"], "cross-mode score conservation")
                         modes = stats["tree_score_mode_counts"]
                         require(len(modes) == 4 and all(len(m) == 3 for m in modes), "score mode scopes")
                         require(all(m[0]["requests"] == 0 for m in modes), "baseline counted by mode")

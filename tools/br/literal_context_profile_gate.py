@@ -16,7 +16,8 @@ COLUMNS = [
     "suffix_tree_count", "suffix_mode", "suffix_savings_bits",
     "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits",
     "full_tree_count", "full_mode", "full_savings_bits",
-    "suffix_payload_scores", "suffix_payload_reuses", "cluster_trials", "cluster_rounds",
+    "suffix_payload_scores", "suffix_payload_reuses", "suffix_lb_pruned",
+    "cluster_trials", "cluster_rounds", "cluster_lb_checks", "cluster_maps_pruned",
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
     "tree_score_cache_hits", "tree_score_cache_misses",
     "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
@@ -128,8 +129,23 @@ def main() -> int:
             validate_candidate(row, prefix)
         assert integer(row, "suffix_payload_scores") > 0, row
         assert integer(row, "suffix_payload_reuses") > 0, row
+        suffix_lb_pruned = integer(row, "suffix_lb_pruned")
+        # Every valid cutoff per iteration is scored once, reused, or pruned
+        # through its lower bound; four modes evaluate at most 63 cutoffs each.
+        assert suffix_lb_pruned >= 0, row
+        assert (
+            integer(row, "suffix_payload_scores") +
+            integer(row, "suffix_payload_reuses") + suffix_lb_pruned
+            <= 4 * 63 * iterations
+        ), row
         assert integer(row, "cluster_trials") == 88 * iterations, row
         assert integer(row, "cluster_rounds") >= integer(row, "cluster_trials"), row
+        cluster_lb_checks = integer(row, "cluster_lb_checks")
+        cluster_maps_pruned = integer(row, "cluster_maps_pruned")
+        # Lower bounds are evaluated on map misses only once an incumbent
+        # exists, so checks never exceed the scored-map miss count.
+        assert cluster_lb_checks <= integer(row, "score_cache_misses"), row
+        assert 0 <= cluster_maps_pruned <= cluster_lb_checks, row
         assert integer(row, "assignment_contexts") > 0, row
         assert integer(row, "assignment_comparisons") >= integer(row, "assignment_contexts"), row
         scored = integer(row, "score_cache_hits") + integer(row, "score_cache_misses")
@@ -138,6 +154,10 @@ def main() -> int:
         tree_scored = integer(row, "tree_score_cache_hits") + integer(row, "tree_score_cache_misses")
         assert tree_scored > 0, row
         assert integer(row, "tree_score_cache_misses") > 0, row
+        # Each map surviving its lower bound scores at least two trees.
+        surviving_maps = integer(row, "score_cache_misses") - cluster_maps_pruned
+        assert surviving_maps >= 0, row
+        assert tree_scored >= 2 * surviving_maps, row
         assert integer(row, "tree_score_cache_misses") == (
             integer(row, "tree_score_cache_cold_misses") +
             integer(row, "tree_score_cache_conflict_misses")

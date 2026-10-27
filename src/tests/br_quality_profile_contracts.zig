@@ -22,16 +22,26 @@ fn contextCounts(stats: anytype) !void {
     var hits: usize = 0;
     var misses: usize = 0;
     var direct: usize = 0;
+    var cross_mode: usize = 0;
     for (stats.tree_score_scope_counts, stats.tree_score_uncached_scope_calls, 0..) |counts, calls, scope| {
         try std.testing.expectEqual(counts.requests, counts.hits + counts.misses);
         try std.testing.expectEqual(counts.misses, counts.cold_misses + counts.conflict_misses);
         try std.testing.expectEqual(@as(usize, 0), counts.cross_scope_hits);
-        try std.testing.expectEqual(@as(usize, 0), counts.cross_mode_hits);
-        if (scope < 2) try std.testing.expectEqual(@as(usize, 0), counts.requests);
+        try std.testing.expect(counts.cross_mode_hits <= counts.hits);
+        // Baseline and suffix score directly; only clustering shares one
+        // memo across the four RFC modes.
+        if (scope < 2) {
+            try std.testing.expectEqual(@as(usize, 0), counts.requests);
+            try std.testing.expectEqual(@as(usize, 0), counts.cross_mode_hits);
+        }
         hits += counts.hits;
         misses += counts.misses;
         direct += calls;
+        cross_mode += counts.cross_mode_hits;
     }
+    var mode_cross_mode: usize = 0;
+    for (stats.tree_score_mode_counts) |mode| mode_cross_mode += mode[2].cross_mode_hits;
+    try std.testing.expectEqual(cross_mode, mode_cross_mode);
     try std.testing.expectEqual(hits, stats.tree_score_cache_hits);
     try std.testing.expectEqual(misses, stats.tree_score_cache_misses);
     try std.testing.expectEqual(direct, stats.tree_score_uncached_calls);
