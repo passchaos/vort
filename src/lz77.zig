@@ -1,5 +1,8 @@
 const std = @import("std");
 const byte_scan = @import("lz77/byte_scan.zig");
+const scan_lazy = @import("lz77/scan/lazy.zig");
+const scan_indexed_match = @import("lz77/scan/indexed_match.zig");
+const scan_prefix_match = @import("lz77/scan/prefix_match.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -1097,36 +1100,40 @@ fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 fn scanLazyGreedyPlanReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    tokens.clearRetainingCapacity();
-    var stats = PlanStats{};
+    if (input.len >= 8192 and options.window_len >= 64 and options.max_chain >= 8)
+        return scan_lazy.prefixed(tokens, allocator, input, options, PlanStats{}, ScanLazyContext);
+    if (input.len >= 2048 and options.window_len >= 64 and options.max_chain >= 8)
+        return scan_lazy.indexed(tokens, allocator, input, options, PlanStats{}, ScanLazyContext);
+    return scan_lazy.reverse(tokens, allocator, input, options, PlanStats{}, ScanLazyContext);
+}
 
-    var pos: usize = 0;
-    while (pos < input.len) {
-        const best = findBestMatch(input, pos, options);
-        if (!acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .literal = input[pos] });
-            stats.literals += 1;
-            pos += 1;
-            continue;
-        }
+const ScanLazyContext = struct {
+    pub const reverse = findBestMatch;
+    pub const accept = acceptMatch;
 
-        if (pos + 1 < input.len) {
-            const next = findBestMatch(input, pos + 1, options);
-            if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
-                try tokens.append(allocator, .{ .literal = input[pos] });
-                stats.literals += 1;
-                pos += 1;
-                continue;
-            }
-        }
-
-        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
-        stats.matches += 1;
-        stats.matched_bytes += best.length;
-        pos += best.length;
+    pub fn indexed(index: *const @import("lz77/scan/byte_index.zig").Index, input: []const u8, pos: usize, options: GreedyOptions) MatchCandidate {
+        return scan_indexed_match.find(MatchCandidate, index, input, pos, options, minMatch(options), maxMatch(options), matchLength);
     }
 
-    return stats;
+    pub fn prefixed(index: *const @import("lz77/scan/prefix_index.zig").Index, input: []const u8, pos: usize, options: GreedyOptions) MatchCandidate {
+        return scan_prefix_match.find(MatchCandidate, index, input, pos, options, minMatch(options), maxMatch(options), matchLength);
+    }
+};
+
+test "indexed scan matching preserves normalized scalar budgets and ties" {
+    try @import("lz77/scan/tests/parser.zig").candidates(GreedyOptions, ScanLazyContext);
+}
+
+test "indexed lazy parser preserves complete scalar tokens and independent reuse" {
+    try @import("lz77/scan/tests/parser.zig").plans(Token, PlanStats, GreedyOptions, ScanLazyContext);
+}
+
+test "indexed lazy parser preserves token allocation failures and ownership" {
+    try @import("lz77/scan/tests/parser.zig").failures(Token, PlanStats, GreedyOptions, ScanLazyContext);
+}
+
+test "prefix scan hash collisions preserve first-byte budgets and full-window endpoints" {
+    try @import("lz77/scan/tests/parser.zig").collisions(GreedyOptions, ScanLazyContext);
 }
 
 fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
