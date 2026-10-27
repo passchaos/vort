@@ -10,6 +10,7 @@ const literal_tree_score_cache = @import("literal_tree_score_cache.zig");
 const literal_entropy = @import("literal_entropy.zig");
 const literal_context_bounds = @import("literal_context_bounds.zig");
 const literal_alphabet = @import("literal_alphabet.zig");
+const assignment_costs = @import("assignment_costs.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
@@ -688,21 +689,29 @@ fn clusterContexts(
     if (profiled) profiler.profile.cluster_init_ns +%= profiler.elapsedNs(init_start);
     for (0..cluster_iterations) |_| {
         const prepare_start = if (profiled) profiler.now() else {};
-        var symbol_costs: [max_trees][256]u16 = undefined;
-        prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
+        var symbol_costs: if (prune) assignment_costs.Costs else [max_trees][256]u16 = undefined;
+        if (comptime prune)
+            prepareAssignmentCostsTransposed(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs)
+        else
+            prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
         if (profiled) profiler.profile.cluster_prepare_ns +%= profiler.elapsedNs(prepare_start);
         const assignment_start = if (profiled) profiler.now() else {};
         var changed = false;
         for (populated[0..populated_count]) |context| {
-            var best_tree: usize = 0;
-            var best_cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[0]);
-            for (1..requested_tree_count) |tree| {
-                const cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[tree]);
-                if (cost < best_cost) {
-                    best_cost = cost;
-                    best_tree = tree;
+            const best_tree = if (comptime prune)
+                assignment_costs.choose(&sparse_contexts[context], &symbol_costs, requested_tree_count).tree
+            else blk: {
+                var best_tree: usize = 0;
+                var best_cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[0]);
+                for (1..requested_tree_count) |tree| {
+                    const cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[tree]);
+                    if (cost < best_cost) {
+                        best_cost = cost;
+                        best_tree = tree;
+                    }
                 }
-            }
+                break :blk best_tree;
+            };
             const previous_tree: usize = context_map[context];
             if (previous_tree != best_tree) {
                 // Assignment costs stay frozen for the complete round. Moving
@@ -885,6 +894,23 @@ fn prepareAssignmentCosts(
             const symbol_cost = model_log - assignmentLog2Q8(modeled + 1);
             std.debug.assert(symbol_cost <= std.math.maxInt(u16));
             tree_costs[symbol] = @intCast(symbol_cost);
+        }
+    }
+}
+
+fn prepareAssignmentCostsTransposed(
+    tree_histograms: *const TreeHistograms,
+    tree_totals: *const TreeTotals,
+    tree_count: usize,
+    active_symbols: *const ActiveSymbols,
+    costs: *assignment_costs.Costs,
+) void {
+    for (tree_histograms[0..tree_count], tree_totals[0..tree_count], 0..) |*tree, tree_total, tree_index| {
+        const model_log = fastLog2Q8(tree_total + 256);
+        for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+            const symbol_cost = model_log - assignmentLog2Q8(tree[symbol] + 1);
+            std.debug.assert(symbol_cost <= std.math.maxInt(u16));
+            costs[symbol][tree_index] = @intCast(symbol_cost);
         }
     }
 }
@@ -1307,9 +1333,14 @@ test "literal context prepared assignment costs match reference" {
         }
     }
     var costs: [max_trees][256]u16 = undefined;
+    var transposed: assignment_costs.Costs = undefined;
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&context, &active_symbols);
     prepareAssignmentCosts(&trees, &totals, 4, &active_symbols, &costs);
+    prepareAssignmentCostsTransposed(&trees, &totals, 4, &active_symbols, &transposed);
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol|
+        for (0..4) |tree|
+            try std.testing.expectEqual(costs[tree][symbol], transposed[symbol][tree]);
     var contexts: ContextHistograms = @splat(@splat(0));
     contexts[0] = context;
     var sparse_contexts: SparseContexts = undefined;

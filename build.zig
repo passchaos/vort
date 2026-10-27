@@ -188,6 +188,27 @@ pub fn build(b: *std.Build) void {
     br_prepared_wasm_run.addArtifactArg(br_prepared_wasm);
     const br_prepared_wasm_test = b.step("test-br-prepared-command-wasm", "Compare public q8 prepared command/distance output with its frozen baseline");
     br_prepared_wasm_test.dependOn(&br_prepared_wasm_run.step);
+
+    const br_assignment_simd_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .wasi,
+        .cpu_features_add = std.Target.wasm.featureSet(&.{.simd128}),
+    });
+    const br_assignment_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/assignment_costs_wasm_gate.js" });
+    for ([_]std.Build.ResolvedTarget{ wasm_target, br_assignment_simd_target }, 0..) |assignment_target, index| {
+        const assignment_test = b.addTest(.{
+            .name = if (index == 0) "vort-br-assignment-wasm" else "vort-br-assignment-wasm-simd128",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/br/encoder/assignment_costs.zig"),
+                .target = assignment_target,
+                .optimize = .ReleaseFast,
+                .single_threaded = true,
+            }),
+        });
+        br_assignment_wasm_run.addArtifactArg(assignment_test);
+    }
+    const br_assignment_wasm_test = b.step("test-br-assignment-wasm", "Run exact grouped assignment contracts on scalar and SIMD128 Wasm targets");
+    br_assignment_wasm_test.dependOn(&br_assignment_wasm_run.step);
     const lz4_fast_wasm = b.addExecutable(.{
         .name = "vort-lz4-fast-controls-wasm",
         .root_module = b.createModule(.{
@@ -7777,6 +7798,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
     ci_smoke_step.dependOn(br_bit_writer_wasm_test);
     ci_smoke_step.dependOn(br_prepared_wasm_test);
+    ci_smoke_step.dependOn(br_assignment_wasm_test);
     ci_smoke_step.dependOn(br_reference_parameter_step);
     ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);

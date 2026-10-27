@@ -1,0 +1,156 @@
+{
+  "base_commit": "c507a5c1d10dabfb4cbe9f933b9b486677c8cd04",
+  "source_files": {
+    "src/br/encoder/assignment_costs.zig": {
+      "sha256": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+      "package_path": "sources/src/br/encoder/assignment_costs.zig",
+      "compression": null
+    },
+    "src/br/encoder/literal_context_split.zig": {
+      "sha256": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+      "package_path": "sources/src/br/encoder/literal_context_split.zig",
+      "compression": null
+    },
+    "build.zig": {
+      "sha256": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+      "package_path": "sources/build.zig.xz",
+      "compression": "xz"
+    },
+    "tools/br/assignment_costs_wasm_gate.js": {
+      "sha256": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e",
+      "package_path": "sources/tools/br/assignment_costs_wasm_gate.js",
+      "compression": null
+    },
+    "tools/br/prepared_command_distance_wasm_gate.js": {
+      "sha256": "0d9bd356e0a486b4c5b2d60ae3dca68fa6ae25f8576e88aef7aa8de4cb3d8c06",
+      "package_path": "sources/tools/br/prepared_command_distance_wasm_gate.js",
+      "compression": null
+    },
+    "src/br_prepared_command_distance_wasm.zig": {
+      "sha256": "3aee09b0fc12f9250a65b2716e2660ff11c171755ed092e83e3ebe504d936e98",
+      "package_path": "sources/src/br_prepared_command_distance_wasm.zig",
+      "compression": null
+    },
+    "src/tests/br_prepared_command_distance_wasm.zig": {
+      "sha256": "fcb140b5778c2b465582b2b0aec5b317c46b24ce9d8f5aeba02630fd5fd61623",
+      "package_path": "sources/src/tests/br_prepared_command_distance_wasm.zig",
+      "compression": null
+    },
+    "src/br.zig": {
+      "sha256": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+      "source": "c507a5c1 dependency"
+    }
+  },
+  "module_sha256": {
+    "wasm32-wasi-generic": "a5034703aa0e2372f98c3487c3b3ae0952f7eeb6e0b99537a2fd176e90e60fcd",
+    "wasm32-wasi-simd128": "5fb5f97e097c9352a94938fb6798ec857795a9cb972b57b3cfff4a6178dcea1c",
+    "public-q8": "25eb52344d1bc575c3557a7bf74819e394ab53fb910d0f4b4a8508affd473e24"
+  },
+  "located_modules": {
+    "wasm32-wasi-simd128": ".zig-cache/o/2f88100a1ce1f5b1d239ef03c5944433/vort-br-assignment-wasm-simd128.wasm",
+    "wasm32-wasi-generic": ".zig-cache/o/f0e4fe7c30ea4eb00f83054720264648/vort-br-assignment-wasm.wasm",
+    "public-q8": ".zig-cache/o/7d4b8658c0dcebd812cbab1ce6d5c03b/vort-br-prepared-command-wasm.wasm"
+  },
+  "module_target_features": {
+    "wasm32-wasi-simd128": [
+      "+bulk-memory-opt",
+      "+call-indirect-overlong",
+      "+extended-const",
+      "+multivalue",
+      "+mutable-globals",
+      "+nontrapping-fptoint",
+      "+sign-ext",
+      "+simd128"
+    ],
+    "wasm32-wasi-generic": [
+      "+bulk-memory-opt",
+      "+call-indirect-overlong",
+      "+extended-const",
+      "+multivalue",
+      "+mutable-globals",
+      "+nontrapping-fptoint",
+      "+sign-ext"
+    ],
+    "public-q8": [
+      "+bulk-memory-opt",
+      "+call-indirect-overlong",
+      "+extended-const",
+      "+multivalue",
+      "+mutable-globals",
+      "+nontrapping-fptoint",
+      "+sign-ext"
+    ]
+  },
+  "kernel_unit_reports": [
+    {
+      "target": "wasm32-wasi-generic",
+      "node_version": "v26.10.0",
+      "wasm_sha256": "a5034703aa0e2372f98c3487c3b3ae0952f7eeb6e0b99537a2fd176e90e60fcd",
+      "exit_code": 0
+    },
+    {
+      "target": "wasm32-wasi-simd128",
+      "node_version": "v26.10.0",
+      "wasm_sha256": "5fb5f97e097c9352a94938fb6798ec857795a9cb972b57b3cfff4a6178dcea1c",
+      "exit_code": 0
+    }
+  ],
+  "public_q8_report": {
+    "node_version": "v26.10.0",
+    "baseline": {
+      "wasm_sha256": "fb3ea213835c177711dcd14293c765cb7872a76297cac45286be44c7c701d3bf",
+      "input_bytes": 65536,
+      "input_sha256": "af1a093e1380b98ce3fd749e06b2618b02d80c9b1234fe0018e0a3bc95eb1c25",
+      "wire_bytes": 14362,
+      "wire_sha256": "b6eb2991d9848de02c4079a698b23328d122550b2af0dc119326219da6f96762",
+      "wire_crc32": 2351097254,
+      "command_count": 1299,
+      "command_active_entries": 88,
+      "complex_command_trees": 1,
+      "recent_copy_count": 152,
+      "shared_candidate_groups": 2,
+      "ordinary_profile_wire_equal": true,
+      "zig_decode_checked": true,
+      "node_native_decode_checked": true,
+      "wide_key_above_2_32_checked": true
+    },
+    "candidate": {
+      "wasm_sha256": "25eb52344d1bc575c3557a7bf74819e394ab53fb910d0f4b4a8508affd473e24",
+      "input_bytes": 65536,
+      "input_sha256": "af1a093e1380b98ce3fd749e06b2618b02d80c9b1234fe0018e0a3bc95eb1c25",
+      "wire_bytes": 14362,
+      "wire_sha256": "b6eb2991d9848de02c4079a698b23328d122550b2af0dc119326219da6f96762",
+      "wire_crc32": 2351097254,
+      "command_count": 1299,
+      "command_active_entries": 88,
+      "complex_command_trees": 1,
+      "recent_copy_count": 152,
+      "shared_candidate_groups": 2,
+      "ordinary_profile_wire_equal": true,
+      "zig_decode_checked": true,
+      "node_native_decode_checked": true,
+      "wide_key_above_2_32_checked": true
+    },
+    "full_wire_equal": true
+  },
+  "owner_observed_exit_codes": {
+    "wasm_gate_session_17818": 0,
+    "context_rf_session_88207": 0
+  },
+  "context_rf_tests_passed": 82,
+  "wasm_build_steps": "9/9 succeeded",
+  "source_scope": "Only direct kernel and literal_context_split overlay change compression behavior; remaining src dependencies referenced by c507a5c1.",
+  "review": {
+    "max_u64_cost_bound": "256 * maxInt(u32) * maxInt(u16) < 2^56",
+    "tree_ties": "strict < in ascending tree order; earliest tree wins",
+    "cost_freeze": "prepare once before context loop; moves update next-round histograms only",
+    "reference_boundary": "prune=false uses original tree-major costs and scalar algorithm",
+    "counter_scope": "assignment_comparisons counts populated contexts * requested trees, independent of machine lane operations"
+  },
+  "archive_verification": {
+    "exit_code": 0,
+    "mode": "hash/restore only; no gates executed",
+    "replay_sha256": "455f1475eaee1b5441c305512cdd9e25d29a4b3f2cfb0176ba0d57802b7e591c"
+  },
+  "literal_context_diff": "sources/literal-context-overlay.patch.xz"
+}

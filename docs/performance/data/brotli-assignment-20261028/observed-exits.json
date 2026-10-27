@@ -1,0 +1,60 @@
+{
+  "source_epoch": "c507a5c1 dependencies plus frozen assignment and literal_context overlays",
+  "observed_exits": [
+    {
+      "session_id": 98189,
+      "exit_code": 0,
+      "scope": "final-source Debug literal-context tests 82/82"
+    },
+    {
+      "session_id": 63900,
+      "exit_code": 0,
+      "scope": "ReleaseFast standalone integer kernel"
+    },
+    {
+      "session_id": 17818,
+      "exit_code": 0,
+      "scope": "scalar/SIMD128/public q8 Wasm gate 9/9"
+    },
+    {
+      "session_id": 88207,
+      "exit_code": 0,
+      "scope": "ReleaseFast literal-context tests 82/82"
+    },
+    {
+      "session_id": 99990,
+      "exit_code": 0,
+      "scope": "candidate q8 diagnostics"
+    },
+    {
+      "session_id": 28572,
+      "exit_code": 0,
+      "scope": "baseline q8 diagnostic build"
+    },
+    {
+      "session_id": 92823,
+      "exit_code": 0,
+      "scope": "baseline q8 diagnostics"
+    },
+    {
+      "session_id": 16986,
+      "exit_code": 0,
+      "scope": "public q8 profile resource contracts 25/25"
+    },
+    {
+      "session_id": 52321,
+      "exit_code": 0,
+      "scope": "check check-wasm CLI help 212/212"
+    },
+    {
+      "session_id": 29978,
+      "exit_code": 0,
+      "scope": "exploratory 36-case matrix"
+    },
+    {
+      "session_id": 46830,
+      "exit_code": 0,
+      "scope": "final three-sweep matched 36-case matrix"
+    }
+  ]
+}

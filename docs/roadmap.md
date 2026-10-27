@@ -23861,3 +23861,19 @@ reuse, so production keeps the simpler independently owned plans.
   ratio 0.99556. These points do not establish significance or industry-best
   results. Reduce repeated emission next while retaining byte and resource
   contracts; the full ten-format optimization objective remains active.
+
+- 2026-10-28: Brotli literal-context clustering now transposes its fixed 32 KiB
+  assignment workspace and computes four adjacent tree costs together with
+  widened u64 integer arithmetic. Inactive cells and scalar tails stay bounded;
+  strict ties, frozen-round decisions and logical counters remain identical.
+  The exhaustive oracle retains the old scalar layout. Debug/ReleaseFast
+  context gates pass 82/82, public profile/resource contracts pass 25/25 and
+  compile/CLI checks pass 212/212. New generic/SIMD128 Wasm unit gates plus the
+  public full-wire oracle pass nine steps and are wired into CI.
+  [Assignment evidence](performance/brotli-assignment-costs.md) preserves the
+  final three-sweep, 36-prefix q8/generic/actual-lgwin16 time ratio 0.946894
+  versus c507a5c1; all wires/settings and complete q8 non-time profiles agree.
+  Current tuned Brotli 1.2.0 time ratio remains 37.3951 at size ratio 0.99556.
+  These points do not establish significance or industry-best results. Next
+  reduce loser materialization with exact count/select/emit, real new peaks,
+  budget refusal and evaluation-to-wire trace linkage; retain the full goal.

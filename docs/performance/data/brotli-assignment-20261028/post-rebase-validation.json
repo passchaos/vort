@@ -1,0 +1,107 @@
+{
+  "pull_rebase": {
+    "remote": "origin",
+    "branch": "main",
+    "observed_exit_code": 0,
+    "result": "Current branch main is up to date.",
+    "upstream_commit": "c507a5c1d10dabfb4cbe9f933b9b486677c8cd04"
+  },
+  "source_unchanged_after_validation": true,
+  "tested_commit_is_before_documentation_amend": true,
+  "checks": [
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=literal context",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 11.608117728028446,
+      "finished_at_utc": "2026-10-27T22:00:04.236541+00:00",
+      "tested_commit": "f94ba1a3fda785e088f067a03e2062d363c94371",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/assignment_costs.zig": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+        "src/br/encoder/literal_context_split.zig": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+        "build.zig": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+        "tools/br/assignment_costs_wasm_gate.js": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=literal context",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.5737672538962215,
+      "finished_at_utc": "2026-10-27T21:59:54.196758+00:00",
+      "tested_commit": "f94ba1a3fda785e088f067a03e2062d363c94371",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/assignment_costs.zig": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+        "src/br/encoder/literal_context_split.zig": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+        "build.zig": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+        "tools/br/assignment_costs_wasm_gate.js": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=Brotli q8 quality profile",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 2.0560499818529934,
+      "finished_at_utc": "2026-10-27T21:59:54.665182+00:00",
+      "tested_commit": "f94ba1a3fda785e088f067a03e2062d363c94371",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/assignment_costs.zig": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+        "src/br/encoder/literal_context_split.zig": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+        "build.zig": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+        "tools/br/assignment_costs_wasm_gate.js": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e"
+      }
+    },
+    {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "check",
+        "check-wasm",
+        "test-br-assignment-wasm",
+        "test-br-prepared-command-wasm",
+        "run",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.1034113708883524,
+      "finished_at_utc": "2026-10-27T21:59:53.712547+00:00",
+      "tested_commit": "f94ba1a3fda785e088f067a03e2062d363c94371",
+      "source_sha256": {
+        "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+        "src/br/encoder/assignment_costs.zig": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+        "src/br/encoder/literal_context_split.zig": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+        "build.zig": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+        "tools/br/assignment_costs_wasm_gate.js": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e"
+      }
+    }
+  ]
+}

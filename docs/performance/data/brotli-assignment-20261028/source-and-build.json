@@ -1,0 +1,101 @@
+{
+  "baseline_commit": "c507a5c1d10dabfb4cbe9f933b9b486677c8cd04",
+  "source_sha256": {
+    "src/br/encoder/assignment_costs.zig": "b46b29889daffd6959ddd4c746a348d45b325a479b73c5f40e341ba92e6d0d53",
+    "src/br/encoder/literal_context_split.zig": "4f35e363f7b5f11f754a7a197403f5517c726944ddcd72bc46de045af62171b0",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "tools/br/planned_encode_bench.zig": "e18e8078c5da19cfed9d1a9009d9d825a41f69346990dcc8027c06831199f32a",
+    "tools/br/libbrotli_runtime.zig": "0dca0909d63f9c5ac5d3c463d7a5c69fb71d2e6322e95be327ab38892fe52e93",
+    "tools/br/q8_records_fixture.zig": "4d692a07162c37d1d9cbbaee1788c0a2d9dd3d18d92d3babdfad7401e5b94c63",
+    "tools/br/encode_samples.zig": "296c9c0f11fc494262c772deb86d9a6f77d4ad43fd4dd9ff823200a6e128dc7a",
+    "tools/br/reference_encode_options.zig": "fc78ff9aa488ca85682b180ee251e2d2166db766ccfbcbd0dc4d166a70621d47",
+    "build.zig": "be4b929b6532a075f62824a2ae4d97d7fd92b0b080b9aed7b1c42129a8b8c7f4",
+    "src/br.zig": "db2db118b2622bbbbd8e4b3c65f8f1e542827163746cdddb32da08c95a8626fd",
+    "tools/br/quality_stage_profile.zig": "a80e469945a0429dcf13537b046b24b48ec8deb373417191a058cd0edf1117cd",
+    "tools/br/assignment_costs_wasm_gate.js": "868232db20283516e2c7aa9d7e1a94a8708e208f22e579c539967a9f495b494e"
+  },
+  "executables": {
+    "bench-baseline": "933ebc07d44114ec35f2915607c9c4c06c7bc05ab421c2ae5e5b114f43c1c1cb",
+    "bench-candidate": "56f639e9372a65e20f68ccc095e34b357a18acc0ad4e99c94f2e5a6f59bdd82e",
+    "baseline-stage": "75669b8de96eea1c737290a02439759f8ba0e41e2a17d88c90f67ceaf345fe13"
+  },
+  "candidate_profile_executable": "e8a1937f5e90c01bd4c2f9441d5ed455a5a4d26fc2a5d11fe107e0d5e673140b",
+  "ordinary_provenance": {
+    "provenance_version": 1,
+    "optimize": "ReleaseFast",
+    "zig_version": "0.16.0",
+    "target_arch": "x86_64",
+    "target_os": "linux",
+    "target_abi": "gnu",
+    "target_cpu": "skylake+pku+sgx",
+    "cpu_model": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "cpu_affinity": "2",
+    "affinity_cpu_count": 1,
+    "benchmark_threads": 1,
+    "codec_thread_policy": "single",
+    "executable_sha256": "56f639e9372a65e20f68ccc095e34b357a18acc0ad4e99c94f2e5a6f59bdd82e",
+    "command": "/tmp/vort-br-assignment-20261028-__kw7uy0/bench-candidate --quality 8 --planned-quality=8 --planned-mode=generic --reference-lgwin=16 --reference-mode=generic --iterations 3 --limit 65536 --samples-json /tmp/vort-br-assignment-20261028-__kw7uy0/matched-3/candidate-0-65536.json --csv /tmp/vort-br-assignment-20261028-__kw7uy0/matched-3/candidate-0-65536.csv --libbrotli-encoder /tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlienc.so.1.2.0 --libbrotli-decoder /tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlidec.so.1.2.0 --libbrotli-common /tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlicommon.so.1.2.0 --path /home/passchaos/Work/corpora/silesia-20261025/files/dickens --path /home/passchaos/Work/corpora/silesia-20261025/files/mozilla --path /home/passchaos/Work/corpora/silesia-20261025/files/mr --path /home/passchaos/Work/corpora/silesia-20261025/files/nci --path /home/passchaos/Work/corpora/silesia-20261025/files/ooffice --path /home/passchaos/Work/corpora/silesia-20261025/files/osdb --path /home/passchaos/Work/corpora/silesia-20261025/files/reymont --path /home/passchaos/Work/corpora/silesia-20261025/files/samba --path /home/passchaos/Work/corpora/silesia-20261025/files/sao --path /home/passchaos/Work/corpora/silesia-20261025/files/webster --path /home/passchaos/Work/corpora/silesia-20261025/files/x-ray --path /home/passchaos/Work/corpora/silesia-20261025/files/xml"
+  },
+  "ordinary_timing": {
+    "clock": "awake",
+    "unit": "nanoseconds",
+    "round_order": "vort_first_on_even_zero_based_rounds",
+    "csv_statistic": "minimum",
+    "median_statistic": "integer_floor",
+    "mix": "sum_of_encoded_lengths_wrapping_target_usize",
+    "vort_warmup": "one_untimed_encode_before_each_primary_vort_round",
+    "reference_warmup": "none",
+    "timed_work": "encoding_allocation_and_free",
+    "metadata_outside_timing": true
+  },
+  "reference_git": "558fc647cdaf391228d614ca85f711e02e4e583b",
+  "reference_clean": true,
+  "reference_build_flags": "-O3 -DNDEBUG -march=native",
+  "reference_compiler": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+  "reference_files": {
+    "libbrotlienc.so.1.2.0": "79433e774220027a191eaac4dd4437afc687837ad080dfd4d15b9243565ff70d",
+    "libbrotlidec.so.1.2.0": "0377077412584221d95fd9f3e14a4572275cd606a0e878c671fbfe05651036d8",
+    "libbrotlicommon.so.1.2.0": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb"
+  },
+  "references": [
+    {
+      "role": "brotli_encoder",
+      "requested_path": "/tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlienc.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "file_sha256": "79433e774220027a191eaac4dd4437afc687837ad080dfd4d15b9243565ff70d",
+      "file_bytes": 855824,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_decoder",
+      "requested_path": "/tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlidec.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "file_sha256": "0377077412584221d95fd9f3e14a4572275cd606a0e878c671fbfe05651036d8",
+      "file_bytes": 60304,
+      "version": 16785408,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    },
+    {
+      "role": "brotli_common",
+      "requested_path": "/tmp/vort-br-assignment-20261028-__kw7uy0/reference-build/libbrotlicommon.so.1.2.0",
+      "successful_open_argument": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "canonical_file_path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "file_sha256": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb",
+      "file_bytes": 143776,
+      "version": null,
+      "loaded_identity": null,
+      "dependencies_verified": false,
+      "identity_status": "requested_file_hashed_actual_object_unverified"
+    }
+  ],
+  "diagnostic_timing_scope": "non-time equality only; affinities differ",
+  "formal_matrix_after_compilation_completed": true,
+  "baseline_compression_source_sha256": "977cf3119ce4c4595332cafa30e68d17378bb96240da2ac55aea2e7bc70d6b24"
+}

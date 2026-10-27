@@ -1,0 +1,24 @@
+{
+  "non_time_fields_equal": true,
+  "rows": [
+    {
+      "path": "/tmp/vort-encode-corpus/silesia-mozilla.bin",
+      "input_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "wire_sha256": "0edaa9cf782d41223ce9cca5f4811d94e2bcfe58185ab88a513d297b210f6209",
+      "candidate_assignment_diagnostic_ns": 2955628
+    },
+    {
+      "path": "/tmp/vort-encode-corpus/silesia-dickens.bin",
+      "input_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "wire_sha256": "2d5a260a0e470c49372ad983dc6ef7ffb5a50658a16a2839e1dddc83381d9342",
+      "candidate_assignment_diagnostic_ns": 746924
+    },
+    {
+      "path": "/tmp/vort-encode-corpus/silesia-mr.bin",
+      "input_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "wire_sha256": "57619fbc05dc6474c2e48c73a9e44d193ffdd1630ed78fcd1a223f8dc180209b",
+      "candidate_assignment_diagnostic_ns": 1179249
+    }
+  ],
+  "timing_scope": "diagnostic only; no matched affinity/time claim"
+}
