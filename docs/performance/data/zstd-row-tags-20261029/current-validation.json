@@ -1,0 +1,180 @@
+{
+  "runtime_commit": "85c03b1a",
+  "runs": {
+    "native_debug": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_tests.zig",
+        "-ODebug",
+        "--test-filter",
+        "Zstd HQ search row tags"
+      ],
+      "chunk_id": "6c5464",
+      "exit_code": 0,
+      "original_token_count": 142,
+      "output": "OK\n6/15 zstd.match.hq_parser.row_tags_tests.test.Zstd HQ search row tags optional edge fallback and tagged target table...OK\n7/15 zstd.match.hq_parser.search_edges.test_0...OK\n8/15 zstd.encode.controls.test_0...OK\n9/15 zstd.match.hq_parser.search_edges_row_tags_reference.test_0...OK\n10/15 zstd.match.controlled_source.test_0...OK\n11/15 zstd.match.hq_tree.test_0...OK\n12/15 zstd.match.hq_parser_row_tags_reference.test_0...OK\n13/15 zstd.match.lazy2.test_0...OK\n14/15 zstd.match.hq_parser.test_0...OK\n15/15 zstd.match.hq_parser.tests.test_0...OK\nAll 15 tests passed.\n",
+      "wall_time_seconds": 0.000001606
+    },
+    "x86_debug": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_tests.zig",
+        "-ODebug",
+        "-target",
+        "x86-linux",
+        "--test-filter",
+        "Zstd HQ search row tags"
+      ],
+      "chunk_id": "87a6c8",
+      "exit_code": 0,
+      "original_token_count": 259,
+      "output": "1/15 zstd_row_tags_tests.test_0...OK\n2/15 zstd.match.hq_parser.row_tags.test_0...OK\n3/15 zstd.match.hq_parser.row_tags_tests.test.Zstd HQ search row tags all hash collisions exact keys and aliased candidates...OK\n4/15 zstd.match.hq_parser.row_tags_tests.test.Zstd HQ search row tags arbitrary rows random insertion and tag synchronization...OK\n5/15 zstd.match.hq_parser.row_tags_tests.test.Zstd HQ search row tags frozen DP profiles admission and requested heap bytes...OK\n6/15 zstd.match.hq_parser.row_tags_tests.test.Zstd HQ search row tags optional edge fallback and tagged target table...OK\n7/15 zstd.match.hq_parser.search_edges.test_0...OK\n8/15 zstd.encode.controls.test_0...OK\n9/15 zstd.match.hq_parser.search_edges_row_tags_reference.test_0...OK\n10/15 zstd.match.controlled_source.test_0...OK\n11/15 zstd.match.hq_tree.test_0...OK\n12/15 zstd.match.hq_parser_row_tags_reference.test_0...OK\n13/15 zstd.match.lazy2.test_0...OK\n14/15 zstd.match.hq_parser.test_0...OK\n15/15 zstd.match.hq_parser.tests.test_0...OK\nAll 15 tests passed.\n",
+      "wall_time_seconds": 4.99e-7
+    },
+    "wasm_compile": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_tests.zig",
+        "-ODebug",
+        "-target",
+        "wasm32-wasi",
+        "--test-no-exec",
+        "--stack",
+        "8388608",
+        "-femit-bin=/tmp/vort-zstd-rowtags-current-20261029.wasm",
+        "--test-filter",
+        "Zstd HQ search row tags"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "4a6fef"
+    },
+    "wasm_execute": {
+      "command": [
+        "node",
+        "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/partial-score-wasi-runner.js",
+        "/tmp/vort-zstd-rowtags-current-20261029.wasm"
+      ],
+      "exit_code": 0,
+      "tests_passed": 15,
+      "terminal_chunk": "ad158b",
+      "wasm_sha256": "ac4e8261539c2bd627529c202874a3e52055bcbd8fe8469d2e8acebc2bbb0937",
+      "node_version": "v26.10.0"
+    },
+    "focused": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "test-zstd-hq",
+        "test-zstd-hq-search",
+        "test-zstd-parallel-incremental",
+        "--summary",
+        "all"
+      ],
+      "chunk_id": "142a02",
+      "exit_code": 0,
+      "original_token_count": 421,
+      "output": "Build Summary: 15/15 steps succeeded; 385/385 tests passed\ntest-zstd-hq success\n+- run test vort-zstd-hq-tests 145 pass (145 total) 4s MaxRSS:77M\n   +- compile test vort-zstd-hq-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:38M\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-hq-search success\n+- run test vort-zstd-hq-search-tests 79 pass (79 total) 1s MaxRSS:77M\n   +- compile test vort-zstd-hq-search-tests ReleaseFast native success 57s MaxRSS:1G\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-parallel-incremental success\n+- run test vort-zstd-incremental-parallel-tests 65 pass (65 total) 18s MaxRSS:19M\n|  +- compile test vort-zstd-incremental-parallel-tests ReleaseFast native success 49s MaxRSS:1G\n|     +- WriteFile (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n+- run test vort-zstd-incremental-parallel-root-tests 96 pass (96 total) 66ms MaxRSS:9M\n   +- compile test vort-zstd-incremental-parallel-root-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:38M\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-br-record-optimal ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n\n",
+      "wall_time_seconds": 3.935612813
+    },
+    "zip": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "test-zip-zstd-stream",
+        "--summary",
+        "all"
+      ],
+      "chunk_id": "83fffa",
+      "exit_code": 0,
+      "original_token_count": 152,
+      "output": "Build Summary: 7/7 steps succeeded; 81/81 tests passed\ntest-zip-zstd-stream success\n+- run test vort-zip-zstd-stream-tests 81 pass (81 total) 2ms MaxRSS:9M\n   +- compile test vort-zip-zstd-stream-tests ReleaseFast native success 13s MaxRSS:515M\n      +- WriteFile cached\n      +- compile obj vort-br-record-optimal ReleaseFast native cached 7ms MaxRSS:34M\n      +- WriteFile cached\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 7ms MaxRSS:35M\n      +- compile obj vort-br-record-optimal ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n\n",
+      "wall_time_seconds": 0.000001289
+    },
+    "hq_diff": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-hq-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-hq-legacy-f95c3446",
+        "--output-dir",
+        "/tmp/vort-zstd-rowtags-hq-diff-20261029"
+      ],
+      "chunk_id": "a97847",
+      "exit_code": 0,
+      "original_token_count": 29,
+      "output": "{\"status\": \"ok\", \"rows\": 52, \"baseline_rows\": 56, \"report\": \"/tmp/vort-zstd-rowtags-hq-diff-20261029/report.json\"}\n",
+      "wall_time_seconds": 0.000001709
+    },
+    "search_diff": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-search-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-search-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-search-legacy-97c4ad99",
+        "--output-dir",
+        "/tmp/vort-zstd-rowtags-search-diff-20261029"
+      ],
+      "chunk_id": "85d24f",
+      "exit_code": 0,
+      "original_token_count": 32,
+      "output": "{\"status\": \"ok\", \"rows\": 41, \"baseline_rows\": 8, \"report\": \"/tmp/vort-zstd-rowtags-search-diff-20261029/hq-search-report.json\"}\n",
+      "wall_time_seconds": 6.99e-7
+    },
+    "common_benchmark": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "test-zstd-common-hq-bench",
+        "--",
+        "--libzstd",
+        "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "--output-dir",
+        "/tmp/vort-zstd-rowtags-common-hq-smoke-20261029"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "6b09fc",
+      "valid_rows": 24,
+      "cli_rejections": 25,
+      "evidence_rejections": 37,
+      "dictionary_evidence_rejections": 8,
+      "level_zero_rejections": 2
+    },
+    "build_check": {
+      "command": [
+        "zig",
+        "build",
+        "-j8",
+        "check",
+        "--summary",
+        "failures"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "0c11a4"
+    }
+  },
+  "scope": "Current-source integrated tests and references; measured prototype differs only by comments/assertions/test registration. Snapshot14-test targets remain separately archived; current registered root reports15."
+}

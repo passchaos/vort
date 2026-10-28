@@ -110,6 +110,16 @@ skipping candidates or reducing search quality silently. Requested heap peaks
 are distinct from process RSS, caller input/output, fixed codec state and OS
 overhead.
 
+Optimal HQ DP rows retain sixteen one-byte key tags beside their nodes to
+reject unequal repeat/literal keys before reading complete nodes. Tag matches
+still verify every key field. This adds sixteen requested heap bytes per row:
+65,552 bytes for a full bounded 4096-position table and 2,097,168 bytes for
+whole-block 128 KiB parsing. Sub-minimum inputs omit the tag allocation. The
+checked preflight includes these bytes; an older exact-fitting cap must grow
+by the tag storage to admit the same parse. Node layout, price admission and
+output ordering are unchanged. [Performance and resource evidence](../performance/zstd-row-tags.md)
+records the measured speed/memory tradeoff.
+
 `EncoderControlProfile` records tree and byte comparisons, prices, parsing and
 refinement passes, seed reuse and working peaks. Work accumulates through
 attempts; emitted block/reference counts only describe published wire and roll

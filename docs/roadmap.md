@@ -24070,3 +24070,21 @@ reuse, so production keeps the simpler independently owned plans.
   production API. The current source remains `26d9eb06`; prioritize larger
   state-scanning and transition-cost reductions, while keeping the complete
   ten-format performance and functionality objective active.
+
+- 2026-10-29: HQ duplicate-state scans now use sixteen one-byte key tags per
+  DP row, with complete-key checks on every matching tag and synchronized
+  predecessor movement. The retained `85c03b1a` changes no candidate order,
+  price admission or wire bytes; all collisions, arbitrary rows and aliases
+  are covered by frozen insertion/DP/edge contracts. Exact requested heap
+  accounting adds 65,552 bytes to a full bounded table and 2,097,168 to whole
+  128 KiB parsing, including preflight and allocation-failure boundaries.
+  [Row-tag evidence](performance/zstd-row-tags.md) records two real 4 KiB
+  AB/BA rounds at time ratios 0.5936-0.8804, and a separate Mozilla16KiB/trained
+  8KiB round at 0.5137-0.8760. All 32 ordinary encodes, 64 native decodes and
+  32 independent libzstd decodes preserve output; dictionary references remain
+  78/87. Registered native/x86/Wasm roots pass 15/15, focused tests 385/385,
+  ZIP Zstd stream tests 81/81 and bidirectional HQ/search references 52/41.
+  The explicit common-HQ benchmark and final build check pass. A smaller
+  sorted-sentinel-only alternative is archived separately; it is not mixed
+  into the retained kernel. Wider speed/ratio/memory and platform evidence,
+  remaining state/transition work and the complete ten-format goal remain open.

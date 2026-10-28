@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "cwd": "/tmp/vort-zstd-row-tags-contracts-20261029-3QP25F",
+  "recorded_at_utc": "2026-10-28 16:11:34 UTC",
+  "prototype": "/tmp/vort-zstd-row-tag-screen-20261029.w7go0wn7/candidate/src",
+  "frozen_source": "/tmp/vort-zstd-row-tag-screen-20261029.w7go0wn7/baseline/src",
+  "source_hashes": "source_hashes.json",
+  "runs": [
+    {
+      "command": "zig test src/zstd_row_tags_tests.zig -ODebug --test-filter 'Zstd HQ search row tags'",
+      "session_id": 92039,
+      "exit_code": 0,
+      "passed": 14,
+      "total": 14,
+      "observed_terminal_output": "All 14 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_row_tags_tests.zig -OReleaseFast --test-filter 'Zstd HQ search row tags'",
+      "session_id": 18678,
+      "exit_code": 0,
+      "passed": 14,
+      "total": 14,
+      "observed_terminal_output": "All 14 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_row_tags_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ search row tags'",
+      "session_id": 28835,
+      "exit_code": 0,
+      "passed": 14,
+      "total": 14,
+      "observed_terminal_output": "All 14 tests passed.\n"
+    }
+  ],
+  "fmt": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/row_tags_tests.zig src/zstd/match/hq_parser/row_tags_tests src/zstd_row_tags_tests.zig",
+    "exit_code": 0
+  },
+  "contracts": [
+    "All 256 hash tags, including zero/default-sentinel tag; both Node types; widths1/8/16; arbitrary rows; exact collisions and first-match order; actual row candidates and tag synchronization.",
+    "24576 deterministic random arbitrary-row insertion comparisons against original public state_tests.referenceInsert.",
+    "Frozen baseline DP and original edges; records/offset/statistics/plan fields and profile preserved, except exact tag heap peak and precisely derived matcher remaining-cap diagnostics.",
+    "Sampled/complete, bounded/whole, min3/7, beam8/16, tiny/known/repetitive/random inputs, dictionary/history and multi-window source.",
+    "All tiny actual admission prefixes plus quota0; direct old-cap rejection/new exact-cap acceptance, zero-cap refusal, allocation leak checks.",
+    "Public HQ preflight: old required cap accepted by old implementation but rejected by tagged implementation; old+16*rowCount permits identical plans.",
+    "Whole128KiB adds2097168 requested tag bytes; bounded4096 adds65552, with real backed input storage and no large DP table allocation.",
+    "Optional Context.tag_rows=null compared to frozen edges, and non-null tagged targets checked for complete node/active-tag correspondence."
+  ],
+  "notes": [
+    "Only independent temporary snapshot edited; no ordinary timings.",
+    "DP oracle changed solely to redirect its edges import; HQ reference changed solely to redirect its DP import.",
+    "Wasm root bridge prepared; parent owns final Wasm execution."
+  ]
+}
