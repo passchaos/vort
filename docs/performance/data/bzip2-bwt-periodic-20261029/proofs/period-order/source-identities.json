@@ -1,0 +1,4 @@
+{
+  "src/bzip2/bwt.zig": "2995d3b65a707840e601120aeb02c70d7bfeeadfdb081b6826bacf3afa74aebc",
+  "src/bzip2/test_support/bwt_full_doubling.zig": "02064bf51e344cbd44f2eb04ba818b1af0001749e75b5d9bf01629f6e0399fab"
+}

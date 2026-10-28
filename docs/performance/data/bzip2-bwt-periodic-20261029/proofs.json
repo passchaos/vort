@@ -1,0 +1,64 @@
+{
+  "artifacts": [
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/audit.json",
+      "sha256": "35d7084ad090c24b632c13fe06f41ec468943aa157692030f65f3e191f552d6b"
+    },
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/manifest.json",
+      "sha256": "e498da5a29feeac3e3622a0377e87f72ad1a0731d749710774a7c10f90a21456"
+    },
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/model.py",
+      "sha256": "0386f90b85fa28495198179c85ab0f551fc031a2c27276e39a7dd7b14616f714"
+    },
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/proof.md",
+      "sha256": "32923923403b679f36fcd9c3f66076f7b14fe829d2d937d54d5452f47bc02673"
+    },
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/results.json",
+      "sha256": "1562909fa83a92c65f17fe14b9cada1cb7a5743682ebdf43db3f63583200850f"
+    },
+    {
+      "role": "period-order",
+      "path": "proofs/period-order/source-identities.json",
+      "sha256": "d01bb66155f437b8ffb7066f16900316b8cbe4f9f5be05d39473fdb491050921"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/audit.json",
+      "sha256": "cac4be4f81c3f950c878c083841485cb1c5c7ec6233b9a699aef5c1208227765"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/filter_model.py",
+      "sha256": "12aed583fe08da45c710f18324004ae30ac70fe27544a4cb75945a7ace1559ad"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/manifest.json",
+      "sha256": "7e7688c0fdfe1f0964b144388591f09aae7f5ff2b3cdfe9c3397b22cb0dbc2e2"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/original_model.py",
+      "sha256": "0386f90b85fa28495198179c85ab0f551fc031a2c27276e39a7dd7b14616f714"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/proof.md",
+      "sha256": "c93c76af0c04b369bc740efc5df9dbc74c0459fe9432d4e57b9dd3b0a7baf673"
+    },
+    {
+      "role": "period-filter",
+      "path": "proofs/period-filter/results.json",
+      "sha256": "bc00561826f6c134caef57b7c026e51e8968d3830bea79dae18083168319e93c"
+    }
+  ]
+}

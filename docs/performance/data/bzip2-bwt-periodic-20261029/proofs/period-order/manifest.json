@@ -1,0 +1,22 @@
+{
+  "audit.json": {
+    "bytes": 748,
+    "sha256": "35d7084ad090c24b632c13fe06f41ec468943aa157692030f65f3e191f552d6b"
+  },
+  "model.py": {
+    "bytes": 7864,
+    "sha256": "0386f90b85fa28495198179c85ab0f551fc031a2c27276e39a7dd7b14616f714"
+  },
+  "proof.md": {
+    "bytes": 5194,
+    "sha256": "32923923403b679f36fcd9c3f66076f7b14fe829d2d937d54d5452f47bc02673"
+  },
+  "results.json": {
+    "bytes": 32273,
+    "sha256": "1562909fa83a92c65f17fe14b9cada1cb7a5743682ebdf43db3f63583200850f"
+  },
+  "source-identities.json": {
+    "bytes": 212,
+    "sha256": "d01bb66155f437b8ffb7066f16900316b8cbe4f9f5be05d39473fdb491050921"
+  }
+}

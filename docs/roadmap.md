@@ -24224,3 +24224,23 @@ reuse, so production keeps the simpler independently owned plans.
   pass is inferred. Frozen checkouts isolate future long test gates. Continue
   reducing planner/MTF/BWT overhead, widening corpus and memory comparisons,
   and the entire ten-format industry-best functionality/performance objective.
+
+
+- 2026-10-29: exact periodic Bzip2 BWT now transforms a primitive base once,
+  repeats each emitted byte and restores the old stable original-pointer tie
+  rank using the complete doubling-shift sum. Conservative proper-divisor
+  samples and a16-byte minimum avoid clear primitive/tiny KMP overhead; KMP
+  plus exact divisibility remains authoritative. Generic six allocations keep
+  their prior sizes/order; the periodic eight-allocation path lowers requested
+  BWT heap from22.5MB to4.5MB at900k/p1 or4, and14.85MB atp=n/2. [Periodic evidence](performance/bzip2-bwt-periodic.md)
+  retains496 calls/2480 samples across31 inputs, raw BWT and all three encoding
+  strategies. `abac`64KiB/900k complete encoding improves about19x/24x; the
+  large base repeated twice improves5.68x-8.86x. Exact outputs/origins and372
+  independent libbz2 decodes pass; primitive/tiny rows retain mixed small
+  timing deviations. Direct-KMP exploratory regressions/source deltas and
+  temporary/restored background CPU masks are recorded. New tests exercise
+  both9840 generic and9840 optimized-period cases, largest period heap,
+  conservative false positives, allocation failures and actual32-bit execution.
+  No compression-ratio, idle-host, RSS or full industry-best result is inferred.
+  Continue primitive/tiny cost, real-corpus frontier comparisons and all ten
+  formats toward the complete functionality/performance objective.

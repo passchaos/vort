@@ -120,15 +120,16 @@ output; limited APIs reject expansion before exceeding the caller's limit.
 Encoding uses a doubling cyclic suffix array, so its work memory is bounded by
 the selected block size rather than total input size.
 
-Forward BWT sorting stops once every cyclic prefix has a unique class: those
-prefixes already determine the complete rotation order. Periodic blocks retain
-ties and finish the original doubling sequence, preserving both transformed
-bytes and the original pointer. One-shot and incremental encoding share this
-core in `src/bzip2/bwt.zig`. That BWT-only change saves sorting passes on distinct
-data without changing transformed bytes, allocation sizes, or the worst-case
-work bound. Later Huffman changes legitimately alter complete encoded bytes. The
-[BWT measurement](../performance/bzip2-bwt-unique-classes.md) records the
-output comparisons and allocation-inclusive timing scope.
+Forward BWT sorting stops once every cyclic prefix has a unique class. Exact
+whole-period blocks of at least16 bytes can instead transform their primitive
+base, expand each BWT byte by the repetition count, and restore the original
+stable tie rank. A conservative divisor sample bypasses KMP on clear primitive
+inputs; KMP and whole-length divisibility remain the exact decision. Both paths
+produce the same transformed bytes and original pointer, so this optimization
+preserves complete encoded bytes under the same Huffman strategy. Generic
+allocation sizes/order are unchanged; periodic blocks need far less sorting
+scratch, with explicit failure cleanup. See [periodic BWT evidence](../performance/bzip2-bwt-periodic.md)
+and the earlier [unique-class comparison](../performance/bzip2-bwt-unique-classes.md).
 
 The incremental decoder additionally bounds the compressed candidate and
 decoded-block length independently; the latter is a safety limit, not a

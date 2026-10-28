@@ -1,0 +1,69 @@
+{
+  "pid": 1792814,
+  "worktree": "/home/passchaos/project-z/vort-bzip2-huffman-verify-20261029",
+  "changed_utc": "2026-10-28T21:38:34.972311+00:00",
+  "original_threads": {
+    "1792814": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "temporary_affinity": [
+    0,
+    1,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "benchmark_cpu": 2,
+  "benchmark_sibling": 10,
+  "purpose": "isolate benchmark physical core; frozen test source unchanged",
+  "restore_status": "restored",
+  "restored_utc": "2026-10-28T21:54:48.665084+00:00",
+  "restored_threads": [
+    {
+      "tid": 1792814,
+      "affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    }
+  ]
+}

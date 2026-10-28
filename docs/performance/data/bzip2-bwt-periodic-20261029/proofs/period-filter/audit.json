@@ -1,0 +1,24 @@
+{
+  "all_periodic_recursive_singleton_bases_guarded": true,
+  "command": [
+    "taskset",
+    "-c",
+    "4",
+    "python3",
+    "/tmp/vort-bzip2-period-proof-filter-20261029.b61hjt8w/filter_model.py"
+  ],
+  "exhaustive_cases": 88572,
+  "false_negatives": 0,
+  "false_positive_cases": 1122,
+  "full_old_model_exact_cases": 460,
+  "large_filter_only_cases": 6,
+  "no_codec_measurement_or_compilation": true,
+  "no_worktree_edits": true,
+  "observed_exit_code": 0,
+  "prior_periodic_cases": 49,
+  "proper_periodic_cases": 411,
+  "singleton_guard_required": true,
+  "sqrt_body_iteration_upper_bound": 948,
+  "status": "ok",
+  "wall_seconds": 0.6869618741329759
+}

@@ -12,6 +12,7 @@ import io
 import json
 import os
 import platform
+import shutil
 import statistics
 import subprocess
 import sys
@@ -94,6 +95,10 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=2)
+    parser.add_argument("--compare-baseline-bwt", action="store_true",
+                        help="Compare the two source epochs' production BWT kernels")
+    parser.add_argument("--period-cases", action="store_true", help="Include periodic and near-periodic boundaries")
+    parser.add_argument("--strategies", nargs="+", choices=("fast", "balanced", "ratio"))
     args = parser.parse_args()
     if min(args.iterations, args.samples, args.repeats) < 1:
         parser.error("iterations, samples and repeats must be positive")
@@ -104,6 +109,21 @@ def main() -> None:
     if args.cpu not in os.sched_getaffinity(0):
         parser.error("selected CPU is outside the allowed affinity")
     inputs = corpus(commit)
+    if args.period_cases:
+        inputs["random899k"] = random_bytes(899000)
+        inputs["double_large_base"] = random_bytes(450000) * 2
+        inputs["period257"] = (bytes(256) + b"\x01") * 3501
+        inputs["period3_nonpower"] = b"baa" * 21845
+        for size in (2, 3, 5, 16, 64, 256, 1024, 65536, 900000):
+            inputs[f"all_same{size}"] = b"A" * size
+        for size in (16, 64, 256, 1024):
+            inputs[f"small_period4_{size}"] = b"abac" * (size // 4)
+        inputs["nondividing5"] = b"ababa"
+        inputs["nondividing257"] = (b"abac" * 64) + b"a"
+        inputs["near_period900k"] = b"abac" * 224999 + b"abaX"
+        inputs["common_prefix900k"] = b"A" * 899999 + b"B"
+        inputs["rle_whole_period"] = b"A" * (259 * 3470)
+    scopes = [("bwt", None)] + [("encode", strategy) for strategy in (args.strategies or [None])]
     closure = git("ls-tree", "-r", "--name-only", commit, "src/bzip2", "src/core.zig", "src/io/stream_count.zig").decode().splitlines()
     tool_paths = ["src/bzip2_bench.zig", "src/bzip2/test_support/bwt_full_doubling.zig",
                   "tools/bzip2/bwt_bench.zig", "tools/bzip2/libbz2_runtime.zig", "tools/benchmark_provenance.zig"]
@@ -125,6 +145,9 @@ def main() -> None:
         "baseline_sources": {p: sha(git("show", f"{commit}:{p}")) for p in closure},
         "python": platform.python_version(),
         "zig_version": run([args.zig, "version"], text=True).stdout.strip(),
+        "compiler_executable": str(Path(shutil.which(args.zig) or args.zig).resolve()),
+        "compiler_sha256": sha(Path(shutil.which(args.zig) or args.zig).resolve().read_bytes()),
+        "inputs": {name: {"bytes": len(payload), "sha256": sha(payload)} for name, payload in inputs.items()},
         "reference": {"oracle": "Python bz2 / its dynamically linked libbz2", "bz2_extension": _bz2.__file__,
                       "bz2_extension_sha256": sha(Path(_bz2.__file__).read_bytes()), "libbz2": str(libbz2_path),
                       "libbz2_sha256": sha(libbz2_path.read_bytes()), "libbz2_version": libbz2.BZ2_bzlibVersion().decode()},
@@ -135,6 +158,7 @@ def main() -> None:
         "raw_bwt_original_pointer": "BWT directly over input bytes, before encoder RLE1; not the pointer in the emitted Bzip2 block",
         "cpu": args.cpu,
         "iterations": args.iterations, "samples": args.samples, "repeats": args.repeats,
+        "scopes": scopes, "production_bwt_comparison": args.compare_baseline_bwt,
         "load_before": os.getloadavg(), "runs": [], "summary": [], "status": "running",
     }
     args.report.parent.mkdir(parents=True, exist_ok=True)
@@ -158,25 +182,29 @@ def main() -> None:
                  "-OReleaseFast", f"-Mbenchmark_provenance={baseline_root / 'tools/benchmark_provenance.zig'}", f"-femit-bin={baseline}"]
         run(build)
         report["baseline_build_command"] = build
+        report["baseline_generated_sources"] = {p.relative_to(baseline_root).as_posix(): sha(p.read_bytes()) for p in baseline_root.rglob("*.zig")}
         report["binaries"] = {"baseline": sha(baseline.read_bytes()), "current": sha(current.read_bytes())}
+        report["load_before_timing"] = os.getloadavg()
+        report["background_before_timing"] = run(["ps", "-eo", "pid,psr,pcpu,comm", "--sort=-pcpu"], text=True).stdout.splitlines()[:12]
         save()
         target_metadata = None
         for case, payload in inputs.items():
             source = temp / f"{case}.input"
             source.write_bytes(payload)
-            for scope in ("bwt", "encode"):
+            for scope, strategy in scopes:
                 groups = {"baseline": [], "current": []}
                 outputs = {}
                 for repeat in range(args.repeats):
                     variants = ("baseline", "current") if repeat % 2 == 0 else ("current", "baseline")
                     for variant in variants:
                         # Same binary for both BWT kernels; old/new encoder trees for end-to-end.
-                        binary = baseline if scope == "encode" and variant == "baseline" else current
-                        algorithm = "full" if scope == "bwt" and variant == "baseline" else "current"
-                        output = temp / f"{case}-{scope}-{variant}.output"
+                        binary = baseline if variant == "baseline" and (scope == "encode" or args.compare_baseline_bwt) else current
+                        algorithm = "full" if scope == "bwt" and variant == "baseline" and not args.compare_baseline_bwt else "current"
+                        output = temp / f"{case}-{scope}-{strategy}-{variant}.output"
                         command = ["taskset", "-c", str(args.cpu), str(binary), "--input", str(source),
                                    "--scope", scope, "--algorithm", algorithm, "--iterations", str(args.iterations),
                                    "--samples", str(args.samples), "--output", str(output)]
+                        if strategy is not None: command += ["--strategy", strategy]
                         raw = run(command, text=True).stdout
                         rows = list(csv.DictReader(io.StringIO(raw), strict=True))
                         if len(rows) != args.samples:
@@ -187,6 +215,8 @@ def main() -> None:
                                     or row["cpu_affinity"] != str(args.cpu) or row["benchmark_threads"] != "1"
                                     or row["codec_thread_policy"] != "single"):
                                 raise AssertionError("scope, algorithm, iteration, dimension or thread mismatch")
+                            if strategy is not None and row["strategy"] != strategy:
+                                raise AssertionError("wrong encode strategy")
                             if not 0 <= int(row["raw_bwt_original_pointer"]) < len(payload):
                                 raise AssertionError("invalid raw BWT pointer")
                             if scope == "bwt" and row["output_bytes"] != str(len(payload)):
@@ -202,6 +232,11 @@ def main() -> None:
                                 raise AssertionError("build, affinity or sample mismatch")
                             if row["output_sha256"] != sha(output.read_bytes()) or int(row["elapsed_ns"]) <= 0:
                                 raise AssertionError("output identity or timer mismatch")
+                            data = output.read_bytes()
+                            checksum = len(data) + data[0] + data[len(data) // 2] + data[-1]
+                            if scope == "bwt": checksum += int(row["raw_bwt_original_pointer"])
+                            if int(row["checksum"]) != (checksum * args.iterations) % (1 << 64):
+                                raise AssertionError("timed output consumption mismatch")
                         if scope == "encode" and bz2.decompress(output.read_bytes()) != payload:
                             raise AssertionError("independent bz2 decode mismatch")
                         signature = (rows[0]["output_sha256"], rows[0]["output_bytes"], rows[0]["raw_bwt_original_pointer"])
@@ -212,19 +247,19 @@ def main() -> None:
                         outputs[variant] = signature
                         groups[variant].extend(int(row["elapsed_ns"]) / args.iterations for row in rows)
                         report["runs"].append({"case": case, "scope": scope, "variant": variant,
-                                               "repeat": repeat, "command": command, "csv": raw})
+                                               "strategy": strategy, "repeat": repeat, "command": command, "csv": raw})
                         save()
                 if outputs["baseline"] != outputs["current"]:
                     raise AssertionError(f"exact output mismatch: {case}/{scope}")
                 old, new = (statistics.median(groups[v]) for v in ("baseline", "current"))
-                report["summary"].append({"case": case, "scope": scope, "input_bytes": len(payload),
+                report["summary"].append({"case": case, "scope": scope, "strategy": strategy, "input_bytes": len(payload),
                                           "baseline_median_ns": old, "current_median_ns": new,
                                           "speedup": old / new, "output_sha256": outputs["current"][0],
                                           "output_bytes": int(outputs["current"][1]), "raw_bwt_original_pointer": int(outputs["current"][2])})
-                print(f"{case}/{scope}: exact=ok median_speedup={old / new:.3f}", flush=True)
+                print(f"{case}/{scope}/{strategy}: exact=ok median_speedup={old / new:.3f}", flush=True)
                 save()
-        expected_runs = len(inputs) * 2 * 2 * args.repeats
-        if (len(report["runs"]) != expected_runs or len(report["summary"]) != len(inputs) * 2
+        expected_runs = len(inputs) * len(scopes) * 2 * args.repeats
+        if (len(report["runs"]) != expected_runs or len(report["summary"]) != len(inputs) * len(scopes)
                 or sum(len(list(csv.DictReader(io.StringIO(r["csv"])))) for r in report["runs"]) != expected_runs * args.samples):
             raise AssertionError("incomplete campaign")
         if report["current_sources"] != {p: sha((ROOT / p).read_bytes()) for p in source_paths}:

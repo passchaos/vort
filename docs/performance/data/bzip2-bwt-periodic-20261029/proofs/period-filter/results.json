@@ -1,0 +1,278 @@
+{
+  "additional_prior_periodic_fixtures": 49,
+  "affinity": [
+    4
+  ],
+  "exhaustive_cases": 88572,
+  "false_negatives": 0,
+  "false_positive_exhaustive_cases": 1122,
+  "finished_utc": "2026-10-28T21:41:41.696939+00:00",
+  "full_old_model_exact_periodic_cases": 460,
+  "large_filter_only_fixtures": [
+    {
+      "byte_probes": 5,
+      "divisor_loop_iterations": 1,
+      "filter_pass": true,
+      "input_sha256": "78c4321306bcea3e24dc085d4a497c1db5b336baa027e079a851329024121a58",
+      "known_exact_period": 1,
+      "length": 900000,
+      "name": "all_a_900000",
+      "tested_candidates": [
+        1
+      ]
+    },
+    {
+      "byte_probes": 8,
+      "divisor_loop_iterations": 2,
+      "filter_pass": true,
+      "input_sha256": "50732fc300ae9a390b9cdf1b609ba33e0aaa551e1c9d5e449d5bf526afcba0f0",
+      "known_exact_period": 4,
+      "length": 900000,
+      "name": "abac_900000",
+      "tested_candidates": [
+        1,
+        2,
+        450000
+      ]
+    },
+    {
+      "byte_probes": 8,
+      "divisor_loop_iterations": 2,
+      "filter_pass": true,
+      "input_sha256": "c733dd5177ce0c6adb3a956db91fdd1a1ff0231f3b2a70b5d30e9e5e87bb72dc",
+      "known_exact_period": 450000,
+      "length": 900000,
+      "name": "two_large_primitive_bases",
+      "tested_candidates": [
+        1,
+        2,
+        450000
+      ]
+    },
+    {
+      "byte_probes": 9,
+      "divisor_loop_iterations": 16,
+      "filter_pass": false,
+      "input_sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "known_exact_period": 256,
+      "length": 256,
+      "name": "byte_unique",
+      "tested_candidates": [
+        1,
+        2,
+        128,
+        4,
+        64,
+        8,
+        32,
+        16,
+        16
+      ]
+    },
+    {
+      "byte_probes": 63,
+      "divisor_loop_iterations": 948,
+      "filter_pass": false,
+      "input_sha256": "bc35a94a96cd0b1376e5b94128ccd46ebe249b035c3a07deee1d7a1bdac7195a",
+      "known_exact_period": 899000,
+      "length": 899000,
+      "name": "random899000",
+      "tested_candidates": [
+        1,
+        2,
+        449500,
+        4,
+        224750,
+        5,
+        179800,
+        8,
+        112375,
+        10,
+        89900,
+        20,
+        44950,
+        25,
+        35960,
+        29,
+        31000,
+        31,
+        29000,
+        40,
+        22475,
+        50,
+        17980,
+        58,
+        15500,
+        62,
+        14500,
+        100,
+        8990,
+        116,
+        7750,
+        124,
+        7250,
+        125,
+        7192,
+        145,
+        6200,
+        155,
+        5800,
+        200,
+        4495,
+        232,
+        3875,
+        248,
+        3625,
+        250,
+        3596,
+        290,
+        3100,
+        310,
+        2900,
+        500,
+        1798,
+        580,
+        1550,
+        620,
+        1450,
+        725,
+        1240,
+        775,
+        1160,
+        899,
+        1000
+      ]
+    },
+    {
+      "byte_probes": 5,
+      "divisor_loop_iterations": 1,
+      "filter_pass": true,
+      "input_sha256": "83ec869fc508eeb07ac71ae0f5f755b34343fd553a441416c700fdcf2792b6ee",
+      "known_exact_period": 900000,
+      "length": 900000,
+      "name": "sample_evasion_single_marker",
+      "tested_candidates": [
+        1
+      ]
+    }
+  ],
+  "original_model_sha256": "0386f90b85fa28495198179c85ab0f551fc031a2c27276e39a7dd7b14616f714",
+  "per_length": [
+    {
+      "cases": 3,
+      "divisor_candidates_including_square_duplicates": [],
+      "false_positives": 0,
+      "filter_pass": 0,
+      "length": 1,
+      "proper_periodic": 0
+    },
+    {
+      "cases": 9,
+      "divisor_candidates_including_square_duplicates": [
+        1
+      ],
+      "false_positives": 0,
+      "filter_pass": 3,
+      "length": 2,
+      "proper_periodic": 3
+    },
+    {
+      "cases": 27,
+      "divisor_candidates_including_square_duplicates": [
+        1
+      ],
+      "false_positives": 0,
+      "filter_pass": 3,
+      "length": 3,
+      "proper_periodic": 3
+    },
+    {
+      "cases": 81,
+      "divisor_candidates_including_square_duplicates": [
+        1,
+        2,
+        2
+      ],
+      "false_positives": 0,
+      "filter_pass": 9,
+      "length": 4,
+      "proper_periodic": 9
+    },
+    {
+      "cases": 243,
+      "divisor_candidates_including_square_duplicates": [
+        1
+      ],
+      "false_positives": 0,
+      "filter_pass": 3,
+      "length": 5,
+      "proper_periodic": 3
+    },
+    {
+      "cases": 729,
+      "divisor_candidates_including_square_duplicates": [
+        1,
+        2,
+        3
+      ],
+      "false_positives": 0,
+      "filter_pass": 33,
+      "length": 6,
+      "proper_periodic": 33
+    },
+    {
+      "cases": 2187,
+      "divisor_candidates_including_square_duplicates": [
+        1
+      ],
+      "false_positives": 6,
+      "filter_pass": 9,
+      "length": 7,
+      "proper_periodic": 3
+    },
+    {
+      "cases": 6561,
+      "divisor_candidates_including_square_duplicates": [
+        1,
+        2,
+        4
+      ],
+      "false_positives": 42,
+      "filter_pass": 123,
+      "length": 8,
+      "proper_periodic": 81
+    },
+    {
+      "cases": 19683,
+      "divisor_candidates_including_square_duplicates": [
+        1,
+        3,
+        3
+      ],
+      "false_positives": 132,
+      "filter_pass": 159,
+      "length": 9,
+      "proper_periodic": 27
+    },
+    {
+      "cases": 59049,
+      "divisor_candidates_including_square_duplicates": [
+        1,
+        2,
+        5
+      ],
+      "false_positives": 942,
+      "filter_pass": 1191,
+      "length": 10,
+      "proper_periodic": 249
+    }
+  ],
+  "precheck_never_authorizes_expansion_without_KMP": true,
+  "proper_divisor_coverage_complete": true,
+  "proper_periodic_exhaustive_cases": 411,
+  "script_sha256": "12aed583fe08da45c710f18324004ae30ac70fe27544a4cb75945a7ace1559ad",
+  "singleton_handling": "no proper divisor exists; return false without evaluating sample index1",
+  "sqrt_900000_floor": 948,
+  "status": "ok",
+  "wall_seconds": 0.6869618741329759
+}

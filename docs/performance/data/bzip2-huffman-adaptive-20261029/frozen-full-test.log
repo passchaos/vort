@@ -1,0 +1,48 @@
+test
++- run test vort-tests w
+four-byte optimal frame audit: changed=0 larger=0 total=590165/590165 worst_extra=0
+fastest optimal budget audit: changed=3 larger=0 smaller=3 total=230779/230784 worst_extra=0
+single beam audit: changed=1 larger=0 smaller=1 total=658597/658600 worst_extra=0
+single beam JSON audit: changed=20 total=12581/12534 worst_extra=3
+level three single beam audit: changed=0 larger=0 smaller=0 total=1574138/1574138 worst_extra=0 absolute_selected=0 absolute_larger=0 absolute_worst_extra=0 proxy_selected=0 proxy_larger=0 proxy_worst_extra=0
+level three single beam JSON audit: changed=0 larger=0 total=10104/10104 worst_extra=0
+level three large single beam audit: selected=20 changed=20 larger=20 total=19576/19524 worst_extra=4 absolute_selected=24 absolute_larger=20 absolute_total=19576 absolute_worst_extra=4 proxy_selected=24 proxy_larger=20 proxy_total=19576 proxy_worst_extra=4
+level three structured-family audit: screened=16 eligible=0 changed=0 larger=0 smaller=0 total=100138/100138 worst_extra=0 proxy_eligible=0 proxy_larger=0 proxy_smaller=0 proxy_total=100138 proxy_worst_extra=0
+four-byte optimal plan audit: improved=2 total=30487549/30487553
+cut-histogram state-bytes=4208 initial-scan=49152 adjacent128-scan=256
+validated RLE prefix model=4294967296 actual-final-input=7 wire-tail=4 bytes
+total-memory setting=fast requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=balanced requested-peak=1088 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=ratio requested-peak=689759 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q0 requested-peak=4433 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q1 requested-peak=2775 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q2 requested-peak=689668 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q3 requested-peak=689654 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q4 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q5 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q6 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q7 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q8 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q9 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q10 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=q11 requested-peak=689758 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq10 requested-peak=8953273 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+total-memory setting=hq11 requested-peak=9355743 exact=pass below=WorkingMemoryLimitExceeded final-live=0
+whole-block moving workspace peak=1938400 exact=pass one-below=WorkingMemoryLimitExceeded live=0
+whole-block wide trace commands=33792 moving-peak=21070392 returned-live=3244032
+failed command: ./.zig-cache/o/c1dfce306712b5797cb501f1941c90b5/vort-tests --cache-dir=./.zig-cache --seed=0xb039698c --listen=-
+
+Build Summary: 11/11 steps succeeded; 5046/5048 tests passed (2 skipped)
+test success
++- run test vort-tests 5039 pass, 2 skip (5041 total) 58m MaxRSS:301M
+|  +- compile test vort-tests Debug native success 15s MaxRSS:1G
+|     +- WriteFile cached
+|     +- compile obj vort-br-record-optimal Debug native success 249ms MaxRSS:132M
+|     +- WriteFile success
+|     +- compile obj vort-zstd-huffman-x2 Debug native success 292ms MaxRSS:133M
+|     +- compile obj vort-br-record-optimal Debug native (reused)
+|     +- compile obj vort-zstd-huffman-x2 Debug native (reused)
++- run test vort-br-record-classifier-tests 1 pass (1 total) 4ms MaxRSS:8M
+|  +- compile test vort-br-record-classifier-tests Debug native success 340ms MaxRSS:143M
++- run test vort-br-record-optimal-object-tests 6 pass (6 total) 4ms MaxRSS:8M
+   +- compile test vort-br-record-optimal-object-tests Debug native success 354ms MaxRSS:143M

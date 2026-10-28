@@ -1,0 +1,26 @@
+{
+  "additional_intermediate_tie_class_checks": 12397,
+  "additional_periodic_cases": 49,
+  "byte_pointer_full_order_equal": true,
+  "command": [
+    "taskset",
+    "-c",
+    "4",
+    "python3",
+    "/tmp/vort-bzip2-period-proof-20261029.yclgqtbv/model.py"
+  ],
+  "exec_session_id": 36864,
+  "exhaustive_cases": 88572,
+  "exhaustive_intermediate_tie_class_checks": 8094,
+  "formula_proved": true,
+  "maximum_executed_input_length": 1539,
+  "maximum_executed_primitive_base_length": 513,
+  "model_wall_seconds": 4.374760794918984,
+  "non_integral_period_controls": 5,
+  "observed_exit_code": 0,
+  "proper_periodic_exhaustive_cases": 411,
+  "python_version": "3.10.12",
+  "source_hashes_still_match": true,
+  "status": "ok",
+  "total_cases": 88626
+}

@@ -1,6 +1,6 @@
 {
   "schema": "vort.bzip2_huffman_validation.v1",
-  "status": "focused_and_compile_passed_frozen_full_test_running",
+  "status": "focused_compile_and_frozen_full_test_passed",
   "recorded_utc": "2026-10-28T21:25:44.297144+00:00",
   "feature_commit": "1fe1eda4d50a682de7283efb22b521608a08f639",
   "checks": [
@@ -141,7 +141,7 @@
   },
   "frozen_full_test": {
     "session_id": 74729,
-    "status": "running",
+    "status": "passed",
     "commit": "1fe1eda4d50a682de7283efb22b521608a08f639",
     "worktree": "/home/passchaos/project-z/vort-bzip2-huffman-verify-20261029",
     "command": [
@@ -153,7 +153,16 @@
       "all"
     ],
     "log_runtime": "/tmp/vort-bzip2-huffman-frozen-full-test.log",
-    "note": "Clean detached core commit; no current-worktree edits affect this source snapshot. No full-test completion is assigned."
+    "note": "Clean detached core commit; no current-worktree edits affect this source snapshot. No full-test completion is assigned.",
+    "exit_code": 0,
+    "recorded_completion_utc": "2026-10-28T22:13:06.131596+00:00",
+    "log": "frozen-full-test.log",
+    "raw_sha256": "2b1cc929ba03b01eebb171e31187b0c882341158c13ffcafb7edf032a69200fd",
+    "saved_sha256": "bc86e35d06d51c7345d02644c828f31335faf906d52fb15274cbb2e1caaaa4ad",
+    "affinity_during_later_benchmark": "temporarily excluded CPUs2/10; restored after timing; see periodic evidence background-affinity.json",
+    "tests_passed": 5046,
+    "tests_skipped": 2,
+    "source_snapshot_complete": true
   },
   "log_normalization": "Trailing line whitespace and extra final blank lines stripped; raw and saved hashes both recorded.",
   "rebase": {

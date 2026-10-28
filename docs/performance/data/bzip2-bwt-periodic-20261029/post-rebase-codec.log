@@ -1,0 +1,27 @@
+bzip2 empty-level1 checks=3 reference=ok
+bzip2 empty-level9 checks=6 reference=ok
+bzip2 tiny-level1 checks=9 reference=ok
+bzip2 tiny-level9 checks=12 reference=ok
+bzip2 text-level1 checks=15 reference=ok
+bzip2 text-level9 checks=18 reference=ok
+bzip2 json-level1 checks=21 reference=ok
+bzip2 json-level9 checks=24 reference=ok
+bzip2 random-level1 checks=27 reference=ok
+bzip2 random-level9 checks=30 reference=ok
+bzip2 pattern-level1 checks=33 reference=ok
+bzip2 pattern-level9 checks=36 reference=ok
+bzip2 runs-level1 checks=39 reference=ok
+bzip2 runs-level9 checks=42 reference=ok
+bzip2 rle-8m-level1 checks=43 reference=ok
+bzip2 rle-8m-level9 checks=44 reference=ok
+bzip2 rle-40m-level9 checks=45 reference=ok
+bzip2 legacy-randomized checks=48 reference=ok
+bzip2 multiblock-unaligned checks=51 reference=ok
+bzip2_contract_cases=92 corpus=19 libbz2=1.0.8, 13-Jul-2019 CRC_errors=5 OOM=25 resource=6
+Build Summary: 6/6 steps succeeded; 80/80 tests passed
+test-bzip2 success
++- run test vort-bzip2-tests 80 pass (80 total) 4s MaxRSS:27M
+   +- compile test vort-bzip2-tests ReleaseFast native cached 6ms MaxRSS:38M
+run-bzip2-stream-contract-diff success
++- run python3 success 18s
+   +- compile exe vort-bzip2-stream-contract-probe ReleaseFast native cached 6ms MaxRSS:38M

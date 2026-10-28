@@ -1,0 +1,8 @@
+1/7 bzip2.test_0...OK
+2/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT tiny and expanded ternary rotations preserve full doubling...OK
+3/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT rejects non-dividing prefix periods and preserves origin ties...OK
+4/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT maximum blocks preserve exact output and requested heap...OK
+5/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT allocation paths unwind and invalid lengths allocate nothing...OK
+6/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT conservative filter preserves true periods and rejects small inputs...OK
+7/7 bzip2.bwt_period_tests.test.Bzip2 periodic BWT largest primitive period preserves exact output and peak...OK
+All 7 tests passed.

@@ -1,0 +1,7 @@
+Build Summary: 6/6 steps succeeded; 80/80 tests passed
+test-bzip2 success
++- run test vort-bzip2-tests 80 pass (80 total) 4s MaxRSS:27M
+   +- compile test vort-bzip2-tests ReleaseFast native success 20s MaxRSS:562M
+build-bzip2-bwt-bench cached
++- install vort-bzip2-bwt-bench cached
+   +- compile exe vort-bzip2-bwt-bench ReleaseFast native success 14s MaxRSS:477M

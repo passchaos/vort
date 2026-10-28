@@ -193,8 +193,9 @@ Final current-source compilation/Wasm passes 211/211 steps with observed
 exit 0. Current ReleaseFast archive consumers pass 95 tests; Debug bidirectional
 bz2, CLI help, and the independent 92-case stream-contract campaign pass.
 A detached, clean checkout at feature commit `1fe1eda4` runs the full root tests
-separately. That session remains active at this recorded epoch and is not
-reported as a full-test pass. [Validation records](data/bzip2-huffman-adaptive-20261029/validation.json)
+separately. That frozen-source test session later returns exit0 with5046 passed / two
+skipped; its final log and source
+identity are recorded separately from subsequent BWT changes. [Validation records](data/bzip2-huffman-adaptive-20261029/validation.json)
 retain command exit codes/log hashes and the frozen-worktree identity.
 Post-rebase ReleaseFast Bzip2 74 and the 92-case independent contract campaign
 pass again; Wasm compilation and CLI help also return exit 0.
