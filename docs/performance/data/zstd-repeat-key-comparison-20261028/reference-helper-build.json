@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "cc",
+    "-std=c11",
+    "-O2",
+    "-fPIC",
+    "-shared",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/home/passchaos/Work/zstd/lib",
+    "tools/zstd/hq_controls_reference.c",
+    "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+    "-ldl",
+    "-Wl,-rpath,/home/passchaos/Work/zstd/lib",
+    "-o",
+    "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so"
+  ],
+  "exit_code": 0,
+  "helper_sha256": "dabbc64c08485df739db35e4159d7319d155e18e2314a9bf4946d2b076dc7201",
+  "matching_header_runtime": 10600
+}

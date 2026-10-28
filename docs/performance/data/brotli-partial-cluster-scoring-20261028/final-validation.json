@@ -194,22 +194,6 @@
       "argv": [
         "zig",
         "build",
-        "-j2",
-        "test",
-        "--summary",
-        "all"
-      ],
-      "status": "running",
-      "exec_session_id": 35093,
-      "test_pid": 1555887,
-      "live_log": "/tmp/vort-br-partial-final-20261028/test.log",
-      "scope": "all-library Debug; started before the final test-only cache-revisit assertions",
-      "last_confirmed_running_utc": "2026-10-28T10:38:11.234230+00:00"
-    },
-    {
-      "argv": [
-        "zig",
-        "build",
         "-j6",
         "test",
         "-Doptimize=ReleaseFast",
@@ -223,7 +207,7 @@
       "last_confirmed_running_utc": "2026-10-28T10:38:11.234230+00:00"
     }
   ],
-  "whole_test_status": "not yet verified; no passing claim from empty logs or focused checks",
+  "whole_test_status": "Earlier source full Debug finished: 5007 passed, 2 skipped. Full ReleaseFast remains unverified.",
   "source_manifest": "final-source-manifest.json",
   "debug_diagnostic": {
     "argv": [
@@ -274,5 +258,23 @@
     "log": "logs/post-rebase.log",
     "log_sha256": "13d77bd0d24566edecc21904d209fba3fe4f75f34036b712f641577497bd745c",
     "scope": "83/83 Debug context tests, full public Wasm wire equality, producer/smoke and portable compile after rebase"
+  },
+  "full_debug_completion": {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0,
+    "passed": 5007,
+    "skipped": 2,
+    "total": 5009,
+    "observed_utc": "2026-10-28T11:32:59.875755+00:00",
+    "log": "full-debug-completion.log.xz",
+    "log_sha256": "9311796f163d3724bf63a51bd1e7bdf435ea27f2aa6cf914b95686ac2b807ba7",
+    "scope": "The already-running original executable, before final cache-revisit test-only additions and the later Zstd repeat-key change. Those additions have their separate focused checks."
   }
 }

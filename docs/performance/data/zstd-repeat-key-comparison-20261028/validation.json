@@ -1,0 +1,265 @@
+{
+  "observed_utc": "2026-10-28T11:36:52.812229+00:00",
+  "source_manifest": "source-manifest.json",
+  "checks": [
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/zstd_state_key_tests.zig",
+        "-O",
+        "ReleaseFast",
+        "--test-filter",
+        "zstd hq state"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 reference tests",
+      "log": "zstd-state-key-unit-rf.log",
+      "log_sha256": "b9af81f2cce058c8e163920eb181f5b3b58eac47fd576fbe03f705d69efb5978"
+    },
+    {
+      "argv": [
+        "node",
+        "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/partial-score-wasi-runner.js",
+        "/tmp/vort-br-partial-final-20261028/zstd-state-key.wasm"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 actual wasm32-wasi reference tests",
+      "log": "zstd-state-key-wasm-run.log",
+      "log_sha256": "f2973e6ff98e6a09e4cdbbcf989bd28c8157267b83fafa9d0b56ef3bcc7d59c0"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "test-zstd-hq",
+        "test-zstd-hq-search",
+        "test-zstd-parallel-incremental",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "357/357 HQ/search/incremental/ZIP tests; codec code before test-registration-only followup",
+      "log": "zstd-state-key-hq.log",
+      "log_sha256": "bae936ce2d3f5b4066075cc922759dfe02a8a9656bebcf56dcc45069b9a86ff2"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-diff",
+        "--summary",
+        "all",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-hq-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-hq-legacy-f95c3446",
+        "--output-dir",
+        "/tmp/vort-zstd-key-hq-diff-20261028"
+      ],
+      "exit_code": 0,
+      "scope": "52 modern HQ rows and 56 frozen legacy rows",
+      "log": "zstd-state-key-hq-diff-final.log",
+      "log_sha256": "abf78fbbbd5b9b66f762b58e081e9825e391ddb270a36c1921a617a01f00eb9e"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-search-diff",
+        "--summary",
+        "all",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-search-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-search-legacy-97c4ad99",
+        "--output-dir",
+        "/tmp/vort-zstd-key-search-diff-20261028"
+      ],
+      "exit_code": 0,
+      "scope": "41 search rows and 8 frozen legacy rows",
+      "log": "zstd-state-key-search-diff-final.log",
+      "log_sha256": "30d0e407a0cf22add542b1a24b23a9ad11b7948db49a704655cdd59efc91fd2b"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-incremental-parallel-diff",
+        "--summary",
+        "all",
+        "--",
+        "--directory",
+        "/tmp/vort-zstd-key-incremental-diff-20261028",
+        "--source-epoch",
+        "b04a9019-plus-repeat-key",
+        "--reference",
+        "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+        "--reference-header",
+        "/home/passchaos/Work/zstd/lib/zstd.h"
+      ],
+      "exit_code": 0,
+      "scope": "171/171 full incremental interoperability matrix",
+      "log": "zstd-state-key-incremental-diff-final.log",
+      "log_sha256": "5f1e34264c2189eebc65fc3a5a1c1da0349222339a8a0fc0dc6cd88c8a63f122"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/zstd_state_key_tests.zig",
+        "-ODebug",
+        "--test-filter",
+        "zstd hq state"
+      ],
+      "exit_code": 0,
+      "tests": 3,
+      "scope": "worker-verified native Debug, final registered test"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/zstd_state_key_tests.zig",
+        "-target",
+        "x86-linux",
+        "-ODebug",
+        "--test-filter",
+        "zstd hq state"
+      ],
+      "exit_code": 0,
+      "tests": 3,
+      "scope": "worker-verified actual 32-bit x86 Debug, final registered test"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j8",
+        "check",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "210/210 current-source compile steps",
+      "log": "zstd-state-key-check-final.log",
+      "log_sha256": "b1af9647d08d689ee70fe00ebf16d0ad8c693389a5e1f8c425323311e8c835ea"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/zstd_state_key_tests.zig",
+        "-O",
+        "ReleaseFast",
+        "--test-filter",
+        "zstd hq state"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 after rebase",
+      "log": "zstd-state-key-post-rebase-unit.log",
+      "log_sha256": "b9af81f2cce058c8e163920eb181f5b3b58eac47fd576fbe03f705d69efb5978"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/zstd_state_key_tests.zig",
+        "-target",
+        "x86-linux",
+        "-O",
+        "ReleaseFast",
+        "--test-filter",
+        "zstd hq state"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 actual 32-bit after rebase",
+      "log": "zstd-state-key-post-rebase-x86.log",
+      "log_sha256": "b9af81f2cce058c8e163920eb181f5b3b58eac47fd576fbe03f705d69efb5978"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "-Doptimize=ReleaseFast",
+        "test-zstd-hq",
+        "test-zstd-hq-search",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "HQ/search contracts after rebase",
+      "log": "zstd-state-key-post-rebase-hq.log",
+      "log_sha256": "b6a29412da99d639639b6b60749549d6fa8391ba8366ceca43a26eaaf713a6a4"
+    }
+  ],
+  "references": {
+    "modern": "1.6.0, matching header/runtime; isolated helper namespace",
+    "system": "1.4.8"
+  },
+  "initial_interoperability_setup": {
+    "exit_code": 1,
+    "cause": "missing required script arguments; then raw libzstd supplied instead of hqr adapter",
+    "scope": "harness setup errors; completed reruns recorded separately"
+  },
+  "earlier_full_debug": {
+    "argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0,
+    "passed": 5007,
+    "skipped": 2,
+    "total": 5009,
+    "log": "original-full-debug.log",
+    "scope": "started before repeat-key change and before final Brotli test-only cache revisit; does not claim current-key full Debug coverage"
+  },
+  "pending_checks": [
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j6",
+        "test",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exec_session_id": 72177,
+      "compiler_pid": 1569168,
+      "status": "running",
+      "live_log": "/tmp/vort-br-partial-final-20261028/test-releasefast.log",
+      "scope": "original source snapshot before repeat-key change"
+    }
+  ],
+  "source_commit": "8bfcd26f",
+  "post_rebase": {
+    "argv": [
+      "git",
+      "pull",
+      "--rebase"
+    ],
+    "exit_code": 0,
+    "result": "Current branch main is up to date.",
+    "source_hashes_unchanged": true
+  }
+}

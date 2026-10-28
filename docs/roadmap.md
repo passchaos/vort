@@ -23936,3 +23936,19 @@ reuse, so production keeps the simpler independently owned plans.
   counting to adaptive-distance split context alternatives: four rejected
   wires account for 6.93-12.40% of three recorded diagnostic calls. Preserve
   split planning and final wires; retain the complete ten-format goal.
+
+- 2026-10-28: Zstd HQ repeat-key equality now uses the format's three usize
+  word comparisons, preserving sentinel/literal guards, stable ordering and
+  all search/price budgets. Independent old-insertion contracts cover both
+  predecessor layouts, row widths 1/8/16 and 12,288 randomized steps, including
+  each word's high bits and all tie fields. Native/32-bit Debug, native
+  ReleaseFast and actual wasm32-wasi pass; HQ/search/incremental/ZIP contracts
+  pass 357/357 and libzstd 1.6.0 incremental interoperability passes 171/171.
+  [Repeat-key evidence](performance/zstd-repeat-key-comparison.md) retains
+  five exploratory AB/BA native encoding rounds on twelve synthetic cases,
+  unchanged complete wires and strategy/transition counts. Periodic and
+  structured time ratios are 0.2871-0.3919; these background-loaded small
+  samples do not establish general compressor leadership. An unconditional
+  worst-node guard preserves behavior but regresses periodic inputs and stays
+  archived. Continue real-corpus/dictionary/block-size measurement and reduce
+  remaining HQ transition work; retain the full ten-format goal.

@@ -1,0 +1,5 @@
+{
+  "src/zstd/match/hq_parser/state.zig": "597a6723f641c2c82aa8ad10681febb963ac30c70ce3e82cc30fd6476724892b",
+  "src/zstd/match/hq_parser/state_tests.zig": "f28ee06b0c1651b3d462a0c85a515375ddbfa1f1e503e3b3965a324863ec8b5f",
+  "src/zstd_state_key_tests.zig": "2f377f93577ac29c59d99cc08c4701255cd2997b306a5861336e52f50184dc4d"
+}
