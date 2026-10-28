@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "cwd": "/tmp/vort-zstd-row-tags-cost-contracts-20261029-UmWUVT",
+  "baseline_commit": "7adf83938def6670e160076fd5d31ed11563f6a6",
+  "prototype": "/tmp/vort-zstd-node-cost-gate-screen-20261029.48az4tij/candidate/src",
+  "source_hashes": "source_hashes.json",
+  "runs": [
+    {
+      "command": "zig test src/zstd_row_tags_cost_tests.zig -ODebug --test-filter 'Zstd HQ search row tag cost gates'",
+      "exit_code": 0,
+      "passed": 4,
+      "total": 4,
+      "observed_output": "1/4 zstd_row_tags_cost_tests.test_0...OK\n2/4 zstd.match.hq_parser.row_tags.test_0...OK\n3/4 zstd.match.hq_parser.row_tags_cost_tests.test.Zstd HQ search row tag cost gates preserve frozen ties costs and aliases...OK\n4/4 zstd.match.hq_parser.row_tags_cost_reference.test_0...OK\nAll 4 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_row_tags_cost_tests.zig -OReleaseFast --test-filter 'Zstd HQ search row tag cost gates'",
+      "session_id": 94949,
+      "exit_code": 0,
+      "passed": 4,
+      "total": 4,
+      "observed_terminal_output": "All 4 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_row_tags_cost_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ search row tag cost gates'",
+      "session_id": 79528,
+      "exit_code": 0,
+      "passed": 4,
+      "total": 4,
+      "observed_terminal_output": "All 4 tests passed.\n"
+    }
+  ],
+  "fmt": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/row_tags_cost_tests.zig src/zstd/match/hq_parser/row_tags_cost_tests src/zstd_row_tags_cost_tests.zig",
+    "exit_code": 0
+  },
+  "coverage": [
+    "Cost0/1/2^63/max-1/max; candidate below/equal/above with saturating arithmetic avoiding overflow.",
+    "Exact duplicate first-slot acceptance and distinct same-tag final-slot acceptance; original arbitrary-row semantics preserved.",
+    "All tie fields match_len/offset/distance/predecessor/slot, scalar literal key and each repeat word through exact hash collisions.",
+    "Both Node layouts and widths1/8/16; sentinel arbitrary fields/high bits/all256tag collisions.",
+    "True row-element alias candidates per slot; bool/fullnodefields/fulltags compared to exact frozen current row_tags.insert.",
+    "24576 deterministic arbitrary-row traces and existing collision/high-bit tests reused through candidate/frozen dual-run adapter."
+  ],
+  "notes": [
+    "Frozen reference is exact baseline row_tags module, unchanged algorithm and current state import.",
+    "Candidate source exactly matches parent prototype SHA51aeb7213d5597132cb03535ee7866e76dd2259decae77295b4851be0d0b779d.",
+    "No sorting precondition, no worst-node early rejection change, no main/prototype edits, no ordinary timing, no broad DP checks."
+  ]
+}

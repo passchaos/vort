@@ -1,0 +1,80 @@
+[
+  {
+    "case": "dickens16KiB",
+    "strategy": "btopt",
+    "input_bytes": 16384,
+    "baseline_ns": 42393073,
+    "candidate_ns": 40769796,
+    "candidate_over_baseline": 0.9617089093777184,
+    "wire_bytes": 7119,
+    "wire_sha256": "dd669091c88cd6db528009d2b73bdb3342257b8026493a08035b13f27ccd5b0a",
+    "dictionary_sequences": 0,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  },
+  {
+    "case": "dickens16KiB",
+    "strategy": "btultra2",
+    "input_bytes": 16384,
+    "baseline_ns": 171950352,
+    "candidate_ns": 145686705,
+    "candidate_over_baseline": 0.8472602894119112,
+    "wire_bytes": 7059,
+    "wire_sha256": "6c4dc4c93fc77d76f4fe5e1f99d19fda75836faa58236db2e5ca21a69b7643cb",
+    "dictionary_sequences": 0,
+    "hq_passes": 2,
+    "refinement_passes": 1
+  },
+  {
+    "case": "mozilla16KiB",
+    "strategy": "btopt",
+    "input_bytes": 16384,
+    "baseline_ns": 141431924,
+    "candidate_ns": 126503751,
+    "candidate_over_baseline": 0.8944497636898442,
+    "wire_bytes": 4416,
+    "wire_sha256": "ef5ca7bc6cb5a98f2e456a5866433796bd8f31f82c6e46eace177160f99ba26e",
+    "dictionary_sequences": 0,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  },
+  {
+    "case": "mozilla16KiB",
+    "strategy": "btultra2",
+    "input_bytes": 16384,
+    "baseline_ns": 662236804,
+    "candidate_ns": 593474107,
+    "candidate_over_baseline": 0.8961659989528459,
+    "wire_bytes": 4287,
+    "wire_sha256": "0f149c1deb2a8e322fe83ea67e6b8cca36e38e6952cf6232f9b1fbbffee458e3",
+    "dictionary_sequences": 0,
+    "hq_passes": 2,
+    "refinement_passes": 1
+  },
+  {
+    "case": "trained8KiB",
+    "strategy": "btopt",
+    "input_bytes": 8192,
+    "baseline_ns": 58062991,
+    "candidate_ns": 54779914,
+    "candidate_over_baseline": 0.9434566331589773,
+    "wire_bytes": 3277,
+    "wire_sha256": "2ad6ebee899bd1643108f879f6caf25d3012ffdf98227cad5deafda62f891d40",
+    "dictionary_sequences": 78,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  },
+  {
+    "case": "trained8KiB",
+    "strategy": "btultra2",
+    "input_bytes": 8192,
+    "baseline_ns": 142567051,
+    "candidate_ns": 126732472,
+    "candidate_over_baseline": 0.8889324083725348,
+    "wire_bytes": 3269,
+    "wire_sha256": "6378cf98cf3a7fe759dc25f056064b964eba08380440973862835e6e266d3f78",
+    "dictionary_sequences": 87,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  }
+]

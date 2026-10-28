@@ -1,0 +1,154 @@
+{
+  "runtime_commit": "52eccf45",
+  "runs": {
+    "debug": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_cost_tests.zig",
+        "-ODebug",
+        "--test-filter",
+        "Zstd HQ search row tag cost"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "c1293f",
+      "tests_passed": 4,
+      "observed_summary": "All 4 tests passed."
+    },
+    "releasefast": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_cost_tests.zig",
+        "-OReleaseFast",
+        "--test-filter",
+        "Zstd HQ search row tag cost"
+      ],
+      "chunk_id": "f28bce",
+      "exit_code": 0,
+      "original_token_count": 74,
+      "output": "1/4 zstd_row_tags_cost_tests.test_0...OK\n2/4 zstd.match.hq_parser.row_tags.test_0...OK\n3/4 zstd.match.hq_parser.row_tags_cost_tests.test.Zstd HQ search row tag cost gates preserve frozen ties costs and aliases...OK\n4/4 zstd.match.hq_parser.row_tags_cost_reference.test_0...OK\nAll 4 tests passed.\n",
+      "wall_time_seconds": 4.93e-07
+    },
+    "x86": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_row_tags_cost_tests.zig",
+        "-ODebug",
+        "-target",
+        "x86-linux",
+        "--test-filter",
+        "Zstd HQ search row tag cost"
+      ],
+      "chunk_id": "295381",
+      "exit_code": 0,
+      "original_token_count": 74,
+      "output": "1/4 zstd_row_tags_cost_tests.test_0...OK\n2/4 zstd.match.hq_parser.row_tags.test_0...OK\n3/4 zstd.match.hq_parser.row_tags_cost_tests.test.Zstd HQ search row tag cost gates preserve frozen ties costs and aliases...OK\n4/4 zstd.match.hq_parser.row_tags_cost_reference.test_0...OK\nAll 4 tests passed.\n",
+      "wall_time_seconds": 2.109e-06
+    },
+    "wasm": {
+      "command": [
+        "node",
+        "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/partial-score-wasi-runner.js",
+        "/tmp/vort-zstd-cost-first-current-20261029.wasm"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "45a5ba",
+      "tests_passed": 4,
+      "wasm_sha256": "a4b21bd0fdabe0027c1239fa0d6e98e2817ae5264a4a24f5918c7e3e7cb04d78",
+      "observed_summary": "All 4 tests passed."
+    },
+    "focused": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "test-zstd-hq",
+        "test-zstd-hq-search",
+        "test-zstd-parallel-incremental",
+        "--summary",
+        "all"
+      ],
+      "chunk_id": "790b65",
+      "exit_code": 0,
+      "original_token_count": 421,
+      "output": "Build Summary: 15/15 steps succeeded; 389/389 tests passed\ntest-zstd-hq success\n+- run test vort-zstd-hq-tests 147 pass (147 total) 5s MaxRSS:77M\n   +- compile test vort-zstd-hq-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:40M\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-hq-search success\n+- run test vort-zstd-hq-search-tests 81 pass (81 total) 2s MaxRSS:77M\n   +- compile test vort-zstd-hq-search-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-parallel-incremental success\n+- run test vort-zstd-incremental-parallel-tests 65 pass (65 total) 17s MaxRSS:19M\n|  +- compile test vort-zstd-incremental-parallel-tests ReleaseFast native success 56s MaxRSS:1G\n|     +- WriteFile (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n+- run test vort-zstd-incremental-parallel-root-tests 96 pass (96 total) 71ms MaxRSS:9M\n   +- compile test vort-zstd-incremental-parallel-root-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:40M\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-br-record-optimal ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n\n",
+      "wall_time_seconds": 2.121e-06
+    },
+    "hq": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-hq-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-hq-legacy-f95c3446",
+        "--output-dir",
+        "/tmp/vort-zstd-cost-first-hq-diff-20261029"
+      ],
+      "chunk_id": "a4827e",
+      "exit_code": 0,
+      "original_token_count": 30,
+      "output": "{\"status\": \"ok\", \"rows\": 52, \"baseline_rows\": 56, \"report\": \"/tmp/vort-zstd-cost-first-hq-diff-20261029/report.json\"}\n",
+      "wall_time_seconds": 1.042e-06
+    },
+    "search": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-search-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-search-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-search-legacy-97c4ad99",
+        "--output-dir",
+        "/tmp/vort-zstd-cost-first-search-diff-20261029"
+      ],
+      "chunk_id": "728789",
+      "exit_code": 0,
+      "original_token_count": 33,
+      "output": "{\"status\": \"ok\", \"rows\": 41, \"baseline_rows\": 8, \"report\": \"/tmp/vort-zstd-cost-first-search-diff-20261029/hq-search-report.json\"}\n",
+      "wall_time_seconds": 9.45e-07
+    },
+    "check": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "check",
+        "--summary",
+        "failures"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "08beea",
+      "output": ""
+    }
+  },
+  "scope": "Final integrated contract source adds only the explanatory comment and cost-contract registration to the measured kernel. Body comparison preserves original ordering and all resource/admission behavior.",
+  "final_registered_source_build_check": {
+    "command": [
+      "zig",
+      "build",
+      "-j8",
+      "check",
+      "--summary",
+      "failures"
+    ],
+    "exit_code": 0,
+    "terminal_chunk": "d8eadc",
+    "output": ""
+  }
+}

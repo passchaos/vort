@@ -1,0 +1,140 @@
+[
+  {
+    "case": "dickens",
+    "input_bytes": 4096,
+    "strategy": "btopt",
+    "baseline_ns": [
+      5724817,
+      5613711
+    ],
+    "candidate_ns": [
+      5347779,
+      5472149
+    ],
+    "paired_ratios": [
+      0.9341397288332536,
+      0.9747828130090772
+    ],
+    "median_ratio": 0.9542621405529889,
+    "wire_bytes": 2035,
+    "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+    "transitions": 126711,
+    "price_evaluations": 126711,
+    "refinement_passes": 0
+  },
+  {
+    "case": "dickens",
+    "input_bytes": 4096,
+    "strategy": "btultra2",
+    "baseline_ns": [
+      21231890,
+      20803778
+    ],
+    "candidate_ns": [
+      20156652,
+      25439956
+    ],
+    "paired_ratios": [
+      0.9493574052992927,
+      1.2228526953133225
+    ],
+    "median_ratio": 1.0847123447639753,
+    "wire_bytes": 2019,
+    "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737",
+    "transitions": 555215,
+    "price_evaluations": 555215,
+    "refinement_passes": 1
+  },
+  {
+    "case": "mozilla",
+    "input_bytes": 4096,
+    "strategy": "btopt",
+    "baseline_ns": [
+      32667024,
+      32947988
+    ],
+    "candidate_ns": [
+      29586784,
+      29639555
+    ],
+    "paired_ratios": [
+      0.9057079702148564,
+      0.8995861902098544
+    ],
+    "median_ratio": 0.9026339734571717,
+    "wire_bytes": 1191,
+    "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a",
+    "transitions": 2024165,
+    "price_evaluations": 2024165,
+    "refinement_passes": 0
+  },
+  {
+    "case": "mozilla",
+    "input_bytes": 4096,
+    "strategy": "btultra2",
+    "baseline_ns": [
+      172001750,
+      173575013
+    ],
+    "candidate_ns": [
+      155167862,
+      154998230
+    ],
+    "paired_ratios": [
+      0.9021295539144224,
+      0.8929754768331776
+    ],
+    "median_ratio": 0.8975316780775564,
+    "wire_bytes": 1155,
+    "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+    "transitions": 11399658,
+    "price_evaluations": 11399658,
+    "refinement_passes": 1
+  },
+  {
+    "case": "mr",
+    "input_bytes": 4096,
+    "strategy": "btopt",
+    "baseline_ns": [
+      8461770,
+      8470424
+    ],
+    "candidate_ns": [
+      8020184,
+      8078718
+    ],
+    "paired_ratios": [
+      0.9478139916353198,
+      0.9537560339364358
+    ],
+    "median_ratio": 0.9507865312670053,
+    "wire_bytes": 1644,
+    "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d",
+    "transitions": 285214,
+    "price_evaluations": 285214,
+    "refinement_passes": 0
+  },
+  {
+    "case": "mr",
+    "input_bytes": 4096,
+    "strategy": "btultra2",
+    "baseline_ns": [
+      33787336,
+      32368936
+    ],
+    "candidate_ns": [
+      30907691,
+      30491859
+    ],
+    "paired_ratios": [
+      0.9147714694049865,
+      0.9420099258128225
+    ],
+    "median_ratio": 0.9280986993946696,
+    "wire_bytes": 1624,
+    "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d",
+    "transitions": 1207314,
+    "price_evaluations": 1207314,
+    "refinement_passes": 1
+  }
+]

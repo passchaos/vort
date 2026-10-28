@@ -24111,3 +24111,21 @@ reuse, so production keeps the simpler independently owned plans.
   checks pass. No memory or admission reduction is claimed. Wider corpus and
   platform comparisons, edge/state materialization and all ten formats remain
   active work toward the full functionality/performance goal.
+
+- 2026-10-29: row-tag insertion now makes its original cost-first ordering
+  explicit at duplicate and selected-slot acceptance, so unequal costs avoid
+  unnecessary tie-field loads. `52eccf45` preserves complete scan/first-match,
+  sentinel, ordering, alias, shift, tag and price/admission behavior with no
+  allocation change. [Cost-first evidence](performance/zstd-cost-first.md)
+  records five 4 KiB configurations improving 4.6%-10.2% in both rounds;
+  Dickens btultra2 has an unresolved slow second call and its ratio 1.0847 is
+  retained. A separate six-configuration larger/trained round improves
+  3.8%-15.3%, preserving full wires/profiles/peaks and dictionary references
+  78/87. All 36 ordinary encodes, 72 native decodes and 36 independent libzstd
+  wire decodes pass. The small frozen cost/tie/collision/alias matrix and
+  24,576-random-step contracts pass 4/4 on native Debug/ReleaseFast, x86 Debug
+  and executed Wasm; current focused gates pass 389/389 and bidirectional
+  references 52/41. Final build and archive audits pass. A pointer-parameter
+  edge alternative remains separately archived after small/mixed gains.
+  Wider ratio/speed/memory comparisons, remaining edge/state work and the
+  complete ten-format objective continue.
