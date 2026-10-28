@@ -4,6 +4,10 @@ const rep = @import("rep.zig");
 const prices = @import("prices.zig");
 const controls = @import("../../encode/controls.zig");
 
+comptime {
+    std.debug.assert(@typeInfo(rep.Repeats).array.len == 3);
+}
+
 const default_entropy: prices.EntropyModel = .{};
 pub const Parameters = struct {
     strategy: controls.Strategy,
@@ -70,7 +74,12 @@ pub fn less(left: anytype, right: @TypeOf(left)) bool {
 pub fn insert(row: anytype, candidate: @TypeOf(row[0])) bool {
     var replace = row.len - 1;
     for (row, 0..) |old, slot| {
-        if (old.cost != std.math.maxInt(u64) and old.literal_len == candidate.literal_len and std.mem.eql(usize, &old.repeats, &candidate.repeats)) {
+        // Keep the fixed-format repeat key as three word comparisons.
+        if (old.cost != std.math.maxInt(u64) and old.literal_len == candidate.literal_len and
+            old.repeats[0] == candidate.repeats[0] and
+            old.repeats[1] == candidate.repeats[1] and
+            old.repeats[2] == candidate.repeats[2])
+        {
             if (!less(candidate, old)) return false;
             replace = slot;
             break;
@@ -81,4 +90,8 @@ pub fn insert(row: anytype, candidate: @TypeOf(row[0])) bool {
     while (replace > 0 and less(row[replace], row[replace - 1])) : (replace -= 1)
         std.mem.swap(@TypeOf(candidate), &row[replace], &row[replace - 1]);
     return true;
+}
+
+test "zstd hq state repeat keys preserve reference insertion and ordering" {
+    try @import("state_tests.zig").contracts(@This());
 }
