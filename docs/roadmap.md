@@ -11,6 +11,12 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [eight-bit raw-plane proof](performance/png-plane-raw-proof.md) keeps
+the published decision-plane heap and 120 complete PNG buffers exact.
+Adjacent-change vector counts prove raw admission without changing payloads.
+Raw internal planes gain 12x..18x; eight whole-PNG controls remain neutral
+at 0.998643x geomean. Larger DP/token/PNG/JXL frontiers remain active.
+
 The [one-shot optimal decision-plane storage](performance/png-decision-planes.md)
 codes distance and length chunks without an additional full parser pass.
 Source-bound literal markers preserve complete owned results. A 2-MiB input

@@ -48,9 +48,42 @@ fn runEnd(comptime T: type, values: []const T, start: usize) usize {
     return end;
 }
 
+// Each positive run needs at least one count byte and one value. A vector
+// count of adjacent changes can therefore prove that raw storage wins before
+// finding every run end. A sparse prefix keeps long-run planes on their
+// existing inexpensive scanner; no sampled result chooses the wire form.
+noinline fn mustUseRaw(comptime T: type, values: []const T, raw_bytes: usize) bool {
+    if (values.len < 129) return false;
+    if (values[0] == values[1] and values[0] == values[2] and values[0] == values[3]) return false;
+    const lanes = 32 / @sizeOf(T);
+    const required = raw_bytes / (1 + @sizeOf(T)) + @intFromBool(raw_bytes % (1 + @sizeOf(T)) != 0);
+    var count: usize = 1;
+    var position: usize = 0;
+    while (values.len - position > lanes) : (position += lanes) {
+        const left: @Vector(lanes, T) = values[position..][0..lanes].*;
+        const right: @Vector(lanes, T) = values[position + 1 ..][0..lanes].*;
+        count += @reduce(.Add, @select(u8, left != right, @as(@Vector(lanes, u8), @splat(1)), @as(@Vector(lanes, u8), @splat(0))));
+        if (count >= required) return true;
+        if (position + lanes == 128 and count * (1 + @sizeOf(T)) < 129 * @sizeOf(T)) return false;
+    }
+    while (position + 1 < values.len) : (position += 1) {
+        count += @intFromBool(values[position] != values[position + 1]);
+        if (count >= required) return true;
+    }
+    return false;
+}
+
 pub fn encode(comptime T: type, allocator: std.mem.Allocator, values: []const T) !Plane {
     comptime std.debug.assert(T == u8 or T == u16);
     const raw_bytes = std.math.mul(usize, values.len, @sizeOf(T)) catch return error.InvalidBlockPlan;
+    if (T == u8 and mustUseRaw(T, values, raw_bytes)) {
+        const bytes = try allocator.alloc(u8, raw_bytes);
+        if (T == u8 or endian == .little) @memcpy(bytes, std.mem.sliceAsBytes(values)) else {
+            var position: usize = 0;
+            for (values) |value| putValue(T, bytes, &position, value);
+        }
+        return .{ .bytes = bytes, .runs = false };
+    }
     var encoded_bytes: usize = 0;
     var start: usize = 0;
     while (start < values.len) {
@@ -70,6 +103,9 @@ pub fn encode(comptime T: type, allocator: std.mem.Allocator, values: []const T)
             putValue(T, bytes, &position, values[start]);
             start = end;
         }
+    } else if (T == u8) {
+        @memcpy(bytes, std.mem.sliceAsBytes(values));
+        position = bytes.len;
     } else for (values) |value| putValue(T, bytes, &position, value);
     std.debug.assert(position == bytes.len);
     return .{ .bytes = bytes, .runs = runs };
@@ -88,6 +124,10 @@ pub fn decode(comptime T: type, plane: Plane, values: []T) !void {
     if (!plane.runs) {
         const expected = std.math.mul(usize, values.len, @sizeOf(T)) catch return error.InvalidBlockPlan;
         if (plane.bytes.len != expected) return error.InvalidBlockPlan;
+        if (T == u8) {
+            @memcpy(std.mem.sliceAsBytes(values), plane.bytes);
+            return;
+        }
         for (values) |*value| value.* = try takeValue(T, plane.bytes, &position);
         return;
     }
@@ -153,6 +193,39 @@ test "optimal plane word scanning preserves every scalar tail and offset" {
                         try std.testing.expectEqual(@min(mismatch, limit), runEnd(T, values[0..limit], start));
                     }
                 }
+            }
+        }
+    }
+}
+
+test "optimal plane vector raw proof retains exact scalar run admission" {
+    inline for (.{ u8, u16 }) |T| {
+        var values: [4099]T = undefined;
+        for (0..7) |kind| {
+            for (&values, 0..) |*value, i| value.* = switch (kind) {
+                0 => 0,
+                1 => @truncate(i),
+                2 => @truncate(i / 2),
+                3 => @truncate(i / 129),
+                4 => @truncate(i *% 7919),
+                5 => if (i < 128) @truncate(i) else 0,
+                else => if (i < 128) 0 else @truncate(i),
+            };
+            for ([_]usize{ 0, 1, 2, 127, 128, 129, 255, 256, 257, 513, 4099 }) |count| {
+                var coded_bytes: usize = 0;
+                var start: usize = 0;
+                while (start < count) {
+                    var end = start + 1;
+                    while (end < count and values[end] == values[start]) end += 1;
+                    coded_bytes += varintBytes(end - start) + @sizeOf(T);
+                    start = end;
+                }
+                const raw_bytes = count * @sizeOf(T);
+                if (mustUseRaw(T, values[0..count], raw_bytes)) try std.testing.expect(coded_bytes >= raw_bytes);
+                const plane = try encode(T, std.testing.allocator, values[0..count]);
+                defer plane.deinit(std.testing.allocator);
+                try std.testing.expectEqual(coded_bytes < raw_bytes, plane.runs);
+                try std.testing.expectEqual(@min(coded_bytes, raw_bytes), plane.bytes.len);
             }
         }
     }
