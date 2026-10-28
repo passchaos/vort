@@ -1,0 +1,300 @@
+{
+  "source_revision": "bdae5ce7128e30fee20e20e16612844a818cf1ff",
+  "shared_baseline_source": "../baseline-source.tar.xz",
+  "source_file_count_verified": 1497,
+  "original_artifact_manifest": {
+    "source_snapshot_reused": "/tmp/vort-zstd-ordinary-hotspots-20261028.BqlAj1/source",
+    "source_revision": "bdae5ce7128e30fee20e20e16612844a818cf1ff",
+    "artifacts": [
+      {
+        "path": "analysis-commands.json",
+        "bytes": 1659,
+        "sha256": "1dd7258fdf3b9f1e354fba4782b48e9266fa36657eff8ae90d5eb3aeebdceed6",
+        "setup_only": false
+      },
+      {
+        "path": "compile-command.json",
+        "bytes": 694,
+        "sha256": "d3e1583b41c8d5738fa574c0d2f6c1e6ff5391c2cefe1cc1bda783152576edf0",
+        "setup_only": false
+      },
+      {
+        "path": "compile-command.txt",
+        "bytes": 582,
+        "sha256": "507a86a4ac6ae9140fc63567f07e9e81ca5f349f2cf34f0619fc42d87ec46747",
+        "setup_only": false
+      },
+      {
+        "path": "compile-terminal.json",
+        "bytes": 1042,
+        "sha256": "df4ff78dbb2fbfc49d66b8081d8172d405d8a2624b940d0d806b45c02a2c75b1",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.candidate-annotate.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.candidate-annotate.txt",
+        "bytes": 40243,
+        "sha256": "c72dc65dc30fea7d0553b2bf1f48ffb4da3c5513d1a9fc04a14566dda25e4be1",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.candidate-disassembly.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.candidate-disassembly.txt",
+        "bytes": 31693,
+        "sha256": "c811294092d5749c28d28cbcd6f21fe1a9c6fb3cff74ffb218f676e66a0d493d",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.cpu-ip-period.txt",
+        "bytes": 344096,
+        "sha256": "a4bc51c57768145bd15307eb6aca3bb54d507cf90ced1ad51c4f77c3854149db",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.ip-period.txt",
+        "bytes": 320024,
+        "sha256": "1eacfe64f725273bd0894af0a5bf5ea1ad8b599441cb3de99b4e551c958cda14",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.perf.data",
+        "bytes": 540016,
+        "sha256": "5c6c526d7ef8924750d97fcde5f18253456340d43a903d7bfb6cf61da0a06301",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.report.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.report.txt",
+        "bytes": 15871,
+        "sha256": "270539515f98f4f46fa73b38fbe05eee11098e5de6a1f68a465617b79cbe608e",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.stderr",
+        "bytes": 181,
+        "sha256": "4355ac65e5d5ac3ab3e770c5cbd3b66023f8b47962d2d2a94ab098d1ac6a725a",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.stdout",
+        "bytes": 411,
+        "sha256": "14e590b637f4cff981ba555599e7965420c1e5ab4a13aaa3efcb845c69cf482b",
+        "setup_only": false
+      },
+      {
+        "path": "dickens-btopt.zst",
+        "bytes": 2035,
+        "sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+        "setup_only": false
+      },
+      {
+        "path": "huffman-x2.o",
+        "bytes": 159864,
+        "sha256": "bf082b0c5ebe2d9d50b678244fab7a58648e45895bb49cc7e05175bf8e4f9450",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.candidate-annotate.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.candidate-annotate.txt",
+        "bytes": 40243,
+        "sha256": "fbb246168605387a4cfb0dcab75e62e4d93e2d6dbefcffddfeea414324531edd",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.candidate-disassembly.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.candidate-disassembly.txt",
+        "bytes": 31693,
+        "sha256": "c811294092d5749c28d28cbcd6f21fe1a9c6fb3cff74ffb218f676e66a0d493d",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.cpu-ip-period.txt",
+        "bytes": 450219,
+        "sha256": "86b559da04992fb2c710c1b2526c51dc6b8a394c663e4e5c570339d49db46661",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.ip-period.txt",
+        "bytes": 419169,
+        "sha256": "0ecaad21f1c7d8bc305274fd4cca3abb4b0f2b4a5a70ed2645c20fc496122ed9",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.perf.data",
+        "bytes": 706720,
+        "sha256": "5800b5d56f970423201bccfa409e34c65658871f8fc43a980d71349334eaa854",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.perf.data.failed-setup",
+        "bytes": 16280,
+        "sha256": "9744722fc48ba214ba099bba7cd6829d17254b3b649b9a677ccd5ae499553ef5",
+        "setup_only": true
+      },
+      {
+        "path": "mozilla-btultra2.report.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.report.txt",
+        "bytes": 9150,
+        "sha256": "93a67768d53d207c54a372ca42781e67faa4efe3a2894764c73ca1e4140a6763",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.stderr",
+        "bytes": 184,
+        "sha256": "0df4c18d145bfc56eabf990818f100a0d92fd2326657c9b15fd7bd6f1b408bb7",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.stderr.failed-setup",
+        "bytes": 190,
+        "sha256": "8799a47666a3eeba71ec510fa817d8891f2d8b510953918077c57cb07877acb3",
+        "setup_only": true
+      },
+      {
+        "path": "mozilla-btultra2.stdout",
+        "bytes": 412,
+        "sha256": "08865a1f5b9e3cdee2df3ebe11a27e90aa952a8eafb1396b2bd3421f49e7ed95",
+        "setup_only": false
+      },
+      {
+        "path": "mozilla-btultra2.stdout.failed-setup",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "setup_only": true
+      },
+      {
+        "path": "mozilla-btultra2.zst",
+        "bytes": 1155,
+        "sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+        "setup_only": false
+      },
+      {
+        "path": "ordinary-loop",
+        "bytes": 8359720,
+        "sha256": "f1e56b91e5efc9b16efa2072a66a52e7d5e15ee169f8b801e8556ce5fbe78043",
+        "setup_only": false
+      },
+      {
+        "path": "ordinary_loop.zig",
+        "bytes": 2806,
+        "sha256": "95c3d75a81871ecdf619d4c3f0a05993eef39de12d8f7a89073e35026f0ff86c",
+        "setup_only": false
+      },
+      {
+        "path": "record-commands.txt",
+        "bytes": 739,
+        "sha256": "d2fb204a3e27ddaa14a3cfefa325e65e0fa77eac831f6ce7c95c72d4b3ff951a",
+        "setup_only": false
+      },
+      {
+        "path": "recordings.json",
+        "bytes": 5356,
+        "sha256": "0596315c2cf64163c75c5a3cf5b1122ebf14efee32ecbe692aaa7c1b333f8760",
+        "setup_only": false
+      },
+      {
+        "path": "sample-summary.json",
+        "bytes": 7515,
+        "sha256": "52792be32bd0e8e5b9aa32e275c53e290724f1e159e511510e961bb276bbc574",
+        "setup_only": false
+      },
+      {
+        "path": "source-provenance.json",
+        "bytes": 1462,
+        "sha256": "4900d3e235520a63a9540854762af1c2e8a20372a54ddb213d62912ec5128380",
+        "setup_only": false
+      },
+      {
+        "path": "summary.md",
+        "bytes": 6051,
+        "sha256": "b2fed67b5c36caa4bce0ac459e8492f41611116bd810f4647c858657a6be6eb5",
+        "setup_only": false
+      }
+    ],
+    "cache_excluded": true
+  },
+  "archive_sha256": "c8cd80bc7624d726fff775f70a58de7e8eb8bffb5e63b2a92fecc74533ccf972",
+  "archive_member_sha256": {
+    "analysis-commands.json": "1dd7258fdf3b9f1e354fba4782b48e9266fa36657eff8ae90d5eb3aeebdceed6",
+    "artifact-manifest.json": "1dd24fe73e412d0131f89aab67706157de3684c11f83a446549f9ce149176883",
+    "compile-command.json": "d3e1583b41c8d5738fa574c0d2f6c1e6ff5391c2cefe1cc1bda783152576edf0",
+    "compile-command.txt": "507a86a4ac6ae9140fc63567f07e9e81ca5f349f2cf34f0619fc42d87ec46747",
+    "compile-terminal.json": "df4ff78dbb2fbfc49d66b8081d8172d405d8a2624b940d0d806b45c02a2c75b1",
+    "dickens-btopt.candidate-annotate.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dickens-btopt.candidate-annotate.txt": "c72dc65dc30fea7d0553b2bf1f48ffb4da3c5513d1a9fc04a14566dda25e4be1",
+    "dickens-btopt.candidate-disassembly.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dickens-btopt.candidate-disassembly.txt": "c811294092d5749c28d28cbcd6f21fe1a9c6fb3cff74ffb218f676e66a0d493d",
+    "dickens-btopt.cpu-ip-period.txt": "a4bc51c57768145bd15307eb6aca3bb54d507cf90ced1ad51c4f77c3854149db",
+    "dickens-btopt.ip-period.txt": "1eacfe64f725273bd0894af0a5bf5ea1ad8b599441cb3de99b4e551c958cda14",
+    "dickens-btopt.perf.data": "5c6c526d7ef8924750d97fcde5f18253456340d43a903d7bfb6cf61da0a06301",
+    "dickens-btopt.report.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dickens-btopt.report.txt": "270539515f98f4f46fa73b38fbe05eee11098e5de6a1f68a465617b79cbe608e",
+    "dickens-btopt.stderr": "4355ac65e5d5ac3ab3e770c5cbd3b66023f8b47962d2d2a94ab098d1ac6a725a",
+    "dickens-btopt.stdout": "14e590b637f4cff981ba555599e7965420c1e5ab4a13aaa3efcb845c69cf482b",
+    "dickens-btopt.zst": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+    "mozilla-btultra2.candidate-annotate.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mozilla-btultra2.candidate-annotate.txt": "fbb246168605387a4cfb0dcab75e62e4d93e2d6dbefcffddfeea414324531edd",
+    "mozilla-btultra2.candidate-disassembly.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mozilla-btultra2.candidate-disassembly.txt": "c811294092d5749c28d28cbcd6f21fe1a9c6fb3cff74ffb218f676e66a0d493d",
+    "mozilla-btultra2.cpu-ip-period.txt": "86b559da04992fb2c710c1b2526c51dc6b8a394c663e4e5c570339d49db46661",
+    "mozilla-btultra2.ip-period.txt": "0ecaad21f1c7d8bc305274fd4cca3abb4b0f2b4a5a70ed2645c20fc496122ed9",
+    "mozilla-btultra2.perf.data": "5800b5d56f970423201bccfa409e34c65658871f8fc43a980d71349334eaa854",
+    "mozilla-btultra2.perf.data.failed-setup": "9744722fc48ba214ba099bba7cd6829d17254b3b649b9a677ccd5ae499553ef5",
+    "mozilla-btultra2.report.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mozilla-btultra2.report.txt": "93a67768d53d207c54a372ca42781e67faa4efe3a2894764c73ca1e4140a6763",
+    "mozilla-btultra2.stderr": "0df4c18d145bfc56eabf990818f100a0d92fd2326657c9b15fd7bd6f1b408bb7",
+    "mozilla-btultra2.stderr.failed-setup": "8799a47666a3eeba71ec510fa817d8891f2d8b510953918077c57cb07877acb3",
+    "mozilla-btultra2.stdout": "08865a1f5b9e3cdee2df3ebe11a27e90aa952a8eafb1396b2bd3421f49e7ed95",
+    "mozilla-btultra2.stdout.failed-setup": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mozilla-btultra2.zst": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+    "ordinary_loop.zig": "95c3d75a81871ecdf619d4c3f0a05993eef39de12d8f7a89073e35026f0ff86c",
+    "record-commands.txt": "d2fb204a3e27ddaa14a3cfefa325e65e0fa77eac831f6ce7c95c72d4b3ff951a",
+    "recordings.json": "0596315c2cf64163c75c5a3cf5b1122ebf14efee32ecbe692aaa7c1b333f8760",
+    "sample-summary.json": "52792be32bd0e8e5b9aa32e275c53e290724f1e159e511510e961bb276bbc574",
+    "source-provenance.json": "4900d3e235520a63a9540854762af1c2e8a20372a54ddb213d62912ec5128380",
+    "summary.md": "b2fed67b5c36caa4bce0ac459e8492f41611116bd810f4647c858657a6be6eb5"
+  },
+  "parent_audit": {
+    "valid_recording_exit_codes": [
+      0,
+      0
+    ],
+    "global_period_percentages_recomputed": true,
+    "full_wire_hashes_verified": true,
+    "diagnostic_profile_calls": [
+      0,
+      0
+    ],
+    "same_baseline_source_verified": true
+  }
+}

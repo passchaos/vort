@@ -38,3 +38,10 @@ driver contains the two-round balancing order and comparison logic.
 Compiled runner binaries and caches are excluded from these archives; their
 actual SHA-256 identities remain recorded. This package preserves a negative
 decision and does not claim portable speedup or upstream performance parity.
+
+The `ordinary-hotspots` subdirectory records the subsequent ordinary-only
+sampling, with its own runner, build/record terminal statuses, raw perf data,
+instruction exports and manifests. It shares this directory's baseline and
+inputs; frame-pointer flags distinguish its binary from the timing screens.
+Its `audit.py` verifies both recordings and recomputes the global instruction
+shares from archived raw periods, including their CPU assignments.

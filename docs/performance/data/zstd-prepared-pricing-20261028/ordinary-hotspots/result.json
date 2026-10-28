@@ -1,0 +1,294 @@
+[
+  {
+    "label": "mozilla-btultra2",
+    "sample_count": 5175,
+    "total_period": 2588793750,
+    "top10": [
+      {
+        "symbol": "zstd.match.hq_parser.state.insert__anon_203607",
+        "global_pct": 64.07729468599034
+      },
+      {
+        "symbol": "zstd.match.hq_parser.search_edges.Context(false,false).candidate",
+        "global_pct": 28.579710144927535
+      },
+      {
+        "symbol": "zstd.match.hq_parser.resources.matchLength",
+        "global_pct": 1.6618357487922706
+      },
+      {
+        "symbol": "zstd.match.hq_parser.prices.EntropyModel.sequencePrice",
+        "global_pct": 1.5845410628019323
+      },
+      {
+        "symbol": "zstd.match.hq_parser.dp.plan__anon_203099",
+        "global_pct": 1.2560386473429952
+      },
+      {
+        "symbol": "zstd.match.hq_parser.rep.choices",
+        "global_pct": 1.0821256038647342
+      },
+      {
+        "symbol": "zstd.match.hq_parser.search_edges.Context(false,false).extend",
+        "global_pct": 0.7342995169082126
+      },
+      {
+        "symbol": "zstd.match.hq_tree.OwnedMatcher.process",
+        "global_pct": 0.4444444444444444
+      },
+      {
+        "symbol": "zstd.match.hq_tree.OwnedMatcher.extend",
+        "global_pct": 0.4057971014492754
+      },
+      {
+        "symbol": "compiler_rt.memset",
+        "global_pct": 0.0966183574879227
+      }
+    ],
+    "address_ranges": {
+      "ml_range_loop_control_lower_gate": {
+        "begin": "0x1124eeb",
+        "end_exclusive": "0x1124f1e",
+        "global_pct": 2.6473429951690823,
+        "samples": 137
+      },
+      "ml_range_loop_strategy_upper_gate": {
+        "begin": "0x1125075",
+        "end_exclusive": "0x11250ae",
+        "global_pct": 6.086956521739131,
+        "samples": 315
+      },
+      "ml_range_loop_setup": {
+        "begin": "0x1124e50",
+        "end_exclusive": "0x1124e6b",
+        "global_pct": 0.30917874396135264,
+        "samples": 16
+      },
+      "short_length_loop_budget": {
+        "begin": "0x1124b84",
+        "end_exclusive": "0x1124bc5",
+        "global_pct": 2.570048309178744,
+        "samples": 133
+      },
+      "short_length_loop_profile_null_check": {
+        "begin": "0x1124bc5",
+        "end_exclusive": "0x1124bce",
+        "global_pct": 0.30917874396135264,
+        "samples": 16
+      }
+    },
+    "candidate_top_ips": [
+      {
+        "ip": "0x1124eeb",
+        "global_pct": 1.391304347826087
+      },
+      {
+        "ip": "0x1125094",
+        "global_pct": 1.391304347826087
+      },
+      {
+        "ip": "0x1125075",
+        "global_pct": 1.2753623188405796
+      },
+      {
+        "ip": "0x1124b8f",
+        "global_pct": 1.1207729468599035
+      },
+      {
+        "ip": "0x1124b7d",
+        "global_pct": 1.0628019323671498
+      },
+      {
+        "ip": "0x1125089",
+        "global_pct": 1.0628019323671498
+      },
+      {
+        "ip": "0x1124bbb",
+        "global_pct": 1.0241545893719808
+      },
+      {
+        "ip": "0x1125084",
+        "global_pct": 0.8309178743961353
+      },
+      {
+        "ip": "0x1124dc8",
+        "global_pct": 0.7922705314009661
+      },
+      {
+        "ip": "0x1124dc4",
+        "global_pct": 0.7342995169082126
+      },
+      {
+        "ip": "0x1125091",
+        "global_pct": 0.5990338164251208
+      },
+      {
+        "ip": "0x1124ccf",
+        "global_pct": 0.5410628019323671
+      },
+      {
+        "ip": "0x1124ca0",
+        "global_pct": 0.5410628019323671
+      },
+      {
+        "ip": "0x1124efc",
+        "global_pct": 0.5217391304347826
+      },
+      {
+        "ip": "0x1124cb9",
+        "global_pct": 0.5024154589371981
+      }
+    ],
+    "sample_cpu_counts": {
+      "[002]": 5175
+    },
+    "ml_enumeration_control_global_pct": 8.734299516908212,
+    "ml_enumeration_control_samples": 452
+  },
+  {
+    "label": "dickens-btopt",
+    "sample_count": 4012,
+    "total_period": 2007003000,
+    "top10": [
+      {
+        "symbol": "zstd.match.hq_parser.state.insert__anon_203607",
+        "global_pct": 39.13260219341974
+      },
+      {
+        "symbol": "zstd.match.hq_parser.search_edges.Context(false,false).candidate",
+        "global_pct": 30.533399800598204
+      },
+      {
+        "symbol": "zstd.match.hq_parser.resources.matchLength",
+        "global_pct": 9.022931206380857
+      },
+      {
+        "symbol": "zstd.match.hq_parser.dp.plan__anon_203099",
+        "global_pct": 7.577268195413759
+      },
+      {
+        "symbol": "zstd.match.hq_parser.rep.choices",
+        "global_pct": 2.8913260219341974
+      },
+      {
+        "symbol": "zstd.match.hq_tree.OwnedMatcher.process",
+        "global_pct": 2.0438683948155534
+      },
+      {
+        "symbol": "compiler_rt.memset",
+        "global_pct": 1.8943170488534398
+      },
+      {
+        "symbol": "zstd.match.hq_parser.prices.EntropyModel.sequencePrice",
+        "global_pct": 1.744765702891326
+      },
+      {
+        "symbol": "zstd.match.hq_parser.search_edges.Context(false,false).extend",
+        "global_pct": 1.6699900299102692
+      },
+      {
+        "symbol": "zstd.match.hq_tree.OwnedMatcher.extend",
+        "global_pct": 0.8225324027916251
+      }
+    ],
+    "address_ranges": {
+      "ml_range_loop_control_lower_gate": {
+        "begin": "0x1124eeb",
+        "end_exclusive": "0x1124f1e",
+        "global_pct": 9.596211365902294,
+        "samples": 385
+      },
+      "ml_range_loop_strategy_upper_gate": {
+        "begin": "0x1125075",
+        "end_exclusive": "0x11250ae",
+        "global_pct": 6.530408773678963,
+        "samples": 262
+      },
+      "ml_range_loop_setup": {
+        "begin": "0x1124e50",
+        "end_exclusive": "0x1124e6b",
+        "global_pct": 0.6729810568295115,
+        "samples": 27
+      },
+      "short_length_loop_budget": {
+        "begin": "0x1124b84",
+        "end_exclusive": "0x1124bc5",
+        "global_pct": 1.0967098703888336,
+        "samples": 44
+      },
+      "short_length_loop_profile_null_check": {
+        "begin": "0x1124bc5",
+        "end_exclusive": "0x1124bce",
+        "global_pct": 0.09970089730807577,
+        "samples": 4
+      }
+    },
+    "candidate_top_ips": [
+      {
+        "ip": "0x1124eeb",
+        "global_pct": 4.087736789631107
+      },
+      {
+        "ip": "0x1124f11",
+        "global_pct": 3.3399800598205385
+      },
+      {
+        "ip": "0x112507c",
+        "global_pct": 2.7916251246261217
+      },
+      {
+        "ip": "0x1125075",
+        "global_pct": 2.168494516450648
+      },
+      {
+        "ip": "0x1124efc",
+        "global_pct": 2.1186440677966103
+      },
+      {
+        "ip": "0x112507a",
+        "global_pct": 1.5702891326021935
+      },
+      {
+        "ip": "0x1124ae3",
+        "global_pct": 0.6979062811565304
+      },
+      {
+        "ip": "0x1124e54",
+        "global_pct": 0.4985044865403789
+      },
+      {
+        "ip": "0x1124b8f",
+        "global_pct": 0.3988035892323031
+      },
+      {
+        "ip": "0x1124b7d",
+        "global_pct": 0.3988035892323031
+      },
+      {
+        "ip": "0x11249e0",
+        "global_pct": 0.37387836490528414
+      },
+      {
+        "ip": "0x1124dc8",
+        "global_pct": 0.3489531405782652
+      },
+      {
+        "ip": "0x11251a8",
+        "global_pct": 0.29910269192422734
+      },
+      {
+        "ip": "0x1124bbb",
+        "global_pct": 0.29910269192422734
+      },
+      {
+        "ip": "0x11251b4",
+        "global_pct": 0.2741774675972084
+      }
+    ],
+    "sample_cpu_counts": {
+      "[002]": 4012
+    },
+    "ml_enumeration_control_global_pct": 16.126620139581256,
+    "ml_enumeration_control_samples": 647
+  }
+]

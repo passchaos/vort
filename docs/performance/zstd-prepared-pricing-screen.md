@@ -83,3 +83,36 @@ Next sample ordinary HQ encoding again and choose a different measured source
 of work before changing more pricing or row-insertion control flow. Continue
 matched competitor, corpus and dictionary coverage as well. The full
 deflate/zstd/brotli/lz4/xz/zip/rar/tar/bzip2/snappy goal remains active.
+
+## Ordinary-only follow-up sampling
+
+A separate runner subsequently calls ordinary encoding with
+`control_profile=null` throughout, making zero diagnostic encodes. The earlier
+process runner would mix ordinary and diagnostic work under whole-process
+sampling. The new source and binary, all original commands, raw perf data,
+instruction reports and IP/period exports are preserved in the
+[sampling evidence](data/zstd-prepared-pricing-20261028/ordinary-hotspots/).
+It reuses the same baseline source and inputs. LLVM ReleaseFast/Skylake now
+retains frame pointers for `cpu-clock:u` sampling at 1999 Hz on CPU 2.
+
+One recording runs Mozilla 4 KiB btultra2 eight times, completing its loop in
+2.601 seconds with 5175 samples. Another runs Dickens 4 KiB btopt 256 times,
+completing in 2.118 seconds with 4012 samples. Both return exit code zero,
+retain identical repeated wires and pass native decode; no samples are lost.
+The loop includes allocation/free and wire comparisons. Input setup and final
+decode/hash/write are outside the loop but inside the sampled process.
+
+Global self shares for `state.insert` are 64.08%/39.13%; `candidate` accounts
+for 28.58%/30.53%. Within the latter, ML-range loop/lower-condition instructions
+at `[0x1124eeb,0x1124f1e)` and strategy/upper-condition instructions at
+`[0x1125075,0x11250ae)` account for a combined 8.73%/16.13% of all sampled
+periods. These ranges exclude admitted pricing and insertion. The parent
+independently recomputes those global percentages from raw IP/period exports;
+the local percentages printed by `perf annotate` are not used as global shares.
+
+This supports screening a tail stop once a monotonic ML lower bound reaches
+the maximum candidate length. The measured ranges contain both useful and
+unsuccessful checks, so their shares are not a predicted speedup. Sampling
+skid, frame-pointer code generation, two inputs and background scheduling
+limit generalization. One initial input-setup failure is retained separately
+as `*.failed-setup`; it occurs before encoding and contributes no valid samples.
