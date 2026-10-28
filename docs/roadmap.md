@@ -11,6 +11,13 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [bounded reverse-parser index work](performance/png-window-index.md)
+preserves 120 complete PNG pairs and 720 independent original-pixel checks.
+Level-8/9 requested-heap peaks decrease about 34.7% by geomean. The sixty-case
+CPU matrix gives 1.025239x geomean and 1.058915x aggregate throughput, retaining
+twenty-four regressions and the 0.141777x image-png aggregate ratio. Eight exact
+RSS pairs confirm a 4K RGB/Adaptive drop from 329,252,864 to 131,596,288 bytes.
+
 The [compact one-shot optimal decisions](performance/png-compact-decisions.md)
 milestone preserves 120 complete PNG pairs and 720 independent pixel checks
 while reducing level-8/9 requested-heap peaks by 24.4% geomean. A finite 768-KiB
