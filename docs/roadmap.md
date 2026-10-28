@@ -15,8 +15,10 @@ The [compact one-shot optimal decisions](performance/png-compact-decisions.md)
 milestone preserves 120 complete PNG pairs and 720 independent pixel checks
 while reducing level-8/9 requested-heap peaks by 24.4% geomean. A finite 768-KiB
 allocator now succeeds for the retained all-literal contract. Full predecessor
-and rank storage still scales with input, and complete CPU measurement remains
-in progress. Builds use one job and explicit process address-space limits.
+and rank storage still scales with input. The frozen 60-case CPU matrix gives
+1.013350x geomean and 1.005146x aggregate throughput, retaining eighteen small
+regressions and the 0.133830x image-png aggregate ratio. Builds use one job and
+explicit process address-space limits.
 
 The [general Brotli Large Window milestone](performance/brotli-general-large-window-functional-baseline.md)
 extends explicit format selection to q0...q11, legacy and stored frontends,

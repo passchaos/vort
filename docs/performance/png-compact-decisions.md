@@ -40,6 +40,9 @@ zig test src/lz77.zig -target powerpc64-linux -OReleaseFast -fno-emit-bin --test
 ```
 
 Full predecessor/rank arrays and the returned tokens still scale with input
-length. This change establishes a measured memory improvement. The separate
-60-case complete-encoder CPU matrix is running; throughput leadership and
-whole-format compression/resource leadership remain open.
+length. The complete 60-case three-round CPU matrix on frozen `a784417` gives
+1.013350x geomean and 1.005146x aggregate throughput, minimum 0.987077x;
+all eighteen regressions remain in the imx evidence. Native aggregate changes
+from 3.47 to 3.49 MiB/s versus image-png's 26.08 MiB/s (0.133830x). Successful
+guarded execution records a 410,345,472-byte process-family RSS peak and zero
+swaps. Throughput and whole-format compression/resource leadership remain open.
