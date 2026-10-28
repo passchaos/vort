@@ -11,6 +11,13 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [AArch64 NEON Adler kernel](performance/png-adler-neon.md) preserves
+strict validation and all 120 PNG buffers/allocation records while increasing
+fifteen-case strict decode throughput by 1.159922x geomean and 1.129142x
+aggregate. No-Adler controls remain effectively neutral. Target-disabled,
+x86 and big-endian fallbacks are covered separately; the fast path remains
+allocation-free. Remaining per-fixture PNG and broad JXL frontiers stay open.
+
 The [source-bound token runs](performance/png-token-runs.md) preserve the
 complete public token result while coalescing temporary literals. A 1-MiB
 all-literal plan fits a 7.5-MiB fixed allocator budget where frozen code fails.

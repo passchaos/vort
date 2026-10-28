@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 /// This is zlib's NMAX bound for keeping the scalar recurrence within u32.
 pub const nmax: usize = 5_552;
 pub const modulus: u32 = 65_521;
+const aarch64 = @import("adler/aarch64.zig").Kernel(nmax, modulus);
 
 const portable_vector_len: usize = 64;
 const PortableBytes = @Vector(portable_vector_len, u8);
@@ -45,15 +46,16 @@ const avx2_halfword_ones: Avx2HalfWords = @splat(1);
 pub const Backend = enum {
     portable,
     avx2,
+    neon,
 };
 
 /// Report the implementation compiled for this target.
 ///
-/// Vort keeps the portable vector kernel as the semantic fallback. The AVX2
-/// path is selected only when the target feature set guarantees that its small
-/// inline-assembly primitives are legal; there is no unchecked runtime jump.
+/// Vort keeps the portable vector kernel as the semantic fallback. AVX2 and
+/// AArch64 NEON are selected only when guaranteed by the target feature set.
 pub fn bestBackend() Backend {
     if (comptime hasAvx2()) return .avx2;
+    if (comptime hasNeon()) return .neon;
     return .portable;
 }
 
@@ -62,6 +64,10 @@ fn hasAvx2() bool {
         .x86, .x86_64 => std.Target.x86.featureSetHas(builtin.cpu.features, .avx2),
         else => false,
     };
+}
+
+fn hasNeon() bool {
+    return @import("adler/aarch64.zig").supported();
 }
 
 /// Streaming Adler-32 state compatible with zlib's checksum definition.
@@ -76,6 +82,11 @@ pub const Adler32 = struct {
     pub fn update(self: *Adler32, input: []const u8) void {
         if (comptime hasAvx2()) {
             updateAvx2(&self.a, &self.b, input);
+        } else if (comptime hasNeon()) {
+            if (input.len < aarch64.block_len)
+                updatePortable(&self.a, &self.b, input)
+            else
+                aarch64.update(&self.a, &self.b, input);
         } else {
             updatePortable(&self.a, &self.b, input);
         }

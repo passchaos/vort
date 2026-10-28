@@ -1098,6 +1098,7 @@ zig build -Doptimize=ReleaseFast run-native-parallel-multi-corpus-full-dashboard
 const vort = @import("vort");
 
 const adler = vort.adler32("payload");
+// vort.bestAdler32Backend() reports portable, avx2, or target-guaranteed AArch64 neon.
 const crc = vort.crc32("payload");
 const encoded = try vort.storeEncodeAlloc(allocator, "payload");
 defer allocator.free(encoded);
