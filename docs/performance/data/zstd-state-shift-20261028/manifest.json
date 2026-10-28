@@ -51,9 +51,9 @@
       "sha256": "2e805cf1005d5b0da317e8d8677ba01f240d2d631cf293f1ff0ca59f78e94719"
     },
     {
-      "bytes": 524,
-      "path": "source.diff",
-      "sha256": "a1dd0dc134cdbc2582eceea9a4669e22a167bf64b0417b9431f5a22e1cb1b2f1"
+      "bytes": 296,
+      "path": "source.diff.xz",
+      "sha256": "770c12327ee0da5e2d451d4764dc9d2930e5faa693376ad820c6088f612f89d1"
     }
   ],
   "mutable_files": [
