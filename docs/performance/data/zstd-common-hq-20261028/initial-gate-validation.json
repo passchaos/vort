@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28 14:59:37 UTC",
+  "cwd": "/home/passchaos/project-z/vort",
+  "source_sha256": {
+    "tools/zstd/common_hq_bench_smoke.py": "68080414c29ceea7202002c569b494b1318cc13f614005a71706e08b03308c53",
+    "tools/codec_bench/zstd_common_parameters_smoke.py": "f87831df8bff3b35dd9e2cdfbf5b98fdcc4cd533fa62acebb3347fa9e8af37de"
+  },
+  "runs": [
+    {
+      "command": "python3 tools/zstd/common_hq_bench_smoke.py .zig-cache/o/fa2141b0160d67e934f570ae5782898f/vort-zstd-encode-bench --libzstd /home/passchaos/Work/zstd/lib/libzstd.so.1.6.0 --output-dir /tmp/vort-zstd-common-hq-gate-20261028",
+      "library_version": "1.6.0",
+      "session_id": 30615,
+      "exit_code": 0,
+      "observed_output": "zstd_common_hq_bench_smoke={\"cli_rejections\": 18, \"commands\": 14, \"dictionary_references\": 6, \"evidence_rejections\": 33, \"rows\": 22, \"status\": \"ok\"}\n"
+    },
+    {
+      "command": "python3 tools/zstd/common_hq_bench_smoke.py .zig-cache/o/fa2141b0160d67e934f570ae5782898f/vort-zstd-encode-bench --libzstd /lib/x86_64-linux-gnu/libzstd.so.1 --output-dir /tmp/vort-zstd-common-hq-system-gate-20261028",
+      "library_version": "1.4.8",
+      "session_id": 79893,
+      "exit_code": 0,
+      "observed_output": "zstd_common_hq_bench_smoke={\"cli_rejections\": 18, \"commands\": 14, \"dictionary_references\": 6, \"evidence_rejections\": 33, \"rows\": 22, \"status\": \"ok\"}\n"
+    },
+    {
+      "command": "python3 tools/codec_bench/zstd_common_parameters_smoke.py --samples-json /tmp/vort-zstd-common-hq-gate-20261028/plain-btopt-15-False.json --manifest /tmp/vort-zstd-common-hq-gate-20261028/plain-btopt-15-False.manifest.json --csv /tmp/vort-zstd-common-hq-gate-20261028/plain-btopt-15-False.csv",
+      "exit_code": 0,
+      "observed_output": "zstd_common_parameters_smoke=ok invalid=33\n"
+    }
+  ],
+  "notes": [
+    "Each accepted case runs one iteration and two alternating rounds on frozen 512..2048 byte files.",
+    "Requested reference controls and nominal search budgets only; hash/chain zero remain default sentinels.",
+    "Decoding and untimed profile/wire equality checks are performed by the benchmark executable.",
+    "No parent source files were edited."
+  ]
+}

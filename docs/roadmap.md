@@ -24019,3 +24019,31 @@ reuse, so production keeps the simpler independently owned plans.
   decodes pass; actual dictionary references remain 78/87. Expand matched
   competitor/corpus/platform measurement and recheck remaining insertion and
   repeat-match costs. The complete ten-format goal remains active.
+
+- 2026-10-28: HQ row insertion now holds the candidate while moving each
+  predecessor right once, preserving frozen swap-based insertion for arbitrary
+  rows, sentinels, duplicate/tie fields and aliased row-element arguments.
+  `e29650ca` passes the 12,288-step old oracle plus new movement contracts in
+  native Debug/ReleaseFast, x86 Debug and actual Wasm (4/4 each), 369 focused
+  HQ/search/incremental tests and 52 HQ/41 search bidirectional reference groups.
+  [Shift evidence](performance/zstd-state-shift.md) records two ordinary real
+  4 KiB rounds: Dickens/MR improve 10.2%-23.2%; Mozilla remains near parity
+  with a mixed btultra2 round. Exact wires/profiles, compiler output and an
+  independent 24-wire libzstd decode audit remain frozen. No added memory or
+  reduced search/price admission is used; the full ten-format goal continues.
+
+- 2026-10-28: the encode benchmark now has an explicit common-HQ reference
+  mode, with ordinary allocating APIs, matching requested strategy/window/
+  checksum/content-size, nominal search budget, zero workers, raw/full
+  dictionaries and separate diagnostics. Library getter values remain labeled
+  requested; unspecified hash/chain settings retain default sentinels.
+  `50e709ce` plus level-zero fix `a66c067d` preserve the old preset benchmark
+  and split options/pair ownership into small modules. Both libzstd 1.6.0 and
+  1.4.8 pass 14 parameter, five legacy-wire and eight dictionary cases;
+  final benchmark gates each pass 15 commands/24 rows, 25 CLI rejections and
+  parameter/dictionary/normalization negative evidence checks. The broader
+  build check completes with exit zero. [Common-HQ evidence](performance/zstd-common-hq-reference.md)
+  records 14 real 4/16 KiB/trained configurations at size ratios 0.9631-1.0127
+  but time ratios 27.69-490.11 against local 1.6.0. This substantial HQ work
+  gap remains open; prioritize repeated state-key scans and transition cost,
+  wider full-file/platform/memory comparisons and all ten requested formats.

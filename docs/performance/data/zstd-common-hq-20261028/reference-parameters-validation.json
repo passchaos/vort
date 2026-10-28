@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28 14:42:52 UTC",
+  "working_directory": "/home/passchaos/project-z/vort",
+  "zig_version": "0.16.0",
+  "compile": {
+    "command": "zig build-exe -ODebug -lc /tmp/vort-reference-parameters-huffman-x2.o --dep vort_zstd -Mroot=tools/zstd/reference_parameters_probe.zig -ODebug -Mvort_zstd=src/zstd.zig -femit-bin=/tmp/vort-reference-parameters-probe",
+    "session_id": 59223,
+    "exit_code": 0,
+    "observed_output": ""
+  },
+  "support_object": {
+    "command": "zig build-obj src/zstd_huffman_x2_object.zig -OReleaseFast -femit-bin=/tmp/vort-reference-parameters-huffman-x2.o",
+    "exit_code": 0,
+    "observed_output": ""
+  },
+  "run": {
+    "command": "/tmp/vort-reference-parameters-probe /home/passchaos/Work/zstd/lib/libzstd.so.1.6.0 /lib/x86_64-linux-gnu/libzstd.so.1",
+    "session_id": 39823,
+    "exit_code": 0,
+    "observed_output": "library=/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0 version=1.6.0 parameter_cases=14 legacy_cases=5 dictionary_cases=8 status=ok\nlibrary=/lib/x86_64-linux-gnu/libzstd.so.1 version=1.4.8 parameter_cases=14 legacy_cases=5 dictionary_cases=8 status=ok\n"
+  },
+  "fmt": {
+    "command": "zig fmt --check tools/zstd/libzstd_runtime.zig tools/zstd/reference_parameters.zig tools/zstd/reference_parameters_tests.zig tools/zstd/reference_dictionary_tests.zig tools/zstd/reference_parameters_probe.zig",
+    "exit_code": 0,
+    "observed_output": ""
+  },
+  "diff_check": {
+    "command": "git diff --check -- tools/zstd/libzstd_runtime.zig",
+    "exit_code": 0,
+    "observed_output": ""
+  },
+  "source_sha256": {
+    "tools/zstd/libzstd_runtime.zig": "3717dfa83308dfadc98ef9015bd12eccf7cab50f411617f34ef53e76e6220a2c",
+    "tools/zstd/reference_parameters.zig": "cc3423554e0ba67706eac57666668cf713c2c5c22c6ebdc3a5e97a144e3504c9",
+    "tools/zstd/reference_parameters_tests.zig": "c894ad14f23b3c995e6353b546bb13ee673fb87f5cd235b79920814bfac3beaf",
+    "tools/zstd/reference_dictionary_tests.zig": "8040c42088f98ad384b053eda44bd015a7362aebad8470babb46d30efe02fee0",
+    "tools/zstd/reference_parameters_probe.zig": "40620ff76ba2429b6c45cb575f995be411bdbd2b1fee277b3495b6ca22d80bad"
+  },
+  "notes": [
+    "No throughput measurements or broad checks were run.",
+    "Requested diagnostics preserve default sentinels and report dict_id as ZSTD_c_dictIDFlag.",
+    "Main source owned by the parent and other workers was not edited."
+  ]
+}
