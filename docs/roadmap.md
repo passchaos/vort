@@ -24129,3 +24129,23 @@ reuse, so production keeps the simpler independently owned plans.
   edge alternative remains separately archived after small/mixed gains.
   Wider ratio/speed/memory comparisons, remaining edge/state work and the
   complete ten-format objective continue.
+
+- 2026-10-29: sampled ML-range endpoints now reuse their already-enumerated
+  symbol index for exact sequence pricing in `8819c178`. Maximum-first, short
+  exhaustive and complete-mode prices retain the original classifier; every
+  candidate, duplicate, offset selector and price admission stays in order,
+  including upper66/code39 under a higher private minimum. The new inline
+  helper verifies its private range in Debug and adds no storage. Frozen scalar
+  prices across seven valid models and full edge/tag/quota/error comparisons
+  pass native Debug/ReleaseFast/x86/Wasm 7/7; current gates pass 395/395, ZIP
+  81/81, and bidirectional references 52/41. [Known-ML evidence](performance/zstd-known-ml.md)
+  records three btopt 4 KiB configurations improving about 1%-3% in both rounds,
+  while ultra aggregates have slow baseline calls and are not claimed as large
+  gains. The first larger matrix has direct CPU-2 compiler overlap and is
+  excluded from stable timing claims. A separate two-round follow-up supports
+  modest btopt/dictionary-ultra improvements; incomplete affinity isolation
+  is explicitly corrected in the evidence. All 60 ordinary/120 native decodes,
+  complete profiles and heap peaks agree, and 60 independent libzstd wire
+  decodes pass. Final build and archive checks succeed. Wider clean-host/full-
+  file ratio/speed/memory evidence, edge/state costs and all ten formats remain
+  active work toward the full objective.

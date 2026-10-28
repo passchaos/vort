@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "cwd": "/tmp/vort-zstd-known-ml-contracts-20261029-MH27Uu",
+  "baseline_commit": "e654641d6ab248ac6147564aaeada986aa429af9",
+  "prototype": "/tmp/vort-zstd-known-ml-screen-20261029.76e_rswe/candidate/src",
+  "source_hashes": "source_hashes.json",
+  "runs": [
+    {
+      "command": "zig test src/zstd_known_ml_tests.zig -ODebug --test-filter 'Zstd HQ search known ML'",
+      "session_id": 76896,
+      "exit_code": 0,
+      "passed": 7,
+      "total": 7,
+      "observed_terminal_output": "All 7 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_known_ml_tests.zig -OReleaseFast --test-filter 'Zstd HQ search known ML'",
+      "session_id": 78282,
+      "exit_code": 0,
+      "passed": 7,
+      "total": 7,
+      "observed_terminal_output": "All 7 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_known_ml_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ search known ML'",
+      "session_id": 29277,
+      "exit_code": 0,
+      "passed": 7,
+      "total": 7,
+      "observed_terminal_output": "All 7 tests passed.\n"
+    }
+  ],
+  "fmt": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/known_ml_tests src/zstd/match/hq_parser/known_ml_tests.zig src/zstd/match/hq_parser/row_tags_tests/edges/helpers.zig src/zstd_known_ml_tests.zig",
+    "exit_code": 0
+  },
+  "oracle": {
+    "prices_sha256": "9e1b1f24540395e8a915dd5113cb7fad43fc8fd3d78d3e19e7e22758356c0509",
+    "edges_sha256": "7fb7fc7a08172ba2166d4a970051870a45401cb3bfea4830f45fd62fa2c601fb",
+    "notes": "Both files copied exactly from current baseline; no mirrored known-symbol implementation. Primitive models copied field-for-field into frozen model type."
+  },
+  "coverage": [
+    "All LL lower/upper endpoints crossed with all ML lower/upper endpoints and repeat/direct offset values through maxu32; frozen scalar sequencePrice equality.",
+    "Seven valid models: predefined, dictionary, previous block, refined, fractional penalized, zero prices and maximum legal prices; btopt long-offset penalties.",
+    "All known-match arguments are valid by independent frozen matchSymbol proof; invalid LL and OF0 return behavior, 66/code39, maximum safe71424u32 cost bound.",
+    "Frozen complete node/tag tables, Spill, full profiles, budget admissions, errors and quota prefixes; both Node layouts, widths1/8/16; sampled/complete; tagged/fallback.",
+    "High-minimum existing subminimum behavior, max/min and ML boundaries, invalid longest length/zeroquota error precedence, cost/spill overflow, aliases and saturated counters.",
+    "No per-choice LL/OF preparation or caching; only known sampled tail ML classification is specialized."
+  ],
+  "notes": [
+    "Only temporary snapshot edited; no main/prototype changes, no ordinary timings.",
+    "Existing generic edge helper reused with optional Reference/force_tags/model settings preserving defaults.",
+    "Wasm bridge prepared; parent owns execution after adoption."
+  ]
+}
