@@ -134,11 +134,12 @@ test "Zstd HQ storage whole block 128 KiB preflight counts actual workspace and 
             const layout = try resources.nodeLayout(input.len, dp.beamWidth(strategy), true);
             const result_bytes = input.len / parameters.hq_options.min_match * (@sizeOf(state.Record) + @sizeOf(u32));
             try std.testing.expectEqual(result_bytes, try resources.resultBytes(source, parameters.hq_options.min_match));
-            try std.testing.expectEqual(layout.bytes + result_bytes, try dp.ownWorkingBytes(source, parameters));
+            const tag_bytes = layout.row_count * @sizeOf(@import("row_tags.zig").Tags);
+            try std.testing.expectEqual(layout.bytes + result_bytes + tag_bytes, try dp.ownWorkingBytes(source, parameters));
             const matcher_bytes = try tree.Matcher.requiredWorkingMemory(source, parameters.hq_options);
             const retained_result = if (strategy == .btultra2 and history.len == 0) result_bytes else 0;
             const required = try hq.requiredWorkingMemory(source, parameters);
-            try std.testing.expectEqual(layout.bytes + result_bytes + matcher_bytes + retained_result, required);
+            try std.testing.expectEqual(layout.bytes + result_bytes + tag_bytes + matcher_bytes + retained_result, required);
             parameters.hq_options.max_working_memory = required - 1;
             var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
             try std.testing.expectError(error.WorkingMemoryLimitExceeded, hq.planAlloc(failing.allocator(), source, parameters));

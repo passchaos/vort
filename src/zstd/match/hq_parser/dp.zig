@@ -5,6 +5,7 @@ const rep = @import("rep.zig");
 const resources = @import("resources.zig");
 const edges = @import("search_edges.zig");
 const extension = @import("extension.zig");
+const row_tags = @import("row_tags.zig");
 const PriceBudget = @import("price_budget.zig").PriceBudget;
 
 pub fn beamWidth(strategy: @import("../../encode/controls.zig").Strategy) usize {
@@ -15,6 +16,7 @@ pub fn ownWorkingBytes(source: source_mod.Source, parameters: state.Parameters) 
     const whole = parameters.hq_options.parse_mode == .whole_block;
     const layout = try resources.nodeLayout(source.block.len, beamWidth(parameters.strategy), whole);
     var bytes = try resources.add(try resources.resultBytes(source, parameters.hq_options.min_match), layout.bytes);
+    bytes = try resources.add(bytes, try resources.multiply(layout.row_count, @sizeOf(row_tags.Tags)));
     if (!whole and parameters.hq_options.match_lengths == .complete) {
         bytes = try resources.add(bytes, try resources.multiply(try resources.add(source.block.len, 1), @sizeOf(u64)));
         bytes = try resources.add(bytes, @sizeOf(edges.Spill));
@@ -63,6 +65,8 @@ fn planMode(comptime whole: bool, comptime complete: bool, allocator: std.mem.Al
         for (source.block, 0..) |byte, position|
             prefix[position + 1] = std.math.add(u64, prefix[position], parameters.entropy.literal_prices[byte]) catch return error.IntegerOverflow;
     }
+    const tag_rows = try allocator.alloc(row_tags.Tags, layout.row_count);
+    defer allocator.free(tag_rows);
     const spill: ?*edges.Spill = if (!whole and complete) try allocator.create(edges.Spill) else null;
     defer if (spill) |pointer| allocator.destroy(pointer);
     var matcher_options = parameters.hq_options;
@@ -77,8 +81,10 @@ fn planMode(comptime whole: bool, comptime complete: bool, allocator: std.mem.Al
         const goal = if (whole) source.block.len else @min(state.horizon, source.block.len - base);
         @memset(nodes[0 .. (goal + 1) * width], .{});
         nodes[0] = .{ .cost = 0, .repeats = repeats, .literal_len = @intCast(pending_literals) };
+        @memset(tag_rows[0 .. goal + 1], @splat(row_tags.key(@as(Node, .{}))));
+        tag_rows[0] = row_tags.init(nodes[0..width]);
         if (spill) |pointer| pointer.* = .{};
-        var context: edges.Context(whole, complete) = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .parameters = parameters, .price_budget = &price_budget, .literal_prefix = literal_prefix, .spill = spill };
+        var context: edges.Context(whole, complete) = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .parameters = parameters, .price_budget = &price_budget, .literal_prefix = literal_prefix, .spill = spill, .tag_rows = tag_rows };
         for (0..goal) |position| {
             const global = base + position;
             try matcher.advanceTo(global);
@@ -87,7 +93,7 @@ fn planMode(comptime whole: bool, comptime complete: bool, allocator: std.mem.Al
             const row = nodes[position * width ..][0..width];
             for (row, 0..) |node, slot| {
                 if (node.cost == std.math.maxInt(u64)) break;
-                _ = state.insert(nodes[(position + 1) * width ..][0..width], .{
+                _ = row_tags.insert(nodes[(position + 1) * width ..][0..width], &tag_rows[position + 1], .{
                     .cost = std.math.add(u64, node.cost, parameters.entropy.literal_prices[source.block[global]]) catch return error.IntegerOverflow,
                     .repeats = node.repeats,
                     .literal_len = node.literal_len + 1,

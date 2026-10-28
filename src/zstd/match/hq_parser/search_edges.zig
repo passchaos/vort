@@ -3,6 +3,7 @@ const std = @import("std");
 const state = @import("state.zig");
 const rep = @import("rep.zig");
 const prices = @import("prices.zig");
+const row_tags = @import("row_tags.zig");
 const PriceBudget = @import("price_budget.zig").PriceBudget;
 
 pub const Spill = struct {
@@ -21,6 +22,7 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
         price_budget: *PriceBudget,
         literal_prefix: ?[]const u64 = null,
         spill: ?*Spill = null,
+        tag_rows: ?[]row_tags.Tags = null,
 
         const Self = @This();
         const Node = state.NodeFor(whole);
@@ -76,9 +78,13 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
             const target = position + length;
             if (whole or !complete) {
                 std.debug.assert(target <= self.goal);
-                _ = state.insert(self.nodes[target * self.width ..][0..self.width], next);
+                if (self.tag_rows) |tags| {
+                    _ = row_tags.insert(self.nodes[target * self.width ..][0..self.width], &tags[target], next);
+                } else _ = state.insert(self.nodes[target * self.width ..][0..self.width], next);
             } else if (target <= self.goal) {
-                _ = state.insert(self.nodes[target * self.width ..][0..self.width], next);
+                if (self.tag_rows) |tags| {
+                    _ = row_tags.insert(self.nodes[target * self.width ..][0..self.width], &tags[target], next);
+                } else _ = state.insert(self.nodes[target * self.width ..][0..self.width], next);
             } else {
                 const literal_prefix = self.literal_prefix.?;
                 const remaining_literals = literal_prefix[literal_prefix.len - 1] - literal_prefix[self.base + target];
