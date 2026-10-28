@@ -1,0 +1,65 @@
+{
+  "library": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+  "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+  "version_number": 10600,
+  "reference_decodes_passed": 8,
+  "all_outputs_equal_input": true,
+  "rows": [
+    {
+      "wire": "runs/0/baseline.zst",
+      "wire_sha256": "ef5ca7bc6cb5a98f2e456a5866433796bd8f31f82c6e46eace177160f99ba26e",
+      "input_sha256": "227bb1ae54a92c0d7199598e77e6e1c5ca3cdbeca784e106c9c68639a70bae21",
+      "dictionary_sha256": null,
+      "decoded_bytes": 16384
+    },
+    {
+      "wire": "runs/0/candidate.zst",
+      "wire_sha256": "ef5ca7bc6cb5a98f2e456a5866433796bd8f31f82c6e46eace177160f99ba26e",
+      "input_sha256": "227bb1ae54a92c0d7199598e77e6e1c5ca3cdbeca784e106c9c68639a70bae21",
+      "dictionary_sha256": null,
+      "decoded_bytes": 16384
+    },
+    {
+      "wire": "runs/1/baseline.zst",
+      "wire_sha256": "0f149c1deb2a8e322fe83ea67e6b8cca36e38e6952cf6232f9b1fbbffee458e3",
+      "input_sha256": "227bb1ae54a92c0d7199598e77e6e1c5ca3cdbeca784e106c9c68639a70bae21",
+      "dictionary_sha256": null,
+      "decoded_bytes": 16384
+    },
+    {
+      "wire": "runs/1/candidate.zst",
+      "wire_sha256": "0f149c1deb2a8e322fe83ea67e6b8cca36e38e6952cf6232f9b1fbbffee458e3",
+      "input_sha256": "227bb1ae54a92c0d7199598e77e6e1c5ca3cdbeca784e106c9c68639a70bae21",
+      "dictionary_sha256": null,
+      "decoded_bytes": 16384
+    },
+    {
+      "wire": "runs/2/baseline.zst",
+      "wire_sha256": "2ad6ebee899bd1643108f879f6caf25d3012ffdf98227cad5deafda62f891d40",
+      "input_sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "dictionary_sha256": "6877fa1b2bbbdfbe4027738caa65f7d0c96d728b6eda2542620020a06c2bcb03",
+      "decoded_bytes": 8192
+    },
+    {
+      "wire": "runs/2/candidate.zst",
+      "wire_sha256": "2ad6ebee899bd1643108f879f6caf25d3012ffdf98227cad5deafda62f891d40",
+      "input_sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "dictionary_sha256": "6877fa1b2bbbdfbe4027738caa65f7d0c96d728b6eda2542620020a06c2bcb03",
+      "decoded_bytes": 8192
+    },
+    {
+      "wire": "runs/3/baseline.zst",
+      "wire_sha256": "6378cf98cf3a7fe759dc25f056064b964eba08380440973862835e6e266d3f78",
+      "input_sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "dictionary_sha256": "6877fa1b2bbbdfbe4027738caa65f7d0c96d728b6eda2542620020a06c2bcb03",
+      "decoded_bytes": 8192
+    },
+    {
+      "wire": "runs/3/candidate.zst",
+      "wire_sha256": "6378cf98cf3a7fe759dc25f056064b964eba08380440973862835e6e266d3f78",
+      "input_sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "dictionary_sha256": "6877fa1b2bbbdfbe4027738caa65f7d0c96d728b6eda2542620020a06c2bcb03",
+      "decoded_bytes": 8192
+    }
+  ]
+}

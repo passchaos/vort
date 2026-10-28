@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28 14:17:48 UTC",
+  "working_directory": "/tmp/vort-zstd-ml-stop-tests-20261028-vnMKAr",
+  "zig_version": "0.16.0",
+  "source_snapshot_commit": "d246b8de4b03f4dcd200d4893c65146853538693",
+  "frozen_oracle_commit": "bdae5ce7",
+  "candidate_change": "src/zstd/match/hq_parser/search_edges.zig adds only if (lower >= maximum) break; immediately after const lower.",
+  "notes": [
+    "Records observed completed tool output without rerunning validation.",
+    "Hashes collected after these runs; no source changes occurred after the successful Debug compilation.",
+    "Parent integration and parent verification are outside this record."
+  ],
+  "source_sha256": {
+    "src/zstd/match/hq_parser/search_edges.zig": "86d9e8aa69a45a5e016eb35a3eec7cbe4c07744b54b28d1888ade74e02625c03",
+    "src/zstd/match/hq_parser/search_edges_reference.zig": "6fc3e666e3e43e817fad5abe6aa481c1cad10aaee36f9c284db80f26618e6383",
+    "src/zstd/match/hq_parser/search_edges_tests.zig": "03332f9bb30f5a9b509bca4f68301a0b1590a3043231f16d47f41ce824d28b92",
+    "src/zstd/match/hq_parser/search_edges_tests/helpers.zig": "a0b52206ab01ecdf41a9a64fd1f52dfff63bf04c618b1741e9468b66d031bb5f",
+    "src/zstd/match/hq_parser/search_edges_tests/boundaries.zig": "3d86d3466aeaeb3018b22cb9186b2fc408321ce182b29478a9eb723ba514550d",
+    "src/zstd/match/hq_parser/search_edges_tests/quotas.zig": "085a3121ac406e63b2077a4bbd17334afb88519ea8ae5e64bc5d500a94e6bddf",
+    "src/zstd/match/hq_parser/search_edges_tests/errors.zig": "3d063fe77e05b680238c43651f44897d8fe511f5ba0108b73f9882ebca341c27",
+    "src/zstd/match/hq_parser/search_edges_tests/smoke.zig": "94b38a79f357cbe6d35ba791a070fa956df416a2e4ec2db26c5d0e4f37d1f626",
+    "src/zstd_sampled_edge_tests.zig": "74436f126abec6ba5c96d20a25a983ad028c54f48a6eda8cc71ee729982cfd20"
+  },
+  "runs": [
+    {
+      "command": "zig test src/zstd_sampled_edge_tests.zig -ODebug --test-filter 'Zstd HQ search'",
+      "session_id": 12785,
+      "exit_code": 0,
+      "tests_passed": 8,
+      "tests_total": 8,
+      "observed_output": "1/8 zstd_sampled_edge_tests.test_0...OK\n2/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled ML boundaries preserve frozen nodes and profile...OK\n3/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled finite quotas preserve every frozen admission prefix...OK\n4/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled failures preserve frozen error precedence and overflow...OK\n5/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search complete spill and whole predecessor preserve frozen edges...OK\n6/8 zstd.encode.controls.test_0...OK\n7/8 zstd.encode.controls_search_tests.test.Zstd HQ search options preserve defaults and reject unconsumed controls...OK\n8/8 zstd.encode.controls_search_tests.test.Zstd HQ search profiles separate actual work maxima from emitted safeguards...OK\nAll 8 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_sampled_edge_tests.zig -OReleaseFast --test-filter 'Zstd HQ search'",
+      "session_id": 79306,
+      "exit_code": 0,
+      "tests_passed": 8,
+      "tests_total": 8,
+      "observed_output": "1/8 zstd_sampled_edge_tests.test_0...OK\n2/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled ML boundaries preserve frozen nodes and profile...OK\n3/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled finite quotas preserve every frozen admission prefix...OK\n4/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled failures preserve frozen error precedence and overflow...OK\n5/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search complete spill and whole predecessor preserve frozen edges...OK\n6/8 zstd.encode.controls.test_0...OK\n7/8 zstd.encode.controls_search_tests.test.Zstd HQ search options preserve defaults and reject unconsumed controls...OK\n8/8 zstd.encode.controls_search_tests.test.Zstd HQ search profiles separate actual work maxima from emitted safeguards...OK\nAll 8 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_sampled_edge_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ search'",
+      "session_id": 77705,
+      "exit_code": 0,
+      "tests_passed": 8,
+      "tests_total": 8,
+      "observed_output": "1/8 zstd_sampled_edge_tests.test_0...OK\n2/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled ML boundaries preserve frozen nodes and profile...OK\n3/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled finite quotas preserve every frozen admission prefix...OK\n4/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search sampled failures preserve frozen error precedence and overflow...OK\n5/8 zstd.match.hq_parser.search_edges_tests.test.Zstd HQ search complete spill and whole predecessor preserve frozen edges...OK\n6/8 zstd.encode.controls.test_0...OK\n7/8 zstd.encode.controls_search_tests.test.Zstd HQ search options preserve defaults and reject unconsumed controls...OK\n8/8 zstd.encode.controls_search_tests.test.Zstd HQ search profiles separate actual work maxima from emitted safeguards...OK\nAll 8 tests passed.\n"
+    }
+  ],
+  "format_check": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/search_edges_tests.zig src/zstd/match/hq_parser/search_edges_tests src/zstd_sampled_edge_tests.zig",
+    "exit_code": 0,
+    "observed_output": "",
+    "observation_note": "Ran last in the observed successful command cell containing sha256sum and wc; no formatter output and final cell exit_code was 0."
+  }
+}

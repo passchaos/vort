@@ -1,0 +1,54 @@
+[
+  {
+    "case": "mozilla16KiB",
+    "strategy": "btopt",
+    "input_bytes": 16384,
+    "baseline_ns": 108850666,
+    "candidate_ns": 100500431,
+    "candidate_over_baseline": 0.9232872401534042,
+    "wire_bytes": 4416,
+    "wire_sha256": "ef5ca7bc6cb5a98f2e456a5866433796bd8f31f82c6e46eace177160f99ba26e",
+    "dictionary_sequences": 0,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  },
+  {
+    "case": "mozilla16KiB",
+    "strategy": "btultra2",
+    "input_bytes": 16384,
+    "baseline_ns": 656593928,
+    "candidate_ns": 599706972,
+    "candidate_over_baseline": 0.9133605207509625,
+    "wire_bytes": 4287,
+    "wire_sha256": "0f149c1deb2a8e322fe83ea67e6b8cca36e38e6952cf6232f9b1fbbffee458e3",
+    "dictionary_sequences": 0,
+    "hq_passes": 2,
+    "refinement_passes": 1
+  },
+  {
+    "case": "trained8KiB",
+    "strategy": "btopt",
+    "input_bytes": 8192,
+    "baseline_ns": 43294085,
+    "candidate_ns": 39744924,
+    "candidate_over_baseline": 0.918022034649768,
+    "wire_bytes": 3277,
+    "wire_sha256": "2ad6ebee899bd1643108f879f6caf25d3012ffdf98227cad5deafda62f891d40",
+    "dictionary_sequences": 78,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  },
+  {
+    "case": "trained8KiB",
+    "strategy": "btultra2",
+    "input_bytes": 8192,
+    "baseline_ns": 132068850,
+    "candidate_ns": 123944211,
+    "candidate_over_baseline": 0.9384817918835516,
+    "wire_bytes": 3269,
+    "wire_sha256": "6378cf98cf3a7fe759dc25f056064b964eba08380440973862835e6e266d3f78",
+    "dictionary_sequences": 87,
+    "hq_passes": 1,
+    "refinement_passes": 0
+  }
+]

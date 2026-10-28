@@ -24003,3 +24003,19 @@ reuse, so production keeps the simpler independently owned plans.
   source overlays, raw clocks, full profiles and independently audited
   identities. Production remains unchanged. Re-sample ordinary HQ work and
   select a different measured hotspot; retain the complete ten-format goal.
+
+- 2026-10-28: Zstd HQ sampled ML enumeration now stops when its monotonic
+  lower bounds reach the already-priced maximum length. It preserves every
+  admitted edge, duplicate, ordering rule, price/profile count and finite
+  budget, with no added allocation. The retained implementation in `cf33bfa0`
+  has four frozen-old-edge contract groups split into small test modules;
+  native Debug/ReleaseFast and actual Wasm roots pass 9/9, independent x86
+  Debug passes 8/8, and existing HQ/search/parallel-incremental tests pass
+  369/369. Versioned bidirectional references pass 52 HQ and 41 search groups.
+  [Tail-stop evidence](performance/zstd-sampled-length-tail.md) records two
+  balanced real 4 KiB rounds with time ratios 0.8489-0.9498, plus a separate
+  Mozilla 16 KiB/trained 8 KiB round at 0.9134-0.9385. All 32 ordinary encodes,
+  64 native decodes, full wire/profile comparisons and 32 independent libzstd
+  decodes pass; actual dictionary references remain 78/87. Expand matched
+  competitor/corpus/platform measurement and recheck remaining insertion and
+  repeat-match costs. The complete ten-format goal remains active.

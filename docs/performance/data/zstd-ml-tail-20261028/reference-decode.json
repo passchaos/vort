@@ -1,0 +1,153 @@
+{
+  "library": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+  "version_number": 10600,
+  "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+  "reference_decodes_passed": 24,
+  "all_outputs_equal_input": true,
+  "rows": [
+    {
+      "wire": "runs/0/dickens-btopt/baseline.zst",
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/dickens-btopt/candidate.zst",
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/dickens-btultra2/baseline.zst",
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/dickens-btultra2/candidate.zst",
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mozilla-btopt/baseline.zst",
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mozilla-btopt/candidate.zst",
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mozilla-btultra2/baseline.zst",
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mozilla-btultra2/candidate.zst",
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mr-btopt/baseline.zst",
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mr-btopt/candidate.zst",
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mr-btultra2/baseline.zst",
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/0/mr-btultra2/candidate.zst",
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/dickens-btopt/baseline.zst",
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/dickens-btopt/candidate.zst",
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/dickens-btultra2/baseline.zst",
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/dickens-btultra2/candidate.zst",
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737",
+      "input_sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mozilla-btopt/baseline.zst",
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mozilla-btopt/candidate.zst",
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mozilla-btultra2/baseline.zst",
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mozilla-btultra2/candidate.zst",
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e",
+      "input_sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mr-btopt/baseline.zst",
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mr-btopt/candidate.zst",
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mr-btultra2/baseline.zst",
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    },
+    {
+      "wire": "runs/1/mr-btultra2/candidate.zst",
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d",
+      "input_sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+      "decoded_bytes": 4096
+    }
+  ]
+}
