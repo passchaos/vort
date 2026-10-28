@@ -1,0 +1,8 @@
+{
+  "binary_input_dictionary_hashes_match": true,
+  "all_wire_profile_equal": true,
+  "configurations": 14,
+  "ordinary_samples": 84,
+  "median_recomputed": true,
+  "exit_code": 0
+}

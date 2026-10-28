@@ -1,0 +1,144 @@
+{
+  "observed_utc": "2026-10-28T11:56:53.492697+00:00",
+  "source_base": "b04a90195f8932ff2d83ef545fd11b7d575ac8ee",
+  "candidate_commit": "8bfcd26f",
+  "scope": "CPU4 real Silesia/raw dictionary, 3 balanced rounds, original global RF compiler live",
+  "validation": {
+    "encodes": 84,
+    "decodes": 168,
+    "all_wire_profile_equal": true
+  },
+  "rows": [
+    {
+      "case": "dickens",
+      "bytes": 4096,
+      "strategy": "btopt",
+      "baseline_ns": 12714299,
+      "candidate_ns": 8470946,
+      "ratio": 0.6662534835778205,
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9"
+    },
+    {
+      "case": "dickens",
+      "bytes": 4096,
+      "strategy": "btultra2",
+      "baseline_ns": 69493378,
+      "candidate_ns": 41295001,
+      "ratio": 0.5942292947682007,
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737"
+    },
+    {
+      "case": "dickens",
+      "bytes": 16384,
+      "strategy": "btopt",
+      "baseline_ns": 56934079,
+      "candidate_ns": 37895474,
+      "ratio": 0.6656026524992176,
+      "wire_sha256": "dd669091c88cd6db528009d2b73bdb3342257b8026493a08035b13f27ccd5b0a"
+    },
+    {
+      "case": "dickens",
+      "bytes": 16384,
+      "strategy": "btultra2",
+      "baseline_ns": 325992836,
+      "candidate_ns": 193847043,
+      "ratio": 0.5946358986858227,
+      "wire_sha256": "6c4dc4c93fc77d76f4fe5e1f99d19fda75836faa58236db2e5ca21a69b7643cb"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 4096,
+      "strategy": "btopt",
+      "baseline_ns": 134607522,
+      "candidate_ns": 44906134,
+      "ratio": 0.3336079093707705,
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 4096,
+      "strategy": "btultra2",
+      "baseline_ns": 1248140930,
+      "candidate_ns": 321534365,
+      "ratio": 0.2576106249476171,
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 16384,
+      "strategy": "btopt",
+      "baseline_ns": 297806979,
+      "candidate_ns": 109035968,
+      "ratio": 0.36612966011115544,
+      "wire_sha256": "ef5ca7bc6cb5a98f2e456a5866433796bd8f31f82c6e46eace177160f99ba26e"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 16384,
+      "strategy": "btultra2",
+      "baseline_ns": 2364274265,
+      "candidate_ns": 670995223,
+      "ratio": 0.2838060004007192,
+      "wire_sha256": "0f149c1deb2a8e322fe83ea67e6b8cca36e38e6952cf6232f9b1fbbffee458e3"
+    },
+    {
+      "case": "mr",
+      "bytes": 4096,
+      "strategy": "btopt",
+      "baseline_ns": 21457105,
+      "candidate_ns": 12789851,
+      "ratio": 0.5960660117010194,
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d"
+    },
+    {
+      "case": "mr",
+      "bytes": 4096,
+      "strategy": "btultra2",
+      "baseline_ns": 118038026,
+      "candidate_ns": 62156269,
+      "ratio": 0.5265783502682432,
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d"
+    },
+    {
+      "case": "mr",
+      "bytes": 16384,
+      "strategy": "btopt",
+      "baseline_ns": 461294539,
+      "candidate_ns": 167945175,
+      "ratio": 0.36407362498605256,
+      "wire_sha256": "6c830fc26bc5f6d5626ee315ffd5f2fff19f8c7d6c54cb34b52139a39e880cbd"
+    },
+    {
+      "case": "mr",
+      "bytes": 16384,
+      "strategy": "btultra2",
+      "baseline_ns": 5262369348,
+      "candidate_ns": 1381250774,
+      "ratio": 0.2624769723784124,
+      "wire_sha256": "eaae84d76d3cc6a29fa9964ee29ea914c3a3b56e417bc35fc08dc3ebbd619439"
+    },
+    {
+      "case": "raw_fixture_reference",
+      "bytes": 2084,
+      "strategy": "btopt",
+      "baseline_ns": 46387762,
+      "candidate_ns": 19210782,
+      "ratio": 0.4141347021656272,
+      "wire_sha256": "1fdf49b10797c41d60bef495442f60670bf498705f7c0669d82a3743ab91bcc5"
+    },
+    {
+      "case": "raw_fixture_reference",
+      "bytes": 2084,
+      "strategy": "btultra2",
+      "baseline_ns": 162244113,
+      "candidate_ns": 59223508,
+      "ratio": 0.3650271612628558,
+      "wire_sha256": "1fdf49b10797c41d60bef495442f60670bf498705f7c0669d82a3743ab91bcc5"
+    }
+  ],
+  "input_manifest": "reproduction.tar.xz/input-manifest.json",
+  "binary_sha256": {
+    "baseline": "5cf47faba1498e03807c82207f3ba31194647cdc9823fbeeb831e3c5d9b31919",
+    "candidate": "5416e60404904e4ec99c57ae89f8c1df55df53e3de999f4cec676c4082328e4f"
+  }
+}

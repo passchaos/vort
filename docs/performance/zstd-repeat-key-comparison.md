@@ -96,3 +96,9 @@ to the measured comparison. A fresh run is a separate measurement epoch.
 Next measure real files, trained dictionaries, 16/64/128 KiB blocks and other
 architectures, then target the remaining HQ transition count. The complete
 ten-format optimization goal remains active.
+
+The [real-file and raw-dictionary follow-up](zstd-repeat-key-real-corpus.md)
+records three CPU-4 rounds of Dickens/Mozilla/MR 4/16 KiB prefixes and an actual
+dictionary reference, with unchanged wires and full profiles. It also records
+two withdrawn Brotli interval-memo layouts whose component benefit did not
+establish a useful ordinary-encoder improvement.

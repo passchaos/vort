@@ -23952,3 +23952,18 @@ reuse, so production keeps the simpler independently owned plans.
   worst-node guard preserves behavior but regresses periodic inputs and stays
   archived. Continue real-corpus/dictionary/block-size measurement and reduce
   remaining HQ transition work; retain the full ten-format goal.
+
+- 2026-10-28: repeat-key before/after verification extends to real Silesia
+  Dickens/Mozilla/MR 4/16 KiB inputs and an actual raw-dictionary reference.
+  Three balanced CPU-4 rounds preserve complete wires and profile shapes: 84
+  ordinary encodes and 168 native decodes pass, with real-file time ratios
+  0.2576-0.6663 and raw dictionary ratios 0.3650/0.4141. The old full-library
+  RF compiler remains active; these observations are a separate exploratory
+  epoch, with no clean-host or competitor-throughput claim.
+  [Real-corpus evidence](performance/zstd-repeat-key-real-corpus.md) also keeps
+  withdrawn Brotli interval-cost memo and refinement-frame experiments:
+  complete proposals/wires remain equal, but the three-sweep 36-prefix
+  ordinary time ratio is 0.999257 and smaller-input points regress. A separate
+  frame does not establish a stable remedy. Neither Brotli prototype changes
+  production. Continue larger/trained Zstd data and adaptive-distance candidate
+  preparation; retain the complete ten-format goal.
