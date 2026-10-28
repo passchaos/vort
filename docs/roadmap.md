@@ -24165,3 +24165,21 @@ reuse, so production keeps the simpler independently owned plans.
   behavior, price admission and output remain unchanged at the current
   retained source. Continue larger measured state/edge work and the complete
   ten-format functionality/performance objective.
+
+- 2026-10-29: full-associative per-position repeat matching was screened with
+  48 exact distance/length slots, using firstTrue and then an independent
+  lane-mask selection shape. Both preserve candidate/price order and actual
+  miss+hit accounting, with no requested-heap change and fixed stack increases
+  of 560/544 bytes. Reuse rates reach 65.7%-81.9%, but ordinary timing is
+  mixed and neither cache enters production. Separate vector32 mismatch-mask
+  and four-byte prefix rejection kernels also preserve output; larger/trained
+  timing includes slower rows, so they remain unadopted. [Matching-path evidence](performance/zstd-repeat-match-paths.md)
+  freezes four independent kernels, 120 ordinary encodes/240 native decodes,
+  all 120 independent libzstd wire decodes, actual counter ledgers and raw
+  clocks. Cache contracts pass native Debug/ReleaseFast/x86 Debug 24/24 and
+  25/25, including all 65,536 lane patterns; both resource kernels pass 5/5
+  with independent scalar/frozen oracles. Big-endian vector fallback is
+  compiled without claiming execution. Requested heap, output correctness
+  and search budgets are not exchanged for speculative gains. Continue
+  measured state/edge work, wider codec coverage and the full ten-format
+  functionality/performance objective.
