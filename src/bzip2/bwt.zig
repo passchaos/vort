@@ -1,5 +1,6 @@
 //! Forward Burrows-Wheeler transform with block-bounded cyclic suffix sorting.
 const std = @import("std");
+const periodic = @import("bwt_period.zig");
 
 pub const Block = struct {
     bytes: []u8,
@@ -14,6 +15,22 @@ pub fn transformAlloc(allocator: std.mem.Allocator, input: []const u8) !Block {
     if (input.len == 0 or input.len > 900_000) return error.InvalidBzip2Stream;
     const order_a = try allocator.alloc(u32, input.len);
     defer allocator.free(order_a);
+    // Reuse the first eventual order array for KMP only when a conservative
+    // sample admits a whole-period candidate. Generic allocation order stays.
+    const period = if (periodic.possible(input)) periodic.least(input, order_a) else input.len;
+    if (period < input.len) {
+        const base = try transformAlloc(allocator, input[0..period]);
+        defer base.deinit(allocator);
+        const repeated = input.len / period;
+        const transformed = try allocator.alloc(u8, input.len);
+        errdefer allocator.free(transformed);
+        for (base.bytes, 0..) |byte, row|
+            @memset(transformed[row * repeated ..][0..repeated], byte);
+        return .{
+            .bytes = transformed,
+            .original_pointer = periodic.originalPointer(input.len, period, base.original_pointer),
+        };
+    }
     const order_b = try allocator.alloc(u32, input.len);
     defer allocator.free(order_b);
     const classes_a = try allocator.alloc(u32, input.len);
@@ -49,8 +66,8 @@ pub fn transformAlloc(allocator: std.mem.Allocator, input: []const u8) !Block {
     var next_classes = classes_b;
     var shift: usize = 1;
     // Unique prefix classes already fix the order of all cyclic rotations.
-    // Periodic inputs keep ties and must complete the original doubling passes
-    // to preserve their deterministic order and original pointer.
+    // Whole-period inputs were expanded above with the original tie rank;
+    // the remaining rotations become unique only when their prefixes suffice.
     while (shift < input.len and class_count < input.len) : (shift *= 2) {
         for (order, next_order) |position_u32, *shifted| {
             const position: usize = position_u32;
