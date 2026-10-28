@@ -1,0 +1,13 @@
+{
+  "raw_records": 18,
+  "cases": 36,
+  "samples_per_case_per_variant": [
+    15
+  ],
+  "source_hashes_match": true,
+  "benchmark_binary_hashes_match": true,
+  "all_wires_settings_match": true,
+  "recomputed_time_ratio": 0.9870207881692615,
+  "regressing_cases": 3,
+  "exit_code": 0
+}

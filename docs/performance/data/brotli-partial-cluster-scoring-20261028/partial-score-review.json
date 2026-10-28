@@ -1,0 +1,42 @@
+{
+  "reviewed_at_utc": "2026-10-28T05:52:54.504446+00:00",
+  "caller_path": "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/candidate/src/br/encoder/literal_context_split.zig",
+  "caller_sha256": "7a291deddcd4b6743517dae3d8e9adf4443c2451fe6975ca0a5ec4441ed153a5",
+  "source_sha256": "fa56efb076a271ed82b41b9e29766de7185b1c11e0cf540e47c0344197974951",
+  "strict_comparison": "Only known prefix bits > threshold prune. Equality reaches the next scorer and may retain smaller-tree ties.",
+  "publication": "evaluate returns a full total after the last tree, even above threshold. The caller publishes map scores only after a non-null complete result. Individual successful tree scores remain valid cache entries.",
+  "eligible_threshold": "requested_tree_count <=16 uses max(full_threshold,bounded_threshold); requested_tree_count >16 updates only the full slot under the current policy, even if compaction leaves <=16 actual trees.",
+  "numeric_precondition": "Unchecked u64 addition requires representable total. The current bounded byte-histogram caller satisfies it; the generic function does not protect arbitrary overflowing u64 costs.",
+  "failure_scope": "Reached scorer errors propagate. The helper intentionally skips errors of remaining provably irrelevant trees. The current tree scorer has no heap allocation; allocations before the loop still propagate normally.",
+  "profile_invariant": "The old tree_scored >= 2*(map_cache_misses-map_lower_bound_pruned) must exclude partial-score-pruned maps. Complete map publication remains separate from partially scored tree cache entries.",
+  "checks": {
+    "releasefast": {
+      "compile_exit_code": 0,
+      "execution_exit_code": 0,
+      "tests": 3,
+      "target_verified": "x86_64-linux native",
+      "artifact_sha256": "ed23e0bca60ca7d06f75d386f459e5741c3237ea9af0e568699ba580352bdb48",
+      "metadata": "partial-score-releasefast.json",
+      "log": "partial-score-releasefast.log"
+    },
+    "x86-linux-releasefast": {
+      "compile_exit_code": 0,
+      "execution_exit_code": 0,
+      "tests": 3,
+      "target_verified": "x86-linux-gnu (32-bit ELF)",
+      "artifact_sha256": "f72b7e3f04d6c749c3f953824a51bef3b61b69332790c15921f54208520a1e66",
+      "metadata": "partial-score-x86-linux-releasefast.json",
+      "log": "partial-score-x86-linux-releasefast.log"
+    },
+    "wasm32-wasi-releasefast": {
+      "compile_exit_code": 0,
+      "execution_exit_code": 0,
+      "tests": 3,
+      "target_verified": "wasm32-wasi",
+      "artifact_sha256": "e46af7781e19d4216eb46a2dde1150526fc005d62dcce722d834ff7ebd50ab7d",
+      "metadata": "partial-score-wasm32-wasi-releasefast.json",
+      "log": "partial-score-wasm32-wasi-releasefast.log"
+    }
+  },
+  "scope": "Temporary candidate source read-only. Standalone module tests only; no caller profiling or library-wide gate."
+}

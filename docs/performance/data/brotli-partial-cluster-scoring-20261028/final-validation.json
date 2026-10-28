@@ -1,0 +1,278 @@
+{
+  "observed_utc": "2026-10-28T10:38:11.234230+00:00",
+  "passed_checks": [
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Dbr-test-filter=literal context",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "83/83 Debug context tests; final cache-revisit assertions",
+      "log": "logs/context-debug-cache.log",
+      "log_sha256": "46f7c8c995fdd6a65eb57fb845c644e2374e59f5363b17add734bc83641cb69a"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br",
+        "-Doptimize=ReleaseFast",
+        "-Dbr-test-filter=literal context",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "83/83 ReleaseFast context tests; final source",
+      "log": "logs/context-releasefast-cache.log",
+      "log_sha256": "878adc30825f4153ae3e27c05f01a4c7d190ff21cf257d4865b9eebae779e755"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/br/encoder/cluster_partial_score.zig",
+        "-O",
+        "ReleaseFast"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 native scorer reference tests",
+      "log": "logs/partial-releasefast.log",
+      "log_sha256": "4daa3311922624ea40579cbad1d47b6974ba1b9e85fb5c1b9a7d70c3cf0876e2"
+    },
+    {
+      "argv": [
+        "zig",
+        "test",
+        "src/br/encoder/cluster_partial_score.zig",
+        "-target",
+        "x86-linux-gnu",
+        "-O",
+        "ReleaseFast"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 actual 32-bit x86 scorer tests",
+      "log": "logs/partial-x86-releasefast.log",
+      "log_sha256": "4daa3311922624ea40579cbad1d47b6974ba1b9e85fb5c1b9a7d70c3cf0876e2"
+    },
+    {
+      "argv": [
+        "node",
+        "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/partial-score-wasi-runner.js",
+        "/tmp/vort-br-partial-final-20261028/partial.wasm"
+      ],
+      "exit_code": 0,
+      "scope": "3/3 actual wasm32-wasi scorer tests; separate build log retained",
+      "log": "logs/partial-wasm-run.log",
+      "log_sha256": "8c9c8220451dc72d1f8a7cc501de08d82c9fe8c2bf8a153755ece16ec82e9ce2"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "test-br-prepared-command-wasm",
+        "run-br-literal-context-profile-gate",
+        "run-br-literal-context-profile-gate-smoke",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "14362-byte public q8 frozen wire equality, Zig/Node decode, 98-column producer gate and 32-case smoke",
+      "log": "logs/wasm-profile.log",
+      "log_sha256": "9f9ba8ee5c411b34aa6ecc1f83232c2774ebb83d8f220868b2500c291865b7bc"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "run-br-literal-context-modes-diff",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "8 literal-context interoperability cases; system reference 1.0.9",
+      "log": "logs/context-modes-diff.log",
+      "log_sha256": "6608a97c5630ea36e99273fc0a2ec41b0c1ae6c11bf28dc6644befcce69c2c8c"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "check-wasm",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "6/6 compile steps",
+      "log": "logs/check-wasm.log",
+      "log_sha256": "2750bfc1d588af9e93e3c8ebfecf02d169787f08c819f2d842e2a52d5a43a143"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "check",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "210/210 compile steps; initial run retained",
+      "log": "logs/check.log",
+      "log_sha256": "d53721dd4323a5bdeebe6d1b7b3011d124af94bf693490f1bf34b0548f58a0f4"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j8",
+        "check",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "scope": "210/210 compile steps; final source",
+      "log": "logs/check-final-parallel.log",
+      "log_sha256": "00063962fe3c599268a9b196560af7c0fe1272c1c68e683cea78526f826803fd"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "run",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "scope": "CLI help smoke",
+      "log": "logs/help.log",
+      "log_sha256": "366b7418f4dda9daea8e51a0c2dfe7ee798de6d238359c6ce7f66f052c2e5a29"
+    },
+    {
+      "argv": [
+        "zig",
+        "fmt",
+        "--check",
+        "src/br/encoder/cluster_partial_score.zig",
+        "src/br/encoder/context_cache_tests.zig",
+        "src/br/encoder/literal_context_split.zig",
+        "src/br/encoder/literal_context_profile.zig",
+        "tools/br/literal_context_profile.zig"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "py_compile",
+        "tools/br/literal_context_profile_gate.py",
+        "tools/br/literal_context_profile_gate_smoke.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "pending_checks": [
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j2",
+        "test",
+        "--summary",
+        "all"
+      ],
+      "status": "running",
+      "exec_session_id": 35093,
+      "test_pid": 1555887,
+      "live_log": "/tmp/vort-br-partial-final-20261028/test.log",
+      "scope": "all-library Debug; started before the final test-only cache-revisit assertions",
+      "last_confirmed_running_utc": "2026-10-28T10:38:11.234230+00:00"
+    },
+    {
+      "argv": [
+        "zig",
+        "build",
+        "-j6",
+        "test",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "status": "running",
+      "exec_session_id": 72177,
+      "live_log": "/tmp/vort-br-partial-final-20261028/test-releasefast.log",
+      "scope": "all-library ReleaseFast; final source",
+      "last_confirmed_running_utc": "2026-10-28T10:38:11.234230+00:00"
+    }
+  ],
+  "whole_test_status": "not yet verified; no passing claim from empty logs or focused checks",
+  "source_manifest": "final-source-manifest.json",
+  "debug_diagnostic": {
+    "argv": [
+      "perf",
+      "record",
+      "-e",
+      "cpu-clock:u",
+      "-g",
+      "-p",
+      "1555887",
+      "-o",
+      "/tmp/vort-br-partial-final-20261028/debug-test-live.perf",
+      "--",
+      "sleep",
+      "2"
+    ],
+    "exit_code": 0,
+    "mem_eql_sample_share_percent": 65.37,
+    "call_path": "zstd.match.hq_parser.state.insert -> search_edges -> incremental_parallel.worker",
+    "scope": "2-second untimed test-progress diagnostic; not an encoder benchmark",
+    "dedup_key": "literal_len and [3]usize repeat offsets; eql compares 24 bytes on this x86_64 host",
+    "review": "bounded beam and future DP transitions; no obvious cycle found; currently executing fixture not identified from sampling alone"
+  },
+  "source_commit": "7ffbbe39c9b29ee900a715093f1bb2c9cf6ab62c",
+  "post_rebase": {
+    "pull_argv": [
+      "git",
+      "pull",
+      "--rebase"
+    ],
+    "pull_exit_code": 0,
+    "remote_result": "Current branch main is up to date.",
+    "source_hashes_unchanged": true,
+    "validation_argv": [
+      "zig",
+      "build",
+      "-j2",
+      "test-br",
+      "-Dbr-test-filter=literal context",
+      "test-br-prepared-command-wasm",
+      "run-br-literal-context-profile-gate",
+      "run-br-literal-context-profile-gate-smoke",
+      "check-wasm",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0,
+    "log": "logs/post-rebase.log",
+    "log_sha256": "13d77bd0d24566edecc21904d209fba3fe4f75f34036b712f641577497bd745c",
+    "scope": "83/83 Debug context tests, full public Wasm wire equality, producer/smoke and portable compile after rebase"
+  }
+}

@@ -23922,3 +23922,17 @@ reuse, so production keeps the simpler independently owned plans.
   [RLE statistics evidence](performance/brotli-rle-statistics-experiment.md)
   retains traces, commands, source overlays and raw timings. Prioritize larger
   measured q8 planning/evaluation/context-assignment costs next; retain the goal.
+
+- 2026-10-28: converged Brotli literal-context maps now stop exact tree scoring
+  once known costs exceed every eligible proposal threshold. Equality and
+  complete map-cache publication are preserved; partial results stay uncached.
+  Native proposal tests require actual cutoffs and compare the exhaustive
+  policy, with combined complete/partial request accounting and legacy CSV
+  support. [Partial-scoring evidence](performance/brotli-partial-cluster-scoring.md)
+  records three clean 36-prefix sweeps at time ratio 0.987021 with identical
+  wires/settings and three small regressing points. Requested Brotli 1.2.0
+  reference time ratio remains 36.7268 at size ratio 0.995560; its loaded object
+  identity is unverified in this runner epoch. Next extend exact prepared
+  counting to adaptive-distance split context alternatives: four rejected
+  wires account for 6.93-12.40% of three recorded diagnostic calls. Preserve
+  split planning and final wires; retain the complete ten-format goal.

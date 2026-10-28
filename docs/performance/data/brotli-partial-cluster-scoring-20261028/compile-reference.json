@@ -1,0 +1,43 @@
+{
+  "ordinary_compile": {
+    "candidate_cwd": "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/candidate",
+    "argv": [
+      "zig",
+      "build-exe",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/record.o",
+      "-lc",
+      "-O",
+      "ReleaseFast",
+      "--dep",
+      "vort_br",
+      "--dep",
+      "benchmark_provenance",
+      "-Mroot=tools/br/planned_encode_bench.zig",
+      "-O",
+      "ReleaseFast",
+      "-Mvort_br=src/br.zig",
+      "-O",
+      "ReleaseFast",
+      "-Mbenchmark_provenance=tools/benchmark_provenance.zig",
+      "-femit-bin=/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/bench-final-candidate"
+    ],
+    "exit_code": 0
+  },
+  "profile_compile": {
+    "exit_code": 0
+  },
+  "reference": {
+    "libbrotlienc.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlienc.so.1.2.0",
+      "sha256": "79433e774220027a191eaac4dd4437afc687837ad080dfd4d15b9243565ff70d"
+    },
+    "libbrotlidec.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlidec.so.1.2.0",
+      "sha256": "0377077412584221d95fd9f3e14a4572275cd606a0e878c671fbfe05651036d8"
+    },
+    "libbrotlicommon.so.1.2.0": {
+      "path": "/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build/libbrotlicommon.so.1.2.0",
+      "sha256": "d049d028ce0ee836b2f90579b1fba73ac2c8cdde4e2014721eb93c107a399dfb"
+    }
+  }
+}

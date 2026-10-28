@@ -1,0 +1,62 @@
+{
+  "mozilla-65536": {
+    "baseline": {
+      "rounds": 3,
+      "per_round": {
+        "cluster_tree_scores_pruned": 0.0,
+        "tree_score_cache_hits": 687.0,
+        "tree_score_cache_misses": 1994.0,
+        "cluster_score_ns": 10551087.666666666
+      }
+    },
+    "candidate": {
+      "rounds": 1,
+      "per_round": {
+        "cluster_tree_scores_pruned": 71.0,
+        "tree_score_cache_hits": 827.0,
+        "tree_score_cache_misses": 1837.0,
+        "cluster_score_ns": 10486536.0
+      }
+    }
+  },
+  "dickens-65536": {
+    "baseline": {
+      "rounds": 3,
+      "per_round": {
+        "cluster_tree_scores_pruned": 0.0,
+        "tree_score_cache_hits": 448.0,
+        "tree_score_cache_misses": 620.0,
+        "cluster_score_ns": 2949461.0
+      }
+    },
+    "candidate": {
+      "rounds": 1,
+      "per_round": {
+        "cluster_tree_scores_pruned": 22.0,
+        "tree_score_cache_hits": 435.0,
+        "tree_score_cache_misses": 611.0,
+        "cluster_score_ns": 2929741.0
+      }
+    }
+  },
+  "mr-65536": {
+    "baseline": {
+      "rounds": 3,
+      "per_round": {
+        "cluster_tree_scores_pruned": 0.0,
+        "tree_score_cache_hits": 641.0,
+        "tree_score_cache_misses": 913.0,
+        "cluster_score_ns": 4531540.333333333
+      }
+    },
+    "candidate": {
+      "rounds": 1,
+      "per_round": {
+        "cluster_tree_scores_pruned": 86.0,
+        "tree_score_cache_hits": 481.0,
+        "tree_score_cache_misses": 805.0,
+        "cluster_score_ns": 4278499.0
+      }
+    }
+  }
+}

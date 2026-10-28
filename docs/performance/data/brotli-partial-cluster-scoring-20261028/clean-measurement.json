@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/matched_measure.py",
+    "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d",
+    "3"
+  ],
+  "start_utc": "2026-10-28T05:58:42.083768+00:00",
+  "conditions": "all owned compiler/profile jobs observed terminal before these sweeps; no diagnostic prints in encoder; interleaved baseline/candidate",
+  "finish_utc": "2026-10-28T06:01:24.263397+00:00",
+  "exit_code": 0
+}

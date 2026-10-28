@@ -1,0 +1,17 @@
+{
+  "base_commit": "85aa84bf7db0c9541267fb98f79dd3ac8222202f",
+  "baseline_binary_origin": "620efa74 snapshot; subsequent85aa84bf only adds test/docs and does not alter production code",
+  "binaries": {
+    "bench-baseline": "fe082134d0cb01f9bf2a50ed7d48e3c3180d959f6fa9eb3b56927d22e321540c",
+    "bench-first-candidate": "6a05ce2fa0d9c05b7ed823c4f749384a9f63cebd8bef103ba2af51b00fb54cac",
+    "bench-final-candidate": "3bf7db94109e8964a1a630a5b2f92d86ee14121051c32d68579418d35cd50a9b",
+    "profile-baseline": "eab9324fa9b036d07c544cd0774b1df6ae7b8d805cdfe1d64148654d35be9c72",
+    "profile-candidate": "7c0ffce491ea80446972820acc1847d02da340575fd39dcb172049ad378813b1"
+  },
+  "production_scoring_sources": {
+    "src/br/encoder/cluster_partial_score.zig": "aaebc36fa7a7e4bd5b40354a0d6ecf7bb245cc7be0dd9d1ba64956071e418bce",
+    "src/br/encoder/literal_context_split.zig": "7a291deddcd4b6743517dae3d8e9adf4443c2451fe6975ca0a5ec4441ed153a5",
+    "src/br/encoder/literal_context_profile.zig": "3655e77727aa3713b3557739bf444bdd864a3720eca399129b29d297f780a99d"
+  },
+  "timing_exclusion": "matched-1 is discovery; matched-3 head overlaps diagnostic compilation. Final benefit will use separate post-compile clean sweeps."
+}

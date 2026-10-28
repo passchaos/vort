@@ -1,0 +1,9 @@
+{
+  "src/br/encoder/cluster_partial_score.zig": "aaebc36fa7a7e4bd5b40354a0d6ecf7bb245cc7be0dd9d1ba64956071e418bce",
+  "src/br/encoder/context_cache_tests.zig": "4a6ecb3d532da1d710546845e4e2a8a09cd97809c2cdc65bf1cd2c74c2e31cbf",
+  "src/br/encoder/literal_context_split.zig": "44d04874e296ec0ce052464d725789a445bf4eb6905a219c7caba552db99e0c9",
+  "src/br/encoder/literal_context_profile.zig": "3655e77727aa3713b3557739bf444bdd864a3720eca399129b29d297f780a99d",
+  "tools/br/literal_context_profile.zig": "4e39acf930650adf317453f474a3b0a0521681645efa5fdc51e5fe2cdd9eba06",
+  "tools/br/literal_context_profile_gate.py": "37c84ab63bd683247e63e155dc5f91d3d4012f98dc94704880906ba257818504",
+  "tools/br/literal_context_profile_gate_smoke.py": "836253dadca7a1274ac7b517d71e7bb4540f53bf7de3504b58ced99633f03b58"
+}

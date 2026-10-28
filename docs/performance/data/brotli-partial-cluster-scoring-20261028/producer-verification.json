@@ -1,0 +1,7 @@
+{
+  "producer_gate_exit": 0,
+  "producer_smoke_exit": 0,
+  "columns": 98,
+  "rows": 3,
+  "source_csv": "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/candidate/zig-out/vort-br-literal-context-profile.csv"
+}
