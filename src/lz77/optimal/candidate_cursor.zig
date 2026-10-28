@@ -1,7 +1,7 @@
 //! Reuse a sparse existing suffix chain with exact original candidate budgets.
 const std = @import("std");
 const anchors = @import("rarest_anchor.zig");
-const Ordinals = @import("prefix_jumps.zig").Index;
+const access = @import("index_access.zig");
 const empty = std.math.maxInt(u32);
 
 pub const Candidate = struct { position: usize, raw_count: usize, prefix_count: usize };
@@ -13,7 +13,7 @@ pub const Cursor = struct {
     selected: anchors.Anchor = .{},
     initialized: bool = false,
 
-    pub fn next(self: *Cursor, input: []const u8, prev: []const u32, ordinals: *const Ordinals, pos: usize, raw_next: usize, coverage: usize, window: usize, chain_limit: usize, candidate_limit: usize) ?Candidate {
+    pub fn next(self: *Cursor, input: []const u8, prev: anytype, ordinals: anytype, pos: usize, raw_next: usize, coverage: usize, window: usize, chain_limit: usize, candidate_limit: usize) ?Candidate {
         std.debug.assert(coverage >= 8 and raw_next < pos and pos + coverage < input.len);
         // Every longer match contains all the covered prefixes. Incrementally
         // select the chain with the farthest newest predecessor.
@@ -34,7 +34,7 @@ pub const Cursor = struct {
             if (suffix < anchor) return null;
             const jumped = suffix - anchor;
             if (jumped > raw_next) {
-                self.cursor = prev[suffix];
+                self.cursor = access.at(prev, suffix);
                 continue;
             }
             if (pos - jumped > window) return null;
@@ -42,7 +42,7 @@ pub const Cursor = struct {
             if (std.mem.readInt(u24, input[jumped..][0..3], .little) !=
                 std.mem.readInt(u24, input[pos..][0..3], .little))
             {
-                self.cursor = prev[suffix];
+                self.cursor = access.at(prev, suffix);
                 continue;
             }
             const raw_count = ordinals.rawCount(pos, jumped);

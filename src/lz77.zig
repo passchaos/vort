@@ -9,6 +9,8 @@ const optimal_suffix_costs = @import("lz77/optimal/suffix_costs.zig");
 const optimal_prefix_jumps = @import("lz77/optimal/prefix_jumps.zig");
 const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
 const match_length = @import("lz77/match/length.zig");
+const optimal_index_access = @import("lz77/optimal/index_access.zig");
+const optimal_window_index = @import("lz77/optimal/window_index.zig");
 const optimal_decisions = @import("lz77/optimal/decisions.zig");
 const optimal_match_reuse = @import("lz77/optimal/match_reuse.zig");
 const core = @import("core.zig");
@@ -56,6 +58,7 @@ pub const Token = union(enum) {
 };
 
 const OptimalDecisions = optimal_decisions.Views(Token);
+const OptimalWindowIndex = optimal_window_index.Index(optimalHashAt);
 
 pub const PlanStats = struct {
     literals: usize = 0,
@@ -415,6 +418,10 @@ pub const OptimalCostModel = struct {
 };
 
 const optimal_compact_index_empty = std.math.maxInt(u32);
+
+fn optimalHashAt(input: []const u8, position: usize) ?usize {
+    return hashAtInput(input, position, hash_head_table_size, .three);
+}
 
 fn buildOptimalCompactHashIndex(
     allocator: std.mem.Allocator,
@@ -1246,7 +1253,7 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
 pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    var costs = optimal_suffix_costs.Window.init(try optimalCostLength(input.len));
+    var costs = optimal_suffix_costs.Window.init(try optimalFixedCostLength(input.len));
     var decisions: OptimalDecisions.Compact = .{};
     defer decisions.deinit(allocator);
     const stats = try optimalPlanReuseStoredProfiled(&scratch, allocator, input, options, &costs, &decisions, true, false, false, undefined, undefined, undefined);
@@ -1520,7 +1527,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const total_start = std.Io.Clock.awake.now(io);
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    var costs = optimal_suffix_costs.Window.init(try optimalCostLength(input.len));
+    var costs = optimal_suffix_costs.Window.init(try optimalFixedCostLength(input.len));
     var decisions: OptimalDecisions.Compact = .{};
     defer decisions.deinit(allocator);
     const stats = try optimalPlanReuseStoredProfiled(&scratch, allocator, input, options, &costs, &decisions, true, true, false, io, profile, undefined);
@@ -1549,11 +1556,20 @@ fn optimalPlanReuseInternalProfiled(
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
-    const length = try optimalCostLength(input.len);
+    const length = if (comptime modeled) try optimalCostLength(input.len) else try optimalFixedCostLength(input.len);
     try optimal_storage.resizeFresh(&scratch.costs, allocator, length);
     var costs = optimal_suffix_costs.Full.init(scratch.costs.items);
     var decisions = OptimalDecisions.Full{ .values = &scratch.steps };
     return optimalPlanReuseStoredProfiled(scratch, allocator, input, options, &costs, &decisions, enable_prefix_bound, collect_profile, modeled, io, profile, model);
+}
+
+fn optimalFixedCostLength(n: usize) !usize {
+    // The compact index makes larger 32-bit inputs practical. Reject a fixed
+    // proxy cost that cannot represent the worst-case nine bits per byte
+    // before any input-sized allocation. Caller models validate separately.
+    if (comptime !packed_optimal_length_choices)
+        if (n > std.math.maxInt(usize) / 9) return error.InvalidBlockPlan;
+    return optimalCostLength(n);
 }
 
 fn optimalCostLength(n: usize) !usize {
@@ -1571,7 +1587,7 @@ fn optimalPlanReuseWindowAudited(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
-    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalCostLength(input.len));
+    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalFixedCostLength(input.len));
     var costs = optimal_suffix_costs.Audited.init(scratch.costs.items);
     var decisions = OptimalDecisions.Full{ .values = &scratch.steps };
     return optimalPlanReuseStoredProfiled(scratch, allocator, input, options, &costs, &decisions, enable_prefix_bound, false, false, undefined, undefined, undefined);
@@ -1609,6 +1625,10 @@ fn optimalPlanReuseStoredProfiled(
     std.debug.assert(costs.len == n + 1);
     try decisions.reserve(allocator, n);
     scratch.tokens.clearRetainingCapacity();
+    if (comptime enable_prefix_bound and !modeled and @TypeOf(decisions.*) == OptimalDecisions.Compact) {
+        if (input.len >= optimal_window_index.minimum_input and input.len <= optimal_compact_index_empty and options.window_len <= default_window_len)
+            return optimalPlanReuseWindowIndex(scratch, allocator, input, options, costs, decisions, collect_profile, io, profile, optimal_window_index.default_chunk);
+    }
     if (enable_prefix_bound and input.len <= optimal_compact_index_empty) {
         const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
         try buildOptimalCompactHashIndex(
@@ -1641,7 +1661,7 @@ inline fn optimalPlanReuseWithIndex(
     costs: anytype,
     decisions: anytype,
     prev: anytype,
-    comptime empty: @TypeOf(prev[0]),
+    comptime empty: optimal_index_access.Value(@TypeOf(prev)),
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
     comptime modeled: bool,
@@ -1649,7 +1669,7 @@ inline fn optimalPlanReuseWithIndex(
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
-    const can_jump = enable_prefix_bound and !modeled and @TypeOf(prev[0]) == u32;
+    const can_jump = enable_prefix_bound and !modeled and optimal_index_access.Value(@TypeOf(prev)) == u32;
     if (comptime can_jump) {
         if (minMatch(options) == 3 and options.window_len <= default_window_len and input.len >= 1024 and
             options.max_chain >= 16 and normalizedMaxCandidates(options) >= 8 and optimal_prefix_jumps.useful(input, prev))
@@ -1666,7 +1686,7 @@ inline fn optimalPlanReuseWithIndexBackend(
     costs: anytype,
     decisions: anytype,
     prev: anytype,
-    comptime empty: @TypeOf(prev[0]),
+    comptime empty: optimal_index_access.Value(@TypeOf(prev)),
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
     comptime modeled: bool,
@@ -1682,7 +1702,7 @@ inline fn optimalPlanReuseWithIndexBackend(
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
-    const compact_u32 = @TypeOf(prev[0]) == u32;
+    const compact_u32 = optimal_index_access.Value(@TypeOf(prev)) == u32;
     const use_bound = enable_prefix_bound and !modeled;
     // The non-jump compact-index backend serves sparse minimum-three chains:
     // their measured extensions are a few choices per candidate, so the
@@ -1696,11 +1716,14 @@ inline fn optimalPlanReuseWithIndexBackend(
     if (comptime use_jumps) {
         if (jumps_active) {
             const jump_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
-            try scratch.prefix_jumps.build(allocator, input, prev);
-            if (comptime collect_profile) {
-                profile.index_bytes += scratch.prefix_jumps.bytes();
-                profile.index_ns += elapsedNs(jump_start, io);
+            if (comptime optimal_index_access.isWindow(@TypeOf(prev))) {
+                try prev.activate(allocator, true);
+                if (comptime collect_profile) profile.index_bytes = prev.bytes();
+            } else {
+                try scratch.prefix_jumps.build(allocator, input, prev);
+                if (comptime collect_profile) profile.index_bytes += scratch.prefix_jumps.bytes();
             }
+            if (comptime collect_profile) profile.index_ns += elapsedNs(jump_start, io);
         }
     }
     var minima: if (use_bound) optimal_length_minima.Set(fixed_length_costs) else void = if (use_bound) init: {
@@ -1709,191 +1732,211 @@ inline fn optimalPlanReuseWithIndexBackend(
     } else {};
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     var match_cache: if (enable_jumps) optimal_match_reuse.Cache else void = if (enable_jumps) .{} else {};
+    const track_window = comptime collect_profile and optimal_index_access.isWindow(@TypeOf(prev));
+    var window_index_ns: if (track_window) u64 else void = if (track_window) 0 else {};
 
     while (rev_i > 0) {
-        rev_i -= 1;
-        if (comptime collect_profile) profile.positions += 1;
-        costs.set(rev_i, (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs.get(rev_i + 1));
-        decisions.set(rev_i, .{ .literal = input[rev_i] });
-
-        // Runtime minimum selects the strategy: the dense/long-minimum
-        // instance keeps the queues, the sparse minimum-three instance uses
-        // the linear running minimum.
-        if (comptime use_bound) {
-            if (!sparse_linear) minima.advance(costs, rev_i);
-        }
-        if (rev_i + minimum > n) continue;
-
-        const max_len = @min(maxMatch(options), n - rev_i);
-        var coverage = struct { through: usize, distance_cost: usize }{
-            .through = minimum - 1,
-            .distance_cost = std.math.maxInt(usize),
-        };
-        var chain_i = prev[rev_i];
-        var checked: usize = 0;
-        var candidates_seen: usize = 0;
-        var jumps = optimal_candidate_cursor.Cursor{};
-
-        while (chain_i != empty and checked < options.max_chain) {
-            var candidate: usize = @intCast(chain_i);
-            if (comptime use_jumps) {
-                if (coverage.through >= 8) {
-                    const jumped = jumps.next(input, prev, &scratch.prefix_jumps, rev_i, candidate, coverage.through, options.window_len, options.max_chain, candidate_limit) orelse break;
-                    candidates_seen = jumped.prefix_count - 1;
-                    checked = jumped.raw_count - 1;
-                    candidate = jumped.position;
-                }
+        const parse_index = if (comptime optimal_index_access.isWindow(@TypeOf(prev))) snapshot: {
+            const rebuild_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
+            prev.prepare(rev_i - 1);
+            if (comptime collect_profile) {
+                const rebuild_ns = elapsedNs(rebuild_start, io);
+                profile.index_ns += rebuild_ns;
+                window_index_ns += rebuild_ns;
             }
-            checked += 1;
-            if (comptime collect_profile) profile.chain_nodes += 1;
-            std.debug.assert(candidate < rev_i);
-            const distance = rev_i - candidate;
-            if (distance == 0 or distance > options.window_len) break;
-            if (minimum >= 4 and
-                std.mem.readInt(u32, input[candidate..][0..4], .little) !=
-                    std.mem.readInt(u32, input[rev_i..][0..4], .little))
-            {
-                if (comptime collect_profile) {
-                    profile.prefix_rejections += 1;
-                    const candidate_prefix = std.mem.readInt(u32, input[candidate..][0..4], .little);
-                    const current_prefix = std.mem.readInt(u32, input[rev_i..][0..4], .little);
-                    profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
-                }
-                chain_i = prev[candidate];
-                continue;
-            }
+            break :snapshot prev.snapshot();
+        } else prev;
+        const through = if (comptime optimal_index_access.isWindow(@TypeOf(prev))) parse_index.core else 0;
+        // The active pointers and coordinate base are immutable throughout
+        // this chunk. Minima and adjacent-match state continue across chunks.
+        while (rev_i > through) {
+            rev_i -= 1;
+            if (comptime collect_profile) profile.positions += 1;
+            costs.set(rev_i, (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs.get(rev_i + 1));
+            decisions.set(rev_i, .{ .literal = input[rev_i] });
 
+            // Runtime minimum selects the strategy: the dense/long-minimum
+            // instance keeps the queues, the sparse minimum-three instance uses
+            // the linear running minimum.
             if (comptime use_bound) {
-                if (minimum == 3) {
-                    const candidate_prefix = std.mem.readInt(u24, input[candidate..][0..3], .little);
-                    const current_prefix = std.mem.readInt(u24, input[rev_i..][0..3], .little);
-                    if (candidate_prefix != current_prefix) {
-                        if (comptime collect_profile) {
-                            profile.prefix_rejections += 1;
-                            profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
+                if (!sparse_linear) minima.advance(costs, rev_i);
+            }
+            if (rev_i + minimum > n) continue;
+
+            const max_len = @min(maxMatch(options), n - rev_i);
+            var coverage = struct { through: usize, distance_cost: usize }{
+                .through = minimum - 1,
+                .distance_cost = std.math.maxInt(usize),
+            };
+            var chain_i = optimal_index_access.at(parse_index, rev_i);
+            var checked: usize = 0;
+            var candidates_seen: usize = 0;
+            var jumps = optimal_candidate_cursor.Cursor{};
+
+            while (chain_i != empty and checked < options.max_chain) {
+                var candidate: usize = @intCast(chain_i);
+                if (comptime use_jumps) {
+                    if (coverage.through >= 8) {
+                        const jumped = jumps.next(input, parse_index, if (comptime optimal_index_access.isWindow(@TypeOf(prev))) parse_index else &scratch.prefix_jumps, rev_i, candidate, coverage.through, options.window_len, options.max_chain, candidate_limit) orelse break;
+                        candidates_seen = jumped.prefix_count - 1;
+                        checked = jumped.raw_count - 1;
+                        candidate = jumped.position;
+                    }
+                }
+                checked += 1;
+                if (comptime collect_profile) profile.chain_nodes += 1;
+                std.debug.assert(candidate < rev_i);
+                const distance = rev_i - candidate;
+                if (distance == 0 or distance > options.window_len) break;
+                if (minimum >= 4 and
+                    std.mem.readInt(u32, input[candidate..][0..4], .little) !=
+                        std.mem.readInt(u32, input[rev_i..][0..4], .little))
+                {
+                    if (comptime collect_profile) {
+                        profile.prefix_rejections += 1;
+                        const candidate_prefix = std.mem.readInt(u32, input[candidate..][0..4], .little);
+                        const current_prefix = std.mem.readInt(u32, input[rev_i..][0..4], .little);
+                        profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
+                    }
+                    chain_i = optimal_index_access.at(parse_index, candidate);
+                    continue;
+                }
+
+                if (comptime use_bound) {
+                    if (minimum == 3) {
+                        const candidate_prefix = std.mem.readInt(u24, input[candidate..][0..3], .little);
+                        const current_prefix = std.mem.readInt(u24, input[rev_i..][0..3], .little);
+                        if (candidate_prefix != current_prefix) {
+                            if (comptime collect_profile) {
+                                profile.prefix_rejections += 1;
+                                profile.prefix_mismatch_histogram[@ctz(candidate_prefix ^ current_prefix) / 8] += 1;
+                            }
+                            chain_i = optimal_index_access.at(parse_index, candidate);
+                            continue;
                         }
-                        chain_i = prev[candidate];
+                    }
+                }
+
+                const distance_cost = distance_costs[distance];
+                if (comptime use_bound) {
+                    // A validated prefix spends the same candidate slot. If it
+                    // cannot extend covered lengths and costs no less than the
+                    // covering distance, it cannot improve any suffix choice.
+                    if (minimum <= 4 and coverage.through >= minimum and coverage.through < max_len and
+                        distance_cost >= coverage.distance_cost and
+                        std.mem.readInt(u32, input[candidate + coverage.through - 3 ..][0..4], .little) !=
+                            std.mem.readInt(u32, input[rev_i + coverage.through - 3 ..][0..4], .little))
+                    {
+                        if (comptime collect_profile) {
+                            profile.bound_rejections += 1;
+                            profile.bound_length_histogram[optimalBoundLengthBucket(coverage.through)] += 1;
+                            profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
+                            const covered_cost = if (sparse_linear)
+                                optimalLengthChoiceCost(scratch.index.best_length_choices[coverage.through])
+                            else
+                                minima.best(costs, rev_i, coverage.through).cost;
+                            const slack = covered_cost + distance_cost - costs.get(rev_i);
+                            profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
+                        }
+                        candidates_seen += 1;
+                        if (candidates_seen >= candidate_limit) {
+                            if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                            break;
+                        }
+                        chain_i = optimal_index_access.at(parse_index, candidate);
                         continue;
                     }
                 }
-            }
 
-            const distance_cost = distance_costs[distance];
-            if (comptime use_bound) {
-                // A validated prefix spends the same candidate slot. If it
-                // cannot extend covered lengths and costs no less than the
-                // covering distance, it cannot improve any suffix choice.
-                if (minimum <= 4 and coverage.through >= minimum and coverage.through < max_len and
-                    distance_cost >= coverage.distance_cost and
-                    std.mem.readInt(u32, input[candidate + coverage.through - 3 ..][0..4], .little) !=
-                        std.mem.readInt(u32, input[rev_i + coverage.through - 3 ..][0..4], .little))
-                {
+                if (comptime collect_profile) profile.match_length_calls += 1;
+                const length = if (comptime enable_jumps) match_cache.find(input, candidate, rev_i, max_len) else matchLength(input, candidate, rev_i, max_len);
+                if (length >= minimum) {
                     if (comptime collect_profile) {
-                        profile.bound_rejections += 1;
-                        profile.bound_length_histogram[optimalBoundLengthBucket(coverage.through)] += 1;
-                        profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
-                        const covered_cost = if (sparse_linear)
-                            optimalLengthChoiceCost(scratch.index.best_length_choices[coverage.through])
-                        else
-                            minima.best(costs, rev_i, coverage.through).cost;
-                        const slack = covered_cost + distance_cost - costs.get(rev_i);
-                        profile.bound_slack_histogram[@min(slack, profile.bound_slack_histogram.len - 1)] += 1;
+                        const added_choices = length -| coverage.through;
+                        profile.valid_match_candidates += 1;
+                        profile.length_choices_built += added_choices;
+                        profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                     }
-                    candidates_seen += 1;
-                    if (candidates_seen >= candidate_limit) {
-                        if (comptime collect_profile) profile.candidate_budget_stops += 1;
-                        break;
-                    }
-                    chain_i = prev[candidate];
-                    continue;
-                }
-            }
-
-            if (comptime collect_profile) profile.match_length_calls += 1;
-            const length = if (comptime enable_jumps) match_cache.find(input, candidate, rev_i, max_len) else matchLength(input, candidate, rev_i, max_len);
-            if (length >= minimum) {
-                if (comptime collect_profile) {
-                    const added_choices = length -| coverage.through;
-                    profile.valid_match_candidates += 1;
-                    profile.length_choices_built += added_choices;
-                    profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
-                }
-                if (comptime use_bound) {
-                    if (sparse_linear) {
-                        extendOptimalLengthChoices(
-                            costs,
-                            rev_i,
-                            minimum,
-                            coverage.through,
-                            length,
-                            &scratch.index.best_length_choices,
-                            &scratch.index.best_lengths,
-                        );
+                    if (comptime use_bound) {
+                        if (sparse_linear) {
+                            extendOptimalLengthChoices(
+                                costs,
+                                rev_i,
+                                minimum,
+                                coverage.through,
+                                length,
+                                &scratch.index.best_length_choices,
+                                &scratch.index.best_lengths,
+                            );
+                            const choice = scratch.index.best_length_choices[length];
+                            const cost = optimalLengthChoiceCost(choice) + distance_cost;
+                            if (cost < costs.get(rev_i)) {
+                                costs.set(rev_i, cost);
+                                decisions.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
+                            }
+                        } else {
+                            if (length > coverage.through or distance_cost < coverage.distance_cost) {
+                                const choice = minima.best(costs, rev_i, length);
+                                const cost = choice.cost + distance_cost;
+                                if (cost < costs.get(rev_i)) {
+                                    costs.set(rev_i, cost);
+                                    decisions.set(rev_i, .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } });
+                                }
+                            }
+                        }
+                        if (length > coverage.through) coverage.distance_cost = distance_cost else if (length == coverage.through)
+                            coverage.distance_cost = @min(coverage.distance_cost, distance_cost);
+                    } else {
+                        if (comptime modeled) {
+                            extendModeledOptimalLengthChoices(
+                                costs,
+                                rev_i,
+                                minimum,
+                                coverage.through,
+                                length,
+                                model.length,
+                                &scratch.index.best_length_choices,
+                                &scratch.index.best_lengths,
+                            );
+                        } else {
+                            extendOptimalLengthChoices(
+                                costs,
+                                rev_i,
+                                minimum,
+                                coverage.through,
+                                length,
+                                &scratch.index.best_length_choices,
+                                &scratch.index.best_lengths,
+                            );
+                        }
                         const choice = scratch.index.best_length_choices[length];
                         const cost = optimalLengthChoiceCost(choice) + distance_cost;
                         if (cost < costs.get(rev_i)) {
                             costs.set(rev_i, cost);
                             decisions.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
                         }
-                    } else {
-                        if (length > coverage.through or distance_cost < coverage.distance_cost) {
-                            const choice = minima.best(costs, rev_i, length);
-                            const cost = choice.cost + distance_cost;
-                            if (cost < costs.get(rev_i)) {
-                                costs.set(rev_i, cost);
-                                decisions.set(rev_i, .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } });
-                            }
-                        }
                     }
-                    if (length > coverage.through) coverage.distance_cost = distance_cost else if (length == coverage.through)
-                        coverage.distance_cost = @min(coverage.distance_cost, distance_cost);
-                } else {
-                    if (comptime modeled) {
-                        extendModeledOptimalLengthChoices(
-                            costs,
-                            rev_i,
-                            minimum,
-                            coverage.through,
-                            length,
-                            model.length,
-                            &scratch.index.best_length_choices,
-                            &scratch.index.best_lengths,
-                        );
-                    } else {
-                        extendOptimalLengthChoices(
-                            costs,
-                            rev_i,
-                            minimum,
-                            coverage.through,
-                            length,
-                            &scratch.index.best_length_choices,
-                            &scratch.index.best_lengths,
-                        );
+                    coverage.through = @max(coverage.through, length);
+                    candidates_seen += 1;
+                    if (length == max_len) break;
+                    if (length >= options.nice_len and candidates_seen >= candidate_limit) {
+                        if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                        break;
                     }
-                    const choice = scratch.index.best_length_choices[length];
-                    const cost = optimalLengthChoiceCost(choice) + distance_cost;
-                    if (cost < costs.get(rev_i)) {
-                        costs.set(rev_i, cost);
-                        decisions.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
+                    if (candidates_seen >= candidate_limit) {
+                        if (comptime collect_profile) profile.candidate_budget_stops += 1;
+                        break;
                     }
                 }
-                coverage.through = @max(coverage.through, length);
-                candidates_seen += 1;
-                if (length == max_len) break;
-                if (length >= options.nice_len and candidates_seen >= candidate_limit) {
-                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
-                    break;
-                }
-                if (candidates_seen >= candidate_limit) {
-                    if (comptime collect_profile) profile.candidate_budget_stops += 1;
-                    break;
-                }
+                chain_i = optimal_index_access.at(parse_index, candidate);
             }
-            chain_i = prev[candidate];
         }
     }
 
-    if (comptime collect_profile) profile.search_ns = elapsedNs(search_start, io);
+    if (comptime collect_profile) {
+        profile.search_ns = elapsedNs(search_start, io);
+        if (comptime optimal_index_access.isWindow(@TypeOf(prev))) profile.search_ns -|= window_index_ns;
+    }
     const reconstruct_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     var stats = PlanStats{};
     var pos: usize = 0;
@@ -4902,7 +4945,7 @@ test "optimal suffix geometry rejects unrepresentable cost extents" {
 }
 
 fn optimalPlanReuseCompactAudited(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, comptime enable_prefix_bound: bool) !PlanStats {
-    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalCostLength(input.len));
+    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalFixedCostLength(input.len));
     var costs = optimal_suffix_costs.Audited.init(scratch.costs.items);
     var decisions = OptimalDecisions.Audited{ .observed = .{ .values = &scratch.steps } };
     defer decisions.deinit(allocator);
@@ -4919,4 +4962,59 @@ test "optimal compact decisions preserve dense budgets wrapping and wide positio
 
 test "optimal compact decisions retain owned literals within a finite memory budget" {
     try @import("lz77/optimal/tests/memory_budget.zig").verify(GreedyOptions, optimalPlanAlloc);
+}
+
+noinline fn optimalPlanReuseWindowIndex(
+    noalias scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    noalias costs: anytype,
+    noalias decisions: anytype,
+    comptime collect_profile: bool,
+    io: if (collect_profile) std.Io else void,
+    profile: if (collect_profile) *OptimalSearchProfile else void,
+    chunk: usize,
+) !PlanStats {
+    const start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
+    var index = try OptimalWindowIndex.init(allocator, input, chunk);
+    defer index.deinit(allocator);
+    if (comptime collect_profile) {
+        profile.index_ns = elapsedNs(start, io);
+        profile.index_bytes = index.view().bytes();
+    }
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, index.view(), optimal_compact_index_empty, true, collect_profile, false, io, profile, undefined);
+}
+
+fn optimalPlanReuseWindowIndexAudited(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, chunk: usize) !PlanStats {
+    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalFixedCostLength(input.len));
+    var costs = optimal_suffix_costs.Audited.init(scratch.costs.items);
+    var decisions = OptimalDecisions.Audited{ .observed = .{ .values = &scratch.steps } };
+    defer decisions.deinit(allocator);
+    try decisions.reserve(allocator, input.len);
+    scratch.tokens.clearRetainingCapacity();
+    return optimalPlanReuseWindowIndex(scratch, allocator, input, options, &costs, &decisions, false, undefined, undefined, chunk);
+}
+
+test "optimal bounded index preserves predecessors ordinals expiration and whole-input policies" {
+    try @import("lz77/optimal/tests/window_index.zig").verify(OptimalWindowIndex, buildOptimalCompactHashIndex, optimalHashAt);
+}
+
+test "optimal bounded index preserves every cost decision and token across chunk boundaries" {
+    try @import("lz77/optimal/tests/window_index.zig").parser(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal, optimalPlanReuseWindowIndexAudited);
+}
+
+test "optimal bounded index releases every failed owner" {
+    try @import("lz77/optimal/tests/window_index.zig").ownership(optimalPlanAlloc);
+}
+
+test "optimal bounded index storage stays finite and checks chunk geometry" {
+    try @import("lz77/optimal/tests/window_index.zig").geometry(OptimalWindowIndex);
+}
+
+test "optimal bounded index rejects fixed cost overflow before large allocations" {
+    const maximum = if (comptime packed_optimal_length_choices) std.math.maxInt(usize) >> optimal_length_bits else std.math.maxInt(usize);
+    const limit = maximum / 9;
+    try std.testing.expectEqual(limit + 1, try optimalFixedCostLength(limit));
+    try std.testing.expectError(error.InvalidBlockPlan, optimalFixedCostLength(limit + 1));
 }

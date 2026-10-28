@@ -1,21 +1,25 @@
 //! Exact original hash/prefix ordinals for suffix-anchored candidate jumps.
 const std = @import("std");
+const access = @import("index_access.zig");
 const history = 32768;
 const empty = std.math.maxInt(u32);
 
+pub fn samplePosition(input_len: usize, ordinal: usize) usize {
+    const state = @as(u64, @intCast(ordinal + 1)) *% 0x9e3779b97f4a7c15;
+    return 3 + @as(usize, @intCast(state % (input_len - 5)));
+}
+
 /// Index construction pays off on dense repeated prefixes, while sparse photo
 /// and random blocks keep their existing compact index and heap footprint.
-pub fn useful(input: []const u8, raw: []const u32) bool {
+pub fn useful(input: []const u8, raw: anytype) bool {
     std.debug.assert(input.len == raw.len);
     if (input.len < 1024) return false;
     var nearby: usize = 0;
-    var state: u64 = 0;
     // Scramble sample positions so an image row stride cannot repeatedly probe
     // the same pixel channel or leading zero residuals on every row.
-    for (0..256) |_| {
-        state +%= 0x9e3779b97f4a7c15;
-        const pos: usize = 3 + @as(usize, @intCast(state % (input.len - 5)));
-        const previous = raw[pos];
+    for (0..256) |ordinal| {
+        const pos = samplePosition(input.len, ordinal);
+        const previous = access.sample(raw, pos);
         if (previous != empty and pos - @as(usize, previous) <= 256 and
             std.mem.readInt(u24, input[previous..][0..3], .little) == std.mem.readInt(u24, input[pos..][0..3], .little)) nearby += 1;
     }
@@ -25,16 +29,14 @@ pub fn useful(input: []const u8, raw: []const u32) bool {
 /// Linear prefix minima win when validated candidates usually add only a
 /// short tail. Long repeated matches amortize the bounded range-minimum
 /// queues instead. Tiny blocks keep the lower fixed setup cost directly.
-pub fn sparseLinearUseful(input: []const u8, raw: []const u32) bool {
+pub fn sparseLinearUseful(input: []const u8, raw: anytype) bool {
     std.debug.assert(input.len == raw.len);
     if (input.len < 8 * 1024) return true;
     var measured: usize = 0;
     var total_length: usize = 0;
-    var state: u64 = 0;
-    for (0..64) |_| {
-        state +%= 0x9e3779b97f4a7c15;
-        const pos: usize = 3 + @as(usize, @intCast(state % (input.len - 5)));
-        const predecessor = raw[pos];
+    for (0..64) |ordinal| {
+        const pos = samplePosition(input.len, ordinal);
+        const predecessor = access.sample(raw, pos);
         if (predecessor == empty or pos - @as(usize, predecessor) > history) continue;
         const candidate: usize = predecessor;
         if (std.mem.readInt(u24, input[candidate..][0..3], .little) != std.mem.readInt(u24, input[pos..][0..3], .little)) continue;

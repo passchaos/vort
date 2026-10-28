@@ -1,14 +1,15 @@
 //! Pick the existing prefix chain with the farthest newest predecessor.
 const std = @import("std");
+const access = @import("index_access.zig");
 
 pub const Anchor = struct { offset: usize = 0, gap: usize = 0, predecessor: u32 = std.math.maxInt(u32) };
 
-pub fn extend(prev: []const u32, pos: usize, from: usize, through: usize, original: Anchor) Anchor {
+pub fn extend(prev: anytype, pos: usize, from: usize, through: usize, original: Anchor) Anchor {
     std.debug.assert(from <= through + 1 and pos + through < prev.len);
     var best_offset = original.offset;
     var best_gap = original.gap;
     for (from..through + 1) |offset| {
-        const predecessor = prev[pos + offset];
+        const predecessor = access.at(prev, pos + offset);
         if (predecessor == std.math.maxInt(u32))
             return .{ .offset = offset, .gap = std.math.maxInt(usize), .predecessor = predecessor };
         const gap = pos + offset - predecessor;
@@ -19,7 +20,7 @@ pub fn extend(prev: []const u32, pos: usize, from: usize, through: usize, origin
     }
     // Only the final winner needs its predecessor. Carrying all three fields
     // through this inlined scan can spill the predecessor on every iteration.
-    return .{ .offset = best_offset, .gap = best_gap, .predecessor = if (best_gap > original.gap) prev[pos + best_offset] else original.predecessor };
+    return .{ .offset = best_offset, .gap = best_gap, .predecessor = if (best_gap > original.gap) access.at(prev, pos + best_offset) else original.predecessor };
 }
 
 fn scalar(prev: []const u32, pos: usize, from: usize, through: usize, original: Anchor) Anchor {
