@@ -12,6 +12,7 @@ const match_length = @import("lz77/match/length.zig");
 const optimal_index_access = @import("lz77/optimal/index_access.zig");
 const optimal_window_index = @import("lz77/optimal/window_index.zig");
 const optimal_chunked_decisions = @import("lz77/optimal/chunked_decisions.zig");
+const token_runs = @import("lz77/token_runs.zig");
 const optimal_decisions = @import("lz77/optimal/decisions.zig");
 const optimal_match_reuse = @import("lz77/optimal/match_reuse.zig");
 const core = @import("core.zig");
@@ -60,7 +61,15 @@ pub const Token = union(enum) {
 
 const OptimalDecisions = optimal_decisions.Views(Token);
 const ChunkedDecisions = optimal_chunked_decisions.Store(Token);
+const TokenRuns = token_runs.Store(Token);
 const OptimalWindowIndex = optimal_window_index.Index(optimalHashAt);
+
+fn ownedRunTokens(stored: *TokenRuns, allocator: std.mem.Allocator) std.mem.Allocator.Error![]Token {
+    return stored.toOwnedSlice(allocator) catch |err| switch (err) {
+        error.InvalidBlockPlan => unreachable, // Internal completed-parser invariant.
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+}
 
 pub const PlanStats = struct {
     literals: usize = 0,
@@ -677,10 +686,11 @@ fn initTokenList(allocator: std.mem.Allocator, input_len: usize) !std.ArrayList(
 }
 
 inline fn appendToken(
-    tokens: *std.ArrayList(Token),
+    tokens: anytype,
     allocator: std.mem.Allocator,
     token: Token,
 ) !void {
+    if (comptime @TypeOf(tokens.*) == TokenRuns) return tokens.append(allocator, token);
     // `ArrayList.append` is deliberately not inline and its call/capacity
     // handling showed up once per token in the fastest hash parser. Growth is
     // rare after the small initial reserve, so keep the common store in the
@@ -1114,13 +1124,21 @@ fn preferScanLazy(input: []const u8) bool {
 }
 
 fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (input.len >= optimal_window_index.minimum_input and minMatch(options) >= 5) return scanLazyRunTokensAlloc(allocator, input, options);
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     const stats = try scanLazyGreedyPlanReuse(&tokens, allocator, input, options);
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
-fn scanLazyGreedyPlanReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+noinline fn scanLazyRunTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var tokens = try TokenRuns.init(allocator, input);
+    defer tokens.deinit(allocator);
+    const stats = try scanLazyGreedyPlanReuse(&tokens, allocator, input, options);
+    return .{ .tokens = try ownedRunTokens(&tokens, allocator), .stats = stats };
+}
+
+fn scanLazyGreedyPlanReuse(tokens: anytype, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     if (input.len >= 8192 and options.window_len >= 64 and options.max_chain >= 8)
         return scan_lazy.prefixed(tokens, allocator, input, options, PlanStats{}, ScanLazyContext);
     if (input.len >= 2048 and options.window_len >= 64 and options.max_chain >= 8)
@@ -1195,10 +1213,18 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
     // table to avoid heap allocation and a full 32 Ki-slot clear on source/text
     // chunks below one deflate window.
 
+    if (input.len >= optimal_window_index.minimum_input and minMatch(options) >= 5) return hashLazyRunTokensWithTables(allocator, input, options, head, prev);
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     const stats = try hashLazyGreedyPlanWithTablesReuse(&tokens, allocator, input, options, head, prev);
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+noinline fn hashLazyRunTokensWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !GreedyPlan {
+    var tokens = try TokenRuns.init(allocator, input);
+    defer tokens.deinit(allocator);
+    const stats = try hashLazyGreedyPlanWithTablesReuse(&tokens, allocator, input, options, head, prev);
+    return .{ .tokens = try ownedRunTokens(&tokens, allocator), .stats = stats };
 }
 
 pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
@@ -1209,7 +1235,7 @@ pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std
     return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
-fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
+fn hashLazyGreedyPlanWithTablesReuse(tokens: anytype, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
     var stats = PlanStats{};
 
     var pos: usize = 0;
@@ -1961,11 +1987,17 @@ inline fn optimalPlanReuseWithIndexBackend(
         if (comptime optimal_index_access.isWindow(@TypeOf(prev))) profile.search_ns -|= window_index_ns;
     }
     const reconstruct_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
+    const run_tokens = comptime optimal_index_access.isWindow(@TypeOf(prev)) and (@TypeOf(decisions.*) == ChunkedDecisions or @TypeOf(decisions.*) == OptimalDecisions.Compact);
+    // Optimal reconstruction previously started with an empty token owner.
+    // Keep that initial geometry; lazy parsing retains its eager reservation.
+    var stored: if (run_tokens) TokenRuns else void = if (run_tokens) .{ .input = input } else {};
+    defer if (run_tokens) stored.deinit(allocator);
+    const output = if (run_tokens) &stored else &scratch.tokens;
     var stats = PlanStats{};
     var pos: usize = 0;
     while (pos < n) {
         const token = decisions.get(pos);
-        try appendToken(&scratch.tokens, allocator, token);
+        try appendToken(output, allocator, token);
         switch (token) {
             .literal => {
                 stats.literals += 1;
@@ -1977,6 +2009,11 @@ inline fn optimalPlanReuseWithIndexBackend(
                 pos += m.length;
             },
         }
+    }
+    if (comptime run_tokens) {
+        const owned = try ownedRunTokens(&stored, allocator);
+        scratch.tokens.deinit(allocator);
+        scratch.tokens = std.ArrayList(Token).fromOwnedSlice(owned);
     }
     if (comptime collect_profile) profile.reconstruct_ns = elapsedNs(reconstruct_start, io);
     return stats;
@@ -5075,4 +5112,36 @@ test "optimal chunked storage retains every cost decision and reconstructed toke
 
 test "optimal chunked decisions retain owned results within a finite memory budget" {
     try @import("lz77/optimal/tests/memory_budget.zig").chunked(GreedyOptions, optimalPlanAlloc);
+}
+
+test "optimal literal token runs own complete literals within a finite memory budget" {
+    try @import("lz77/optimal/tests/memory_budget.zig").literalRuns(GreedyOptions, optimalPlanAlloc);
+}
+
+fn lazyRunReferenceAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    if (preferScanLazy(input)) {
+        const stats = try scanLazyGreedyPlanReuse(&tokens, allocator, input, options);
+        return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    }
+    const head = try allocator.alloc(u32, 1 << 15);
+    defer allocator.free(head);
+    @memset(head, hashPositionEmpty(u32));
+    const prev = try allocator.alloc(u32, input.len);
+    defer allocator.free(prev);
+    const stats = try hashLazyGreedyPlanWithTablesReuse(&tokens, allocator, input, options, head, prev);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+test "large literal token runs retain scalar lazy plans and every owned token" {
+    try @import("lz77/token_runs/tests.zig").compare(GreedyOptions, Token, lazyGreedyPlanAlloc, lazyRunReferenceAlloc);
+}
+
+test "literal token runs preserve the lazy allocator error contract" {
+    const Function = *const fn (std.mem.Allocator, []const u8, GreedyOptions) std.mem.Allocator.Error!GreedyPlan;
+    const lazy: Function = lazyGreedyPlanAlloc;
+    const dictionary: *const fn (std.mem.Allocator, []const u8, []const u8, GreedyOptions) error{ OutOfMemory, InvalidBlockPlan }!GreedyPlan = lazyGreedyPlanAllocWithDictionary;
+    std.mem.doNotOptimizeAway(lazy);
+    std.mem.doNotOptimizeAway(dictionary);
 }

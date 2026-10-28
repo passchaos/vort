@@ -11,6 +11,14 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [source-bound token runs](performance/png-token-runs.md) preserve the
+complete public token result while coalescing temporary literals. A 1-MiB
+all-literal plan fits a 7.5-MiB fixed allocator budget where frozen code fails.
+All 120 PNGs remain exact; Level-8/9 heap peaks decrease about 4% geomean,
+with effectively neutral CPU. Actual RSS tradeoffs remain explicit, including
+the repeated Palette increase. Complete token and predecessor storage remain
+active resource work.
+
 The [eight-bit raw-plane proof](performance/png-plane-raw-proof.md) keeps
 the published decision-plane heap and 120 complete PNG buffers exact.
 Adjacent-change vector counts prove raw admission without changing payloads.

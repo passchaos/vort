@@ -60,3 +60,21 @@ pub fn chunked(comptime Options: type, comptime allocate: anytype) !void {
     var insufficient = std.heap.FixedBufferAllocator.init(memory[0 .. 128 * 1024]);
     try std.testing.expectError(error.OutOfMemory, allocate(insufficient.allocator(), input, options));
 }
+
+pub fn literalRuns(comptime Options: type, comptime allocate: anytype) !void {
+    const input = try std.testing.allocator.alloc(u8, 1024 * 1024);
+    defer std.testing.allocator.free(input);
+    @memset(input, 17);
+    const memory = try std.testing.allocator.alloc(u8, 15 * 512 * 1024);
+    defer std.testing.allocator.free(memory);
+    var fixed = std.heap.FixedBufferAllocator.init(memory);
+    const plan = try allocate(fixed.allocator(), input, @as(Options, .{ .max_chain = 0 }));
+    defer plan.deinit(fixed.allocator());
+    try std.testing.expectEqual(input.len, plan.tokens.len);
+    try std.testing.expectEqual(input.len, plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 0), plan.stats.matches);
+    for (plan.tokens) |token| try std.testing.expectEqual(@as(u8, 17), token.literal);
+    @memset(input, 0);
+    try std.testing.expectEqual(@as(u8, 17), plan.tokens[0].literal);
+    try std.testing.expectEqual(@as(u8, 17), plan.tokens[plan.tokens.len - 1].literal);
+}
