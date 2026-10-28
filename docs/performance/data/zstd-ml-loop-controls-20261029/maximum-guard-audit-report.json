@@ -1,0 +1,269 @@
+{
+  "archive_members_verified": 134,
+  "archive_sha256": "0dc4a26e2381c46132f1a6d0e0eaae821ecf7eeddb685f45ab82db285ebc17c0",
+  "baseline_source_members_verified": 1536,
+  "new_compilation_or_performance_rounds": 0,
+  "original_evidence": {
+    "binary_object_identities_preserved": 3,
+    "loop_codegen_bytes": {
+      "baseline": 628,
+      "candidate": 672
+    },
+    "recorded_candidate_compile_exit_code": 0,
+    "recorded_smoke_passed": 6,
+    "screen_original_manifest_artifacts_archived": 114
+  },
+  "reference_decodes_verified": 24,
+  "reference_record_sha256": "c8066448feec338653e670349c947b9e5afb4ff056c40ba3a433aa5801dcad52",
+  "reference_version_number": 10600,
+  "schema_version": 1,
+  "screen": {
+    "decision": "not adopted from mixed exploratory results; no further variants",
+    "ordinary_rows_verified": 24,
+    "ratio_method": "median(candidate_ns)/median(baseline_ns), independently computed with Fraction",
+    "recorded_native_decodes": 48,
+    "summaries": [
+      {
+        "baseline_ns": [
+          5395683,
+          5474479
+        ],
+        "baseline_profile_ns": [
+          5404739,
+          5390852
+        ],
+        "candidate_ns": [
+          5278041,
+          5509829
+        ],
+        "candidate_profile_ns": [
+          5279435,
+          5600426
+        ],
+        "case": "dickens",
+        "median_ratio": 0.9924295516478964,
+        "median_ratio_exact": "5393935/5435081",
+        "paired_ratios": [
+          0.9781970141685492,
+          1.0064572354739145
+        ],
+        "round_orders": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "strategy": "btopt",
+        "wire_bytes": 2035,
+        "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9"
+      },
+      {
+        "baseline_ns": [
+          19431381,
+          20461199
+        ],
+        "baseline_profile_ns": [
+          20151632,
+          21202904
+        ],
+        "candidate_ns": [
+          19603601,
+          19622298
+        ],
+        "candidate_profile_ns": [
+          19656742,
+          20138084
+        ],
+        "case": "dickens",
+        "median_ratio": 0.9832880951796048,
+        "median_ratio_exact": "39225899/39892580",
+        "paired_ratios": [
+          1.0088629830273,
+          0.9590003987547358
+        ],
+        "round_orders": [
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ]
+        ],
+        "strategy": "btultra2",
+        "wire_bytes": 2019,
+        "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737"
+      },
+      {
+        "baseline_ns": [
+          29015365,
+          29053448
+        ],
+        "baseline_profile_ns": [
+          31055440,
+          31231452
+        ],
+        "candidate_ns": [
+          28987286,
+          28750428
+        ],
+        "candidate_profile_ns": [
+          31050419,
+          31271033
+        ],
+        "case": "mozilla",
+        "median_ratio": 0.9942981613900046,
+        "median_ratio_exact": "57737714/58068813",
+        "paired_ratios": [
+          0.9990322713500244,
+          0.9895702568590138
+        ],
+        "round_orders": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "strategy": "btopt",
+        "wire_bytes": 1191,
+        "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a"
+      },
+      {
+        "baseline_ns": [
+          152973923,
+          155415582
+        ],
+        "baseline_profile_ns": [
+          166415446,
+          167422119
+        ],
+        "candidate_ns": [
+          149518712,
+          149437958
+        ],
+        "candidate_profile_ns": [
+          160593275,
+          162456011
+        ],
+        "case": "mozilla",
+        "median_ratio": 0.9694125939856482,
+        "median_ratio_exact": "59791334/61677901",
+        "paired_ratios": [
+          0.9774130718998427,
+          0.9615378077083674
+        ],
+        "round_orders": [
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ]
+        ],
+        "strategy": "btultra2",
+        "wire_bytes": 1155,
+        "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e"
+      },
+      {
+        "baseline_ns": [
+          8386470,
+          8289922
+        ],
+        "baseline_profile_ns": [
+          8286943,
+          8384495
+        ],
+        "candidate_ns": [
+          10135720,
+          7883414
+        ],
+        "candidate_profile_ns": [
+          10025051,
+          7850788
+        ],
+        "case": "mr",
+        "median_ratio": 1.0805175364071558,
+        "median_ratio_exact": "9009567/8338196",
+        "paired_ratios": [
+          1.208580010421548,
+          0.9509635916960377
+        ],
+        "round_orders": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "strategy": "btopt",
+        "wire_bytes": 1644,
+        "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d"
+      },
+      {
+        "baseline_ns": [
+          30321934,
+          30409180
+        ],
+        "baseline_profile_ns": [
+          32600556,
+          31292434
+        ],
+        "candidate_ns": [
+          29746937,
+          29503719
+        ],
+        "candidate_profile_ns": [
+          30423855,
+          30332654
+        ],
+        "case": "mr",
+        "median_ratio": 0.9756227425698135,
+        "median_ratio_exact": "29625328/30365557",
+        "paired_ratios": [
+          0.9810369285811387,
+          0.9702240902253859
+        ],
+        "round_orders": [
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ]
+        ],
+        "strategy": "btultra2",
+        "wire_bytes": 1624,
+        "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d"
+      }
+    ],
+    "wire_profile_pairs_verified": 12
+  },
+  "source": {
+    "contract_source_hashes_verified": 6,
+    "contract_target_records_verified": 3,
+    "eligible_endpoint_minima": {
+      "btopt": 17,
+      "other_sampled_strategies": 66
+    },
+    "exact_source_guard_added_lines": 2,
+    "recorded_tests_per_target": 7,
+    "recorded_trace_pairs_per_run": 1572900,
+    "wasm_executed": false
+  }
+}

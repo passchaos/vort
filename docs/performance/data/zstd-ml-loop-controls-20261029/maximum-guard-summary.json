@@ -1,0 +1,272 @@
+{
+  "audit_command": "python3 docs/performance/data/zstd-ml-loop-controls-20261029/guard_validation_audit.py",
+  "candidate": "Two added lines after maximum and short exhaustive edges: first_endpoint = btopt ? 17 : 66; continue when maximum <= first_endpoint. Original unsliced loop and all remaining source bytes are unchanged.",
+  "decision": "not adopted from mixed exploratory results; no further variants",
+  "limitations": [
+    "Exploratory two-round screen; raw rounds retained, including MR btopt first candidate ordinary 10.135720 ms and profile 10.025051 ms. No stable regression magnitude inferred.",
+    "Compiles were pinned to CPUs 4,6 and timings to CPU2. One background compiler was observed on CPU4; no direct CPU2 overlap was observed.",
+    "Three exact-source 7/7 target records and six-source hashes are archived; no original contract artifact-manifest.json exists. Wasm prepared but not executed.",
+    "The compiler executable SHA, version and host model are archive-time observations; original recorded compile commands and terminal statuses are preserved.",
+    "Compiled runners, object files, caches and complete source trees are excluded. Shared baseline-source.tar.xz and inputs.tar.xz are read-only dependencies."
+  ],
+  "loop_codegen_bytes": {
+    "baseline": 628,
+    "candidate": 672
+  },
+  "original_manifest_audits": {
+    "contract_source_hashes_verified": 6,
+    "contracts_artifact_manifest_present": false,
+    "reused_baseline_artifacts": 118,
+    "screen_artifacts": 117
+  },
+  "ratio_method": "median(candidate_ns)/median(baseline_ns), independently computed with Fraction",
+  "reference_decode_command": "python3 docs/performance/data/zstd-ml-loop-controls-20261029/guard_validation_audit.py --decode",
+  "revision": "5f38d682101e7840c89939877b9dd71517d9c4a8",
+  "schema_version": 1,
+  "source_contract_binding": {
+    "candidate_sha256": "3e116f39404e31d23da65a439a04b806980b096efccc50f12bc8ef3c6e209c65",
+    "reference_sha256": "1a4aee3ba14dfbd9f002475b85b8180b5f7d94035d8831d34e34fa3fb5670c7b"
+  },
+  "summaries": [
+    {
+      "baseline_ns": [
+        5395683,
+        5474479
+      ],
+      "baseline_profile_ns": [
+        5404739,
+        5390852
+      ],
+      "candidate_ns": [
+        5278041,
+        5509829
+      ],
+      "candidate_profile_ns": [
+        5279435,
+        5600426
+      ],
+      "case": "dickens",
+      "median_ratio": 0.9924295516478964,
+      "median_ratio_exact": "5393935/5435081",
+      "paired_ratios": [
+        0.9781970141685492,
+        1.0064572354739145
+      ],
+      "round_orders": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ]
+      ],
+      "strategy": "btopt",
+      "wire_bytes": 2035,
+      "wire_sha256": "4ea7f75a9079d4f2550c13fca8589434ee97f637e7ef2daac92d18efb8d57ee9"
+    },
+    {
+      "baseline_ns": [
+        19431381,
+        20461199
+      ],
+      "baseline_profile_ns": [
+        20151632,
+        21202904
+      ],
+      "candidate_ns": [
+        19603601,
+        19622298
+      ],
+      "candidate_profile_ns": [
+        19656742,
+        20138084
+      ],
+      "case": "dickens",
+      "median_ratio": 0.9832880951796048,
+      "median_ratio_exact": "39225899/39892580",
+      "paired_ratios": [
+        1.0088629830273,
+        0.9590003987547358
+      ],
+      "round_orders": [
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "strategy": "btultra2",
+      "wire_bytes": 2019,
+      "wire_sha256": "86582dbcc170896a23128bf2af266a4448caadea2deb2591321a4a9c1065c737"
+    },
+    {
+      "baseline_ns": [
+        29015365,
+        29053448
+      ],
+      "baseline_profile_ns": [
+        31055440,
+        31231452
+      ],
+      "candidate_ns": [
+        28987286,
+        28750428
+      ],
+      "candidate_profile_ns": [
+        31050419,
+        31271033
+      ],
+      "case": "mozilla",
+      "median_ratio": 0.9942981613900046,
+      "median_ratio_exact": "57737714/58068813",
+      "paired_ratios": [
+        0.9990322713500244,
+        0.9895702568590138
+      ],
+      "round_orders": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ]
+      ],
+      "strategy": "btopt",
+      "wire_bytes": 1191,
+      "wire_sha256": "13144de578edb72109603b6b80794aae081ed2329ccff742c26126ac6d38a19a"
+    },
+    {
+      "baseline_ns": [
+        152973923,
+        155415582
+      ],
+      "baseline_profile_ns": [
+        166415446,
+        167422119
+      ],
+      "candidate_ns": [
+        149518712,
+        149437958
+      ],
+      "candidate_profile_ns": [
+        160593275,
+        162456011
+      ],
+      "case": "mozilla",
+      "median_ratio": 0.9694125939856482,
+      "median_ratio_exact": "59791334/61677901",
+      "paired_ratios": [
+        0.9774130718998427,
+        0.9615378077083674
+      ],
+      "round_orders": [
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "strategy": "btultra2",
+      "wire_bytes": 1155,
+      "wire_sha256": "9edbf6073fd56582f30376371e068d5a8746828da0ec32313d10936c6699d43e"
+    },
+    {
+      "baseline_ns": [
+        8386470,
+        8289922
+      ],
+      "baseline_profile_ns": [
+        8286943,
+        8384495
+      ],
+      "candidate_ns": [
+        10135720,
+        7883414
+      ],
+      "candidate_profile_ns": [
+        10025051,
+        7850788
+      ],
+      "case": "mr",
+      "median_ratio": 1.0805175364071558,
+      "median_ratio_exact": "9009567/8338196",
+      "paired_ratios": [
+        1.208580010421548,
+        0.9509635916960377
+      ],
+      "round_orders": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ]
+      ],
+      "strategy": "btopt",
+      "wire_bytes": 1644,
+      "wire_sha256": "46731c3fc95f8b3b39bf2044c2b39980a4cffb3c79cfaded4013c7ea3b9d812d"
+    },
+    {
+      "baseline_ns": [
+        30321934,
+        30409180
+      ],
+      "baseline_profile_ns": [
+        32600556,
+        31292434
+      ],
+      "candidate_ns": [
+        29746937,
+        29503719
+      ],
+      "candidate_profile_ns": [
+        30423855,
+        30332654
+      ],
+      "case": "mr",
+      "median_ratio": 0.9756227425698135,
+      "median_ratio_exact": "29625328/30365557",
+      "paired_ratios": [
+        0.9810369285811387,
+        0.9702240902253859
+      ],
+      "round_orders": [
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "strategy": "btultra2",
+      "wire_bytes": 1624,
+      "wire_sha256": "a8b429ab597e888819cde4248aa4fa7c576a28e09a332a1e8319916048da421d"
+    }
+  ],
+  "validation": {
+    "contract_target_records": 3,
+    "contract_tests_per_target": 7,
+    "independent_reference_decodes": 24,
+    "new_compilation_or_performance_rounds": 0,
+    "ordinary_rows": 24,
+    "recorded_native_decodes": 48,
+    "reference_version_number": 10600,
+    "trace_pairs_per_run": 1572900,
+    "wasm_executed": false,
+    "wire_profile_pairs": 12
+  }
+}

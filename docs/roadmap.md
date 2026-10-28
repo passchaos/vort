@@ -24149,3 +24149,19 @@ reuse, so production keeps the simpler independently owned plans.
   decodes pass. Final build and archive checks succeed. Wider clean-host/full-
   file ratio/speed/memory evidence, edge/state costs and all ten formats remain
   active work toward the full objective.
+
+- 2026-10-29: three exact sampled-ML loop-control variants were measured and
+  retained as unadopted evidence. Starting table slices at proven inactive
+  prefixes 14/39 preserves all endpoint/code visits, but Dickens btopt slows
+  in both rounds. Hoisting the strategy's upper-endpoint branch grows the
+  loop body and regresses Mozilla btultra2 in both rounds. A two-line guard
+  skips entirely inactive ML tails at maximum<=17/66, but has mixed Dickens
+  results and a slow first MR btopt run. [Loop-control evidence](performance/zstd-ml-loop-controls.md)
+  preserves three separate two-round 24-encode/48-decode screens, full wire/
+  profile comparisons, 72 independent libzstd decodes, compiler affinity and
+  background records. Prefix and maximum-guard contracts each verify
+  1,572,900 ordered length/code traces and pass native Debug/ReleaseFast/x86
+  Debug 7/7. No loop variant enters the production codec; deterministic
+  behavior, price admission and output remain unchanged at the current
+  retained source. Continue larger measured state/edge work and the complete
+  ten-format functionality/performance objective.
