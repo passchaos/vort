@@ -106,8 +106,9 @@ def main() -> None:
     inputs = corpus(commit)
     closure = git("ls-tree", "-r", "--name-only", commit, "src/bzip2", "src/core.zig", "src/io/stream_count.zig").decode().splitlines()
     tool_paths = ["src/bzip2_bench.zig", "src/bzip2/test_support/bwt_full_doubling.zig",
-                  "tools/bzip2/bwt_bench.zig", "tools/benchmark_provenance.zig"]
-    source_paths = sorted(set(closure + tool_paths + ["src/bzip2/bwt.zig", "src/bzip2/bwt_tests.zig",
+                  "tools/bzip2/bwt_bench.zig", "tools/bzip2/libbz2_runtime.zig", "tools/benchmark_provenance.zig"]
+    current_closure = [p.relative_to(ROOT).as_posix() for p in (ROOT / "src/bzip2").rglob("*.zig")]
+    source_paths = sorted(set(closure + current_closure + tool_paths + ["src/bzip2/bwt.zig", "src/bzip2/bwt_tests.zig",
                                                     "src/bzip2.zig", "tools/bzip2/bwt_campaign.py", "build.zig"]))
     current_build = [args.zig, "build", "-j2", "build-bzip2-bwt-bench", "-Doptimize=ReleaseFast", "--summary", "all"]
     build_result = run(current_build, cwd=ROOT, text=True)
@@ -152,7 +153,7 @@ def main() -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((ROOT / name).read_bytes())
         baseline = temp / "baseline-bench"
-        build = [args.zig, "build-exe", "-OReleaseFast", "--dep", "bzip2_bench", "--dep", "benchmark_provenance",
+        build = [args.zig, "build-exe", "-OReleaseFast", "-lc", "--dep", "bzip2_bench", "--dep", "benchmark_provenance",
                  f"-Mroot={baseline_root / 'tools/bzip2/bwt_bench.zig'}", "-OReleaseFast", f"-Mbzip2_bench={baseline_root / 'src/bzip2_bench.zig'}",
                  "-OReleaseFast", f"-Mbenchmark_provenance={baseline_root / 'tools/benchmark_provenance.zig'}", f"-femit-bin={baseline}"]
         run(build)

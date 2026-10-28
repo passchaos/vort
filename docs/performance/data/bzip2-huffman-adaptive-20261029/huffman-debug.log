@@ -1,0 +1,18 @@
+1/17 bzip2.test_0...OK
+2/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman lengths validate shape without changing output...OK
+3/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman positive smoothing and stable equal-weight ties...OK
+4/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman full alphabet handles equal zero uniform and skewed weights...OK
+5/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman lengths match independent small-alphabet brute optimal costs...OK
+6/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman Fibonacci invokes the bounded optimal package fallback...OK
+7/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman maximum alphabet and large Fibonacci weights exercise bounded recovery...OK
+8/17 bzip2.huffman_lengths_tests.test.Bzip2 Huffman fixed-seed dense random weights remain canonical and deterministic...OK
+9/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman plan preserves exact wire costs and never exceeds fixed groups...OK
+10/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman plan models nonstationary chunks with multiple groups...OK
+11/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman writer handles all group counts MTF ranks and length deltas...OK
+12/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman plan validates before allocating and unwinds both selector allocations...OK
+13/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman selector refinement prices MTF ties and removes an unused table...OK
+14/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman writer emits the largest complete 20-bit canonical codes...OK
+15/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman strategies preserve ordered costs across chunk and training thresholds...OK
+16/17 bzip2.huffman_plan_tests.test.Bzip2 Huffman single-chunk and all-single frequencies have identical strategy plans...OK
+17/17 bzip2.decoder.test.Bzip2 Huffman table decodes canonical MSB-first codes...OK
+All 17 tests passed.

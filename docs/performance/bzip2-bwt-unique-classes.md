@@ -137,10 +137,18 @@ Wasm compilation and CLI help also return exit 0. A separate complete
 `zig build -j2 check` returns exit 0 with 211/211 steps. Format, Python syntax,
 source-reference and Git whitespace checks pass.
 
-The combined `zig build -j2 test check check-wasm` remains active in full root
-test execution at this recorded epoch. Its whole-test exit code is unresolved
-and no full-test pass is claimed. A three-second activity sample observes Zstd
-match extension/optimal parsing work, with resolved user-space symbols;
-it is a liveness observation rather than a performance or completion result.
-The existing session is preserved for continuation. [Validation records](data/bzip2-bwt-unique-classes-20261029/validation.json)
-keep the completed command exit codes/logs and the separate pending full gate.
+The combined `zig build -j2 test check check-wasm` later returns exit 1.
+Its original root-test executable reports 5030 passed / two skipped, including
+the two small support suites, after about 59 minutes. Three later queued
+compilation steps read the next Huffman prototype while it still exposed an
+internal shape error outside existing consumer error sets. That error mapping
+is corrected in the following feature, but this command spans source epochs
+and is not assigned a clean whole-gate pass. The original separate 211-step
+check remains an independent completed epoch. [Validation records](data/bzip2-bwt-unique-classes-20261029/validation.json)
+retain the terminal combined log, counts and source-epoch distinction.
+
+Complete-stream byte equality in this document belongs to commits
+`b2f6e2b7` / `80ea656b`; reproduce the screen from that source epoch.
+The subsequent adaptive Huffman feature changes encoded bits while preserving
+the forward BWT result. Future long gates use a frozen checkout to avoid late
+compilations reading ongoing edits.

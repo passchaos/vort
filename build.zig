@@ -3145,6 +3145,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/bzip2/bwt_bench.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
             .imports = &.{
                 .{ .name = "bzip2_bench", .module = b.createModule(.{ .root_source_file = b.path("src/bzip2_bench.zig"), .target = target, .optimize = optimize }) },
                 .{ .name = "benchmark_provenance", .module = b.createModule(.{ .root_source_file = b.path("tools/benchmark_provenance.zig"), .target = target, .optimize = optimize }) },

@@ -13,9 +13,12 @@ concatenated APIs decode all adjacent Bzip2 streams.
 
 The deterministic encoder performs first-stage RLE, cyclic suffix-array BWT,
 move-to-front and RUNA/RUNB generation, and emits canonical Huffman-coded
-blocks. Its current baseline uses two identical equal-length Huffman groups;
-this is fully interoperable but intentionally favors implementation coverage
-over compression ratio until the later optimization phase.
+blocks. It builds positive, length-limited Huffman trees and compares complete
+selector, code-length-description and data costs. Fixed equal-length,
+global adaptive and uniform-weight candidates remain available as size bounds.
+The default balanced strategy trains the standard 2...6 group count; the ratio
+strategy also evaluates the other group counts. Canonical codes may use up to
+20 bits, supported by the standard decoder.
 
 ```zig
 const decoded_len = try vort.bzip2DecodedSizeLimited(
@@ -36,9 +39,27 @@ defer allocator.free(concatenated);
 
 const encoded = try vort.encodeBzip2Alloc(allocator, input, .{
     .block_size_100k = 9,
+    .strategy = .balanced,
 });
 defer allocator.free(encoded);
 ```
+
+`Bzip2EncodeOptions.strategy` and `Bzip2IncrementalEncoder.Options.strategy`
+use `Bzip2EncodeStrategy` (also `bzip2.EncodeStrategy`):
+
+| Strategy | Encoding work | Size guarantee on identical block settings |
+| --- | --- | --- |
+| `fast` | Global adaptive/uniform tables and fixed fallback; no group training | No larger than the previous fixed-code encoder |
+| `balanced` (default) | Four trained rounds at the standard symbol-count group thresholds, then selector-aware refinement | No larger than `fast` |
+| `ratio` | Retain the balanced result and search the other group counts from 2 through 6 | No larger than `balanced` |
+
+Strategies change Huffman coding while retaining the same RLE1/BWT block
+boundaries and CRCs. They produce deterministic standard Bzip2 streams.
+One-shot and incremental encoding remain byte-identical for the same strategy
+when no explicit flush is requested. The [adaptive Huffman evidence](../performance/bzip2-huffman-adaptive.md)
+records complete physical bit costs, bounded scratch, and measured size/speed
+tradeoffs. A strategy name does not imply speed or ratio leadership over other
+libraries.
 
 For caller-driven streaming, `Bzip2IncrementalDecoder` retains compressed data
 only until one complete block or member terminator can be parsed. Bzip2 block
@@ -103,8 +124,9 @@ Forward BWT sorting stops once every cyclic prefix has a unique class: those
 prefixes already determine the complete rotation order. Periodic blocks retain
 ties and finish the original doubling sequence, preserving both transformed
 bytes and the original pointer. One-shot and incremental encoding share this
-core in `src/bzip2/bwt.zig`. This saves sorting passes on distinct data without
-changing encoded bytes, allocation sizes, or the worst-case work bound. The
+core in `src/bzip2/bwt.zig`. That BWT-only change saves sorting passes on distinct
+data without changing transformed bytes, allocation sizes, or the worst-case
+work bound. Later Huffman changes legitimately alter complete encoded bytes. The
 [BWT measurement](../performance/bzip2-bwt-unique-classes.md) records the
 output comparisons and allocation-inclusive timing scope.
 

@@ -1,0 +1,170 @@
+{
+  "schema": "vort.bzip2_huffman_validation.v1",
+  "status": "focused_and_compile_passed_frozen_full_test_running",
+  "recorded_utc": "2026-10-28T21:25:44.297144+00:00",
+  "feature_commit": "1fe1eda4d50a682de7283efb22b521608a08f639",
+  "checks": [
+    {
+      "name": "debug-suite",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "debug-suite.log",
+      "raw_log_sha256": "3ed81f8d0e46f1d119a5eac46073a38b7d29645067adadd0c495b1151a2fb896",
+      "log_sha256": "c37b1241933390a4d911f47212f1b26e9ecfb930f19b2f8c3b1e78478ff2e009"
+    },
+    {
+      "name": "releasefast-suite",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "build-bzip2-bwt-bench",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "releasefast-suite.log",
+      "raw_log_sha256": "05e2c563a5a175440049a4f269b1d6b43c8e6cc9d793ab16c133cdde75164109",
+      "log_sha256": "2f564f620d3b9c3904a1b40619a5be1538cb0ed46ced81bb46bcd9cb936008af"
+    },
+    {
+      "name": "consumer-contracts",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2-stream-consumers",
+        "run-bzip2-stream-contract-diff",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "consumer-contracts.log",
+      "raw_log_sha256": "40d1fb5000cb5e7fe7683be3584da01c5addadf60d15df15a96047dd821a4277",
+      "log_sha256": "0814321ea65c4f8b004326516b8a028956e4b6b92218e3ed208b315bed681512"
+    },
+    {
+      "name": "help-diff",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "run-bzip2-diff",
+        "run",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "log": "help-diff.log",
+      "raw_log_sha256": "bcd5eda519278cecb6295ec15075183b5b9a053b959377717a326ea39013f113",
+      "log_sha256": "d55b650d300add957e5e4bf340c3fe1430c3ab5b27ae8bfbb7e6eba325f9ffbc"
+    },
+    {
+      "name": "huffman-debug",
+      "command": [
+        "zig",
+        "test",
+        "src/bzip2.zig",
+        "--test-filter",
+        "Bzip2 Huffman"
+      ],
+      "exit_code": 0,
+      "log": "huffman-debug.log",
+      "raw_log_sha256": "a7eeba1c5635e27db4b6e6a52e0bee66dc0fdf2b0d94bbd9b3b1864c1bc902e7",
+      "log_sha256": "a7eeba1c5635e27db4b6e6a52e0bee66dc0fdf2b0d94bbd9b3b1864c1bc902e7"
+    },
+    {
+      "name": "post-rebase-codec",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "run-bzip2-stream-contract-diff",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "post-rebase-codec.log",
+      "raw_log_sha256": "37db7861eef45e4e5ff18d41b16f680c18c033790d72608a9c1a650d9adce934",
+      "log_sha256": "44f112fb1e85cfcce898c656bbe8e67d24ac0916ab8def38df963e50c0c5573e"
+    },
+    {
+      "name": "post-rebase-wasm-help",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "check-wasm",
+        "run",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "log": "post-rebase-wasm-help.log",
+      "raw_log_sha256": "3ab8bbf4ba10c00c072e90e0e4aaff27e0cffa481716e67faeae7d76c3f6a332",
+      "log_sha256": "d3b667b306ca6b3694727df222c8bf3f4b289d5818dcf7990626a688c2d2e14f"
+    }
+  ],
+  "final_compile": {
+    "session_id": 41882,
+    "status": "passed",
+    "command": [
+      "zig",
+      "build",
+      "-j2",
+      "check",
+      "check-wasm",
+      "--summary",
+      "all"
+    ],
+    "exit_code": 0,
+    "steps_passed": 211,
+    "log": "compile-wasm.log",
+    "raw_log_sha256": "632fa04851bca92988dcaa73655d2a8ebf4e75b2f7c3a8f65ee4737da58ec891",
+    "log_sha256": "c523314ae760b8193224893716b55a335cface030e423f357401290fef3d0051"
+  },
+  "frozen_full_test": {
+    "session_id": 74729,
+    "status": "running",
+    "commit": "1fe1eda4d50a682de7283efb22b521608a08f639",
+    "worktree": "/home/passchaos/project-z/vort-bzip2-huffman-verify-20261029",
+    "command": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "--summary",
+      "all"
+    ],
+    "log_runtime": "/tmp/vort-bzip2-huffman-frozen-full-test.log",
+    "note": "Clean detached core commit; no current-worktree edits affect this source snapshot. No full-test completion is assigned."
+  },
+  "log_normalization": "Trailing line whitespace and extra final blank lines stripped; raw and saved hashes both recorded.",
+  "rebase": {
+    "command": [
+      "git",
+      "pull",
+      "--rebase",
+      "origin",
+      "main"
+    ],
+    "exit_code": 0,
+    "result": "up to date, no conflicts"
+  }
+}

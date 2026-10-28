@@ -24201,3 +24201,26 @@ reuse, so production keeps the simpler independently owned plans.
   bound are unchanged. Adaptive Bzip2 Huffman grouping, comparable real-file
   ratio/throughput/memory evidence and all ten formats remain active work;
   this increment establishes no industry-wide lead.
+
+
+- 2026-10-29: Bzip2 now builds positive, length-limited canonical Huffman
+  tables, trains standard group counts and evaluates complete selector/table/
+  payload costs. Unused groups compact and selector-aware refinement is kept
+  only on whole-wire improvement. Global/uniform and fixed bounds support
+  fast/balanced(default)/ratio strategies shared by one-shot and incremental
+  encoders, with per-block size ordering ratio<=balanced<=fast<=old fixed.
+  Natural trees have an optimal 20-bit package-merge fallback; shape errors
+  preserve existing consumer error sets. [Adaptive Huffman evidence](performance/bzip2-huffman-adaptive.md)
+  records a final 180-call/900-row old/three-strategy/libbz2 campaign: fast
+  generally keeps larger-input throughput near old while random/source/JSON
+  sizes drop about 11%/43%/59%; balanced improves source/JSON about 43%/64%.
+  Tiny and trained modes retain CPU regressions, and many reference throughput
+  rows remain faster. Debug/ReleaseFast each pass 74 tests; independent wire
+  inspection includes 20-bit extremes, all group counts and malformed paths.
+  Complete output decode, stable source/binary/input identities, strict bit
+  bounds and the slower full-search prototype are preserved. The earlier
+  combined whole gate closes with a successful old test step but three late
+  compile failures from a subsequent mixed source epoch; no clean whole-gate
+  pass is inferred. Frozen checkouts isolate future long test gates. Continue
+  reducing planner/MTF/BWT overhead, widening corpus and memory comparisons,
+  and the entire ten-format industry-best functionality/performance objective.

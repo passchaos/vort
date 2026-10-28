@@ -2,7 +2,7 @@
   "schema": "vort.bzip2_bwt_validation.v1",
   "recorded_utc": "2026-10-28T19:57:02.999288+00:00",
   "feature_commit": "b2f6e2b7196f12047c03a2e1a9a78b547f9dd119",
-  "status": "focused_and_compile_passed_full_test_running",
+  "status": "focused_and_compile_passed_combined_gate_mixed_epoch_failed",
   "commands": [
     {
       "name": "focused-releasefast",
@@ -99,7 +99,7 @@
   ],
   "full_gate": {
     "session_id": 34439,
-    "status": "running",
+    "status": "failed",
     "command": [
       "zig",
       "build",
@@ -110,7 +110,7 @@
       "--summary",
       "all"
     ],
-    "note": "Whole root test execution remains active; no exit code or whole-test pass is assigned. Separate check and check-wasm completed with observed exit 0.",
+    "note": "Original root-test executable reports 5030 passed / 2 skipped. Later queued compile steps read the next Huffman prototype before its internal shape error was mapped, producing InvalidBzip2HuffmanLengths error-set mismatches. This combined command spans source epochs and is not a clean full-gate pass. The earlier separate 211-step check is preserved as its own completed epoch.",
     "activity_observation": {
       "command": [
         "perf",
@@ -137,7 +137,16 @@
       "report_sha256": "5be3ffb50aeb21ef52a984c49b94bd0164344b21a6e18ef34c8f5b1851421e96",
       "report": "full-test-activity.log",
       "raw_report_sha256": "1cf877e585fdea12ad342db105bffe2a37775bae60bb6f78571be33c263660f1"
-    }
+    },
+    "exit_code": 1,
+    "completion_recorded_utc": "2026-10-28T20:58:13.223603+00:00",
+    "log": "mixed-full-gate.log",
+    "raw_log_sha256": "71109bd7cd701db25d0605f8a5428c069b4ad048b499d2eba7cbad9524587a80",
+    "log_sha256": "71109bd7cd701db25d0605f8a5428c069b4ad048b499d2eba7cbad9524587a80",
+    "reported_test_step_status": "success",
+    "reported_tests_passed": 5030,
+    "reported_tests_skipped": 2,
+    "reported_check_compile_failures": 3
   },
   "code_source_sha256": {
     "build.zig": "0245e9c0c7f1a0885641430626215e8669aa22d2a47bcd477b73d8575d9617b5",

@@ -1,0 +1,4 @@
+Build Summary: 3/3 steps succeeded; 74/74 tests passed
+test-bzip2 success
++- run test vort-bzip2-tests 74 pass (74 total) 4s MaxRSS:29M
+   +- compile test vort-bzip2-tests Debug native success 440ms MaxRSS:160M
