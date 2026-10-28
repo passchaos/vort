@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "cwd": "/tmp/vort-zstd-prepared-tags-contracts-20261029-Gc8Lle",
+  "baseline_commit": "9433c9bb2573f2d6bcf1f44f9c5524532bde5e72",
+  "prototype": "/tmp/vort-zstd-prepared-tag-screen-20261029.m_bkl1zn/candidate/src",
+  "recorded_at_utc": "2026-10-28 16:37:46 UTC",
+  "source_hashes": "source_hashes.json",
+  "runs": [
+    {
+      "command": "zig test src/zstd_prepared_tags_tests.zig -ODebug --test-filter 'Zstd HQ search prepared tags'",
+      "session_id": 81009,
+      "exit_code": 0,
+      "passed": 9,
+      "total": 9,
+      "observed_terminal_output": "All 9 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_prepared_tags_tests.zig -OReleaseFast --test-filter 'Zstd HQ search prepared tags'",
+      "session_id": 57624,
+      "exit_code": 0,
+      "passed": 9,
+      "total": 9,
+      "observed_terminal_output": "All 9 tests passed.\n"
+    },
+    {
+      "command": "zig test src/zstd_prepared_tags_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ search prepared tags'",
+      "session_id": 61360,
+      "exit_code": 0,
+      "passed": 9,
+      "total": 9,
+      "observed_terminal_output": "All 9 tests passed.\n"
+    }
+  ],
+  "fmt": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/prepared_tags_tests src/zstd/match/hq_parser/prepared_row_tags_tests.zig src/zstd/match/hq_parser/row_tags_tests/edges/helpers.zig src/zstd_prepared_tags_tests.zig",
+    "exit_code": 0
+  },
+  "oracle_notes": [
+    "prepared_row_tags_reference.zig is the exact baseline row_tags file; key/insert implementation untouched.",
+    "search_edges_prepared_reference.zig is baseline edges with only row_tags import redirected to the frozen module.",
+    "Reusable helper's optional Codec.Reference/force_tags defaults preserve old suites; prepared tagged suite runs both contexts with tags enabled and compares all active/full tags."
+  ],
+  "coverage": [
+    "key depends only on literal_len and 3 repeats; cost/match_len/offset/distance/predecessor/slot extremes do not change tags.",
+    "Each immutable offset choice and sequence.literal_len=0 has same tag across sampled ML boundaries.",
+    "All 256 hash tags/collisions, arbitrary rows, sentinels, high bits, first-match order, widths1/8/16, both Node types; 24576 random prepared insertion traces reuse original exact-state oracle.",
+    "Each row slot supplies actual row element directly to insertPrepared; return, full row and full tag array compare to frozen original row_tags.insert.",
+    "Sampled/complete boundaries including subminimum existing behavior; repeat aliases/direct offsets/LL0; finite quota every actual prefix; invalid literals/zero quota/error precedence/checked overflow.",
+    "Frozen old search_edges versus prepared public candidate complete node tables, profile, admitted budget, returned errors and spill outputs; tagged and fallback paths."
+  ],
+  "limitations": [
+    "Wasm root bridge prepared; parent owns final execution.",
+    "No ordinary benchmarks, no main-tree edits, no parent prototype edits."
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "runtime_commit": "dcd748f7",
+  "scope": "sequencePrice body unchanged; explicit inline keyword and durable root for existing independent pricing contracts",
+  "runs": {
+    "debug": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_hq_price_tests.zig",
+        "-ODebug",
+        "--test-filter",
+        "Zstd HQ price",
+        "--test-filter",
+        "Zstd HQ entropy",
+        "--test-filter",
+        "Zstd HQ btopt effective prices"
+      ],
+      "exit_code": 0,
+      "tests_passed": 5,
+      "terminal_chunk": "b4dabc",
+      "observed_summary": "All 5 tests passed."
+    },
+    "releasefast": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_hq_price_tests.zig",
+        "-OReleaseFast",
+        "--test-filter",
+        "Zstd HQ price",
+        "--test-filter",
+        "Zstd HQ entropy",
+        "--test-filter",
+        "Zstd HQ btopt effective prices"
+      ],
+      "chunk_id": "306820",
+      "exit_code": 0,
+      "original_token_count": 119,
+      "output": "1/5 zstd_hq_price_tests.test_0...OK\n2/5 zstd.match.hq_parser.price_tests.test.Zstd HQ price symbols match independent range oracle at all format boundaries...OK\n3/5 zstd.match.hq_parser.price_tests.test.Zstd HQ entropy model uses actual symbol prices and selected pass statistics...OK\n4/5 zstd.match.hq_parser.price_tests.test.Zstd HQ btopt effective prices round integers and penalize exact long offset symbols...OK\n5/5 zstd.encode.controls.test_0...OK\nAll 5 tests passed.\n",
+      "wall_time_seconds": 0.000001553
+    },
+    "x86": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_hq_price_tests.zig",
+        "-ODebug",
+        "-target",
+        "x86-linux",
+        "--test-filter",
+        "Zstd HQ price",
+        "--test-filter",
+        "Zstd HQ entropy",
+        "--test-filter",
+        "Zstd HQ btopt effective prices"
+      ],
+      "chunk_id": "db30de",
+      "exit_code": 0,
+      "original_token_count": 119,
+      "output": "1/5 zstd_hq_price_tests.test_0...OK\n2/5 zstd.match.hq_parser.price_tests.test.Zstd HQ price symbols match independent range oracle at all format boundaries...OK\n3/5 zstd.match.hq_parser.price_tests.test.Zstd HQ entropy model uses actual symbol prices and selected pass statistics...OK\n4/5 zstd.match.hq_parser.price_tests.test.Zstd HQ btopt effective prices round integers and penalize exact long offset symbols...OK\n5/5 zstd.encode.controls.test_0...OK\nAll 5 tests passed.\n",
+      "wall_time_seconds": 0.000001819
+    },
+    "wasm_compile": {
+      "command": [
+        "zig",
+        "test",
+        "src/zstd_hq_price_tests.zig",
+        "-ODebug",
+        "-target",
+        "wasm32-wasi",
+        "--test-no-exec",
+        "--stack",
+        "8388608",
+        "-femit-bin=/tmp/vort-zstd-price-inline-current-20261029.wasm",
+        "--test-filter",
+        "Zstd HQ price",
+        "--test-filter",
+        "Zstd HQ entropy",
+        "--test-filter",
+        "Zstd HQ btopt effective prices"
+      ],
+      "chunk_id": "cc86e1",
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": "",
+      "wall_time_seconds": 6.61e-7
+    },
+    "wasm_execute": {
+      "command": [
+        "node",
+        "/tmp/vort-br-q8-hotspots-20261028-yxmxnv4d/partial-score-wasi-runner.js",
+        "/tmp/vort-zstd-price-inline-current-20261029.wasm"
+      ],
+      "exit_code": 0,
+      "tests_passed": 5,
+      "terminal_chunk": "8b5b0a",
+      "wasm_sha256": "8f4afd643c99dddea78bf1b882e0878b077e9cb51ffb513ad94586bc851382e4",
+      "node_version": "v26.10.0"
+    },
+    "focused": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "test-zstd-hq",
+        "test-zstd-hq-search",
+        "test-zstd-parallel-incremental",
+        "--summary",
+        "all"
+      ],
+      "chunk_id": "b431f4",
+      "exit_code": 0,
+      "original_token_count": 421,
+      "output": "Build Summary: 15/15 steps succeeded; 385/385 tests passed\ntest-zstd-hq success\n+- run test vort-zstd-hq-tests 145 pass (145 total) 5s MaxRSS:77M\n   +- compile test vort-zstd-hq-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native cached 5ms MaxRSS:39M\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-hq-search success\n+- run test vort-zstd-hq-search-tests 79 pass (79 total) 2s MaxRSS:77M\n   +- compile test vort-zstd-hq-search-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\ntest-zstd-parallel-incremental success\n+- run test vort-zstd-incremental-parallel-tests 65 pass (65 total) 20s MaxRSS:19M\n|  +- compile test vort-zstd-incremental-parallel-tests ReleaseFast native success 1m MaxRSS:1G\n|     +- WriteFile (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n|     +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n+- run test vort-zstd-incremental-parallel-root-tests 96 pass (96 total) 68ms MaxRSS:9M\n   +- compile test vort-zstd-incremental-parallel-root-tests ReleaseFast native success 1m MaxRSS:1G\n      +- WriteFile cached\n      +- compile obj vort-br-record-optimal ReleaseFast native cached 5ms MaxRSS:38M\n      +- WriteFile (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n      +- compile obj vort-br-record-optimal ReleaseFast native (reused)\n      +- compile obj vort-zstd-huffman-x2 ReleaseFast native (reused)\n\n",
+      "wall_time_seconds": 0.000002067
+    },
+    "hq_diff": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-hq-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-hq-legacy-f95c3446",
+        "--output-dir",
+        "/tmp/vort-zstd-price-inline-hq-diff-20261029"
+      ],
+      "chunk_id": "7cc015",
+      "exit_code": 0,
+      "original_token_count": 30,
+      "output": "{\"status\": \"ok\", \"rows\": 52, \"baseline_rows\": 56, \"report\": \"/tmp/vort-zstd-price-inline-hq-diff-20261029/report.json\"}\n",
+      "wall_time_seconds": 0.000001285
+    },
+    "search_diff": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "-Doptimize=ReleaseFast",
+        "run-zstd-hq-search-diff",
+        "--",
+        "--reference",
+        "/tmp/vort-br-partial-final-20261028/hq-controls-reference.so",
+        "--legacy-probe",
+        "/tmp/vort-zstd-search-legacy-probe",
+        "--legacy-source",
+        "/tmp/vort-zstd-search-legacy-97c4ad99",
+        "--output-dir",
+        "/tmp/vort-zstd-price-inline-search-diff-20261029"
+      ],
+      "chunk_id": "396210",
+      "exit_code": 0,
+      "original_token_count": 34,
+      "output": "{\"status\": \"ok\", \"rows\": 41, \"baseline_rows\": 8, \"report\": \"/tmp/vort-zstd-price-inline-search-diff-20261029/hq-search-report.json\"}\n",
+      "wall_time_seconds": 6.72e-7
+    },
+    "check": {
+      "command": [
+        "zig",
+        "build",
+        "-j4",
+        "check",
+        "--summary",
+        "failures"
+      ],
+      "exit_code": 0,
+      "terminal_chunk": "c77644",
+      "output": ""
+    }
+  }
+}

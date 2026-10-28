@@ -24088,3 +24088,26 @@ reuse, so production keeps the simpler independently owned plans.
   sorted-sentinel-only alternative is archived separately; it is not mixed
   into the retained kernel. Wider speed/ratio/memory and platform evidence,
   remaining state/transition work and the complete ten-format goal remain open.
+
+- 2026-10-29: current row-tag encoder sampling locates sequence pricing at
+  15.60%/5.63% of ordinary Mozilla/Dickens user periods and separate call
+  setup/return at 4.11%/1.65%. The [prepared-tag screen](performance/zstd-prepared-row-tag-screen.md)
+  retains a once-per-offset-choice tag prototype and three-target 9/9 frozen
+  row/edge contracts, but first-round delays make its complete matrix
+  inconclusive. It is not combined with the next retained runtime change.
+  Raw CPU samples and global instruction-period attribution remain separate
+  from non-FP ordinary timing; price and node materialization are larger targets.
+
+- 2026-10-29: exact HQ sequence pricing is explicitly inlined at callers in
+  `dcd748f7`, with the complete original validation/arithmetic body unchanged.
+  [Inline-price evidence](performance/zstd-sequence-price-inline.md) records
+  five real 4 KiB configurations improving in both ordinary AB/BA rounds by
+  roughly 2.5%-6%, with MR btopt near parity; a separate Mozilla16KiB/trained
+  8KiB round improves about 3%-4% except trained btopt near parity. All 32
+  ordinary encodes, 64 native decodes, complete profiles and requested peaks
+  remain identical; 32 independent libzstd wire decodes pass. Existing focused
+  tests pass 385/385, bidirectional reference groups 52/41, and exact pricing
+  roots native Debug/ReleaseFast/x86/Wasm each 5/5. Final build and evidence
+  checks pass. No memory or admission reduction is claimed. Wider corpus and
+  platform comparisons, edge/state materialization and all ten formats remain
+  active work toward the full functionality/performance goal.
