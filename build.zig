@@ -6380,6 +6380,21 @@ pub fn build(b: *std.Build) void {
     const zstd_encode_bench_step = b.step("run-zstd-encode-bench", "Compare Zstd encoding with runtime libzstd");
     zstd_encode_bench_step.dependOn(&run_zstd_encode_bench.step);
 
+    const zstd_reference_parameters_probe = b.addExecutable(.{
+        .name = "vort-zstd-reference-parameters-probe",
+        .use_llvm = true,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/reference_parameters_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort_zstd", .module = zstd_encode_bench_mod }},
+        }),
+    });
+    const run_zstd_reference_parameters = b.addRunArtifact(zstd_reference_parameters_probe);
+    if (b.args) |args| run_zstd_reference_parameters.addArgs(args) else run_zstd_reference_parameters.addArg("libzstd.so.1");
+    b.step("test-zstd-reference-parameters", "Validate requested reference controls, legacy wires and dictionaries").dependOn(&run_zstd_reference_parameters.step);
+
     const zstd_multi_duplicate_profile_exe = b.addExecutable(.{
         .name = "vort-zstd-multi-duplicate-profile",
         .root_module = b.createModule(.{
@@ -6463,6 +6478,10 @@ pub fn build(b: *std.Build) void {
     zstd_encode_bench_path_smoke.addArtifactArg(zstd_encode_bench_exe);
     const zstd_encode_bench_path_smoke_step = b.step("run-zstd-encode-bench-path-smoke", "Validate file-backed Zstd encode benchmark inputs");
     zstd_encode_bench_path_smoke_step.dependOn(&zstd_encode_bench_path_smoke.step);
+    const zstd_common_hq_bench_smoke = b.addSystemCommand(&.{ "python3", "tools/zstd/common_hq_bench_smoke.py" });
+    zstd_common_hq_bench_smoke.addArtifactArg(zstd_encode_bench_exe);
+    if (b.args) |args| zstd_common_hq_bench_smoke.addArgs(args);
+    b.step("test-zstd-common-hq-bench", "Validate aligned requested HQ controls, raw rounds and rejected evidence").dependOn(&zstd_common_hq_bench_smoke.step);
     const run_zstd_fast_compressed_bench = b.addRunArtifact(zstd_encode_bench_exe);
     run_zstd_fast_compressed_bench.addArgs(&.{
         "--native-selection", "fast_compressed",

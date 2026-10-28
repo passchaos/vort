@@ -60,6 +60,20 @@ def manifest_identities(manifest: dict) -> set[tuple[int, str]]:
     return identities
 
 
+def dictionary_identities(manifest: dict) -> set[tuple[int, str]]:
+    items = manifest.get("dictionary_sets", [])
+    require(isinstance(items, list), "manifest: invalid dictionaries")
+    identities = set()
+    for item in items:
+        size = integer(item.get("dictionary_bytes"), "manifest.dictionary_bytes")
+        sha = digest(item.get("dictionary_sha256"), "manifest.dictionary_sha256")
+        path = Path(item["frozen_path"])
+        require(path.stat().st_size == size and file_digest(path) == sha,
+                f"manifest: frozen dictionary changed: {path}")
+        identities.add((size, sha))
+    return identities
+
+
 def settings_key(codec: str, row: dict) -> tuple[str, int | None]:
     settings = row.get("settings")
     require(isinstance(settings, dict), "row: missing settings")
@@ -203,8 +217,15 @@ def validate_settings(codec: str, settings: dict, input_bytes: int) -> None:
     reference = settings["reference"]
     require(isinstance(reference, dict) and set(reference) >= {"api", "level", "internal_parameters", "wire_header"},
             "Zstd settings: incomplete reference policy")
-    require(reference["api"] == "ZSTD_compress" and reference["level"] == settings["level"],
-            "Zstd settings: reference level/API differs")
+    mode = settings.get("comparison_mode", "level_preset")
+    require(mode in {"level_preset", "common_hq"}, "Zstd settings: invalid comparison mode")
+    require(reference["level"] == settings["level"], "Zstd settings: reference level differs")
+    if mode == "level_preset":
+        require(reference["api"] == "ZSTD_compress", "Zstd settings: reference API differs")
+        require(settings.get("requested_controls_match") is None, "Zstd settings: preset claims common controls")
+    else:
+        import zstd_common_parameters
+        zstd_common_parameters.validate(settings, require)
     require(isinstance(reference["internal_parameters"], str) and bool(reference["internal_parameters"]),
             "Zstd settings: missing reference parameter scope")
     wire_header(reference["wire_header"], "settings.reference.wire_header", input_bytes)
@@ -276,6 +297,7 @@ def validate(report: dict, manifest: dict, *, csv_rows: list[dict[str, str]] | N
     require(bool(provenance.get("command")) and bool(provenance.get("cpu_model")),
             "report: incomplete runtime provenance")
     identities = manifest_identities(manifest)
+    dictionaries = dictionary_identities(manifest)
     rows = report.get("rows")
     require(isinstance(rows, list) and bool(rows), "report: missing sample rows")
     arch = provenance.get("target_arch")
@@ -292,6 +314,10 @@ def validate(report: dict, manifest: dict, *, csv_rows: list[dict[str, str]] | N
         iterations = integer(row.get("iterations"), "row.iterations", positive=True)
         key = settings_key(codec, row)
         validate_settings(codec, row["settings"], size)
+        if codec == "zstd" and row["settings"].get("comparison_mode") == "common_hq" \
+                and row["settings"].get("dictionary_kind") is not None:
+            require((row["settings"]["dictionary_bytes"], row["settings"]["dictionary_sha256"]) in dictionaries,
+                    "common HQ: dictionary absent from frozen manifest")
         require(key not in seen, f"row: duplicate setting {key}")
         seen.add(key)
         rounds = row.get("rounds")
@@ -324,6 +350,9 @@ def validate(report: dict, manifest: dict, *, csv_rows: list[dict[str, str]] | N
             require(summary.get(f"{implementation}_median_ns") == median_floor(times),
                     f"summary: median differs: {key}")
         total_rounds += len(rounds)
+    common_hq = codec == "zstd" and any(row["settings"].get("comparison_mode") == "common_hq" for row in rows)
+    if common_hq:
+        require(provenance.get("codec_thread_policy") == "single", "common HQ: explicit single-thread policy required")
     references = report.get("references")
     require(isinstance(references, list), "report: missing references")
     roles = {"brotli_encoder", "brotli_decoder", "brotli_common"} if codec == "brotli" else {"zstd"}
@@ -341,7 +370,7 @@ def validate(report: dict, manifest: dict, *, csv_rows: list[dict[str, str]] | N
             require(runtime_version == report.get(field), "references: Brotli runtime version differs")
         path = reference.get("canonical_file_path")
         sha = reference.get("file_sha256")
-        if require_explicit_references:
+        if require_explicit_references or common_hq:
             require(bool(reference.get("requested_path")) and bool(path), "references: explicit file required")
         if path is not None:
             digest(sha, "reference.file_sha256")

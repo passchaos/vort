@@ -3,6 +3,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const zstd = @import("vort_zstd");
+const libzstd = @import("libzstd_runtime.zig");
 
 pub const schema = "vort.codec_encode_samples";
 pub const version: u8 = 1;
@@ -76,10 +77,20 @@ pub const Settings = struct {
     resolved_primary: ResolvedOptions,
     internal_candidate_settings: []const u8,
     wire_header: WireHeader,
+    comparison_mode: enum { level_preset, common_hq } = .level_preset,
+    requested_controls_match: ?bool = null,
+    search_budget_scope: ?[]const u8 = null,
+    reference_block_ceiling: ?usize = null,
+    dictionary_bytes: usize = 0,
+    dictionary_sha256: ?[]const u8 = null,
+    dictionary_kind: ?[]const u8 = null,
+    dictionary_preparation_timed: bool = false,
+    vort_profile: ?zstd.EncoderControlProfile = null,
     reference: struct {
         api: []const u8 = "ZSTD_compress",
         level: c_int,
         internal_parameters: []const u8 = "library_default_level_preset",
+        requested_parameters: ?libzstd.Runtime.RequestedParameters = null,
         wire_header: WireHeader,
     },
 };

@@ -3,6 +3,7 @@ const zstd = @import("vort_zstd");
 const libzstd = @import("libzstd_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 const encode_samples = @import("encode_samples.zig");
+const pairing = @import("encode_bench_pair.zig");
 
 const Case = struct {
     name: []const u8,
@@ -16,33 +17,15 @@ const Case = struct {
         }
     }
 };
-const Options = struct {
-    iterations: usize = 1,
-    rounds: usize = 3,
-    csv_path: ?[]const u8 = null,
-    samples_json_path: ?[]const u8 = null,
-    only_case: ?[]const u8 = null,
-    only_level: ?c_int = null,
-    native_selection: ?zstd.NativeFrameSelection = null,
-    strategy: ?zstd.Strategy = null,
-    fast_acceleration: ?u32 = null,
-    show_help: bool = false,
-    reference_library_path: ?[]const u8 = null,
-    path_limit: usize = std.compress.zstd.block_size_max,
-    paths: std.ArrayList([]const u8) = .empty,
-
-    fn deinit(options: *Options, allocator: std.mem.Allocator) void {
-        for (options.paths.items) |path| allocator.free(path);
-        options.paths.deinit(allocator);
-    }
-};
+const config = @import("encode_bench_options.zig");
+const Options = config.Options;
 const Sample = struct { ns: u64, mix: usize };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
-    var options = try parseOptions(init.gpa, &args);
+    var options = try config.parseOptions(init.gpa, &args);
     defer options.deinit(init.gpa);
     if (options.show_help) {
         var buffer: [2048]u8 = undefined;
@@ -58,6 +41,14 @@ pub fn main(init: std.process.Init) !void {
             \\  --samples-json FILE          Save raw alternating rounds and JSON provenance.
             \\  --level=N, --strategy=NAME and --fast-acceleration=N are also accepted.
             \\  Defaults: levels 1, 3, 9 and 22; one iteration; three rounds.
+            \\  --match-hq                   Align requested HQ controls with libzstd.
+            \\    Requires --strategy btopt|btultra|btultra2, --libzstd and --samples-json.
+            \\    Defaults: reference level 3, window 17, depth 64, nice 64, min 3.
+            \\  --window-log N --block-size N Natural window/format block ceiling only.
+            \\  --hq-search-depth N          Power of two; aligns nominal search budget.
+            \\  --hq-nice-len N --hq-min-match N  Minimum 3 or 4.
+            \\  --content-checksum BOOL --content-size BOOL  true|false|1|0.
+            \\  --dictionary FILE            Raw or standard; preparation timed on both sides.
             \\  Negative level -N selects fast acceleration N.
             \\  Acceleration is supported by fast and double_fast strategies.
             \\
@@ -72,18 +63,34 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
     try encode_samples.validateOutputPaths(init.io, init.gpa, options.csv_path, options.samples_json_path);
-    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, "internal-auto");
+    if (options.match_hq) {
+        for (options.paths.items) |path| {
+            try encode_samples.validateOutputPaths(init.io, init.gpa, options.csv_path, path);
+            try encode_samples.validateOutputPaths(init.io, init.gpa, options.samples_json_path, path);
+        }
+        for ([_]?[]const u8{ options.dictionary_path, options.reference_library_path }) |source| {
+            try encode_samples.validateOutputPaths(init.io, init.gpa, options.csv_path, source);
+            try encode_samples.validateOutputPaths(init.io, init.gpa, options.samples_json_path, source);
+        }
+    }
+    const provenance = try benchmark_provenance.capture(init.io, init.gpa, init.minimal.args, if (options.match_hq) "single" else "internal-auto");
     defer provenance.deinit(init.gpa);
     var runtime = if (options.reference_library_path) |path|
         try libzstd.Runtime.openPath(path)
     else
         try libzstd.Runtime.open();
     defer runtime.deinit();
+    const dictionary_bytes = try pairing.readDictionary(init, options.dictionary_path);
+    defer if (dictionary_bytes) |bytes| init.gpa.free(bytes);
+    const dictionary_sha = benchmark_provenance.sha256Hex(dictionary_bytes orelse "");
+    const dictionary_kind: ?[]const u8 = if (dictionary_bytes) |bytes| @tagName((try pairing.parseDictionary(bytes)).kind()) else null;
     const sample_reference = if (options.samples_json_path != null)
         try encode_samples.Reference.capture(init.io, init.gpa, options.reference_library_path, runtime.version())
     else
         null;
     defer if (sample_reference) |reference| reference.deinit(init.gpa);
+    if (options.match_hq and sample_reference.?.canonical_file_path == null)
+        return error.UnidentifiedReferenceFile;
     var sample_report: encode_samples.Report = .{};
     defer sample_report.deinit(init.gpa);
 
@@ -159,18 +166,28 @@ pub fn main(init: std.process.Init) !void {
     for (cases.items) |case| for (levels) |level| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         selected_rows += 1;
-        const native_options = try resolvedNativeOptions(options, level);
-        const vort_encoded = try encodeVort(init.gpa, case.payload, level, native_options);
+        const native_options = try config.resolvedNativeOptions(options, level);
+        const pair: pairing.Pair = .{
+            .runtime = runtime,
+            .level = level,
+            .native_options = native_options,
+            .reference_options = try config.referenceOptions(options, native_options, level),
+            .dictionary_bytes = dictionary_bytes,
+        };
+        const vort_encoded = try pair.encodeVort(init.gpa, case.payload);
         defer init.gpa.free(vort_encoded);
-        const reference_encoded = try runtime.encodeAlloc(init.gpa, case.payload, level);
+        const reference_encoded = try pair.encodeReference(init.gpa, case.payload);
         defer init.gpa.free(reference_encoded);
-        try verifyBothDecoders(init.gpa, runtime, case.payload, vort_encoded, reference_encoded);
+        try pair.verify(init.gpa, case.payload, vort_encoded, reference_encoded);
+        const reference_parameters = try pair.referenceParameters();
+        const requested_controls_match = try pair.checkRequestedControls(reference_parameters);
+        const control_profile = if (options.match_hq) try pair.profile(init.gpa, case.payload, vort_encoded) else null;
         const raw_rounds: ?[]encode_samples.Round = if (options.samples_json_path != null)
             try init.gpa.alloc(encode_samples.Round, options.rounds)
         else
             null;
         defer if (raw_rounds) |rounds| init.gpa.free(rounds);
-        const samples = try measureInterleaved(init.io, init.gpa, runtime, case.payload, level, native_options, options.iterations, options.rounds, raw_rounds);
+        const samples = try measureInterleaved(init.io, init.gpa, pair, case.payload, options.iterations, options.rounds, raw_rounds);
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
@@ -195,8 +212,20 @@ pub fn main(init: std.process.Init) !void {
                     .resolved_primary = try encode_samples.ResolvedOptions.capture(resolved_primary),
                     .internal_candidate_settings = if (native_options != null) "resolved_primary" else "public_auto_level_policy",
                     .wire_header = .{ .window_size = header.window_size, .content_size = header.content_size, .content_checksum = header.has_checksum, .dictionary_id = header.dictionary_id },
+                    .comparison_mode = if (options.match_hq) .common_hq else .level_preset,
+                    .requested_controls_match = requested_controls_match,
+                    .search_budget_scope = if (options.match_hq) "nominal depth = 2^searchLog; actual visits and parser algorithms differ" else null,
+                    .reference_block_ceiling = if (options.match_hq) resolved_primary.block_size_max else null,
+                    .dictionary_bytes = if (dictionary_bytes) |bytes| bytes.len else 0,
+                    .dictionary_sha256 = if (dictionary_bytes != null) dictionary_sha[0..] else null,
+                    .dictionary_kind = dictionary_kind,
+                    .dictionary_preparation_timed = dictionary_bytes != null,
+                    .vort_profile = control_profile,
                     .reference = .{
+                        .api = if (options.match_hq) "ZSTD_compress2" else "ZSTD_compress",
                         .level = level,
+                        .internal_parameters = if (options.match_hq) "public_requested_parameters; unspecified hash/chain parameters retain level defaults" else "library_default_level_preset",
+                        .requested_parameters = reference_parameters,
                         .wire_header = .{ .window_size = reference_header.window_size, .content_size = reference_header.content_size, .content_checksum = reference_header.has_checksum, .dictionary_id = reference_header.dictionary_id },
                     },
                 },
@@ -233,22 +262,13 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn verifyBothDecoders(allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, vort_encoded: []const u8, reference_encoded: []const u8) !void {
-    const output = try allocator.alloc(u8, payload.len);
-    defer allocator.free(output);
-    try runtime.decode(vort_encoded, output);
-    if (!std.mem.eql(u8, payload, output)) return error.SizeMismatch;
-    const written = try zstd.decodeFrameInto(reference_encoded, output);
-    if (written != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;
-}
-
-fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions, iterations: usize, rounds: usize, raw_rounds: ?[]encode_samples.Round) !struct { vort: Sample, reference: Sample } {
+fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, pair: pairing.Pair, payload: []const u8, iterations: usize, rounds: usize, raw_rounds: ?[]encode_samples.Round) !struct { vort: Sample, reference: Sample } {
     var best_vort = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     var best_reference = best_vort;
     for (0..rounds) |round| {
         const vort_first = round & 1 == 0;
-        const first = if (vort_first) try measureVort(io, allocator, payload, level, native_options, iterations) else try measureReference(io, allocator, runtime, payload, level, iterations);
-        const second = if (vort_first) try measureReference(io, allocator, runtime, payload, level, iterations) else try measureVort(io, allocator, payload, level, native_options, iterations);
+        const first = if (vort_first) try measureVort(io, allocator, pair, payload, iterations) else try measureReference(io, allocator, pair, payload, iterations);
+        const second = if (vort_first) try measureReference(io, allocator, pair, payload, iterations) else try measureVort(io, allocator, pair, payload, iterations);
         const vort_sample = if (vort_first) first else second;
         const reference_sample = if (vort_first) second else first;
         if (raw_rounds) |raw| raw[round] = .{
@@ -265,46 +285,22 @@ fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd
     return .{ .vort = best_vort, .reference = best_reference };
 }
 
-fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions, iterations: usize) !Sample {
+fn measureVort(io: std.Io, allocator: std.mem.Allocator, pair: pairing.Pair, payload: []const u8, iterations: usize) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try encodeVort(allocator, payload, level, native_options);
+        const encoded = try pair.encodeVort(allocator, payload);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
     return .{ .ns = elapsed(start, io), .mix = mix };
 }
 
-fn encodeVort(allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions) ![]u8 {
-    if (native_options) |options| return (try zstd.encodeNativeFrameWithOptionsAlloc(allocator, payload, options)).frame;
-    return zstd.encodeFrameWithLevelAlloc(allocator, payload, level);
-}
-
-fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameOptions {
-    var resolved = try zstd.resolveFrameOptionsForLevel(level, .{
-        .strategy = options.strategy orelse .auto,
-        .fast_acceleration = options.fast_acceleration,
-    });
-    // Retain the existing positive-level selection gate. New engine controls
-    // and negative magnitudes always use the shared library level resolver.
-    if (level > 0 and (options.strategy orelse .auto) == .auto and options.fast_acceleration == null) {
-        if (options.native_selection) |selection| return .{ .selection = selection, .content_checksum = false };
-        return null;
-    }
-    if (options.native_selection) |selection| {
-        if (resolved.selection != .auto and resolved.selection != selection) return error.InvalidBlockPlan;
-        resolved.selection = selection;
-    }
-    try resolved.validate();
-    return resolved;
-}
-
-fn measureReference(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, iterations: usize) !Sample {
+fn measureReference(io: std.Io, allocator: std.mem.Allocator, pair: pairing.Pair, payload: []const u8, iterations: usize) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try runtime.encodeAlloc(allocator, payload, level);
+        const encoded = try pair.encodeReference(allocator, payload);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
@@ -328,61 +324,4 @@ fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize)
     for (std.fs.path.basename(path)) |byte|
         try out.writer.writeByte(if (std.ascii.isAlphanumeric(byte)) byte else '_');
     return try out.toOwnedSlice();
-}
-
-fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
-    var options: Options = .{};
-    errdefer options.deinit(allocator);
-    while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--help")) {
-            options.show_help = true;
-            return options;
-        } else if (std.mem.eql(u8, arg, "--iterations"))
-            options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
-        else if (std.mem.eql(u8, arg, "--rounds"))
-            options.rounds = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
-        else if (std.mem.eql(u8, arg, "--case"))
-            options.only_case = args.next() orelse return error.MissingCorpusPath
-        else if (try optionValue("--level", arg, args)) |value| {
-            if (options.only_level != null) return error.DuplicateZstdOption;
-            options.only_level = try std.fmt.parseInt(c_int, value, 10);
-        } else if (try optionValue("--strategy", arg, args)) |value| {
-            if (options.strategy != null) return error.DuplicateZstdOption;
-            options.strategy = if (std.mem.eql(u8, value, "double-fast")) .double_fast else std.meta.stringToEnum(zstd.Strategy, value) orelse return error.InvalidZstdStrategy;
-        } else if (try optionValue("--fast-acceleration", arg, args)) |value| {
-            if (options.fast_acceleration != null) return error.DuplicateZstdOption;
-            options.fast_acceleration = try std.fmt.parseInt(u32, value, 10);
-        } else if (std.mem.eql(u8, arg, "--native-selection")) {
-            const selection = args.next() orelse return error.MissingLimit;
-            options.native_selection = if (std.mem.eql(u8, selection, "fast_compressed") or std.mem.eql(u8, selection, "fast-compressed"))
-                .fast_compressed
-            else
-                return error.UnknownArgument;
-        } else if (std.mem.eql(u8, arg, "--libzstd"))
-            options.reference_library_path = args.next() orelse return error.MissingCorpusPath
-        else if (try optionValue("--samples-json", arg, args)) |value| {
-            if (options.samples_json_path != null) return error.DuplicateZstdOption;
-            options.samples_json_path = value;
-        } else if (std.mem.eql(u8, arg, "--csv"))
-            options.csv_path = args.next() orelse return error.MissingCorpusPath
-        else if (std.mem.eql(u8, arg, "--limit"))
-            options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
-        else if (std.mem.eql(u8, arg, "--path"))
-            try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath))
-        else
-            return error.UnknownArgument;
-    }
-    if (options.iterations == 0 or options.rounds == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
-    if (options.only_level) |level| {
-        _ = try resolvedNativeOptions(options, level);
-    } else {
-        for ([_]c_int{ 1, 3, 9, 22 }) |level| _ = try resolvedNativeOptions(options, level);
-    }
-    return options;
-}
-
-fn optionValue(comptime name: []const u8, arg: []const u8, args: *std.process.Args.Iterator) !?[]const u8 {
-    if (std.mem.eql(u8, arg, name)) return args.next() orelse error.MissingLimit;
-    if (std.mem.startsWith(u8, arg, name ++ "=")) return arg[name.len + 1 ..];
-    return null;
 }

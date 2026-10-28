@@ -1,4 +1,5 @@
 const std = @import("std");
+const reference_parameters = @import("reference_parameters.zig");
 
 const CompressBoundFn = *const fn (usize) callconv(.c) usize;
 const CompressFn = *const fn (
@@ -20,6 +21,8 @@ const VersionStringFn = *const fn () callconv(.c) [*:0]const u8;
 const CreateCCtxFn = *const fn () callconv(.c) ?*anyopaque;
 const FreeCCtxFn = *const fn (?*anyopaque) callconv(.c) usize;
 const CCtxSetParameterFn = *const fn (?*anyopaque, c_int, c_int) callconv(.c) usize;
+const CCtxGetParameterFn = *const fn (?*const anyopaque, c_int, *c_int) callconv(.c) usize;
+const CCtxLoadDictionaryFn = *const fn (?*anyopaque, [*]const u8, usize) callconv(.c) usize;
 const Compress2Fn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize) callconv(.c) usize;
 const InBuffer = extern struct { src: ?*const anyopaque, size: usize, pos: usize };
 const OutBuffer = extern struct { dst: ?*anyopaque, size: usize, pos: usize };
@@ -45,6 +48,8 @@ pub const Runtime = struct {
     create_cctx: CreateCCtxFn,
     free_cctx: FreeCCtxFn,
     cctx_set_parameter: CCtxSetParameterFn,
+    cctx_get_parameter: ?CCtxGetParameterFn,
+    cctx_load_dictionary: ?CCtxLoadDictionaryFn,
     compress2: Compress2Fn,
     compress_stream2: CompressStream2Fn,
     compress_sequences: CompressSequencesFn,
@@ -127,6 +132,8 @@ pub const Runtime = struct {
             .create_cctx = create_cctx,
             .free_cctx = free_cctx,
             .cctx_set_parameter = cctx_set_parameter,
+            .cctx_get_parameter = library.lookup(CCtxGetParameterFn, "ZSTD_CCtx_getParameter"),
+            .cctx_load_dictionary = library.lookup(CCtxLoadDictionaryFn, "ZSTD_CCtx_loadDictionary"),
             .compress2 = compress2,
             .compress_stream2 = compress_stream2,
             .compress_sequences = compress_sequences,
@@ -208,29 +215,81 @@ pub const Runtime = struct {
         content_size: bool = true,
         checksum: bool = false,
         window_log: ?c_int = null,
+        hash_log: ?c_int = null,
+        chain_log: ?c_int = null,
+        search_log: ?c_int = null,
         min_match: ?c_int = null,
         target_length: ?c_int = null,
         strategy: ?c_int = null,
+        workers: ?c_int = null,
         long_distance_matching: bool = false,
     };
 
+    pub const RequestedParameters = reference_parameters.RequestedParameters;
+
     pub fn encodeAdvancedAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, options: AdvancedOptions) ![]u8 {
+        return self.encodeAdvancedWithDictAlloc(allocator, input, options, &.{});
+    }
+
+    pub fn encodeAdvancedWithDictAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, options: AdvancedOptions, dictionary: []const u8) ![]u8 {
         const context = self.create_cctx() orelse return error.ReferenceUnavailable;
         defer _ = self.free_cctx(context);
-        try self.setParameter(context, 100, options.level); // ZSTD_c_compressionLevel
-        try self.setParameter(context, 200, @intFromBool(options.content_size)); // ZSTD_c_contentSizeFlag
-        try self.setParameter(context, 201, @intFromBool(options.checksum)); // ZSTD_c_checksumFlag
-        if (options.window_log) |value| try self.setParameter(context, 101, value); // ZSTD_c_windowLog
-        if (options.min_match) |value| try self.setParameter(context, 105, value); // ZSTD_c_minMatch
-        if (options.target_length) |value| try self.setParameter(context, 106, value); // ZSTD_c_targetLength
-        if (options.strategy) |value| try self.setParameter(context, 107, value); // ZSTD_c_strategy
-        if (options.long_distance_matching) try self.setParameter(context, 160, 1); // ZSTD_c_enableLongDistanceMatching
+        try self.configureAdvanced(context, options);
+        try self.loadAdvancedDictionary(context, dictionary);
 
         const output = try allocator.alloc(u8, self.compress_bound(input.len));
         errdefer allocator.free(output);
         const written = self.compress2(context, output.ptr, output.len, input.ptr, input.len);
         if (self.is_error(written) != 0) return error.ReferenceEncodeFailed;
         return allocator.realloc(output, written);
+    }
+
+    fn configureAdvanced(self: Runtime, context: ?*anyopaque, options: AdvancedOptions) !void {
+        try self.setParameter(context, 100, options.level); // ZSTD_c_compressionLevel
+        try self.setParameter(context, 200, @intFromBool(options.content_size)); // ZSTD_c_contentSizeFlag
+        try self.setParameter(context, 201, @intFromBool(options.checksum)); // ZSTD_c_checksumFlag
+        if (options.window_log) |value| try self.setParameter(context, 101, value); // ZSTD_c_windowLog
+        if (options.hash_log) |value| try self.setParameter(context, 102, value); // ZSTD_c_hashLog
+        if (options.chain_log) |value| try self.setParameter(context, 103, value); // ZSTD_c_chainLog
+        if (options.search_log) |value| try self.setParameter(context, 104, value); // ZSTD_c_searchLog
+        if (options.min_match) |value| try self.setParameter(context, 105, value); // ZSTD_c_minMatch
+        if (options.target_length) |value| try self.setParameter(context, 106, value); // ZSTD_c_targetLength
+        if (options.strategy) |value| try self.setParameter(context, 107, value); // ZSTD_c_strategy
+        if (options.workers) |value| try self.setParameter(context, 400, value); // ZSTD_c_nbWorkers
+        if (options.long_distance_matching) try self.setParameter(context, 160, 1); // ZSTD_c_enableLongDistanceMatching
+    }
+
+    fn loadAdvancedDictionary(self: Runtime, context: ?*anyopaque, dictionary: []const u8) !void {
+        if (dictionary.len == 0) return;
+        const load_dictionary = self.cctx_load_dictionary orelse return error.ReferenceUnavailable;
+        if (self.is_error(load_dictionary(context, dictionary.ptr, dictionary.len)) != 0)
+            return error.ReferenceEncodeFailed;
+    }
+
+    /// Read only the requested CCtx settings. Zero/default sentinels are kept.
+    pub fn readRequestedParameters(self: Runtime, context: ?*anyopaque) !RequestedParameters {
+        const get = self.cctx_get_parameter orelse return error.ReferenceParametersUnavailable;
+        const ctx = context orelse return error.ReferenceParametersUnavailable;
+        var result: RequestedParameters = undefined;
+        inline for (comptime std.meta.fieldNames(RequestedParameters)) |field| {
+            const parameter = @field(reference_parameters.Parameter, field);
+            if (self.is_error(get(ctx, @intFromEnum(parameter), &@field(result, field))) != 0)
+                return error.ReferenceParameterReadFailed;
+        }
+        return result;
+    }
+
+    /// Inspect a separately configured context; no input is compressed here.
+    pub fn inspectAdvancedParameters(self: Runtime, options: AdvancedOptions) !RequestedParameters {
+        return self.inspectAdvancedWithDictParameters(options, &.{});
+    }
+
+    pub fn inspectAdvancedWithDictParameters(self: Runtime, options: AdvancedOptions, dictionary: []const u8) !RequestedParameters {
+        const context = self.create_cctx() orelse return error.ReferenceUnavailable;
+        defer _ = self.free_cctx(context);
+        try self.configureAdvanced(context, options);
+        try self.loadAdvancedDictionary(context, dictionary);
+        return self.readRequestedParameters(context);
     }
 
     fn setParameter(self: Runtime, context: ?*anyopaque, parameter: c_int, value: c_int) !void {
@@ -242,14 +301,7 @@ pub const Runtime = struct {
         if (chunk_len == 0) return error.ReferenceEncodeFailed;
         const context = self.create_cctx() orelse return error.ReferenceUnavailable;
         defer _ = self.free_cctx(context);
-        try self.setParameter(context, 100, options.level);
-        try self.setParameter(context, 200, @intFromBool(options.content_size));
-        try self.setParameter(context, 201, @intFromBool(options.checksum));
-        if (options.window_log) |value| try self.setParameter(context, 101, value);
-        if (options.min_match) |value| try self.setParameter(context, 105, value);
-        if (options.target_length) |value| try self.setParameter(context, 106, value);
-        if (options.strategy) |value| try self.setParameter(context, 107, value);
-        if (options.long_distance_matching) try self.setParameter(context, 160, 1);
+        try self.configureAdvanced(context, options);
 
         var output: std.ArrayList(u8) = .empty;
         errdefer output.deinit(allocator);
