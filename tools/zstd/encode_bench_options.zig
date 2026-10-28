@@ -33,7 +33,10 @@ pub const Options = struct {
     }
 };
 pub fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameOptions {
-    var resolved = try zstd.resolveFrameOptionsForLevel(level, .{
+    // Explicit common HQ level zero uses the reference's default preset;
+    // the ordinary product level-zero resolver selects raw/RLE behavior.
+    const preset_level = if (options.match_hq and level == 0) 3 else level;
+    var resolved = try zstd.resolveFrameOptionsForLevel(preset_level, .{
         .strategy = options.strategy orelse .auto,
         .fast_acceleration = options.fast_acceleration,
     });
@@ -85,7 +88,8 @@ pub fn referenceOptions(options: Options, native: ?zstd.NativeFrameOptions, leve
     const primary = native.?;
     const hq = (try primary.effectiveHq()).?;
     return .{
-        .level = level,
+        // libzstd stores a level-zero request as its default level three.
+        .level = if (level == 0) 3 else level,
         .strategy = switch (primary.strategy) {
             .btopt => 7,
             .btultra => 8,

@@ -98,6 +98,18 @@ def dictionary_negative_contracts(report: dict, manifest: dict, csv_rows: list[d
     return 4
 
 
+def level_zero_negative_contracts(report: dict, manifest: dict, csv_rows: list[dict]) -> int:
+    validate(report, manifest, csv_rows=csv_rows, require_explicit_references=True)
+    assert report["rows"][0]["settings"]["level"] == 0, "level-zero fixture required"
+    for field in ("requested_parameters", None):
+        changed = copy.deepcopy(report)
+        reference = changed["rows"][0]["settings"]["reference"]
+        target = reference[field] if field else reference
+        target["level"] = 0
+        expect_rejected(changed, manifest, csv_rows, "level-zero reference omitted public default normalization")
+    return 2
+
+
 def expect_rejected(report: dict, manifest: dict, csv_rows: list[dict], label: str) -> None:
     try:
         validate(report, manifest, csv_rows=csv_rows, require_explicit_references=True)
@@ -118,6 +130,8 @@ def main() -> int:
     count = negative_contracts(report, manifest, rows)
     if report["rows"][0]["settings"]["dictionary_kind"] is not None:
         count += dictionary_negative_contracts(report, manifest, rows)
+    if report["rows"][0]["settings"]["level"] == 0:
+        count += level_zero_negative_contracts(report, manifest, rows)
     print(f"zstd_common_parameters_smoke=ok invalid={count}")
     return 0
 

@@ -223,7 +223,7 @@ pub fn main(init: std.process.Init) !void {
                     .vort_profile = control_profile,
                     .reference = .{
                         .api = if (options.match_hq) "ZSTD_compress2" else "ZSTD_compress",
-                        .level = level,
+                        .level = if (pair.reference_options) |reference| reference.level else level,
                         .internal_parameters = if (options.match_hq) "public_requested_parameters; unspecified hash/chain parameters retain level defaults" else "library_default_level_preset",
                         .requested_parameters = reference_parameters,
                         .wire_header = .{ .window_size = reference_header.window_size, .content_size = reference_header.content_size, .content_checksum = reference_header.has_checksum, .dictionary_id = reference_header.dictionary_id },

@@ -219,8 +219,8 @@ def validate_settings(codec: str, settings: dict, input_bytes: int) -> None:
             "Zstd settings: incomplete reference policy")
     mode = settings.get("comparison_mode", "level_preset")
     require(mode in {"level_preset", "common_hq"}, "Zstd settings: invalid comparison mode")
-    require(reference["level"] == settings["level"], "Zstd settings: reference level differs")
     if mode == "level_preset":
+        require(reference["level"] == settings["level"], "Zstd settings: reference level differs")
         require(reference["api"] == "ZSTD_compress", "Zstd settings: reference API differs")
         require(settings.get("requested_controls_match") is None, "Zstd settings: preset claims common controls")
     else:

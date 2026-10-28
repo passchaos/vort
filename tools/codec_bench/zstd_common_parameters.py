@@ -18,7 +18,8 @@ def validate(settings, require):
                 "long_distance_matching", "dict_id"}
     require(set(params) >= required, "common HQ: incomplete requested reference parameters")
     require(all(type(params[key]) is int for key in required), "common HQ: reference values must be integers")
-    require(params["level"] == reference["level"] == settings["level"], "common HQ: reference level differs")
+    level = 3 if settings["level"] == 0 else settings["level"]
+    require(params["level"] == reference["level"] == level, "common HQ: reference level differs")
     strategies = {"btopt": 7, "btultra": 8, "btultra2": 9}
     require(primary["strategy"] in strategies, "common HQ: unsupported strategy")
     require(params["strategy"] == strategies[primary["strategy"]], "common HQ: strategy differs")

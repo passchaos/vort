@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "tools/codec_bench"))
 from sample_gate import validate
-from zstd_common_parameters_smoke import negative_contracts, dictionary_negative_contracts
+from zstd_common_parameters_smoke import negative_contracts, dictionary_negative_contracts, level_zero_negative_contracts
 
 
 def digest(data: bytes) -> str:
@@ -65,9 +65,10 @@ def fixtures(library: Path, directory: Path) -> dict:
 
 
 def run_case(executable: Path, library: Path, directory: Path, name: str, paths: list[Path],
-             strategy: str, window: int, checksum: bool, fcs: bool, dictionary: Path | None = None) -> tuple:
+             strategy: str, window: int, checksum: bool, fcs: bool, dictionary: Path | None = None,
+             level: int = 3) -> tuple:
     csv_path, json_path = directory / f"{name}.csv", directory / f"{name}.json"
-    command = [str(executable), "--match-hq", "--strategy", strategy, "--window-log", str(window),
+    command = [str(executable), "--match-hq", "--strategy", strategy, "--window-log", str(window), "--level", str(level),
                "--content-checksum", str(checksum).lower(), "--content-size", str(fcs).lower(),
                "--iterations", "1", "--rounds", "2", "--csv", str(csv_path),
                "--samples-json", str(json_path), "--libzstd", str(library)]
@@ -95,6 +96,9 @@ def run_case(executable: Path, library: Path, directory: Path, name: str, paths:
     for row in report["rows"]:
         settings = row["settings"]
         params = settings["reference"]["requested_parameters"]
+        assert settings["level"] == level
+        assert settings["reference"]["level"] == params["level"] == (3 if level == 0 else level)
+        assert settings["resolved_primary"]["selection"] == "fast_compressed"
         assert params["hash_log"] == params["chain_log"] == 0  # Default sentinels, not table sizes.
         assert params["strategy"] == {"btopt": 7, "btultra2": 9}[strategy]
         assert params["window_log"] == window and params["search_log"] == 6
@@ -186,16 +190,23 @@ def alias_rejections(executable: Path, library: Path, directory: Path, source: P
 def campaign(executable: Path, library: Path, directory: Path) -> dict:
     data = fixtures(library, directory)
     commands = 0
+    total_rows = 0
     anchor = None
     for strategy, window, flag in itertools.product(("btopt", "btultra2"), (15, 17), (False, True)):
         report = run_case(executable, library, directory, f"plain-{strategy}-{window}-{flag}",
                           data["plain"], strategy, window, flag, flag)
         anchor = anchor or report
         commands += 1
+        total_rows += len(report[0]["rows"])
     for checksum, fcs in ((True, False), (False, True)):
-        run_case(executable, library, directory, f"mixed-flags-{checksum}", data["plain"][:1],
-                 "btopt", 15, checksum, fcs)
+        report = run_case(executable, library, directory, f"mixed-flags-{checksum}", data["plain"][:1],
+                          "btopt", 15, checksum, fcs)
         commands += 1
+        total_rows += len(report[0]["rows"])
+    zero = run_case(executable, library, directory, "plain-btopt-level0", data["plain"],
+                    "btopt", 15, True, True, level=0)
+    commands += 1
+    total_rows += len(zero[0]["rows"])
     dictionary_refs = 0
     dictionary_rejections = 0
     for kind in ("raw", "full"):
@@ -208,11 +219,13 @@ def campaign(executable: Path, library: Path, directory: Path) -> dict:
             if strategy == "btopt":
                 dictionary_rejections += dictionary_negative_contracts(report, manifest, rows)
             commands += 1
+            total_rows += len(report["rows"])
     assert dictionary_refs > 0, "dictionary fixtures emitted no actual dictionary references"
-    return {"status": "ok", "commands": commands, "rows": 22, "dictionary_references": dictionary_refs,
+    return {"status": "ok", "commands": commands, "rows": total_rows, "dictionary_references": dictionary_refs,
             "cli_rejections": cli_rejections(executable, library, directory, data["plain"][0])
                               + alias_rejections(executable, library, directory, data["plain"][0], data["raw"][0]),
             "dictionary_evidence_rejections": dictionary_rejections,
+            "level_zero_evidence_rejections": level_zero_negative_contracts(*zero),
             "evidence_rejections": negative_contracts(*anchor)}
 
 
