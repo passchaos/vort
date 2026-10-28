@@ -2,7 +2,7 @@ const std = @import("std");
 
 // Frozen b04a9019 insert: keep the slice equality and the original replacement,
 // rejection, and sorting rules independent of the production key comparison.
-fn referenceInsert(comptime Codec: type, row: anytype, candidate: @TypeOf(row[0])) bool {
+pub fn referenceInsert(comptime Codec: type, row: anytype, candidate: @TypeOf(row[0])) bool {
     var replace = row.len - 1;
     for (row, 0..) |old, slot| {
         if (old.cost != std.math.maxInt(u64) and old.literal_len == candidate.literal_len and std.mem.eql(usize, &old.repeats, &candidate.repeats)) {

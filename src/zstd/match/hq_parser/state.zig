@@ -86,12 +86,17 @@ pub fn insert(row: anytype, candidate: @TypeOf(row[0])) bool {
         }
     }
     if (!less(candidate, row[replace])) return false;
+    // Hold the candidate while each preceding node moves right once.
+    while (replace > 0 and less(candidate, row[replace - 1])) : (replace -= 1)
+        row[replace] = row[replace - 1];
     row[replace] = candidate;
-    while (replace > 0 and less(row[replace], row[replace - 1])) : (replace -= 1)
-        std.mem.swap(@TypeOf(candidate), &row[replace], &row[replace - 1]);
     return true;
 }
 
 test "zstd hq state repeat keys preserve reference insertion and ordering" {
     try @import("state_tests.zig").contracts(@This());
+}
+
+test "zstd hq state shifts preserve frozen arbitrary rows and aliased candidates" {
+    try @import("state_shift_tests.zig").contracts(@This());
 }
