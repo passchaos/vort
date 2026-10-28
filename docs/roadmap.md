@@ -11,6 +11,13 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [compact one-shot optimal decisions](performance/png-compact-decisions.md)
+milestone preserves 120 complete PNG pairs and 720 independent pixel checks
+while reducing level-8/9 requested-heap peaks by 24.4% geomean. A finite 768-KiB
+allocator now succeeds for the retained all-literal contract. Full predecessor
+and rank storage still scales with input, and complete CPU measurement remains
+in progress. Builds use one job and explicit process address-space limits.
+
 The [general Brotli Large Window milestone](performance/brotli-general-large-window-functional-baseline.md)
 extends explicit format selection to q0...q11, legacy and stored frontends,
 including chunked, reusable and incremental operations. Default wires remain
