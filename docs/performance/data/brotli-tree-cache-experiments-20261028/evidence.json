@@ -1,0 +1,46 @@
+{
+  "base_commit": "b6c3f92f64505a676fb84a349176cbaccea1e39a",
+  "status": "withdrawn; no production implementation retained",
+  "source_sha256": {
+    "src/br/encoder/literal_context_split.zig": "c9b384b5aab580dadb7ce3f68a5f0be950204a2d20e01ba01130bc4dced79f0e",
+    "src/br/encoder/narrow_tree_score_cache.zig": "6c1fb69606d0939b12270cd035af0705554d16be30b968841b6ee1d24a3a1eda",
+    "src/br/encoder/narrow_tree_score_cache_tests.zig": "0ead62a5d4b4b21db39b428ddc08003f9df794da59c226c7f8338e8fc63370dc"
+  },
+  "source_scope": "complete final vector/gated overlays retained; earlier scalar/all-input source bytes were not frozen, raw executable identities remain in reports",
+  "executables_sha256": {
+    "bench-baseline": "8d7c8b7572066a158bd2f69d663169d4e677d003653544a735e901b6c4a7a86d",
+    "bench-candidate": "d05238953643ba5972be36364c99801f707f3df3089c5bc2d9ef56d3875e6f58",
+    "bench-gated": "20070d41e130c39fc7315985f833182cd43a0ed19ecc6f0e19641dcafd64bbdd",
+    "bench-vector": "da4caec2f49e90e78e10a6b91e2725b3a058b3ad201b662600be142ec0e884c7"
+  },
+  "measurements": {
+    "scalar-all-input": {
+      "cases": 36,
+      "geometric_ratio": 0.9982796346472083,
+      "reference_time_ratio": 36.461212716018736,
+      "size_ratio": 0.9955604200802325
+    },
+    "scalar-gated": {
+      "cases": 36,
+      "geometric_ratio": 0.9961945167776957,
+      "reference_time_ratio": 36.667975261412494,
+      "size_ratio": 0.9955604200802325
+    },
+    "vector-exploratory": {
+      "cases": 36,
+      "geometric_ratio": 1.0009461933207546,
+      "reference_time_ratio": 35.709334378240484,
+      "size_ratio": 0.9955604200802325
+    },
+    "vector-formal": {
+      "cases": 36,
+      "geometric_ratio": 0.9978808069700277,
+      "reference_time_ratio": 34.26696207505865,
+      "size_ratio": 0.9955604200802325
+    }
+  },
+  "formal_matrix_session": 63239,
+  "formal_matrix_exit_code": 0,
+  "tests": "cache native Debug/RF 7/7; scalar/SIMD128 Wasm actual 7/7; public q8 Wasm5/5; context Debug83/83",
+  "withdrawal_reason": "same-memory cache reduced misses, but repeated ordinary-call measurements did not establish a stable throughput advantage"
+}

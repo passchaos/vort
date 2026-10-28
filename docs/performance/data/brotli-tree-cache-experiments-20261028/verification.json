@@ -1,0 +1,10 @@
+{
+  "ratios_recomputed": {
+    "scalar-all-input": 0.9982796346472083,
+    "scalar-gated": 0.9961945167776957,
+    "vector-exploratory": 1.0009461933207546,
+    "vector-formal": 0.9978808069700277
+  },
+  "all_inputs_wires_settings_equal": true,
+  "source_restored_to_base": true
+}

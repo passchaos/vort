@@ -23894,3 +23894,12 @@ reuse, so production keeps the simpler independently owned plans.
   caller storage grows 16,400 bytes. Tuned reference time ratio remains 37.1483
   at size ratio 0.99556. Points do not establish significance or industry-best
   results; continue context planning/primary cost reduction and the full goal.
+
+- 2026-10-28: fixed-size FNV set folding and same-size 256-entry u16 literal
+  tree caches were evaluated and withdrawn. Full-vector matching, LRU, integer
+  bounds, native/Wasm and proposal/wire differential checks pass, but ordinary
+  results do not establish a stable speed benefit. Final three-sweep 36-prefix
+  time ratio is 0.997881; short inputs do not enable the final gated path.
+  [Cache experiment evidence](performance/brotli-tree-cache-experiments.md)
+  preserves variants, raw clocks and final source. Production remains b6c3f92f.
+  Investigate code-length-shape prefix-score reuse next; the full goal persists.
