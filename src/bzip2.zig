@@ -25,6 +25,7 @@ pub const decodedSizeConcatenatedLimited = decoder.decodedSizeConcatenatedLimite
 
 test {
     _ = @import("bzip2/inverse_bwt.zig");
+    _ = @import("bzip2/bwt_tests.zig");
     _ = @import("bzip2/output_cursor.zig");
     _ = @import("bzip2/incremental/contracts_tests.zig");
     _ = decoder;
