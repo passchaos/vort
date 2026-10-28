@@ -1,0 +1,22 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "2",
+    "zig",
+    "test",
+    "/tmp/vort-zstd-prepared-edge-screen-20261028.qZgwNT/candidate/src/prepared_price_contracts.zig",
+    "-ODebug",
+    "-fllvm",
+    "-mcpu=skylake",
+    "--test-filter",
+    "prototype prepared",
+    "--cache-dir",
+    "/tmp/vort-zstd-prepared-edge-screen-20261028.qZgwNT/cache-contracts",
+    "--global-cache-dir",
+    "/tmp/vort-zstd-repeat-dp-screen-20261028.E7TmOD/global-cache"
+  ],
+  "exit_code": 0,
+  "tests_passed": 3,
+  "output": "1/3 prepared price oracle contract OK;2/3 first-edge budget refusal contract OK;3/3 zstd.encode.controls.test_0 OK"
+}

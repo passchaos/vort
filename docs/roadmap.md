@@ -23990,3 +23990,16 @@ reuse, so production keeps the simpler independently owned plans.
   No stale compiler PID or empty output is treated as terminal evidence. Current
   optimizations retain their separately completed focused, portable and oracle
   checks. Continue raising the full compression functionality/performance bar.
+
+- 2026-10-28: two per-choice Zstd HQ prepared-pricing experiments preserve
+  exact wire/profile behavior and original admission/enumeration semantics,
+  but are withdrawn after separate two-round ordinary real-input screens.
+  Each passes three Debug pricing/admission checks, 133 existing ReleaseFast
+  HQ/search tests, 24 ordinary encodes and 48 native decodes. Optional state
+  regresses five of six configurations in both rounds; peeling the first
+  edge yields mixed candidate/baseline ratios of 0.9894-1.0193. Generated
+  edge code remains larger despite inlined node completion. The
+  [pricing screen](performance/zstd-prepared-pricing-screen.md) preserves
+  source overlays, raw clocks, full profiles and independently audited
+  identities. Production remains unchanged. Re-sample ordinary HQ work and
+  select a different measured hotspot; retain the complete ten-format goal.

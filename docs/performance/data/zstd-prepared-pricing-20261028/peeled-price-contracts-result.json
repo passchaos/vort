@@ -1,0 +1,22 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "2",
+    "zig",
+    "test",
+    "/tmp/vort-zstd-peeled-price-screen-20261028.xKnnZm/candidate/src/prepared_price_contracts.zig",
+    "-ODebug",
+    "-fllvm",
+    "-mcpu=skylake",
+    "--test-filter",
+    "prototype prepared",
+    "--cache-dir",
+    "/tmp/vort-zstd-peeled-price-screen-20261028.xKnnZm/cache-contracts",
+    "--global-cache-dir",
+    "/tmp/vort-zstd-repeat-dp-screen-20261028.E7TmOD/global-cache"
+  ],
+  "exit_code": 0,
+  "observed_tests_passed": 3,
+  "observed_final_output": "All 3 tests passed."
+}

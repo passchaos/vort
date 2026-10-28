@@ -1,0 +1,28 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "2",
+    "zig",
+    "test",
+    "/tmp/vort-zstd-prepared-edge-screen-20261028.qZgwNT/candidate/src/zstd.zig",
+    "/tmp/vort-zstd-prepared-edge-screen-20261028.qZgwNT/huffman-x2.o",
+    "-OReleaseFast",
+    "-fllvm",
+    "-mcpu=skylake",
+    "--test-filter",
+    "Zstd HQ",
+    "--test-filter",
+    "Zstd lazy2",
+    "--test-filter",
+    "Zstd canonical presets",
+    "--cache-dir",
+    "/tmp/vort-zstd-prepared-edge-screen-20261028.qZgwNT/cache-hq-tests",
+    "--global-cache-dir",
+    "/tmp/vort-zstd-repeat-dp-screen-20261028.E7TmOD/global-cache"
+  ],
+  "exit_code": 0,
+  "observed_tests_passed": 133,
+  "observed_final_output": "All 133 tests passed.",
+  "scope": "HQ/search/storage/price/codec/safeguard, lazy2 and canonical preset contracts"
+}

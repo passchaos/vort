@@ -1,0 +1,35 @@
+[
+  {
+    "case": "dickens",
+    "input_bytes": 4096,
+    "path": "/tmp/vort-zstd-repeat-real-screen-20261028.YgB8gQ/inputs/dickens-4096",
+    "sha256": "5c5e01ba63f560e6385e38bea918caf3cc4dae1847bc19411dcef339a3c708a1",
+    "source_path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+    "source_bytes": 65536,
+    "source_sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+    "dictionary_path": null,
+    "frozen_brotli_profile_source_hash_matches": true
+  },
+  {
+    "case": "mozilla",
+    "input_bytes": 4096,
+    "path": "/tmp/vort-zstd-repeat-real-screen-20261028.YgB8gQ/inputs/mozilla-4096",
+    "sha256": "e2492e694b093f2faf8e1a7e3596e4c585db3e1141a26a85ca73f8d72b88c640",
+    "source_path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+    "source_bytes": 65536,
+    "source_sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+    "dictionary_path": null,
+    "frozen_brotli_profile_source_hash_matches": true
+  },
+  {
+    "case": "mr",
+    "input_bytes": 4096,
+    "path": "/tmp/vort-zstd-repeat-real-screen-20261028.YgB8gQ/inputs/mr-4096",
+    "sha256": "ee4d10385f9eb17cdfe50c411ace6478e51410c886c9fc16e4e5c02455ecdcd5",
+    "source_path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+    "source_bytes": 65536,
+    "source_sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+    "dictionary_path": null,
+    "frozen_brotli_profile_source_hash_matches": true
+  }
+]

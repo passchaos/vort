@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "bdae5ce7128e30fee20e20e16612844a818cf1ff",
+  "source_tar_sha256": "3dee7bb9f011faedfdb4ab23a10c82c574592c769e3413010f9555d489dcd2ea",
+  "production_changes": [
+    "src/zstd/match/hq_parser/search_edges.zig",
+    "src/zstd/match/hq_parser/prepared_sequence_price.zig"
+  ],
+  "public_sequence_price_unchanged": true,
+  "affinity": "2",
+  "public_prices_sha256": "42c97645f16c13377d9decd4fbb8b0e274aec75a865ca016e3e31fe446bcb0c9",
+  "runner_sha256": "196022bee167ee4f7cedff21a3477eeaa421da59e4a485c7a2a89103f7f2c626",
+  "helper_sha256": "55c0369109b403a8ef85cb6c48b450bca77d9ba2e6863cbac6937918b5d8b32b",
+  "candidate_search_edges_sha256": "f46da34715fa20d34db8a9fa49955fa4ebe76ebe9af745310483660b9407ac7f",
+  "temporary_contract_harness": "candidate/src/prepared_price_contracts.zig"
+}
