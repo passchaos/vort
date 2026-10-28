@@ -11,6 +11,11 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [complete-index planner isolation](performance/png-small-planner.md)
+recovers the 128-pixel rsvg icon's regression with 1.068542x focused throughput.
+All 120 PNG buffers and allocator records remain exact. Measured tiny/large
+code-generation costs remain visible and require further optimization.
+
 The [bounded reverse-parser index work](performance/png-window-index.md)
 preserves 120 complete PNG pairs and 720 independent original-pixel checks.
 Level-8/9 requested-heap peaks decrease about 34.7% by geomean. The sixty-case

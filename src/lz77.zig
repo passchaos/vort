@@ -1642,6 +1642,10 @@ fn optimalPlanReuseStoredProfiled(
             profile.index_ns = elapsedNs(index_start, io);
             profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
         }
+        if (comptime enable_prefix_bound and !modeled and @TypeOf(decisions.*) == OptimalDecisions.Compact) {
+            if (input.len >= 64 * 1024)
+                return optimalPlanReuseCompactOutlined(scratch, allocator, input, options, costs, decisions, collect_profile, io, profile);
+        }
         return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
@@ -1651,6 +1655,20 @@ fn optimalPlanReuseStoredProfiled(
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
     }
     return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, io, profile, model);
+}
+
+noinline fn optimalPlanReuseCompactOutlined(
+    noalias scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    noalias costs: anytype,
+    noalias decisions: anytype,
+    comptime collect_profile: bool,
+    io: if (collect_profile) std.Io else void,
+    profile: if (collect_profile) *OptimalSearchProfile else void,
+) !PlanStats {
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, scratch.compact_prev.items, optimal_compact_index_empty, true, collect_profile, false, io, profile, undefined);
 }
 
 inline fn optimalPlanReuseWithIndex(
