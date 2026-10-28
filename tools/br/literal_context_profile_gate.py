@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
 
-COLUMNS = [
+LEGACY_COLUMNS = [
     "case", "input_bytes", "input_sha256", "iterations", "literal_count", "active_symbols",
     "suffix_tree_count", "suffix_mode", "suffix_savings_bits",
     "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits",
@@ -38,6 +38,8 @@ COLUMNS = [
     "complex_prefix_shape_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
 ] + PROVENANCE_COLUMNS
+COLUMNS = LEGACY_COLUMNS.copy()
+COLUMNS.insert(COLUMNS.index("cluster_maps_pruned") + 1, "cluster_tree_scores_pruned")
 CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
 TOP_STAGES = ["analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns"]
 CLUSTER_STAGES = [
@@ -83,6 +85,23 @@ def validate_candidate(row: dict[str, str], prefix: str) -> None:
         assert savings >= 128, (prefix, row)
 
 
+def validate_cluster_tree_accounting(row: dict[str, str]) -> None:
+    misses = integer(row, "score_cache_misses")
+    checks = integer(row, "cluster_lb_checks")
+    map_only = integer(row, "cluster_maps_pruned")
+    partial = integer(row, "cluster_tree_scores_pruned")
+    tree_calls = integer(row, "tree_score_cache_hits") + integer(row, "tree_score_cache_misses")
+    assert 0 <= checks <= misses, row
+    assert 0 <= map_only <= checks, row
+    assert 0 <= partial <= checks - map_only, row
+    completed = misses - map_only - partial
+    assert completed >= 0, row
+    # These categories consume disjoint calls: completed maps need >=2, and
+    # a partial cutoff happens only after >=1 exact tree request. Check their
+    # combined minimum so the same calls cannot satisfy both categories.
+    assert tree_calls >= 2 * completed + partial, row
+
+
 def validate_historical_dominance(row: dict[str, str]) -> None:
     # These ratios describe the earlier source32k profile, rather than timing
     # conservation. Preserve them for explicit historical comparisons while
@@ -109,8 +128,12 @@ def main() -> int:
     args = parser.parse_args()
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
-        assert reader.fieldnames == COLUMNS, reader.fieldnames
+        assert reader.fieldnames in (COLUMNS, LEGACY_COLUMNS), reader.fieldnames
+        legacy = reader.fieldnames == LEGACY_COLUMNS
         rows = list(reader)
+    if legacy:
+        for row in rows:
+            row["cluster_tree_scores_pruned"] = "0"
     by_case = {row["case"]: row for row in rows}
     assert len(rows) == len(CASES) and set(by_case) == set(CASES), sorted(by_case)
     validate_provenance(rows, executable=args.executable, codec_thread_policy="single")
@@ -140,12 +163,6 @@ def main() -> int:
         ), row
         assert integer(row, "cluster_trials") == 88 * iterations, row
         assert integer(row, "cluster_rounds") >= integer(row, "cluster_trials"), row
-        cluster_lb_checks = integer(row, "cluster_lb_checks")
-        cluster_maps_pruned = integer(row, "cluster_maps_pruned")
-        # Lower bounds are evaluated on map misses only once an incumbent
-        # exists, so checks never exceed the scored-map miss count.
-        assert cluster_lb_checks <= integer(row, "score_cache_misses"), row
-        assert 0 <= cluster_maps_pruned <= cluster_lb_checks, row
         assert integer(row, "assignment_contexts") > 0, row
         assert integer(row, "assignment_comparisons") >= integer(row, "assignment_contexts"), row
         scored = integer(row, "score_cache_hits") + integer(row, "score_cache_misses")
@@ -154,10 +171,7 @@ def main() -> int:
         tree_scored = integer(row, "tree_score_cache_hits") + integer(row, "tree_score_cache_misses")
         assert tree_scored > 0, row
         assert integer(row, "tree_score_cache_misses") > 0, row
-        # Each map surviving its lower bound scores at least two trees.
-        surviving_maps = integer(row, "score_cache_misses") - cluster_maps_pruned
-        assert surviving_maps >= 0, row
-        assert tree_scored >= 2 * surviving_maps, row
+        validate_cluster_tree_accounting(row)
         assert integer(row, "tree_score_cache_misses") == (
             integer(row, "tree_score_cache_cold_misses") +
             integer(row, "tree_score_cache_conflict_misses")

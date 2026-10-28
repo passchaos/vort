@@ -70,6 +70,12 @@ fn validateCounts(profile: anytype) !void {
         try std.testing.expect(counts.cross_mode_hits <= counts.hits);
     }
     try std.testing.expect(profile.cluster_maps_pruned <= profile.cluster_lb_checks);
+    try std.testing.expect(profile.cluster_lb_checks <= profile.score_cache_misses);
+    try std.testing.expect(profile.cluster_tree_scores_pruned <= profile.cluster_lb_checks - profile.cluster_maps_pruned);
+    const complete_maps = profile.score_cache_misses - profile.cluster_maps_pruned - profile.cluster_tree_scores_pruned;
+    // Full maps request at least two trees; each partial map already requested
+    // at least one. These disjoint categories cannot reuse the same requests.
+    try std.testing.expect(scoped_requests >= 2 * complete_maps + profile.cluster_tree_scores_pruned);
     var mode_cross_mode: usize = 0;
     for (profile.tree_score_mode_counts) |scopes| {
         try std.testing.expectEqual(@as(usize, 0), scopes[0].requests);
@@ -280,9 +286,28 @@ fn allocationFailures(comptime Codec: type) !void {
     }
 }
 
+fn partialPruning(comptime Codec: type) !void {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x243f6a88;
+    for (&input) |*byte| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = @truncate(state >> 24);
+    }
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const expected = try runCase(Codec, &input, &commands);
+    var profile: Codec.Profile = .{};
+    const actual = try Codec.chooseProposalsProfiled(std.testing.allocator, &input, &commands, std.testing.io, &profile);
+    try proposalsEqual(expected, actual);
+    // Make the differential test exercise the new cutoff, even if other
+    // proposal fixtures happen to reject maps before any exact tree score.
+    try std.testing.expect(profile.cluster_tree_scores_pruned > 0);
+    try validateCounts(profile);
+}
+
 pub fn contracts(comptime Codec: type) !void {
     try simpleAndThresholds(Codec);
     try modeContexts(Codec);
     try randomizedEquivalence(Codec);
+    try partialPruning(Codec);
     try allocationFailures(Codec);
 }

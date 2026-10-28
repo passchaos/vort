@@ -3,10 +3,59 @@
 
 import argparse
 import csv
+import importlib.util
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+
+
+def load_gate(path: Path):
+    spec = importlib.util.spec_from_file_location("literal_context_profile_gate_target", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"gate cannot be loaded: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def accounting_fixture(misses: int, map_only: int, partial: int, calls: int, *, checks: int | None = None) -> dict[str, str]:
+    return {
+        "score_cache_misses": str(misses),
+        "cluster_lb_checks": str(misses if checks is None else checks),
+        "cluster_maps_pruned": str(map_only),
+        "cluster_tree_scores_pruned": str(partial),
+        "tree_score_cache_hits": str(max(calls - 1, 0)),
+        "tree_score_cache_misses": str(int(calls != 0)),
+    }
+
+
+def accounting_smoke(gate) -> int:
+    for row in (
+        accounting_fixture(3, 1, 1, 3),  # One complete map plus one partial map.
+        accounting_fixture(1, 0, 1, 1),  # A partial map's single completed call.
+        accounting_fixture(1, 0, 0, 2, checks=0),  # Exhaustive reference policy.
+    ):
+        gate.validate_cluster_tree_accounting(row)
+    invalid = (
+        accounting_fixture(1, 0, -1, 2),
+        accounting_fixture(3, 1, 2, 4, checks=2),  # Two partial maps but one available check.
+        accounting_fixture(2, 1, 2, 4),  # Pruned map counts exceed map misses.
+        accounting_fixture(2, 0, 0, 4, checks=3),
+        accounting_fixture(1, 0, 1, 0),  # Partial pruning before any exact tree call.
+        accounting_fixture(1, 0, 0, 1),  # A completed map with only one tree call.
+        accounting_fixture(2, 0, 1, 2),  # Calls cannot satisfy both minima separately.
+        accounting_fixture(3, 1, 0, 3),  # Missing the partial-map attribution.
+    )
+    for index, row in enumerate(invalid):
+        try:
+            gate.validate_cluster_tree_accounting(row)
+        except AssertionError:
+            continue
+        raise AssertionError(f"invalid cluster tree accounting accepted: {index}")
+    return len(invalid)
 
 
 def run_gate(gate: Path, csv_path: Path, *, historical: bool = False) -> bool:
@@ -79,17 +128,24 @@ def main() -> int:
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--gate", type=Path, required=True)
     args = parser.parse_args()
+    gate = load_gate(args.gate)
+    if len(gate.LEGACY_COLUMNS) != 97 or len(gate.COLUMNS) != 98:
+        raise AssertionError("unexpected legacy/new CSV widths")
+    accounting_negatives = accounting_smoke(gate)
     with args.csv.open(newline="") as file:
         reader = csv.DictReader(file)
         fieldnames = reader.fieldnames
         rows = list(reader)
     if fieldnames is None or not run_gate(args.gate, args.csv):
         raise AssertionError("valid fixture rejected")
+    rows = [dict(row, cluster_tree_scores_pruned=row.get("cluster_tree_scores_pruned", "0")) for row in rows]
+    fieldnames = gate.COLUMNS
 
     mutations = []
     mutations.append(rows[:-1])
     for field, value in (
         ("cluster_trials", "1"),
+        ("cluster_tree_scores_pruned", "-1"),
         ("stage_ns", "1"),
         ("full_mode", "9"),
         ("cluster_score_ns", "1"),
@@ -118,6 +174,15 @@ def main() -> int:
     row = next(row for row in changed if row["case"] == "source32k")
     row.update(tree_alphabet_ns="41", tree_score_stage_ns="101")
     mutations.append(changed)
+
+    for field, value in (
+        ("cluster_lb_checks", int(source32["score_cache_misses"]) + 1),
+        ("cluster_tree_scores_pruned", int(source32["cluster_lb_checks"]) - int(source32["cluster_maps_pruned"]) + 1),
+    ):
+        changed = [row.copy() for row in all_scores]
+        row = next(row for row in changed if row["case"] == "source32k")
+        row[field] = str(value)
+        mutations.append(changed)
     changed = [row.copy() for row in all_scores]
     row = next(row for row in changed if row["case"] == "source32k")
     row.update(unattributed_ns="-1", total_ns=str(int(row["stage_ns"]) - 1))
@@ -151,6 +216,18 @@ def main() -> int:
             write_rows(path, fieldnames, fixture)
             if not run_gate(args.gate, path):
                 raise AssertionError(f"valid timing fixture rejected: {name}")
+        # Legacy rows describe completed maps. Model the old two-tree minimum
+        # by adding one cached request per partial map; exact scorer totals and
+        # timing equations stay intact in this synthetic compatibility fixture.
+        legacy_rows = []
+        for row in all_scores:
+            legacy = {field: row[field] for field in gate.LEGACY_COLUMNS}
+            legacy["tree_score_cache_hits"] = str(int(legacy["tree_score_cache_hits"]) + int(row["cluster_tree_scores_pruned"]))
+            legacy_rows.append(legacy)
+        legacy_path = root / "valid-legacy97.csv"
+        write_rows(legacy_path, gate.LEGACY_COLUMNS, legacy_rows)
+        if not run_gate(args.gate, legacy_path):
+            raise AssertionError("valid legacy 97-column profile rejected")
         historical_path = root / "valid-historical.csv"
         if not run_gate(args.gate, historical_path, historical=True):
             raise AssertionError("valid historical ratios rejected")
@@ -167,7 +244,7 @@ def main() -> int:
             write_rows(path, fieldnames, mutation)
             if run_gate(args.gate, path):
                 raise AssertionError(f"invalid fixture accepted: {index}")
-    print(f"br_literal_context_profile_gate_smoke=ok cases={len(mutations) + 2} positives=4")
+    print(f"br_literal_context_profile_gate_smoke=ok cases={len(mutations) + accounting_negatives + 2} positives=5 accounting_negatives={accounting_negatives} widths=97/98")
     return 0
 
 

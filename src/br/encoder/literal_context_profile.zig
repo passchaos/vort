@@ -45,6 +45,9 @@ pub const Profile = struct {
     /// Converged cluster maps whose lower bound could not win, so exact tree
     /// scores and prefix serialization were skipped.
     cluster_maps_pruned: usize = 0,
+    /// Converged maps stopped after at least one exact tree score exceeded the
+    /// threshold, with remaining trees left unscored. This counts maps.
+    cluster_tree_scores_pruned: usize = 0,
     assignment_contexts: usize = 0,
     assignment_comparisons: usize = 0,
     score_cache_hits: usize = 0,
@@ -161,6 +164,7 @@ pub const Profile = struct {
             "cluster_rounds",
             "cluster_lb_checks",
             "cluster_maps_pruned",
+            "cluster_tree_scores_pruned",
             "assignment_contexts",
             "assignment_comparisons",
             "score_cache_hits",
@@ -231,6 +235,14 @@ pub const Profile = struct {
         for (&self.mode_ns, sample.mode_ns) |*total, ns| total.* +%= ns;
     }
 };
+
+test "literal context partial pruning map counts accumulate across samples" {
+    var total: Profile = .{};
+    total.addSample(.{ .cluster_tree_scores_pruned = 3 });
+    total.addSample(.{ .cluster_tree_scores_pruned = 5 });
+    total.addSample(.{});
+    try std.testing.expectEqual(@as(usize, 8), total.cluster_tree_scores_pruned);
+}
 
 pub const Timer = struct {
     io: std.Io,

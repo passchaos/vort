@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
             "up_to_16_tree_count,up_to_16_mode,up_to_16_savings_bits," ++
             "full_tree_count,full_mode,full_savings_bits," ++
             "suffix_payload_scores,suffix_payload_reuses,suffix_lb_pruned," ++
-            "cluster_trials,cluster_rounds,cluster_lb_checks,cluster_maps_pruned," ++
+            "cluster_trials,cluster_rounds,cluster_lb_checks,cluster_maps_pruned,cluster_tree_scores_pruned," ++
             "assignment_contexts,assignment_comparisons,score_cache_hits,score_cache_misses," ++
             "tree_score_cache_hits,tree_score_cache_misses," ++
             "tree_score_cache_cold_misses,tree_score_cache_conflict_misses," ++
@@ -98,13 +98,14 @@ pub fn main(init: std.process.Init) !void {
             },
         );
         try csv.writer.print(
-            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 profile.suffix_lb_pruned,
                 profile.cluster_trials,
                 profile.cluster_rounds,
                 profile.cluster_lb_checks,
                 profile.cluster_maps_pruned,
+                profile.cluster_tree_scores_pruned,
                 profile.assignment_contexts,
                 profile.assignment_comparisons,
                 profile.score_cache_hits,

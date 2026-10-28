@@ -11,6 +11,7 @@ const literal_entropy = @import("literal_entropy.zig");
 const literal_context_bounds = @import("literal_context_bounds.zig");
 const literal_alphabet = @import("literal_alphabet.zig");
 const assignment_costs = @import("assignment_costs.zig");
+const cluster_partial_score = @import("cluster_partial_score.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
@@ -581,8 +582,9 @@ fn chooseModeFromHistograms(
 }
 
 /// Tightest exact candidate bit cost that any new proposal may have and still
-/// be accepted: it must clear the 128-bit savings gate and strictly beat every
-/// retained incumbent. Lower bounds greater than this value are safe to prune.
+/// be accepted: it must clear the 128-bit savings gate and remain eligible
+/// against retained incumbents. Equal cost may win with fewer trees, so only
+/// lower bounds greater than this value are safe to prune.
 fn pruneThresholdBits(baseline_bits: u64, incumbents: []const ?Candidate) u64 {
     var threshold = baseline_bits -| min_payload_savings_bits;
     for (incumbents) |optional| {
@@ -760,8 +762,14 @@ fn clusterContexts(
     if (profiled) profiler.profile.cluster_finalize_ns +%= profiler.elapsedNs(finalize_start);
 
     const score_start = if (profiled) profiler.now() else {};
-    const prior_cache_hits = if (profiled) score_cache.hits else 0;
-    const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
+    defer if (profiled) {
+        profiler.profile.cluster_score_ns +%= profiler.elapsedNs(score_start);
+    };
+    const cached_bits = score_cache.get(&context_map, tree_count);
+    if (profiled) {
+        if (cached_bits != null) profiler.profile.score_cache_hits += 1 else profiler.profile.score_cache_misses += 1;
+    }
+    const candidate_bits = cached_bits orelse blk: {
         const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
         if (comptime prune) {
             // The context-map declaration is planned for every miss anyway; if
@@ -773,21 +781,26 @@ fn clusterContexts(
                 return null;
             }
         }
-        var bits: u64 = @intCast(map_plan.bit_cost);
-        for (tree_histograms[0..tree_count]) |*histogram| {
-            const tree_bits = try treeBitCostCached(profiled, allocator, histogram, active_symbols, tree_score_cache, mode, profiler);
-            bits += tree_bits;
-        }
+        const Scorer = struct {
+            allocator: std.mem.Allocator,
+            histograms: []const [256]u32,
+            active: *const ActiveSymbols,
+            cache: *TreeScoreCache,
+            mode: u2,
+            profiler: if (profiled) *ProfileTimer else void,
+
+            pub fn score(self: *@This(), tree: usize) !u64 {
+                return treeBitCostCached(profiled, self.allocator, &self.histograms[tree], self.active, self.cache, self.mode, self.profiler);
+            }
+        };
+        var scorer: Scorer = .{ .allocator = allocator, .histograms = tree_histograms[0..tree_count], .active = active_symbols, .cache = tree_score_cache, .mode = mode, .profiler = profiler };
+        const bits = try cluster_partial_score.evaluate(prune, @intCast(map_plan.bit_cost), threshold_bits, tree_count, &scorer) orelse {
+            if (profiled) profiler.profile.cluster_tree_scores_pruned += 1;
+            return null;
+        };
         score_cache.put(&context_map, tree_count, bits);
         break :blk bits;
     };
-    if (profiled) {
-        profiler.profile.cluster_score_ns +%= profiler.elapsedNs(score_start);
-        if (score_cache.hits != prior_cache_hits)
-            profiler.profile.score_cache_hits += 1
-        else
-            profiler.profile.score_cache_misses += 1;
-    }
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
     return .{
@@ -1506,9 +1519,23 @@ test "literal context scored map cache hits and rejects collisions" {
     const baseline_bits = try treeBitCost(std.testing.allocator, &total);
     var cache: ScoredMapCache = .{};
     var tree_cache: TreeScoreCache = .{};
+    var map: [64]u8 = undefined;
+    for (&map, 0..) |*tree, context| tree.* = @intCast(context % 4);
+    const map_plan = try context_map_encoder.choose(std.testing.allocator, &map, 4);
+    var profile: Profile = .{};
+    var timer = ProfileTimer{ .io = std.testing.io, .profile = &profile };
+    // The map alone meets the threshold. One exact nonnegative tree cost
+    // then exceeds it, leaving three trees unscored and no map-cache entry.
+    const rejected = try clusterContexts(true, true, std.testing.allocator, literal_context.mode_lsb6, &sparse_contexts, &active_symbols, &cache, &tree_cache, baseline_bits, @intCast(map_plan.bit_cost), 4, .interleaved, &timer);
+    try std.testing.expectEqual(@as(?Candidate, null), rejected);
+    try std.testing.expectEqual(@as(usize, 0), cache.len);
+    try std.testing.expectEqual(@as(usize, 1), profile.cluster_tree_scores_pruned);
+    try std.testing.expectEqual(@as(usize, 1), profile.tree_score_cache_hits + profile.tree_score_cache_misses);
+    // Revisit the same map with a looser threshold: reuse the completed tree
+    // but compute the full sum before publishing the map for the next hit.
     const first = try clusterContexts(
         false,
-        false,
+        true,
         std.testing.allocator,
         literal_context.mode_lsb6,
         &sparse_contexts,
@@ -1540,6 +1567,11 @@ test "literal context scored map cache hits and rejects collisions" {
     try std.testing.expectEqual(first.savings_bits, second.savings_bits);
     try std.testing.expectEqual(@as(usize, 1), cache.len);
     try std.testing.expectEqual(@as(usize, 1), cache.hits);
+    var reference_cache: ScoredMapCache = .{};
+    const reference = try clusterContexts(false, false, std.testing.allocator, literal_context.mode_lsb6, &sparse_contexts, &active_symbols, &reference_cache, &tree_cache, baseline_bits, std.math.maxInt(u64), 4, .interleaved, {}) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(Candidate.eql(reference, first));
+    try std.testing.expectEqual(reference.savings_bits, first.savings_bits);
+    try std.testing.expectEqual(reference_cache.entries[0].bit_cost, cache.entries[0].bit_cost);
 
     const map_a: [64]u8 = @splat(0);
     var map_b = map_a;
