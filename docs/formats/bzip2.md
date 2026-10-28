@@ -99,6 +99,15 @@ output; limited APIs reject expansion before exceeding the caller's limit.
 Encoding uses a doubling cyclic suffix array, so its work memory is bounded by
 the selected block size rather than total input size.
 
+Forward BWT sorting stops once every cyclic prefix has a unique class: those
+prefixes already determine the complete rotation order. Periodic blocks retain
+ties and finish the original doubling sequence, preserving both transformed
+bytes and the original pointer. One-shot and incremental encoding share this
+core in `src/bzip2/bwt.zig`. This saves sorting passes on distinct data without
+changing encoded bytes, allocation sizes, or the worst-case work bound. The
+[BWT measurement](../performance/bzip2-bwt-unique-classes.md) records the
+output comparisons and allocation-inclusive timing scope.
+
 The incremental decoder additionally bounds the compressed candidate and
 decoded-block length independently; the latter is a safety limit, not a
 plaintext scratch allocation. It retries incomplete Huffman/BWT

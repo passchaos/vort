@@ -24183,3 +24183,21 @@ reuse, so production keeps the simpler independently owned plans.
   and search budgets are not exchanged for speculative gains. Continue
   measured state/edge work, wider codec coverage and the full ten-format
   functionality/performance objective.
+
+
+- 2026-10-29: Bzip2 forward BWT now ends prefix doubling once every rotation
+  has a unique prefix class. Periodic rotations retain the old full-pass tie
+  ordering, so transformed bytes, original pointers and complete encoded
+  streams remain exact. The shared core is extracted into a cohesive BWT
+  module; four test groups compare a frozen old implementation, exhaustive
+  naive rotations and an independent LF inverse, including 900000-byte blocks
+  and every allocation failure. [Allocation-inclusive evidence](performance/bzip2-bwt-unique-classes.md)
+  records a final 72-call/360-sample campaign: random full encoding is about
+  2.39x-7.34x faster, source/JSON about 1.78x/2.16x, while periodic and nearly
+  periodic encoding throughput is 2.4%-3.2% lower. All compressed bytes match the old Git
+  encoder; 36 output files pass independent linked-libbz2 decoding. Builds,
+  source/input/binary hashes, target/affinity, raw timers and preliminary or
+  interrupted setup records are retained. Allocations and the worst-case work
+  bound are unchanged. Adaptive Bzip2 Huffman grouping, comparable real-file
+  ratio/throughput/memory evidence and all ten formats remain active work;
+  this increment establishes no industry-wide lead.

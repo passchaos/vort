@@ -3139,6 +3139,24 @@ pub fn build(b: *std.Build) void {
     const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 encode/decode against Python bz2");
     bzip2_diff_step.dependOn(&bzip2_diff.step);
 
+    const bzip2_bwt_bench = b.addExecutable(.{
+        .name = "vort-bzip2-bwt-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/bzip2/bwt_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "bzip2_bench", .module = b.createModule(.{ .root_source_file = b.path("src/bzip2_bench.zig"), .target = target, .optimize = optimize }) },
+                .{ .name = "benchmark_provenance", .module = b.createModule(.{ .root_source_file = b.path("tools/benchmark_provenance.zig"), .target = target, .optimize = optimize }) },
+            },
+        }),
+    });
+    const bzip2_bwt_bench_install = b.addInstallArtifact(bzip2_bwt_bench, .{});
+    b.step("build-bzip2-bwt-bench", "Build allocation-inclusive Bzip2 BWT and encode measurement tool").dependOn(&bzip2_bwt_bench_install.step);
+    const bzip2_bwt_bench_run = b.addRunArtifact(bzip2_bwt_bench);
+    if (b.args) |args| bzip2_bwt_bench_run.addArgs(args);
+    b.step("run-bzip2-bwt-bench", "Measure Bzip2 BWT or one-shot encoding on a caller file").dependOn(&bzip2_bwt_bench_run.step);
+
     const bzip2_contract_probe = b.addExecutable(.{ .name = "vort-bzip2-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/bzip2/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "bzip2", .module = bzip2_tests_mod }} }) });
     const bzip2_contract_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/stream_contract_diff.py", "--probe" });
     bzip2_contract_diff.addArtifactArg(bzip2_contract_probe);
@@ -7696,6 +7714,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&snappy_interop_probe_exe.step);
     check_step.dependOn(&bzip2_contract_probe.step);
+    check_step.dependOn(&bzip2_bwt_bench.step);
     check_step.dependOn(&snappy_contract_probe.step);
     check_step.dependOn(&snappy_framing_contract_probe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);

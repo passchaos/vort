@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 154  of event 'cycles:P'
+# Event count (approx.): 15007626654
+#
+# Overhead  Symbol                                                           IPC   [IPC Coverage]
+# ........  ...............................................................  ....................
+#
+    23.72%  [.] zstd.duplicateMatchLengthAfterAnchor                         -      -
+            |
+            ---zstd.duplicateMatchLength
+               zstd.findBestDuplicateMatchIndexedCancellable
+               zstd.findBestDuplicateMatchIndexed
+               zstd.emitNativeMatchCompressedBlockSerialWithBeamImpl__anon_547329__struct_547355.run
+               zstd.emitNativeMatchCompressedBlockSerialWithBeamImpl__anon_547328
+
+    18.71%  [.] lz77.extendOptimalLengthChoices                              -      -
+            |
+            ---lz77.optimalPlanReuseInternalProfiled__anon_43517
+               lz77.optimalPlanReuse
+               zstd.emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch
+               zstd.emitNativeMatchCompressedBlockSerialWithBeamImpl__anon_547328
+
+    16.67%  [.] lz77.matchLength                                             -      -
+            |
+            |--11.32%--lz77.optimalPlanReuseInternalProfiled__anon_43517
+            |          lz77.optimalPlanReuse
+            |          zstd.emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch
+            |          zstd.emitNativeMatchCompressedBlockSerialWithBeamImpl__anon_547328
+            |
+             --5.35%--lz77.optimalRepBeamPlanZstdReuse
+                       zstd.emitDecisiveWideMatchCompressedBlockInternal
+                       zstd.emitNativeMatchCompressedBlockWithWideProbeInternal
+                       zstd.emitNativeMatchCompressedBlockWithWideProbeForFrame
+                       zstd.emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl__anon_547058
+
+    11.34%  [.] zstd.match.single_beam.matchLengthAfterPrefix                -      -
+            |
+            ---zstd.match.single_beam.firstIndexedMatch__anon_548829
+               zstd.match.single_beam.planReuseWithChainLimit__anon_548786
+               zstd.match.single_beam.planReuse
+               zstd.emitNativeMatchCompressedBlockSerialWithSingleStateBeam__anon_547197
+
+     4.64%  [.] debug.assert                                                 -      -
+            |
+             --3.97%--lz77.extendOptimalLengthChoices
+                       lz77.optimalPlanReuseInternalProfiled__anon_43517
+                       lz77.optimalPlanReuse
+                       zstd.emitOptimalHashMatchCompressedBlockReuseWithSequenceScratch
+                       zstd.emitNativeMatchCompressedBlockSerialWithBeamImpl__anon_547328
+
+     2.35%  [.] zstd.match.double_fast.matchLength                           -      -
+            |
+            ---zstd.match.double_fast.matchAtDistance
+               zstd.match.double_fast.consumeImmediateReps
+               zstd.match.double_fast.planReuse
+               zstd.emitDecisiveWideMatchCompressedBlockInternal
+               zstd.emitNativeMatchCompressedBlockWithWideProbeInternal
+
+     2.01%  [.] mem.eqlBytes                                                 -      -
+            |
+            ---mem.eql__anon_12314
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#
+Warning:
+Kernel address maps (/proc/{kallsyms,modules}) were restricted.
+
+Check /proc/sys/kernel/kptr_restrict before running 'perf record'.
+
+As no suitable kallsyms nor vmlinux was found, kernel samples
+can't be resolved.
+
+Samples in kernel modules can't be resolved as well.

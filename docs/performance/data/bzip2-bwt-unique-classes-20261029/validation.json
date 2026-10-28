@@ -1,0 +1,170 @@
+{
+  "schema": "vort.bzip2_bwt_validation.v1",
+  "recorded_utc": "2026-10-28T19:57:02.999288+00:00",
+  "feature_commit": "b2f6e2b7196f12047c03a2e1a9a78b547f9dd119",
+  "status": "focused_and_compile_passed_full_test_running",
+  "commands": [
+    {
+      "name": "focused-releasefast",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "test-bzip2-stream-consumers",
+        "run-bzip2-diff",
+        "run-bzip2-stream-contract-diff",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "focused-releasefast.log",
+      "sha256": "4d59e09c918c03e91cf0fc8dc889d4eb7ac74f5ff08ecc9c5f451ca283f3a812",
+      "raw_log_sha256": "f6a164e9192d1066ce51ff99fdd91d965de82da8624020da6681115a1c9dd17f"
+    },
+    {
+      "name": "debug-mode",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "run-bzip2-bwt-bench",
+        "--summary",
+        "all",
+        "--",
+        "--input",
+        "/tmp/vort-bzip2-mode.input",
+        "--iterations",
+        "1",
+        "--samples",
+        "1"
+      ],
+      "exit_code": 0,
+      "log": "debug-mode.log",
+      "sha256": "1c5abc698e4b71c5b237aeede7dfafebf87383b880668d5a6950f5d559d5aa6a",
+      "raw_log_sha256": "23a799bfd20d0663943d75c99dd3d94d429f35a11be860e880901e8eba251618"
+    },
+    {
+      "name": "post-rebase-focused",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "test-bzip2",
+        "run-bzip2-stream-contract-diff",
+        "-Doptimize=ReleaseFast",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "post-rebase-focused.log",
+      "sha256": "406964e17e160cbf40b4df04ec956ef08bb818ecb53409d11413a7917f382a7b",
+      "raw_log_sha256": "697f64f21948d3e557b503407127e5cc8a6670c9c408ac5a5736f4d68c2e33ce"
+    },
+    {
+      "name": "post-rebase-help-wasm",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "check-wasm",
+        "run",
+        "--summary",
+        "all",
+        "--",
+        "--help"
+      ],
+      "exit_code": 0,
+      "log": "post-rebase-help-wasm.log",
+      "sha256": "ae14e7929016ac1d1b60b123c267534c8996c4e9a40d77738114e56099b06783",
+      "raw_log_sha256": "5645ac93e3ad2d8b4bc9297ed9c30ee61b8f5c6fea67965c3ec056b0ab72fecb"
+    },
+    {
+      "name": "check",
+      "command": [
+        "zig",
+        "build",
+        "-j2",
+        "check",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "log": "check.log",
+      "sha256": "34d964558a52d5642f011ef4a3ae35607535fc5921a1a6d1b5d2a528f0b4ae8d",
+      "raw_log_sha256": "bae127ec8e9ed8ad404847357b76072d3c68f5a7f46884e3fce3734842709e64"
+    }
+  ],
+  "full_gate": {
+    "session_id": 34439,
+    "status": "running",
+    "command": [
+      "zig",
+      "build",
+      "-j2",
+      "test",
+      "check",
+      "check-wasm",
+      "--summary",
+      "all"
+    ],
+    "note": "Whole root test execution remains active; no exit code or whole-test pass is assigned. Separate check and check-wasm completed with observed exit 0.",
+    "activity_observation": {
+      "command": [
+        "perf",
+        "record",
+        "-q",
+        "-F",
+        "49",
+        "-g",
+        "--call-graph",
+        "dwarf,16384",
+        "-p",
+        "1763905",
+        "-o",
+        "/tmp/vort-bzip2-full-gate.perf",
+        "--",
+        "sleep",
+        "3"
+      ],
+      "exit_code": 0,
+      "samples": 154,
+      "lost_samples": 0,
+      "observed_stage": "Zstd match extension and optimal parse work; sampling does not prove test completion",
+      "kernel_symbol_limit": "Kernel address maps restricted; named user-space symbols were resolved.",
+      "report_sha256": "5be3ffb50aeb21ef52a984c49b94bd0164344b21a6e18ef34c8f5b1851421e96",
+      "report": "full-test-activity.log",
+      "raw_report_sha256": "1cf877e585fdea12ad342db105bffe2a37775bae60bb6f78571be33c263660f1"
+    }
+  },
+  "code_source_sha256": {
+    "build.zig": "0245e9c0c7f1a0885641430626215e8669aa22d2a47bcd477b73d8575d9617b5",
+    "src/bzip2.zig": "c927df362cf683ab71a2015859ec46ca7d078e9ea658ec23689f2dafc64d4c35",
+    "src/bzip2/bit_reader.zig": "2a43c90d8aed21face4029ed6f79ac96b2f9e50bbeeffb658029554b2011cb65",
+    "src/bzip2/bit_writer.zig": "2e37a3cddfee85632e634f1d2a3c01e9f36e1f1a6db61010724ce5c5f6280f88",
+    "src/bzip2/bwt.zig": "2995d3b65a707840e601120aeb02c70d7bfeeadfdb081b6826bacf3afa74aebc",
+    "src/bzip2/bwt_tests.zig": "5ad597b5b2d88b83859894a56fb7accc8e83af0e3d2ac2ec986829567cb1ea45",
+    "src/bzip2/crc.zig": "c6f7fd0b81a8f6c52615ee3a4a1d92e7d118ea5a0ed6215f24344d3fa0702df7",
+    "src/bzip2/decoder.zig": "009e5d71ecefbf4173d27117340890953b2ac5d5eabfe382a455403f96656c79",
+    "src/bzip2/encoder.zig": "331a4fe9e94b07f17ce64d251711903ae6a0e477cb9676c463c6c1aa238a44e9",
+    "src/bzip2/incremental/contracts_tests.zig": "3022e6aa183d5a92c549f19c59cd4ce1a2b9dc3609a077477f50167cc6fd7257",
+    "src/bzip2/incremental/options.zig": "4007769c24321b470f2d82f3a2baf90f084340c6002d31be0b9e49c056f92dac",
+    "src/bzip2/incremental_decoder.zig": "da0b53a874c4dc5e8bca321d7fa898fdf65714cf1c9cf047f48b1757c8c0e09e",
+    "src/bzip2/incremental_encoder.zig": "31e734673751ac345dc16466128d6f066d4a7f07e9e5f9e4c9fc437f09642e56",
+    "src/bzip2/incremental_encoder_tests.zig": "4b23b8cc1d40f42db56f2ccc23f4432803dd838341115ec2fc1c244765a40910",
+    "src/bzip2/incremental_tests.zig": "f4c1fee4e6173f731e674120d2039975e3fb7d54f673c5847b561524f703066f",
+    "src/bzip2/inverse_bwt.zig": "225b794638b1dfdae3684b893772538c18f28707ebb34d337995d07817c8403c",
+    "src/bzip2/output_cursor.zig": "a52ef4d475a971e091e16587504d568a34f4aa0aa6f838aa027859e87efb1785",
+    "src/bzip2/randomization.zig": "7c104b80d46b76264522c868cdc7b09fbc415ecdf74f5622042a72b29f8439ad",
+    "src/bzip2/test_support/bwt_full_doubling.zig": "02064bf51e344cbd44f2eb04ba818b1af0001749e75b5d9bf01629f6e0399fab",
+    "src/bzip2_bench.zig": "1ac3e452f5f3c87b68925b86bd17674f553a25fd6a6a65ebad18619fc22f3b4f",
+    "src/core.zig": "8cc14724241613c82c43da38ef4640bf29cb327d4c54daf9d29c9602cdffb4e3",
+    "src/io/stream_count.zig": "581217a966fe2cc067e0973a012a9d5a1361441becd46265389e404ace8cd2b8",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "tools/bzip2/bwt_bench.zig": "641089ad7a6b181be669819afffe95cd40bcb82d1ea8d5a99c8c325f08db502e",
+    "tools/bzip2/bwt_campaign.py": "cd53bfddb0917c6e8375ab5c41da54a4f67489f16511383d697de4dd48f53c69"
+  },
+  "log_normalization": "Trailing whitespace on each line and extra blank lines at EOF removed; raw and saved hashes both recorded."
+}
