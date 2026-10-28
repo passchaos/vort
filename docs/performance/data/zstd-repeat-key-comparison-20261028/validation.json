@@ -233,24 +233,7 @@
     "log": "original-full-debug.log",
     "scope": "started before repeat-key change and before final Brotli test-only cache revisit; does not claim current-key full Debug coverage"
   },
-  "pending_checks": [
-    {
-      "argv": [
-        "zig",
-        "build",
-        "-j6",
-        "test",
-        "-Doptimize=ReleaseFast",
-        "--summary",
-        "all"
-      ],
-      "exec_session_id": 72177,
-      "compiler_pid": 1569168,
-      "status": "running",
-      "live_log": "/tmp/vort-br-partial-final-20261028/test-releasefast.log",
-      "scope": "original source snapshot before repeat-key change"
-    }
-  ],
+  "pending_checks": [],
   "source_commit": "8bfcd26f",
   "post_rebase": {
     "argv": [
@@ -261,5 +244,25 @@
     "exit_code": 0,
     "result": "Current branch main is up to date.",
     "source_hashes_unchanged": true
+  },
+  "original_full_rf_completion": {
+    "argv": [
+      "zig",
+      "build",
+      "-j6",
+      "test",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ],
+    "exec_session_id": 72177,
+    "exit_code": 0,
+    "passed": 5008,
+    "skipped": 1,
+    "total": 5009,
+    "observed_utc": "2026-10-28T12:44:19.127943+00:00",
+    "log_sha256": "90168926e151d12599d83df652b4e15f349290286a4b07703ffca1780d5c0a0c",
+    "scope": "Original source snapshot before later Zstd repeat-key and test-registration changes; current code has separate focused and interoperability results.",
+    "evidence_path": "../zstd-large-trained-20261028/original-full-rf-completion.log.xz"
   }
 }

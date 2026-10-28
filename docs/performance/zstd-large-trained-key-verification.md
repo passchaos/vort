@@ -63,3 +63,10 @@ Next compare the retained HQ encoder with matched libzstd settings, expand
 trained-dictionary/large-block corpus coverage, and reduce transition pricing
 or match-search cost while preserving documented admission semantics. The
 full deflate/zstd/brotli/lz4/xz/zip/rar/tar/bzip2/snappy goal remains active.
+
+The previously tracked full-library ReleaseFast run subsequently completed:
+5008/5009 tests pass with one skip and process exit code zero. Its executable
+was built from the original snapshot before the later repeat-key change; the
+completion record preserves that scope. It complements the retained 5007-pass,
+two-skip Debug run and does not replace the current key's focused/reference,
+portable and interoperability results.

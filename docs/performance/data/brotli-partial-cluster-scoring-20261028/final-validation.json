@@ -189,25 +189,8 @@
       "exit_code": 0
     }
   ],
-  "pending_checks": [
-    {
-      "argv": [
-        "zig",
-        "build",
-        "-j6",
-        "test",
-        "-Doptimize=ReleaseFast",
-        "--summary",
-        "all"
-      ],
-      "status": "running",
-      "exec_session_id": 72177,
-      "live_log": "/tmp/vort-br-partial-final-20261028/test-releasefast.log",
-      "scope": "all-library ReleaseFast; final source",
-      "last_confirmed_running_utc": "2026-10-28T10:38:11.234230+00:00"
-    }
-  ],
-  "whole_test_status": "Earlier source full Debug finished: 5007 passed, 2 skipped. Full ReleaseFast remains unverified.",
+  "pending_checks": [],
+  "whole_test_status": "Earlier source full Debug/RF complete; later code/test-only changes retain their own scoped checks.",
   "source_manifest": "final-source-manifest.json",
   "debug_diagnostic": {
     "argv": [
@@ -276,5 +259,25 @@
     "log": "full-debug-completion.log.xz",
     "log_sha256": "9311796f163d3724bf63a51bd1e7bdf435ea27f2aa6cf914b95686ac2b807ba7",
     "scope": "The already-running original executable, before final cache-revisit test-only additions and the later Zstd repeat-key change. Those additions have their separate focused checks."
+  },
+  "original_full_rf_completion": {
+    "argv": [
+      "zig",
+      "build",
+      "-j6",
+      "test",
+      "-Doptimize=ReleaseFast",
+      "--summary",
+      "all"
+    ],
+    "exec_session_id": 72177,
+    "exit_code": 0,
+    "passed": 5008,
+    "skipped": 1,
+    "total": 5009,
+    "observed_utc": "2026-10-28T12:44:19.127943+00:00",
+    "log_sha256": "90168926e151d12599d83df652b4e15f349290286a4b07703ffca1780d5c0a0c",
+    "scope": "Original source snapshot before later Zstd repeat-key and test-registration changes; current code has separate focused and interoperability results.",
+    "evidence_path": "../zstd-large-trained-20261028/original-full-rf-completion.log.xz"
   }
 }

@@ -23981,3 +23981,12 @@ reuse, so production keeps the simpler independently owned plans.
   stable periodic regressions of 6.7%/4.2% reject it; source remains unchanged.
   Preserve the three-word comparison, expand matched competitor/corpus data,
   and reduce remaining transition/pricing cost. The ten-format goal continues.
+
+- 2026-10-28: the long-running original full-library RF build/test finished
+  with process exit code zero: 5008/5009 passed, one skipped. The original
+  Debug run already finished 5007/5009 with two skips. Both executable epochs
+  predate later repeat-key/test additions; their exact scope is preserved in
+  [the completion record](performance/data/zstd-large-trained-20261028/original-full-rf-completion.json).
+  No stale compiler PID or empty output is treated as terminal evidence. Current
+  optimizations retain their separately completed focused, portable and oracle
+  checks. Continue raising the full compression functionality/performance bar.

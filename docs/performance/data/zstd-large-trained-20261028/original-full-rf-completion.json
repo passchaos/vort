@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "zig",
+    "build",
+    "-j6",
+    "test",
+    "-Doptimize=ReleaseFast",
+    "--summary",
+    "all"
+  ],
+  "exec_session_id": 72177,
+  "exit_code": 0,
+  "passed": 5008,
+  "skipped": 1,
+  "total": 5009,
+  "observed_utc": "2026-10-28T12:44:19.127943+00:00",
+  "log_sha256": "90168926e151d12599d83df652b4e15f349290286a4b07703ffca1780d5c0a0c",
+  "scope": "Original source snapshot before later Zstd repeat-key and test-registration changes; current code has separate focused and interoperability results."
+}
