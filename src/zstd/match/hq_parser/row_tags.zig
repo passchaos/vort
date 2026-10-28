@@ -33,12 +33,13 @@ pub fn insert(row: anytype, tags: *Tags, candidate: @TypeOf(row[0])) bool {
             old.repeats[0] == candidate.repeats[0] and old.repeats[1] == candidate.repeats[1] and
             old.repeats[2] == candidate.repeats[2])
         {
-            if (!state.less(candidate, old)) return false;
+            // Cost decides unequal pairs without loading the tie fields.
+            if (candidate.cost > old.cost or (candidate.cost == old.cost and !state.less(candidate, old))) return false;
             replace = slot;
             break;
         }
     }
-    if (!state.less(candidate, row[replace])) return false;
+    if (candidate.cost > row[replace].cost or (candidate.cost == row[replace].cost and !state.less(candidate, row[replace]))) return false;
     while (replace > 0 and state.less(candidate, row[replace - 1])) : (replace -= 1) {
         row[replace] = row[replace - 1];
         tags[replace] = tags[replace - 1];
@@ -50,4 +51,5 @@ pub fn insert(row: anytype, tags: *Tags, candidate: @TypeOf(row[0])) bool {
 
 test {
     _ = @import("row_tags_tests.zig");
+    _ = @import("row_tags_cost_tests.zig");
 }
