@@ -11,6 +11,13 @@ native-format code remains available but does not drive roadmap priority.
 
 ### Current completion audit (2026-10-24)
 
+The [one-shot optimal decision-plane storage](performance/png-decision-planes.md)
+codes distance and length chunks without an additional full parser pass.
+Source-bound literal markers preserve complete owned results. A 2-MiB input
+now parses within a 2-MiB allocator budget, while measured whole-PNG heap/RSS
+and CPU tradeoffs remain part of acceptance. Input-sized token ownership and
+raw decision fallback remain active memory work.
+
 The [complete-index planner isolation](performance/png-small-planner.md)
 recovers the 128-pixel rsvg icon's regression with 1.068542x focused throughput.
 All 120 PNG buffers and allocator records remain exact. Measured tiny/large

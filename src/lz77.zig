@@ -11,6 +11,7 @@ const optimal_candidate_cursor = @import("lz77/optimal/candidate_cursor.zig");
 const match_length = @import("lz77/match/length.zig");
 const optimal_index_access = @import("lz77/optimal/index_access.zig");
 const optimal_window_index = @import("lz77/optimal/window_index.zig");
+const optimal_chunked_decisions = @import("lz77/optimal/chunked_decisions.zig");
 const optimal_decisions = @import("lz77/optimal/decisions.zig");
 const optimal_match_reuse = @import("lz77/optimal/match_reuse.zig");
 const core = @import("core.zig");
@@ -58,6 +59,7 @@ pub const Token = union(enum) {
 };
 
 const OptimalDecisions = optimal_decisions.Views(Token);
+const ChunkedDecisions = optimal_chunked_decisions.Store(Token);
 const OptimalWindowIndex = optimal_window_index.Index(optimalHashAt);
 
 pub const PlanStats = struct {
@@ -1623,12 +1625,12 @@ fn optimalPlanReuseStoredProfiled(
 ) !PlanStats {
     const n = input.len;
     std.debug.assert(costs.len == n + 1);
-    try decisions.reserve(allocator, n);
-    scratch.tokens.clearRetainingCapacity();
     if (comptime enable_prefix_bound and !modeled and @TypeOf(decisions.*) == OptimalDecisions.Compact) {
         if (input.len >= optimal_window_index.minimum_input and input.len <= optimal_compact_index_empty and options.window_len <= default_window_len)
             return optimalPlanReuseWindowIndex(scratch, allocator, input, options, costs, decisions, collect_profile, io, profile, optimal_window_index.default_chunk);
     }
+    try decisions.reserve(allocator, n);
+    scratch.tokens.clearRetainingCapacity();
     if (enable_prefix_bound and input.len <= optimal_compact_index_empty) {
         const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
         try buildOptimalCompactHashIndex(
@@ -1764,14 +1766,16 @@ inline fn optimalPlanReuseWithIndexBackend(
             }
             break :snapshot prev.snapshot();
         } else prev;
-        const through = if (comptime optimal_index_access.isWindow(@TypeOf(prev))) parse_index.core else 0;
+        const decision_base = if (comptime @hasDecl(@TypeOf(decisions.*), "startChunk")) try decisions.startChunk(allocator, rev_i - 1) else 0;
+        const through = @max(decision_base, if (comptime optimal_index_access.isWindow(@TypeOf(prev))) parse_index.core else 0);
+        const decision_writer = if (comptime @hasDecl(@TypeOf(decisions.*), "writer")) decisions.writer() else decisions;
         // The active pointers and coordinate base are immutable throughout
         // this chunk. Minima and adjacent-match state continue across chunks.
         while (rev_i > through) {
             rev_i -= 1;
             if (comptime collect_profile) profile.positions += 1;
             costs.set(rev_i, (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs.get(rev_i + 1));
-            decisions.set(rev_i, .{ .literal = input[rev_i] });
+            decision_writer.set(rev_i, .{ .literal = input[rev_i] });
 
             // Runtime minimum selects the strategy: the dense/long-minimum
             // instance keeps the queues, the sparse minimum-three instance uses
@@ -1890,7 +1894,7 @@ inline fn optimalPlanReuseWithIndexBackend(
                             const cost = optimalLengthChoiceCost(choice) + distance_cost;
                             if (cost < costs.get(rev_i)) {
                                 costs.set(rev_i, cost);
-                                decisions.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
+                                decision_writer.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
                             }
                         } else {
                             if (length > coverage.through or distance_cost < coverage.distance_cost) {
@@ -1898,7 +1902,7 @@ inline fn optimalPlanReuseWithIndexBackend(
                                 const cost = choice.cost + distance_cost;
                                 if (cost < costs.get(rev_i)) {
                                     costs.set(rev_i, cost);
-                                    decisions.set(rev_i, .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } });
+                                    decision_writer.set(rev_i, .{ .match = .{ .length = choice.length, .distance = @intCast(distance) } });
                                 }
                             }
                         }
@@ -1931,7 +1935,7 @@ inline fn optimalPlanReuseWithIndexBackend(
                         const cost = optimalLengthChoiceCost(choice) + distance_cost;
                         if (cost < costs.get(rev_i)) {
                             costs.set(rev_i, cost);
-                            decisions.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
+                            decision_writer.set(rev_i, .{ .match = .{ .length = optimalLengthChoiceLength(choice, &scratch.index.best_lengths, length), .distance = @intCast(distance) } });
                         }
                     }
                     coverage.through = @max(coverage.through, length);
@@ -1951,6 +1955,7 @@ inline fn optimalPlanReuseWithIndexBackend(
         }
     }
 
+    if (comptime @hasDecl(@TypeOf(decisions.*), "finish")) try decisions.finish(allocator);
     if (comptime collect_profile) {
         profile.search_ns = elapsedNs(search_start, io);
         if (comptime optimal_index_access.isWindow(@TypeOf(prev))) profile.search_ns -|= window_index_ns;
@@ -5001,6 +5006,20 @@ noinline fn optimalPlanReuseWindowIndex(
         profile.index_ns = elapsedNs(start, io);
         profile.index_bytes = index.view().bytes();
     }
+    if (comptime @TypeOf(decisions.*) == OptimalDecisions.Compact) {
+        // Short-tail chains retain their exact compact-array memory and
+        // avoid run coding that the sampled matching shape cannot amortize.
+        if (optimal_prefix_jumps.sparseLinearUseful(input, index.view())) {
+            try decisions.reserve(allocator, input.len);
+            scratch.tokens.clearRetainingCapacity();
+            return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, index.view(), optimal_compact_index_empty, true, collect_profile, false, io, profile, undefined);
+        }
+        var stored: ChunkedDecisions = .{ .input = input };
+        defer stored.deinit(allocator);
+        try stored.reserve(allocator, input.len);
+        scratch.tokens.clearRetainingCapacity();
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, &stored, index.view(), optimal_compact_index_empty, true, collect_profile, false, io, profile, undefined);
+    }
     return optimalPlanReuseWithIndex(scratch, allocator, input, options, costs, decisions, index.view(), optimal_compact_index_empty, true, collect_profile, false, io, profile, undefined);
 }
 
@@ -5035,4 +5054,25 @@ test "optimal bounded index rejects fixed cost overflow before large allocations
     const limit = maximum / 9;
     try std.testing.expectEqual(limit + 1, try optimalFixedCostLength(limit));
     try std.testing.expectError(error.InvalidBlockPlan, optimalFixedCostLength(limit + 1));
+}
+
+fn optimalPlanReuseChunkedAudited(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, chunk: usize) !PlanStats {
+    try optimal_storage.resizeFresh(&scratch.costs, allocator, try optimalFixedCostLength(input.len));
+    try optimal_storage.resizeFresh(&scratch.steps, allocator, input.len);
+    var costs = optimal_suffix_costs.Audited.init(scratch.costs.items);
+    var stored: ChunkedDecisions = .{ .input = input, .chunk = chunk };
+    defer stored.deinit(allocator);
+    try stored.reserve(allocator, input.len);
+    scratch.tokens.clearRetainingCapacity();
+    const stats = try optimalPlanReuseWindowIndex(scratch, allocator, input, options, &costs, &stored, false, undefined, undefined, chunk);
+    for (0..input.len) |pos| scratch.steps.items[pos] = stored.get(pos);
+    return stats;
+}
+
+test "optimal chunked storage retains every cost decision and reconstructed token" {
+    try @import("lz77/optimal/tests/chunked_parser.zig").compare(GreedyOptions, OptimalScratch, Token, optimalPlanReuseInternal, optimalPlanReuseChunkedAudited);
+}
+
+test "optimal chunked decisions retain owned results within a finite memory budget" {
+    try @import("lz77/optimal/tests/memory_budget.zig").chunked(GreedyOptions, optimalPlanAlloc);
 }
