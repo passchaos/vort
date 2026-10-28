@@ -92,7 +92,7 @@ pub const EntropyModel = struct {
         }
         return result;
     }
-    pub fn sequencePrice(self: *const EntropyModel, literal_len: usize, match_len: usize, offset_value: u32) Error!u32 {
+    pub inline fn sequencePrice(self: *const EntropyModel, literal_len: usize, match_len: usize, offset_value: u32) Error!u32 {
         const ll = try literalSymbol(literal_len);
         const ml = try matchSymbol(match_len);
         const of = try offsetSymbol(offset_value);
