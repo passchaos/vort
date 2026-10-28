@@ -102,3 +102,9 @@ records three CPU-4 rounds of Dickens/Mozilla/MR 4/16 KiB prefixes and an actual
 dictionary reference, with unchanged wires and full profiles. It also records
 two withdrawn Brotli interval-memo layouts whose component benefit did not
 establish a useful ordinary-encoder improvement.
+
+The [large-block and trained-dictionary verification](zstd-large-trained-key-verification.md)
+extends the retained comparison to 64/128 KiB inputs and a libzstd-trained
+4096-byte standard dictionary, with complete output/profile equality. A
+first-slot shortcut is validated for equivalence but withdrawn after measured
+periodic regressions.

@@ -23967,3 +23967,17 @@ reuse, so production keeps the simpler independently owned plans.
   frame does not establish a stable remedy. Neither Brotli prototype changes
   production. Continue larger/trained Zstd data and adaptive-distance candidate
   preparation; retain the complete ten-format goal.
+
+- 2026-10-28: repeat-key equivalence/performance verification now includes
+  64/128 KiB Dickens/Mozilla, 64 KiB MR and a genuinely libzstd-trained 4 KiB
+  standard dictionary. The dictionary's 192 real 1 KiB training samples seed
+  entropy tables, repcodes and Dictionary_ID; btopt/btultra2 emit 78/87 actual
+  dictionary sequences. One balanced CPU-4 exploratory round preserves all
+  complete wires/profile shapes: 24 ordinary encodes and 48 native decodes.
+  [Large/trained evidence](performance/zstd-large-trained-key-verification.md)
+  records Mozilla 128 KiB btultra2 56.337s to 15.079s, with existing full RF
+  compilation still active and no clean-host/general competitor claim. The
+  proposed first-slot duplicate shortcut is equivalent under frozen tests but
+  stable periodic regressions of 6.7%/4.2% reject it; source remains unchanged.
+  Preserve the three-word comparison, expand matched competitor/corpus data,
+  and reduce remaining transition/pricing cost. The ten-format goal continues.

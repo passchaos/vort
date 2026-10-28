@@ -1,0 +1,8 @@
+{
+  "all_input_dictionary_binary_wire_hashes_match": true,
+  "ordinary_encodes": 24,
+  "native_decodes": 48,
+  "configs": 12,
+  "all_wire_profile_equal": true,
+  "exit_code": 0
+}

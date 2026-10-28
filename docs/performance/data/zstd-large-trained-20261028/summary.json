@@ -1,0 +1,278 @@
+{
+  "source_base": "b04a9019",
+  "candidate": "8bfcd26f",
+  "scope": "one balanced exploratory CPU4 round on 64/128KiB real data and 4KiB trained dictionary; old RF compiler running",
+  "configs": [
+    {
+      "case": "dickens",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/dickens-65536",
+      "bytes": 65536,
+      "sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "dickens",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/dickens-65536",
+      "bytes": 65536,
+      "sha256": "134ad989a7b8b40c900a3b9c0f4895317dfd827d9e6e933895b08d2f4a8a8293",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "dickens",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/dickens-131072",
+      "bytes": 131072,
+      "sha256": "20e33fcc8faa96dc32a2d0921115c0f363e64c598a5847ce1a3876e356d59872",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 131072,
+      "dictionary": null
+    },
+    {
+      "case": "dickens",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/dickens-131072",
+      "bytes": 131072,
+      "sha256": "20e33fcc8faa96dc32a2d0921115c0f363e64c598a5847ce1a3876e356d59872",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 131072,
+      "dictionary": null
+    },
+    {
+      "case": "mozilla",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mozilla-65536",
+      "bytes": 65536,
+      "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "mozilla",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mozilla-65536",
+      "bytes": 65536,
+      "sha256": "b0050240663f54371d372303eeaba0a59ab0758bcd565f4f639d06561e6bc996",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "mozilla",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mozilla-131072",
+      "bytes": 131072,
+      "sha256": "85cdbea98382db12e9a21ff90e1907452712d074000a6b855d2ca215fa591eb4",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 131072,
+      "dictionary": null
+    },
+    {
+      "case": "mozilla",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mozilla-131072",
+      "bytes": 131072,
+      "sha256": "85cdbea98382db12e9a21ff90e1907452712d074000a6b855d2ca215fa591eb4",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 131072,
+      "dictionary": null
+    },
+    {
+      "case": "mr",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mr-65536",
+      "bytes": 65536,
+      "sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "mr",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/mr-65536",
+      "bytes": 65536,
+      "sha256": "cab7b6408934009a4bbfedb57beb4943bf5478cf8b3688d01f004e0422ebc651",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 65536,
+      "dictionary": null
+    },
+    {
+      "case": "trained-reference",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/trained-reference",
+      "bytes": 8192,
+      "sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "strategy": "btopt",
+      "window_log": 17,
+      "block_size": 16384,
+      "dictionary": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/trained.dict"
+    },
+    {
+      "case": "trained-reference",
+      "input": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/trained-reference",
+      "bytes": 8192,
+      "sha256": "286a212ff88278245fc3bb7c99b97217ffda51509e290819dbdc8b04b0074969",
+      "strategy": "btultra2",
+      "window_log": 17,
+      "block_size": 16384,
+      "dictionary": "/tmp/vort-zstd-large-trained-20261028-omjszpyn/inputs/trained.dict"
+    }
+  ],
+  "training": {
+    "library": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+    "samples": 192,
+    "sample_bytes": 196608,
+    "capacity": 4096,
+    "dictionary_bytes": 4096,
+    "dictionary_sha256": "6877fa1b2bbbdfbe4027738caa65f7d0c96d728b6eda2542620020a06c2bcb03"
+  },
+  "binary_sha256": {
+    "baseline": "eee4447264b24c64610267c34ac92635d18e7d3433235105c1242bafec3fdee4",
+    "candidate": "c92401c0544d68a893f54ca2ed2d6c93ba3e0517a90d4df204a0a26590c988ce"
+  },
+  "summary": [
+    {
+      "case": "dickens",
+      "bytes": 65536,
+      "strategy": "btopt",
+      "block_size": 65536,
+      "baseline_ns": 296124076,
+      "candidate_ns": 192668645,
+      "ratio": 0.650634854154851,
+      "dictionary_sequences": 0,
+      "wire_sha256": "bdb62f056a12ed2d24ff2ffd4830d80a84c96e5feb1dc6a0ba98e06a5dfa1d62"
+    },
+    {
+      "case": "dickens",
+      "bytes": 65536,
+      "strategy": "btultra2",
+      "block_size": 65536,
+      "baseline_ns": 1691917265,
+      "candidate_ns": 1001420101,
+      "ratio": 0.591884793491956,
+      "dictionary_sequences": 0,
+      "wire_sha256": "89545fcb6bbfe26bf8253c3832641efd985ecee78e472f20ec30afec9316a693"
+    },
+    {
+      "case": "dickens",
+      "bytes": 131072,
+      "strategy": "btopt",
+      "block_size": 131072,
+      "baseline_ns": 698245539,
+      "candidate_ns": 439820471,
+      "ratio": 0.6298937070616931,
+      "dictionary_sequences": 0,
+      "wire_sha256": "f58bb4dcb81f75ba03a26524510108110a1b2c19b914c0e4670d756bb64352ff"
+    },
+    {
+      "case": "dickens",
+      "bytes": 131072,
+      "strategy": "btultra2",
+      "block_size": 131072,
+      "baseline_ns": 4038934392,
+      "candidate_ns": 2246885430,
+      "ratio": 0.5563064937252885,
+      "dictionary_sequences": 0,
+      "wire_sha256": "f6bf6c132cbad7e75fe8878105dc62ba35bb6a3c1dcf7e144c55dc6e99b0ea7f"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 65536,
+      "strategy": "btopt",
+      "block_size": 65536,
+      "baseline_ns": 1871036103,
+      "candidate_ns": 628189806,
+      "ratio": 0.3357443530847785,
+      "dictionary_sequences": 0,
+      "wire_sha256": "81780f4393eabcca7ce440e60f9ae0686a7bbe047130dfeee642526d5f3624d7"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 65536,
+      "strategy": "btultra2",
+      "block_size": 65536,
+      "baseline_ns": 18711209600,
+      "candidate_ns": 5167312942,
+      "ratio": 0.2761613520699378,
+      "dictionary_sequences": 0,
+      "wire_sha256": "2680d03821da2d3114b827f2cffa8cfd8bd2b84795ab4561753004991805507a"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 131072,
+      "strategy": "btopt",
+      "block_size": 131072,
+      "baseline_ns": 5368127901,
+      "candidate_ns": 1676839150,
+      "ratio": 0.31236944814366857,
+      "dictionary_sequences": 0,
+      "wire_sha256": "2fa8f0046ed9da404795a160fbd831bdbcc6f6ec12585ea5f58927d1272cc9db"
+    },
+    {
+      "case": "mozilla",
+      "bytes": 131072,
+      "strategy": "btultra2",
+      "block_size": 131072,
+      "baseline_ns": 56336661417,
+      "candidate_ns": 15078676585,
+      "ratio": 0.2676530026049769,
+      "dictionary_sequences": 0,
+      "wire_sha256": "3bb2e976e6c3640bcab3f92d07c829ca428b98fad1b55e416f40964603936b89"
+    },
+    {
+      "case": "mr",
+      "bytes": 65536,
+      "strategy": "btopt",
+      "block_size": 65536,
+      "baseline_ns": 1773429676,
+      "candidate_ns": 642534002,
+      "ratio": 0.3623115202680301,
+      "dictionary_sequences": 0,
+      "wire_sha256": "dda3836a6ac5bf15e6c51d01839164fcecef31e821abad5170f593488f53fce5"
+    },
+    {
+      "case": "mr",
+      "bytes": 65536,
+      "strategy": "btultra2",
+      "block_size": 65536,
+      "baseline_ns": 18989450753,
+      "candidate_ns": 4774278085,
+      "ratio": 0.25141738679544207,
+      "dictionary_sequences": 0,
+      "wire_sha256": "b66d8546c7fd55e2e9c5a651097feee6a9274fce2e07d021e8f797df2c29b330"
+    },
+    {
+      "case": "trained-reference",
+      "bytes": 8192,
+      "strategy": "btopt",
+      "block_size": 16384,
+      "baseline_ns": 99411389,
+      "candidate_ns": 44455998,
+      "ratio": 0.447192202495028,
+      "dictionary_sequences": 78,
+      "wire_sha256": "2ad6ebee899bd1643108f879f6caf25d3012ffdf98227cad5deafda62f891d40"
+    },
+    {
+      "case": "trained-reference",
+      "bytes": 8192,
+      "strategy": "btultra2",
+      "block_size": 16384,
+      "baseline_ns": 389015805,
+      "candidate_ns": 135317004,
+      "ratio": 0.3478444892489651,
+      "dictionary_sequences": 87,
+      "wire_sha256": "6378cf98cf3a7fe759dc25f056064b964eba08380440973862835e6e266d3f78"
+    }
+  ],
+  "validation": {
+    "ordinary_encodes": 24,
+    "native_decodes": 48,
+    "all_wires_profiles_equal": true
+  }
+}

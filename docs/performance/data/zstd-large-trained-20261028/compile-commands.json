@@ -1,0 +1,38 @@
+[
+  {
+    "argv": [
+      "zig",
+      "build-exe",
+      "-fllvm",
+      "-OReleaseFast",
+      "-mcpu=skylake",
+      "--dep",
+      "zstd",
+      "-Mroot=/tmp/vort-zstd-large-trained-20261028-omjszpyn/runner.zig",
+      "-OReleaseFast",
+      "-mcpu=skylake",
+      "-Mzstd=/tmp/vort-zstd-repeat-dp-screen-20261028.E7TmOD/baseline/src/zstd.zig",
+      "/tmp/vort-zstd-large-trained-20261028-omjszpyn/huffman-x2.o",
+      "-femit-bin=/tmp/vort-zstd-large-trained-20261028-omjszpyn/baseline-runner"
+    ],
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "zig",
+      "build-exe",
+      "-fllvm",
+      "-OReleaseFast",
+      "-mcpu=skylake",
+      "--dep",
+      "zstd",
+      "-Mroot=/tmp/vort-zstd-large-trained-20261028-omjszpyn/runner.zig",
+      "-OReleaseFast",
+      "-mcpu=skylake",
+      "-Mzstd=/tmp/vort-zstd-repeat-dp-screen-20261028.E7TmOD/candidate/src/zstd.zig",
+      "/tmp/vort-zstd-large-trained-20261028-omjszpyn/huffman-x2.o",
+      "-femit-bin=/tmp/vort-zstd-large-trained-20261028-omjszpyn/candidate-runner"
+    ],
+    "exit_code": 0
+  }
+]
