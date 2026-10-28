@@ -36,6 +36,7 @@ pub const Encoder = struct {
     pub const Error = encoder.Error || std.mem.Allocator.Error;
     pub const Options = struct {
         block_size_100k: u4 = 9,
+        strategy: encoder.EncodeStrategy = .balanced,
         max_input_len: usize = std.math.maxInt(usize),
         max_pending_output_len: usize = 4 * 1024 * 1024,
     };
@@ -299,7 +300,7 @@ pub const Encoder = struct {
         defer transformed.deinit(self.allocator);
         const crc = self.block_crc.digest();
         var writer = self.bitWriter();
-        try encoder.writeBlock(&writer, transformed, crc);
+        try encoder.writeBlockWithStrategy(&writer, transformed, crc, self.options.strategy);
         self.saveBitWriter(writer);
         try self.checkPendingLimit();
         self.combined_crc = std.math.rotl(u32, self.combined_crc, 1) ^ crc;

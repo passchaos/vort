@@ -35,6 +35,34 @@ test "Bzip2 incremental encoder matches the canonical empty stream" {
     try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().block_count);
 }
 
+test "Bzip2 incremental encoder preserves every strategy across bit-aligned blocks" {
+    const input = try std.testing.allocator.alloc(u8, 101_321);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, index| byte.* = @truncate(index *% 73 +% index / 251);
+    var previous: usize = std.math.maxInt(usize);
+    for ([_]bzip2.EncodeStrategy{ .fast, .balanced, .ratio }) |strategy| {
+        const one_shot = try bzip2.encodeAlloc(std.testing.allocator, input, .{
+            .block_size_100k = 1,
+            .strategy = strategy,
+        });
+        defer std.testing.allocator.free(one_shot);
+        try std.testing.expect(one_shot.len <= previous);
+        previous = one_shot.len;
+        var encoder = try bzip2.IncrementalEncoder.initExactSize(std.testing.allocator, .{
+            .block_size_100k = 1,
+            .strategy = strategy,
+        }, input.len);
+        defer encoder.deinit();
+        const incremental = try encodeSplit(&encoder, input, 1, 7);
+        defer std.testing.allocator.free(incremental);
+        try std.testing.expectEqualSlices(u8, one_shot, incremental);
+        try std.testing.expect(encoder.snapshot().block_count >= 2);
+        const decoded = try bzip2.decodeAlloc(std.testing.allocator, incremental);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
 test "Bzip2 incremental encoder flushes deterministic blocks" {
     const first = "first flushed Bzip2 run " ** 128;
     const second = "second Bzip2 block after flush " ** 96;

@@ -262,6 +262,7 @@ pub const zipExtractByNameAllocWithOptions = zip.extractByNameAllocWithOptions;
 
 pub const Bzip2Error = bzip2.Error;
 pub const Bzip2EncodeOptions = bzip2.EncodeOptions;
+pub const Bzip2EncodeStrategy = bzip2.EncodeStrategy;
 pub const Bzip2IncrementalDecoder = bzip2.IncrementalDecoder;
 pub const Bzip2IncrementalEncoder = bzip2.IncrementalEncoder;
 pub const encodeBzip2Alloc = bzip2.encodeAlloc;

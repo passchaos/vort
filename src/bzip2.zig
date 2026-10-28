@@ -7,6 +7,7 @@ const incremental_tests = @import("bzip2/incremental_tests.zig");
 
 pub const Error = decoder.Error || encoder.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
 pub const EncodeOptions = encoder.EncodeOptions;
+pub const EncodeStrategy = encoder.EncodeStrategy;
 pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const IncrementalEncoder = incremental_encoder.Encoder;
 pub const encodeAlloc = encoder.encodeAlloc;
@@ -26,6 +27,8 @@ pub const decodedSizeConcatenatedLimited = decoder.decodedSizeConcatenatedLimite
 test {
     _ = @import("bzip2/inverse_bwt.zig");
     _ = @import("bzip2/bwt_tests.zig");
+    _ = @import("bzip2/huffman_lengths_tests.zig");
+    _ = @import("bzip2/huffman_plan_tests.zig");
     _ = @import("bzip2/output_cursor.zig");
     _ = @import("bzip2/incremental/contracts_tests.zig");
     _ = decoder;

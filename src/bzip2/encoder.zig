@@ -3,16 +3,19 @@ const bwt = @import("bwt.zig");
 const bit_writer = @import("bit_writer.zig");
 const bzip2_crc = @import("crc.zig");
 const decoder = @import("decoder.zig");
+const huffman_plan = @import("huffman_plan.zig");
+const huffman_writer = @import("huffman_writer.zig");
 
 pub const Error = decoder.Error;
+pub const EncodeStrategy = huffman_plan.Strategy;
 
 pub const EncodeOptions = struct {
     block_size_100k: u4 = 9,
+    strategy: EncodeStrategy = .balanced,
 };
 
 const block_magic: u64 = 0x3141_5926_5359;
 const end_magic: u64 = 0x1772_4538_5090;
-const group_size: usize = 50;
 
 const RleBlock = struct {
     input_read: usize,
@@ -72,7 +75,7 @@ pub fn encodeAppend(
 
         const transformed = try bwtTransformAlloc(allocator, rle_block.items);
         defer transformed.deinit(allocator);
-        try writeBlock(&writer, transformed, block_result.crc32);
+        try writeBlockWithStrategy(&writer, transformed, block_result.crc32, options.strategy);
         combined_crc = std.math.rotl(u32, combined_crc, 1) ^ block_result.crc32;
     }
 
@@ -114,6 +117,10 @@ fn fillRleBlock(block: *std.ArrayList(u8), input: []const u8, block_limit: usize
 }
 
 pub fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u32) !void {
+    return writeBlockWithStrategy(writer, transformed, crc32, .balanced);
+}
+
+pub fn writeBlockWithStrategy(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u32, strategy: EncodeStrategy) !void {
     var in_use: [256]bool = @splat(false);
     for (transformed.bytes) |byte| in_use[byte] = true;
     var sequence: [256]u8 = undefined;
@@ -150,6 +157,8 @@ pub fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u
     try flushZeroRun(&symbols, writer.allocator, zero_run);
     const end_of_block: u16 = @intCast(sequence_len + 1);
     try symbols.append(writer.allocator, end_of_block);
+    const plan = try huffman_plan.planAllocWithStrategy(writer.allocator, symbols.items, sequence_len + 2, strategy);
+    defer plan.deinit(writer.allocator);
 
     try writer.writeBits(48, block_magic);
     try writer.writeBits(32, crc32);
@@ -165,18 +174,7 @@ pub fn writeBlock(writer: *bit_writer.BitWriter, transformed: BwtBlock, crc32: u
         for (in_use[group * 16 ..][0..16]) |byte_used|
             try writer.writeBit(@intFromBool(byte_used));
 
-    try writer.writeBits(3, 2);
-    const selector_count: u16 = @intCast((symbols.items.len + group_size - 1) / group_size);
-    try writer.writeBits(15, selector_count);
-    for (0..selector_count) |_| try writer.writeBit(0);
-
-    const alpha_size = sequence_len + 2;
-    const code_length = fixedCodeLength(alpha_size);
-    for (0..2) |_| {
-        try writer.writeBits(5, code_length);
-        for (0..alpha_size) |_| try writer.writeBit(0);
-    }
-    for (symbols.items) |symbol| try writer.writeBits(code_length, symbol);
+    try huffman_writer.write(writer, &plan, symbols.items);
 }
 
 pub fn writeStreamEnd(writer: *bit_writer.BitWriter, combined_crc: u32) !void {
@@ -193,16 +191,6 @@ fn flushZeroRun(symbols: *std.ArrayList(u16), allocator: std.mem.Allocator, run:
         if (value < 2) break;
         value = (value - 2) / 2;
     }
-}
-
-fn fixedCodeLength(alpha_size: usize) u6 {
-    var bits: u6 = 1;
-    var capacity: usize = 2;
-    while (capacity < alpha_size) {
-        capacity *= 2;
-        bits += 1;
-    }
-    return bits;
 }
 
 test "Bzip2 encoder round trips empty text binary and long runs" {
