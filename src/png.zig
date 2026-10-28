@@ -564,6 +564,9 @@ fn reconstructPngSubScanline(filtered: []const u8, bytes_per_pixel: usize, outpu
 }
 
 fn reconstructPngSubBpp3Scanline(filtered: []const u8, output: []u8) void {
+    if (comptime @import("png/sub_rgb8.zig").supported()) {
+        if (filtered.len >= 64) return @import("png/sub_rgb8.zig").run(filtered, output);
+    }
     const prefix = @min(@as(usize, 3), filtered.len);
     copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
     if (filtered.len <= 3) return;
@@ -594,6 +597,10 @@ fn reconstructPngSubBpp3Scanline(filtered: []const u8, output: []u8) void {
         green +%= filtered[i];
         output[i] = green;
     }
+}
+
+test {
+    _ = @import("png/sub_rgb8.zig");
 }
 
 fn reconstructPngSubFixedBppScanline(comptime bytes_per_pixel: usize, filtered: []const u8, output: []u8) void {
