@@ -22,10 +22,13 @@ pub const Case = struct {
     prefix_unit: u64 = prices.scale,
     prefix_tail: ?u64 = null,
     pricing: enum { predefined, varied, zero } = .varied,
+    entropy: ?*const prices.EntropyModel = null,
     seed_rows: bool = true,
     repetitions: usize = 1,
     instrument: bool = true,
     tagged: bool = false,
+    alias_origin: bool = false,
+    alias_slot: usize = 0,
     profile: controls.Profile = .{
         .positions_tested = 17,
         .price_evaluations = 9,
@@ -99,6 +102,8 @@ fn initializeRow(comptime Node: type, row: []Node, index: usize, case: Case) voi
 }
 
 pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bool, width: usize, case: Case) !Report {
+    const Reference = if (@hasDecl(Codec, "Reference")) Codec.Reference else Frozen;
+    const tagged = case.tagged or (if (@hasDecl(Codec, "force_tags")) Codec.force_tags else false);
     const Node = state.NodeFor(whole);
     const goal = case.goal orelse case.position + case.maximum;
     const count = (goal + 1) * width;
@@ -127,8 +132,10 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
         .distance = 13,
         .offset_value = 17,
     };
-    actual[case.position * width] = origin;
-    expected[case.position * width] = origin;
+    const origin_slot = if (case.alias_origin) case.alias_slot else 0;
+    const caller_slot = if (case.alias_origin) case.alias_slot else width - 1;
+    actual[case.position * width + origin_slot] = origin;
+    expected[case.position * width + origin_slot] = origin;
     var actual_profile = case.profile;
     var expected_profile = case.profile;
     var actual_budget = PriceBudget.init(case.limit, if (case.instrument) &actual_profile else null);
@@ -153,13 +160,13 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
             .match_lengths = if (complete) .complete else .sampled,
             .max_price_evaluations = case.limit,
         },
-        .entropy = &model,
+        .entropy = case.entropy orelse &model,
         .profile = if (case.instrument) &actual_profile else null,
     };
     var expected_parameters = actual_parameters;
     expected_parameters.profile = if (case.instrument) &expected_profile else null;
     var actual_spill: Codec.Spill = .{};
-    var expected_spill: Frozen.Spill = .{};
+    var expected_spill: Reference.Spill = .{};
     const prefix = try a.alloc(u64, case.base + case.position + case.maximum + 3);
     defer a.free(prefix);
     for (prefix, 0..) |*price, index| price.* = @as(u64, @intCast(index)) * case.prefix_unit;
@@ -176,14 +183,17 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
     };
     const tags = try a.alloc(@import("../../row_tags.zig").Tags, goal + 1);
     defer a.free(tags);
-    if (case.tagged) {
+    const expected_tags = try a.alloc(@import("../../row_tags.zig").Tags, goal + 1);
+    defer a.free(expected_tags);
+    if (tagged) {
         for (0..goal + 1) |row| {
             if (!dense and std.mem.indexOfScalar(usize, probes.rows[0..probes.len], row) == null) continue;
             tags[row] = @import("../../row_tags.zig").init(actual[row * width ..][0..width]);
+            expected_tags[row] = tags[row];
         }
         context.tag_rows = tags;
     }
-    var reference: Frozen.Context(whole, complete) = .{
+    var reference: Reference.Context(whole, complete) = .{
         .nodes = expected,
         .width = width,
         .base = case.base,
@@ -193,16 +203,17 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
         .literal_prefix = prefix,
         .spill = &expected_spill,
     };
+    if (tagged and @hasField(@TypeOf(reference), "tag_rows")) reference.tag_rows = expected_tags;
     var actual_failure: ?anyerror = null;
     var expected_failure: ?anyerror = null;
     for (0..case.repetitions) |_| {
-        if (context.candidate(case.position, width - 1, origin, case.distance, case.maximum)) |_| {} else |err| {
+        if (context.candidate(case.position, caller_slot, if (case.alias_origin) actual[case.position * width + origin_slot] else origin, case.distance, case.maximum)) |_| {} else |err| {
             actual_failure = err;
             break;
         }
     }
     for (0..case.repetitions) |_| {
-        if (reference.candidate(case.position, width - 1, origin, case.distance, case.maximum)) |_| {} else |err| {
+        if (reference.candidate(case.position, caller_slot, if (case.alias_origin) expected[case.position * width + origin_slot] else origin, case.distance, case.maximum)) |_| {} else |err| {
             expected_failure = err;
             break;
         }
@@ -220,17 +231,18 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
         try std.testing.expectEqualDeep(expected, actual);
     } else for (probes.rows[0..probes.len]) |row|
         try std.testing.expectEqualDeep(expected[row * width ..][0..width], actual[row * width ..][0..width]);
-    if (case.tagged) {
+    if (tagged) {
         for (probes.rows[0..probes.len]) |row| {
             for (actual[row * width ..][0..width], 0..) |node, slot|
                 try std.testing.expectEqual(@import("../../row_tags.zig").key(node), tags[row][slot]);
+            if (@hasField(@TypeOf(reference), "tag_rows")) try std.testing.expectEqualDeep(expected_tags[row], tags[row]);
         }
     }
     var lowest: ?u32 = null;
     for (probes.rows[0..probes.len]) |row| {
         if (row == case.position) continue;
         for (actual[row * width ..][0..width]) |node| {
-            if (node.previous_position != case.position or node.previous_slot != width - 1 or node.match_len == 0) continue;
+            if (node.previous_position != case.position or node.previous_slot != caller_slot or node.match_len == 0) continue;
             lowest = @min(lowest orelse node.match_len, node.match_len);
         }
     }

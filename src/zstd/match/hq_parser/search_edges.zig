@@ -4,6 +4,7 @@ const state = @import("state.zig");
 const rep = @import("rep.zig");
 const prices = @import("prices.zig");
 const row_tags = @import("row_tags.zig");
+const known_price = @import("sampled_price.zig");
 const PriceBudget = @import("price_budget.zig").PriceBudget;
 
 pub const Spill = struct {
@@ -36,36 +37,40 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
                     // Includes every interior length, every exact repeat
                     // selector and every endpoint beyond the bounded horizon.
                     for (minimum..maximum + 1) |length|
-                        try self.extend(position, slot, node, length, choice);
+                        try self.extend(false, position, slot, node, length, choice, 0);
                 } else {
                     // Preserve the old sampling order, duplicates and ties.
-                    try self.extend(position, slot, node, maximum, choice);
+                    try self.extend(false, position, slot, node, maximum, choice, 0);
                     const exhaustive: usize = if (self.parameters.strategy == .btopt) 16 else 64;
                     var length = minimum;
                     while (length < @min(maximum, exhaustive + 1)) : (length += 1)
-                        try self.extend(position, slot, node, length, choice);
-                    for (prices.ml_bases, prices.ml_bits) |base, bits| {
+                        try self.extend(false, position, slot, node, length, choice, 0);
+                    for (prices.ml_bases, prices.ml_bits, 0..) |base, bits, code| {
                         const lower: usize = base;
                         // Later ML intervals also start beyond the strict bound.
                         if (lower >= maximum) break;
+                        // Both endpoints belong to this ML symbol already.
                         const upper = lower + (@as(usize, 1) << @intCast(bits)) - 1;
                         if (lower > exhaustive and lower < maximum)
-                            try self.extend(position, slot, node, lower, choice);
+                            try self.extend(true, position, slot, node, lower, choice, @intCast(code));
                         if (self.parameters.strategy != .btopt and upper > exhaustive and upper < maximum)
-                            try self.extend(position, slot, node, upper, choice);
+                            try self.extend(true, position, slot, node, upper, choice, @intCast(code));
                     }
                 }
             }
         }
 
-        fn extend(self: *Self, position: usize, slot: usize, node: Node, length: usize, choice: rep.Choice) !void {
+        fn extend(self: *Self, comptime known_match: bool, position: usize, slot: usize, node: Node, length: usize, choice: rep.Choice, match_code: u8) !void {
             try self.price_budget.admit();
             if (self.parameters.profile) |profile| {
                 profile.add("price_evaluations", 1);
                 profile.add("optimal_transitions", 1);
                 profile.recordMatchLengthConsidered(length);
             }
-            const cost = try self.parameters.entropy.sequencePrice(node.literal_len, length, choice.offset_value);
+            const cost = if (known_match)
+                try known_price.sequencePrice(self.parameters.entropy, node.literal_len, length, choice.offset_value, match_code)
+            else
+                try self.parameters.entropy.sequencePrice(node.literal_len, length, choice.offset_value);
             const next: Node = .{
                 .cost = std.math.add(u64, node.cost, cost) catch return error.IntegerOverflow,
                 .repeats = choice.repeats,
@@ -100,4 +105,5 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
 
 test {
     _ = @import("search_edges_tests.zig");
+    _ = @import("known_ml_tests.zig");
 }
