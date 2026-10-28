@@ -289,6 +289,55 @@ test "sparse bit cost preserves byte-alphabet boundaries" {
     );
 }
 
+test "post RLE frequencies preserve prefix scores but not wire bytes" {
+    const BitWriter = @import("bit_writer.zig").Writer;
+    const allocator = std.testing.allocator;
+    var shapes: [2][2][256]u4 = @splat(@splat(@splat(0)));
+    // Both trees satisfy Kraft equality, but repeat-16 extras differ.
+    @memset(shapes[0][0][0..5], 3);
+    @memset(shapes[0][0][5..11], 4);
+    @memset(shapes[0][1][0..6], 3);
+    @memset(shapes[0][1][6..10], 4);
+    // The same tree after leading zero gaps 3 and 10 has different repeat-17
+    // extras while retaining one repeat-17 token and identical frequencies.
+    for ([_]usize{ 3, 10 }, 0..) |gap, index| {
+        @memset(shapes[1][index][gap..][0..5], 3);
+        @memset(shapes[1][index][gap + 5 ..][0..6], 4);
+    }
+    for (shapes, 0..) |pair, pair_index| {
+        var summaries: [2]code_length_rle.Summary = undefined;
+        var scores: [2]usize = undefined;
+        var wires: [2]std.ArrayList(u8) = .{ .empty, .empty };
+        defer for (&wires) |*wire| wire.deinit(allocator);
+        for (&pair, 0..) |*lengths, index| {
+            var symbols: [256]u8 = undefined;
+            var count: usize = 0;
+            var kraft: u32 = 0;
+            for (lengths, 0..) |length, symbol| {
+                if (length == 0) continue;
+                symbols[count] = @intCast(symbol);
+                count += 1;
+                kraft += @as(u32, 1) << @intCast(15 - length);
+            }
+            try std.testing.expectEqual(@as(u32, 1 << 15), kraft);
+            summaries[index] = try code_length_rle.summarizeSparse(false, lengths, symbols[0..count]);
+            const summary = summaries[index];
+            try std.testing.expectEqual(@as(usize, summary.frequencies[16]), summary.repeat16_tokens);
+            try std.testing.expectEqual(@as(usize, summary.frequencies[17]), summary.repeat17_tokens);
+            try std.testing.expectEqual(@as(u32, 2), summary.frequencies[16]);
+            try std.testing.expectEqual(@as(u32, @intCast(pair_index)), summary.frequencies[17]);
+            scores[index] = try bitCostSparse(allocator, lengths, symbols[0..count]);
+            var writer: BitWriter = .{ .out = &wires[index] };
+            const stop_index = @as(usize, symbols[count - 1]) + 1;
+            try writeWithStopIndex(allocator, &writer, lengths.len, lengths, stop_index);
+            try std.testing.expectEqual(@as(u64, scores[index]), writer.bitPosition());
+        }
+        try std.testing.expectEqual(summaries[0].frequencies, summaries[1].frequencies);
+        try std.testing.expectEqual(scores[0], scores[1]);
+        try std.testing.expect(!std.mem.eql(u8, wires[0].items, wires[1].items));
+    }
+}
+
 fn writeWithStorage(
     comptime storage_len: usize,
     allocator: std.mem.Allocator,

@@ -23911,3 +23911,14 @@ reuse, so production keeps the simpler independently owned plans.
   restored. [Prefix experiment evidence](performance/brotli-prefix-shape-experiment.md)
   preserves overlays and raw results. Next investigate the 18-symbol RLE
   frequency statistic for the remaining prefix construction; retain the goal.
+
+- 2026-10-28: post-RLE scoring is confirmed to depend only on eighteen symbol
+  frequencies, with writer/scorer tests distinguishing equal costs from
+  different repeat-extra bytes. A 36-prefix screen records 34,298 cluster
+  requests, 6.901% unbounded reuse and 4.840% LRU64 reuse; the frequency memo
+  remains deferred. Direct repeat-count thresholds pass independent oracles
+  but three ordinary sweeps show no stable benefit (aggregate 0.998710), so
+  that candidate is archived and production counting remains unchanged.
+  [RLE statistics evidence](performance/brotli-rle-statistics-experiment.md)
+  retains traces, commands, source overlays and raw timings. Prioritize larger
+  measured q8 planning/evaluation/context-assignment costs next; retain the goal.

@@ -1,0 +1,365 @@
+{
+  "context_debug_initial": {
+    "command": [
+      "zig",
+      "test",
+      "-O",
+      "Debug",
+      "-Mroot=src/br.zig",
+      "--test-filter",
+      "literal context"
+    ],
+    "exit_code": 1,
+    "reason": "standalone invocation omitted the separately linked record object; fixed below"
+  },
+  "context_debug": {
+    "command": [
+      "zig",
+      "test",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/record.o",
+      "-O",
+      "Debug",
+      "-Mroot=src/br.zig",
+      "--test-filter",
+      "literal context"
+    ],
+    "exit_code": 0,
+    "tests_passed": 82
+  },
+  "cli_help": {
+    "command": [
+      "zig",
+      "build",
+      "-j2",
+      "run",
+      "--",
+      "--help"
+    ],
+    "exit_code": 0
+  },
+  "ordinary_matrix": {
+    "command": [
+      "python3",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/matched_measure.py",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf",
+      "3"
+    ],
+    "exit_code": 0,
+    "cases": 36
+  },
+  "evidence_verifier": {
+    "command": [
+      "python3",
+      "docs/performance/data/brotli-rle-statistics-20261028/verify.py"
+    ],
+    "exit_code": 0
+  },
+  "production_runtime_unchanged": true,
+  "retained_source_change": "complex_prefix.zig scorer/writer contract test only",
+  "prefix_contract": {
+    "test_filter": "post RLE frequencies preserve prefix scores but not wire bytes",
+    "head_commit": "620efa74f44bb230b660e9cc4ddfc3f050aef291",
+    "source_sha256": "a06b5686510017856f86917e344b674edded951da7f58bad59cc2b0827d372f5",
+    "checks": {
+      "debug": {
+        "exit_code": 0,
+        "passed_tests": 20,
+        "reexecuted": false,
+        "metadata": "prefix-contract-debug.json",
+        "log": null
+      },
+      "releasefast": {
+        "exit_code": 0,
+        "passed_tests": 20,
+        "reexecuted": true,
+        "metadata": "prefix-contract-releasefast.json",
+        "log": "prefix-contract-releasefast.log"
+      },
+      "wasm32-wasi-releasefast": {
+        "exit_code": 0,
+        "passed_tests": 20,
+        "reexecuted": true,
+        "metadata": "prefix-contract-wasm32-wasi-releasefast.json",
+        "log": "prefix-contract-wasm32-wasi-releasefast.log"
+      }
+    },
+    "wasm_sha256": "0da42d6154f7b39bbbcf57af460b6a871e95e00645a86ba490357bfe78b2367f",
+    "wasm_bytes": 1447992,
+    "diagnostic_attempt": {
+      "exit_code": 1,
+      "reason": "Initial command placed -target after -Mroot, so Zig emitted an ELF binary. Corrected command sets target before the module.",
+      "metadata": "prefix-contract-wasm32-wasi-releasefast-initial-native-target.json",
+      "log": "prefix-contract-wasm32-wasi-releasefast-initial-native-target.log"
+    },
+    "scope": "One substantive contract plus 19 dependency import hooks per run. Existing Debug result recorded only; ReleaseFast native and actual wasm32-wasi execution validated. No library-wide gate or workspace source edit."
+  },
+  "repeat_count_valid": {
+    "repeat-count-portable-native-releasefast-valid.json": {
+      "schema": "vort.repeat-count-portable.v1",
+      "command": "zig test -O ReleaseFast -Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig --test-filter 'repeat token count' -femit-bin=/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-tests --cache-dir /tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache",
+      "argv": [
+        "zig",
+        "test",
+        "-O",
+        "ReleaseFast",
+        "-Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+        "--test-filter",
+        "repeat token count",
+        "-femit-bin=/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-tests",
+        "--cache-dir",
+        "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache"
+      ],
+      "target": "native",
+      "mode": "ReleaseFast",
+      "cwd": "/tmp/vort-br-rle-key-20261028-im_rz_vf",
+      "exit_code": 0,
+      "started_utc": "2026-10-28T05:38:21.617449+00:00",
+      "finished_utc": "2026-10-28T05:38:33.512658+00:00",
+      "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+      "source_sha256_before": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "source_sha256_after": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "zig_version": "0.16.0",
+      "log_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-valid.log",
+      "per_module_options_before_root": true,
+      "tests_executed": true,
+      "tests_reported_pass": true,
+      "tests_total": 3,
+      "tests_passed": 3,
+      "validation_accepted": true,
+      "artifact_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-tests",
+      "artifact_magic_hex": "7f454c46",
+      "artifact_sha256": "664cfb18f0dfe10a173121623f27a59ba091b03e86c2f20da2ed3fb57217daa0",
+      "elf_class": 64,
+      "target_verified": true,
+      "optimize_verified": true
+    },
+    "repeat-count-portable-x86-linux-debug.json": {
+      "schema": "vort.repeat-count-portable.v1",
+      "command": "zig test -target x86-linux -Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig --test-filter 'repeat token count' --cache-dir /tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache",
+      "argv": [
+        "zig",
+        "test",
+        "-target",
+        "x86-linux",
+        "-Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+        "--test-filter",
+        "repeat token count",
+        "--cache-dir",
+        "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache"
+      ],
+      "phase": "compile-and-execute",
+      "target": "x86-linux",
+      "usize_bits": 32,
+      "mode": "Debug",
+      "cwd": "/tmp/vort-br-rle-key-20261028-im_rz_vf",
+      "exit_code": 0,
+      "started_utc": "2026-10-28T05:37:07.111285+00:00",
+      "finished_utc": "2026-10-28T05:37:09.564844+00:00",
+      "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+      "source_sha256_before": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "source_sha256_after": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "zig_version": "0.16.0",
+      "log_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-x86-linux-debug.log",
+      "target_option_before_root": true,
+      "tests_executed": true,
+      "tests_reported_pass": true,
+      "artifact_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-x86-linux-tests",
+      "original_artifact_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache/o/a7f146c056d9f32532c94793cd6866b9/root",
+      "artifact_sha256": "0b422a562de7d3aa0ab179a747358fabd7821647c7bfb4ce700cb2252e771d21",
+      "artifact_magic_hex": "7f454c46",
+      "elf_class": 32,
+      "elf_machine": "EM_386",
+      "target_verified": true,
+      "tests_total": 3,
+      "tests_passed": 3,
+      "validation_accepted": true
+    },
+    "repeat-count-portable-wasm32-wasi-compile.json": {
+      "schema": "vort.repeat-count-portable.v1",
+      "command": "zig test -target wasm32-wasi -Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig --test-filter 'repeat token count' --test-no-exec -femit-bin=/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm --cache-dir /tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache",
+      "argv": [
+        "zig",
+        "test",
+        "-target",
+        "wasm32-wasi",
+        "-Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+        "--test-filter",
+        "repeat token count",
+        "--test-no-exec",
+        "-femit-bin=/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm",
+        "--cache-dir",
+        "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-zig-cache"
+      ],
+      "phase": "compile",
+      "target": "wasm32-wasi",
+      "usize_bits": 32,
+      "mode": "Debug",
+      "cwd": "/tmp/vort-br-rle-key-20261028-im_rz_vf",
+      "exit_code": 0,
+      "started_utc": "2026-10-28T05:37:07.101045+00:00",
+      "finished_utc": "2026-10-28T05:37:07.953765+00:00",
+      "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+      "source_sha256_before": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "source_sha256_after": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "zig_version": "0.16.0",
+      "log_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-compile.log",
+      "target_option_before_root": true,
+      "tests_executed": false,
+      "tests_reported_pass": null,
+      "artifact_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm",
+      "artifact_magic_hex": "0061736d",
+      "artifact_sha256": "5dec8d59f662b5dca1ff15f249239bf5469fcaacc136a5ca94236051a7343b1e",
+      "target_verified": true,
+      "validation_accepted": true
+    },
+    "repeat-count-portable-wasm32-wasi-execute.json": {
+      "schema": "vort.repeat-count-portable.v1",
+      "phase": "execute",
+      "target": "wasm32-wasi",
+      "usize_bits": 32,
+      "mode": "Debug",
+      "command": "/home/passchaos/.pixi/bin/node /tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasi-runner.mjs /tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm",
+      "argv": [
+        "/home/passchaos/.pixi/bin/node",
+        "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasi-runner.mjs",
+        "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm"
+      ],
+      "cwd": "/tmp/vort-br-rle-key-20261028-im_rz_vf",
+      "exit_code": 0,
+      "started_utc": "2026-10-28T05:38:42.973667+00:00",
+      "finished_utc": "2026-10-28T05:38:43.113311+00:00",
+      "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+      "source_sha256_before": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "source_sha256_after": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+      "artifact_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi.wasm",
+      "artifact_magic_hex": "0061736d",
+      "artifact_sha256": "5dec8d59f662b5dca1ff15f249239bf5469fcaacc136a5ca94236051a7343b1e",
+      "runner_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasi-runner.mjs",
+      "runner_version": "v26.10.0",
+      "runner_sha256": "99758d06571e1c2afcf16df711f2072f8d6bda210d29f29653f6f1a0d41a796a",
+      "target_verified": true,
+      "tests_executed": true,
+      "tests_reported_pass": true,
+      "tests_total": 3,
+      "tests_passed": 3,
+      "validation_accepted": true,
+      "log_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-execute.log"
+    }
+  },
+  "repeat_count_prior_observations": {
+    "schema": "vort.repeat-count-portable.v1",
+    "recorded_utc": "2026-10-28T05:35:02.625012+00:00",
+    "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+    "source_sha256": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+    "zig_version_observed": "0.16.0",
+    "runner_observation": {
+      "node_path": "/home/passchaos/.pixi/bin/node",
+      "node_version": "v26.10.0",
+      "wasmtime_available": false
+    },
+    "verification": [
+      {
+        "mode": "Debug",
+        "target": "native",
+        "command": "zig test -Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig --test-filter 'repeat token count'",
+        "argv": [
+          "zig",
+          "test",
+          "-Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+          "--test-filter",
+          "repeat token count"
+        ],
+        "exit_code": 0,
+        "tests_passed": 3,
+        "tests_total": 3,
+        "recorded_from": "previous agent tool output",
+        "tool_chunk_id": "859c58",
+        "rerun": false,
+        "observed_output": "1/3 code_length_rle.test.repeat token count thresholds match every run through 65536...OK\n2/3 code_length_rle.test.repeat token count threshold neighbors match forward geometric bounds...OK\n3/3 code_length_rle.test.repeat token count preserves summaries at usize extremes...OK\nAll 3 tests passed.\n",
+        "requested_mode": "Debug"
+      },
+      {
+        "mode": "Debug",
+        "target": "native",
+        "command": "zig test -Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig --test-filter 'repeat token count' -O ReleaseFast",
+        "argv": [
+          "zig",
+          "test",
+          "-Mroot=/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+          "--test-filter",
+          "repeat token count",
+          "-O",
+          "ReleaseFast"
+        ],
+        "exit_code": 0,
+        "tests_passed": 3,
+        "tests_total": 3,
+        "recorded_from": "previous agent tool output",
+        "tool_chunk_id": "8446be",
+        "rerun": false,
+        "observed_output": "1/3 code_length_rle.test.repeat token count thresholds match every run through 65536...OK\n2/3 code_length_rle.test.repeat token count threshold neighbors match forward geometric bounds...OK\n3/3 code_length_rle.test.repeat token count preserves summaries at usize extremes...OK\nAll 3 tests passed.\n",
+        "requested_mode": "ReleaseFast",
+        "accepted_as_ReleaseFast_verification": false,
+        "module_settings_note": "-O ReleaseFast follows -Mroot, so the root was created with default Debug settings; its observed exit_code=0 remains recorded without rerun."
+      }
+    ],
+    "purpose": "Archive the threshold candidate; no production merge or native test rerun.",
+    "zig_module_settings_evidence": {
+      "help_command": "zig test --help | rg -n -A 5 -- '^-M|After a|Per-Module|\\-O \\['",
+      "help_observation": "After a -M argument, per-module settings are reset; -target and -O are per-module options, default optimize mode Debug."
+    }
+  },
+  "repeat_count_summary": {
+    "schema": "vort.repeat-count-portable-summary.v1",
+    "recorded_utc": "2026-10-28T05:39:36.161621+00:00",
+    "source_file": "/tmp/vort-br-rle-key-20261028-im_rz_vf/candidate/src/br/encoder/code_length_rle.zig",
+    "source_sha256": "d4afa3da3fbfb00b791f1e04bbf8ed7c03f8da1db8e3101e0c2f2f5505420b4d",
+    "source_unchanged": true,
+    "status": "passed",
+    "valid_executions": [
+      {
+        "name": "native-releasefast-valid",
+        "metadata": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-valid.json",
+        "log": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-releasefast-valid.log",
+        "target": "native",
+        "mode": "ReleaseFast",
+        "exit_code": 0,
+        "tests_passed": 3,
+        "tests_total": 3,
+        "target_verified": true
+      },
+      {
+        "name": "x86-linux-debug",
+        "metadata": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-x86-linux-debug.json",
+        "log": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-x86-linux-debug.log",
+        "target": "x86-linux",
+        "mode": "Debug",
+        "exit_code": 0,
+        "tests_passed": 3,
+        "tests_total": 3,
+        "target_verified": true
+      },
+      {
+        "name": "wasm32-wasi-execute",
+        "metadata": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-execute.json",
+        "log": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-execute.log",
+        "target": "wasm32-wasi",
+        "mode": "Debug",
+        "exit_code": 0,
+        "tests_passed": 3,
+        "tests_total": 3,
+        "target_verified": true
+      }
+    ],
+    "wasm_compile_metadata": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-compile.json",
+    "prior_native_observations": "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-native-observed.json",
+    "misconfigured_metadata": [
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-compile-misconfigured.json",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-wasm32-wasi-execute-misconfigured.json",
+      "/tmp/vort-br-rle-key-20261028-im_rz_vf/repeat-count-portable-x86-linux-debug-misconfigured.json"
+    ],
+    "misconfigured_records_count_as_valid": false,
+    "scope": "Threshold candidate portability validation evidence only; source and runtime implementation unchanged.",
+    "production_disposition": "Archive only; root ordinary benchmarks reported no stable benefit."
+  }
+}
