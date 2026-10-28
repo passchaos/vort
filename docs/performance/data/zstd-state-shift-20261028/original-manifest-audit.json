@@ -1,0 +1,14 @@
+[
+  {
+    "all_size_hashes_equal": true,
+    "artifacts_checked": 35,
+    "manifest_sha256": "7625386aa1f1fc089b28f12ed5a98141d592e286ec315038eb26ebd8e7805b6a",
+    "path": "/tmp/vort-zstd-current-hq-hotspots-20261028.emkiFJ"
+  },
+  {
+    "all_size_hashes_equal": true,
+    "artifacts_checked": 119,
+    "manifest_sha256": "23591af545e7960d9a2c3c056055603f0de4a26df726bc6289bca2f577a381c0",
+    "path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk"
+  }
+]

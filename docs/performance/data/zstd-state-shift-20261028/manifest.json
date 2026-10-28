@@ -1,0 +1,64 @@
+{
+  "artifacts": [
+    {
+      "bytes": 6531,
+      "path": "audit-result.json",
+      "sha256": "3b1893a263917d311aac8dcfddb18ddfe25114ced8fda12ad3eeb1d621babe1b"
+    },
+    {
+      "bytes": 18918,
+      "path": "audit.py",
+      "sha256": "2268a0f677b70662b700155e6c4097d8538aa3f35f3e644129dc61f15ccd095e"
+    },
+    {
+      "bytes": 4333944,
+      "path": "baseline-source.tar.xz",
+      "sha256": "650a17493a676221195a0ff937ba395590700df94539575e01894961d48bb8fc"
+    },
+    {
+      "bytes": 2703,
+      "path": "binary-identities.json",
+      "sha256": "5efcec0af5d36eff51d76686d161d2220177ebfc96c8339d00d850705538d689"
+    },
+    {
+      "bytes": 5100,
+      "path": "frozen-inputs.tar.xz",
+      "sha256": "8cdc67f4f11c9d2d3ca62e5559f6390063d810e304971cbf49fa3beca40ea1aa"
+    },
+    {
+      "bytes": 283771,
+      "path": "index.json",
+      "sha256": "789ce3f5da304806eb90c1e65580c2a3e2fea251fdb65a072997512716d21477"
+    },
+    {
+      "bytes": 140308,
+      "path": "ordinary-sampling.tar.xz",
+      "sha256": "3306d977f100461b86bfa2c03b5a100b715a39f7865d95ce87a8d562cc644df5"
+    },
+    {
+      "bytes": 461,
+      "path": "original-manifest-audit.json",
+      "sha256": "0c335f48c482576fac4bc8ede861c7e7c574b0d9cd342c74c4bb622bfdd9c242"
+    },
+    {
+      "bytes": 7457,
+      "path": "reference-decode.json",
+      "sha256": "28b6b4ae1e7e056fcba8f843b9459e44c55cff5758c38d524ab23a85d34861b9"
+    },
+    {
+      "bytes": 32868,
+      "path": "shift-prototype.tar.xz",
+      "sha256": "2e805cf1005d5b0da317e8d8677ba01f240d2d631cf293f1ff0ca59f78e94719"
+    },
+    {
+      "bytes": 524,
+      "path": "source.diff",
+      "sha256": "a1dd0dc134cdbc2582eceea9a4669e22a167bf64b0417b9431f5a22e1cb1b2f1"
+    }
+  ],
+  "mutable_files": [
+    "current-validation.json"
+  ],
+  "mutable_scope": "Parent integration source, commands and final gate records are added separately; immutable prototype and sampling remain fixed.",
+  "schema": "vort.zstd.state-shift-artifacts.v1"
+}

@@ -1,0 +1,73 @@
+{
+  "compiled_binaries_archived": false,
+  "identities": [
+    {
+      "archived": false,
+      "bytes": 8358920,
+      "elf_class": "ELF64",
+      "elf_machine": 62,
+      "original_path": "/tmp/vort-zstd-current-hq-hotspots-20261028.emkiFJ/ordinary-loop",
+      "role": "ordinary-only FP sampling runner",
+      "sha256": "2db2ecf3de684899dce264a91856a610c14f37720cc17693e23cbc2ef8fa3919"
+    },
+    {
+      "archived": false,
+      "bytes": 8989280,
+      "elf_class": "ELF64",
+      "elf_machine": 62,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/baseline-runner",
+      "role": "ordinary non-FP baseline runner",
+      "sha256": "4426060583193d0d6ae79bd465afe2853d16cd8ede9c44192f3f2c8d07725ff6"
+    },
+    {
+      "archived": false,
+      "bytes": 8987928,
+      "elf_class": "ELF64",
+      "elf_machine": 62,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/candidate-runner",
+      "role": "ordinary non-FP shift runner",
+      "sha256": "4ea907efda5f849768ba7a450d60ec0d168cc0ee0ad471439799b3e6e6bd940e"
+    },
+    {
+      "archived": false,
+      "bytes": 4797088,
+      "elf_class": "ELF64",
+      "elf_machine": 62,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/cache-test-debug/o/87a74681ce3e077b916bd3f2f813e8ac/test",
+      "role": "frozen state contracts debug",
+      "sha256": "a32be81e100c01926b91ae86adb39ff6d1a967d0e2865055b8ba68e4c33f31f7"
+    },
+    {
+      "archived": false,
+      "bytes": 4576456,
+      "elf_class": "ELF64",
+      "elf_machine": 62,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/cache-test-releasefast/o/05bde4599abc3474170f6bce42dd3b55/test",
+      "role": "frozen state contracts releasefast",
+      "sha256": "c7730fa1997e74be6f901559b2295d2c689a63044f0f09c5a1322ae56e992575"
+    },
+    {
+      "archived": false,
+      "bytes": 4461044,
+      "elf_class": "ELF32",
+      "elf_machine": 3,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/cache-test-x86/o/df51a3a4ef9b664207c47c943450319e/test",
+      "role": "frozen state contracts x86",
+      "sha256": "a3bb6073d10efb2229230f24b25341bb70da1760aa024ed1bbcf232aec0fee9b"
+    }
+  ],
+  "objects": [
+    {
+      "archived": false,
+      "bytes": 159864,
+      "original_path": "/tmp/vort-zstd-current-hq-hotspots-20261028.emkiFJ/huffman-x2.o",
+      "sha256": "bf082b0c5ebe2d9d50b678244fab7a58648e45895bb49cc7e05175bf8e4f9450"
+    },
+    {
+      "archived": false,
+      "bytes": 159864,
+      "original_path": "/tmp/vort-zstd-state-shift-screen-20261028.Th48wk/huffman-x2.o",
+      "sha256": "bf082b0c5ebe2d9d50b678244fab7a58648e45895bb49cc7e05175bf8e4f9450"
+    }
+  ]
+}

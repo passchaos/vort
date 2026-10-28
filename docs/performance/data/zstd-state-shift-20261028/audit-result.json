@@ -1,0 +1,242 @@
+{
+  "archives_verified": 4,
+  "baseline_git_blobs_verified": 1505,
+  "binary_identity_audit": {
+    "contract_test_binaries": 3,
+    "ordinary_binaries": 3,
+    "original_artifacts_checked": 154,
+    "scope": "binary identities retained; compiled binaries and caches excluded"
+  },
+  "independent_decoder": {
+    "library_path": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+    "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+    "version": "1.6.0",
+    "wire_count": 24
+  },
+  "ordinary_wires": 24,
+  "parent_current_validation": "separate, mutable; not covered by this prototype audit",
+  "ratio_definition": "median(candidate_ns) / median(baseline_ns)",
+  "ratios": [
+    {
+      "case": "dickens",
+      "exact_denominator": 252605,
+      "exact_numerator": 213973,
+      "paired_ratios": [
+        0.8289817254161655,
+        0.8655560537386747
+      ],
+      "ratio": 0.847065576690881,
+      "strategy": "btopt"
+    },
+    {
+      "case": "dickens",
+      "exact_denominator": 36684891,
+      "exact_numerator": 28165243,
+      "paired_ratios": [
+        0.7660790064622531,
+        0.7694404599817506
+      ],
+      "ratio": 0.7677613925580425,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 11999747,
+      "exact_numerator": 11778036,
+      "paired_ratios": [
+        0.9805213024505033,
+        0.9825293225349345
+      ],
+      "ratio": 0.9815236937912107,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 308019785,
+      "exact_numerator": 301061252,
+      "paired_ratios": [
+        0.9483381024181193,
+        1.0072084011817855
+      ],
+      "ratio": 0.9774088115800743,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 328189,
+      "exact_numerator": 294542,
+      "paired_ratios": [
+        0.901598270187367,
+        0.8933307875236595
+      ],
+      "ratio": 0.8974767588188514,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 104534564,
+      "exact_numerator": 87392337,
+      "paired_ratios": [
+        0.8428986206121696,
+        0.8291510687700983
+      ],
+      "ratio": 0.8360137896590835,
+      "strategy": "btultra2"
+    }
+  ],
+  "sampling_global_period_recomputed": [
+    {
+      "CPU": 2,
+      "diagnostic_calls": 0,
+      "label": "mozilla-btultra2",
+      "parts": {
+        "duplicate_scan_cost_sentinel": {
+          "global_pct": 12.058340180772392,
+          "period": 293646750,
+          "samples": 587
+        },
+        "duplicate_scan_literal_len": {
+          "global_pct": 4.067378800328677,
+          "period": 99049500,
+          "samples": 198
+        },
+        "duplicate_scan_loop_control": {
+          "global_pct": 21.548890714872638,
+          "period": 524762250,
+          "samples": 1049
+        },
+        "duplicate_scan_repeats0": {
+          "global_pct": 8.525061626951521,
+          "period": 207603750,
+          "samples": 415
+        },
+        "duplicate_scan_repeats1": {
+          "global_pct": 6.881676253081348,
+          "period": 167583750,
+          "samples": 335
+        },
+        "duplicate_scan_repeats2": {
+          "global_pct": 1.7871815940838127,
+          "period": 43521750,
+          "samples": 87
+        },
+        "entry_candidate_key_loads": {
+          "global_pct": 3.1840591618734595,
+          "period": 77538750,
+          "samples": 155
+        },
+        "final_replacement_less": {
+          "global_pct": 2.198027937551356,
+          "period": 53526750,
+          "samples": 107
+        },
+        "node_initial_copy": {
+          "global_pct": 0.2875924404272802,
+          "period": 7003500,
+          "samples": 14
+        },
+        "return_epilogue": {
+          "global_pct": 1.7460969597370584,
+          "period": 42521250,
+          "samples": 85
+        },
+        "same_key_less": {
+          "global_pct": 0.8011503697617092,
+          "period": 19509750,
+          "samples": 39
+        },
+        "sort_less": {
+          "global_pct": 0.5135579293344289,
+          "period": 12506250,
+          "samples": 25
+        },
+        "sort_swaps_and_loop": {
+          "global_pct": 3.4921939194741167,
+          "period": 85042500,
+          "samples": 170
+        }
+      },
+      "sample_count": 4868,
+      "total_period": 2435217000
+    },
+    {
+      "CPU": 2,
+      "diagnostic_calls": 0,
+      "label": "dickens-btopt",
+      "parts": {
+        "duplicate_scan_cost_sentinel": {
+          "global_pct": 4.233576642335766,
+          "period": 72536250,
+          "samples": 145
+        },
+        "duplicate_scan_literal_len": {
+          "global_pct": 1.6934306569343065,
+          "period": 29014500,
+          "samples": 58
+        },
+        "duplicate_scan_loop_control": {
+          "global_pct": 7.065693430656935,
+          "period": 121060500,
+          "samples": 242
+        },
+        "duplicate_scan_repeats0": {
+          "global_pct": 1.7226277372262773,
+          "period": 29514750,
+          "samples": 59
+        },
+        "duplicate_scan_repeats1": {
+          "global_pct": 2.0437956204379564,
+          "period": 35017500,
+          "samples": 70
+        },
+        "duplicate_scan_repeats2": {
+          "global_pct": 1.313868613138686,
+          "period": 22511250,
+          "samples": 45
+        },
+        "entry_candidate_key_loads": {
+          "global_pct": 2.18978102189781,
+          "period": 37518750,
+          "samples": 75
+        },
+        "final_replacement_less": {
+          "global_pct": 2.2773722627737225,
+          "period": 39019500,
+          "samples": 78
+        },
+        "node_initial_copy": {
+          "global_pct": 1.1094890510948905,
+          "period": 19009500,
+          "samples": 38
+        },
+        "return_epilogue": {
+          "global_pct": 1.8394160583941606,
+          "period": 31515750,
+          "samples": 63
+        },
+        "same_key_less": {
+          "global_pct": 1.4306569343065694,
+          "period": 24512250,
+          "samples": 49
+        },
+        "sort_less": {
+          "global_pct": 2.4525547445255476,
+          "period": 42021000,
+          "samples": 84
+        },
+        "sort_swaps_and_loop": {
+          "global_pct": 14.510948905109489,
+          "period": 248624250,
+          "samples": 497
+        }
+      },
+      "sample_count": 3425,
+      "total_period": 1713356250
+    }
+  ],
+  "source_changes": [
+    "src/zstd/match/hq_parser/state.zig"
+  ],
+  "status": "ok",
+  "wire_profile_pairs": 12
+}
