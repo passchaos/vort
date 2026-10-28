@@ -1,0 +1,76 @@
+{
+  "codegen": "AVX2 equality plus three-lane boolean extraction; exact16+8memoryloads; no fourthword",
+  "comparison": "median(candidate_ns)/median(baseline_ns)",
+  "decision": "Vector3 not adopted; six configurations regress in both rounds",
+  "independent_epoch": true,
+  "raw_periods": "not collected",
+  "rows": [
+    {
+      "case": "dickens",
+      "exact_denominator": 13260095,
+      "exact_numerator": 13577722,
+      "paired_ratios": [
+        1.0058840881931903,
+        1.0425324775638898
+      ],
+      "ratio": 1.0239535991257982,
+      "strategy": "btopt"
+    },
+    {
+      "case": "dickens",
+      "exact_denominator": 58013171,
+      "exact_numerator": 60341975,
+      "paired_ratios": [
+        1.016160413204693,
+        1.0653426014785687
+      ],
+      "ratio": 1.0401426772551357,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 81943336,
+      "exact_numerator": 102729935,
+      "paired_ratios": [
+        1.2474407059005017,
+        1.259926795439739
+      ],
+      "ratio": 1.2536704021910945,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 305825062,
+      "exact_numerator": 413830961,
+      "paired_ratios": [
+        1.3706186303643557,
+        1.3362095619091228
+      ],
+      "ratio": 1.3531623546274307,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 295782,
+      "exact_numerator": 310651,
+      "paired_ratios": [
+        1.050483010224503,
+        1.0500573638807222
+      ],
+      "ratio": 1.0502701313805438,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 88315219,
+      "exact_numerator": 95413617,
+      "paired_ratios": [
+        1.0733517107573045,
+        1.087491762899051
+      ],
+      "ratio": 1.080375705120541,
+      "strategy": "btultra2"
+    }
+  ],
+  "source_revision": "26d9eb062da7dedded4aa1e3b639d76a53192d4f"
+}

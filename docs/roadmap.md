@@ -24047,3 +24047,26 @@ reuse, so production keeps the simpler independently owned plans.
   but time ratios 27.69-490.11 against local 1.6.0. This substantial HQ work
   gap remains open; prioritize repeated state-key scans and transition cost,
   wider full-file/platform/memory comparisons and all ten requested formats.
+
+- 2026-10-28: additional HQ exact-work screens preserve the current encoder
+  rather than adopting uncertain or negative variants. XOR/or repeat equality
+  becomes a reordered scalar compare in LLVM; five 4 KiB configurations improve
+  but MR btultra2 is mixed. An actual three-word vector comparison regresses
+  all six configurations. Eight-byte short-tail matching also regresses all
+  three btultra2 points while retaining the old logical comparison counts.
+  [Repeat-screen evidence](performance/zstd-hq-repeat-screen.md) keeps isolated
+  source identities, code generation, ordinary raw timings and exact wire/
+  profile comparisons. These findings rule out assumptions that fewer source
+  expressions or wider comparisons necessarily speed up ordinary encoding.
+
+- 2026-10-28: per-position diagnostic comparison finds 65.7%-80.1% duplicate
+  legal repeat probes on Dickens/Mozilla 4 KiB. Fixed 64-entry exact reuse
+  prototypes reduce actual comparison work, with explicit hit accounting,
+  but separate outlined/inline ordinary screens do not establish broad speed
+  benefit. [Cache-screen evidence](performance/zstd-rep-match-cache-screen.md)
+  preserves two 24-encode/48-decode campaigns, 48 independent libzstd wire
+  decodes and a frozen-DP/resource/ledger suite passing 22/22 in native Debug,
+  ReleaseFast and x86 Debug. Neither cache nor its new counters enter the
+  production API. The current source remains `26d9eb06`; prioritize larger
+  state-scanning and transition-cost reductions, while keeping the complete
+  ten-format performance and functionality objective active.

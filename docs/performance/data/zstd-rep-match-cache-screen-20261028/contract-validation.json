@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28 15:40:10 UTC",
+  "cwd": "/tmp/vort-zstd-rep-cache-contracts-20261028-8oB51V",
+  "prototype": "/tmp/vort-zstd-rep-cache-screen-20261028.jwinw34p/candidate/src",
+  "frozen_dp_source": "/tmp/vort-zstd-rep-cache-screen-20261028.jwinw34p/baseline/src/zstd/match/hq_parser/dp.zig",
+  "frozen_dp_sha256": "c04a165d658026adb1e71b595aca3f0bfed10811c4e8570761ab1dd4fd0fd14d",
+  "frozen_resources_sha256": "b1f22f123b9e8c513025cb031e16fe431503995a128b108d3361bc2c29fb8bfc",
+  "runs": [
+    {
+      "command": "zig test src/zstd_repeat_cache_tests.zig -ODebug --test-filter 'Zstd HQ repeat cache'",
+      "session_id": 47503,
+      "exit_code": 0,
+      "tests_passed": 22,
+      "tests_total": 22,
+      "observed_terminal_output": "All 22 tests passed.\n",
+      "source_note": "Completed before target-specific frozen public-profile peak adjustment. New helper defaults remain depth=8/nice=16; 64-bit public behavior unchanged."
+    },
+    {
+      "command": "zig test src/zstd_repeat_cache_tests.zig -OReleaseFast --test-filter 'Zstd HQ repeat cache'",
+      "session_id": 55746,
+      "exit_code": 0,
+      "tests_passed": 22,
+      "tests_total": 22,
+      "observed_terminal_output": "All 22 tests passed.\n",
+      "source_note": "Completed before target-specific frozen public-profile peak adjustment; 64-bit public branch unaffected."
+    },
+    {
+      "command": "zig test src/zstd_repeat_cache_tests.zig -ODebug -target x86-linux --test-filter 'Zstd HQ repeat cache'",
+      "session_id": 34122,
+      "exit_code": 0,
+      "tests_passed": 22,
+      "tests_total": 22,
+      "observed_terminal_output": "All 22 tests passed.\n",
+      "source_note": "Final source including frozen-DP target-layout peak derivation."
+    }
+  ],
+  "fmt_check": {
+    "command": "zig fmt --check src/zstd/match/hq_parser/repeat_cache_tests.zig src/zstd/match/hq_parser/repeat_cache_tests src/zstd_repeat_cache_tests.zig",
+    "exit_code": 0,
+    "observed_output": ""
+  },
+  "coverage": [
+    "Direct cache coordinate/max/source/pass reset and collisions checked against untouched resources_reference.matchLength with explicit independent hit/miss/actual-byte ledger.",
+    "DP reference remains untouched baseline file. Complete plan fields, records, offset values, statistics, ownership capacity, working allocation geometry and errors compared.",
+    "Profile fields match except rep_probes, byte_comparisons, new rep_match_reuses; logical old probes equal candidate misses plus reuses; actual byte comparisons never increase.",
+    "Bounded/whole, sampled/complete, min3/7, beams8/16, literal/tiny/known/repetitive/random/preset dictionary/history and 4108-byte multi-window inputs.",
+    "Every finite admission quota of a tiny actual sequence plus zero/exact/one-below heap budget.",
+    "Four known real4KiB public frames match frozen wire hashes and complete profile fields, with target-dependent peak derived from frozen DP.",
+    "Saturating cache counters, mergeWork, and emitted rollback preserve actual search work."
+  ],
+  "artifacts": {
+    "source_hashes": "source_hashes.json",
+    "test_root": "src/zstd_repeat_cache_tests.zig",
+    "facade": "src/zstd/match/hq_parser/repeat_cache_tests.zig",
+    "modules": "src/zstd/match/hq_parser/repeat_cache_tests",
+    "frozen_oracles": [
+      "src/zstd/match/hq_parser/dp_reference.zig",
+      "src/zstd/match/hq_parser/resources_reference.zig"
+    ]
+  },
+  "limitations": [
+    "Wasm bridge prepared but no Wasm execution in this subtask.",
+    "No ordinary timings or performance claims.",
+    "No main-tree or parent prototype edits."
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "candidate_source_sha256": "63d9c291d2d9a5917700d0c6ef07637eae67f0860b9748a8417852fd264f8adf",
+  "codegen": {
+    "baseline": {
+      "bytes": [
+        535,
+        551
+      ],
+      "symbols": [
+        "zstd.match.hq_parser.state.insert__anon_204574",
+        "zstd.match.hq_parser.state.insert__anon_204736"
+      ]
+    },
+    "candidate": {
+      "bytes": [
+        706,
+        722
+      ],
+      "symbols": [
+        "zstd.match.hq_parser.state.insert__anon_204574",
+        "zstd.match.hq_parser.state.insert__anon_204736"
+      ]
+    }
+  },
+  "compile_exit_codes": [
+    0,
+    0
+  ],
+  "compiled_binaries": {
+    "baseline": {
+      "ELF_class": 2,
+      "ELF_machine": 62,
+      "archived": false,
+      "bytes": 8987944,
+      "original_path": "/tmp/vort-zstd-repeat-vector-screen-20261028.IWbX2E/baseline-runner",
+      "sha256": "8cf0dfab1c743b071370f276bf5858f0d6cbf55f5eaf619e035cd2ea8c58f43f"
+    },
+    "candidate": {
+      "ELF_class": 2,
+      "ELF_machine": 62,
+      "archived": false,
+      "bytes": 8989904,
+      "original_path": "/tmp/vort-zstd-repeat-vector-screen-20261028.IWbX2E/candidate-runner",
+      "sha256": "d2a49d7589308cd6f460056d44e15119c64ba148d8737377a672a63569105d6d"
+    }
+  },
+  "contract_tests": {
+    "native_debug": 3,
+    "native_releasefast": 3,
+    "x86_debug": 3
+  },
+  "original_scope_unchanged": true,
+  "runner_sha256": "196022bee167ee4f7cedff21a3477eeaa421da59e4a485c7a2a89103f7f2c626",
+  "tmp_artifact_manifest_sha256": "594fc9505360ad9fd73ee3af2d61ecdb3754bfa54be0561a7c9f1402660e16d5",
+  "tmp_manifest_checked_artifacts": 122
+}

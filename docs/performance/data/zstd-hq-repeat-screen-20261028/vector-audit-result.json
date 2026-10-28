@@ -1,0 +1,84 @@
+{
+  "baseline_git_blobs_verified": 1506,
+  "decision": "not adopted: all paired ratios exceed one",
+  "independent_reference": {
+    "library": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+    "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+    "version": "1.6.0",
+    "wires_decoded": 24
+  },
+  "ordinary_encodes": 24,
+  "original_native_decodes": 48,
+  "protected_original_artifacts": 6,
+  "ratios": [
+    {
+      "case": "dickens",
+      "exact_denominator": 13260095,
+      "exact_numerator": 13577722,
+      "paired_ratios": [
+        1.0058840881931903,
+        1.0425324775638898
+      ],
+      "ratio": 1.0239535991257982,
+      "strategy": "btopt"
+    },
+    {
+      "case": "dickens",
+      "exact_denominator": 58013171,
+      "exact_numerator": 60341975,
+      "paired_ratios": [
+        1.016160413204693,
+        1.0653426014785687
+      ],
+      "ratio": 1.0401426772551357,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 81943336,
+      "exact_numerator": 102729935,
+      "paired_ratios": [
+        1.2474407059005017,
+        1.259926795439739
+      ],
+      "ratio": 1.2536704021910945,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mozilla",
+      "exact_denominator": 305825062,
+      "exact_numerator": 413830961,
+      "paired_ratios": [
+        1.3706186303643557,
+        1.3362095619091228
+      ],
+      "ratio": 1.3531623546274307,
+      "strategy": "btultra2"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 295782,
+      "exact_numerator": 310651,
+      "paired_ratios": [
+        1.050483010224503,
+        1.0500573638807222
+      ],
+      "ratio": 1.0502701313805438,
+      "strategy": "btopt"
+    },
+    {
+      "case": "mr",
+      "exact_denominator": 88315219,
+      "exact_numerator": 95413617,
+      "paired_ratios": [
+        1.0733517107573045,
+        1.087491762899051
+      ],
+      "ratio": 1.080375705120541,
+      "strategy": "btultra2"
+    }
+  ],
+  "status": "ok",
+  "vector_archive_members": 120,
+  "wire_profile_pairs": 12
+}

@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    {
+      "bytes": 2084,
+      "path": "vector-audit-result.json",
+      "sha256": "8e77cbe00077284f9ff586c15ac179b35a91500ae0b0ee08059673acffab16ab"
+    },
+    {
+      "bytes": 4738,
+      "path": "vector-audit.py",
+      "sha256": "804cc74e7dcfee0af457fcd32b0a6e2155a73daa9849afd80b6dae24a253349f"
+    },
+    {
+      "bytes": 21500,
+      "path": "vector-index.json",
+      "sha256": "f681c9c44c77d1a7eddd76a04a45ce00933bc29b9ab6935306ac2819daf44db5"
+    },
+    {
+      "bytes": 1591,
+      "path": "vector-provenance.json",
+      "sha256": "3e2ed26f4ef68178cdf48ac1e8d0c6a5eea8da7a3c11c76a41854279bfe5c734"
+    },
+    {
+      "bytes": 6943,
+      "path": "vector-reference-decode.json",
+      "sha256": "ed29fe334d043d2b2587e359bd14ec95f125c434573a6b93227f5f38624cdf23"
+    },
+    {
+      "bytes": 32896,
+      "path": "vector-screen.tar.xz",
+      "sha256": "16bd26e8eae5b37e2bb65cd8c36ccb23a1cc9092406960e169760576083f3721"
+    },
+    {
+      "bytes": 1942,
+      "path": "vector-summary.json",
+      "sha256": "95485b4980646941afa9d519468024136f628996c6f07c12fb504ad757665dc6"
+    }
+  ],
+  "original_archive_and_index_unchanged": true,
+  "schema": "vort.zstd.hq.vector-artifacts.v1"
+}

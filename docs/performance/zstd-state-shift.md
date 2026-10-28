@@ -10,7 +10,7 @@ added. The ten-format product goal remains active.
 This is equivalent even for unsorted rows: at every old bubble comparison,
 `row[replace]` contains the same candidate, and the predecessor is the same old
 node. Both loops stop at the same position and produce the same shifted segment.
-The [measured diff](data/zstd-state-shift-20261028/source.diff) changes only the
+The [measured diff](data/zstd-state-shift-20261028/source.diff.xz) changes only the
 sorting tail of `state.insert`.
 
 The [evidence package](data/zstd-state-shift-20261028/) shares baseline

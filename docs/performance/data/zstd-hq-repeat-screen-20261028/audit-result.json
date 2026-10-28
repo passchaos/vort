@@ -1,0 +1,155 @@
+{
+  "archives_verified": 4,
+  "baseline_git_blobs_verified": 1506,
+  "full_wire_profile_pairs": 24,
+  "independent_reference": {
+    "library": "/home/passchaos/Work/zstd/lib/libzstd.so.1.6.0",
+    "library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+    "version": "1.6.0",
+    "wires_decoded": 48
+  },
+  "ordinary_encodes": 48,
+  "original_native_decodes": 96,
+  "ratio_definition": "median(candidate_ns) / median(baseline_ns)",
+  "raw_sample_periods": "not collected for these timing screens",
+  "screens": {
+    "short": [
+      {
+        "case": "dickens",
+        "exact_denominator": 13544980,
+        "exact_numerator": 13110991,
+        "paired_ratios": [
+          0.9690524722470909,
+          0.9668885758220307
+        ],
+        "ratio": 0.9679594211287134,
+        "strategy": "btopt"
+      },
+      {
+        "case": "dickens",
+        "exact_denominator": 56210050,
+        "exact_numerator": 57158117,
+        "paired_ratios": [
+          1.01802402063121,
+          1.0157206834922168
+        ],
+        "ratio": 1.0168665034099773,
+        "strategy": "btultra2"
+      },
+      {
+        "case": "mozilla",
+        "exact_denominator": 27264364,
+        "exact_numerator": 27193153,
+        "paired_ratios": [
+          0.9926720659212661,
+          1.0020916136242106
+        ],
+        "ratio": 0.9973881290610703,
+        "strategy": "btopt"
+      },
+      {
+        "case": "mozilla",
+        "exact_denominator": 596762317,
+        "exact_numerator": 612968059,
+        "paired_ratios": [
+          1.0508201706402993,
+          1.002437256015984
+        ],
+        "ratio": 1.0271561081159888,
+        "strategy": "btultra2"
+      },
+      {
+        "case": "mr",
+        "exact_denominator": 19834138,
+        "exact_numerator": 19993205,
+        "paired_ratios": [
+          1.0213935627488697,
+          0.9946366266651347
+        ],
+        "ratio": 1.0080198594967928,
+        "strategy": "btopt"
+      },
+      {
+        "case": "mr",
+        "exact_denominator": 86660723,
+        "exact_numerator": 88177787,
+        "paired_ratios": [
+          1.0278878793029735,
+          1.007048290891373
+        ],
+        "ratio": 1.017505785175598,
+        "strategy": "btultra2"
+      }
+    ],
+    "xor": [
+      {
+        "case": "dickens",
+        "exact_denominator": 6695351,
+        "exact_numerator": 6525910,
+        "paired_ratios": [
+          0.9752288232185365,
+          0.9741651938803209
+        ],
+        "ratio": 0.9746927382895982,
+        "strategy": "btopt"
+      },
+      {
+        "case": "dickens",
+        "exact_denominator": 57846371,
+        "exact_numerator": 54539630,
+        "paired_ratios": [
+          0.9426683862016049,
+          0.9430040072272451
+        ],
+        "ratio": 0.9428358090086585,
+        "strategy": "btultra2"
+      },
+      {
+        "case": "mozilla",
+        "exact_denominator": 83194655,
+        "exact_numerator": 79657051,
+        "paired_ratios": [
+          0.9516176459307633,
+          0.9634090927999291
+        ],
+        "ratio": 0.9574779894213156,
+        "strategy": "btopt"
+      },
+      {
+        "case": "mozilla",
+        "exact_denominator": 151424664,
+        "exact_numerator": 145148653,
+        "paired_ratios": [
+          0.9562561976881474,
+          0.960869207951431
+        ],
+        "ratio": 0.9585535748654526,
+        "strategy": "btultra2"
+      },
+      {
+        "case": "mr",
+        "exact_denominator": 20013694,
+        "exact_numerator": 19294743,
+        "paired_ratios": [
+          0.9713762537965901,
+          0.9567776071363472
+        ],
+        "ratio": 0.9640770464462982,
+        "strategy": "btopt"
+      },
+      {
+        "case": "mr",
+        "exact_denominator": 6324420,
+        "exact_numerator": 6327883,
+        "paired_ratios": [
+          0.9792596916952748,
+          1.0218339936690173
+        ],
+        "ratio": 1.000547560092467,
+        "strategy": "btultra2"
+      }
+    ]
+  },
+  "short_terminal_scope": "parent observations; original full logs/test commands not retained",
+  "status": "ok"
+}
