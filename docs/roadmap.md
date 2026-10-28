@@ -23903,3 +23903,11 @@ reuse, so production keeps the simpler independently owned plans.
   [Cache experiment evidence](performance/brotli-tree-cache-experiments.md)
   preserves variants, raw clocks and final source. Production remains b6c3f92f.
   Investigate code-length-shape prefix-score reuse next; the full goal persists.
+
+- 2026-10-28: complete prefix-shape memoization was implemented, tested and
+  withdrawn. Exact weighted/prefix scoring and cache collision/LRU contracts
+  pass, but actual shape reuse is low (35/1980 Mozilla requests) and the
+  36-prefix ordinary time point regresses to 1.008117. Production source is
+  restored. [Prefix experiment evidence](performance/brotli-prefix-shape-experiment.md)
+  preserves overlays and raw results. Next investigate the 18-symbol RLE
+  frequency statistic for the remaining prefix construction; retain the goal.

@@ -1,0 +1,20 @@
+{
+  "base_commit": "293964c139573a55d160e8bcf65322cd1eb8c535",
+  "status": "withdrawn",
+  "source_sha256": {
+    "src/br/encoder/literal_context_profile.zig": "5f52bf09ea70fd2f3f0c926f95eda1e7dec09dcf0bda256a1b9263c6f1163b7e",
+    "src/br/encoder/literal_context_split.zig": "576017349866323b8fb6d6ed93489f1ef5709d9da352b8fd5b9dfb615696ea6e",
+    "tools/br/literal_context_profile.zig": "3553471fe669ef0032ed3812211ed176cabff3358bf2064f7e9113c34292151a",
+    "tools/br/literal_context_profile_gate.py": "648b92e9449d60c34e76663cbe88b1736e4c2147e4963697e4dab23a7b5571dd",
+    "tools/br/literal_context_profile_gate_smoke.py": "718a671b08140085d87619f233ea9a4561aa7e5af91dcdde826d74ba13b7456d",
+    "src/br/encoder/prefix_score_cache.zig": "675be00fc96ac8ebbdc443558f6ca9ae082e37ccbb8c850c6c9743fe079a3473",
+    "src/br/encoder/prefix_score_cache_tests.zig": "7d8b15c72a751e852a5485b8da2e85d82e1f68864cbba3046212eb1c2c92a96c"
+  },
+  "ordinary_session": 88056,
+  "ordinary_exit_code": 0,
+  "context_session": 82470,
+  "context_exit_code": 0,
+  "standalone_cache_tests": "native Debug/RF/x86 and actual Wasm4/4 worker-observed exit0",
+  "reason": "low prefix-shape hit rate and ordinary encoding slowdown",
+  "scope": "single sweep,36 real prefixes,all wire/input/settings identities equal; no significance claim"
+}
