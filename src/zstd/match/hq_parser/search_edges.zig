@@ -44,6 +44,8 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
                         try self.extend(position, slot, node, length, choice);
                     for (prices.ml_bases, prices.ml_bits) |base, bits| {
                         const lower: usize = base;
+                        // Later ML intervals also start beyond the strict bound.
+                        if (lower >= maximum) break;
                         const upper = lower + (@as(usize, 1) << @intCast(bits)) - 1;
                         if (lower > exhaustive and lower < maximum)
                             try self.extend(position, slot, node, lower, choice);
@@ -88,4 +90,8 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
             }
         }
     };
+}
+
+test {
+    _ = @import("search_edges_tests.zig");
 }
