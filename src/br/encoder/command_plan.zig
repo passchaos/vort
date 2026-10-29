@@ -163,45 +163,30 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                 },
                 5...max_prefix_symbols => {
                     if (self.len <= 64) {
-                        var compact_lengths: [64]u4 = undefined;
-                        var compact_frequencies: [64]u32 = undefined;
-                        for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
                         const built = if (profiled)
-                            small_huffman.buildProfiled(64, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                            small_huffman.buildRankedProfiled(64, capacity, self.symbols[0..self.len], frequencies, &lengths, io, profile)
                         else
-                            small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths);
-                        if (built) {
-                            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
-                        } else {
+                            small_huffman.buildRanked(64, capacity, self.symbols[0..self.len], frequencies, &lengths);
+                        if (!built) {
                             if (profiled) profile.package_merge_calls += 1;
                             self.fillTreeLengths(frequencies, 64, &lengths);
                         }
                     } else if (self.len <= 128) {
-                        var compact_lengths: [128]u4 = undefined;
-                        var compact_frequencies: [128]u32 = undefined;
-                        for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
                         const built = if (profiled)
-                            small_huffman.buildProfiled(128, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                            small_huffman.buildRankedProfiled(128, capacity, self.symbols[0..self.len], frequencies, &lengths, io, profile)
                         else
-                            small_huffman.build(128, compact_frequencies[0..self.len], &compact_lengths);
-                        if (built) {
-                            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
-                        } else {
+                            small_huffman.buildRanked(128, capacity, self.symbols[0..self.len], frequencies, &lengths);
+                        if (!built) {
                             if (profiled) profile.package_merge_calls += 1;
                             self.fillTreeLengths(frequencies, 256, &lengths);
                         }
                     } else if (self.len <= 256) {
                         if (comptime dense_fast) {
-                            var compact_lengths: [256]u4 = undefined;
-                            var compact_frequencies: [256]u32 = undefined;
-                            for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
                             const built = if (profiled)
-                                small_huffman.buildProfiled(256, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                                small_huffman.buildRankedProfiled(256, capacity, self.symbols[0..self.len], frequencies, &lengths, io, profile)
                             else
-                                small_huffman.build(256, compact_frequencies[0..self.len], &compact_lengths);
-                            if (built) {
-                                for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
-                            } else {
+                                small_huffman.buildRanked(256, capacity, self.symbols[0..self.len], frequencies, &lengths);
+                            if (!built) {
                                 if (profiled) profile.package_merge_calls += 1;
                                 self.fillTreeLengths(frequencies, 256, &lengths);
                             }

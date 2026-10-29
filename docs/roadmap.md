@@ -24345,3 +24345,23 @@ reuse, so production keeps the simpler independently owned plans.
   a throughput lead. Next reduce the second-pass search cost or reuse seed
   matching state, then extend entropy feedback to multi-block/history-aware
   planning only with similarly strict complete-wire arbitration.
+
+- 2026-10-29: Brotli complex trees with at most 256 active symbols now consume
+  the existing frequency-ranked `PrefixAlphabet` directly. Compact frequency/
+  length arrays, a duplicate leaf permutation and the final scatter are gone;
+  compact rank remains the creation serial, leaf/parent tie behavior and
+  package-merge fallback remain exact, and failures publish no partial output.
+  New 64/128/256 scratch and 256/704-symbol-capacity oracles compare complete
+  arrays with the old compact builder across sparse, equal-frequency, random
+  and over-depth inputs. [Ranked Huffman evidence](performance/brotli-ranked-huffman.md)
+  records a 36-case q8 candidate/baseline ordinary time ratio of `0.978982`,
+  three improving sweeps, bucket ratios `0.973118/0.975669/0.988224`, exact
+  wire/settings identity and 36/36 non-regressing cases. Mechanism profile tree
+  length time falls 17.6% with all 4,739 calls and every non-time field equal.
+  Debug/ReleaseFast each pass 1,466 tests with one existing skip; x86-musl,
+  Wasm and HQ controls pass. Pinned Brotli 1.2.0 source confirms the ordered
+  leaf/natural-parent queue invariant, while Vort deliberately retains its own
+  deterministic ties, `u64` weights, bounded fallback and resource contracts.
+  Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
+  next work should reuse model-independent q10/q11 match frontiers and reduce
+  context/candidate search rather than claim broad Brotli leadership.

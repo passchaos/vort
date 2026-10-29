@@ -106,6 +106,139 @@ fn fibonacci(frequencies: []u32) void {
     std.mem.sort(u32, frequencies, {}, std.sort.desc(u32));
 }
 
+fn rankedDirect(
+    comptime PlanCodec: type,
+    comptime Small: type,
+    comptime scratch_capacity: usize,
+    comptime symbol_capacity: usize,
+    active: usize,
+    seed: u32,
+    skewed: bool,
+) !void {
+    try std.testing.expect(active >= 5 and active <= scratch_capacity);
+    var frequencies: [symbol_capacity]u32 = @splat(0);
+    var support: [scratch_capacity]u16 = undefined;
+    support[0] = 0;
+    support[1] = symbol_capacity - 1;
+    var support_len: usize = 2;
+    var candidate: usize = seed % symbol_capacity;
+    while (support_len < active) {
+        var duplicate = false;
+        for (support[0..support_len]) |symbol| {
+            if (symbol == candidate) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            support[support_len] = @intCast(candidate);
+            support_len += 1;
+        }
+        candidate = (candidate + 149) % symbol_capacity;
+    }
+
+    var compact_frequencies: [scratch_capacity]u32 = @splat(0);
+    if (skewed) {
+        fibonacci(compact_frequencies[0..active]);
+    } else {
+        for (compact_frequencies[0..active], 0..) |*frequency, index|
+            frequency.* = 1 + @as(u32, @intCast((index * 17 + seed) % 23));
+    }
+    for (support[0..active], compact_frequencies[0..active]) |symbol, frequency|
+        frequencies[symbol] = frequency;
+    const original = frequencies;
+    const alphabet = try PlanCodec.alphabetFromFrequencies(symbol_capacity, &frequencies);
+    try std.testing.expectEqual(active, alphabet.len);
+    for (alphabet.symbols[0..alphabet.len], 0..) |symbol, rank|
+        compact_frequencies[rank] = frequencies[symbol];
+
+    var compact_lengths: [scratch_capacity]u4 = @splat(0xf);
+    const expected_ok = Small.build(
+        scratch_capacity,
+        compact_frequencies[0..alphabet.len],
+        &compact_lengths,
+    );
+    var expected: [symbol_capacity]u4 = @splat(0xf);
+    if (expected_ok) {
+        for (alphabet.symbols[0..alphabet.len], compact_lengths[0..alphabet.len]) |symbol, bits|
+            expected[symbol] = bits;
+    }
+
+    var ordinary: [symbol_capacity]u4 = @splat(0xf);
+    const ordinary_ok = Small.buildRanked(
+        scratch_capacity,
+        symbol_capacity,
+        alphabet.symbols[0..alphabet.len],
+        &frequencies,
+        &ordinary,
+    );
+    var profiled: [symbol_capacity]u4 = @splat(0xf);
+    var profile: Small.BuildProfile = .{};
+    const profiled_ok = Small.buildRankedProfiled(
+        scratch_capacity,
+        symbol_capacity,
+        alphabet.symbols[0..alphabet.len],
+        &frequencies,
+        &profiled,
+        std.testing.io,
+        &profile,
+    );
+    try std.testing.expectEqual(expected_ok, ordinary_ok);
+    try std.testing.expectEqual(expected_ok, profiled_ok);
+    try std.testing.expectEqualSlices(u4, &expected, &ordinary);
+    try std.testing.expectEqualSlices(u4, &ordinary, &profiled);
+    try std.testing.expectEqualSlices(u32, &original, &frequencies);
+    try std.testing.expectEqual(@as(usize, 1), profile.calls);
+    try std.testing.expectEqual(@as(usize, @intFromBool(!expected_ok)), profile.failures);
+    try std.testing.expectEqual(@as(usize, 0), profile.package_merge_calls);
+}
+
+fn rankedFallbackIntegration(
+    comptime PlanCodec: type,
+    comptime Small: type,
+    comptime scratch_capacity: usize,
+    comptime fallback_capacity: usize,
+    active: usize,
+) !void {
+    try std.testing.expect(active >= 5 and active <= scratch_capacity);
+    var ranked_frequencies: [scratch_capacity]u32 = undefined;
+    fibonacci(ranked_frequencies[0..active]);
+    var frequencies: [PlanCodec.max_prefix_symbols]u32 = @splat(0);
+    for (ranked_frequencies[0..active], 0..) |frequency, rank|
+        frequencies[(rank * 149 + 311) % PlanCodec.max_prefix_symbols] = frequency;
+    const original = frequencies;
+    const alphabet = try PlanCodec.alphabetFromFrequencies(PlanCodec.max_prefix_symbols, &frequencies);
+    try std.testing.expectEqual(active, alphabet.len);
+
+    var direct: [PlanCodec.max_prefix_symbols]u4 = @splat(0xf);
+    try std.testing.expect(!Small.buildRanked(
+        scratch_capacity,
+        PlanCodec.max_prefix_symbols,
+        alphabet.symbols[0..alphabet.len],
+        &frequencies,
+        &direct,
+    ));
+    for (direct) |bits| try std.testing.expectEqual(@as(u4, 0xf), bits);
+
+    var compact_frequencies: [fallback_capacity]u32 = @splat(0);
+    for (alphabet.symbols[0..alphabet.len], 0..) |symbol, rank|
+        compact_frequencies[rank] = frequencies[symbol];
+    const compact_lengths = huffman.treeCodeLengths(fallback_capacity, &compact_frequencies, 15);
+    var expected: [PlanCodec.max_prefix_symbols]u4 = @splat(0);
+    for (alphabet.symbols[0..alphabet.len], compact_lengths[0..alphabet.len]) |symbol, bits|
+        expected[symbol] = bits;
+
+    const ordinary = try alphabet.codeLengths(&frequencies);
+    var profile: Small.BuildProfile = .{};
+    const profiled = try alphabet.codeLengthsProfiled(&frequencies, std.testing.io, &profile);
+    try std.testing.expectEqualSlices(u32, &original, &frequencies);
+    try std.testing.expectEqualSlices(u4, &expected, &ordinary);
+    try std.testing.expectEqualSlices(u4, &ordinary, &profiled);
+    try std.testing.expectEqual(@as(usize, 1), profile.calls);
+    try std.testing.expectEqual(@as(usize, 1), profile.failures);
+    try std.testing.expectEqual(@as(usize, 1), profile.package_merge_calls);
+}
+
 fn narrowDepthBoundary(comptime Codec: type) !void {
     // Exactly 34 leaves: adding more weight-one leaves changes this depth
     // boundary and would stop exercising the original <=128 primitive.
@@ -170,14 +303,28 @@ pub fn contracts(comptime Codec: type) !void {
 /// Optional command_plan hook passes its own namespace and SmallHuffman type,
 /// avoiding a reverse import of command_plan from the small builder tests.
 pub fn commandIntegration(comptime PlanCodec: type, comptime Small: type) !void {
+    try rankedDirect(PlanCodec, Small, 64, 256, 5, 0x11, false);
+    try rankedDirect(PlanCodec, Small, 64, 704, 64, 0x23, false);
+    try rankedDirect(PlanCodec, Small, 128, 256, 65, 0x35, false);
+    try rankedDirect(PlanCodec, Small, 128, 704, 96, 0x47, false);
+    try rankedDirect(PlanCodec, Small, 256, 256, 129, 0x59, false);
+    try rankedDirect(PlanCodec, Small, 256, 704, 256, 0x6b, false);
+    try rankedDirect(PlanCodec, Small, 64, 256, 34, 0x7d, true);
+    try rankedDirect(PlanCodec, Small, 128, 704, 96, 0x8f, true);
+    try rankedDirect(PlanCodec, Small, 256, 704, 192, 0xa1, true);
+    try rankedFallbackIntegration(PlanCodec, Small, 64, 64, 34);
+    try rankedFallbackIntegration(PlanCodec, Small, 128, 256, 96);
+
     var frequencies: [256]u32 = @splat(0);
-    for ([_]usize{ 129, 159, 255, 256 }) |active| {
+    for ([_]usize{ 5, 7, 32, 64, 65, 96, 128, 129, 159, 255, 256 }) |active| {
         @memset(&frequencies, 0);
         for (0..active) |index| frequencies[(index * 149 + 41) % 256] = @intCast(1 + index % 19);
+        const original = frequencies;
         const alphabet = try PlanCodec.alphabetFromFrequencies(256, &frequencies);
         const ordinary = try alphabet.codeLengths(&frequencies);
         var profile: Small.BuildProfile = .{};
         const observed = try alphabet.codeLengthsProfiled(&frequencies, std.testing.io, &profile);
+        try std.testing.expectEqualSlices(u32, &original, &frequencies);
         try std.testing.expectEqualSlices(u4, &ordinary, &observed);
         var compact: [256]u32 = @splat(0);
         for (alphabet.symbols[0..alphabet.len], 0..) |symbol, rank| compact[rank] = frequencies[symbol];
@@ -187,6 +334,29 @@ pub fn commandIntegration(comptime PlanCodec: type, comptime Small: type) !void 
         try std.testing.expectEqual(@as(usize, 1), profile.calls);
         try std.testing.expectEqual(@as(usize, 0), profile.package_merge_calls);
     }
+
+    var command_frequencies: [PlanCodec.max_prefix_symbols]u32 = @splat(0);
+    for (0..200) |index|
+        command_frequencies[(index * 149 + 311) % PlanCodec.max_prefix_symbols] = @intCast(1 + index % 23);
+    const command_original = command_frequencies;
+    const command_alphabet = try PlanCodec.alphabetFromFrequencies(PlanCodec.max_prefix_symbols, &command_frequencies);
+    const command_lengths = try command_alphabet.codeLengths(&command_frequencies);
+    var command_profile: Small.BuildProfile = .{};
+    const command_profiled = try command_alphabet.codeLengthsProfiled(&command_frequencies, std.testing.io, &command_profile);
+    try std.testing.expectEqualSlices(u32, &command_original, &command_frequencies);
+    try std.testing.expectEqualSlices(u4, &command_lengths, &command_profiled);
+    var command_compact: [256]u32 = @splat(0);
+    for (command_alphabet.symbols[0..command_alphabet.len], 0..) |symbol, rank|
+        command_compact[rank] = command_frequencies[symbol];
+    const command_reference = huffman.treeCodeLengths(256, &command_compact, 15);
+    for (command_alphabet.symbols[0..command_alphabet.len], 0..) |symbol, rank|
+        try std.testing.expectEqual(command_reference[rank], command_lengths[symbol]);
+    for (command_frequencies, command_lengths) |frequency, bits|
+        try std.testing.expectEqual(frequency != 0, bits != 0);
+    try std.testing.expectEqual(@as(usize, 1), command_profile.calls);
+    try std.testing.expectEqual(@as(usize, 0), command_profile.failures);
+    try std.testing.expectEqual(@as(usize, 0), command_profile.package_merge_calls);
+
     fibonacci(&frequencies);
     const alphabet = try PlanCodec.alphabetFromFrequencies(256, &frequencies);
     const ordinary = try alphabet.codeLengths(&frequencies);

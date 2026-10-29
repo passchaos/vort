@@ -1,0 +1,76 @@
+Frozen setup:
+
+  REPO=/home/passchaos/project-z/vort
+  EVIDENCE=$REPO/docs/performance/data/brotli-ranked-huffman-20261029
+  EPOCH=/tmp/vort-br-ranked-huffman-replay
+  BASELINE_ROOT=$EPOCH/baseline
+  CANDIDATE_ROOT=$EPOCH/candidate
+  REFERENCE=/tmp/vort-br-q8-next-20261028-jewk_a_x/reference-build
+  mkdir -p "$BASELINE_ROOT" "$CANDIDATE_ROOT" "$EPOCH/inputs"
+  git -C "$REPO" archive 761da0ddd6c7856d7bd9b8c0cf3cc4cbc5169ee1 | tar -x -C "$BASELINE_ROOT"
+  git -C "$REPO" archive 761da0ddd6c7856d7bd9b8c0cf3cc4cbc5169ee1 | tar -x -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/source-overlay.tar.xz" -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/inputs.tar.xz" -C "$EPOCH/inputs"
+  ln -s "$REFERENCE" "$EPOCH/reference-build"
+
+Build the shared isolated record object and four independent executables:
+
+  zig build-obj "$BASELINE_ROOT/src/br/encoder/record_optimal_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/record.o"
+  for side in baseline candidate; do
+    if [ "$side" = baseline ]; then ROOT=$BASELINE_ROOT; else ROOT=$CANDIDATE_ROOT; fi
+    zig build-exe "$EPOCH/record.o" -lc -O ReleaseFast \
+      --dep vort_br --dep benchmark_provenance \
+      -Mroot="$ROOT/tools/br/planned_encode_bench.zig" \
+      -O ReleaseFast -Mvort_br="$ROOT/src/br.zig" \
+      -O ReleaseFast -Mbenchmark_provenance="$ROOT/tools/benchmark_provenance.zig" \
+      -femit-bin="$EPOCH/bench-$side"
+    zig build-exe "$EPOCH/record.o" -lc -O ReleaseFast \
+      --dep vort_br --dep benchmark_provenance \
+      -Mroot="$ROOT/tools/br/quality_stage_profile.zig" \
+      -O ReleaseFast -Mvort_br="$ROOT/src/br.zig" \
+      -O ReleaseFast -Mbenchmark_provenance="$ROOT/tools/benchmark_provenance.zig" \
+      -femit-bin="$EPOCH/profile-$side"
+  done
+
+Copy `pilot.py` and `formal.py` beside the executables, then run:
+
+  python3 "$EPOCH/pilot.py"
+  python3 "$EPOCH/formal.py"
+
+Mechanism profile and gate:
+
+  for side in baseline candidate; do
+    taskset -c 2 "$EPOCH/profile-$side" --rounds 1 \
+      --path "$EPOCH/inputs/mozilla-65536" \
+      --path "$EPOCH/inputs/dickens-65536" \
+      --path "$EPOCH/inputs/mr-65536" \
+      --json "$EPOCH/profile-$side.json"
+    python3 "$ROOT/tools/br/quality_profile_gate.py" \
+      --json "$EPOCH/profile-$side.json" \
+      --executable "$EPOCH/profile-$side" \
+      --output "$EPOCH/profile-$side-gate.json"
+  done
+
+Focused and full validation from the candidate checkout (the symlink supplies
+the repository's sibling dependency expected by its clean build graph):
+
+  mkdir -p "$EPOCH/vail"
+  ln -s /home/passchaos/project-z/vail/archive_crypto "$EPOCH/vail/archive_crypto"
+  cd "$CANDIDATE_ROOT"
+  zig fmt --check src/br/encoder/small_huffman.zig \
+    src/br/encoder/command_plan.zig src/br/encoder/dense_huffman_tests.zig
+  zig build -j2 -Doptimize=Debug -Dbr-test-filter='dense Huffman' test-br
+  zig build -j2 -Doptimize=ReleaseFast -Dbr-test-filter='dense Huffman' test-br
+  zig build -j2 -Doptimize=Debug -Dbr-test-filter='literal context' test-br
+  zig build -j2 -Doptimize=ReleaseFast -Dbr-test-filter='literal context' test-br
+  zig build -j2 -Dtarget=x86-linux-musl -Doptimize=ReleaseFast \
+    -Dbr-test-filter='dense Huffman' test-br
+  zig build -j2 test-br-prepared-command-wasm
+  zig build -j2 -Doptimize=ReleaseFast test-br-hq
+  zig build -j2 -Doptimize=Debug test-br --summary all
+  zig build -j2 -Doptimize=ReleaseFast test-br --summary all
+
+Independent archive audit:
+
+  python3 "$EVIDENCE/audit.py"

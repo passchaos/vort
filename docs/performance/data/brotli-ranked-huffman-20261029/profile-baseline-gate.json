@@ -1,0 +1,81 @@
+{
+  "validated_runs": 3,
+  "rows": [
+    {
+      "path": "/tmp/vort-br-ranked-huffman-20261029.Px8Ml6/inputs/mozilla-65536",
+      "round": 0,
+      "outer_ns": 43748131,
+      "wire_attempts": 12,
+      "evaluation_attempts": 10,
+      "exclusive_ns": {
+        "lazy_parse": 1069877,
+        "lazy_commands": 93939,
+        "optimal_parse": 7456550,
+        "optimal_commands": 90406,
+        "preferred_context": 13760,
+        "recent_distance_scan": 109019,
+        "context_proposals": 22257371,
+        "split_planning": 1660600,
+        "wire": 7540211,
+        "evaluate": 1571480,
+        "distance_parameters": 1296467,
+        "selection": 86,
+        "other": 587867
+      },
+      "unaccounted_ns": 498,
+      "classified_fraction": 0.986551082605106,
+      "wire_coverage_complete": true
+    },
+    {
+      "path": "/tmp/vort-br-ranked-huffman-20261029.Px8Ml6/inputs/dickens-65536",
+      "round": 0,
+      "outer_ns": 42121317,
+      "wire_attempts": 12,
+      "evaluation_attempts": 10,
+      "exclusive_ns": {
+        "lazy_parse": 3443190,
+        "lazy_commands": 328554,
+        "optimal_parse": 10380616,
+        "optimal_commands": 220909,
+        "preferred_context": 23814,
+        "recent_distance_scan": 227618,
+        "context_proposals": 5680181,
+        "split_planning": 2169116,
+        "wire": 12844682,
+        "evaluate": 1542216,
+        "distance_parameters": 4161069,
+        "selection": 76,
+        "other": 1098870
+      },
+      "unaccounted_ns": 406,
+      "classified_fraction": 0.9739021455573196,
+      "wire_coverage_complete": true
+    },
+    {
+      "path": "/tmp/vort-br-ranked-huffman-20261029.Px8Ml6/inputs/mr-65536",
+      "round": 0,
+      "outer_ns": 53181891,
+      "wire_attempts": 14,
+      "evaluation_attempts": 10,
+      "exclusive_ns": {
+        "lazy_parse": 3898168,
+        "lazy_commands": 105026,
+        "optimal_parse": 14927785,
+        "optimal_commands": 103136,
+        "preferred_context": 17229,
+        "recent_distance_scan": 151348,
+        "context_proposals": 9998545,
+        "split_planning": 9628282,
+        "wire": 10475266,
+        "evaluate": 1032270,
+        "distance_parameters": 2141210,
+        "selection": 64,
+        "other": 703265
+      },
+      "unaccounted_ns": 297,
+      "classified_fraction": 0.986770647173866,
+      "wire_coverage_complete": true
+    }
+  ],
+  "scope": "Exact wire equality/roundtrip asserted by producer; local input and optional executable identity, event topology and non-overlapping timing independently checked. No competitor throughput claim."
+}

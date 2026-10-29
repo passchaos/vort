@@ -1,0 +1,56 @@
+{
+  "baseline_commit": "761da0ddd6c7856d7bd9b8c0cf3cc4cbc5169ee1",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "cpu_affinity": "2",
+  "zig_version": "0.16.0",
+  "reference": {
+    "version": "1.2.0",
+    "commit": "558fc647cdaf391228d614ca85f711e02e4e583b",
+    "build": "GCC -O3 -DNDEBUG -march=native"
+  },
+  "pilot": {
+    "cases": 3,
+    "geomean": 0.9843054972783373,
+    "maximum": 0.9962858280426851,
+    "sweep_geomeans": [0.9792621855876444, 0.9852103333389944, 0.9878588261642217]
+  },
+  "formal": {
+    "cases": 36,
+    "geomean": 0.9789815571056225,
+    "maximum": 0.9983031111853956,
+    "not_regressed": 36,
+    "sweep_geomeans": [0.9786019026469673, 0.9788091609329961, 0.9785650430435018],
+    "buckets": {
+      "4096": 0.9731181792044751,
+      "16384": 0.9756691131529251,
+      "65536": 0.9882239801687006
+    },
+    "candidate_over_reference": 33.44160063599933,
+    "size_geomean": 0.9955608655648552,
+    "aggregate_vort_bytes": 363416,
+    "aggregate_reference_bytes": 373878
+  },
+  "profile": {
+    "small_huffman_calls": 4739,
+    "small_huffman_failures": 0,
+    "baseline_tree_lengths_ns": 6099525,
+    "candidate_tree_lengths_ns": 5025205,
+    "tree_lengths_ratio": 0.8238682520360192,
+    "baseline_leaf_order_ns": 1668855,
+    "candidate_leaf_order_ns": 385059,
+    "leaf_order_ratio": 0.23073244829538817,
+    "non_time_fields_equal": true
+  },
+  "validation": {
+    "dense_huffman_debug": "21/21",
+    "dense_huffman_release_fast": "21/21",
+    "brotli_debug": "1466 passed, 1 skipped",
+    "brotli_release_fast": "1466 passed, 1 skipped",
+    "literal_context_debug": "success",
+    "literal_context_release_fast": "success",
+    "x86_linux_musl_release_fast": "success",
+    "prepared_command_wasm": "success",
+    "brotli_hq_release_fast": "success",
+    "project_check": "212/212"
+  }
+}
