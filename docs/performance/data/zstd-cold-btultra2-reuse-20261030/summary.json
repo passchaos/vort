@@ -1,0 +1,34 @@
+{
+  "baseline_commit": "8ad5b3eab502994b0d57f038cf5999bd2c1cd205",
+  "all_input_wire_settings_equal": true,
+  "primary": {
+    "samples_per_side_per_case": 16,
+    "btultra2_geomean": 0.9633463811017275,
+    "btultra2_maximum": 0.9938067490794426,
+    "btultra2_paired_wins": 19,
+    "btopt_control_geomean": 0.9937627917293212,
+    "btopt_control_maximum": 1.0004841068638908
+  },
+  "secondary": {
+    "samples_per_side_per_case": 16,
+    "btultra2_geomean": 0.9799098086693626,
+    "btultra2_maximum": 0.9947917434127731,
+    "btultra2_paired_wins": 22,
+    "trained_dictionary_control": 1.006443258053501
+  },
+  "mozilla_long": {
+    "pairs": 15,
+    "samples_per_side": 30,
+    "ratio": 0.9890008580075176,
+    "paired_wins": 14
+  },
+  "requested_peak_bytes": {
+    "primary_baseline": 4469288,
+    "primary_candidate": 4747820,
+    "primary_frontier_delta": 278532,
+    "secondary_baseline": 5091880,
+    "secondary_candidate": 6205996,
+    "secondary_frontier_delta": 1114116
+  },
+  "decision": "retain_cold_btultra2_only"
+}

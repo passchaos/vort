@@ -1783,3 +1783,21 @@ pair/field executor or change table/bitstream organization without increasing
 hot live state; repeating raw-copy or wrapper-layer experiments is no longer
 evidence-aligned. Exact hashes, ratios, commands, and the profile summary are in
 `docs/performance/data/zstd-reference-audit-x86-20261013.json`.
+
+## 2026-10-30 cold btultra2 reuse
+
+Cold prefix-free `btultra2` now keeps its two-pass semantics but reuses the
+model-independent match frontier, repeat-distance match lengths and owned
+workspace capacity. Other strategies and non-cold inputs stay on the original
+DP specialization. Independent ordinary A/B improves the 4 KiB three-file
+geomean to `0.963346` and the 16 KiB geomean to `0.979910`; a separate
+Mozilla fifteen-pair run is `0.989001` with 14/15 wins. Complete wires remain
+identical. The fixed native frontier raises requested peak by 278,532 bytes at
+4 KiB and 1,114,116 bytes at 16 KiB, both represented in exact preflight.
+
+This narrows one measured HQ encoding gap but does not change the broader
+conclusion: matched-HQ still remains far slower than libzstd. Next work should
+reduce the millions of beam transitions or share evidence with safeguard
+searches without leaking cache setup into btopt, dictionary or initialized
+single-pass paths. Detailed evidence is in
+[`performance/zstd-cold-btultra2-reuse.md`](performance/zstd-cold-btultra2-reuse.md).

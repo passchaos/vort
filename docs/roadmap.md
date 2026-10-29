@@ -24390,6 +24390,19 @@ reuse, so production keeps the simpler independently owned plans.
   despite exact requested-peak reductions of 20.5%/23.5%, and was removed at
   the early-stop boundary.
 
+- 2026-10-30: Cold Zstd `btultra2` now reuses caller-owned DP/matcher capacity,
+  a complete model-independent match frontier and per-position repeat match
+  lengths across its two entropy-price passes. The specialization is entered
+  only for prefix-free, predefined, uninitialized cold blocks; btopt, btultra,
+  dictionaries, history and initialized entropy retain the original `dp.plan`
+  path with zero cache counters. The ordinary
+  [reuse evidence](performance/zstd-cold-btultra2-reuse.md) records 4 KiB and
+  16 KiB geomeans `0.963346/0.979910`, a fifteen-pair Mozilla ratio `0.989001`
+  with 14/15 wins, exact wire identity and bounded requested-heap deltas equal
+  to the fixed frontier allocation. Incomplete frontiers fall back to a real
+  second search; exact-cap, OOM, x86, Wasm and dual-reference gates remain
+  strict.
+
 - 2026-10-30: Prepared DEFLATE now releases its build-only 32K-entry hash head
   before allocating the fixed/modeled DP arrays. Exact planner tokens and all
   216 level/wrapper wires remain unchanged. The ordinary

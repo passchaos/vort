@@ -1,0 +1,27 @@
+Focused and semantic gates
+- cold record/replay Plan oracle: records, offsets, statistics, estimated cost
+  and final repeats equal independent dp.plan
+- non-warm btopt/btultra/dictionary/history/initialized entropy cache counters: zero
+- cold complete frontier: replay counters nonzero
+- exact requested cap: pass
+- requested cap minus one: WorkingMemoryLimitExceeded before allocation
+- every short planner allocation failure: cleanup and no published statistics
+- Debug test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq: 153/153 pass
+- ReleaseFast x86-linux-musl test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq-search-wasm: 7/7 steps, all four operations status 0
+- ReleaseFast run-zstd-hq-search-diff: 41 rows plus 8 frozen baseline rows
+- ReleaseFast run-zstd-hq-diff: 52 rows plus 56 frozen baseline rows
+- Debug full test-zstd: 1199/1199 pass, exit 0, 17m
+- ReleaseFast full test-zstd: 1199/1199 pass
+- zig build -j2 check check-wasm --summary all: 212/212 steps succeeded, exit 0
+
+Performance
+- independent clean baseline/candidate ReleaseFast executables
+- fixed logical CPU 2, one codec thread
+- complete input/settings/wire identity in all primary and secondary rows
+- primary cold btultra2 geomean: 0.9633463811017275
+- secondary cold btultra2 geomean: 0.9799098086693626
+- Mozilla fifteen-pair ratio: 0.9890008580075176, 14/15 wins
+- btopt and trained dictionary controls remain inside 0.99..1.01 aggregate gates
