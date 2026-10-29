@@ -1,0 +1,27 @@
+{
+  "baseline_commit": "c2b69ebeeb97e7391fe5769d84d29833cc957a4d",
+  "node_bytes": {
+    "baseline_bounded": 56,
+    "baseline_whole": 64,
+    "candidate_bounded": 40,
+    "candidate_whole": 40
+  },
+  "all_input_wire_settings_and_non_memory_profile_equal": true,
+  "samples_per_side": 16,
+  "btopt": {
+    "baseline_ns": 27224691.5,
+    "candidate_ns": 30517178.0,
+    "time_ratio": 1.120937513653736,
+    "baseline_peak_requested_bytes": 2562852,
+    "candidate_peak_requested_bytes": 2038436
+  },
+  "btultra2": {
+    "baseline_ns": 140893663.0,
+    "candidate_ns": 155713228.5,
+    "time_ratio": 1.1051826262761015,
+    "baseline_peak_requested_bytes": 4469288,
+    "candidate_peak_requested_bytes": 3420456
+  },
+  "time_geomean_ratio": 1.1130321941575811,
+  "decision": "reject_and_remove"
+}

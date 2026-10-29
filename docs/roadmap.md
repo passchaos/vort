@@ -24383,7 +24383,12 @@ reuse, so production keeps the simpler independently owned plans.
   ratio was `0.995468` with a `1.011483` worst case, so every prototype was
   removed. [The negative screen](performance/zstd-upstream-layout-screen.md)
   records why Vort needs a native shared match store or state-specific SoA
-  redesign rather than a mechanical copy of upstream's node layout.
+  redesign rather than a mechanical copy of upstream's node layout. A later
+  exact-source recheck avoided a packed struct and used a naturally aligned
+  40-byte node with private `u32` repeats/distance plus one encoded predecessor
+  word. It still regressed Mozilla btopt/btultra2 to `1.120938/1.105183`,
+  despite exact requested-peak reductions of 20.5%/23.5%, and was removed at
+  the early-stop boundary.
 
 - 2026-10-30: Prepared DEFLATE now releases its build-only 32K-entry hash head
   before allocating the fixed/modeled DP arrays. Exact planner tokens and all

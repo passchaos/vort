@@ -1,0 +1,25 @@
+Prototype validation before early stop
+- naturally aligned Node size: 40 bytes
+- naturally aligned WholeNode size: 40 bytes
+- predecessor round trips: positions 0/4095/4096/65535/65536/131071/u24.max
+- predecessor round trips: slots 0/7/15/31/255
+- predecessor position u24.max+1: InvalidBlockPlan
+- predecessor slot 256: InvalidBlockPlan
+- zig build -j2 -Doptimize=Debug test-zstd-hq-search: 85/85 pass
+- baseline/candidate input, complete wire, requested settings and all profile
+  fields except peak_working_memory: equal
+
+Early-stop A/B
+- ReleaseFast, logical CPU 2, one codec thread
+- Mozilla 4096 bytes, window log 15, matched HQ controls
+- btopt and btultra2
+- eight alternating AB/BA sweeps, two rounds each, sixteen samples per side
+- btopt candidate/baseline median: 1.120937513653736
+- btultra2 candidate/baseline median: 1.1051826262761015
+- combined geomean: 1.1130321941575811
+- both strategies exceed the 1.02 early-stop threshold
+
+Rollback
+- broader performance/resource/platform gates were intentionally not run after
+  the hard early-stop failure
+- every src/zstd prototype and test edit was restored exactly to baseline

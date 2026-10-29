@@ -22,6 +22,28 @@ than retained behind an option.
 | compact 8-byte frontier plus cache | `0.975727` | worst `0.998874` | secondary required |
 | 16 KiB plus trained-dictionary secondary | `0.995468` | worst `1.011483` | reject |
 
+## Natural-aligned node40 recheck
+
+The original node40 package did not preserve its source overlay, so a distinct
+implementation shape was rechecked on 2026-10-30 against baseline `c2b69ebe`:
+
+- the node remained an ordinary naturally aligned struct, not a packed struct;
+- only DP-local repeats and distance narrowed to `u32`;
+- public parameters, plans and records retained `[3]usize` / `usize`;
+- predecessor position and slot used one explicit `u32` word encoded as
+  `position << 8 | slot`, preserving the old lexicographic tie order;
+- `cost` remained checked `u64` with the existing sentinel.
+
+Both bounded and whole nodes reached 40 bytes. The Debug HQ-search gate passed
+85/85 and all Mozilla input, settings, non-memory profile and wire signatures
+matched. Nevertheless, sixteen samples per side gave `1.120938` for btopt and
+`1.105183` for btultra2, a combined `1.113032`. Requested peak fell exactly
+`2,562,852 -> 2,038,436` and `4,469,288 -> 3,420,456` bytes, but the 10–12%
+throughput regression failed the `1.02` early-stop gate. The complete source
+overlay and raw rounds are retained in
+[`data/zstd-node40-natural-screen-20261030/`](data/zstd-node40-natural-screen-20261030/),
+and all source changes were removed.
+
 Ratios are candidate time divided by baseline time. The timing campaigns use
 separate ReleaseFast executables, fixed CPU affinity, alternating order and
 exact wire/settings checks. Mechanism counters are diagnostic; only ordinary
