@@ -438,6 +438,26 @@ fn encodeZlibBestTestStream(encoder: *deflate.ZlibIncrementalBestEncoder, payloa
     return try encoded.toOwnedSlice(std.testing.allocator);
 }
 
+fn encodeGzipBestTestStream(encoder: *deflate.GzipIncrementalBestEncoder, payload: []const u8) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    var scratch: [23]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + 211);
+        const result = try encoder.step(payload[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return try encoded.toOwnedSlice(std.testing.allocator);
+}
+
 test "raw deflate incremental best encoder adapts block boundaries" {
     const payload = ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 512) ++
         ("structured-json-field:value,structured-json-field:value\n" ** 512);
@@ -467,6 +487,68 @@ test "raw deflate incremental best encoder adapts block boundaries" {
     const fixed_encoded = try encodeRawBestTestStream(&fixed_boundary, payload);
     defer std.testing.allocator.free(fixed_encoded);
     try std.testing.expect(encoded.len <= fixed_encoded.len);
+}
+
+test "incremental adaptive wrappers retain cross-block history under fragmentation" {
+    var payload: [64 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x243f_6a88);
+    random.random().bytes(payload[0 .. payload.len / 2]);
+    @memcpy(payload[payload.len / 2 ..], payload[0 .. payload.len / 2]);
+    var compression = deflate.optionsForLevel(.default);
+    compression.split_options = .{
+        .min_block_len = 16 * 1024,
+        .max_block_len = 32 * 1024,
+        .sample_len = 2048,
+        .search_step = 16 * 1024,
+    };
+
+    var adaptive = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .adaptive_blocks = true,
+        .compression = compression,
+    });
+    defer adaptive.deinit();
+    const raw = try encodeRawBestTestStream(&adaptive, &payload);
+    defer std.testing.allocator.free(raw);
+    const raw_decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, raw_decoded);
+
+    var fixed = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .compression = compression,
+    });
+    defer fixed.deinit();
+    const fixed_raw = try encodeRawBestTestStream(&fixed, &payload);
+    defer std.testing.allocator.free(fixed_raw);
+    try std.testing.expect(raw.len <= fixed_raw.len);
+
+    var zlib_options = try deflate.zlibIncrementalBestOptionsForLevel(6);
+    zlib_options.raw.adaptive_blocks = true;
+    zlib_options.raw.compression = compression;
+    var zlib_encoder = deflate.ZlibIncrementalBestEncoder.initWithOptions(
+        std.testing.allocator,
+        zlib_options,
+    );
+    defer zlib_encoder.deinit();
+    const zlib = try encodeZlibBestTestStream(&zlib_encoder, &payload);
+    defer std.testing.allocator.free(zlib);
+    const zlib_decoded = try deflate.decodeZlibAlloc(std.testing.allocator, zlib);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, zlib_decoded);
+
+    var gzip_options = try deflate.gzipIncrementalBestOptionsForLevel(6, .{});
+    gzip_options.raw.adaptive_blocks = true;
+    gzip_options.raw.compression = compression;
+    var gzip_encoder = deflate.GzipIncrementalBestEncoder.initWithOptions(
+        std.testing.allocator,
+        gzip_options,
+    );
+    defer gzip_encoder.deinit();
+    const gzip = try encodeGzipBestTestStream(&gzip_encoder, &payload);
+    defer std.testing.allocator.free(gzip);
+    const gzip_decoded = try deflate.decodeGzipAlloc(std.testing.allocator, gzip);
+    defer std.testing.allocator.free(gzip_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, gzip_decoded);
 }
 
 test "raw deflate incremental adaptive plan validates bounds" {

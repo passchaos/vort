@@ -1381,8 +1381,13 @@ pub const AdaptiveSplitOptions = struct {
     min_block_len: usize = 16 * 1024,
     max_block_len: usize = max_stored_block_len,
     sample_len: usize = 4096,
+    /// Requested grid spacing. The encoder raises smaller values as needed to
+    /// keep at most 64 grid candidates per bounded horizon; zero therefore
+    /// means the finest resource-bounded grid rather than an unbounded scan.
     search_step: usize = 4096,
 };
+
+const max_adaptive_split_candidates: usize = 64;
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
@@ -1464,50 +1469,119 @@ fn shouldSkipAdaptiveSplitSearch(input_len: usize, split_options: AdaptiveSplitO
 fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
     const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
     if (input.len <= min_block_len) return heuristic;
-    const limit = @min(input.len, max_block_len);
-    const step = @max(search_step, 1);
-    var best_len = heuristic;
-    var best_score = try scoreSplitCandidate(allocator, input, best_len, options);
+    const horizon = @min(input.len, max_block_len);
+    const step = adaptiveSplitSearchStep(horizon, min_block_len, search_step);
+    // Compare every split over the same plaintext horizon. Prefix-only sizes
+    // are not comparable: a shorter prefix is almost always fewer bytes even
+    // when its extra block boundary makes the complete two-block plan worse.
+    // Starting with the unsplit horizon also keeps exact ties unfragmented.
+    var best_len = horizon;
+    var best_score = try scoreAdaptiveSplitAt(
+        allocator,
+        input,
+        horizon,
+        horizon,
+        options,
+    );
     var candidate = min_block_len;
-    while (candidate <= limit) : (candidate += step) {
-        const score = try scoreSplitCandidate(allocator, input, candidate, options);
-        if (score < best_score) {
-            best_score = score;
-            best_len = candidate;
-        }
-        if (limit - candidate < step) break;
+    while (candidate < horizon) {
+        const score = try scoreAdaptiveSplitAt(
+            allocator,
+            input,
+            horizon,
+            candidate,
+            options,
+        );
+        retainAdaptiveSplitCandidate(&best_score, &best_len, score, candidate);
+        if (horizon - candidate <= step) break;
+        candidate += step;
     }
-    if (best_len != limit) {
-        const score = try scoreSplitCandidate(allocator, input, limit, options);
-        if (score < best_score) best_len = limit;
+    // The entropy heuristic need not land on the caller's search grid. Score
+    // that additional point once, while preserving the same longer-on-tie
+    // rule used by the regular candidates.
+    const heuristic_on_grid = adaptiveSplitGridContains(
+        heuristic,
+        min_block_len,
+        horizon,
+        step,
+    );
+    if (heuristic < horizon and !heuristic_on_grid) {
+        const score = try scoreAdaptiveSplitAt(
+            allocator,
+            input,
+            horizon,
+            heuristic,
+            options,
+        );
+        retainAdaptiveSplitCandidate(&best_score, &best_len, score, heuristic);
     }
     return best_len;
 }
 
 fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !usize {
-    const split = options.split_options;
-    const candidate = try chooseCostedAdaptiveBlockLen(
+    return chooseCostedAdaptiveBlockLen(
         allocator,
         input,
-        @min(split.min_block_len, input.len),
-        @min(split.max_block_len, input.len),
-        split.sample_len,
-        split.search_step,
+        @min(options.split_options.min_block_len, input.len),
+        @min(options.split_options.max_block_len, input.len),
+        options.split_options.sample_len,
+        options.split_options.search_step,
         options,
     );
-    if (candidate == input.len) return candidate;
+}
 
-    // A prefix's local score omits the second block header/tree overhead. Only
-    // accept the split when the two independently scored halves beat the full
-    // window after charging a conservative byte for the extra BFINAL/BTYPE
-    // boundary. This prevents adaptive mode from regressing ratio merely because
-    // one prefix looks locally cheap.
-    const full_score = try scoreSplitCandidate(allocator, input, input.len, options);
-    const first_score = try scoreSplitCandidate(allocator, input, candidate, options);
-    const tail_score = try scoreSplitCandidate(allocator, input[candidate..], input.len - candidate, options);
-    const split_score = std.math.add(usize, first_score, tail_score) catch return error.IntegerOverflow;
-    const charged_split = std.math.add(usize, split_score, 1) catch return error.IntegerOverflow;
-    return if (charged_split < full_score) candidate else input.len;
+fn scoreAdaptiveSplitAt(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    horizon: usize,
+    candidate: usize,
+    options: CompressionOptions,
+) !usize {
+    if (horizon == 0 or horizon > input.len or candidate == 0 or candidate > horizon)
+        return error.InvalidBlockPlan;
+    const first = try scoreSplitCandidate(allocator, input[0..horizon], candidate, options);
+    if (candidate == horizon) return first;
+    const second = try scoreSplitCandidate(
+        allocator,
+        input[candidate..horizon],
+        horizon - candidate,
+        options,
+    );
+    return combineAdaptiveSplitScores(first, second);
+}
+
+fn combineAdaptiveSplitScores(first: usize, second: usize) !usize {
+    const blocks = std.math.add(usize, first, second) catch return error.IntegerOverflow;
+    // Retain the established conservative byte charge beyond the two local
+    // block scores. Their independent byte rounding can only overestimate the
+    // real bit-packed pair, so this policy cannot make fragmentation easier.
+    return std.math.add(usize, blocks, 1) catch return error.IntegerOverflow;
+}
+
+fn preferAdaptiveSplitCandidate(score: usize, len: usize, best_score: usize, best_len: usize) bool {
+    return score < best_score or (score == best_score and len > best_len);
+}
+
+fn retainAdaptiveSplitCandidate(best_score: *usize, best_len: *usize, score: usize, len: usize) void {
+    if (!preferAdaptiveSplitCandidate(score, len, best_score.*, best_len.*)) return;
+    best_score.* = score;
+    best_len.* = len;
+}
+
+fn adaptiveSplitSearchStep(horizon: usize, min_block_len: usize, requested: usize) usize {
+    const span = horizon -| min_block_len;
+    const bounded_minimum = if (span == 0)
+        1
+    else
+        span / max_adaptive_split_candidates +
+            @intFromBool(span % max_adaptive_split_candidates != 0);
+    return @max(@max(requested, bounded_minimum), 1);
+}
+
+fn adaptiveSplitGridContains(candidate: usize, min_block_len: usize, horizon: usize, step: usize) bool {
+    std.debug.assert(step != 0);
+    return candidate >= min_block_len and candidate < horizon and
+        (candidate - min_block_len) % step == 0;
 }
 
 fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: CompressionOptions) !usize {
@@ -1540,7 +1614,7 @@ fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidat
     const len = @min(candidate_len, input.len);
     const plan = try planTokensAlloc(allocator, input[0..len], options);
     defer plan.deinit(allocator);
-    const stored = len + 5;
+    const stored = std.math.add(usize, len, 5) catch return error.IntegerOverflow;
     const fixed = (lz77.fixedBitCost(plan.tokens) + 7) / 8;
     if (options.block_selection == .stored_fixed) return @min(stored, fixed);
     const dynamic = (try dynamicTokenBitCost(plan.tokens) + 7) / 8;
@@ -23406,16 +23480,26 @@ test "adaptive split best wrappers round trip" {
     try std.testing.expectEqualSlices(u8, input, gzip_decoded);
 }
 
-test "adaptive split search uses costed candidate lengths" {
-    const input = ("aaaaaaaaaaaaaaaa" ** 4) ++ "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
-    const chosen = try chooseCostedAdaptiveBlockLen(std.testing.allocator, input, 16, 64, 8, 16, optionsForLevel(.default));
-    try std.testing.expect(chosen >= 16);
-    try std.testing.expect(chosen <= 64);
-    const encoded = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8, .search_step = 16 });
-    defer std.testing.allocator.free(encoded);
-    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
-    defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, input, decoded);
+const AdaptiveSplitTestAdapter = struct {
+    pub const Options = CompressionOptions;
+    pub const max_candidates = max_adaptive_split_candidates;
+    pub const options = optionsForLevel;
+    pub const choose = chooseCostedAdaptiveBlockLen;
+    pub const heuristic = chooseAdaptiveBlockLen;
+    pub const score = scoreSplitCandidate;
+    pub const scoreAt = scoreAdaptiveSplitAt;
+    pub const combine = combineAdaptiveSplitScores;
+    pub const prefer = preferAdaptiveSplitCandidate;
+    pub const retain = retainAdaptiveSplitCandidate;
+    pub const searchStep = adaptiveSplitSearchStep;
+    pub const gridContains = adaptiveSplitGridContains;
+    pub const chooseIncremental = chooseNonRegressiveIncrementalBlockLen;
+    pub const encode = encodeRawBestAdaptiveSplitAlloc;
+    pub const decode = decodeRawAutoAlloc;
+};
+
+test "adaptive split complete horizon scoring and resource contracts" {
+    try @import("deflate/tests/adaptive_split.zig").contracts(AdaptiveSplitTestAdapter);
 }
 
 test "adaptive split falls back to one-shot when smaller" {

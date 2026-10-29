@@ -1,0 +1,14 @@
+{
+  "baseline_commit": "f560b1564724d52e7d151564226bfaac2275aa04",
+  "source_overlay_sha256": "4176d2f3a81299de447b659c4c3a43cf3a167be0649dac641d53d57708fe8262",
+  "fresh_record_optimal_object_sha256": "ae6a486237915ac0877288a219ee04530affaaaeb8eb58d0510e27c6cf649101",
+  "fresh_zstd_huffman_x2_object_sha256": "5798631559da68049d8d645141c2535fefdc269b94541013c1ca28db7014dcc9",
+  "fresh_baseline_bench_sha256": "c9697d6b6f64390a7b1ec1d6434e56700be540a026655404e4a67bad20ace3d6",
+  "fresh_candidate_bench_sha256": "b924d3559cf06200f08f5cf989691aad7faa2085cc46afec279ff1ffea0909e0",
+  "fresh_candidate_probe_sha256": "7163290cc97962e6a2cb69b079e287a7e6f1c3929a5bcbb0bbd9a92675aa943f",
+  "samba_196608_baseline_bytes": 110207,
+  "samba_196608_candidate_bytes": 104700,
+  "samba_196608_replayed_zlib_sha256": "164ba90614f661580a1d571c66318d8ad57c729716edad9350f52a26212c11d4",
+  "samba_196608_retained_zlib_sha256": "164ba90614f661580a1d571c66318d8ad57c729716edad9350f52a26212c11d4",
+  "wire_equal": true
+}

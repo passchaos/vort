@@ -1,0 +1,413 @@
+{
+  "baseline_commit": "f560b1564724d52e7d151564226bfaac2275aa04",
+  "baseline_sha256": "24359c14984f6746a5be1f46ebf8ceeef85cbeb31be2b820aa6092c169683bd1",
+  "candidate_sha256": "60a8ae3f6ba4dce7e907f61f9d42d62257fa8fc28f8cef3903c71ea456f25f76",
+  "input_count": 3,
+  "input_sha256": {
+    "dickens-524288": "bb73638a8db7b3c995234a22364b048948b1a28f83169c503b6ee01b19949b3f",
+    "mozilla-524288": "bbf579d3558421e9250fad143d7a6afa7e2280f092131367f7da7ee9ed4dee07",
+    "samba-524288": "a6605c00972ab6dc843405bb68335f0694121d9d89bf705e92719dac1051e96b"
+  },
+  "sweeps": 3,
+  "iterations": 1,
+  "time_geomean": 0.273372820566942,
+  "sweep_geomeans": [
+    0.27171213740165673,
+    0.27409624044458736,
+    0.2766221666442723
+  ],
+  "all_sizes_non_regressive": true,
+  "total_baseline_bytes": 815453,
+  "total_candidate_bytes": 801878,
+  "rows": [
+    {
+      "case": "dickens",
+      "baseline_ns": 1088469857,
+      "candidate_ns": 247699053,
+      "time_ratio": 0.22756629538892229,
+      "baseline_bytes": 194125,
+      "candidate_bytes": 194125,
+      "size_delta": 0
+    },
+    {
+      "case": "mozilla",
+      "baseline_ns": 3902312088,
+      "candidate_ns": 1299733219,
+      "time_ratio": 0.3330674712042662,
+      "baseline_bytes": 378175,
+      "candidate_bytes": 376389,
+      "size_delta": -1786
+    },
+    {
+      "case": "samba",
+      "baseline_ns": 488646576,
+      "candidate_ns": 131710592,
+      "time_ratio": 0.2695416247017763,
+      "baseline_bytes": 243153,
+      "candidate_bytes": 231364,
+      "size_delta": -11789
+    }
+  ],
+  "raw": [
+    {
+      "sweep": 0,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272101306884553,
+      "process_end_ns": 1793272103476782229,
+      "elapsed_ns": 1088469857,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 0,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272103476823377,
+      "process_end_ns": 1793272103972983884,
+      "elapsed_ns": 246556760,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 0,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272103973024958,
+      "process_end_ns": 1793272106560295126,
+      "elapsed_ns": 1299733219,
+      "frame_bytes": 376389,
+      "zlib_bytes": 376389,
+      "mix": 376509
+    },
+    {
+      "sweep": 0,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272106560334503,
+      "process_end_ns": 1793272114399129743,
+      "elapsed_ns": 3935851060,
+      "frame_bytes": 378175,
+      "zlib_bytes": 378175,
+      "mix": 378295
+    },
+    {
+      "sweep": 0,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272114399172016,
+      "process_end_ns": 1793272115383790669,
+      "elapsed_ns": 491144920,
+      "frame_bytes": 243153,
+      "zlib_bytes": 243153,
+      "mix": 243273
+    },
+    {
+      "sweep": 0,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272115383831198,
+      "process_end_ns": 1793272115652288259,
+      "elapsed_ns": 131710592,
+      "frame_bytes": 231364,
+      "zlib_bytes": 231364,
+      "mix": 231484
+    },
+    {
+      "sweep": 1,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272115652328564,
+      "process_end_ns": 1793272116154381105,
+      "elapsed_ns": 247699053,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 1,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272116154420514,
+      "process_end_ns": 1793272118383744956,
+      "elapsed_ns": 1101070582,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 1,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272118383800527,
+      "process_end_ns": 1793272126126899058,
+      "elapsed_ns": 3865564124,
+      "frame_bytes": 378175,
+      "zlib_bytes": 378175,
+      "mix": 378295
+    },
+    {
+      "sweep": 1,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272126126938869,
+      "process_end_ns": 1793272128722813133,
+      "elapsed_ns": 1299896943,
+      "frame_bytes": 376389,
+      "zlib_bytes": 376389,
+      "mix": 376509
+    },
+    {
+      "sweep": 1,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272128722857816,
+      "process_end_ns": 1793272128990177205,
+      "elapsed_ns": 132166361,
+      "frame_bytes": 231364,
+      "zlib_bytes": 231364,
+      "mix": 231484
+    },
+    {
+      "sweep": 1,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272128990212249,
+      "process_end_ns": 1793272129970655494,
+      "elapsed_ns": 485530955,
+      "frame_bytes": 243153,
+      "zlib_bytes": 243153,
+      "mix": 243273
+    },
+    {
+      "sweep": 2,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272129970697253,
+      "process_end_ns": 1793272132137880491,
+      "elapsed_ns": 1079640696,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 2,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/dickens-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272132137920232,
+      "process_end_ns": 1793272132656859376,
+      "elapsed_ns": 256899434,
+      "frame_bytes": 194125,
+      "zlib_bytes": 194125,
+      "mix": 194245
+    },
+    {
+      "sweep": 2,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272132656898487,
+      "process_end_ns": 1793272135266233585,
+      "elapsed_ns": 1296549857,
+      "frame_bytes": 376389,
+      "zlib_bytes": 376389,
+      "mix": 376509
+    },
+    {
+      "sweep": 2,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/mozilla-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272135266274059,
+      "process_end_ns": 1793272143068295028,
+      "elapsed_ns": 3902312088,
+      "frame_bytes": 378175,
+      "zlib_bytes": 378175,
+      "mix": 378295
+    },
+    {
+      "sweep": 2,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-baseline",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272143068340058,
+      "process_end_ns": 1793272144053201136,
+      "elapsed_ns": 488646576,
+      "frame_bytes": 243153,
+      "zlib_bytes": 243153,
+      "mix": 243273
+    },
+    {
+      "sweep": 2,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-adaptive-score-20261029.EjCbL2/final-v2-root/bench-final",
+        "/tmp/vort-deflate-adaptive-score-inputs-20261029/samba-524288",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793272144053241407,
+      "process_end_ns": 1793272144321175354,
+      "elapsed_ns": 130829196,
+      "frame_bytes": 231364,
+      "zlib_bytes": 231364,
+      "mix": 231484
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+Self-contained source/build setup used for replay:
+
+  REPO=/home/passchaos/project-z/vort
+  EVIDENCE=$REPO/docs/performance/data/deflate-adaptive-split-horizon-20261029
+  EPOCH=/tmp/vort-deflate-adaptive-score-replay
+  BASELINE_ROOT=$EPOCH/baseline-src
+  CANDIDATE_ROOT=$EPOCH/candidate-src
+  VAIL=/home/passchaos/project-z/vail/archive_crypto/src/root.zig
+  mkdir -p "$BASELINE_ROOT" "$CANDIDATE_ROOT" "$EPOCH/inputs"
+  git -C "$REPO" archive f560b1564724d52e7d151564226bfaac2275aa04 | tar -x -C "$BASELINE_ROOT"
+  git -C "$REPO" archive f560b1564724d52e7d151564226bfaac2275aa04 | tar -x -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/source-overlay.tar.xz" -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/inputs.tar.xz" -C "$EPOCH/inputs"
+
+Rebuild both linked objects from the frozen baseline source:
+
+  zig build-obj "$BASELINE_ROOT/src/br/encoder/record_optimal_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/record-optimal.o"
+  zig build-obj "$BASELINE_ROOT/src/zstd_huffman_x2_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/zstd-huffman-x2.o"
+
+Build both benchmark executables without depending on the calling worktree or
+its build.zig:
+
+  for side in baseline final; do
+    if [ "$side" = baseline ]; then ROOT=$BASELINE_ROOT; else ROOT=$CANDIDATE_ROOT; fi
+    zig build-exe -O ReleaseFast --dep vort --dep benchmark_provenance \
+      -Mroot="$ROOT/tools/zlib_encode_bench.zig" \
+      "$EPOCH/record-optimal.o" "$EPOCH/zstd-huffman-x2.o" \
+      --dep vail_archive_crypto -Mvort="$ROOT/src/root.zig" \
+      -O ReleaseFast -Mbenchmark_provenance="$ROOT/tools/benchmark_provenance.zig" \
+      -O ReleaseFast -Mvail_archive_crypto="$VAIL" -lc \
+      -femit-bin="$EPOCH/bench-$side"
+  done
+
+Reproduce both ordinary campaigns:
+
+  python3 "$EVIDENCE/measure.py" \
+    "$EPOCH" "$EPOCH/inputs" "$EPOCH/replayed-192k.json" --suffix 196608 --sweeps 5
+  python3 "$EVIDENCE/measure.py" \
+    "$EPOCH" "$EPOCH/inputs" "$EPOCH/replayed-512k.json" --suffix 524288 --sweeps 3
+
+Build the candidate wire probe and regenerate wrapper/reference evidence:
+
+  zig build-exe -O ReleaseFast --dep vort -Mroot="$EVIDENCE/probe.zig" \
+    "$EPOCH/record-optimal.o" "$EPOCH/zstd-huffman-x2.o" \
+    --dep vail_archive_crypto -Mvort="$CANDIDATE_ROOT/src/root.zig" \
+    -O ReleaseFast -Mvail_archive_crypto="$VAIL" -lc \
+    -femit-bin="$EPOCH/probe-final"
+  python3 "$EVIDENCE/interop.py" "$EPOCH/probe-final" "$EPOCH/inputs" \
+    "$EPOCH/wires" "$EPOCH/interop.json" "$EPOCH/reference-sizes.json"
+  tar -C "$EPOCH/wires" -cJf "$EPOCH/wires.tar.xz" .
+
+Focused and compatibility validation:
+
+  zig test src/deflate.zig -ODebug --test-filter 'adaptive split'
+  zig test src/deflate.zig -OReleaseFast --test-filter 'adaptive split'
+  zig test src/deflate.zig -ODebug -target x86-linux --test-filter 'adaptive split'
+  zig test src/deflate.zig -ODebug --test-filter 'incremental adaptive'
+  zig build run-python-zlib-diff -j2 --summary all
+  zig build run-deflate-params-interop -j2 --summary all
+  taskset -c 2 zig build run-deflate-incremental-encode-gate -j2 --summary all
+
+Evidence audit, including source/checksum validation, raw timing reconstruction
+and fresh system-zlib decoding of archived wires:
+
+  python3 "$EVIDENCE/audit.py"

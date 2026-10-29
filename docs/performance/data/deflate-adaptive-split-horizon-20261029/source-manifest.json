@@ -1,0 +1,20 @@
+{
+  "baseline_commit": "f560b1564724d52e7d151564226bfaac2275aa04",
+  "files": [
+    {
+      "path": "src/deflate.zig",
+      "bytes": 1172967,
+      "sha256": "19332bcf2face1cca8b69670145b5267d0422cd72cdc84994eb2c5a052d831a3"
+    },
+    {
+      "path": "src/deflate/incremental/tests.zig",
+      "bytes": 64277,
+      "sha256": "27c325e40c19e4126b43782add9f5063e768e9919dc457bff0d44302c790f2b4"
+    },
+    {
+      "path": "src/deflate/tests/adaptive_split.zig",
+      "bytes": 6015,
+      "sha256": "678a46813e4a39dfe9d8a3be1538cce7dbb5055cccdc7bef995fe5073b380577"
+    }
+  ]
+}

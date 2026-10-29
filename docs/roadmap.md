@@ -24304,3 +24304,24 @@ reuse, so production keeps the simpler independently owned plans.
   0.952264; all three sweeps improve and every wire/settings identity matches.
   Vort/reference size is 0.995561 but encode time remains 35.69x. Continue
   reducing literal/context clustering work and closing the broader Brotli gap.
+
+- 2026-10-29: DEFLATE adaptive block search now compares complete two-block
+  costs over one fixed horizon instead of incomparable absolute prefix sizes.
+  The unsplit horizon is incumbent, checked pair arithmetic keeps the existing
+  conservative boundary charge, exact ties prefer the longer block, and a
+  64-grid-candidate cap bounds hostile tiny search steps. The incremental
+  chooser reuses the same local, history-free proxy; a fragmented raw/zlib/gzip
+  history fixture validates actual wrapper behavior without claiming general
+  incremental size optimality. New tests independently enumerate
+  the search grid, demonstrate the old shortest-prefix bias, keep uniform input
+  whole, cover overflow, all allocation failures and raw/zlib/gzip round trips.
+  [Adaptive split horizon evidence](performance/deflate-adaptive-split-horizon.md)
+  records a 12-file 192 KiB candidate/baseline time ratio of 0.287951 across
+  five consistently improving sweeps, with total zlib bytes `915572 -> 910041`
+  and no regressing case. Three 512 KiB representatives record 0.273373 and no
+  size regression. The archive retains all 36 wrapper wires and its audit
+  independently decodes them with system zlib. The 192 KiB candidate total is
+  910041 bytes versus zlib 1.2.11 level
+  6/9 totals of 912169/905780: a small level-6 lead remains a 4261-byte level-9
+  gap. Continue with cross-block history and dynamic-Huffman-aware optimal
+  refinement rather than adding more work to an inconsistent split objective.
