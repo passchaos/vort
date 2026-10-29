@@ -24428,6 +24428,18 @@ reuse, so production keeps the simpler independently owned plans.
   records 32 exact wire cases, a 36-case q8 ordinary ratio of `1.000995`, and
   q10/q11 source32k ratios `1.003165/1.004443`, all within pre-registered
   non-regression gates.
+
+- 2026-10-30: Four upstream-Brotli-inspired q10/q11 predecessor-reuse
+  prototypes were rejected after three-way HEAD/layout/reuse screening. Exact
+  wire/settings identity held throughout, but retaining compact workspace,
+  retaining only compact predecessors, using compact modeled scans and using
+  native-word predecessors measured combined reuse/HEAD ratios
+  `1.015739/1.005154/1.002269/1.010920`. The apparently strong `0.973923`
+  reuse/layout result for compact modeled scans only recovered most of that
+  layout's `1.029105` regression. All production and test code was removed.
+  [The screen](performance/brotli-prepared-optimal-screen.md) shows that Vort
+  must cache bounded match evidence itself, as upstream does, rather than only
+  retain a predecessor chain that both DP passes still rescan.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

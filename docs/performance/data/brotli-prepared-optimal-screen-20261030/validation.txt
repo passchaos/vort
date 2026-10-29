@@ -1,0 +1,25 @@
+Baseline and comparison
+- baseline source: clean 235779e4 archive
+- layout and reuse sources: independent clean archives plus explicit overlays
+- build mode: ReleaseFast
+- CPU affinity: logical CPU 2
+- matrix: q10/q11 x 16/32 KiB x Dickens/MR/NCI
+- process order: three rotating H/L/R sweeps
+- samples: fifteen timed rounds per side and case
+- input, settings and complete wire signatures: identical in every epoch
+
+Focused semantic validation before rollback
+- zig test src/lz77.zig -ODebug: 92/92 pass
+- prepared fixed/modeled tokens and PlanStats matched independent APIs
+- prepared allocation-failure cleanup passed
+- q10 entropy-feedback filtered gate: 27/27 pass
+- q10 64 KiB and q11 32 KiB ceiling gate: 25/25 pass
+- chunked/incremental quality-policy gate: 25/25 pass
+- one-shot and multi-meta-block counters observed one owner and two solves per
+  physical feedback block
+
+Decision and rollback
+- all four reuse variants failed the pre-registered ordinary performance gate
+- no memory or broad gate claim is made for a rejected prototype
+- src/br.zig, src/lz77.zig and incremental planner tests were restored exactly
+  to baseline before evidence documentation

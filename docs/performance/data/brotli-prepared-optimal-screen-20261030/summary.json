@@ -1,0 +1,35 @@
+{
+  "baseline_commit": "235779e4f3f9803944d14a7b9a39ce3e27ed7c6c",
+  "cases_per_epoch": 12,
+  "samples_per_side_per_case": 15,
+  "all_wires_settings_equal": true,
+  "retained_compact": {
+    "q10_reuse_head": 1.0208502130701742,
+    "q11_reuse_head": 1.0106541332294936,
+    "combined_layout_head": 1.0062813869870915,
+    "combined_reuse_head": 1.0157393795888692,
+    "combined_reuse_layout": 1.0093989541335906
+  },
+  "released_compact": {
+    "q10_reuse_head": 1.0090240004865,
+    "q11_reuse_head": 1.0012981388693896,
+    "combined_layout_head": 1.0014040861548688,
+    "combined_reuse_head": 1.0051536468429483,
+    "combined_reuse_layout": 1.0037443033635671
+  },
+  "modeled_compact": {
+    "q10_reuse_head": 1.002785313154405,
+    "q11_reuse_head": 1.0017519911096053,
+    "combined_layout_head": 1.029104569340261,
+    "combined_reuse_head": 1.0022685189648002,
+    "combined_reuse_layout": 0.973922912039284
+  },
+  "released_native": {
+    "q10_reuse_head": 1.0062380568504359,
+    "q11_reuse_head": 1.015624558750167,
+    "combined_layout_head": 0.9996620547312831,
+    "combined_reuse_head": 1.0109204135273704,
+    "combined_reuse_layout": 1.0112621647913942
+  },
+  "decision": "reject_all_production_variants"
+}
