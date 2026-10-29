@@ -1,0 +1,41 @@
+{
+  "baseline_commit": "c01ff4241ef4ae2555c9f858a1e99a64f621c822",
+  "candidate_scope": ["src/lz77.zig"],
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "cpu_affinity": 2,
+  "level9": {
+    "case_count": 36,
+    "time_geomean_ratio": 0.9829047931043696,
+    "time_worst_ratio": 1.0155860443524578,
+    "bucket_4096_ratio": 0.957335016,
+    "bucket_16384_ratio": 0.994602683,
+    "bucket_65536_control_ratio": 0.997288447,
+    "wire_size_mismatches": 0
+  },
+  "level8": {
+    "case_count": 36,
+    "time_geomean_ratio": 0.9799774959005371,
+    "time_worst_ratio": 1.0089981477595682,
+    "bucket_4096_ratio": 0.956292233,
+    "bucket_16384_ratio": 0.994453283,
+    "bucket_65536_control_ratio": 0.989631006,
+    "wire_size_mismatches": 0
+  },
+  "rejected_match_length_caches": {
+    "eight_slots_ratio": 1.0385269407408846,
+    "eight_slots_worst": 1.154883167451591,
+    "one_slot_ratio": 1.0362661804631335,
+    "one_slot_worst": 1.1570815921440496
+  },
+  "interop": {
+    "checks_per_side": 216,
+    "wire_sha_or_size_mismatches": 0,
+    "all_system_zlib_decoded": true,
+    "system_zlib_runtime_version": "1.2.11"
+  },
+  "rss_nci_16384_kib": {
+    "baseline_median": 3716,
+    "candidate_median": 3568,
+    "ratio": 0.9601722282023681
+  }
+}

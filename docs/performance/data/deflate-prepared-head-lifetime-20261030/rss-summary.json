@@ -1,0 +1,10 @@
+{
+  "case": "nci-16384",
+  "iterations_per_process": 3,
+  "process_samples_per_side": 5,
+  "baseline_max_rss_kib": [3712, 3720, 3712, 3716, 3720],
+  "candidate_max_rss_kib": [3564, 3564, 3568, 3568, 3572],
+  "baseline_median_kib": 3716,
+  "candidate_median_kib": 3568,
+  "candidate_over_baseline": 0.9601722282023681
+}

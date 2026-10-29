@@ -1,0 +1,25 @@
+Create independent baseline and candidate source trees from commit c01ff424.
+Extract source-overlay.tar.xz over the candidate tree, then build the named
+best, numeric-level, wire and heap probes with the direct ReleaseFast commands
+recorded in the preceding prepared-optimal epoch.
+
+Retained timing:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH" "$INPUTS" "$EPOCH/raw-best-ab.json" --iterations 7 --sweeps 5 --mode raw-best --cpu 2
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH/numeric-run" "$INPUTS" "$EPOCH/level8-raw-ab.json" --iterations 5 --sweeps 5 --mode 8 --extra raw --cpu 2
+
+The rejected cache screens used the same named-best harness with three timed
+encodes and three alternating sweeps.
+
+Compatibility and validation:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/interop.py "$BASELINE_INTEROP" "$INPUTS" "$EPOCH/interop-baseline.json"
+  python3 ../deflate-dynamic-optimal-refinement-20261029/interop.py "$CANDIDATE_INTEROP" "$INPUTS" "$EPOCH/interop-candidate.json"
+  zig test src/lz77.zig -ODebug --test-filter 'prepared optimal'
+  zig test src/lz77.zig -OReleaseFast --test-filter 'prepared optimal'
+  zig test src/deflate.zig -ODebug
+  zig test src/deflate.zig -OReleaseFast
+  zig test src/deflate.zig -ODebug -target x86-linux --test-filter 'dynamic optimal refinement'
+  zig build -j2 run-python-zlib-diff run-deflate-params-interop --summary all
+  taskset -c 2 zig build -j2 run-deflate-incremental-encode-gate --summary all
+  zig build -j2 check check-wasm --summary all

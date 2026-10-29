@@ -1,0 +1,15 @@
+{
+  "scope": "caller input excluded; returned raw wire included; cumulative requests and allocation counts unchanged",
+  "rows": [
+    {"case":"nci-16384","level":8,"side":"baseline","wire_bytes":1587,"allocations":14,"allocated_bytes":788634,"peak_bytes":729104},
+    {"case":"nci-16384","level":8,"side":"candidate","wire_bytes":1587,"allocations":14,"allocated_bytes":788634,"peak_bytes":532368},
+    {"case":"nci-16384","level":9,"side":"baseline","wire_bytes":1587,"allocations":14,"allocated_bytes":788625,"peak_bytes":729104},
+    {"case":"nci-16384","level":9,"side":"candidate","wire_bytes":1587,"allocations":14,"allocated_bytes":788625,"peak_bytes":532368},
+    {"case":"mr-4096","level":9,"side":"baseline","wire_bytes":1674,"allocations":14,"allocated_bytes":460149,"peak_bytes":400274},
+    {"case":"mr-4096","level":9,"side":"candidate","wire_bytes":1674,"allocations":14,"allocated_bytes":460149,"peak_bytes":221440},
+    {"case":"x-ray-16384","level":9,"side":"baseline","wire_bytes":11700,"allocations":14,"allocated_bytes":1186014,"peak_bytes":903494},
+    {"case":"x-ray-16384","level":9,"side":"candidate","wire_bytes":11700,"allocations":14,"allocated_bytes":1186014,"peak_bytes":706758},
+    {"case":"xml-65536","level":9,"side":"baseline","wire_bytes":5026,"allocations":15,"allocated_bytes":2868034,"peak_bytes":2009084},
+    {"case":"xml-65536","level":9,"side":"candidate","wire_bytes":5026,"allocations":15,"allocated_bytes":2868034,"peak_bytes":2009084}
+  ]
+}

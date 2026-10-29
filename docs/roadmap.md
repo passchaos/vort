@@ -24384,6 +24384,18 @@ reuse, so production keeps the simpler independently owned plans.
   removed. [The negative screen](performance/zstd-upstream-layout-screen.md)
   records why Vort needs a native shared match store or state-specific SoA
   redesign rather than a mechanical copy of upstream's node layout.
+
+- 2026-10-30: Prepared DEFLATE now releases its build-only 32K-entry hash head
+  before allocating the fixed/modeled DP arrays. Exact planner tokens and all
+  216 level/wrapper wires remain unchanged. The ordinary
+  [head-lifetime evidence](performance/deflate-prepared-head-lifetime.md)
+  records level-9/level-8 ratios `0.982905/0.979977`, with 4 KiB ratios
+  `0.957335/0.956292`; representative requested peak heap falls 21.8% to
+  44.7%, and median RSS falls 4.0%. A direct libdeflate-style match-store study
+  found 99 to 159 exact candidates per byte on dense 16 KiB inputs. Eight-slot
+  and one-slot match-length caches regressed ordinary time to `1.038527` and
+  `1.036266`, so all cache code was removed; a future frontier must reduce the
+  representation itself rather than memoize the existing chain.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

@@ -93,3 +93,8 @@ leadership, does not add more refinement rounds, and does not change
 dictionary, split, incremental or inputs above 65,535 bytes. Raw samples,
 wrapper hashes, memory measurements, source overlay and replay commands are in
 [`data/deflate-prepared-optimal-20261030/`](data/deflate-prepared-optimal-20261030/).
+
+The subsequent
+[`prepared-index lifetime screen`](deflate-prepared-head-lifetime.md) releases
+the build-only hash head before allocating DP state, further reducing peak
+memory and improving the ordinary 4 KiB path without changing any wire.
