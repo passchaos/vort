@@ -49,6 +49,8 @@ fn exactSelection(comptime C: type) !void {
     defer std.testing.allocator.free(preferred.encoded);
     const split = try C.chooseSplit(std.testing.allocator, commands);
     defer split.deinit(std.testing.allocator);
+    var shared = try C.prepareShared(std.testing.allocator, commands, &split);
+    defer C.deinitShared(std.testing.allocator, &shared);
 
     const Choice = struct { context: ?contexts.Candidate, bytes: usize };
     var choices: [5]Choice = undefined;
@@ -75,6 +77,21 @@ fn exactSelection(comptime C: type) !void {
         const counted = try C.prepare(std.testing.allocator, payload, commands, &counted_stats, choice.context, &split, &state);
         try std.testing.expectEqual(choice.bytes, counted.bytes);
         try std.testing.expectEqual(choice.bytes, state.wire_len);
+        var shared_stats = initial_stats;
+        var shared_state: prepared_literal.State = undefined;
+        const shared_counted = try C.countShared(
+            std.testing.allocator,
+            payload,
+            commands,
+            &shared_stats,
+            choice.context,
+            &split,
+            &shared,
+            &shared_state,
+        );
+        try std.testing.expectEqual(choice.bytes, shared_counted.bytes);
+        try std.testing.expectEqual(choice.bytes, shared_state.wire_len);
+        try std.testing.expectEqualDeep(counted_stats, shared_stats);
         if (choice.bytes < choices[best_index].bytes) best_index = index;
         if (choice.bytes > choices[worst_index].bytes) worst_index = index;
     }
@@ -91,9 +108,22 @@ fn exactSelection(comptime C: type) !void {
     const old = try C.select(std.testing.allocator, payload, commands, &old_stats, preferred, &split);
     defer std.testing.allocator.free(old);
     C.disable(false);
+    C.resetSharedCounters();
     var new_stats = initial_stats;
     const new = try C.select(std.testing.allocator, payload, commands, &new_stats, preferred, &split);
     defer std.testing.allocator.free(new);
+    const counters = C.sharedCounters();
+    try std.testing.expectEqual(@as(usize, 1), counters.group.prepares);
+    try std.testing.expectEqual(
+        @as(usize, 1) + preferred.alternate_literal_context_count + @intFromBool(preferred.alternate_plain_literals),
+        counters.group.literal_counts,
+    );
+    try std.testing.expectEqual(@as(usize, 1), counters.group.physical_emits);
+    try std.testing.expectEqual(@as(usize, 1), counters.common.command_scans);
+    try std.testing.expectEqual(@as(usize, 1), counters.common.distance_histogram_passes);
+    try std.testing.expectEqual(@as(usize, 1), counters.common.distance_tree_build_passes);
+    try std.testing.expectEqual(@as(usize, split.type_count), counters.common.distance_trees_built);
+    try std.testing.expectEqual(@as(usize, 1), counters.common.split_code_builds);
     try std.testing.expectEqualSlices(u8, old, new);
     try std.testing.expectEqualDeep(old_stats, new_stats);
     const decoded = try C.decode(std.testing.allocator, new, payload.len);
@@ -106,14 +136,61 @@ fn exactSelection(comptime C: type) !void {
     defer std.testing.allocator.free(traced);
     try std.testing.expectEqualSlices(u8, old, traced);
     var evaluations: usize = 0;
+    var physical_wires: usize = 0;
     var linked: usize = 0;
     for (profile.recordedEvents()) |event| {
         if (!event.config.adaptive_distance_split) continue;
+        try std.testing.expectEqual(@as(usize, split.type_count), event.config.distance_type_count);
         evaluations += @intFromBool(event.stage == .evaluate and event.evaluated_wire_bytes != null);
-        linked += @intFromBool(event.stage == .wire and event.evaluation_event_id != null);
+        physical_wires += @intFromBool(event.stage == .wire and event.wire_bytes != null);
+        if (event.stage == .wire and event.evaluation_event_id != null) {
+            linked += 1;
+            try std.testing.expectEqual(event.wire_bytes, event.evaluated_wire_bytes);
+        }
     }
-    try std.testing.expect(evaluations != 0);
+    const expected_evaluations: usize = 1 + preferred.alternate_literal_context_count +
+        @intFromBool(preferred.alternate_plain_literals);
+    try std.testing.expectEqual(expected_evaluations, evaluations);
+    try std.testing.expectEqual(expected_evaluations, profile.evaluation_attempts);
+    try std.testing.expectEqual(@as(usize, 1), physical_wires);
     try std.testing.expectEqual(@as(usize, 1), linked);
+
+    var primary_preferred = C.preferred(preferred.encoded, choices[best_index].context, &.{}, false);
+    if (choices[worst_index].context) |candidate| {
+        primary_preferred.alternate_literal_context_candidates[0] = candidate;
+        primary_preferred.alternate_literal_context_count = 1;
+    } else primary_preferred.alternate_plain_literals = true;
+    var primary_profile: quality_profile.Profile = .{};
+    var primary_stats = initial_stats;
+    C.resetSharedCounters();
+    const primary_selected = try C.selectTraced(
+        std.testing.allocator,
+        payload,
+        commands,
+        &primary_stats,
+        primary_preferred,
+        &split,
+        &primary_profile,
+    );
+    defer std.testing.allocator.free(primary_selected);
+    try std.testing.expectEqualSlices(u8, old, primary_selected);
+    try std.testing.expectEqualDeep(old_stats, primary_stats);
+    var primary_evaluations: usize = 0;
+    var primary_wires: usize = 0;
+    var primary_links: usize = 0;
+    for (primary_profile.recordedEvents()) |event| {
+        if (!event.config.adaptive_distance_split) continue;
+        primary_evaluations += @intFromBool(event.stage == .evaluate and event.evaluated_wire_bytes != null);
+        primary_wires += @intFromBool(event.stage == .wire and event.wire_bytes != null);
+        primary_links += @intFromBool(event.stage == .wire and event.evaluation_event_id != null);
+    }
+    try std.testing.expectEqual(@as(usize, 2), primary_evaluations);
+    try std.testing.expectEqual(@as(usize, 2), primary_profile.evaluation_attempts);
+    try std.testing.expectEqual(@as(usize, 1), primary_wires);
+    try std.testing.expectEqual(@as(usize, 1), primary_links);
+    const primary_shared = C.sharedCounters();
+    try std.testing.expectEqual(@as(usize, 1), primary_shared.group.prepares);
+    try std.testing.expectEqual(@as(usize, 1), primary_shared.group.physical_emits);
 
     var measured = std.testing.FailingAllocator.init(std.testing.allocator, .{});
     var measured_stats = initial_stats;
@@ -149,7 +226,11 @@ fn allocationFailures(comptime C: type) !void {
             defer allocator.free(baseline);
             const alternate = contexts.Candidate.suffix(literal_context.mode_lsb6, 40, 0);
             const preferred = C.preferred(baseline, primary, &.{alternate}, true);
-            const encoded = try C.select(allocator, input, command_stream, &stats, preferred, plan);
+            const before = stats;
+            const encoded = C.select(allocator, input, command_stream, &stats, preferred, plan) catch |err| {
+                try std.testing.expectEqualDeep(before, stats);
+                return err;
+            };
             allocator.free(encoded);
         }
     };

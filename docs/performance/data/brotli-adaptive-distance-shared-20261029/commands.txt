@@ -1,0 +1,22 @@
+Baseline source:
+  mkdir baseline-src
+  git archive 47ff561de713158b7522059e38c88502a958189b | tar -x -C baseline-src
+
+Shared record object:
+  zig build-obj baseline-src/src/br/encoder/record_optimal_object.zig -O ReleaseFast -femit-bin=record.o
+
+Benchmark executable, with ROOT set to baseline-src or the candidate checkout:
+  zig build-exe record.o -lc -O ReleaseFast --dep vort_br --dep benchmark_provenance -Mroot=ROOT/tools/br/planned_encode_bench.zig -O ReleaseFast -Mvort_br=ROOT/src/br.zig -O ReleaseFast -Mbenchmark_provenance=ROOT/tools/benchmark_provenance.zig -femit-bin=bench-SIDE
+
+Profile executable, with ROOT set to baseline-src or the candidate checkout:
+  zig build-exe record.o -lc -O ReleaseFast --dep vort_br --dep benchmark_provenance -Mroot=ROOT/tools/br/quality_stage_profile.zig -O ReleaseFast -Mvort_br=ROOT/src/br.zig -O ReleaseFast -Mbenchmark_provenance=ROOT/tools/benchmark_provenance.zig -femit-bin=profile-SIDE
+
+One ordinary case; the campaign alternates SIDE per adjacent case and repeats three sweeps:
+  taskset -c 2 bench-SIDE --quality 8 --planned-quality=8 --planned-mode=generic --reference-lgwin=16 --reference-mode=generic --iterations 3 --limit LIMIT --samples-json RUN.json --csv RUN.csv --libbrotli-encoder libbrotlienc.so.1.2.0 --libbrotli-decoder libbrotlidec.so.1.2.0 --libbrotli-common libbrotlicommon.so.1.2.0 --path INPUT
+
+Profile:
+  taskset -c 2 profile-SIDE --rounds 1 --path mozilla-65536 --path dickens-65536 --path mr-65536 --json PROFILE.json
+  python3 tools/br/quality_profile_gate.py --json PROFILE.json --executable profile-SIDE --output PROFILE-GATE.json
+
+Audit:
+  python3 docs/performance/data/brotli-adaptive-distance-shared-20261029/audit.py docs/performance/data/brotli-adaptive-distance-shared-20261029/final-ab.tar.xz

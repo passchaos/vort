@@ -24288,3 +24288,19 @@ reuse, so production keeps the simpler independently owned plans.
   No compression-ratio, idle-host, RSS or full industry-best result is inferred.
   Continue primitive/tiny cost, real-corpus frontier comparisons and all ten
   formats toward the complete functionality/performance objective.
+
+- 2026-10-29: q8 adaptive-distance literal candidates now share one owned
+  command/distance preparation. Command symbols, explicit distances, command
+  and per-type distance trees, encoders, split code, context map and shared
+  payload cost are built once; every primary/alternate literal candidate is
+  counted exactly and the strict winner is emitted once. The narrow 79-symbol
+  support contract, command/distance resource caps and single-owner cleanup are
+  explicit. Tests compare every shared count with old physical and counted
+  oracles, force primary and alternate winners, verify one scan/tree build,
+  exact trace links, key mismatches and all allocation failures. Executed Wasm
+  keeps its complete wire and passes native Brotli decoding. [Shared-preparation
+  evidence](performance/brotli-adaptive-distance-shared-preparation.md) records
+  a final 36-case candidate/baseline ratio of 0.983721 and 64 KiB ratio of
+  0.952264; all three sweeps improve and every wire/settings identity matches.
+  Vort/reference size is 0.995561 but encode time remains 35.69x. Continue
+  reducing literal/context clustering work and closing the broader Brotli gap.

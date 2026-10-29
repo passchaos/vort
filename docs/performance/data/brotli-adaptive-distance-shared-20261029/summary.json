@@ -1,0 +1,353 @@
+{
+  "cases": 36,
+  "all_wires_settings_equal": true,
+  "all_parameters_match": true,
+  "geometric_ratio": 0.9837206862695904,
+  "buckets": {
+    "4096": {
+      "geomean": 0.9995272168470044,
+      "maximum": 1.0047728102544924
+    },
+    "16384": {
+      "geomean": 1.00014569996235,
+      "maximum": 1.0091875480599672
+    },
+    "65536": {
+      "geomean": 0.952264327946822,
+      "maximum": 1.0020152132365867
+    }
+  },
+  "sweep_geomeans": [
+    0.9819212445977885,
+    0.9832788922101053,
+    0.9835295660771854
+  ],
+  "reference_time_ratio": 35.68743252414652,
+  "size_ratio": 0.9955608655648552,
+  "rows": [
+    {
+      "case": "dickens-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 13651010.0,
+      "candidate_ns": 13687867.0,
+      "ratio": 1.0026999467438673,
+      "candidate_over_reference_time": 24.952330401620728,
+      "size_ratio": 0.9978153218759103
+    },
+    {
+      "case": "dickens-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 6454810.0,
+      "candidate_ns": 6429623.666666667,
+      "ratio": 0.9960980519436927,
+      "candidate_over_reference_time": 49.884710178473064,
+      "size_ratio": 1.0401903754627182
+    },
+    {
+      "case": "dickens-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 44828349.333333336,
+      "candidate_ns": 41621254.0,
+      "ratio": 0.9284583219987399,
+      "candidate_over_reference_time": 15.916763418704578,
+      "size_ratio": 0.9824359229088019
+    },
+    {
+      "case": "mozilla-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 17072629.0,
+      "candidate_ns": 17071402.0,
+      "ratio": 0.999928130576726,
+      "candidate_over_reference_time": 33.3179406376534,
+      "size_ratio": 1.0503394989463826
+    },
+    {
+      "case": "mozilla-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 9201059.333333334,
+      "candidate_ns": 9149875.0,
+      "ratio": 0.9944371260439648,
+      "candidate_over_reference_time": 68.20562101507252,
+      "size_ratio": 1.058008658008658
+    },
+    {
+      "case": "mozilla-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 41276052.0,
+      "candidate_ns": 39256625.0,
+      "ratio": 0.9510750931314845,
+      "candidate_over_reference_time": 26.58456188586482,
+      "size_ratio": 1.0422287390029326
+    },
+    {
+      "case": "mr-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 16987776.666666668,
+      "candidate_ns": 17010299.333333332,
+      "ratio": 1.0013258160328218,
+      "candidate_over_reference_time": 32.81360489977012,
+      "size_ratio": 0.9918229918229918
+    },
+    {
+      "case": "mr-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 9533954.666666666,
+      "candidate_ns": 9508647.666666666,
+      "ratio": 0.997345592580959,
+      "candidate_over_reference_time": 73.08478836216062,
+      "size_ratio": 1.0248138957816377
+    },
+    {
+      "case": "mr-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 55064335.0,
+      "candidate_ns": 52147384.333333336,
+      "ratio": 0.9470264978834909,
+      "candidate_over_reference_time": 18.260017601462277,
+      "size_ratio": 1.009125277017338
+    },
+    {
+      "case": "nci-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 7889224.333333333,
+      "candidate_ns": 7888681.0,
+      "ratio": 0.9999311296890067,
+      "candidate_over_reference_time": 39.00171062714755,
+      "size_ratio": 1.0457650273224044
+    },
+    {
+      "case": "nci-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 4227364.0,
+      "candidate_ns": 4220664.666666667,
+      "ratio": 0.998415245686595,
+      "candidate_over_reference_time": 33.01340404285331,
+      "size_ratio": 1.0172084130019121
+    },
+    {
+      "case": "nci-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 25463286.0,
+      "candidate_ns": 25364063.0,
+      "ratio": 0.9961032916175862,
+      "candidate_over_reference_time": 34.566100484565624,
+      "size_ratio": 1.0530103142240346
+    },
+    {
+      "case": "ooffice-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 21511911.333333332,
+      "candidate_ns": 21403051.0,
+      "ratio": 0.9949395322597555,
+      "candidate_over_reference_time": 46.42767750812911,
+      "size_ratio": 1.0047153923880094
+    },
+    {
+      "case": "ooffice-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 6709816.0,
+      "candidate_ns": 6694741.333333333,
+      "ratio": 0.9977533412739386,
+      "candidate_over_reference_time": 66.77690962409315,
+      "size_ratio": 1.049095607235142
+    },
+    {
+      "case": "ooffice-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 55379380.0,
+      "candidate_ns": 51941782.333333336,
+      "ratio": 0.9379263966720707,
+      "candidate_over_reference_time": 25.9851786840798,
+      "size_ratio": 0.9883237364043506
+    },
+    {
+      "case": "osdb-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 22076204.0,
+      "candidate_ns": 22187048.666666668,
+      "ratio": 1.0050210021010255,
+      "candidate_over_reference_time": 52.26089325645085,
+      "size_ratio": 0.9639910813823858
+    },
+    {
+      "case": "osdb-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 15035789.666666666,
+      "candidate_ns": 15106605.0,
+      "ratio": 1.004709784780398,
+      "candidate_over_reference_time": 112.80713435852503,
+      "size_ratio": 0.9846046186144157
+    },
+    {
+      "case": "osdb-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 43867718.333333336,
+      "candidate_ns": 41678224.666666664,
+      "ratio": 0.9500887269761883,
+      "candidate_over_reference_time": 26.440378783441236,
+      "size_ratio": 0.9783596045952444
+    },
+    {
+      "case": "reymont-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 10068664.333333334,
+      "candidate_ns": 10090427.333333334,
+      "ratio": 1.0021614584893799,
+      "candidate_over_reference_time": 22.146601807501725,
+      "size_ratio": 0.9540657976412167
+    },
+    {
+      "case": "reymont-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 5229923.333333333,
+      "candidate_ns": 5234713.0,
+      "ratio": 1.0009158196710342,
+      "candidate_over_reference_time": 58.82669428669894,
+      "size_ratio": 0.9957716701902748
+    },
+    {
+      "case": "reymont-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 43349818.333333336,
+      "candidate_ns": 40273407.666666664,
+      "ratio": 0.9290329052128667,
+      "candidate_over_reference_time": 13.393571740391776,
+      "size_ratio": 0.9577125328659071
+    },
+    {
+      "case": "samba-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 11525814.666666666,
+      "candidate_ns": 11507878.0,
+      "ratio": 0.9984437831784212,
+      "candidate_over_reference_time": 23.371042589444738,
+      "size_ratio": 1.0059964726631394
+    },
+    {
+      "case": "samba-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 5955417.333333333,
+      "candidate_ns": 5930209.666666667,
+      "ratio": 0.9957672711657712,
+      "candidate_over_reference_time": 53.95972423582508,
+      "size_ratio": 1.0186851211072665
+    },
+    {
+      "case": "samba-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 39260911.666666664,
+      "candidate_ns": 36545102.0,
+      "ratio": 0.9308266275188805,
+      "candidate_over_reference_time": 18.386051158141065,
+      "size_ratio": 0.9848293299620733
+    },
+    {
+      "case": "sao-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 27147871.0,
+      "candidate_ns": 27057470.333333332,
+      "ratio": 0.9966700642320472,
+      "candidate_over_reference_time": 46.277769542754776,
+      "size_ratio": 0.9620114357327485
+    },
+    {
+      "case": "sao-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 16074177.666666666,
+      "candidate_ns": 16150896.666666666,
+      "ratio": 1.0047728102544924,
+      "candidate_over_reference_time": 127.44905608762326,
+      "size_ratio": 0.9658923845927668
+    },
+    {
+      "case": "sao-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 53712299.333333336,
+      "candidate_ns": 50842661.0,
+      "ratio": 0.9465739063687325,
+      "candidate_over_reference_time": 16.537429099971614,
+      "size_ratio": 0.9685397867104184
+    },
+    {
+      "case": "webster-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 13836880.0,
+      "candidate_ns": 13964007.0,
+      "ratio": 1.0091875480599672,
+      "candidate_over_reference_time": 26.517528956453592,
+      "size_ratio": 1.0023477622890682
+    },
+    {
+      "case": "webster-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 6129617.0,
+      "candidate_ns": 6150045.666666667,
+      "ratio": 1.0033327802808343,
+      "candidate_over_reference_time": 48.8218979801909,
+      "size_ratio": 1.0575657894736843
+    },
+    {
+      "case": "webster-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 38888884.333333336,
+      "candidate_ns": 37585846.0,
+      "ratio": 0.966493296074929,
+      "candidate_over_reference_time": 16.297411710428733,
+      "size_ratio": 0.9817480136208854
+    },
+    {
+      "case": "x-ray-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 17797163.333333332,
+      "candidate_ns": 17669969.333333332,
+      "ratio": 0.9928531307142767,
+      "candidate_over_reference_time": 38.39686682181896,
+      "size_ratio": 0.8924024640657084
+    },
+    {
+      "case": "x-ray-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 10120745.333333334,
+      "candidate_ns": 10097047.666666666,
+      "ratio": 0.9976585057833025,
+      "candidate_over_reference_time": 71.38211437674384,
+      "size_ratio": 0.9455967358041483
+    },
+    {
+      "case": "x-ray-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 46666600.666666664,
+      "candidate_ns": 44095281.666666664,
+      "ratio": 0.9449002292160384,
+      "candidate_over_reference_time": 22.20977962787671,
+      "size_ratio": 0.8948318948318948
+    },
+    {
+      "case": "xml-16384",
+      "input_bytes": 16384,
+      "baseline_ns": 8420553.666666666,
+      "candidate_ns": 8409558.333333334,
+      "ratio": 0.9986942267968841,
+      "candidate_over_reference_time": 44.743037685086826,
+      "size_ratio": 0.9893491124260355
+    },
+    {
+      "case": "xml-4096",
+      "input_bytes": 4096,
+      "baseline_ns": 5726540.0,
+      "candidate_ns": 5744834.0,
+      "ratio": 1.0031945991820541,
+      "candidate_over_reference_time": 44.19443034079545,
+      "size_ratio": 1.0012453300124533
+    },
+    {
+      "case": "xml-65536",
+      "input_bytes": 65536,
+      "baseline_ns": 24188672.666666668,
+      "candidate_ns": 24237418.0,
+      "ratio": 1.0020152132365867,
+      "candidate_over_reference_time": 26.472393982641112,
+      "size_ratio": 1.0089724417859431
+    }
+  ]
+}
