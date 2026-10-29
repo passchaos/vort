@@ -1008,14 +1008,28 @@ const DeflateDynamicOptimalStrategy = struct {
     }
 };
 
-noinline fn planDynamicRefinedOptimalProposalAlloc(
+const RefinedOptimalPlans = struct {
+    seed: lz77.GreedyPlan,
+    candidate: ?lz77.GreedyPlan = null,
+
+    fn deinit(self: *RefinedOptimalPlans, allocator: std.mem.Allocator) void {
+        if (self.candidate) |candidate| candidate.deinit(allocator);
+        self.seed.deinit(allocator);
+        self.* = undefined;
+    }
+};
+
+noinline fn planDynamicRefinedOptimalPairAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: CompressionOptions,
-    seed: *const lz77.GreedyPlan,
-) !?lz77.GreedyPlan {
+) !RefinedOptimalPlans {
     std.debug.assert(useDynamicCostRefinement(input.len, options));
-    if (seed.stats.matches == 0) return null;
+    var prepared = try lz77.PreparedOptimal.init(allocator, input, options.lz77_options);
+    defer prepared.deinit(allocator);
+    var seed = try prepared.planFixedAlloc(allocator);
+    errdefer seed.deinit(allocator);
+    if (seed.stats.matches == 0) return .{ .seed = seed };
 
     const seed_coding = try DynamicCodingPlan.init(seed.tokens);
     var model = try dynamic_optimal.Model.init(
@@ -1027,19 +1041,14 @@ noinline fn planDynamicRefinedOptimalProposalAlloc(
     );
     defer model.deinit(allocator);
     const seed_cost = try dynamic_optimal.tokenCost(&model, seed.tokens);
-    const candidate = try lz77.optimalPlanAllocWithCostModel(
-        allocator,
-        input,
-        options.lz77_options,
-        model.lz77Model(),
-    );
+    const candidate = try prepared.planModeledAlloc(allocator, model.lz77Model());
     errdefer candidate.deinit(allocator);
     const candidate_cost = try dynamic_optimal.tokenCost(&model, candidate.tokens);
     if (candidate_cost > seed_cost or tokenSlicesEqual(candidate.tokens, seed.tokens)) {
         candidate.deinit(allocator);
-        return null;
+        return .{ .seed = seed };
     }
-    return candidate;
+    return .{ .seed = seed, .candidate = candidate };
 }
 
 fn tokenSlicesEqual(a: []const lz77.Token, b: []const lz77.Token) bool {
@@ -1192,20 +1201,36 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeRawBestWithStatsAlloc, .{ allocator, input, options });
     }
+    if (useDynamicCostRefinement(input.len, options))
+        return @call(.never_inline, encodeRawBestRefinedAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    var encoded = try encodeRawBestTokensAlloc(allocator, input, plan.tokens, options);
+    const encoded = try encodeRawBestTokensAlloc(allocator, input, plan.tokens, options);
     errdefer allocator.free(encoded);
-    if (useDynamicCostRefinement(input.len, options)) {
-        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
-            defer candidate.deinit(allocator);
-            const candidate_encoded = try encodeRawBestTokensAlloc(allocator, input, candidate.tokens, options);
-            if (candidate_encoded.len < encoded.len) {
-                allocator.free(encoded);
-                encoded = candidate_encoded;
-            } else {
-                allocator.free(candidate_encoded);
-            }
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
+        const fallback = try encodeRawBestAlloc(allocator, input, fallback_options);
+        errdefer allocator.free(fallback);
+        if (fallback.len < encoded.len) {
+            allocator.free(encoded);
+            return fallback;
+        }
+        allocator.free(fallback);
+    }
+    return encoded;
+}
+
+noinline fn encodeRawBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) (Error || std.mem.Allocator.Error)![]u8 {
+    var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
+    defer plans.deinit(allocator);
+    var encoded = try encodeRawBestTokensAlloc(allocator, input, plans.seed.tokens, options);
+    errdefer allocator.free(encoded);
+    if (plans.candidate) |candidate| {
+        const candidate_encoded = try encodeRawBestTokensAlloc(allocator, input, candidate.tokens, options);
+        if (candidate_encoded.len < encoded.len) {
+            allocator.free(encoded);
+            encoded = candidate_encoded;
+        } else {
+            allocator.free(candidate_encoded);
         }
     }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
@@ -7871,20 +7896,36 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeZlibBestWithStatsAlloc, .{ allocator, input, options });
     }
+    if (useDynamicCostRefinement(input.len, options))
+        return @call(.never_inline, encodeZlibBestRefinedAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    var encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
+    const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
     errdefer allocator.free(encoded);
-    if (useDynamicCostRefinement(input.len, options)) {
-        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
-            defer candidate.deinit(allocator);
-            const candidate_encoded = try encodeZlibBestTokensAlloc(allocator, input, null, candidate.tokens, options);
-            if (candidate_encoded.len < encoded.len) {
-                allocator.free(encoded);
-                encoded = candidate_encoded;
-            } else {
-                allocator.free(candidate_encoded);
-            }
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
+        const fallback = try encodeZlibBestAlloc(allocator, input, fallback_options);
+        errdefer allocator.free(fallback);
+        if (fallback.len < encoded.len) {
+            allocator.free(encoded);
+            return fallback;
+        }
+        allocator.free(fallback);
+    }
+    return encoded;
+}
+
+noinline fn encodeZlibBestRefinedAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) (Error || std.mem.Allocator.Error)![]u8 {
+    var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
+    defer plans.deinit(allocator);
+    var encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plans.seed.tokens, options);
+    errdefer allocator.free(encoded);
+    if (plans.candidate) |candidate| {
+        const candidate_encoded = try encodeZlibBestTokensAlloc(allocator, input, null, candidate.tokens, options);
+        if (candidate_encoded.len < encoded.len) {
+            allocator.free(encoded);
+            encoded = candidate_encoded;
+        } else {
+            allocator.free(candidate_encoded);
         }
     }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
@@ -16685,20 +16726,36 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
         return @call(.never_inline, encodeGzipBestWithStatsAlloc, .{ allocator, input, options, header_options });
     }
+    if (useDynamicCostRefinement(input.len, options))
+        return @call(.never_inline, encodeGzipBestRefinedWithHeaderAlloc, .{ allocator, input, options, header_options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    var encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
+    const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
     errdefer allocator.free(encoded);
-    if (useDynamicCostRefinement(input.len, options)) {
-        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
-            defer candidate.deinit(allocator);
-            const candidate_encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, candidate.tokens, options, header_options);
-            if (candidate_encoded.len < encoded.len) {
-                allocator.free(encoded);
-                encoded = candidate_encoded;
-            } else {
-                allocator.free(candidate_encoded);
-            }
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
+        const fallback = try encodeGzipBestWithHeaderAlloc(allocator, input, fallback_options, header_options);
+        errdefer allocator.free(fallback);
+        if (fallback.len < encoded.len) {
+            allocator.free(encoded);
+            return fallback;
+        }
+        allocator.free(fallback);
+    }
+    return encoded;
+}
+
+noinline fn encodeGzipBestRefinedWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) (Error || std.mem.Allocator.Error)![]u8 {
+    var plans = try planDynamicRefinedOptimalPairAlloc(allocator, input, options);
+    defer plans.deinit(allocator);
+    var encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plans.seed.tokens, options, header_options);
+    errdefer allocator.free(encoded);
+    if (plans.candidate) |candidate| {
+        const candidate_encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, candidate.tokens, options, header_options);
+        if (candidate_encoded.len < encoded.len) {
+            allocator.free(encoded);
+            encoded = candidate_encoded;
+        } else {
+            allocator.free(candidate_encoded);
         }
     }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {

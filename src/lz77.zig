@@ -421,6 +421,90 @@ fn buildOptimalCompactHashIndex(
     }
 }
 
+/// Borrowed one-input optimal workspace. Match predecessor discovery is
+/// independent of the edge cost model, so fixed and modeled solves share one
+/// compact index while fully recomputing DP costs, choices and tokens.
+pub const PreparedOptimal = struct {
+    input: []const u8,
+    options: GreedyOptions,
+    scratch: OptimalScratch = .{},
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        options: GreedyOptions,
+    ) !PreparedOptimal {
+        var result: PreparedOptimal = .{ .input = input, .options = options };
+        errdefer result.deinit(allocator);
+        try validateOptimalInputLength(input.len);
+        try result.scratch.costs.resize(allocator, input.len + 1);
+        try result.scratch.steps.resize(allocator, input.len);
+        try buildOptimalCompactHashIndex(
+            allocator,
+            input,
+            &result.scratch.compact_head,
+            &result.scratch.compact_prev,
+            &result.scratch.index.head_initialized,
+        );
+        return result;
+    }
+
+    pub fn deinit(self: *PreparedOptimal, allocator: std.mem.Allocator) void {
+        self.scratch.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn planFixedAlloc(self: *PreparedOptimal, allocator: std.mem.Allocator) !GreedyPlan {
+        self.scratch.tokens.clearRetainingCapacity();
+        const stats = try optimalPlanReuseWithIndex(
+            &self.scratch,
+            allocator,
+            self.input,
+            self.options,
+            self.scratch.compact_prev.items,
+            optimal_compact_index_empty,
+            true,
+            false,
+            false,
+            undefined,
+            undefined,
+            undefined,
+        );
+        return .{ .tokens = try allocator.dupe(Token, self.scratch.tokens.items), .stats = stats };
+    }
+
+    pub fn planModeledAlloc(
+        self: *PreparedOptimal,
+        allocator: std.mem.Allocator,
+        model: OptimalCostModel,
+    ) !GreedyPlan {
+        try model.validate(self.options.window_len, self.input.len);
+        self.scratch.tokens.clearRetainingCapacity();
+        const stats = try optimalPlanReuseWithIndex(
+            &self.scratch,
+            allocator,
+            self.input,
+            self.options,
+            self.scratch.compact_prev.items,
+            optimal_compact_index_empty,
+            false,
+            false,
+            true,
+            undefined,
+            undefined,
+            model,
+        );
+        return .{ .tokens = try allocator.dupe(Token, self.scratch.tokens.items), .stats = stats };
+    }
+};
+
+fn validateOptimalInputLength(len: usize) error{InvalidBlockPlan}!void {
+    if (len > optimal_compact_index_empty) return error.InvalidBlockPlan;
+    if (comptime packed_optimal_length_choices)
+        if (len > (std.math.maxInt(usize) >> optimal_length_bits) / 9)
+            return error.InvalidBlockPlan;
+}
+
 pub const RepBeamScratch = struct {
     states: std.ArrayList(RepBeamState) = .empty,
     lengths: std.ArrayList(u8) = .empty,
@@ -3603,6 +3687,81 @@ test "reusable optimal parser preserves tokens and capacities" {
     const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.compact_head.capacity, scratch.compact_prev.capacity, scratch.tokens.capacity };
     _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.compact_head.capacity, scratch.compact_prev.capacity, scratch.tokens.capacity });
+}
+
+test "prepared optimal matches independent fixed and modeled plans" {
+    const input = "abcabcXabcabcYabcabcZabcabcX" ** 16;
+    const options = GreedyOptions{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = max_match_len,
+        .max_candidates = 8,
+        .min_match = 3,
+    };
+    var literal_costs: [256]u16 = undefined;
+    for (&literal_costs, 0..) |*cost, symbol| cost.* = @intCast(1 + symbol % 13);
+    var length_costs: [max_match_len + 1]u16 = @splat(1);
+    for (length_costs[min_match_len..], min_match_len..) |*cost, length|
+        cost.* = @intCast(2 + length % 11);
+    var distance_costs: [input.len + 1]u16 = @splat(1);
+    for (distance_costs[1..], 1..) |*cost, distance|
+        cost.* = @intCast(1 + distance % 7);
+    const model = OptimalCostModel{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    };
+
+    const fixed_reference = try optimalPlanAlloc(std.testing.allocator, input, options);
+    defer fixed_reference.deinit(std.testing.allocator);
+    const modeled_reference = try optimalPlanAllocWithCostModel(std.testing.allocator, input, options, model);
+    defer modeled_reference.deinit(std.testing.allocator);
+
+    var prepared = try PreparedOptimal.init(std.testing.allocator, input, options);
+    defer prepared.deinit(std.testing.allocator);
+    const fixed = try prepared.planFixedAlloc(std.testing.allocator);
+    defer fixed.deinit(std.testing.allocator);
+    const modeled = try prepared.planModeledAlloc(std.testing.allocator, model);
+    defer modeled.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(fixed_reference.stats, fixed.stats);
+    try expectEqualTokenSlices(fixed_reference.tokens, fixed.tokens);
+    try std.testing.expectEqual(modeled_reference.stats, modeled.stats);
+    try expectEqualTokenSlices(modeled_reference.tokens, modeled.tokens);
+}
+
+test "prepared optimal cleans up every allocation failure" {
+    const Run = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const input = "abcabcXabcabcYabcabcZabcabcX" ** 8;
+            const options = GreedyOptions{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = max_match_len,
+                .max_candidates = 8,
+                .min_match = 3,
+            };
+            var literal_costs: [256]u16 = @splat(8);
+            literal_costs['X'] = 3;
+            var length_costs: [max_match_len + 1]u16 = @splat(7);
+            length_costs[min_match_len] = 2;
+            var distance_costs: [input.len + 1]u16 = @splat(5);
+            distance_costs[0] = 1;
+            const model = OptimalCostModel{
+                .literal = &literal_costs,
+                .length = &length_costs,
+                .distance = &distance_costs,
+            };
+
+            var prepared = try PreparedOptimal.init(allocator, input, options);
+            defer prepared.deinit(allocator);
+            const fixed = try prepared.planFixedAlloc(allocator);
+            defer fixed.deinit(allocator);
+            const modeled = try prepared.planModeledAlloc(allocator, model);
+            defer modeled.deinit(allocator);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Run.run, .{});
 }
 
 test "optimal prefix bound preserves reference tokens" {
