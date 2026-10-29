@@ -1,0 +1,19 @@
+{
+  "node_version": "v26.10.0",
+  "baseline_wasm_sha256": "fb3ea213835c177711dcd14293c765cb7872a76297cac45286be44c7c701d3bf",
+  "candidate_wasm_sha256": "cd7cd7f642a85fdafbd39044e912feb56dbde5135a55b42ef74b06f5a53a4521",
+  "frozen_fixture_wire_equal": true,
+  "frozen_fixture_wire_sha256": "b6eb2991d9848de02c4079a698b23328d122550b2af0dc119326219da6f96762",
+  "evaluation_attempts": 4,
+  "linked_emissions": 2,
+  "adaptive_distance": {
+    "input_bytes": 65536,
+    "input_sha256": "de1e62295ef610d02858083f9b148f01ba42ad4f99d1adff524df6321c7bf298",
+    "wire_bytes": 15178,
+    "wire_sha256": "ae9e3facf40f838a24f7c74681d38660bd3b90ae9479b1f4149ed56c9180aacd",
+    "evaluations": 3,
+    "physical_wires": 2,
+    "ordinary_profile_wire_equal": true,
+    "node_native_decode_checked": true
+  }
+}

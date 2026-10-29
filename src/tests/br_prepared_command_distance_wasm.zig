@@ -16,6 +16,10 @@ var recent_copies: u32 = 0;
 var shared_group_witnesses: u32 = 0;
 var evaluation_attempts: u32 = 0;
 var linked_emissions: u32 = 0;
+var adaptive_input: [65536]u8 = undefined;
+var adaptive_wire: []u8 = &.{};
+var adaptive_evaluations: u32 = 0;
+var adaptive_wires: u32 = 0;
 
 fn fillInput() void {
     var state: u32 = 0x243f_6a88;
@@ -38,6 +42,22 @@ fn fillInput() void {
             input[position] = repeated[index];
             position += 1;
         }
+    }
+}
+
+fn fillAdaptiveInput() void {
+    var position: usize = 0;
+    var record: usize = 0;
+    while (position < adaptive_input.len) : (record += 1) {
+        var buffer: [32]u8 = undefined;
+        const row = std.fmt.bufPrint(
+            &buffer,
+            "a{d:0>3}b{d:0>2}c{d:0>3}e{d:0>2}\n",
+            .{ record % 997, (record * 7) % 89, (record * 13) % 991, (record * 17) % 83 },
+        ) catch unreachable;
+        const count = @min(row.len, adaptive_input.len - position);
+        @memcpy(adaptive_input[position..][0..count], row[0..count]);
+        position += count;
     }
 }
 
@@ -122,6 +142,53 @@ export fn brPreparedEncodeSmoke() callconv(.c) u32 {
     return 0;
 }
 
+export fn brAdaptivePreparedSmoke() callconv(.c) u32 {
+    const allocator = std.heap.page_allocator;
+    if (adaptive_wire.len != 0) allocator.free(adaptive_wire);
+    adaptive_wire = &.{};
+    fillAdaptiveInput();
+    const encoded = br.encodePlannedStreamWithOptionsAlloc(
+        allocator,
+        &adaptive_input,
+        .{ .quality = 8, .mode = .generic },
+    ) catch return 1;
+    var retained = false;
+    defer if (!retained) allocator.free(encoded);
+    const profile = allocator.create(br.QualityQ8Profile) catch return 2;
+    defer allocator.destroy(profile);
+    profile.* = .{};
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const profiled = br.benchmarkQualityQ8ProfileAlloc(
+        allocator,
+        &adaptive_input,
+        io,
+        profile,
+    ) catch return 3;
+    defer allocator.free(profiled);
+    if (!std.mem.eql(u8, encoded, profiled) or profile.events_truncated or
+        !profile.wire_attempt_coverage_complete) return 4;
+    adaptive_evaluations = 0;
+    adaptive_wires = 0;
+    for (profile.recordedEvents()) |event| {
+        if (!event.config.adaptive_distance_split or event.error_name.len != 0) continue;
+        adaptive_evaluations += @intFromBool(
+            event.stage == .evaluate and event.evaluated_wire_bytes != null,
+        );
+        adaptive_wires += @intFromBool(event.stage == .wire and event.wire_bytes != null);
+    }
+    if (adaptive_evaluations == 0 or adaptive_wires == 0) return 5;
+    const decoded = br.decodeStreamAllocExactSize(
+        allocator,
+        encoded,
+        adaptive_input.len,
+    ) catch return 6;
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, &adaptive_input, decoded)) return 7;
+    adaptive_wire = encoded;
+    retained = true;
+    return 0;
+}
+
 export fn brPreparedInputPtr() callconv(.c) usize {
     return @intFromPtr(&input);
 }
@@ -158,12 +225,33 @@ export fn brPreparedEvaluationAttempts() callconv(.c) u32 {
 export fn brPreparedLinkedEmissions() callconv(.c) u32 {
     return linked_emissions;
 }
+export fn brAdaptivePreparedInputPtr() callconv(.c) usize {
+    return @intFromPtr(&adaptive_input);
+}
+export fn brAdaptivePreparedInputLen() callconv(.c) usize {
+    return adaptive_input.len;
+}
+export fn brAdaptivePreparedWirePtr() callconv(.c) usize {
+    return @intFromPtr(adaptive_wire.ptr);
+}
+export fn brAdaptivePreparedWireLen() callconv(.c) usize {
+    return adaptive_wire.len;
+}
+export fn brAdaptivePreparedEvaluations() callconv(.c) u32 {
+    return adaptive_evaluations;
+}
+export fn brAdaptivePreparedWires() callconv(.c) u32 {
+    return adaptive_wires;
+}
 
 test "Brotli prepared public wasm fixture exercises actual complex and shared candidate groups" {
     try std.testing.expectEqual(@as(u32, 0), brPreparedWideKeySmoke());
     const status = brPreparedEncodeSmoke();
     std.debug.print("prepared probe status={d} commands={d} entries={d} complex={d} recent={d} groups={d}\n", .{ status, command_count, command_entries, complex_command_trees, recent_copies, shared_group_witnesses });
     try std.testing.expectEqual(@as(u32, 0), status);
+    try std.testing.expectEqual(@as(u32, 0), brAdaptivePreparedSmoke());
     std.heap.page_allocator.free(wire);
     wire = &.{};
+    std.heap.page_allocator.free(adaptive_wire);
+    adaptive_wire = &.{};
 }

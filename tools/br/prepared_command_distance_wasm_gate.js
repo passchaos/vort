@@ -31,6 +31,26 @@ function run(path) {
     assert.ok(api.brPreparedRecentCopies() > 0);
     assert.ok(api.brPreparedSharedGroupWitnesses() > 0);
     assert.deepEqual(zlib.brotliDecompressSync(wire), input);
+    let adaptiveDistance = null;
+    if (api.brAdaptivePreparedSmoke) {
+        const adaptiveStatus = api.brAdaptivePreparedSmoke();
+        assert.equal(adaptiveStatus, 0, `adaptive-distance q8 probe status=${adaptiveStatus}`);
+        const adaptiveInput = Buffer.from(new Uint8Array(api.memory.buffer, api.brAdaptivePreparedInputPtr() >>> 0, api.brAdaptivePreparedInputLen()));
+        const adaptiveWire = Buffer.from(new Uint8Array(api.memory.buffer, api.brAdaptivePreparedWirePtr() >>> 0, api.brAdaptivePreparedWireLen()));
+        assert.ok(api.brAdaptivePreparedEvaluations() > 0);
+        assert.ok(api.brAdaptivePreparedWires() > 0);
+        assert.deepEqual(zlib.brotliDecompressSync(adaptiveWire), adaptiveInput);
+        adaptiveDistance = {
+            input_bytes: adaptiveInput.length,
+            input_sha256: crypto.createHash("sha256").update(adaptiveInput).digest("hex"),
+            wire_bytes: adaptiveWire.length,
+            wire_sha256: crypto.createHash("sha256").update(adaptiveWire).digest("hex"),
+            evaluations: api.brAdaptivePreparedEvaluations(),
+            physical_wires: api.brAdaptivePreparedWires(),
+            ordinary_profile_wire_equal: true,
+            node_native_decode_checked: true,
+        };
+    }
     return {
         input, wire,
         report: {
@@ -51,6 +71,7 @@ function run(path) {
             zig_decode_checked: true,
             node_native_decode_checked: true,
             wide_key_above_2_32_checked: true,
+            adaptive_distance: adaptiveDistance,
         },
     };
 }
@@ -58,6 +79,8 @@ function run(path) {
 const baseline = run(process.argv[2]);
 const candidate = run(process.argv[3]);
 assert.ok(candidate.report.evaluation_attempts > 0);
+assert.ok(candidate.report.adaptive_distance);
+assert.ok(candidate.report.adaptive_distance.evaluations > 0);
 assert.deepEqual(candidate.input, baseline.input);
 assert.deepEqual(candidate.wire, baseline.wire);
 if (process.argv[4]) {

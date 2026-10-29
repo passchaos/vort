@@ -24214,6 +24214,21 @@ reuse, so production keeps the simpler independently owned plans.
   shared proxy-cost screen. This establishes exact planning, not a broad ratio
   or speed lead. Continue dynamic-cost parsing and standard-corpus splitting.
 
+- 2026-10-29: q8 standard-window adaptive-distance context alternatives now
+  keep the first real wire, count later complete candidates exactly, and emit
+  a counted winner once. Command/distance extras, adaptive switches, context
+  maps, every tree and final padding remain in the byte-level decision; strict
+  ties and candidate order are unchanged. Native tests force an alternate
+  winner, compare every count with the old physical wire, preserve complete
+  stats, link one evaluation to its emission and clean all allocation failures.
+  Executed Wasm observes three adaptive evaluations/two physical wires and
+  native Brotli decoding. [Counted adaptive-distance evidence](performance/brotli-adaptive-distance-counted-context.md)
+  records current-parent paired-sweep ratios of 0.986671/0.985082/0.987474;
+  36-case geometry is 0.986445 and 64 KiB is 0.956262, with exact wires and
+  settings. Vort/reference size is 0.995561 but time remains 36.16x, so broader
+  leadership is not claimed. Share dynamic distance-tree preparation next;
+  retain the full deflate/zstd/brotli functionality and performance goal.
+
 - 2026-10-29: Bzip2 forward BWT now ends prefix doubling once every rotation
   has a unique prefix class. Periodic rotations retain the old full-pass tie
   ordering, so transformed bytes, original pointers and complete encoded

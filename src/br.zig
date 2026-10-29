@@ -11061,14 +11061,127 @@ fn encodeEntropySplitWireCandidateInternalAlloc(
     return encodeEntropySplitWireCandidateInternalAllocRecorded(false, .{}, allocator, input, commands, stats, options, baseline, literal_split, adaptive_literal_split, joint_literal, command_split, adaptive_command_split, distance_split, adaptive_distance_split);
 }
 
+var test_disable_counted_adaptive_distance_contexts = false;
+
+fn useCountedAdaptiveDistanceContexts(
+    input: []const u8,
+    commands: []const command_plan.Command,
+    baseline: PreferredCommandPlan,
+    options: CommandPlanEncodeOptions,
+) bool {
+    if (comptime builtin.is_test) if (test_disable_counted_adaptive_distance_contexts) return false;
+    return input.len >= 64 * 1024 and baseline.use_recent_distances and
+        (baseline.alternate_literal_context_count != 0 or baseline.alternate_plain_literals) and
+        countedAdaptiveDistanceSupported(options, commands) and
+        prepared_literal.supported(options);
+}
+
+fn encodeCountedAdaptiveDistanceContextsRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+    baseline: PreferredCommandPlan,
+) Error![]u8 {
+    const initial_stats = stats.*;
+    errdefer stats.* = initial_stats;
+    var selected_options = options;
+    selected_options.literal_context_candidate = baseline.literal_context_candidate;
+    var selected_stats = initial_stats;
+    var selected_wire: ?[]u8 = try encodeCommandPlanWithOptionsAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &selected_stats,
+        selected_options,
+    );
+    errdefer if (selected_wire) |wire| freeQualityRecorded(trace_enabled, trace, allocator, wire);
+    var selected_reference = trace.reference(selected_wire.?);
+    var selected_state: prepared_literal.State = undefined;
+    var scratch: prepared_literal.State = undefined;
+
+    for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |candidate| {
+        var candidate_options = options;
+        candidate_options.literal_context_candidate = candidate;
+        var candidate_stats = initial_stats;
+        const candidate_reference = try prepareCommandPlanWithOptionsRecorded(
+            trace_enabled,
+            trace,
+            allocator,
+            input,
+            commands,
+            null,
+            &candidate_stats,
+            candidate_options,
+            &scratch,
+        );
+        if (trace.preferReferences(candidate_reference, selected_reference)) {
+            if (selected_wire) |wire| freeQualityRecorded(trace_enabled, trace, allocator, wire);
+            selected_wire = null;
+            selected_state.copyFrom(&scratch);
+            selected_options = candidate_options;
+            selected_stats = candidate_stats;
+            selected_reference = candidate_reference;
+        }
+    }
+    if (baseline.alternate_plain_literals) {
+        var plain_options = options;
+        plain_options.literal_context_candidate = null;
+        var plain_stats = initial_stats;
+        const plain_reference = try prepareCommandPlanWithOptionsRecorded(
+            trace_enabled,
+            trace,
+            allocator,
+            input,
+            commands,
+            null,
+            &plain_stats,
+            plain_options,
+            &scratch,
+        );
+        if (trace.preferReferences(plain_reference, selected_reference)) {
+            if (selected_wire) |wire| freeQualityRecorded(trace_enabled, trace, allocator, wire);
+            selected_wire = null;
+            selected_state.copyFrom(&scratch);
+            selected_options = plain_options;
+            selected_stats = plain_stats;
+            selected_reference = plain_reference;
+        }
+    }
+    if (selected_wire) |wire| {
+        selected_wire = null;
+        stats.* = selected_stats;
+        return wire;
+    }
+    const encoded = try emitCountedAdaptiveDistanceCommandPlanRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        null,
+        &selected_stats,
+        selected_options,
+        &selected_state,
+        selected_reference,
+    );
+    stats.* = selected_stats;
+    return encoded;
+}
+
 fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, adaptive_literal_split: ?*const block_split_plan.Plan, joint_literal: ?*const literal_entropy_plan.Plan, command_split: ?command_block_split.Result, adaptive_command_split: ?*const block_split_plan.Plan, distance_split: ?distance_block_split.Result, adaptive_distance_split: ?*const block_split_plan.Plan) Error![]u8 {
     var profile_scope = trace.begin(.other, input.len, commands.len);
     defer profile_scope.finish();
     errdefer |err| profile_scope.failure(err);
 
     const initial_stats = stats.*;
-    var selected_stats = initial_stats;
-    var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, .{
+    const primary_options: CommandPlanEncodeOptions = .{
         // Literal block splitting disables context trees, while command and
         // distance splitting retain the winning context candidate.
         .use_recent_distances = baseline.use_recent_distances,
@@ -11086,7 +11199,20 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
         .compound_dictionary_size = options.compound_dictionary_size,
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
-    });
+    };
+    if (useCountedAdaptiveDistanceContexts(input, commands, baseline, primary_options))
+        return encodeCountedAdaptiveDistanceContextsRecorded(
+            trace_enabled,
+            trace,
+            allocator,
+            input,
+            commands,
+            stats,
+            primary_options,
+            baseline,
+        );
+    var selected_stats = initial_stats;
+    var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, primary_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
     if (literal_split == null and adaptive_literal_split == null) {
         for (baseline.alternate_literal_context_candidates[0..baseline.alternate_literal_context_count]) |alternate_context| {
@@ -11339,10 +11465,15 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 fn encodeCommandPlanWithOptionsAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    return encodeCommandPlanWithOptionsAllocRecordedReference(trace_enabled, trace, allocator, input, commands, io, stats, options, null);
+}
+
+fn encodeCommandPlanWithOptionsAllocRecordedReference(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions, evaluation: ?quality_profile.CandidateRef) Error![]u8 {
     var profile_scope = trace.begin(.wire, input.len, commands.len);
     defer profile_scope.finish();
     errdefer |err| profile_scope.failure(err);
     profile_scope.config(options);
+    if (evaluation) |reference| profile_scope.emissionOf(reference);
 
     _ = try metadata_header.plan(options.metadata.len);
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
@@ -11377,14 +11508,68 @@ fn prepareCommandPlanWithOptionsRecorded(
     errdefer |err| scope.failure(err);
     scope.config(options);
     state.ready = false;
-    const common = options.prepared_common orelse return error.InvalidBlockPlan;
-    if (!common.matches(options, commands) or !prepared_literal.supported(options)) return error.InvalidBlockPlan;
+    const adaptive_distance = countedAdaptiveDistanceSupported(options, commands);
+    if (!prepared_literal.supported(options)) return error.InvalidBlockPlan;
+    if (!adaptive_distance) {
+        const common = options.prepared_common orelse return error.InvalidBlockPlan;
+        if (!common.matches(options, commands)) return error.InvalidBlockPlan;
+    }
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     var measured = options;
     measured.prepared_literal = state;
     var counter = counting_writer.Writer.init(0);
-    try encodeCommandPlanWithOptionsWriteInternal(false, planned_distance_alphabet_size, allocator, &counter, input, commands, io, stats, measured);
+    if (adaptive_distance)
+        try encodeCommandPlanWithOptionsWriteInternal(true, planned_distance_alphabet_size, allocator, &counter, input, commands, io, stats, measured)
+    else
+        try encodeCommandPlanWithOptionsWriteInternal(false, planned_distance_alphabet_size, allocator, &counter, input, commands, io, stats, measured);
     return scope.evaluated(state.wire_len);
+}
+
+fn countedAdaptiveDistanceSupported(options: CommandPlanEncodeOptions, commands: []const command_plan.Command) bool {
+    const split = options.adaptive_distance_split orelse return false;
+    return !options.large_window and options.use_recent_distances and
+        options.write_stream_prefix and options.final_meta_block and options.metadata.len == 0 and
+        split.type_count >= 2 and split.type_count <= 8 and
+        options.adaptive_literal_split == null and options.literal_entropy_plan == null and
+        options.adaptive_command_split == null and options.literal_split == null and
+        options.command_split == null and options.distance_split == null and
+        options.hq_model_output == null and options.final_wire_state == null and
+        !commandsHaveExactEncoding(commands);
+}
+
+fn emitCountedAdaptiveDistanceCommandPlanRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+    state: *const prepared_literal.State,
+    reference: quality_profile.CandidateRef,
+) Error![]u8 {
+    if (!countedAdaptiveDistanceSupported(options, commands) or
+        !state.matches(input, options) or reference.bytes != state.wire_len)
+        return error.InvalidBlockPlan;
+    var physical = options;
+    physical.prepared_literal = null;
+    const encoded = try encodeCommandPlanWithOptionsAllocRecordedReference(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        io,
+        stats,
+        physical,
+        reference,
+    );
+    if (encoded.len != reference.bytes) {
+        allocator.free(encoded);
+        return error.InvalidBlockPlan;
+    }
+    return encoded;
 }
 
 fn emitPreparedCommandPlanWithOptionsRecorded(
@@ -11832,7 +12017,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             const encoding = if (exact_selection) |selected| selected.command else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
                 commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
             const same_last_shape = if (optimize_same_last_distance) sameLastDistanceShape(command, wire_distance, last_distances[3]) else null;
-            if (common != null) {
+            if (common != null or comptime @TypeOf(writer.*) == counting_writer.Writer) {
                 payload_extra_bits = try weighted_payload.add(payload_extra_bits, commandExtraBitCount(encoding));
             }
             if (same_last_shape) |shape| {
@@ -11919,7 +12104,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                         distance_format,
                     ) orelse return error.InvalidBlockPlan;
                 if (distance.symbol >= distance_capacity) return error.InvalidBlockPlan;
-                if (common != null) payload_extra_bits = try weighted_payload.add(payload_extra_bits, distance.extra_bits);
+                if (common != null or comptime @TypeOf(writer.*) == counting_writer.Writer)
+                    payload_extra_bits = try weighted_payload.add(payload_extra_bits, distance.extra_bits);
                 if (same_last_shape != null) {
                     same_last_distance_frequencies[distance.symbol] += 1;
                     same_last_distance_extra_bits += distance.extra_bits;
@@ -12265,16 +12451,54 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         null;
     if (comptime @TypeOf(writer.*) == counting_writer.Writer) {
         if (comptime distance_capacity != planned_distance_alphabet_size) return error.InvalidBlockPlan;
-        const cached = common orelse return error.InvalidBlockPlan;
         const capture = options.prepared_literal orelse return error.InvalidBlockPlan;
-        if (!common_ready or !prepared_literal.supported(options)) return error.InvalidBlockPlan;
+        if (!prepared_literal.supported(options)) return error.InvalidBlockPlan;
         const alphabets = if (context_candidate) |candidate| literal_context_alphabets[0..candidate.tree_count] else @as(*const [1]prepared_literal.Alphabet, @ptrCast(&literal_alphabet));
         const tree_lengths = if (context_candidate) |candidate| literal_context_lengths[0..candidate.tree_count] else @as(*const [1][256]u4, @ptrCast(&literal_lengths));
-        try writeUnsplitPreparedHeader(distance_capacity, allocator, writer, context_candidate, options.literal_context_mode, alphabets, tree_lengths, &command_alphabet, &command_lengths, &distance_alphabet, &distance_lengths, options.distance_parameters, distance_alphabet_size);
+        var payload_bits: BitCount = 0;
+        if (adaptive_distance_split) |split| {
+            if (!countedAdaptiveDistanceSupported(options, commands) or
+                adaptive_distance_block_frequencies == null or
+                adaptive_distance_block_alphabets == null or
+                adaptive_distance_block_lengths == null or
+                adaptive_distance_split_code == null or
+                adaptive_distance_context_map == null)
+                return error.InvalidBlockPlan;
+            try writePreparedAdaptiveDistanceHeader(
+                distance_capacity,
+                allocator,
+                writer,
+                context_candidate,
+                options.literal_context_mode,
+                alphabets,
+                tree_lengths,
+                &command_alphabet,
+                &command_lengths,
+                split,
+                adaptive_distance_block_alphabets.?,
+                adaptive_distance_block_lengths.?,
+                &adaptive_distance_split_code.?,
+                &adaptive_distance_context_map.?,
+                options.distance_parameters,
+                distance_alphabet_size,
+            );
+            payload_bits = try weighted_payload.histogram(704, &command_frequencies, &command_alphabet, &command_lengths, true);
+            for (adaptive_distance_block_frequencies.?, adaptive_distance_block_alphabets.?, adaptive_distance_block_lengths.?) |*frequencies, *alphabet, *lengths|
+                payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(distance_capacity, frequencies, alphabet, lengths, true));
+            var switches = counting_writer.Writer.init(0);
+            for (1..split.blockCount()) |block_index|
+                try adaptive_distance_split_code.?.writeSwitch(allocator, &switches, block_index);
+            payload_bits = try weighted_payload.add(payload_bits, try switches.checkedBitPosition());
+            payload_bits = try weighted_payload.add(payload_bits, payload_extra_bits);
+        } else {
+            const cached = common orelse return error.InvalidBlockPlan;
+            if (!common_ready) return error.InvalidBlockPlan;
+            try writeUnsplitPreparedHeader(distance_capacity, allocator, writer, context_candidate, options.literal_context_mode, alphabets, tree_lengths, &command_alphabet, &command_lengths, &distance_alphabet, &distance_lengths, options.distance_parameters, distance_alphabet_size);
+            payload_bits = try weighted_payload.histogram(704, &cached.command_frequencies, &cached.command_alphabet, &cached.command_lengths, true);
+            payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(prepared_command_distance.distance_capacity, &cached.distance_frequencies, &cached.distance_alphabet, &cached.distance_lengths, true));
+            payload_bits = try weighted_payload.add(payload_bits, cached.payload_extra_bits);
+        }
         if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
-        var payload_bits = try weighted_payload.histogram(704, &cached.command_frequencies, &cached.command_alphabet, &cached.command_lengths, true);
-        payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(prepared_command_distance.distance_capacity, &cached.distance_frequencies, &cached.distance_alphabet, &cached.distance_lengths, true));
-        payload_bits = try weighted_payload.add(payload_bits, cached.payload_extra_bits);
         if (context_candidate) |candidate| {
             for (literal_context_frequencies[0..candidate.tree_count], alphabets, tree_lengths) |*frequencies, *alphabet, *lengths|
                 payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(256, frequencies, alphabet, lengths, false));
@@ -24652,6 +24876,132 @@ test "br adaptive distance split writes off-grid non-cyclic types" {
     try std.testing.expectEqualSlices(u8, adaptive, selected);
 }
 
+const AdaptiveDistanceCountedTestAdapter = struct {
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+
+    pub fn encode(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        commands: []const command_plan.Command,
+        stats: *Stats,
+        context: ?literal_context_split.Candidate,
+        split: ?*const block_split_plan.Plan,
+    ) Error![]u8 {
+        return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
+            .use_recent_distances = true,
+            .literal_context_candidate = context,
+            .adaptive_distance_split = split,
+        });
+    }
+
+    pub fn prepare(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        commands: []const command_plan.Command,
+        stats: *Stats,
+        context: ?literal_context_split.Candidate,
+        split: *const block_split_plan.Plan,
+        state: *prepared_literal.State,
+    ) Error!quality_profile.CandidateRef {
+        return prepareCommandPlanWithOptionsRecorded(false, .{}, allocator, input, commands, null, stats, .{
+            .use_recent_distances = true,
+            .literal_context_candidate = context,
+            .adaptive_distance_split = split,
+        }, state);
+    }
+
+    pub fn chooseSplit(allocator: std.mem.Allocator, commands: []const command_plan.Command) Error!block_split_plan.Plan {
+        var splits = try chooseCommandAndDistanceSplitsAlloc(
+            allocator,
+            commands,
+            true,
+            false,
+            false,
+            false,
+            true,
+            .{},
+        );
+        errdefer splits.deinit(allocator);
+        const result = splits.adaptive_distance orelse return error.InvalidBlockPlan;
+        splits.adaptive_distance = null;
+        splits.deinit(allocator);
+        return result;
+    }
+
+    pub fn preferred(
+        encoded: []u8,
+        primary: ?literal_context_split.Candidate,
+        alternates: []const literal_context_split.Candidate,
+        plain: bool,
+    ) PreferredCommandPlan {
+        var result: PreferredCommandPlan = .{
+            .encoded = encoded,
+            .use_recent_distances = true,
+            .literal_context_candidate = primary,
+            .alternate_plain_literals = plain,
+        };
+        std.debug.assert(alternates.len <= result.alternate_literal_context_candidates.len);
+        @memcpy(result.alternate_literal_context_candidates[0..alternates.len], alternates);
+        result.alternate_literal_context_count = @intCast(alternates.len);
+        return result;
+    }
+
+    pub fn select(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        commands: []const command_plan.Command,
+        stats: *Stats,
+        baseline: PreferredCommandPlan,
+        split: *const block_split_plan.Plan,
+    ) Error![]u8 {
+        return encodeEntropyAdaptiveDistanceSplitWireCandidateAlloc(
+            allocator,
+            input,
+            commands,
+            stats,
+            .{},
+            baseline,
+            split,
+        );
+    }
+
+    pub fn selectTraced(
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        commands: []const command_plan.Command,
+        stats: *Stats,
+        baseline: PreferredCommandPlan,
+        split: *const block_split_plan.Plan,
+        profile: *quality_profile.Profile,
+    ) Error![]u8 {
+        const trace: quality_profile.Recorder(true) = .{ .io = std.testing.io, .profile = profile };
+        return encodeEntropyAdaptiveDistanceSplitWireCandidateAllocRecorded(
+            true,
+            trace,
+            allocator,
+            input,
+            commands,
+            stats,
+            .{},
+            baseline,
+            split,
+        );
+    }
+
+    pub fn disable(value: bool) void {
+        test_disable_counted_adaptive_distance_contexts = value;
+    }
+
+    pub fn decode(allocator: std.mem.Allocator, encoded: []const u8, expected: usize) Error![]u8 {
+        return decodeStreamAllocExactSize(allocator, encoded, expected);
+    }
+};
+
+test "br counted adaptive distance context contracts" {
+    try @import("br/encoder/adaptive_distance_counted_tests.zig").contracts(
+        AdaptiveDistanceCountedTestAdapter,
+    );
+}
 test "br adaptive distance split cleans up writer allocation failures" {
     const command_count = 32;
     const boundaries = [_]usize{ 5, 13, 22 };
@@ -39092,6 +39442,79 @@ fn writePlannedCompressedHeaderLiteralContexts(
         try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
     try writePlannedDistanceTrees(distance_capacity, allocator, writer, distance_parameters, distance_alphabet_size, distance_alphabet, distance_lengths, distance_split);
+}
+
+fn writePreparedAdaptiveDistanceHeader(
+    comptime distance_capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    context_candidate: ?literal_context_split.Candidate,
+    literal_mode: u2,
+    literal_alphabets: []const prepared_literal.Alphabet,
+    literal_lengths: []const [256]u4,
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    command_lengths: *const [704]u4,
+    split: *const block_split_plan.Plan,
+    distance_alphabets: []const command_plan.PrefixAlphabetFor(distance_capacity),
+    distance_lengths: []const [distance_capacity]u4,
+    split_code: *const adaptive_block_code.Code,
+    context_map: *const identity_context_map.Plan,
+    parameters: encoder_distance.Parameters,
+    distance_alphabet_size: usize,
+) Error!void {
+    const type_count: usize = split.type_count;
+    if (type_count < 2 or distance_alphabets.len != type_count or
+        distance_lengths.len != type_count or context_map.tree_count != type_count or
+        context_map.contexts_per_type != 4 or literal_alphabets.len != literal_lengths.len)
+        return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, @intCast(type_count));
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        type_count + 2,
+        &split_code.type_alphabet,
+        &split_code.type_lengths,
+    );
+    try writePrefixSymbolsWithLengths(
+        allocator,
+        writer,
+        26,
+        &split_code.length_alphabet,
+        &split_code.length_lengths,
+    );
+    try split_code.writeInitialLength(allocator, writer);
+    try writer.writeBits(allocator, parameters.npostfix, 2);
+    try writer.writeBits(allocator, parameters.ndirect_high, 4);
+    try writer.writeBits(
+        allocator,
+        if (context_candidate) |candidate| candidate.mode else literal_mode,
+        2,
+    );
+    if (context_candidate) |candidate| {
+        if (literal_alphabets.len != candidate.tree_count) return error.InvalidBlockPlan;
+        try writeBlockTypeCount(allocator, writer, candidate.tree_count);
+        try writeLiteralContextMap(allocator, writer, candidate);
+    } else {
+        if (literal_alphabets.len != 1) return error.InvalidBlockPlan;
+        try writeBlockTypeCount(allocator, writer, 1);
+    }
+    try writeBlockTypeCount(allocator, writer, @intCast(type_count));
+    try context_map.write(allocator, writer);
+    for (literal_alphabets, literal_lengths) |*alphabet, *lengths|
+        try writePrefixSymbolsWithLengths(allocator, writer, 256, alphabet, lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
+    const active_size = parameters.activeAlphabetSize(.standard);
+    for (distance_alphabets, distance_lengths) |*alphabet, *lengths|
+        try writePrefixSymbolsWithAlphabetSizes(
+            allocator,
+            writer,
+            active_size,
+            distance_alphabet_size,
+            alphabet,
+            lengths,
+        );
 }
 
 fn writeUnsplitPreparedHeader(

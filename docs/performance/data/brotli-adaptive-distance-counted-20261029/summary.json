@@ -1,0 +1,21 @@
+{
+  "status": "ok",
+  "baseline_commit": "ef409b59c565340ef8d1e874fe4e167f371a3993",
+  "cases": 36,
+  "raw_rows": 216,
+  "samples_per_version_case": 15,
+  "all_wires_settings_equal": true,
+  "candidate_over_baseline_geomean": 0.986445,
+  "bucket_geomeans": {
+    "4096": 1.003436,
+    "16384": 1.000351,
+    "65536": 0.956262
+  },
+  "sweep_geomeans": [0.986671, 0.985082, 0.987474],
+  "candidate_over_reference_size_geomean": 0.995561,
+  "candidate_over_reference_time_geomean": 36.1602,
+  "profile_candidate_lengths_equal": true,
+  "profile_adaptive_candidates_per_hot_case": 6,
+  "profile_physical_candidates_per_hot_case": 2,
+  "profile_evaluated_candidates_per_hot_case": 4
+}
