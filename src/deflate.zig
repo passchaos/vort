@@ -5699,7 +5699,7 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     noalias decoder: *const SemanticRle1DynamicDecoder,
-) linksection(semantic_rle1.text_section) Error!usize {
+) align(64) linksection(semantic_rle1.text_section) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
         true,
@@ -5923,6 +5923,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 ) Error!SemanticLinearResult(pause_at_output_boundary) {
     comptime std.debug.assert(!rle1_distance or single_distance);
     const Decoder = @TypeOf(decoder.*);
+    // Machine-word counts keep this resumable PNG hot loop free of repeated
+    // narrow-integer masks and spills. Preserve each packed field's mask when
+    // widening; the other semantic specializations retain their u6 counts.
+    const Count = if (inline_non_overlap and pause_at_output_boundary) usize else u6;
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -5968,19 +5972,19 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             }
         }
 
-        var entry_bits: u6 = @truncate(entry);
+        var entry_bits: Count = @intCast(entry & 0x3f);
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
             const entry2 = decoder.literal[
                 @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & Decoder.literal_lookup_mask))
             ];
-            const entry2_bits: u6 = @truncate(entry2);
-            const entry12_bits: u6 = entry_bits + entry2_bits;
+            const entry2_bits: Count = @intCast(entry2 & 0x3f);
+            const entry12_bits: Count = entry_bits + entry2_bits;
             const entry3 = decoder.literal[
                 @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & Decoder.literal_lookup_mask))
             ];
-            const entry3_bits: u6 = @truncate(entry3);
-            const entry123_bits: u6 = entry12_bits + entry3_bits;
+            const entry3_bits: Count = @intCast(entry3 & 0x3f);
+            const entry123_bits: Count = entry12_bits + entry3_bits;
             const entry4 = decoder.literal[
                 @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & Decoder.literal_lookup_mask))
             ];
@@ -6043,10 +6047,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         }
 
         var length_base: usize = undefined;
-        var length_extra_bits: u6 = undefined;
+        var length_extra_bits: Count = undefined;
         if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
             length_base = @intCast(entry >> 16);
-            length_extra_bits = @truncate(entry >> 8);
+            length_extra_bits = @intCast((entry >> 8) & 0x3f);
         } else if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
             const start: usize = @intCast(entry >> 16);
             const mask: usize = @intCast(entry & 0xff);
@@ -6055,7 +6059,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
-            entry_bits = @truncate(secondary & 0x0f);
+            entry_bits = @intCast(secondary & 0x0f);
             if (symbol < 256) {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
@@ -6154,7 +6158,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             // loop avoids semantic-distance metadata and runtime match-class
             // dispatch entirely.
             if ((bits & 1) != 0) return error.InvalidHuffmanCode;
-            const total_bits: u6 = entry_bits + length_extra_bits + 1;
+            const total_bits: Count = entry_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
             if (comptime !inline_non_overlap) consumed_bits += total_bits;
@@ -6174,11 +6178,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         else
             decoder.distance[@as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))];
         var distance_base: usize = undefined;
-        var distance_extra_bits: u6 = undefined;
-        var distance_code_bits: u6 = @truncate(distance_entry);
+        var distance_extra_bits: Count = undefined;
+        var distance_code_bits: Count = @intCast(distance_entry & 0x3f);
         if ((distance_entry & SemanticDynamicDecoder.literal_flag) != 0) {
             distance_base = @intCast(distance_entry >> 16);
-            distance_extra_bits = @truncate(distance_entry >> 8);
+            distance_extra_bits = @intCast((distance_entry >> 8) & 0x3f);
         } else if ((distance_entry & SemanticDynamicDecoder.secondary_flag) != 0) {
             const start: usize = @intCast(distance_entry >> 16);
             const mask: usize = @intCast(distance_entry & 0xff);
@@ -6188,7 +6192,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const secondary = decoder.distance_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
             if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
-            distance_code_bits = @truncate(secondary & 0x0f);
+            distance_code_bits = @intCast(secondary & 0x0f);
             const metadata = distance_table[symbol];
             distance_base = metadata.base;
             distance_extra_bits = metadata.extra_bits;
@@ -6203,7 +6207,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         bits >>= @intCast(distance_code_bits);
         const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
         const distance = distance_base + @as(usize, @intCast(bits & distance_mask));
-        const total_bits: u6 = entry_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
+        const total_bits: Count = entry_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
@@ -13731,7 +13735,7 @@ noinline fn decodePngFilter0DynamicRle1Block(
     distance_table_: *const huffman.HuffmanTable(30),
     scratch: []u8,
     adler: ?*checksum.Adler32,
-) linksection(semantic_rle1.text_section) Error!bool {
+) align(64) linksection(semantic_rle1.text_section) Error!bool {
     // Keep wider table construction and decode out of the generic filter-0
     // dispatcher so unrelated PNG/DEFLATE code retains its established layout.
     var decoder: SemanticRle1DynamicDecoder = undefined;
