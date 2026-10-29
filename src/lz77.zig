@@ -1976,8 +1976,9 @@ fn fixedLengthSymbolCost(length: usize) usize {
     if (length <= 18) return 8;
     if (length <= 34) return 9;
     if (length <= 66) return 10;
-    if (length <= 130) return 11;
-    if (length <= 257) return 12;
+    if (length <= 114) return 11;
+    if (length <= 130) return 12;
+    if (length <= 257) return 13;
     return 8; // 258 is the fixed-Huffman code 285 with no extra bits.
 }
 

@@ -24200,6 +24200,20 @@ reuse, so production keeps the simpler independently owned plans.
   not establish broad throughput leadership. Continue reducing transition
   count, widening clean-host evidence and advancing the complete codec goal.
 
+- 2026-10-29: DEFLATE fixed-Huffman planning now charges the actual emitted
+  cost for every length. Matches 115..130 rise from 11 to 12 bits and 131..257
+  from 12 to 13; token-scan, dense one-shot, cached incremental and rolling
+  profitability paths share the correction. A writer-level oracle separately
+  checks empty blocks, the 8/9-bit literal boundary, every length, every RFC
+  distance-range endpoint and all incoming bit offsets. The old source fails
+  first with 43 planned versus 44 emitted bits; the corrected source passes
+  546/546 tests in both Debug and ReleaseFast plus 90/90 ReleaseFast LZ77 tests.
+  [Fixed-cost evidence](performance/deflate-fixed-emission-cost.md) records
+  successful zlib parameter and Python differentials, the incremental gate,
+  72 unchanged real-input DEFLATE size pairs and unchanged Zstd hashes on the
+  shared proxy-cost screen. This establishes exact planning, not a broad ratio
+  or speed lead. Continue dynamic-cost parsing and standard-corpus splitting.
+
 - 2026-10-29: Bzip2 forward BWT now ends prefix doubling once every rotation
   has a unique prefix class. Periodic rotations retain the old full-pass tie
   ordering, so transformed bytes, original pointers and complete encoded

@@ -1,0 +1,2 @@
+taskset -c 2 $deflate_executable /tmp/qinputs/$case 1 $mode
+taskset -c 2 $zstd_executable --level 1 --native-selection fast_compressed --iterations 1 --rounds 1 --limit 131072 --libzstd /home/passchaos/Work/zstd/lib/libzstd.so.1.6.0 --path /home/passchaos/Work/corpora/silesia-20261025/files/$case --csv $row.csv --samples-json $row.json

@@ -1,4 +1,5 @@
 const std = @import("std");
+const lz77 = @import("../../../../lz77.zig");
 
 pub inline fn accept(
     input: []const u8,
@@ -23,9 +24,19 @@ pub inline fn accept(
 }
 
 fn fixedMatchBits(length: usize, distance: usize) usize {
-    const length_bits: usize = if (length <= 10) 7 else if (length <= 18) 8 else if (length <= 34) 9 else if (length <= 66) 10 else if (length <= 130) 11 else if (length <= 257) 12 else 8;
-    const distance_extra: usize = if (distance <= 4) 0 else std.math.log2_int(usize, distance - 1) - 1;
-    return length_bits + 5 + distance_extra;
+    return lz77.fixedLengthCost(length) + lz77.fixedDistanceCost(distance);
+}
+
+test "profitability fixed match costs equal the RFC emission model" {
+    const distances = [_]usize{ 1, 4, 5, 8, 9, 16, 17, 256, 257, 4096, 32 * 1024 };
+    for (3..259) |length| {
+        for (distances) |distance| {
+            try std.testing.expectEqual(
+                referenceFixedMatchBits(length, distance),
+                fixedMatchBits(length, distance),
+            );
+        }
+    }
 }
 
 test "profitability bounds equal a full literal scan" {
@@ -50,5 +61,29 @@ fn reference(input: []const u8, length: usize, distance: usize, savings: usize) 
     if (length < 3 or distance == 0 or distance > 32768) return false;
     var literal_bits = length * 8;
     for (input[0..length]) |byte| literal_bits += @intFromBool(byte > 143);
-    return literal_bits >= fixedMatchBits(length, distance) + savings;
+    return literal_bits >= referenceFixedMatchBits(length, distance) + savings;
+}
+
+fn referenceFixedMatchBits(length: usize, distance: usize) usize {
+    const length_bits: usize = if (length <= 10)
+        7
+    else if (length <= 18)
+        8
+    else if (length <= 34)
+        9
+    else if (length <= 66)
+        10
+    else if (length <= 114)
+        11
+    else if (length <= 130)
+        12
+    else if (length <= 257)
+        13
+    else
+        8;
+    const distance_extra: usize = if (distance <= 4)
+        0
+    else
+        std.math.log2_int(usize, distance - 1) - 1;
+    return length_bits + 5 + distance_extra;
 }
