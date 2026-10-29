@@ -9,7 +9,13 @@ compression formats. A zlib/zstd-compatible C ABI and further development of
 the experimental native VORT format are not active deliverables; existing
 native-format code remains available but does not drive roadmap priority.
 
-### Current completion audit (2026-10-24)
+### Current completion audit (2026-10-30)
+
+The [long Huffman match refill](performance/png-long-huffman-match.md)
+repairs legal 14/15-bit PNG streams that exceeded the semantic loop's staged
+bits after paired literals. Complete fifteen-image decode retains original
+pixels and requested heap, with 1.005603x strict / 1.005429x no-Adler
+aggregate improvement. Per-image Rust gaps and the broader goal remain open.
 
 The [AArch64 NEON Adler kernel](performance/png-adler-neon.md) preserves
 strict validation and all 120 PNG buffers/allocation records while increasing

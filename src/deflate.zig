@@ -11,6 +11,7 @@ const png_windowed_history =
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const semantic_match_bits = @import("deflate/semantic/match_bits.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
 const sync = @import("deflate/sync.zig");
@@ -6115,6 +6116,18 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             );
         }
 
+        if (comptime !rle1_distance) {
+            // Two paired entries can consume 22 bits before a 48-bit match.
+            // Refill before reading its extra/distance fields, not just after
+            // the token. Near the input tail, the checked reader resumes from
+            // the still-unconsumed length code.
+            if (bit_count < 48) {
+                const maximum_distance_bits = semantic_match_bits.distanceBudget(rle1_distance, single_distance, decoder);
+                const required_bits = @as(usize, entry_bits) + length_extra_bits + maximum_distance_bits;
+                if (!semantic_match_bits.stage(input, &byte_index, &bit_buffer, &bit_count, required_bits)) break;
+            }
+        }
+
         var bits = bit_buffer >> @intCast(entry_bits);
         const length = if (comptime inline_non_overlap and pause_at_output_boundary) blk: {
             // Kodak-style deep-distance blocks overwhelmingly use length codes
@@ -6628,6 +6641,14 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             consumed_bits += entry_bits;
             storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
             return;
+        }
+
+        if (comptime !rle1_distance) {
+            if (bit_count < 48) {
+                const maximum_distance_bits = semantic_match_bits.distanceBudget(rle1_distance, single_distance, decoder);
+                const required_bits = @as(usize, entry_bits) + length_extra_bits + maximum_distance_bits;
+                if (!semantic_match_bits.stage(input, &byte_index, &bit_buffer, &bit_count, required_bits)) break;
+            }
         }
 
         var bits = bit_buffer >> @intCast(entry_bits);
@@ -14599,6 +14620,129 @@ test "semantic non-overlap window matches generic mixed-match state" {
     try std.testing.expectEqualSlices(u8, expected, reference);
     try std.testing.expectEqualSlices(u8, expected, active);
     try std.testing.expectEqual(reference_reader, active_reader);
+}
+
+test "semantic non-overlap window preserves headroom boundaries and guarded resume" {
+    const tokens = semantic_non_overlap_mixed_tokens;
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+    const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(expected);
+    var parsed: bitstream.BufferedBitReader = undefined;
+    var literals: huffman.HuffmanTable(286) = undefined;
+    var distances: huffman.HuffmanTable(30) = undefined;
+    var decoder: SemanticDynamicDecoder = undefined;
+    try initSemanticDecoderForMixedMatchTest(raw, &parsed, &literals, &distances, &decoder);
+    const reference = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(reference);
+    const active = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(active);
+    const capacities = [_]usize{ 0, 1, 2, 3, 4, 5, 257, 258, 259, 260, 261, 262, 263, 264, 265, 519, 520, 521, 561, 562, 563, 564, 773, 774, 775 };
+    for (capacities) |capacity| {
+        const end = @min(capacity, expected.len);
+        @memset(reference, 165);
+        @memset(active, 165);
+        var reference_reader = parsed;
+        var active_reader = parsed;
+        const ref_step = try decodeSemanticDynamicBlockIntoWindow(&reference_reader, reference[0..end], 0, &decoder);
+        const step = try decodeSemanticDynamicBlockIntoNonOverlapWindow(&active_reader, active[0..end], 0, &decoder);
+        try std.testing.expectEqual(ref_step, step);
+        // Fast and tail refill schedules can prefetch different numbers of
+        // bytes. Compare their logical cursor and next
+        // bits, then resume to prove the retained reservoir is equivalent.
+        try std.testing.expectEqual(reference_reader.consumed_bits, active_reader.consumed_bits);
+        var reference_peek = reference_reader;
+        var active_peek = active_reader;
+        try std.testing.expectEqual(reference_peek.readBits(u32, 32), active_peek.readBits(u32, 32));
+        try std.testing.expectEqualSlices(u8, expected[0..step.output_written], active[0..step.output_written]);
+        try std.testing.expect(std.mem.allEqual(u8, active[end..], 165));
+        if (step.status == .need_output) {
+            const ref_done = try decodeSemanticDynamicBlockIntoWindow(&reference_reader, reference, ref_step.output_written, &decoder);
+            const done = try decodeSemanticDynamicBlockIntoNonOverlapWindow(&active_reader, active, step.output_written, &decoder);
+            try std.testing.expectEqual(ref_done, done);
+            try std.testing.expectEqual(reference_reader, active_reader);
+            try std.testing.expectEqualSlices(u8, expected, active);
+        }
+    }
+}
+
+test "semantic long match after two literal pairs preserves checked decode" {
+    const vectors = @import("deflate/semantic/long_match_vectors.zig");
+    const expected = try vectors.expectedAlloc(std.testing.allocator);
+    defer std.testing.allocator.free(expected);
+    const reference = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(reference);
+    const active = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(active);
+    @memcpy(reference[0..vectors.history_len], expected[0..vectors.history_len]);
+    @memcpy(active[0..vectors.history_len], expected[0..vectors.history_len]);
+    const literals = try huffman.HuffmanTable(286).init(&vectors.literal_lengths);
+    const distances = try huffman.HuffmanTable(30).init(&vectors.distance_lengths);
+    var checked = bitstream.BitReader.init(&vectors.symbol_stream);
+    var reference_written: usize = vectors.history_len;
+    try decodeCompressedBlockIntoReaderNoDict(&checked, reference, &reference_written, literals, distances);
+    try std.testing.expectEqualSlices(u8, expected, reference);
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literals, &distances));
+    var buffered = bitstream.BufferedBitReader.init(&vectors.symbol_stream);
+    const result = try decodeSemanticDynamicBlockIntoNonOverlapWindow(&buffered, active, vectors.history_len, &decoder);
+    try std.testing.expectEqual(SemanticLinearStatus.end_of_block, result.status);
+    try std.testing.expectEqual(expected.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(checked.bitPosition(), buffered.bitPosition());
+    var sink = LinearSemanticSink{ .output = active, .pos = vectors.history_len };
+    var sink_reader = bitstream.BufferedBitReader.init(&vectors.symbol_stream);
+    try decodeSemanticDynamicBlockIntoSink(&sink_reader, &sink, &decoder);
+    try std.testing.expectEqual(expected.len, sink.pos);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(checked.bitPosition(), sink_reader.bitPosition());
+    const public = try decodeRawAutoAllocExactSize(std.testing.allocator, vectors.encoded, expected.len);
+    defer std.testing.allocator.free(public);
+    try std.testing.expectEqualSlices(u8, expected, public);
+    for ([_]usize{ 1, 2, 8 }) |missing|
+        try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAllocExactSize(std.testing.allocator, vectors.encoded[0 .. vectors.encoded.len - missing], expected.len));
+}
+
+test "PNG windowed long Huffman match fields preserve complete pixels" {
+    const vectors = @import("deflate/semantic/long_match_vectors.zig");
+    const expected = try vectors.expectedAlloc(std.testing.allocator);
+    defer std.testing.allocator.free(expected);
+    const encoded = try std.testing.allocator.alloc(u8, vectors.encoded.len + 6);
+    defer std.testing.allocator.free(encoded);
+    @memcpy(encoded[0..2], &[_]u8{ 0x78, 0x9c });
+    @memcpy(encoded[2..][0..vectors.encoded.len], vectors.encoded);
+    var adler = checksum.Adler32.init();
+    adler.update(expected);
+    std.mem.writeInt(u32, encoded[encoded.len - 4 ..][0..4], adler.digest(), .big);
+    var history: [png_windowed_history_scratch_len]u8 = undefined;
+    const wide = try png.pngImageInfo(11097, 1, 8, .truecolor);
+    const wide_output = try std.testing.allocator.alloc(u8, expected.len - 1);
+    defer std.testing.allocator.free(wide_output);
+    try std.testing.expectError(error.UnsupportedDeflateFeature, decodePngWindowedZlibImageWithOptions(encoded, &history, wide, .{}, wide_output));
+
+    // Exercise the owning window path with four complete rows. Its existing
+    // row-size admission remains explicit; the public PNG facade separately
+    // covers the original wide RGB fixture through full-scratch decoding.
+    const info = try png.pngImageInfo(8322, 4, 8, .grayscale);
+    for (1..info.height) |row| {
+        const filter_offset = row * (info.row_len + 1);
+        expected[filter_offset] = 0;
+        encoded[2 + 5 + filter_offset] = 0; // zlib header and stored-block header
+    }
+    adler = checksum.Adler32.init();
+    adler.update(expected);
+    std.mem.writeInt(u32, encoded[encoded.len - 4 ..][0..4], adler.digest(), .big);
+    const output = try std.testing.allocator.alloc(u8, try png.pngImageOutputLen(info));
+    defer std.testing.allocator.free(output);
+    for ([_]ZlibDecodeOptions{ .{}, .{ .ignore_adler = true } }) |options| {
+        const decoded = try decodePngWindowedZlibImageWithOptions(encoded, &history, info, options, output);
+        try std.testing.expectEqual(output.len, decoded.output_written);
+        try std.testing.expectEqual(encoded.len, decoded.zlib_input_read);
+        for (0..info.height) |row| {
+            const start = row * (info.row_len + 1) + 1;
+            try std.testing.expectEqualSlices(u8, expected[start..][0..info.row_len], output[row * info.row_len ..][0..info.row_len]);
+        }
+    }
 }
 
 test "semantic non-overlap full-output loop matches public decode" {

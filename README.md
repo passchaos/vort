@@ -345,6 +345,8 @@ The library is under active development. Its current capabilities include:
   deletion/replacement plus physical compaction are also available;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+  [long Huffman match refill](docs/performance/png-long-huffman-match.md)
+  preserves legal 14/15-bit PNG streams after paired literals;
   default optimal one-shot encoding compares complete default/filtered candidates
   within the caller's window, match and block limits. Fresh optimal state uses
   exact initial capacity; [selection and memory evidence](docs/png-best-selection.md)
