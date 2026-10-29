@@ -1,0 +1,11 @@
+Create independent baseline and candidate source trees from commit f7750905.
+Extract packed2-source-overlay.tar.xz over the packed candidate tree. Build the
+named-best executable with the direct ReleaseFast command recorded by the
+prepared-optimal evidence epochs.
+
+Run both candidates with:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH" "$INPUTS" "$OUTPUT" --iterations 3 --sweeps 3 --mode raw-best --cpu 2
+
+`u16-ab.json` was captured before replacing the candidate with the packed-two-
+hop overlay. `packed2-ab.json` is reproducible from the archived overlay.

@@ -81,5 +81,9 @@ frontier while it already knows common prefixes—for example, a binary-tree or
 multi-hop hash-chain search with class-aware record-length output. Building a
 sidecar representation inside the DP loop is now rejected.
 
+A follow-up [compact predecessor screen](deflate-compact-predecessor-screen.md)
+also rejected transparent `u16` and packed two-hop chain layouts: fewer bytes
+and pointer loads did not offset their added coordinate and iterator work.
+
 Raw A/B data, the fused prototype overlay and the diagnostic profiler are in
 [`data/deflate-cost-class-frontier-screen-20261030/`](data/deflate-cost-class-frontier-screen-20261030/).

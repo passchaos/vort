@@ -24408,6 +24408,15 @@ reuse, so production keeps the simpler independently owned plans.
   archived and all source changes were removed. Future work must make the
   matcher natively emit a short shared-prefix frontier rather than collect one
   beside the DP loop.
+
+- 2026-10-30: Two transparent prepared-index layouts were also rejected. A
+  `u16` predecessor path regressed ordinary level-9 time to `1.033185`; packing
+  two `u16` predecessors into each `u32` reduced pointer loads but still
+  measured `1.020648`, with 4 KiB at `1.053227` and worst `1.076639`. All 36
+  output sizes tied and exact chain-order tests passed, but the
+  [compact predecessor screen](performance/deflate-compact-predecessor-screen.md)
+  shows that candidate checks, match extension and DP work dominate the
+  current hot path more than predecessor bandwidth. Both layouts were removed.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

@@ -1,0 +1,4 @@
+baseline_commit=f77509054e3c7c14475cd0f32a996f24deb91d9b
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_affinity=2
+codec_threads=1

@@ -1,0 +1,4522 @@
+{
+  "cases": {
+    "dickens-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11305256,
+            "finished_unix_ns": 1793298478807732870,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3768418.6666666665,
+            "started_unix_ns": 1793298478790312444,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11304575,
+            "finished_unix_ns": 1793298482724325821,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3768191.6666666665,
+            "started_unix_ns": 1793298482707037697,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11217795,
+            "finished_unix_ns": 1793298486586809914,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3739265.0,
+            "started_unix_ns": 1793298486569159043,
+            "zlib_bytes": 7006
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11235143,
+            "finished_unix_ns": 1793298478824956197,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3745047.6666666665,
+            "started_unix_ns": 1793298478807747831,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11204599,
+            "finished_unix_ns": 1793298482707028636,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3734866.3333333335,
+            "started_unix_ns": 1793298482689827126,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11223384,
+            "finished_unix_ns": 1793298486604170071,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3741128.0,
+            "started_unix_ns": 1793298486586819000,
+            "zlib_bytes": 7006
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 7006,
+        "baseline_median_ns": 3768191.6666666665,
+        "byte_delta": 0,
+        "candidate_bytes": 7006,
+        "candidate_median_ns": 3741128.0,
+        "time_ratio": 0.9928178635640881
+      }
+    },
+    "dickens-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1996561,
+            "finished_unix_ns": 1793298478829659479,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 665520.3333333334,
+            "started_unix_ns": 1793298478824968612,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1975906,
+            "finished_unix_ns": 1793298482733705260,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 658635.3333333334,
+            "started_unix_ns": 1793298482729088187,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1997143,
+            "finished_unix_ns": 1793298486608990824,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 665714.3333333334,
+            "started_unix_ns": 1793298486604180682,
+            "zlib_bytes": 1985
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2099153,
+            "finished_unix_ns": 1793298478834379603,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 699717.6666666666,
+            "started_unix_ns": 1793298478829666411,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2102915,
+            "finished_unix_ns": 1793298482729080383,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 700971.6666666666,
+            "started_unix_ns": 1793298482724336835,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2106740,
+            "finished_unix_ns": 1793298486613668593,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 702246.6666666666,
+            "started_unix_ns": 1793298486608997783,
+            "zlib_bytes": 1985
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1985,
+        "baseline_median_ns": 665520.3333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 1985,
+        "candidate_median_ns": 700971.6666666666,
+        "time_ratio": 1.0532685953497036
+      }
+    },
+    "dickens-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 73349219,
+            "finished_unix_ns": 1793298478935600292,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24449739.666666668,
+            "started_unix_ns": 1793298478834391706,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71933492,
+            "finished_unix_ns": 1793298482931643060,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 23977830.666666668,
+            "started_unix_ns": 1793298482833008247,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 73880577,
+            "finished_unix_ns": 1793298486714992747,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24626859.0,
+            "started_unix_ns": 1793298486613677725,
+            "zlib_bytes": 25439
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72473919,
+            "finished_unix_ns": 1793298479035077107,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24157973.0,
+            "started_unix_ns": 1793298478935611031,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72340734,
+            "finished_unix_ns": 1793298482832999317,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24113578.0,
+            "started_unix_ns": 1793298482733717066,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71632553,
+            "finished_unix_ns": 1793298486813518106,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 23877517.666666668,
+            "started_unix_ns": 1793298486715003003,
+            "zlib_bytes": 25439
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 25439,
+        "baseline_median_ns": 24449739.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 25439,
+        "candidate_median_ns": 24113578.0,
+        "time_ratio": 0.9862509101835153
+      }
+    },
+    "mozilla-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39586270,
+            "finished_unix_ns": 1793298479090970933,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13195423.333333334,
+            "started_unix_ns": 1793298479035095962,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39041492,
+            "finished_unix_ns": 1793298483043662774,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13013830.666666666,
+            "started_unix_ns": 1793298482989031082,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39695139,
+            "finished_unix_ns": 1793298486869316640,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13231713.0,
+            "started_unix_ns": 1793298486813532285,
+            "zlib_bytes": 4597
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 41123844,
+            "finished_unix_ns": 1793298479148561395,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13707948.0,
+            "started_unix_ns": 1793298479090979154,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 40890814,
+            "finished_unix_ns": 1793298482989022300,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13630271.333333334,
+            "started_unix_ns": 1793298482931656356,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 41594862,
+            "finished_unix_ns": 1793298486927954291,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13864954.0,
+            "started_unix_ns": 1793298486869326176,
+            "zlib_bytes": 4597
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4597,
+        "baseline_median_ns": 13195423.333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 4597,
+        "candidate_median_ns": 13707948.0,
+        "time_ratio": 1.038841093136585
+      }
+    },
+    "mozilla-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12685109,
+            "finished_unix_ns": 1793298479167610013,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4228369.666666667,
+            "started_unix_ns": 1793298479148576155,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12753602,
+            "finished_unix_ns": 1793298483082182976,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4251200.666666667,
+            "started_unix_ns": 1793298483063328239,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12873165,
+            "finished_unix_ns": 1793298486947305719,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4291055.0,
+            "started_unix_ns": 1793298486927966166,
+            "zlib_bytes": 1201
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 13240799,
+            "finished_unix_ns": 1793298479187285115,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4413599.666666667,
+            "started_unix_ns": 1793298479167617293,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 13316717,
+            "finished_unix_ns": 1793298483063320450,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4438905.666666667,
+            "started_unix_ns": 1793298483043674946,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 13263982,
+            "finished_unix_ns": 1793298486967192873,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4421327.333333333,
+            "started_unix_ns": 1793298486947314596,
+            "zlib_bytes": 1201
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1201,
+        "baseline_median_ns": 4251200.666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 1201,
+        "candidate_median_ns": 4421327.333333333,
+        "time_ratio": 1.0400184983034595
+      }
+    },
+    "mozilla-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72158225,
+            "finished_unix_ns": 1793298479285836239,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 24052741.666666668,
+            "started_unix_ns": 1793298479187303483,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71252665,
+            "finished_unix_ns": 1793298483277989902,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23750888.333333332,
+            "started_unix_ns": 1793298483180505589,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72271153,
+            "finished_unix_ns": 1793298487066346798,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 24090384.333333332,
+            "started_unix_ns": 1793298486967203583,
+            "zlib_bytes": 16641
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71240134,
+            "finished_unix_ns": 1793298479383431208,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23746711.333333332,
+            "started_unix_ns": 1793298479285843720,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72000858,
+            "finished_unix_ns": 1793298483180496112,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 24000286.0,
+            "started_unix_ns": 1793298483082193855,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71918712,
+            "finished_unix_ns": 1793298487165188348,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23972904.0,
+            "started_unix_ns": 1793298487066357192,
+            "zlib_bytes": 16641
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 16641,
+        "baseline_median_ns": 24052741.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 16641,
+        "candidate_median_ns": 23972904.0,
+        "time_ratio": 0.9966807248931081
+      }
+    },
+    "mr-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 53122161,
+            "finished_unix_ns": 1793298479457150183,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17707387.0,
+            "started_unix_ns": 1793298479383447047,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52963272,
+            "finished_unix_ns": 1793298483426182780,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17654424.0,
+            "started_unix_ns": 1793298483353074768,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 53741227,
+            "finished_unix_ns": 1793298487239176227,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17913742.333333332,
+            "started_unix_ns": 1793298487165207124,
+            "zlib_bytes": 4137
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 54292457,
+            "finished_unix_ns": 1793298479532404184,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 18097485.666666668,
+            "started_unix_ns": 1793298479457158686,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 54393680,
+            "finished_unix_ns": 1793298483353064784,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 18131226.666666668,
+            "started_unix_ns": 1793298483278002907,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 54545928,
+            "finished_unix_ns": 1793298487314958979,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 18181976.0,
+            "started_unix_ns": 1793298487239185827,
+            "zlib_bytes": 4137
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4137,
+        "baseline_median_ns": 17707387.0,
+        "byte_delta": 0,
+        "candidate_bytes": 4137,
+        "candidate_median_ns": 18131226.666666668,
+        "time_ratio": 1.023935754420834
+      }
+    },
+    "mr-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5074171,
+            "finished_unix_ns": 1793298479541193937,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1691390.3333333333,
+            "started_unix_ns": 1793298479532419541,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5019060,
+            "finished_unix_ns": 1793298483443703168,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1673020.0,
+            "started_unix_ns": 1793298483435137816,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5089953,
+            "finished_unix_ns": 1793298487324050344,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1696651.0,
+            "started_unix_ns": 1793298487314971885,
+            "zlib_bytes": 1674
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5412016,
+            "finished_unix_ns": 1793298479550467751,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1804005.3333333333,
+            "started_unix_ns": 1793298479541201558,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5226716,
+            "finished_unix_ns": 1793298483435130789,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1742238.6666666667,
+            "started_unix_ns": 1793298483426195835,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5417622,
+            "finished_unix_ns": 1793298487333245849,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1805874.0,
+            "started_unix_ns": 1793298487324058420,
+            "zlib_bytes": 1674
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1674,
+        "baseline_median_ns": 1691390.3333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 1674,
+        "candidate_median_ns": 1804005.3333333333,
+        "time_ratio": 1.066581319391877
+      }
+    },
+    "mr-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 206017217,
+            "finished_unix_ns": 1793298479827986058,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 68672405.66666667,
+            "started_unix_ns": 1793298479550481219,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 200188636,
+            "finished_unix_ns": 1793298483990209078,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 66729545.333333336,
+            "started_unix_ns": 1793298483718739742,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 204805677,
+            "finished_unix_ns": 1793298487609647304,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 68268559.0,
+            "started_unix_ns": 1793298487333256327,
+            "zlib_bytes": 16412
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 212391353,
+            "finished_unix_ns": 1793298480111133835,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 70797117.66666667,
+            "started_unix_ns": 1793298479828000845,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 203946916,
+            "finished_unix_ns": 1793298483718701685,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67982305.33333333,
+            "started_unix_ns": 1793298483443740157,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 201306779,
+            "finished_unix_ns": 1793298487883229559,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67102259.666666664,
+            "started_unix_ns": 1793298487609659940,
+            "zlib_bytes": 16412
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 16412,
+        "baseline_median_ns": 68268559.0,
+        "byte_delta": 0,
+        "candidate_bytes": 16412,
+        "candidate_median_ns": 67982305.33333333,
+        "time_ratio": 0.9958069472849621
+      }
+    },
+    "nci-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 61869979,
+            "finished_unix_ns": 1793298480196352867,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20623326.333333332,
+            "started_unix_ns": 1793298480111160484,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 60793774,
+            "finished_unix_ns": 1793298484160966556,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20264591.333333332,
+            "started_unix_ns": 1793298484076580117,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 60446550,
+            "finished_unix_ns": 1793298487968070361,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20148850.0,
+            "started_unix_ns": 1793298487883247191,
+            "zlib_bytes": 1587
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 63567012,
+            "finished_unix_ns": 1793298480283470366,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 21189004.0,
+            "started_unix_ns": 1793298480196363451,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62473097,
+            "finished_unix_ns": 1793298484076569448,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20824365.666666668,
+            "started_unix_ns": 1793298483990231492,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62379463,
+            "finished_unix_ns": 1793298488053994188,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20793154.333333332,
+            "started_unix_ns": 1793298487968081381,
+            "zlib_bytes": 1587
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1587,
+        "baseline_median_ns": 20264591.333333332,
+        "byte_delta": 0,
+        "candidate_bytes": 1587,
+        "candidate_median_ns": 20824365.666666668,
+        "time_ratio": 1.0276232727384222
+      }
+    },
+    "nci-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12270745,
+            "finished_unix_ns": 1793298480301934631,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4090248.3333333335,
+            "started_unix_ns": 1793298480283489502,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12147928,
+            "finished_unix_ns": 1793298484198266704,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4049309.3333333335,
+            "started_unix_ns": 1793298484179921101,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11962817,
+            "finished_unix_ns": 1793298488072291097,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 3987605.6666666665,
+            "started_unix_ns": 1793298488054008358,
+            "zlib_bytes": 528
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12415663,
+            "finished_unix_ns": 1793298480320612163,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4138554.3333333335,
+            "started_unix_ns": 1793298480301943003,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12504719,
+            "finished_unix_ns": 1793298484179913605,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4168239.6666666665,
+            "started_unix_ns": 1793298484160980537,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12720710,
+            "finished_unix_ns": 1793298488091251752,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4240236.666666667,
+            "started_unix_ns": 1793298488072298618,
+            "zlib_bytes": 528
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 528,
+        "baseline_median_ns": 4049309.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 528,
+        "candidate_median_ns": 4168239.6666666665,
+        "time_ratio": 1.0293705231048456
+      }
+    },
+    "nci-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 186718529,
+            "finished_unix_ns": 1793298480573062677,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 62239509.666666664,
+            "started_unix_ns": 1793298480320626156,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 185313258,
+            "finished_unix_ns": 1793298484699057106,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61771086.0,
+            "started_unix_ns": 1793298484448608064,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 187049811,
+            "finished_unix_ns": 1793298488344026466,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 62349937.0,
+            "started_unix_ns": 1793298488091261265,
+            "zlib_bytes": 4764
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 187132845,
+            "finished_unix_ns": 1793298480825625052,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 62377615.0,
+            "started_unix_ns": 1793298480573075364,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 185219789,
+            "finished_unix_ns": 1793298484448596370,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61739929.666666664,
+            "started_unix_ns": 1793298484198276933,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 184189061,
+            "finished_unix_ns": 1793298488593641361,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61396353.666666664,
+            "started_unix_ns": 1793298488344040486,
+            "zlib_bytes": 4764
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4764,
+        "baseline_median_ns": 62239509.666666664,
+        "byte_delta": 0,
+        "candidate_bytes": 4764,
+        "candidate_median_ns": 61739929.666666664,
+        "time_ratio": 0.9919732658133784
+      }
+    },
+    "ooffice-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15604904,
+            "finished_unix_ns": 1793298480848783635,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5201634.666666667,
+            "started_unix_ns": 1793298480825651153,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15365581,
+            "finished_unix_ns": 1793298484745602571,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5121860.333333333,
+            "started_unix_ns": 1793298484722635810,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15120457,
+            "finished_unix_ns": 1793298488616702663,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5040152.333333333,
+            "started_unix_ns": 1793298488593660283,
+            "zlib_bytes": 6240
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15669747,
+            "finished_unix_ns": 1793298480872151029,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5223249.0,
+            "started_unix_ns": 1793298480848793291,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15915318,
+            "finished_unix_ns": 1793298484722623895,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5305106.0,
+            "started_unix_ns": 1793298484699075242,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15702791,
+            "finished_unix_ns": 1793298488640179502,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5234263.666666667,
+            "started_unix_ns": 1793298488616733741,
+            "zlib_bytes": 6240
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 6240,
+        "baseline_median_ns": 5121860.333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 6240,
+        "candidate_median_ns": 5234263.666666667,
+        "time_ratio": 1.0219458021144792
+      }
+    },
+    "ooffice-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4738078,
+            "finished_unix_ns": 1793298480880536515,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1579359.3333333333,
+            "started_unix_ns": 1793298480872166103,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4715647,
+            "finished_unix_ns": 1793298484762557944,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1571882.3333333333,
+            "started_unix_ns": 1793298484754220401,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4759860,
+            "finished_unix_ns": 1793298488648476636,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1586620.0,
+            "started_unix_ns": 1793298488640194300,
+            "zlib_bytes": 403
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4994597,
+            "finished_unix_ns": 1793298480889277080,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1664865.6666666667,
+            "started_unix_ns": 1793298480880544005,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4902792,
+            "finished_unix_ns": 1793298484754213135,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1634264.0,
+            "started_unix_ns": 1793298484745614726,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4987621,
+            "finished_unix_ns": 1793298488657124113,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1662540.3333333333,
+            "started_unix_ns": 1793298488648483120,
+            "zlib_bytes": 403
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 403,
+        "baseline_median_ns": 1579359.3333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 403,
+        "candidate_median_ns": 1662540.3333333333,
+        "time_ratio": 1.0526675584488057
+      }
+    },
+    "ooffice-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 48974247,
+            "finished_unix_ns": 1793298480957416957,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16324749.0,
+            "started_unix_ns": 1793298480889290104,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 50220898,
+            "finished_unix_ns": 1793298484900460855,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16740299.333333334,
+            "started_unix_ns": 1793298484831043300,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49266584,
+            "finished_unix_ns": 1793298488727684388,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16422194.666666666,
+            "started_unix_ns": 1793298488657133149,
+            "zlib_bytes": 31765
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49349409,
+            "finished_unix_ns": 1793298481025627993,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16449803.0,
+            "started_unix_ns": 1793298480957425278,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49443200,
+            "finished_unix_ns": 1793298484831033996,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16481066.666666666,
+            "started_unix_ns": 1793298484762567472,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49932790,
+            "finished_unix_ns": 1793298488797344967,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16644263.333333334,
+            "started_unix_ns": 1793298488727695638,
+            "zlib_bytes": 31765
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 31765,
+        "baseline_median_ns": 16422194.666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 31765,
+        "candidate_median_ns": 16481066.666666666,
+        "time_ratio": 1.0035849045267682
+      }
+    },
+    "osdb-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7745681,
+            "finished_unix_ns": 1793298481037929743,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2581893.6666666665,
+            "started_unix_ns": 1793298481025644698,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7878419,
+            "finished_unix_ns": 1793298484925552486,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2626139.6666666665,
+            "started_unix_ns": 1793298484913118137,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9066000,
+            "finished_unix_ns": 1793298488812080293,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 3022000.0,
+            "started_unix_ns": 1793298488797359263,
+            "zlib_bytes": 8967
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8033329,
+            "finished_unix_ns": 1793298481050888294,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2677776.3333333335,
+            "started_unix_ns": 1793298481037937720,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8008898,
+            "finished_unix_ns": 1793298484913106887,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2669632.6666666665,
+            "started_unix_ns": 1793298484900474440,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8296670,
+            "finished_unix_ns": 1793298488825115334,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2765556.6666666665,
+            "started_unix_ns": 1793298488812088516,
+            "zlib_bytes": 8967
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 8967,
+        "baseline_median_ns": 2626139.6666666665,
+        "byte_delta": 0,
+        "candidate_bytes": 8967,
+        "candidate_median_ns": 2677776.3333333335,
+        "time_ratio": 1.0196625744327639
+      }
+    },
+    "osdb-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1935840,
+            "finished_unix_ns": 1793298481055560950,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 645280.0,
+            "started_unix_ns": 1793298481050903205,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1924151,
+            "finished_unix_ns": 1793298484934549989,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 641383.6666666666,
+            "started_unix_ns": 1793298484930098124,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1935940,
+            "finished_unix_ns": 1793298488829672416,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 645313.3333333334,
+            "started_unix_ns": 1793298488825124657,
+            "zlib_bytes": 2865
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2031360,
+            "finished_unix_ns": 1793298481060221449,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 677120.0,
+            "started_unix_ns": 1793298481055567774,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1994146,
+            "finished_unix_ns": 1793298484930091074,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 664715.3333333334,
+            "started_unix_ns": 1793298484925563322,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2030917,
+            "finished_unix_ns": 1793298488834381087,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 676972.3333333334,
+            "started_unix_ns": 1793298488829679209,
+            "zlib_bytes": 2865
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 2865,
+        "baseline_median_ns": 645280.0,
+        "byte_delta": 0,
+        "candidate_bytes": 2865,
+        "candidate_median_ns": 676972.3333333334,
+        "time_ratio": 1.0491140796760063
+      }
+    },
+    "osdb-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31852757,
+            "finished_unix_ns": 1793298481105375966,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10617585.666666666,
+            "started_unix_ns": 1793298481060234445,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31705750,
+            "finished_unix_ns": 1793298485024481522,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10568583.333333334,
+            "started_unix_ns": 1793298484979238494,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32170471,
+            "finished_unix_ns": 1793298488879868144,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10723490.333333334,
+            "started_unix_ns": 1793298488834390280,
+            "zlib_bytes": 27241
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32029101,
+            "finished_unix_ns": 1793298481150826738,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10676367.0,
+            "started_unix_ns": 1793298481105383662,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31525922,
+            "finished_unix_ns": 1793298484979229962,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10508640.666666666,
+            "started_unix_ns": 1793298484934558562,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32208042,
+            "finished_unix_ns": 1793298488925359479,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10736014.0,
+            "started_unix_ns": 1793298488879876887,
+            "zlib_bytes": 27241
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 27241,
+        "baseline_median_ns": 10617585.666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 27241,
+        "candidate_median_ns": 10676367.0,
+        "time_ratio": 1.0055362240700232
+      }
+    },
+    "reymont-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18452886,
+            "finished_unix_ns": 1793298481177497007,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6150962.0,
+            "started_unix_ns": 1793298481150844692,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18319511,
+            "finished_unix_ns": 1793298485077816235,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6106503.666666667,
+            "started_unix_ns": 1793298485051053089,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18129012,
+            "finished_unix_ns": 1793298488951868372,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6043004.0,
+            "started_unix_ns": 1793298488925372032,
+            "zlib_bytes": 4719
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18493286,
+            "finished_unix_ns": 1793298481204134994,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6164428.666666667,
+            "started_unix_ns": 1793298481177508569,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18090783,
+            "finished_unix_ns": 1793298485051045642,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6030261.0,
+            "started_unix_ns": 1793298485024495181,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18452941,
+            "finished_unix_ns": 1793298488978599051,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6150980.333333333,
+            "started_unix_ns": 1793298488951877136,
+            "zlib_bytes": 4719
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4719,
+        "baseline_median_ns": 6106503.666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 4719,
+        "candidate_median_ns": 6150980.333333333,
+        "time_ratio": 1.0072834913552005
+      }
+    },
+    "reymont-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2664387,
+            "finished_unix_ns": 1793298481209609397,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 888129.0,
+            "started_unix_ns": 1793298481204148851,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2701175,
+            "finished_unix_ns": 1793298485089399238,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 900391.6666666666,
+            "started_unix_ns": 1793298485083655342,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2694196,
+            "finished_unix_ns": 1793298488984133007,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 898065.3333333334,
+            "started_unix_ns": 1793298488978610051,
+            "zlib_bytes": 983
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2807238,
+            "finished_unix_ns": 1793298481215193491,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 935746.0,
+            "started_unix_ns": 1793298481209616367,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2885811,
+            "finished_unix_ns": 1793298485083647876,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 961937.0,
+            "started_unix_ns": 1793298485077827180,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2804367,
+            "finished_unix_ns": 1793298488989818246,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 934789.0,
+            "started_unix_ns": 1793298488984140390,
+            "zlib_bytes": 983
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 983,
+        "baseline_median_ns": 898065.3333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 983,
+        "candidate_median_ns": 935746.0,
+        "time_ratio": 1.0419576007090798
+      }
+    },
+    "reymont-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 119051156,
+            "finished_unix_ns": 1793298481377535766,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39683718.666666664,
+            "started_unix_ns": 1793298481215207298,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 118361003,
+            "finished_unix_ns": 1793298485410838677,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39453667.666666664,
+            "started_unix_ns": 1793298485250673434,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 118206045,
+            "finished_unix_ns": 1793298489150087911,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39402015.0,
+            "started_unix_ns": 1793298488989827069,
+            "zlib_bytes": 17765
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 117525620,
+            "finished_unix_ns": 1793298481536800873,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39175206.666666664,
+            "started_unix_ns": 1793298481377546615,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 119841409,
+            "finished_unix_ns": 1793298485250661793,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39947136.333333336,
+            "started_unix_ns": 1793298485089408503,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 117773330,
+            "finished_unix_ns": 1793298489311025164,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39257776.666666664,
+            "started_unix_ns": 1793298489150097641,
+            "zlib_bytes": 17765
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 17765,
+        "baseline_median_ns": 39453667.666666664,
+        "byte_delta": 0,
+        "candidate_bytes": 17765,
+        "candidate_median_ns": 39257776.666666664,
+        "time_ratio": 0.9950349102736143
+      }
+    },
+    "samba-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 16019317,
+            "finished_unix_ns": 1793298481560448136,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5339772.333333333,
+            "started_unix_ns": 1793298481536822859,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15819184,
+            "finished_unix_ns": 1793298485457691109,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5273061.333333333,
+            "started_unix_ns": 1793298485434203230,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15610238,
+            "finished_unix_ns": 1793298489334333088,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5203412.666666667,
+            "started_unix_ns": 1793298489311040512,
+            "zlib_bytes": 5855
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15999513,
+            "finished_unix_ns": 1793298481584229428,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5333171.0,
+            "started_unix_ns": 1793298481560457458,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15725572,
+            "finished_unix_ns": 1793298485434194085,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5241857.333333333,
+            "started_unix_ns": 1793298485410854388,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 16071508,
+            "finished_unix_ns": 1793298489358355189,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5357169.333333333,
+            "started_unix_ns": 1793298489334342307,
+            "zlib_bytes": 5855
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 5855,
+        "baseline_median_ns": 5273061.333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 5855,
+        "candidate_median_ns": 5333171.0,
+        "time_ratio": 1.0113993869721727
+      }
+    },
+    "samba-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6112477,
+            "finished_unix_ns": 1793298481594359551,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2037492.3333333333,
+            "started_unix_ns": 1793298481584245099,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6168140,
+            "finished_unix_ns": 1793298485478959761,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2056046.6666666667,
+            "started_unix_ns": 1793298485468486934,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6052887,
+            "finished_unix_ns": 1793298489368785917,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2017629.0,
+            "started_unix_ns": 1793298489358366462,
+            "zlib_bytes": 1496
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6600665,
+            "finished_unix_ns": 1793298481605198073,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2200221.6666666665,
+            "started_unix_ns": 1793298481594366908,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6542991,
+            "finished_unix_ns": 1793298485468476073,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2180997.0,
+            "started_unix_ns": 1793298485457702119,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6580933,
+            "finished_unix_ns": 1793298489379671246,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2193644.3333333335,
+            "started_unix_ns": 1793298489368792924,
+            "zlib_bytes": 1496
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1496,
+        "baseline_median_ns": 2037492.3333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 1496,
+        "candidate_median_ns": 2193644.3333333335,
+        "time_ratio": 1.0766393067818498
+      }
+    },
+    "samba-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71285247,
+            "finished_unix_ns": 1793298481702698747,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23761749.0,
+            "started_unix_ns": 1793298481605211533,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70067013,
+            "finished_unix_ns": 1793298485671118916,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23355671.0,
+            "started_unix_ns": 1793298485574849022,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70205084,
+            "finished_unix_ns": 1793298489475922156,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23401694.666666668,
+            "started_unix_ns": 1793298489379680501,
+            "zlib_bytes": 21668
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 68258875,
+            "finished_unix_ns": 1793298481796573370,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 22752958.333333332,
+            "started_unix_ns": 1793298481702714352,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70017179,
+            "finished_unix_ns": 1793298485574839394,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23339059.666666668,
+            "started_unix_ns": 1793298485478968972,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70018981,
+            "finished_unix_ns": 1793298489571934339,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23339660.333333332,
+            "started_unix_ns": 1793298489475931746,
+            "zlib_bytes": 21668
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 21668,
+        "baseline_median_ns": 23401694.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 21668,
+        "candidate_median_ns": 23339059.666666668,
+        "time_ratio": 0.9973234844359705
+      }
+    },
+    "sao-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9923271,
+            "finished_unix_ns": 1793298481812232910,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3307757.0,
+            "started_unix_ns": 1793298481796591772,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9956572,
+            "finished_unix_ns": 1793298485702163564,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3318857.3333333335,
+            "started_unix_ns": 1793298485686621212,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10172311,
+            "finished_unix_ns": 1793298489588078315,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3390770.3333333335,
+            "started_unix_ns": 1793298489571947401,
+            "zlib_bytes": 12775
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10006088,
+            "finished_unix_ns": 1793298481827624677,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3335362.6666666665,
+            "started_unix_ns": 1793298481812240850,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9859214,
+            "finished_unix_ns": 1793298485686612015,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3286404.6666666665,
+            "started_unix_ns": 1793298485671132189,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10045649,
+            "finished_unix_ns": 1793298489603839844,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3348549.6666666665,
+            "started_unix_ns": 1793298489588087287,
+            "zlib_bytes": 12775
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 12775,
+        "baseline_median_ns": 3318857.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 12775,
+        "candidate_median_ns": 3335362.6666666665,
+        "time_ratio": 1.0049731976025482
+      }
+    },
+    "sao-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1982615,
+            "finished_unix_ns": 1793298481832480622,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 660871.6666666666,
+            "started_unix_ns": 1793298481827642269,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1934108,
+            "finished_unix_ns": 1793298485711533301,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 644702.6666666666,
+            "started_unix_ns": 1793298485706897385,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2027698,
+            "finished_unix_ns": 1793298489608848700,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 675899.3333333334,
+            "started_unix_ns": 1793298489603850791,
+            "zlib_bytes": 3372
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2151850,
+            "finished_unix_ns": 1793298481837325391,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 717283.3333333334,
+            "started_unix_ns": 1793298481832487872,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2111662,
+            "finished_unix_ns": 1793298485706890919,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 703887.3333333334,
+            "started_unix_ns": 1793298485702173362,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2095751,
+            "finished_unix_ns": 1793298489613495686,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 698583.6666666666,
+            "started_unix_ns": 1793298489608855825,
+            "zlib_bytes": 3372
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 3372,
+        "baseline_median_ns": 660871.6666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 3372,
+        "candidate_median_ns": 703887.3333333334,
+        "time_ratio": 1.0650892886415164
+      }
+    },
+    "sao-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 50843455,
+            "finished_unix_ns": 1793298481907927139,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 16947818.333333332,
+            "started_unix_ns": 1793298481837338451,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51080938,
+            "finished_unix_ns": 1793298485854651270,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17026979.333333332,
+            "started_unix_ns": 1793298485783871975,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51613327,
+            "finished_unix_ns": 1793298489685012734,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17204442.333333332,
+            "started_unix_ns": 1793298489613508001,
+            "zlib_bytes": 49557
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 50686868,
+            "finished_unix_ns": 1793298481977973916,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 16895622.666666668,
+            "started_unix_ns": 1793298481907936404,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52110568,
+            "finished_unix_ns": 1793298485783861250,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17370189.333333332,
+            "started_unix_ns": 1793298485711542936,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52079030,
+            "finished_unix_ns": 1793298489757068221,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17359676.666666668,
+            "started_unix_ns": 1793298489685024157,
+            "zlib_bytes": 49557
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 49557,
+        "baseline_median_ns": 17026979.333333332,
+        "byte_delta": 0,
+        "candidate_bytes": 49557,
+        "candidate_median_ns": 17359676.666666668,
+        "time_ratio": 1.0195394219268255
+      }
+    },
+    "webster-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10441231,
+            "finished_unix_ns": 1793298481994136404,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3480410.3333333335,
+            "started_unix_ns": 1793298481977995172,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10735936,
+            "finished_unix_ns": 1793298485887118633,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3578645.3333333335,
+            "started_unix_ns": 1793298485870628877,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10716245,
+            "finished_unix_ns": 1793298489773890209,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3572081.6666666665,
+            "started_unix_ns": 1793298489757082194,
+            "zlib_bytes": 7000
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10571741,
+            "finished_unix_ns": 1793298482010356670,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3523913.6666666665,
+            "started_unix_ns": 1793298481994144986,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10256498,
+            "finished_unix_ns": 1793298485870620709,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3418832.6666666665,
+            "started_unix_ns": 1793298485854665249,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10740914,
+            "finished_unix_ns": 1793298489790277454,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3580304.6666666665,
+            "started_unix_ns": 1793298489773898128,
+            "zlib_bytes": 7000
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 7000,
+        "baseline_median_ns": 3572081.6666666665,
+        "byte_delta": 0,
+        "candidate_bytes": 7000,
+        "candidate_median_ns": 3523913.6666666665,
+        "time_ratio": 0.9865154258791209
+      }
+    },
+    "webster-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2012278,
+            "finished_unix_ns": 1793298482015115045,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 670759.3333333334,
+            "started_unix_ns": 1793298482010372151,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1974953,
+            "finished_unix_ns": 1793298485896800171,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 658317.6666666666,
+            "started_unix_ns": 1793298485892088523,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1990813,
+            "finished_unix_ns": 1793298489795213645,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 663604.3333333334,
+            "started_unix_ns": 1793298489790288253,
+            "zlib_bytes": 1937
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2121991,
+            "finished_unix_ns": 1793298482019887814,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 707330.3333333334,
+            "started_unix_ns": 1793298482015122004,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2118555,
+            "finished_unix_ns": 1793298485892081897,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 706185.0,
+            "started_unix_ns": 1793298485887129109,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2107062,
+            "finished_unix_ns": 1793298489800028858,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 702354.0,
+            "started_unix_ns": 1793298489795220749,
+            "zlib_bytes": 1937
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1937,
+        "baseline_median_ns": 663604.3333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 1937,
+        "candidate_median_ns": 706185.0,
+        "time_ratio": 1.064165745351271
+      }
+    },
+    "webster-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62851997,
+            "finished_unix_ns": 1793298482106172354,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20950665.666666668,
+            "started_unix_ns": 1793298482019900597,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62047356,
+            "finished_unix_ns": 1793298486069062142,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20682452.0,
+            "started_unix_ns": 1793298485983908380,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62544065,
+            "finished_unix_ns": 1793298489886254191,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20848021.666666668,
+            "started_unix_ns": 1793298489800037587,
+            "zlib_bytes": 22287
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 60599936,
+            "finished_unix_ns": 1793298482189928926,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20199978.666666668,
+            "started_unix_ns": 1793298482106181265,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 63192883,
+            "finished_unix_ns": 1793298485983898422,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 21064294.333333332,
+            "started_unix_ns": 1793298485896809303,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62348499,
+            "finished_unix_ns": 1793298489972410158,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20782833.0,
+            "started_unix_ns": 1793298489886262801,
+            "zlib_bytes": 22287
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 22287,
+        "baseline_median_ns": 20848021.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 22287,
+        "candidate_median_ns": 20782833.0,
+        "time_ratio": 0.9968731485553425
+      }
+    },
+    "x-ray-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6807417,
+            "finished_unix_ns": 1793298482201255524,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2269139.0,
+            "started_unix_ns": 1793298482189947784,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6903138,
+            "finished_unix_ns": 1793298486092104868,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2301046.0,
+            "started_unix_ns": 1793298486080567809,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6725982,
+            "finished_unix_ns": 1793298489983750050,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2241994.0,
+            "started_unix_ns": 1793298489972425028,
+            "zlib_bytes": 11700
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6890382,
+            "finished_unix_ns": 1793298482212558754,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2296794.0,
+            "started_unix_ns": 1793298482201263263,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6809967,
+            "finished_unix_ns": 1793298486080559369,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2269989.0,
+            "started_unix_ns": 1793298486069076056,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6981070,
+            "finished_unix_ns": 1793298489995230845,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2327023.3333333335,
+            "started_unix_ns": 1793298489983772746,
+            "zlib_bytes": 11700
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 11700,
+        "baseline_median_ns": 2269139.0,
+        "byte_delta": 0,
+        "candidate_bytes": 11700,
+        "candidate_median_ns": 2296794.0,
+        "time_ratio": 1.0121874420209604
+      }
+    },
+    "x-ray-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2027111,
+            "finished_unix_ns": 1793298482217456281,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 675703.6666666666,
+            "started_unix_ns": 1793298482212572165,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2040982,
+            "finished_unix_ns": 1793298486101683506,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 680327.3333333334,
+            "started_unix_ns": 1793298486097016309,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1989840,
+            "finished_unix_ns": 1793298489999940827,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 663280.0,
+            "started_unix_ns": 1793298489995242055,
+            "zlib_bytes": 3008
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2159899,
+            "finished_unix_ns": 1793298482222274065,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 719966.3333333334,
+            "started_unix_ns": 1793298482217463633,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2182489,
+            "finished_unix_ns": 1793298486097009417,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 727496.3333333334,
+            "started_unix_ns": 1793298486092115113,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2142882,
+            "finished_unix_ns": 1793298490004645751,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 714294.0,
+            "started_unix_ns": 1793298489999947432,
+            "zlib_bytes": 3008
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 3008,
+        "baseline_median_ns": 675703.6666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 3008,
+        "candidate_median_ns": 719966.3333333334,
+        "time_ratio": 1.0655060329700743
+      }
+    },
+    "x-ray-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22926165,
+            "finished_unix_ns": 1793298482255278783,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7642055.0,
+            "started_unix_ns": 1793298482222290237,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23071050,
+            "finished_unix_ns": 1793298486167823528,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7690350.0,
+            "started_unix_ns": 1793298486134835384,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23095804,
+            "finished_unix_ns": 1793298490037876482,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7698601.333333333,
+            "started_unix_ns": 1793298490004654380,
+            "zlib_bytes": 46593
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22735236,
+            "finished_unix_ns": 1793298482288162314,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7578412.0,
+            "started_unix_ns": 1793298482255286612,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23063013,
+            "finished_unix_ns": 1793298486134827550,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7687671.0,
+            "started_unix_ns": 1793298486101692608,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23043420,
+            "finished_unix_ns": 1793298490070802069,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7681140.0,
+            "started_unix_ns": 1793298490037887586,
+            "zlib_bytes": 46593
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 46593,
+        "baseline_median_ns": 7690350.0,
+        "byte_delta": 0,
+        "candidate_bytes": 46593,
+        "candidate_median_ns": 7681140.0,
+        "time_ratio": 0.9988023952095808
+      }
+    },
+    "xml-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26382993,
+            "finished_unix_ns": 1793298482325543072,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8794331.0,
+            "started_unix_ns": 1793298482288178111,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26826765,
+            "finished_unix_ns": 1793298486243784793,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8942255.0,
+            "started_unix_ns": 1793298486205934031,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26934836,
+            "finished_unix_ns": 1793298490108695259,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8978278.666666666,
+            "started_unix_ns": 1793298490070813659,
+            "zlib_bytes": 1758
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26564800,
+            "finished_unix_ns": 1793298482363241206,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8854933.333333334,
+            "started_unix_ns": 1793298482325551269,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 27064724,
+            "finished_unix_ns": 1793298486205925219,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 9021574.666666666,
+            "started_unix_ns": 1793298486167835896,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26840776,
+            "finished_unix_ns": 1793298490146580005,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8946925.333333334,
+            "started_unix_ns": 1793298490108704211,
+            "zlib_bytes": 1758
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1758,
+        "baseline_median_ns": 8942255.0,
+        "byte_delta": 0,
+        "candidate_bytes": 1758,
+        "candidate_median_ns": 8946925.333333334,
+        "time_ratio": 1.0005222769126283
+      }
+    },
+    "xml-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4892017,
+            "finished_unix_ns": 1793298482371808608,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1630672.3333333333,
+            "started_unix_ns": 1793298482363255640,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4929632,
+            "finished_unix_ns": 1793298486261163894,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1643210.6666666667,
+            "started_unix_ns": 1793298486252501804,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5070693,
+            "finished_unix_ns": 1793298490155287244,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1690231.0,
+            "started_unix_ns": 1793298490146590745,
+            "zlib_bytes": 817
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5104455,
+            "finished_unix_ns": 1793298482380562398,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1701485.0,
+            "started_unix_ns": 1793298482371816834,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4962561,
+            "finished_unix_ns": 1793298486252494389,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1654187.0,
+            "started_unix_ns": 1793298486243796779,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5135660,
+            "finished_unix_ns": 1793298490164421413,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1711886.6666666667,
+            "started_unix_ns": 1793298490155296969,
+            "zlib_bytes": 817
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 817,
+        "baseline_median_ns": 1643210.6666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 817,
+        "candidate_median_ns": 1701485.0,
+        "time_ratio": 1.0354637019558457
+      }
+    },
+    "xml-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 115102043,
+            "finished_unix_ns": 1793298482537082085,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 38367347.666666664,
+            "started_unix_ns": 1793298482380575197,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 111843136,
+            "finished_unix_ns": 1793298486569142931,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37281045.333333336,
+            "started_unix_ns": 1793298486416533391,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 115984821,
+            "finished_unix_ns": 1793298490321256524,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 38661607.0,
+            "started_unix_ns": 1793298490164433470,
+            "zlib_bytes": 5026
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 112180045,
+            "finished_unix_ns": 1793298482689812341,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37393348.333333336,
+            "started_unix_ns": 1793298482537092808,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 114614531,
+            "finished_unix_ns": 1793298486416516047,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 38204843.666666664,
+            "started_unix_ns": 1793298486261174912,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-u16-prepared-20261030.6hj1mi/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 112915035,
+            "finished_unix_ns": 1793298490474462382,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37638345.0,
+            "started_unix_ns": 1793298490321268279,
+            "zlib_bytes": 5026
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 5026,
+        "baseline_median_ns": 38367347.666666664,
+        "byte_delta": 0,
+        "candidate_bytes": 5026,
+        "candidate_median_ns": 37638345.0,
+        "time_ratio": 0.9809993989420327
+      }
+    }
+  },
+  "cpu": 2,
+  "extra": [],
+  "finished_unix_ns": 1793298490474596620,
+  "iterations": 3,
+  "mode": "raw-best",
+  "started_unix_ns": 1793298478790304995,
+  "summary": {
+    "baseline_bytes": 381768,
+    "byte_delta": 0,
+    "candidate_bytes": 381768,
+    "case_count": 36,
+    "regressions": 0,
+    "ties": 36,
+    "time_geomean_ratio": 1.0206478571351476,
+    "time_worst_ratio": 1.0766393067818498,
+    "wins": 0
+  },
+  "sweeps": 3
+}

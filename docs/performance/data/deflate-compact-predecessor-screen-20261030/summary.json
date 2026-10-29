@@ -1,0 +1,19 @@
+{
+  "baseline_commit": "f77509054e3c7c14475cd0f32a996f24deb91d9b",
+  "retained_source_changes": false,
+  "wire_size_mismatches": 0,
+  "u16": {
+    "time_geomean_ratio": 1.0331845259354782,
+    "bucket_4096_ratio": 1.0646157218432521,
+    "bucket_16384_ratio": 1.0416822246234583,
+    "bucket_65536_control_ratio": 0.9945017473717515,
+    "time_worst_ratio": 1.1100378229269774
+  },
+  "packed_two_hop": {
+    "time_geomean_ratio": 1.0206478571351476,
+    "bucket_4096_ratio": 1.0532274870997242,
+    "bucket_16384_ratio": 1.0122066347332714,
+    "bucket_65536_control_ratio": 0.9973243436498497,
+    "time_worst_ratio": 1.0766393067818498
+  }
+}
