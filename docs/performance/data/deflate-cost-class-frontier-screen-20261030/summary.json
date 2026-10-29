@@ -1,0 +1,29 @@
+{
+  "baseline_commit": "814fd654f785eb9d0b43095b09de2172c4657412",
+  "retained_source_changes": false,
+  "wire_size_mismatches": 0,
+  "candidate_density": {
+    "nci_16384": 2607596,
+    "mr_16384": 1938613,
+    "mozilla_16384": 1619421
+  },
+  "coverage": {
+    "one_record_per_byte_active_cases": 2,
+    "two_records_per_byte_active_cases": 6,
+    "active_case_count": 24
+  },
+  "separate_build": {
+    "time_geomean_ratio": 1.1193777110423428,
+    "bucket_4096_ratio": 1.1778083523425942,
+    "bucket_16384_ratio": 1.1982295623384946,
+    "bucket_65536_control_ratio": 0.9938373292640028,
+    "time_worst_ratio": 1.3201804650148625
+  },
+  "fused_build": {
+    "time_geomean_ratio": 1.0657978879607972,
+    "bucket_4096_ratio": 1.115777110481676,
+    "bucket_16384_ratio": 1.0899326736154038,
+    "bucket_65536_control_ratio": 0.9955141699917005,
+    "time_worst_ratio": 1.1754045605831331
+  }
+}

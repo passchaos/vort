@@ -1,0 +1,6 @@
+baseline_commit=814fd654f785eb9d0b43095b09de2172c4657412
+libdeflate_release=1.26
+libdeflate_commit=92e6a0db9fa848d742f9eb286c92afc60f2c3dda
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_affinity=2
+codec_threads=1

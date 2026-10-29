@@ -42,6 +42,12 @@ store needs to reduce the candidate representation itself—for example, an
 explicit DEFLATE distance-cost-class frontier—not merely memoize the existing
 chain traversal.
 
+That exact cost-class frontier was subsequently implemented and rejected as
+well. Its [negative screen](deflate-cost-class-frontier-screen.md) proves the
+safe dominance rule, but shows that collecting the representation beside the
+current hash-chain DP still regresses ordinary execution. A future attempt must
+move frontier generation into the matcher itself.
+
 ## Ordinary A/B evidence
 
 Separate ReleaseFast executables ran on logical CPU 2 of an Intel Core

@@ -1,0 +1,4522 @@
+{
+  "cases": {
+    "dickens-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11318486,
+            "finished_unix_ns": 1793296936828313401,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3772828.6666666665,
+            "started_unix_ns": 1793296936810589950,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11179486,
+            "finished_unix_ns": 1793296940837347339,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3726495.3333333335,
+            "started_unix_ns": 1793296940820223008,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11265583,
+            "finished_unix_ns": 1793296944785553703,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 3755194.3333333335,
+            "started_unix_ns": 1793296944768066101,
+            "zlib_bytes": 7006
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 14171747,
+            "finished_unix_ns": 1793296936849732770,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 4723915.666666667,
+            "started_unix_ns": 1793296936828327553,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 14100935,
+            "finished_unix_ns": 1793296940820214424,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 4700311.666666667,
+            "started_unix_ns": 1793296940799090034,
+            "zlib_bytes": 7006
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 13971553,
+            "finished_unix_ns": 1793296944806773325,
+            "frame_bytes": 7006,
+            "mix": 21513,
+            "per_iteration_ns": 4657184.333333333,
+            "started_unix_ns": 1793296944785562570,
+            "zlib_bytes": 7006
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 7006,
+        "baseline_median_ns": 3755194.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 7006,
+        "candidate_median_ns": 4700311.666666667,
+        "time_ratio": 1.2516826692413523
+      }
+    },
+    "dickens-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1964024,
+            "finished_unix_ns": 1793296936854284784,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 654674.6666666666,
+            "started_unix_ns": 1793296936849745488,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2018761,
+            "finished_unix_ns": 1793296940847328950,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 672920.3333333334,
+            "started_unix_ns": 1793296940842511495,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1906820,
+            "finished_unix_ns": 1793296944811865571,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 635606.6666666666,
+            "started_unix_ns": 1793296944806784078,
+            "zlib_bytes": 1985
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2224828,
+            "finished_unix_ns": 1793296936859170367,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 741609.3333333334,
+            "started_unix_ns": 1793296936854291587,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2240911,
+            "finished_unix_ns": 1793296940842504624,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 746970.3333333334,
+            "started_unix_ns": 1793296940837357550,
+            "zlib_bytes": 1985
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2289430,
+            "finished_unix_ns": 1793296944816992313,
+            "frame_bytes": 1985,
+            "mix": 6450,
+            "per_iteration_ns": 763143.3333333334,
+            "started_unix_ns": 1793296944811872318,
+            "zlib_bytes": 1985
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1985,
+        "baseline_median_ns": 654674.6666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 1985,
+        "candidate_median_ns": 746970.3333333334,
+        "time_ratio": 1.140979438133139
+      }
+    },
+    "dickens-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 73944207,
+            "finished_unix_ns": 1793296936960126741,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24648069.0,
+            "started_unix_ns": 1793296936859182585,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 73903971,
+            "finished_unix_ns": 1793296941046819818,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24634657.0,
+            "started_unix_ns": 1793296940946274254,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 74586465,
+            "finished_unix_ns": 1793296944919133479,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24862155.0,
+            "started_unix_ns": 1793296944817001626,
+            "zlib_bytes": 25439
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72364540,
+            "finished_unix_ns": 1793296937058998160,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24121513.333333332,
+            "started_unix_ns": 1793296936960137518,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72231591,
+            "finished_unix_ns": 1793296940946261074,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24077197.0,
+            "started_unix_ns": 1793296940847338453,
+            "zlib_bytes": 25439
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/dickens-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 73299413,
+            "finished_unix_ns": 1793296945019419961,
+            "frame_bytes": 25439,
+            "mix": 76812,
+            "per_iteration_ns": 24433137.666666668,
+            "started_unix_ns": 1793296944919142609,
+            "zlib_bytes": 25439
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 25439,
+        "baseline_median_ns": 24648069.0,
+        "byte_delta": 0,
+        "candidate_bytes": 25439,
+        "candidate_median_ns": 24121513.333333332,
+        "time_ratio": 0.978637041844265
+      }
+    },
+    "mozilla-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39036011,
+            "finished_unix_ns": 1793296937113853929,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13012003.666666666,
+            "started_unix_ns": 1793296937059016457,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39483050,
+            "finished_unix_ns": 1793296941170764090,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13161016.666666666,
+            "started_unix_ns": 1793296941115225978,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 39199284,
+            "finished_unix_ns": 1793296945074621207,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 13066428.0,
+            "started_unix_ns": 1793296945019434498,
+            "zlib_bytes": 4597
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 50453338,
+            "finished_unix_ns": 1793296937183851815,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 16817779.333333332,
+            "started_unix_ns": 1793296937113861455,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49070032,
+            "finished_unix_ns": 1793296941115216546,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 16356677.333333334,
+            "started_unix_ns": 1793296941046832715,
+            "zlib_bytes": 4597
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49841146,
+            "finished_unix_ns": 1793296945144088993,
+            "frame_bytes": 4597,
+            "mix": 14478,
+            "per_iteration_ns": 16613715.333333334,
+            "started_unix_ns": 1793296945074630170,
+            "zlib_bytes": 4597
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4597,
+        "baseline_median_ns": 13066428.0,
+        "byte_delta": 0,
+        "candidate_bytes": 4597,
+        "candidate_median_ns": 16613715.333333334,
+        "time_ratio": 1.2714810301126929
+      }
+    },
+    "mozilla-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12607797,
+            "finished_unix_ns": 1793296937202897121,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4202599.0,
+            "started_unix_ns": 1793296937183866492,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12647382,
+            "finished_unix_ns": 1793296941213121685,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4215794.0,
+            "started_unix_ns": 1793296941194108897,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12711343,
+            "finished_unix_ns": 1793296945163316038,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 4237114.333333333,
+            "started_unix_ns": 1793296945144100753,
+            "zlib_bytes": 1201
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15779244,
+            "finished_unix_ns": 1793296937226230766,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 5259748.0,
+            "started_unix_ns": 1793296937202903972,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15902152,
+            "finished_unix_ns": 1793296941194101672,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 5300717.333333333,
+            "started_unix_ns": 1793296941170776272,
+            "zlib_bytes": 1201
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15872366,
+            "finished_unix_ns": 1793296945186728594,
+            "frame_bytes": 1201,
+            "mix": 4290,
+            "per_iteration_ns": 5290788.666666667,
+            "started_unix_ns": 1793296945163323207,
+            "zlib_bytes": 1201
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1201,
+        "baseline_median_ns": 4215794.0,
+        "byte_delta": 0,
+        "candidate_bytes": 1201,
+        "candidate_median_ns": 5290788.666666667,
+        "time_ratio": 1.2549922189430194
+      }
+    },
+    "mozilla-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71970407,
+            "finished_unix_ns": 1793296937324561160,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23990135.666666668,
+            "started_unix_ns": 1793296937226247407,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71892246,
+            "finished_unix_ns": 1793296941409680584,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23964082.0,
+            "started_unix_ns": 1793296941310816835,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 72048816,
+            "finished_unix_ns": 1793296945285012648,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 24016272.0,
+            "started_unix_ns": 1793296945186739230,
+            "zlib_bytes": 16641
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70387265,
+            "finished_unix_ns": 1793296937421426883,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23462421.666666668,
+            "started_unix_ns": 1793296937324569475,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71375647,
+            "finished_unix_ns": 1793296941310808169,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23791882.333333332,
+            "started_unix_ns": 1793296941213131667,
+            "zlib_bytes": 16641
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mozilla-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 71099941,
+            "finished_unix_ns": 1793296945382241228,
+            "frame_bytes": 16641,
+            "mix": 50634,
+            "per_iteration_ns": 23699980.333333332,
+            "started_unix_ns": 1793296945285020901,
+            "zlib_bytes": 16641
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 16641,
+        "baseline_median_ns": 23990135.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 16641,
+        "candidate_median_ns": 23699980.333333332,
+        "time_ratio": 0.9879052233232472
+      }
+    },
+    "mr-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52652771,
+            "finished_unix_ns": 1793296937494523581,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17550923.666666668,
+            "started_unix_ns": 1793296937421442263,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52730511,
+            "finished_unix_ns": 1793296941572320627,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17576837.0,
+            "started_unix_ns": 1793296941499170072,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52954553,
+            "finished_unix_ns": 1793296945455750213,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 17651517.666666668,
+            "started_unix_ns": 1793296945382258040,
+            "zlib_bytes": 4137
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 64801194,
+            "finished_unix_ns": 1793296937583460757,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 21600398.0,
+            "started_unix_ns": 1793296937494531009,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 64701060,
+            "finished_unix_ns": 1793296941499159446,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 21567020.0,
+            "started_unix_ns": 1793296941409695985,
+            "zlib_bytes": 4137
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 64957181,
+            "finished_unix_ns": 1793296945545020968,
+            "frame_bytes": 4137,
+            "mix": 13122,
+            "per_iteration_ns": 21652393.666666668,
+            "started_unix_ns": 1793296945455759643,
+            "zlib_bytes": 4137
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4137,
+        "baseline_median_ns": 17576837.0,
+        "byte_delta": 0,
+        "candidate_bytes": 4137,
+        "candidate_median_ns": 21600398.0,
+        "time_ratio": 1.2289126877606023
+      }
+    },
+    "mr-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5129234,
+            "finished_unix_ns": 1793296937592644005,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1709744.6666666667,
+            "started_unix_ns": 1793296937583475891,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5084090,
+            "finished_unix_ns": 1793296941592172398,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1694696.6666666667,
+            "started_unix_ns": 1793296941583176934,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4994785,
+            "finished_unix_ns": 1793296945553974371,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 1664928.3333333333,
+            "started_unix_ns": 1793296945545033645,
+            "zlib_bytes": 1674
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6270214,
+            "finished_unix_ns": 1793296937603318453,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 2090071.3333333333,
+            "started_unix_ns": 1793296937592650942,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6346693,
+            "finished_unix_ns": 1793296941583169732,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 2115564.3333333335,
+            "started_unix_ns": 1793296941572334415,
+            "zlib_bytes": 1674
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6269036,
+            "finished_unix_ns": 1793296945564372679,
+            "frame_bytes": 1674,
+            "mix": 5493,
+            "per_iteration_ns": 2089678.6666666667,
+            "started_unix_ns": 1793296945553981568,
+            "zlib_bytes": 1674
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1674,
+        "baseline_median_ns": 1694696.6666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 1674,
+        "candidate_median_ns": 2090071.3333333333,
+        "time_ratio": 1.2333011414038697
+      }
+    },
+    "mr-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 204772280,
+            "finished_unix_ns": 1793296937880036404,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 68257426.66666667,
+            "started_unix_ns": 1793296937603332095,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 202935511,
+            "finished_unix_ns": 1793296942138442766,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67645170.33333333,
+            "started_unix_ns": 1793296941864175832,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 203721331,
+            "finished_unix_ns": 1793296945838567881,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67907110.33333333,
+            "started_unix_ns": 1793296945564382822,
+            "zlib_bytes": 16412
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 206054341,
+            "finished_unix_ns": 1793296938158622933,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 68684780.33333333,
+            "started_unix_ns": 1793296937880050712,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 201292168,
+            "finished_unix_ns": 1793296941864164217,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67097389.333333336,
+            "started_unix_ns": 1793296941592181858,
+            "zlib_bytes": 16412
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/mr-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 203528572,
+            "finished_unix_ns": 1793296946112362626,
+            "frame_bytes": 16412,
+            "mix": 49947,
+            "per_iteration_ns": 67842857.33333333,
+            "started_unix_ns": 1793296945838579967,
+            "zlib_bytes": 16412
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 16412,
+        "baseline_median_ns": 67907110.33333333,
+        "byte_delta": 0,
+        "candidate_bytes": 16412,
+        "candidate_median_ns": 67842857.33333333,
+        "time_ratio": 0.9990538104230234
+      }
+    },
+    "nci-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 61890465,
+            "finished_unix_ns": 1793296938243766434,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20630155.0,
+            "started_unix_ns": 1793296938158648591,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 60464466,
+            "finished_unix_ns": 1793296942329119512,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 20154822.0,
+            "started_unix_ns": 1793296942245766282,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 63223729,
+            "finished_unix_ns": 1793296946199200969,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 21074576.333333332,
+            "started_unix_ns": 1793296946112380697,
+            "zlib_bytes": 1587
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 79474283,
+            "finished_unix_ns": 1793296938352038240,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 26491427.666666668,
+            "started_unix_ns": 1793296938243775256,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 78060796,
+            "finished_unix_ns": 1793296942245754969,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 26020265.333333332,
+            "started_unix_ns": 1793296942138463807,
+            "zlib_bytes": 1587
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 78472180,
+            "finished_unix_ns": 1793296946306265113,
+            "frame_bytes": 1587,
+            "mix": 5472,
+            "per_iteration_ns": 26157393.333333332,
+            "started_unix_ns": 1793296946199211839,
+            "zlib_bytes": 1587
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1587,
+        "baseline_median_ns": 20630155.0,
+        "byte_delta": 0,
+        "candidate_bytes": 1587,
+        "candidate_median_ns": 26157393.333333332,
+        "time_ratio": 1.2679203492815896
+      }
+    },
+    "nci-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12034000,
+            "finished_unix_ns": 1793296938370441833,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4011333.3333333335,
+            "started_unix_ns": 1793296938352060504,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12056943,
+            "finished_unix_ns": 1793296942370089496,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4018981.0,
+            "started_unix_ns": 1793296942351684206,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 11971822,
+            "finished_unix_ns": 1793296946324726765,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 3990607.3333333335,
+            "started_unix_ns": 1793296946306280379,
+            "zlib_bytes": 528
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15383071,
+            "finished_unix_ns": 1793296938393481216,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 5127690.333333333,
+            "started_unix_ns": 1793296938370451318,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 14842378,
+            "finished_unix_ns": 1793296942351676774,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 4947459.333333333,
+            "started_unix_ns": 1793296942329133131,
+            "zlib_bytes": 528
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15257038,
+            "finished_unix_ns": 1793296946347413890,
+            "frame_bytes": 528,
+            "mix": 2103,
+            "per_iteration_ns": 5085679.333333333,
+            "started_unix_ns": 1793296946324735297,
+            "zlib_bytes": 528
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 528,
+        "baseline_median_ns": 4011333.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 528,
+        "candidate_median_ns": 5085679.333333333,
+        "time_ratio": 1.2678276549775633
+      }
+    },
+    "nci-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 187040253,
+            "finished_unix_ns": 1793296938645986080,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 62346751.0,
+            "started_unix_ns": 1793296938393497421,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 184053708,
+            "finished_unix_ns": 1793296942869033373,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61351236.0,
+            "started_unix_ns": 1793296942620304191,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 211386175,
+            "finished_unix_ns": 1793296946624270833,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 70462058.33333333,
+            "started_unix_ns": 1793296946347424471,
+            "zlib_bytes": 4764
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 185654148,
+            "finished_unix_ns": 1793296938898021949,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61884716.0,
+            "started_unix_ns": 1793296938645996778,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 185518499,
+            "finished_unix_ns": 1793296942620292259,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 61839499.666666664,
+            "started_unix_ns": 1793296942370099774,
+            "zlib_bytes": 4764
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/nci-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 188021712,
+            "finished_unix_ns": 1793296946885071004,
+            "frame_bytes": 4764,
+            "mix": 15003,
+            "per_iteration_ns": 62673904.0,
+            "started_unix_ns": 1793296946624285535,
+            "zlib_bytes": 4764
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4764,
+        "baseline_median_ns": 62346751.0,
+        "byte_delta": 0,
+        "candidate_bytes": 4764,
+        "candidate_median_ns": 61884716.0,
+        "time_ratio": 0.9925892690061748
+      }
+    },
+    "ooffice-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15280343,
+            "finished_unix_ns": 1793296938921191787,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5093447.666666667,
+            "started_unix_ns": 1793296938898050004,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 14944257,
+            "finished_unix_ns": 1793296942920663573,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 4981419.0,
+            "started_unix_ns": 1793296942898114431,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15217397,
+            "finished_unix_ns": 1793296946908077377,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 5072465.666666667,
+            "started_unix_ns": 1793296946885091708,
+            "zlib_bytes": 6240
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 20011998,
+            "finished_unix_ns": 1793296938950309993,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 6670666.0,
+            "started_unix_ns": 1793296938921200568,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 19495396,
+            "finished_unix_ns": 1793296942898104634,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 6498465.333333333,
+            "started_unix_ns": 1793296942869051765,
+            "zlib_bytes": 6240
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 19620582,
+            "finished_unix_ns": 1793296946936658393,
+            "frame_bytes": 6240,
+            "mix": 19431,
+            "per_iteration_ns": 6540194.0,
+            "started_unix_ns": 1793296946908086996,
+            "zlib_bytes": 6240
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 6240,
+        "baseline_median_ns": 5072465.666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 6240,
+        "candidate_median_ns": 6540194.0,
+        "time_ratio": 1.2893520488425187
+      }
+    },
+    "ooffice-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4691946,
+            "finished_unix_ns": 1793296938958668989,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1563982.0,
+            "started_unix_ns": 1793296938950325203,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4700554,
+            "finished_unix_ns": 1793296942938119085,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1566851.3333333333,
+            "started_unix_ns": 1793296942929801903,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4745715,
+            "finished_unix_ns": 1793296946945099084,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1581905.0,
+            "started_unix_ns": 1793296946936673551,
+            "zlib_bytes": 403
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5118661,
+            "finished_unix_ns": 1793296938967586162,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1706220.3333333333,
+            "started_unix_ns": 1793296938958675870,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5068974,
+            "finished_unix_ns": 1793296942929794656,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1689658.0,
+            "started_unix_ns": 1793296942920674848,
+            "zlib_bytes": 403
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5082294,
+            "finished_unix_ns": 1793296946954079280,
+            "frame_bytes": 403,
+            "mix": 1920,
+            "per_iteration_ns": 1694098.0,
+            "started_unix_ns": 1793296946945105902,
+            "zlib_bytes": 403
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 403,
+        "baseline_median_ns": 1566851.3333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 403,
+        "candidate_median_ns": 1694098.0,
+        "time_ratio": 1.0812117039821265
+      }
+    },
+    "ooffice-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49541248,
+            "finished_unix_ns": 1793296939036358609,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16513749.333333334,
+            "started_unix_ns": 1793296938967599701,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 48604672,
+            "finished_unix_ns": 1793296943074236622,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16201557.333333334,
+            "started_unix_ns": 1793296943006757386,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49142977,
+            "finished_unix_ns": 1793296947022208073,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16380992.333333334,
+            "started_unix_ns": 1793296946954089088,
+            "zlib_bytes": 31765
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49291813,
+            "finished_unix_ns": 1793296939104753330,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16430604.333333334,
+            "started_unix_ns": 1793296939036366772,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49474544,
+            "finished_unix_ns": 1793296943006748065,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16491514.666666666,
+            "started_unix_ns": 1793296942938128767,
+            "zlib_bytes": 31765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/ooffice-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 49220321,
+            "finished_unix_ns": 1793296947090665217,
+            "frame_bytes": 31765,
+            "mix": 96006,
+            "per_iteration_ns": 16406773.666666666,
+            "started_unix_ns": 1793296947022217127,
+            "zlib_bytes": 31765
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 31765,
+        "baseline_median_ns": 16380992.333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 31765,
+        "candidate_median_ns": 16430604.333333334,
+        "time_ratio": 1.0030286321481907
+      }
+    },
+    "osdb-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7827462,
+            "finished_unix_ns": 1793296939117395307,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2609154.0,
+            "started_unix_ns": 1793296939104770459,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7771376,
+            "finished_unix_ns": 1793296943099643363,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2590458.6666666665,
+            "started_unix_ns": 1793296943086989546,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7838266,
+            "finished_unix_ns": 1793296947103412267,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2612755.3333333335,
+            "started_unix_ns": 1793296947090680384,
+            "zlib_bytes": 8967
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7949014,
+            "finished_unix_ns": 1793296939130415473,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2649671.3333333335,
+            "started_unix_ns": 1793296939117403488,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7624540,
+            "finished_unix_ns": 1793296943086978805,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2541513.3333333335,
+            "started_unix_ns": 1793296943074249634,
+            "zlib_bytes": 8967
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7897668,
+            "finished_unix_ns": 1793296947116277354,
+            "frame_bytes": 8967,
+            "mix": 27420,
+            "per_iteration_ns": 2632556.0,
+            "started_unix_ns": 1793296947103420094,
+            "zlib_bytes": 8967
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 8967,
+        "baseline_median_ns": 2609154.0,
+        "byte_delta": 0,
+        "candidate_bytes": 8967,
+        "candidate_median_ns": 2632556.0,
+        "time_ratio": 1.0089691907798466
+      }
+    },
+    "osdb-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1940081,
+            "finished_unix_ns": 1793296939135013285,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 646693.6666666666,
+            "started_unix_ns": 1793296939130429189,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1906394,
+            "finished_unix_ns": 1793296943109399035,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 635464.6666666666,
+            "started_unix_ns": 1793296943104620873,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1927490,
+            "finished_unix_ns": 1793296947121034202,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 642496.6666666666,
+            "started_unix_ns": 1793296947116287652,
+            "zlib_bytes": 2865
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2054592,
+            "finished_unix_ns": 1793296939139700755,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 684864.0,
+            "started_unix_ns": 1793296939135019882,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2056193,
+            "finished_unix_ns": 1793296943104613961,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 685397.6666666666,
+            "started_unix_ns": 1793296943099654101,
+            "zlib_bytes": 2865
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2037622,
+            "finished_unix_ns": 1793296947125867252,
+            "frame_bytes": 2865,
+            "mix": 9114,
+            "per_iteration_ns": 679207.3333333334,
+            "started_unix_ns": 1793296947121041039,
+            "zlib_bytes": 2865
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 2865,
+        "baseline_median_ns": 642496.6666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 2865,
+        "candidate_median_ns": 684864.0,
+        "time_ratio": 1.065941716947948
+      }
+    },
+    "osdb-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32168855,
+            "finished_unix_ns": 1793296939185761743,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10722951.666666666,
+            "started_unix_ns": 1793296939139739550,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32526143,
+            "finished_unix_ns": 1793296943200773797,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10842047.666666666,
+            "started_unix_ns": 1793296943155195608,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32505197,
+            "finished_unix_ns": 1793296947171688299,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10835065.666666666,
+            "started_unix_ns": 1793296947125876036,
+            "zlib_bytes": 27241
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31623273,
+            "finished_unix_ns": 1793296939230516132,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10541091.0,
+            "started_unix_ns": 1793296939185769884,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32585571,
+            "finished_unix_ns": 1793296943155187684,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10861857.0,
+            "started_unix_ns": 1793296943109408823,
+            "zlib_bytes": 27241
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/osdb-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 32640270,
+            "finished_unix_ns": 1793296947217245952,
+            "frame_bytes": 27241,
+            "mix": 82266,
+            "per_iteration_ns": 10880090.0,
+            "started_unix_ns": 1793296947171696479,
+            "zlib_bytes": 27241
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 27241,
+        "baseline_median_ns": 10835065.666666666,
+        "byte_delta": 0,
+        "candidate_bytes": 27241,
+        "candidate_median_ns": 10861857.0,
+        "time_ratio": 1.0024726507579695
+      }
+    },
+    "reymont-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18294659,
+            "finished_unix_ns": 1793296939257397806,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6098219.666666667,
+            "started_unix_ns": 1793296939230532298,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18269635,
+            "finished_unix_ns": 1793296943258605965,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6089878.333333333,
+            "started_unix_ns": 1793296943232253115,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 18465248,
+            "finished_unix_ns": 1793296947243896430,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 6155082.666666667,
+            "started_unix_ns": 1793296947217256310,
+            "zlib_bytes": 4719
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 21697111,
+            "finished_unix_ns": 1793296939288830150,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 7232370.333333333,
+            "started_unix_ns": 1793296939257409347,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22062415,
+            "finished_unix_ns": 1793296943232244853,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 7354138.333333333,
+            "started_unix_ns": 1793296943200785277,
+            "zlib_bytes": 4719
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 21728042,
+            "finished_unix_ns": 1793296947275043768,
+            "frame_bytes": 4719,
+            "mix": 14676,
+            "per_iteration_ns": 7242680.666666667,
+            "started_unix_ns": 1793296947243904106,
+            "zlib_bytes": 4719
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 4719,
+        "baseline_median_ns": 6098219.666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 4719,
+        "candidate_median_ns": 7242680.666666667,
+        "time_ratio": 1.1876713307419395
+      }
+    },
+    "reymont-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2706561,
+            "finished_unix_ns": 1793296939294413055,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 902187.0,
+            "started_unix_ns": 1793296939288845071,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2766657,
+            "finished_unix_ns": 1793296943271316819,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 922219.0,
+            "started_unix_ns": 1793296943265502010,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2602103,
+            "finished_unix_ns": 1793296947280592432,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 867367.6666666666,
+            "started_unix_ns": 1793296947275054479,
+            "zlib_bytes": 983
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 3543297,
+            "finished_unix_ns": 1793296939301161318,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 1181099.0,
+            "started_unix_ns": 1793296939294419770,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 3501542,
+            "finished_unix_ns": 1793296943265494571,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 1167180.6666666667,
+            "started_unix_ns": 1793296943258616602,
+            "zlib_bytes": 983
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 3544640,
+            "finished_unix_ns": 1793296947287407730,
+            "frame_bytes": 983,
+            "mix": 3468,
+            "per_iteration_ns": 1181546.6666666667,
+            "started_unix_ns": 1793296947280604108,
+            "zlib_bytes": 983
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 983,
+        "baseline_median_ns": 902187.0,
+        "byte_delta": 0,
+        "candidate_bytes": 983,
+        "candidate_median_ns": 1181099.0,
+        "time_ratio": 1.3091509853278755
+      }
+    },
+    "reymont-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 117985283,
+            "finished_unix_ns": 1793296939460974426,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39328427.666666664,
+            "started_unix_ns": 1793296939301173630,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 115968069,
+            "finished_unix_ns": 1793296943587612903,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 38656023.0,
+            "started_unix_ns": 1793296943430878076,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 118252548,
+            "finished_unix_ns": 1793296947447970782,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39417516.0,
+            "started_unix_ns": 1793296947287417318,
+            "zlib_bytes": 17765
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 119166744,
+            "finished_unix_ns": 1793296939622149964,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39722248.0,
+            "started_unix_ns": 1793296939460984193,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 117390563,
+            "finished_unix_ns": 1793296943430867821,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 39130187.666666664,
+            "started_unix_ns": 1793296943271326849,
+            "zlib_bytes": 17765
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/reymont-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 115950662,
+            "finished_unix_ns": 1793296947606039928,
+            "frame_bytes": 17765,
+            "mix": 53838,
+            "per_iteration_ns": 38650220.666666664,
+            "started_unix_ns": 1793296947447981208,
+            "zlib_bytes": 17765
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 17765,
+        "baseline_median_ns": 39328427.666666664,
+        "byte_delta": 0,
+        "candidate_bytes": 17765,
+        "candidate_median_ns": 39130187.666666664,
+        "time_ratio": 0.9949593713310837
+      }
+    },
+    "samba-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15593050,
+            "finished_unix_ns": 1793296939645491804,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5197683.333333333,
+            "started_unix_ns": 1793296939622170062,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15740972,
+            "finished_unix_ns": 1793296943641107020,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5246990.666666667,
+            "started_unix_ns": 1793296943617634422,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 15502432,
+            "finished_unix_ns": 1793296947629281753,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 5167477.333333333,
+            "started_unix_ns": 1793296947606055005,
+            "zlib_bytes": 5855
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 20590407,
+            "finished_unix_ns": 1793296939675451100,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 6863469.0,
+            "started_unix_ns": 1793296939645500513,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 20500533,
+            "finished_unix_ns": 1793296943617624038,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 6833511.0,
+            "started_unix_ns": 1793296943587628625,
+            "zlib_bytes": 5855
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 20585640,
+            "finished_unix_ns": 1793296947659201704,
+            "frame_bytes": 5855,
+            "mix": 18252,
+            "per_iteration_ns": 6861880.0,
+            "started_unix_ns": 1793296947629290310,
+            "zlib_bytes": 5855
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 5855,
+        "baseline_median_ns": 5197683.333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 5855,
+        "candidate_median_ns": 6861880.0,
+        "time_ratio": 1.3201804650148625
+      }
+    },
+    "samba-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5978315,
+            "finished_unix_ns": 1793296939685556530,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 1992771.6666666667,
+            "started_unix_ns": 1793296939675465691,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5985755,
+            "finished_unix_ns": 1793296943664017670,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 1995251.6666666667,
+            "started_unix_ns": 1793296943653774832,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5925981,
+            "finished_unix_ns": 1793296947669219709,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 1975327.0,
+            "started_unix_ns": 1793296947659213762,
+            "zlib_bytes": 1496
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7714541,
+            "finished_unix_ns": 1793296939697970207,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2571513.6666666665,
+            "started_unix_ns": 1793296939685563576,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7590295,
+            "finished_unix_ns": 1793296943653764363,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2530098.3333333335,
+            "started_unix_ns": 1793296943641117844,
+            "zlib_bytes": 1496
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 7723604,
+            "finished_unix_ns": 1793296947681656982,
+            "frame_bytes": 1496,
+            "mix": 5175,
+            "per_iteration_ns": 2574534.6666666665,
+            "started_unix_ns": 1793296947669226259,
+            "zlib_bytes": 1496
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1496,
+        "baseline_median_ns": 1992771.6666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 1496,
+        "candidate_median_ns": 2571513.6666666665,
+        "time_ratio": 1.290420628555036
+      }
+    },
+    "samba-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 70280292,
+            "finished_unix_ns": 1793296939794398787,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23426764.0,
+            "started_unix_ns": 1793296939697983892,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 69902237,
+            "finished_unix_ns": 1793296943855652930,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23300745.666666668,
+            "started_unix_ns": 1793296943759757160,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 69854859,
+            "finished_unix_ns": 1793296947777728603,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23284953.0,
+            "started_unix_ns": 1793296947681665787,
+            "zlib_bytes": 21668
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 69426803,
+            "finished_unix_ns": 1793296939889771044,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23142267.666666668,
+            "started_unix_ns": 1793296939794408123,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 69978370,
+            "finished_unix_ns": 1793296943759747425,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 23326123.333333332,
+            "started_unix_ns": 1793296943664027522,
+            "zlib_bytes": 21668
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/samba-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 68717780,
+            "finished_unix_ns": 1793296947872172390,
+            "frame_bytes": 21668,
+            "mix": 65715,
+            "per_iteration_ns": 22905926.666666668,
+            "started_unix_ns": 1793296947777737803,
+            "zlib_bytes": 21668
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 21668,
+        "baseline_median_ns": 23300745.666666668,
+        "byte_delta": 0,
+        "candidate_bytes": 21668,
+        "candidate_median_ns": 23142267.666666668,
+        "time_ratio": 0.9931985867633965
+      }
+    },
+    "sao-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9792615,
+            "finished_unix_ns": 1793296939905169224,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3264205.0,
+            "started_unix_ns": 1793296939889789373,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9877939,
+            "finished_unix_ns": 1793296943886245705,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3292646.3333333335,
+            "started_unix_ns": 1793296943870755865,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9982739,
+            "finished_unix_ns": 1793296947888209453,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3327579.6666666665,
+            "started_unix_ns": 1793296947872186506,
+            "zlib_bytes": 12775
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9626942,
+            "finished_unix_ns": 1793296939920211598,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3208980.6666666665,
+            "started_unix_ns": 1793296939905177152,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9442151,
+            "finished_unix_ns": 1793296943870747819,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3147383.6666666665,
+            "started_unix_ns": 1793296943855667830,
+            "zlib_bytes": 12775
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 9643868,
+            "finished_unix_ns": 1793296947903620042,
+            "frame_bytes": 12775,
+            "mix": 38580,
+            "per_iteration_ns": 3214622.6666666665,
+            "started_unix_ns": 1793296947888217431,
+            "zlib_bytes": 12775
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 12775,
+        "baseline_median_ns": 3292646.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 12775,
+        "candidate_median_ns": 3208980.6666666665,
+        "time_ratio": 0.9745901447660286
+      }
+    },
+    "sao-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1989701,
+            "finished_unix_ns": 1793296939925061435,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 663233.6666666666,
+            "started_unix_ns": 1793296939920230102,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1979533,
+            "finished_unix_ns": 1793296943895981519,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 659844.3333333334,
+            "started_unix_ns": 1793296943891301140,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1973927,
+            "finished_unix_ns": 1793296947908531324,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 657975.6666666666,
+            "started_unix_ns": 1793296947903630166,
+            "zlib_bytes": 3372
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2129780,
+            "finished_unix_ns": 1793296939930213827,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 709926.6666666666,
+            "started_unix_ns": 1793296939925068304,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2115902,
+            "finished_unix_ns": 1793296943891293836,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 705300.6666666666,
+            "started_unix_ns": 1793296943886257055,
+            "zlib_bytes": 3372
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2118564,
+            "finished_unix_ns": 1793296947913555418,
+            "frame_bytes": 3372,
+            "mix": 10299,
+            "per_iteration_ns": 706188.0,
+            "started_unix_ns": 1793296947908538360,
+            "zlib_bytes": 3372
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 3372,
+        "baseline_median_ns": 659844.3333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 3372,
+        "candidate_median_ns": 706188.0,
+        "time_ratio": 1.0702342421167013
+      }
+    },
+    "sao-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51616037,
+            "finished_unix_ns": 1793296940001753932,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17205345.666666668,
+            "started_unix_ns": 1793296939930226994,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52486825,
+            "finished_unix_ns": 1793296944039752954,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17495608.333333332,
+            "started_unix_ns": 1793296943966977700,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51648888,
+            "finished_unix_ns": 1793296947985101534,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17216296.0,
+            "started_unix_ns": 1793296947913567480,
+            "zlib_bytes": 49557
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51817320,
+            "finished_unix_ns": 1793296940073301818,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17272440.0,
+            "started_unix_ns": 1793296940001763033,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 51197254,
+            "finished_unix_ns": 1793296943966968375,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17065751.333333332,
+            "started_unix_ns": 1793296943895990733,
+            "zlib_bytes": 49557
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/sao-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 52191039,
+            "finished_unix_ns": 1793296948056661363,
+            "frame_bytes": 49557,
+            "mix": 148926,
+            "per_iteration_ns": 17397013.0,
+            "started_unix_ns": 1793296947985110121,
+            "zlib_bytes": 49557
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 49557,
+        "baseline_median_ns": 17216296.0,
+        "byte_delta": 0,
+        "candidate_bytes": 49557,
+        "candidate_median_ns": 17272440.0,
+        "time_ratio": 1.0032610963473212
+      }
+    },
+    "webster-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10398835,
+            "finished_unix_ns": 1793296940089680586,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3466278.3333333335,
+            "started_unix_ns": 1793296940073319033,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10438073,
+            "finished_unix_ns": 1793296944074620390,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3479357.6666666665,
+            "started_unix_ns": 1793296944058330417,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 10408312,
+            "finished_unix_ns": 1793296948072913377,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 3469437.3333333335,
+            "started_unix_ns": 1793296948056672925,
+            "zlib_bytes": 7000
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12636921,
+            "finished_unix_ns": 1793296940108873895,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 4212307.0,
+            "started_unix_ns": 1793296940089688605,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12340201,
+            "finished_unix_ns": 1793296944058321602,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 4113400.3333333335,
+            "started_unix_ns": 1793296944039767258,
+            "zlib_bytes": 7000
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 12772717,
+            "finished_unix_ns": 1793296948092181644,
+            "frame_bytes": 7000,
+            "mix": 21519,
+            "per_iteration_ns": 4257572.333333333,
+            "started_unix_ns": 1793296948072921402,
+            "zlib_bytes": 7000
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 7000,
+        "baseline_median_ns": 3469437.3333333335,
+        "byte_delta": 0,
+        "candidate_bytes": 7000,
+        "candidate_median_ns": 4212307.0,
+        "time_ratio": 1.214118197071725
+      }
+    },
+    "webster-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1934198,
+            "finished_unix_ns": 1793296940113430277,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 644732.6666666666,
+            "started_unix_ns": 1793296940108888039,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1966972,
+            "finished_unix_ns": 1793296944084621005,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 655657.3333333334,
+            "started_unix_ns": 1793296944079888821,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2002851,
+            "finished_unix_ns": 1793296948096837217,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 667617.0,
+            "started_unix_ns": 1793296948092192508,
+            "zlib_bytes": 1937
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2250892,
+            "finished_unix_ns": 1793296940118602805,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 750297.3333333334,
+            "started_unix_ns": 1793296940113437003,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2240924,
+            "finished_unix_ns": 1793296944079881972,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 746974.6666666666,
+            "started_unix_ns": 1793296944074631036,
+            "zlib_bytes": 1937
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2246411,
+            "finished_unix_ns": 1793296948101831637,
+            "frame_bytes": 1937,
+            "mix": 6330,
+            "per_iteration_ns": 748803.6666666666,
+            "started_unix_ns": 1793296948096843921,
+            "zlib_bytes": 1937
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1937,
+        "baseline_median_ns": 655657.3333333334,
+        "byte_delta": 0,
+        "candidate_bytes": 1937,
+        "candidate_median_ns": 748803.6666666666,
+        "time_ratio": 1.1420655708367988
+      }
+    },
+    "webster-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 63323413,
+            "finished_unix_ns": 1793296940205312315,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 21107804.333333332,
+            "started_unix_ns": 1793296940118614814,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62639536,
+            "finished_unix_ns": 1793296944256123327,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20879845.333333332,
+            "started_unix_ns": 1793296944170354400,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62980902,
+            "finished_unix_ns": 1793296948188308267,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20993634.0,
+            "started_unix_ns": 1793296948101840176,
+            "zlib_bytes": 22287
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 61239577,
+            "finished_unix_ns": 1793296940289874712,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20413192.333333332,
+            "started_unix_ns": 1793296940205320063,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 62206524,
+            "finished_unix_ns": 1793296944170344192,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 20735508.0,
+            "started_unix_ns": 1793296944084634058,
+            "zlib_bytes": 22287
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/webster-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 63802459,
+            "finished_unix_ns": 1793296948275853878,
+            "frame_bytes": 22287,
+            "mix": 67380,
+            "per_iteration_ns": 21267486.333333332,
+            "started_unix_ns": 1793296948188316419,
+            "zlib_bytes": 22287
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 22287,
+        "baseline_median_ns": 20993634.0,
+        "byte_delta": 0,
+        "candidate_bytes": 22287,
+        "candidate_median_ns": 20735508.0,
+        "time_ratio": 0.9877045584390011
+      }
+    },
+    "x-ray-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6623742,
+            "finished_unix_ns": 1793296940300976159,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2207914.0,
+            "started_unix_ns": 1793296940289891791,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6649107,
+            "finished_unix_ns": 1793296944280488208,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2216369.0,
+            "started_unix_ns": 1793296944269334741,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 6656788,
+            "finished_unix_ns": 1793296948287161373,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2218929.3333333335,
+            "started_unix_ns": 1793296948275868612,
+            "zlib_bytes": 11700
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8349282,
+            "finished_unix_ns": 1793296940314037175,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2783094.0,
+            "started_unix_ns": 1793296940300983314,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8116070,
+            "finished_unix_ns": 1793296944269327162,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2705356.6666666665,
+            "started_unix_ns": 1793296944256136977,
+            "zlib_bytes": 11700
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 8340758,
+            "finished_unix_ns": 1793296948300403740,
+            "frame_bytes": 11700,
+            "mix": 35523,
+            "per_iteration_ns": 2780252.6666666665,
+            "started_unix_ns": 1793296948287169449,
+            "zlib_bytes": 11700
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 11700,
+        "baseline_median_ns": 2216369.0,
+        "byte_delta": 0,
+        "candidate_bytes": 11700,
+        "candidate_median_ns": 2780252.6666666665,
+        "time_ratio": 1.254417773695024
+      }
+    },
+    "x-ray-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2018099,
+            "finished_unix_ns": 1793296940318837344,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 672699.6666666666,
+            "started_unix_ns": 1793296940314051045,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1977802,
+            "finished_unix_ns": 1793296944290490896,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 659267.3333333334,
+            "started_unix_ns": 1793296944285801144,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 1980522,
+            "finished_unix_ns": 1793296948305215218,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 660174.0,
+            "started_unix_ns": 1793296948300414418,
+            "zlib_bytes": 3008
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2240671,
+            "finished_unix_ns": 1793296940323772118,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 746890.3333333334,
+            "started_unix_ns": 1793296940318843750,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2221303,
+            "finished_unix_ns": 1793296944285794289,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 740434.3333333334,
+            "started_unix_ns": 1793296944280499054,
+            "zlib_bytes": 3008
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 2227403,
+            "finished_unix_ns": 1793296948310147258,
+            "frame_bytes": 3008,
+            "mix": 9447,
+            "per_iteration_ns": 742467.6666666666,
+            "started_unix_ns": 1793296948305222093,
+            "zlib_bytes": 3008
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 3008,
+        "baseline_median_ns": 660174.0,
+        "byte_delta": 0,
+        "candidate_bytes": 3008,
+        "candidate_median_ns": 742467.6666666666,
+        "time_ratio": 1.1246545102755738
+      }
+    },
+    "x-ray-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22945967,
+            "finished_unix_ns": 1793296940356668317,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7648655.666666667,
+            "started_unix_ns": 1793296940323801317,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22873889,
+            "finished_unix_ns": 1793296944356896515,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7624629.666666667,
+            "started_unix_ns": 1793296944323650639,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23292713,
+            "finished_unix_ns": 1793296948343541264,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7764237.666666667,
+            "started_unix_ns": 1793296948310156385,
+            "zlib_bytes": 46593
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22910905,
+            "finished_unix_ns": 1793296940389647766,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7636968.333333333,
+            "started_unix_ns": 1793296940356675983,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 22813404,
+            "finished_unix_ns": 1793296944323642484,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7604468.0,
+            "started_unix_ns": 1793296944290500292,
+            "zlib_bytes": 46593
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/x-ray-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 23106089,
+            "finished_unix_ns": 1793296948376786843,
+            "frame_bytes": 46593,
+            "mix": 140202,
+            "per_iteration_ns": 7702029.666666667,
+            "started_unix_ns": 1793296948343554046,
+            "zlib_bytes": 46593
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 46593,
+        "baseline_median_ns": 7648655.666666667,
+        "byte_delta": 0,
+        "candidate_bytes": 46593,
+        "candidate_median_ns": 7636968.333333333,
+        "time_ratio": 0.9984719754892003
+      }
+    },
+    "xml-16384": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26578578,
+            "finished_unix_ns": 1793296940427382887,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8859526.0,
+            "started_unix_ns": 1793296940389662510,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 27089741,
+            "finished_unix_ns": 1793296944439757015,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 9029913.666666666,
+            "started_unix_ns": 1793296944401572670,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 26969562,
+            "finished_unix_ns": 1793296948414807644,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 8989854.0,
+            "started_unix_ns": 1793296948376799937,
+            "zlib_bytes": 1758
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31118343,
+            "finished_unix_ns": 1793296940471398663,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 10372781.0,
+            "started_unix_ns": 1793296940427390927,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31920889,
+            "finished_unix_ns": 1793296944401563413,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 10640296.333333334,
+            "started_unix_ns": 1793296944356909106,
+            "zlib_bytes": 1758
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-16384",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 31465378,
+            "finished_unix_ns": 1793296948458939697,
+            "frame_bytes": 1758,
+            "mix": 5913,
+            "per_iteration_ns": 10488459.333333334,
+            "started_unix_ns": 1793296948414815588,
+            "zlib_bytes": 1758
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 1758,
+        "baseline_median_ns": 8989854.0,
+        "byte_delta": 0,
+        "candidate_bytes": 1758,
+        "candidate_median_ns": 10488459.333333334,
+        "time_ratio": 1.1666996297529786
+      }
+    },
+    "xml-4096": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4777675,
+            "finished_unix_ns": 1793296940480044004,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1592558.3333333333,
+            "started_unix_ns": 1793296940471414017,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4834583,
+            "finished_unix_ns": 1793296944457797004,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1611527.6666666667,
+            "started_unix_ns": 1793296944449200426,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 4685360,
+            "finished_unix_ns": 1793296948467407403,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1561786.6666666667,
+            "started_unix_ns": 1793296948458951494,
+            "zlib_bytes": 817
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5682111,
+            "finished_unix_ns": 1793296940489555200,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1894037.0,
+            "started_unix_ns": 1793296940480050791,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5608982,
+            "finished_unix_ns": 1793296944449193420,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1869660.6666666667,
+            "started_unix_ns": 1793296944439768761,
+            "zlib_bytes": 817
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-4096",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 5731698,
+            "finished_unix_ns": 1793296948477308985,
+            "frame_bytes": 817,
+            "mix": 3114,
+            "per_iteration_ns": 1910566.0,
+            "started_unix_ns": 1793296948467414482,
+            "zlib_bytes": 817
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 817,
+        "baseline_median_ns": 1592558.3333333333,
+        "byte_delta": 0,
+        "candidate_bytes": 817,
+        "candidate_median_ns": 1894037.0,
+        "time_ratio": 1.189304630390305
+      }
+    },
+    "xml-65536": {
+      "path": "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+      "samples": {
+        "baseline": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 115439305,
+            "finished_unix_ns": 1793296940646659131,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 38479768.333333336,
+            "started_unix_ns": 1793296940489567661,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 113656267,
+            "finished_unix_ns": 1793296944768049850,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37885422.333333336,
+            "started_unix_ns": 1793296944613522454,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-baseline",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 113966658,
+            "finished_unix_ns": 1793296948632720858,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37988886.0,
+            "started_unix_ns": 1793296948477319353,
+            "zlib_bytes": 5026
+          }
+        ],
+        "candidate": [
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 112263051,
+            "finished_unix_ns": 1793296940799074943,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37421017.0,
+            "started_unix_ns": 1793296940646670637,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 114902613,
+            "finished_unix_ns": 1793296944613509849,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 38300871.0,
+            "started_unix_ns": 1793296944457806278,
+            "zlib_bytes": 5026
+          },
+          {
+            "argv": [
+              "taskset",
+              "-c",
+              "2",
+              "/tmp/vort-deflate-cost-frontier-20261030.jo4RKd/bench-candidate",
+              "/tmp/vort-br-rle-key-20261028-im_rz_vf/inputs/xml-65536",
+              "3",
+              "raw-best"
+            ],
+            "elapsed_ns": 112269522,
+            "finished_unix_ns": 1793296948785202586,
+            "frame_bytes": 5026,
+            "mix": 15741,
+            "per_iteration_ns": 37423174.0,
+            "started_unix_ns": 1793296948632731812,
+            "zlib_bytes": 5026
+          }
+        ]
+      },
+      "summary": {
+        "baseline_bytes": 5026,
+        "baseline_median_ns": 37988886.0,
+        "byte_delta": 0,
+        "candidate_bytes": 5026,
+        "candidate_median_ns": 37423174.0,
+        "time_ratio": 0.9851084867295135
+      }
+    }
+  },
+  "cpu": 2,
+  "extra": [],
+  "finished_unix_ns": 1793296948785340153,
+  "iterations": 3,
+  "mode": "raw-best",
+  "started_unix_ns": 1793296936810582463,
+  "summary": {
+    "baseline_bytes": 381768,
+    "byte_delta": 0,
+    "candidate_bytes": 381768,
+    "case_count": 36,
+    "regressions": 0,
+    "ties": 36,
+    "time_geomean_ratio": 1.1193777110423428,
+    "time_worst_ratio": 1.3201804650148625,
+    "wins": 0
+  },
+  "sweeps": 3
+}

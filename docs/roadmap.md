@@ -24396,6 +24396,18 @@ reuse, so production keeps the simpler independently owned plans.
   and one-slot match-length caches regressed ordinary time to `1.038527` and
   `1.036266`, so all cache code was removed; a future frontier must reduce the
   representation itself rather than memoize the existing chain.
+
+- 2026-10-30: A DEFLATE-specific distance-symbol frontier proved that, after
+  freezing the original candidate budget, same-symbol candidates whose match
+  length does not set a new record are strictly dominated for both fixed and
+  modeled costs. The representation remained too dense under a bounded heap:
+  one/two records per input byte covered only 2/6 of 24 active cases. A separate
+  build regressed ordinary time to `1.119378`; fusing collection into the fixed
+  pass still regressed to `1.065798`, with a `1.175405` worst case. The complete
+  [negative screen](performance/deflate-cost-class-frontier-screen.md) is
+  archived and all source changes were removed. Future work must make the
+  matcher natively emit a short shared-prefix frontier rather than collect one
+  beside the DP loop.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

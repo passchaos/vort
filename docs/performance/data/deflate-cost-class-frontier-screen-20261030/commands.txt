@@ -1,0 +1,13 @@
+Create independent baseline and candidate source trees from commit 814fd654,
+then extract fused-source-overlay.tar.xz over the candidate tree. Build the
+named-best executables with the direct ReleaseFast command recorded in the
+prepared-optimal evidence epochs.
+
+Run each ordinary screen with:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH" "$INPUTS" "$OUTPUT" --iterations 3 --sweeps 3 --mode raw-best --cpu 2
+
+The first output is `separate-build-ab.json`. The fused overlay produces
+`fused-build-ab.json`. `frontier-profile.zig` is compiled against the fused
+candidate `src/lz77.zig` and run over the same Silesia prefixes to report
+frontier admission, retained records and owned capacity.
