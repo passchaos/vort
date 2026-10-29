@@ -11863,6 +11863,29 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
             stats,
             options,
         );
+    return encodeCommandPlanWithStandardWrite(
+        allocator,
+        writer,
+        input,
+        commands,
+        io,
+        stats,
+        options,
+    );
+}
+
+// Keep the standard 79-symbol writer's large fixed scratch out of the public
+// dispatcher frame. Large Window and wide/adaptive calls return above without
+// ever needing this specialization's stack storage.
+noinline fn encodeCommandPlanWithStandardWrite(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: ?std.Io,
+    stats: *encoder_stats.PlannedEncodeStats,
+    options: CommandPlanEncodeOptions,
+) Error!void {
     return encodeCommandPlanWithOptionsWriteInternal(
         false,
         planned_distance_alphabet_size,
