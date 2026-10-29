@@ -437,8 +437,6 @@ pub const PreparedOptimal = struct {
         var result: PreparedOptimal = .{ .input = input, .options = options };
         errdefer result.deinit(allocator);
         try validateOptimalInputLength(input.len);
-        try result.scratch.costs.resize(allocator, input.len + 1);
-        try result.scratch.steps.resize(allocator, input.len);
         try buildOptimalCompactHashIndex(
             allocator,
             input,
@@ -446,6 +444,13 @@ pub const PreparedOptimal = struct {
             &result.scratch.compact_prev,
             &result.scratch.index.head_initialized,
         );
+        // The head table is only needed while materializing predecessor links.
+        // Release it before allocating the DP workspaces so the prepared
+        // owner does not overlap two 32K-entry tables at peak.
+        result.scratch.compact_head.deinit(allocator);
+        result.scratch.compact_head = .empty;
+        try result.scratch.costs.resize(allocator, input.len + 1);
+        try result.scratch.steps.resize(allocator, input.len);
         return result;
     }
 
@@ -3719,6 +3724,7 @@ test "prepared optimal matches independent fixed and modeled plans" {
 
     var prepared = try PreparedOptimal.init(std.testing.allocator, input, options);
     defer prepared.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), prepared.scratch.compact_head.capacity);
     const fixed = try prepared.planFixedAlloc(std.testing.allocator);
     defer fixed.deinit(std.testing.allocator);
     const modeled = try prepared.planModeledAlloc(std.testing.allocator, model);
