@@ -24362,6 +24362,28 @@ reuse, so production keeps the simpler independently owned plans.
   Wasm and HQ controls pass. Pinned Brotli 1.2.0 source confirms the ordered
   leaf/natural-parent queue invariant, while Vort deliberately retains its own
   deterministic ties, `u64` weights, bounded fallback and resource contracts.
+
+- 2026-10-30: DEFLATE levels 8 and 9 now reuse one prepared compact
+  predecessor index and retained DP/token workspace across the fixed-cost seed
+  and entropy-modeled solve. Both solves still recompute every DP choice and
+  complete raw/zlib/gzip arbitration is byte-identical. The 36-case ordinary
+  [prepared-optimal evidence](performance/deflate-prepared-optimal.md) records
+  level-9/level-8 time ratios `0.945438/0.945764`; active 4/16 KiB buckets
+  improve about 7.8%/8.5%, while the disabled 64 KiB controls remain near
+  `1.00x`. Requested peak heap falls 28.9% on `nci-16384`, median RSS falls
+  4.6%, all 216 baseline/candidate wrapper wires match by SHA-256, and system
+  zlib decodes them all. Prepared/independent token and statistic equality,
+  every allocation failure, complete Debug/ReleaseFast DEFLATE, x86 and
+  external zlib gates are covered.
+
+- 2026-10-30: Upstream-Zstd-inspired dominance pruning, packed DP nodes,
+  rep-length caches, scratch reuse and match-frontier prototypes were screened
+  with separate ordinary executables and exact wire/settings checks. The best
+  primary combination reached `0.971563`, but its 16 KiB/dictionary secondary
+  ratio was `0.995468` with a `1.011483` worst case, so every prototype was
+  removed. [The negative screen](performance/zstd-upstream-layout-screen.md)
+  records why Vort needs a native shared match store or state-specific SoA
+  redesign rather than a mechanical copy of upstream's node layout.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

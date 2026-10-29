@@ -1,0 +1,106 @@
+{
+  "raw": [],
+  "rows": [
+    {
+      "baseline_byte_comparisons": 3250306,
+      "baseline_ns": 4523483.5,
+      "baseline_peak": 2562852,
+      "baseline_rep_probes": 96324,
+      "cache_hits": 66848,
+      "candidate_byte_comparisons": 1125182,
+      "candidate_ns": 4342327.5,
+      "candidate_peak": 2562852,
+      "candidate_rep_probes": 29476,
+      "case": "btopt-dickens",
+      "peak_delta": 0,
+      "ratio": 0.9599521032850015
+    },
+    {
+      "baseline_byte_comparisons": 5019352,
+      "baseline_ns": 27099252.0,
+      "baseline_peak": 2562852,
+      "baseline_rep_probes": 93392,
+      "cache_hits": 61316,
+      "candidate_byte_comparisons": 2403322,
+      "candidate_ns": 27160458.0,
+      "candidate_peak": 2562852,
+      "candidate_rep_probes": 32076,
+      "case": "btopt-mozilla",
+      "peak_delta": 0,
+      "ratio": 1.0022585863255562
+    },
+    {
+      "baseline_byte_comparisons": 3323972,
+      "baseline_ns": 6944658.5,
+      "baseline_peak": 2562852,
+      "baseline_rep_probes": 92341,
+      "cache_hits": 66041,
+      "candidate_byte_comparisons": 1225838,
+      "candidate_ns": 6994227.5,
+      "candidate_peak": 2562852,
+      "candidate_rep_probes": 26300,
+      "case": "btopt-mr",
+      "peak_delta": 0,
+      "ratio": 1.0071377159870425
+    },
+    {
+      "baseline_byte_comparisons": 12541744,
+      "baseline_ns": 17496427.0,
+      "baseline_peak": 4469288,
+      "baseline_rep_probes": 382551,
+      "cache_hits": 306477,
+      "candidate_byte_comparisons": 2794200,
+      "candidate_ns": 16874619.5,
+      "candidate_peak": 4469288,
+      "candidate_rep_probes": 76074,
+      "case": "btultra2-dickens",
+      "peak_delta": 0,
+      "ratio": 0.9644608867856277
+    },
+    {
+      "baseline_byte_comparisons": 18030725,
+      "baseline_ns": 142117728.5,
+      "baseline_peak": 4469288,
+      "baseline_rep_probes": 375521,
+      "cache_hits": 281390,
+      "candidate_byte_comparisons": 6094239,
+      "candidate_ns": 140421187.5,
+      "candidate_peak": 4469288,
+      "candidate_rep_probes": 94131,
+      "case": "btultra2-mozilla",
+      "peak_delta": 0,
+      "ratio": 0.9880624253011474
+    },
+    {
+      "baseline_byte_comparisons": 12472314,
+      "baseline_ns": 27891275.0,
+      "baseline_peak": 4469288,
+      "baseline_rep_probes": 367598,
+      "cache_hits": 301073,
+      "candidate_byte_comparisons": 2896490,
+      "candidate_ns": 26697079.0,
+      "candidate_peak": 4469288,
+      "candidate_rep_probes": 66525,
+      "case": "btultra2-mr",
+      "peak_delta": 0,
+      "ratio": 0.9571838863587269
+    }
+  ],
+  "summary": {
+    "all_wires_settings_equal": true,
+    "geomean": 0.9796338099436943,
+    "improved": 4,
+    "maximum": 1.0071377159870425,
+    "profiles_equal_except_peak": true,
+    "sweep_geomeans": [
+      0.9680457334977007,
+      0.9933374945093851,
+      0.9899563578968658,
+      0.9965131305444205,
+      0.9784063645453652,
+      1.0012764622412564,
+      0.9791904352115206,
+      0.9604347453461515
+    ]
+  }
+}

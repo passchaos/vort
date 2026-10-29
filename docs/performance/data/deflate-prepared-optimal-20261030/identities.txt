@@ -1,0 +1,9 @@
+baseline_commit=803834d374675442df225540e38fc90c5cc860ec
+zopfli_release=1.0.3
+libdeflate_release=1.26
+libdeflate_commit=92e6a0db9fa848d742f9eb286c92afc60f2c3dda
+zstd_reference_commit=01b7154f1172432f8abe9b3bb9909e14a1176b7d
+python_zlib_runtime_version=1.2.11
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_affinity=2
+codec_threads=1

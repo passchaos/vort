@@ -1,0 +1,20 @@
+Focused contracts:
+  zig test src/lz77.zig -ODebug --test-filter 'prepared optimal': 3/3 passed
+  zig test src/lz77.zig -OReleaseFast --test-filter 'prepared optimal': 3/3 passed
+  zig test src/deflate.zig -ODebug --test-filter 'dynamic optimal refinement': 6/6 passed
+  zig test src/deflate.zig -OReleaseFast --test-filter 'dynamic optimal refinement': 6/6 passed
+  zig test src/deflate.zig -ODebug -target x86-linux --test-filter 'dynamic optimal refinement': 6/6 passed
+
+Complete DEFLATE units:
+  zig test src/deflate.zig -ODebug: 551/551 passed
+  zig test src/deflate.zig -OReleaseFast: 551/551 passed
+
+External compatibility:
+  run-python-zlib-diff: payloads=11, CLI successes=265, expected failures=60
+  run-deflate-params-interop: cases=6, wrappers=3, parameter changes=84, partial flush cases=6, sync recovery cases=2
+  run-deflate-incremental-encode-gate: cases=5, success
+
+Project gates:
+  zig build -j2 check check-wasm --summary all: 212/212 steps succeeded
+  check: success
+  check-wasm: success

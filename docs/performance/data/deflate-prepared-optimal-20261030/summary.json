@@ -1,0 +1,38 @@
+{
+  "baseline_commit": "803834d374675442df225540e38fc90c5cc860ec",
+  "candidate_scope": [
+    "src/lz77.zig",
+    "src/deflate.zig"
+  ],
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "cpu_affinity": 2,
+  "level9": {
+    "case_count": 36,
+    "time_geomean_ratio": 0.9454378455908669,
+    "time_worst_ratio": 1.013407830989331,
+    "bucket_4096_ratio": 0.922432309,
+    "bucket_16384_ratio": 0.915492314,
+    "bucket_65536_control_ratio": 1.000713458,
+    "wire_size_mismatches": 0
+  },
+  "level8": {
+    "case_count": 36,
+    "time_geomean_ratio": 0.9457636385607521,
+    "time_worst_ratio": 1.0127981357035858,
+    "bucket_4096_ratio": 0.920620399,
+    "bucket_16384_ratio": 0.915784266,
+    "bucket_65536_control_ratio": 1.003399931,
+    "wire_size_mismatches": 0
+  },
+  "interop": {
+    "checks_per_side": 216,
+    "wire_sha_or_size_mismatches": 0,
+    "all_system_zlib_decoded": true,
+    "system_zlib_runtime_version": "1.2.11"
+  },
+  "rss_nci_16384_kib": {
+    "baseline_median": 3900,
+    "candidate_median": 3720,
+    "ratio": 0.9538461538461539
+  }
+}

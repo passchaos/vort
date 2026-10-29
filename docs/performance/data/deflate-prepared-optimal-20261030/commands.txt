@@ -1,0 +1,37 @@
+The baseline and candidate source trees are independent archives of commit
+803834d3. Extract source-overlay.tar.xz over the candidate tree only. Rebuild
+the linked Brotli and Zstd Huffman objects from the baseline exactly as in the
+2026-10-29 refinement epoch.
+
+Build the named-best, numeric-level, wire and heap probes with the same direct
+`zig build-exe -O ReleaseFast` command shape recorded in the preceding epoch,
+substituting this directory's `heap_probe.zig` for the heap binaries.
+
+Ordinary timing:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH" "$INPUTS" "$EPOCH/raw-best-ab.json" --iterations 7 --sweeps 5 --mode raw-best --cpu 2
+  python3 ../deflate-dynamic-optimal-refinement-20261029/measure.py "$EPOCH/numeric-run" "$INPUTS" "$EPOCH/level8-raw-ab.json" --iterations 5 --sweeps 5 --mode 8 --extra raw --cpu 2
+
+Wire generation and system-zlib decode:
+
+  python3 ../deflate-dynamic-optimal-refinement-20261029/interop.py "$BASELINE_INTEROP" "$INPUTS" "$EPOCH/interop-baseline.json"
+  python3 ../deflate-dynamic-optimal-refinement-20261029/interop.py "$CANDIDATE_INTEROP" "$INPUTS" "$EPOCH/interop-candidate.json"
+
+Representative requested heap and RSS:
+
+  taskset -c 2 "$EPOCH/heap-baseline" "$INPUTS/nci-16384" 9
+  taskset -c 2 "$EPOCH/heap-candidate" "$INPUTS/nci-16384" 9
+  /usr/bin/time -v -o "$EPOCH/rss-baseline.txt" taskset -c 2 "$EPOCH/bench-baseline" "$INPUTS/nci-16384" 3 raw-best
+  /usr/bin/time -v -o "$EPOCH/rss-candidate.txt" taskset -c 2 "$EPOCH/bench-candidate" "$INPUTS/nci-16384" 3 raw-best
+
+Validation:
+
+  zig fmt --check src/lz77.zig src/deflate.zig docs/performance/data/deflate-prepared-optimal-20261030/heap_probe.zig
+  zig test src/lz77.zig -ODebug --test-filter 'prepared optimal'
+  zig test src/lz77.zig -OReleaseFast --test-filter 'prepared optimal'
+  zig test src/deflate.zig -ODebug
+  zig test src/deflate.zig -OReleaseFast
+  zig test src/deflate.zig -ODebug -target x86-linux --test-filter 'dynamic optimal refinement'
+  zig build -j2 run-python-zlib-diff run-deflate-params-interop --summary all
+  taskset -c 2 zig build -j2 run-deflate-incremental-encode-gate --summary all
+  zig build -j2 check check-wasm --summary all

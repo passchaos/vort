@@ -1,0 +1,21 @@
+{
+  "upstream_zstd_commit": "01b7154f1172432f8abe9b3bb9909e14a1176b7d",
+  "all_retained_source_changes": false,
+  "dominance": {
+    "weighted_transition_suppression": 0.05456846050910371,
+    "mozilla_btultra2_transition_suppression": 0.028857573942355565
+  },
+  "ordinary_time_ratios": {
+    "node40": 1.0612969731616,
+    "node48": 1.0814641619508183,
+    "rep_cache_open": 0.9796338099436943,
+    "rep_cache_direct": 0.9861751416859693,
+    "rep_cache_seeded": 0.9809172971999001,
+    "scratch": 0.9926918597020834,
+    "frontier16": 0.9840254928512121,
+    "frontier16_rep": 0.9715629592351285,
+    "frontier8_rep": 0.9757266012677439,
+    "secondary_16k_dictionary": 0.995467749648376
+  },
+  "secondary_worst_ratio": 1.011483460648688
+}
