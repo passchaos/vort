@@ -5,6 +5,7 @@ pub fn contracts(comptime C: type) !void {
     try @import("search_edges_tests/quotas.zig").contracts(C);
     try @import("search_edges_tests/errors.zig").contracts(C);
     try @import("search_edges_tests/smoke.zig").contracts(C);
+    try @import("search_edges_tests/borrowed_inputs.zig").contracts(C);
 }
 
 test "Zstd HQ search sampled ML boundaries preserve frozen nodes and profile" {
@@ -18,4 +19,7 @@ test "Zstd HQ search sampled failures preserve frozen error precedence and overf
 }
 test "Zstd HQ search complete spill and whole predecessor preserve frozen edges" {
     try @import("search_edges_tests/smoke.zig").contracts(Codec);
+}
+test "Zstd HQ search borrowed edge inputs preserve aliased snapshots and errors" {
+    try @import("search_edges_tests/borrowed_inputs.zig").contracts(Codec);
 }

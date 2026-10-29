@@ -32,19 +32,19 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
             const minimum: usize = self.parameters.hq_options.min_match;
             if (maximum < minimum) return;
             const choices = try rep.choices(node.literal_len, distance, node.repeats);
-            for (choices.slice()) |choice| {
+            for (choices.slice()) |*choice| {
                 if (complete) {
                     // Includes every interior length, every exact repeat
                     // selector and every endpoint beyond the bounded horizon.
                     for (minimum..maximum + 1) |length|
-                        try self.extend(false, position, slot, node, length, choice, 0);
+                        try self.extend(false, position, slot, &node, length, choice, 0);
                 } else {
                     // Preserve the old sampling order, duplicates and ties.
-                    try self.extend(false, position, slot, node, maximum, choice, 0);
+                    try self.extend(false, position, slot, &node, maximum, choice, 0);
                     const exhaustive: usize = if (self.parameters.strategy == .btopt) 16 else 64;
                     var length = minimum;
                     while (length < @min(maximum, exhaustive + 1)) : (length += 1)
-                        try self.extend(false, position, slot, node, length, choice, 0);
+                        try self.extend(false, position, slot, &node, length, choice, 0);
                     for (prices.ml_bases, prices.ml_bits, 0..) |base, bits, code| {
                         const lower: usize = base;
                         // Later ML intervals also start beyond the strict bound.
@@ -52,15 +52,15 @@ pub fn Context(comptime whole: bool, comptime complete: bool) type {
                         // Both endpoints belong to this ML symbol already.
                         const upper = lower + (@as(usize, 1) << @intCast(bits)) - 1;
                         if (lower > exhaustive and lower < maximum)
-                            try self.extend(true, position, slot, node, lower, choice, @intCast(code));
+                            try self.extend(true, position, slot, &node, lower, choice, @intCast(code));
                         if (self.parameters.strategy != .btopt and upper > exhaustive and upper < maximum)
-                            try self.extend(true, position, slot, node, upper, choice, @intCast(code));
+                            try self.extend(true, position, slot, &node, upper, choice, @intCast(code));
                     }
                 }
             }
         }
 
-        fn extend(self: *Self, comptime known_match: bool, position: usize, slot: usize, node: Node, length: usize, choice: rep.Choice, match_code: u8) !void {
+        fn extend(self: *Self, comptime known_match: bool, position: usize, slot: usize, node: *const Node, length: usize, choice: *const rep.Choice, match_code: u8) !void {
             try self.price_budget.admit();
             if (self.parameters.profile) |profile| {
                 profile.add("price_evaluations", 1);

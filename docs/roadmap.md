@@ -24184,6 +24184,21 @@ reuse, so production keeps the simpler independently owned plans.
   measured state/edge work, wider codec coverage and the full ten-format
   functionality/performance objective.
 
+- 2026-10-29: private Zstd HQ edge expansion now borrows the public candidate's
+  stable value snapshot and immutable local repeat choices instead of copying
+  both into every transition. The public value boundary still protects real
+  source-row aliases from target insertion. New frozen-reference contracts
+  cover every slot at widths 1/8/16, tagged/fallback tables, bounded/whole and
+  sampled/complete modes, finite price prefixes and exact failure order.
+  [Borrowed-edge evidence](performance/zstd-borrowed-edge-inputs.md) records
+  eight alternating 4 KiB cycles at a six-row geometric time ratio of 0.981955
+  and four larger/trained cycles at 0.978084. All 144 ordinary encodes, 288
+  cross-codec decodes, complete wires, profiles and requested peaks agree;
+  trained dictionary references remain 78/87. Native Debug/ReleaseFast and
+  actual 32-bit x86 each pass 79/79 exact tests, executed Wasm passes, and
+  versioned HQ/search references pass 52/41 rows. These short measurements do
+  not establish broad throughput leadership. Continue reducing transition
+  count, widening clean-host evidence and advancing the complete codec goal.
 
 - 2026-10-29: Bzip2 forward BWT now ends prefix doubling once every rotation
   has a unique prefix class. Periodic rotations retain the old full-pass tie
