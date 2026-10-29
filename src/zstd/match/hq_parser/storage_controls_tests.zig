@@ -7,6 +7,7 @@ const controls = @import("../../encode/controls.zig");
 const state = @import("state.zig");
 const resources = @import("resources.zig");
 const dp = @import("dp.zig");
+const frontier_cache = @import("match_frontier_cache.zig");
 
 test "Zstd HQ storage bounded node retains its original field layout" {
     const OriginalNode = struct {
@@ -138,8 +139,12 @@ test "Zstd HQ storage whole block 128 KiB preflight counts actual workspace and 
             try std.testing.expectEqual(layout.bytes + result_bytes + tag_bytes, try dp.ownWorkingBytes(source, parameters));
             const matcher_bytes = try tree.Matcher.requiredWorkingMemory(source, parameters.hq_options);
             const retained_result = if (strategy == .btultra2 and history.len == 0) result_bytes else 0;
+            const frontier_bytes = if (strategy == .btultra2 and history.len == 0)
+                try frontier_cache.Cache.estimatedBytes(input.len)
+            else
+                0;
             const required = try hq.requiredWorkingMemory(source, parameters);
-            try std.testing.expectEqual(layout.bytes + result_bytes + tag_bytes + matcher_bytes + retained_result, required);
+            try std.testing.expectEqual(layout.bytes + result_bytes + tag_bytes + matcher_bytes + retained_result + frontier_bytes, required);
             parameters.hq_options.max_working_memory = required - 1;
             var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
             try std.testing.expectError(error.WorkingMemoryLimitExceeded, hq.planAlloc(failing.allocator(), source, parameters));

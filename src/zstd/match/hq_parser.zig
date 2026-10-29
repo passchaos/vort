@@ -3,8 +3,10 @@ const controls = @import("../encode/controls.zig");
 const source_mod = @import("controlled_source.zig");
 const tree = @import("hq_tree.zig");
 const lazy2 = @import("lazy2.zig");
+const match_frontier_cache = @import("hq_parser/match_frontier_cache.zig");
 const state = @import("hq_parser/state.zig");
 const dp = @import("hq_parser/dp.zig");
+const dp_reuse = @import("hq_parser/dp_reuse.zig");
 const resources = @import("hq_parser/resources.zig");
 pub const prices = @import("hq_parser/prices.zig");
 pub const rep = @import("hq_parser/rep.zig");
@@ -21,7 +23,10 @@ pub fn requiredWorkingMemory(source: Source, parameters: Parameters) !usize {
         return error.InvalidBlockPlan;
     if (source.block.len < parameters.hq_options.min_match) return 0;
     var required = try resources.add(try dp.ownWorkingBytes(source, parameters), try tree.Matcher.requiredWorkingMemory(source, parameters.hq_options));
-    if (warmUp(source, parameters)) required = try resources.add(required, try resources.resultBytes(source, parameters.hq_options.min_match));
+    if (warmUp(source, parameters)) {
+        required = try resources.add(required, try resources.resultBytes(source, parameters.hq_options.min_match));
+        required = try resources.add(required, try match_frontier_cache.Cache.estimatedBytes(source.block.len));
+    }
     return required;
 }
 
@@ -58,10 +63,23 @@ fn warmUp(source: Source, parameters: Parameters) bool {
         !parameters.entropy.initialized and parameters.entropy.origin == .predefined;
 }
 fn run(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: Source, parameters: Parameters) !Plan {
-    if (!warmUp(source, parameters)) return dp.plan(allocator, budget, source, parameters, tree.Matcher);
+    if (!warmUp(source, parameters))
+        return dp.plan(allocator, budget, source, parameters, tree.Matcher);
+    var scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer scratch.deinit(allocator);
+    var frontier = try match_frontier_cache.Cache.init(allocator, source.block.len);
+    defer frontier.deinit(allocator);
     var pass_parameters = parameters;
     pass_parameters.strategy = .btultra;
-    var first = try dp.plan(allocator, budget, source, pass_parameters, tree.Matcher);
+    var first = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        allocator,
+        budget,
+        source,
+        pass_parameters,
+        .{ .record = &frontier },
+    );
     errdefer first.deinit(allocator);
     const initial_cost = first.estimated_cost;
     const refined = parameters.entropy.refined(&first.statistics);
@@ -72,7 +90,22 @@ fn run(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source
     const baseline_cost = first.estimated_cost;
     if (parameters.profile) |profile| profile.add("refinement_passes", 1);
     pass_parameters.entropy = &refined;
-    const second = try dp.plan(allocator, budget, source, pass_parameters, tree.Matcher);
+    const replay = frontier.finish();
+    if (parameters.profile) |profile| {
+        if (replay)
+            profile.add("match_frontier_cache_entries", frontier.entryCount())
+        else
+            profile.add("match_frontier_cache_fallbacks", 1);
+    }
+    const second = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        allocator,
+        budget,
+        source,
+        pass_parameters,
+        if (replay) .{ .replay = &frontier } else .search,
+    );
     // Both candidates are evaluated with the same refined entropy model. The
     // second pass is actual work even if its bounded beam loses to the baseline.
     var result: Plan = undefined;

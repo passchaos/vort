@@ -30,9 +30,14 @@ pub const Report = struct {
 
 pub fn profileEqual(expected: Profile, actual: Profile) !void {
     inline for (comptime std.meta.fieldNames(Profile)) |field| {
-        if (comptime std.mem.eql(u8, field, "peak_working_memory")) continue;
+        if (comptime std.mem.eql(u8, field, "peak_working_memory") or
+            std.mem.eql(u8, field, "rep_probes") or
+            std.mem.eql(u8, field, "rep_length_cache_hits") or
+            std.mem.eql(u8, field, "byte_comparisons")) continue;
         try std.testing.expectEqualDeep(@field(expected, field), @field(actual, field));
     }
+    try std.testing.expectEqual(expected.rep_probes, actual.rep_probes + actual.rep_length_cache_hits);
+    try std.testing.expect(actual.byte_comparisons <= expected.byte_comparisons);
 }
 
 fn planEqual(expected: state.Plan, actual: state.Plan) !void {

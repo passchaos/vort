@@ -4,6 +4,10 @@ const controls = @import("../../encode/controls.zig");
 const source_mod = @import("../controlled_source.zig");
 const replay = @import("lazy2_tests.zig").replay;
 const dp = @import("dp.zig");
+const dp_reuse = @import("dp_reuse.zig");
+const frontier_cache = @import("match_frontier_cache.zig");
+const resources = @import("resources.zig");
+const tree = @import("../hq_tree.zig");
 
 test {
     _ = @import("price_tests.zig");
@@ -28,6 +32,66 @@ fn oracle(source: source_mod.Source, model: *const hq.EntropyModel, position: us
         }
     }
     return best;
+}
+
+fn expectSamePlan(expected: hq.Plan, actual: hq.Plan) !void {
+    try std.testing.expectEqual(expected.statistics, actual.statistics);
+    try std.testing.expectEqual(expected.estimated_cost, actual.estimated_cost);
+    try std.testing.expectEqual(expected.final_repeated_offsets, actual.final_repeated_offsets);
+    try std.testing.expectEqualSlices(source_mod.Record, expected.records, actual.records);
+    try std.testing.expectEqualSlices(u32, expected.offset_values, actual.offset_values);
+}
+
+test "Zstd HQ cold reuse record and replay preserve independent DP plans" {
+    const input = "cold btultra2 shared frontier and repeat length evidence 0123456789\n" ** 48;
+    const source = source_mod.Source.init("", "", input, 4096);
+    const parameters: hq.Parameters = .{ .strategy = .btultra };
+    var expected_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const expected_allocator = expected_budget.allocator();
+    const expected = try dp.plan(
+        expected_allocator,
+        &expected_budget,
+        source,
+        parameters,
+        tree.Matcher,
+    );
+    defer expected.deinit(expected_allocator);
+
+    var actual_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const actual_allocator = actual_budget.allocator();
+    var scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer scratch.deinit(actual_allocator);
+    var frontier = try frontier_cache.Cache.init(actual_allocator, source.block.len);
+    defer frontier.deinit(actual_allocator);
+    const recorded = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        actual_allocator,
+        &actual_budget,
+        source,
+        parameters,
+        .{ .record = &frontier },
+    );
+    defer recorded.deinit(actual_allocator);
+    try expectSamePlan(expected, recorded);
+    try std.testing.expect(frontier.finish());
+    const replayed = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        actual_allocator,
+        &actual_budget,
+        source,
+        parameters,
+        .{ .replay = &frontier },
+    );
+    defer replayed.deinit(actual_allocator);
+    try expectSamePlan(expected, replayed);
 }
 
 test "Zstd HQ DP tiny path matches exhaustive cost and exact final repeated offsets" {
@@ -78,6 +142,10 @@ test "Zstd HQ full block DP uses distinct beams and consumes a hundred twenty ei
         try std.testing.expect(plan.statistics.literal_count < 2 * 1024);
         try std.testing.expectEqual(source.block.len, plan.records[plan.records.len - 1].match_end);
         try std.testing.expect(profile.tree_nodes > 0 and profile.price_evaluations > 0);
+        try std.testing.expectEqual(@as(u64, 0), profile.rep_length_cache_hits);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_entries);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_replay_positions);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_fallbacks);
         const decoded = try replay(std.testing.allocator, source, plan, hq.rep.initial_repeats);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, source.block, decoded);
@@ -96,6 +164,10 @@ test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models 
     try std.testing.expectEqual(@as(u64, 1), profile.refinement_passes);
     try std.testing.expect(cold.first_pass_cost != cold.refined_first_pass_cost);
     try std.testing.expect(cold.estimated_cost <= cold.refined_first_pass_cost);
+    try std.testing.expect(profile.rep_length_cache_hits > 0);
+    try std.testing.expect(profile.match_frontier_cache_entries > 0);
+    try std.testing.expectEqual(@as(u64, source.block.len), profile.match_frontier_replay_positions);
+    try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_fallbacks);
     try std.testing.expect(!initial.initialized);
     const decoded = try replay(std.testing.allocator, source, cold, hq.rep.initial_repeats);
     defer std.testing.allocator.free(decoded);
@@ -110,6 +182,10 @@ test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models 
         try std.testing.expectEqual(@as(u8, 1), plan.passes);
         try std.testing.expectEqual(@as(u64, 1), profile.hq_passes);
         try std.testing.expectEqual(@as(u64, 0), profile.refinement_passes);
+        try std.testing.expectEqual(@as(u64, 0), profile.rep_length_cache_hits);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_entries);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_replay_positions);
+        try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_fallbacks);
     }
     var previous = initial;
     previous.initialized = true;
@@ -118,6 +194,10 @@ test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models 
     defer plan.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u8, 1), plan.passes);
     try std.testing.expectEqual(@as(u64, 0), profile.refinement_passes);
+    try std.testing.expectEqual(@as(u64, 0), profile.rep_length_cache_hits);
+    try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_entries);
+    try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_replay_positions);
+    try std.testing.expectEqual(@as(u64, 0), profile.match_frontier_cache_fallbacks);
 }
 
 test "Zstd HQ DP exact budget one byte below and OOM preserve owned state" {
