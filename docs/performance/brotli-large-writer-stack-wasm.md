@@ -79,3 +79,8 @@ combined Wasm log is separate from the isolated baseline/fix experiment.
 After remote rebase, the same source hashes pass the focused Debug search
 tests (79/79) and full native/Wasm compile checks in 213 successful steps.
 `post-rebase-final.log.xz` retains the final combined gate output.
+
+The later [standard-writer isolation](brotli-standard-writer-stack.md) removes
+another 2.17 MiB path-irrelevant frame from this call chain. An unchanged
+5.5 MiB public witness fails before that follow-up and passes afterward, while
+the existing 8 MiB default remains unchanged.

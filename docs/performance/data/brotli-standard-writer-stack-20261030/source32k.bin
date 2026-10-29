@@ -1,0 +1,605 @@
+const std = @import("std");
+const allocator_dispatch = @import("br/allocator_dispatch.zig");
+const builtin = @import("builtin");
+const core = @import("core.zig");
+pub const Counter = core.StreamCount;
+const stream_count = core.stream_count;
+const bit_count_math = @import("io/bit_count.zig");
+pub const BitCount = bit_count_math.BitCount;
+const stored_bit_bound = @import("br/encoder/stored_bit_bound.zig");
+const metadata_header = @import("br/encoder/metadata_header.zig");
+const lz77 = @import("lz77.zig");
+const bitstream = @import("bitstream.zig");
+const huffman = @import("huffman.zig");
+const match_copy = @import("br/match_copy.zig");
+const dictionary_copy = @import("br/dictionary_copy.zig");
+const single_command_lookup = @import("br/single_command_lookup.zig");
+const static_dictionary = @import("br/static_dictionary.zig");
+const command_lut = @import("br/command_lut.zig");
+const br_length = @import("br/length.zig");
+const command_encoding = @import("br/encoder/command_encoding.zig");
+const pattern = @import("br/pattern.zig");
+const command_plan = @import("br/encoder/command_plan.zig");
+const prepared_command_distance = @import("br/encoder/prepared_command_distance.zig");
+const prepared_adaptive_distance = @import("br/encoder/prepared_adaptive_distance.zig");
+const prepared_literal = @import("br/encoder/prepared_literal.zig");
+const counting_writer = @import("br/encoder/counting_writer.zig");
+const weighted_payload = @import("br/encoder/weighted_payload.zig");
+const context_candidate_group = @import("br/encoder/context_candidate_group.zig");
+const prepared_literal_emission = @import("br/encoder/prepared_literal_emission.zig");
+const fast_fragment = @import("br/encoder/fast_fragment.zig");
+const fast_fragment_one_pass = @import("br/encoder/fast_fragment_one_pass.zig");
+const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
+const literal_context = @import("br/encoder/literal_context.zig");
+const literal_context_split = @import("br/encoder/literal_context_split.zig");
+const literal_entropy_plan = @import("br/encoder/literal_entropy_plan.zig");
+const literal_joint_context_split = @import("br/encoder/literal_joint_context_split.zig");
+const context_map_encoder = @import("br/encoder/context_map.zig");
+const dynamic_context_map = @import("br/encoder/dynamic_context_map.zig");
+const long_distance = @import("br/encoder/long_distance.zig");
+const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
+const encoder_distance = @import("br/encoder/distance.zig");
+const distance_parameter_search = @import("br/encoder/distance_parameter_search.zig");
+const complex_prefix = @import("br/encoder/complex_prefix.zig");
+const huffman_rle_counts = @import("br/encoder/huffman_rle_counts.zig");
+const code_length_rle = @import("br/encoder/code_length_rle.zig");
+const small_huffman = @import("br/encoder/small_huffman.zig");
+const encoder_stats = @import("br/encoder/stats.zig");
+const entropy_feedback = @import("br/encoder/entropy_feedback.zig");
+const hq_command_parser = @import("br/encoder/hq_command_parser.zig");
+const hq_options = @import("br/encoder/hq_options.zig");
+const hq_types = @import("br/encoder/hq_types.zig");
+const hq_codec = @import("br/encoder/hq_codec.zig");
+const new_hq_parser = @import("br/encoder/hq_parser.zig");
+const total_budget = @import("br/encoder/total_budget.zig");
+const stored_memory = @import("br/encoder/stored_memory.zig");
+const stored_memory_owner = @import("br/encoder/stored_memory_owner.zig");
+const stored_memory_reuse = @import("br/encoder/stored_memory_reuse.zig");
+const encoder_window_format = @import("br/encoder/window_format.zig");
+const quality_schedule = @import("br/encoder/quality_schedule.zig");
+const quality_profile = @import("br/encoder/quality_profile.zig");
+const stream_block_split = @import("br/encoder/stream_block_split.zig");
+const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
+const static_dictionary_stream = @import("br/encoder/static_dictionary_stream.zig");
+const literal_block_split = @import("br/encoder/literal_block_split.zig");
+const command_block_split = @import("br/encoder/command_block_split.zig");
+const distance_block_split = @import("br/encoder/distance_block_split.zig");
+const compound_dictionary_matcher = @import("br/encoder/compound_dictionary_matcher.zig");
+const serialized_dictionary_matcher = @import("br/encoder/serialized_dictionary_matcher.zig");
+const compound_wire = @import("br/encoder/compound_wire.zig");
+const block_split_plan = @import("br/encoder/block_split_plan.zig");
+const adaptive_block_code = @import("br/encoder/adaptive_block_code.zig");
+const identity_context_map = @import("br/encoder/identity_context_map.zig");
+const record_optimal_abi = @import("br/encoder/record_optimal_abi.zig");
+extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) callconv(.c) u8;
+extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
+extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
+const header_profile = @import("br/header_profile.zig");
+const incremental_tests = @import("br/incremental/tests.zig");
+const incremental_literal = @import("br/incremental/literal_decoder.zig");
+const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
+const incremental_copy = @import("br/incremental/copy_decoder.zig");
+const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
+const incremental_contracts_tests = @import("br/incremental/contracts_tests.zig");
+const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
+const incremental_rle = @import("br/incremental/rle_decoder.zig");
+const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
+const incremental_stored = @import("br/incremental/stored/decoder.zig");
+const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
+const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
+const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
+const fast_bit_reader = @import("br/fast_bit_reader.zig");
+const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
+const code_sections = @import("br/format/code_sections.zig");
+const distance_history = @import("br/decoder/distance_history.zig");
+const shared_dictionary = @import("br/shared_dictionary.zig");
+const serialized_dictionary = @import("br/serialized_dictionary.zig");
+const serialized_dictionary_builder = @import("br/serialized_dictionary_builder.zig");
+const serialized_dictionary_trainer = @import("br/serialized_dictionary_trainer.zig");
+const serialized_dictionary_transform_clusterer = @import("br/serialized_dictionary_transform_clusterer.zig");
+const serialized_dictionary_word_pruner = @import("br/serialized_dictionary_word_pruner.zig");
+const code_length_decoder_mod = @import("br/code_length_decoder.zig");
+
+const distanceWithDelta = distance_history.withDelta;
+const pushLastDistance = distance_history.push;
+const resolveShortDistanceInto = distance_history.resolveShortInto;
+const recentDistanceSymbol = distance_history.symbolForDistance;
+
+var test_external_literal_lookup_hits: usize = 0;
+var test_context_independent_literal_lookup_hits: usize = 0;
+var test_single_tree_external_lookup_hits: usize = 0;
+var test_wide_auxiliary_lookup10_hits: usize = 0;
+var test_q0_one_pass_writer_hits: usize = 0;
+var test_q1_two_pass_writer_hits: usize = 0;
+var test_q2_fast_writer_hits: usize = 0;
+var test_q2_static_tree_hits: usize = 0;
+var test_q2_dynamic_tree_hits: usize = 0;
+var test_q3_trivial_writer_hits: usize = 0;
+var test_hq_command_candidate_attempts: usize = 0;
+var test_hq_command_candidate_selections: usize = 0;
+var test_hq_command_pre_bytes: usize = 0;
+var test_hq_command_bytes: usize = 0;
+var test_stream_hq_command_candidate_attempts: usize = 0;
+var test_stream_hq_command_candidate_selections: usize = 0;
+
+const large_window_text_section = code_sections.large_window;
+const adaptive_split_text_section = code_sections.adaptive_split;
+const distance_parameter_text_section = code_sections.distance_parameters;
+const command_state_text_section = code_sections.command_state;
+
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
+pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
+pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
+pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
+pub const QualityQ8Profile = quality_profile.Profile;
+
+test "Brotli q8 quality profile complete wire and bounded diagnostic contracts" {
+    try @import("tests/br_quality_profile_contracts.zig").contracts(@This());
+}
+pub const LiteralContextProfile = literal_context_split.Profile;
+pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
+pub const PlannedMode = quality_schedule.Mode;
+pub const SharedDictionary = shared_dictionary.Dictionary;
+pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
+pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
+pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;
+pub const SerializedSharedDictionarySpec = serialized_dictionary_builder.Spec;
+pub const SerializedSharedDictionaryChoice = serialized_dictionary.DictionaryChoice;
+pub const SerializedSharedDictionaryWordListSpec = serialized_dictionary_builder.WordListSpec;
+pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_builder.TransformListSpec;
+pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
+pub const SerializedSharedDictionaryTransformProfile = serialized_dictionary_trainer.TransformProfile;
+pub const SerializedSharedDictionaryContextProfile = serialized_dictionary_trainer.ContextProfile;
+pub const SerializedSharedDictionaryWordSelectionProfile = serialized_dictionary_trainer.WordSelectionProfile;
+pub const SerializedSharedDictionaryWordBucketProfile = struct {
+    min_word_len: u5,
+    max_word_len: u5,
+    max_words_per_length: u16,
+};
+pub const max_serialized_word_bucket_profiles: usize = 8;
+pub const SerializedSharedDictionaryWordLengthBucketCap = struct {
+    word_len: u5,
+    max_words: u16,
+};
+pub const SerializedSharedDictionarySparseWordProfile = struct {
+    buckets: []const SerializedSharedDictionaryWordLengthBucketCap,
+};
+pub const max_serialized_sparse_word_profiles: usize = 16;
+pub const max_serialized_word_bucket_pruning_steps =
+    serialized_dictionary_word_pruner.max_steps;
+pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
+pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
+pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
+pub const serializeSharedDictionaryAlloc = serialized_dictionary_builder.serializeAlloc;
+pub const SerializedSharedDictionaryTrainOptions = struct {
+    min_word_len: u5 = 4,
+    max_word_len: u5 = 16,
+    max_words_per_length: u16 = 64,
+    max_phrases_per_length: usize = 256,
+    word_bucket_profiles: []const SerializedSharedDictionaryWordBucketProfile = &.{},
+    sparse_word_profiles: []const SerializedSharedDictionarySparseWordProfile = &.{},
+    /// Greedily halve one per-length cap at a time and retain each next round
+    /// only when complete held-out wire cost improves.
+    optimize_word_bucket_caps: bool = false,
+    max_word_bucket_pruning_steps: u8 = 2,
+    train_cover_words: bool = true,
+    optimize_cover_words: bool = true,
+    cover_dmer_size: u8 = 8,
+    cover_hash_log: u8 = 16,
+    cover_dmer_sizes: []const u8 = &.{ 6, 8 },
+    cover_hash_logs: []const u8 = &.{ 12, 16 },
+    max_cover_candidates: u8 = 8,
+    max_cover_corpus_size: usize = 256 * 1024 * 1024,
+    train_context_map: bool = true,
+    train_context_clustering: bool = true,
+    train_case_transforms: bool = true,
+    train_omit_transforms: bool = true,
+    train_prefix_suffix_transforms: bool = true,
+    train_shift_transforms: bool = true,
+    train_transform_clustering: bool = true,
+    max_transform_cluster_dictionaries: u7 = 4,
+    max_transform_scoring_positions: usize = 64 * 1024,
+    /// Bounded stringlet learner. Candidate transforms are ranked
+    /// deterministically, then retained only through complete held-out wire
+    /// comparison with the identity/case/omit families.
+    max_prefix_suffix_len: u8 = 8,
+    max_prefix_suffix_transforms: u8 = 16,
+    max_prefix_suffix_candidates: usize = 4096,
+    max_prefix_suffix_words: usize = 4096,
+    max_prefix_suffix_positions: usize = 16 * 1024,
+    min_prefix_suffix_occurrences: u16 = 2,
+    max_shift_transforms: u8 = 8,
+    max_shift_candidates: usize = 4096,
+    max_shift_words: usize = 256,
+    max_shift_positions: usize = 4096,
+    min_shift_occurrences: u16 = 2,
+    /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
+    /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
+    context_cutoffs: []const u6 = &.{ 16, 32, 48 },
+    /// Strictly increasing RFC literal-context modes to evaluate.
+    context_modes: []const u2 = &.{ 0, 1, 2, 3 },
+    /// Strictly increasing learned cluster counts. These arbitrary context maps
+    /// compete with the global and two-range cutoff candidates.
+    context_cluster_counts: []const u7 = &.{ 3, 4 },
+    max_context_positions_per_group: usize = 16 * 1024,
+    max_context_signature_positions: usize = 4096,
+    quality: u4 = 5,
+    mode: PlannedMode = .generic,
+    /// Charge the serialized dictionary bytes once against the held-out frame
+    /// total. Disable only when deployment amortizes dictionary distribution
+    /// out of band.
+    include_dictionary_size: bool = true,
+    min_savings_bytes: usize = 1,
+};
+
+pub const OwnedTrainedSerializedSharedDictionary = struct {
+    bytes: []u8,
+    id: serialized_dictionary_trainer.DictionaryId,
+    bucket_count: usize,
+    word_count: usize,
+    baseline_frame_bytes: usize,
+    trained_frame_bytes: usize,
+    charged_dictionary_bytes: usize,
+    total_savings_bytes: usize,
+    selected_min_word_len: u5,
+    selected_max_word_len: u5,
+    selected_max_words_per_length: u16,
+    /// Present for caller-supplied sparse profiles and automatic pruning.
+    selected_word_count_caps_by_length: ?[32]u16,
+    word_bucket_pruning_steps: u8,
+    word_bucket_candidates_evaluated: u16,
+    selected_sparse_word_profile: ?u8,
+    word_selection_profile: SerializedSharedDictionaryWordSelectionProfile,
+    cover_dmer_size: ?u8,
+    cover_hash_log: ?u8,
+    cover_candidates_evaluated: u16,
+    context_based: bool,
+    trained_context_mode: ?u2,
+    context_cutoff: ?u6,
+    /// Global, contiguous-cutoff, or learned arbitrary context selection.
+    context_profile: SerializedSharedDictionaryContextProfile,
+    /// One for global candidates, two for cutoffs, otherwise the learned count.
+    context_cluster_count: u7,
+    transform_profile: SerializedSharedDictionaryTransformProfile,
+    /// Number of distinct serialized transform lists in the selected result.
+    transform_list_count: u7,
+    /// Non-empty serialized stringlets contributed by the selected learner.
+    learned_stringlet_count: usize,
+    /// Learned prefix/suffix transform triplets, excluding the base family.
+    learned_prefix_suffix_transform_count: usize,
+    /// Unique signed SHIFT parameters in the selected transform family.
+    learned_shift_parameter_count: usize,
+    /// SHIFT_FIRST/SHIFT_ALL triplets added by the selected learner.
+    learned_shift_transform_count: usize,
+
+    pub fn deinit(self: OwnedTrainedSerializedSharedDictionary, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+
+    pub fn parse(
+        self: *const OwnedTrainedSerializedSharedDictionary,
+    ) SerializedSharedDictionaryError!SerializedSharedDictionary {
+        return parseSerializedSharedDictionary(self.bytes);
+    }
+};
+pub const max_extended_dictionary_probes: u16 = 4096;
+pub const command_state_default_max_input_kib: u8 = std.math.maxInt(u8);
+pub const HqOptions = hq_options.HqOptions;
+pub const HqProfile = hq_options.HqProfile;
+pub const HqResolvedOptions = hq_options.Resolved;
+pub const HqDistanceParameters = encoder_distance.Parameters;
+pub const HqDistanceFormat = encoder_distance.Format;
+pub const HqParseMode = hq_options.ParseMode;
+pub const HqCopyLengthPolicy = hq_options.CopyLengthPolicy;
+pub const EncodeMemoryProfile = total_budget.EncodeMemoryProfile;
+pub const PlannedEncodeOptions = struct {
+    /// Optional cap for all live encoder-owned requested heap during this
+    /// operation, including retained storage and complete candidate wires.
+    /// Borrowed input/output buffers and allocator bookkeeping are excluded.
+    max_total_working_memory: ?usize = null,
+    /// Caller-owned total-allocation instrumentation; independent of HQ's
+    /// workspace profile. Enabling instrumentation must preserve output bytes.
+    memory_profile: ?*EncodeMemoryProfile = null,
+    level: PlannedCompressionLevel = .fast,
+    /// Optional Vort-native Brotli quality preset. When present, `level` must
+    /// remain `.fast` and the deterministic q0...q11 schedule is used; null
+    /// preserves the historical three-level output exactly. These presets do
+    /// not claim libbrotli algorithm, byte-output, or performance parity.
+    quality: ?u4 = null,
+    /// Explicit standard-window HQ command parsing for quality 10 or 11.
+    /// Null preserves the established quality policy and complete wire.
+    hq: ?HqOptions = null,
+    /// Emit the explicit Large Window extension at every quality or legacy level.
+    /// All widths 10...30 retain extension identity. Non-HQ matching uses
+    /// bounded fragment/LZ history; the header does not imply a 1 GiB search.
+    /// The decoder must opt in. False preserves the standard wire format.
+    large_window: bool = false,
+    /// Generic, text, or font policy for quality-scheduled encoding. A
+    /// non-generic mode requires `quality` so legacy level calls remain stable.
+    mode: PlannedMode = .generic,
+    /// Explicit Brotli window for one-shot planned encoding. The current
+    /// planned matcher can fully honor RFC window bits 10...16 at every level
+    /// and 17...24 in ratio mode; leaving this null preserves the established level
+    /// policy, including ratio mode's automatic 17-bit long-distance candidate.
+    window_bits: ?u5 = null,
+    /// Optional metadata emitted before the payload meta-block.
+    metadata: []const u8 = "",
+    /// For ratio inputs above the automatic 256-byte dictionary gate, examine
+    /// at most this many literal positions for RFC static-dictionary matches.
+    /// Zero preserves the default latency policy. Non-zero values are valid
+    /// only at ratio level and for inputs no larger than 4096 bytes. Values
+    /// above `max_extended_dictionary_probes` are rejected. Inputs at or below
+    /// the automatic gate retain their existing complete search.
+    extended_dictionary_probes: u16 = 0,
+    /// Opt into the allocator-backed Viterbi command block splitter in ratio
+    /// mode. It searches arbitrary temporal boundaries and general type reuse,
+    /// then retains the result only when its complete Brotli wire is smaller.
+    /// Disabled by default until corpus evidence can justify its extra search.
+    adaptive_command_split: bool = false,
+    /// Opt into the allocator-backed Viterbi literal block splitter in ratio
+    /// mode. It searches arbitrary literal positions and general type reuse,
+    /// then retains the plan only after strict complete-wire comparison.
+    adaptive_literal_split: bool = false,
+    /// Override ratio mode's adaptive distance-block policy. Null uses the
+    /// automatic bounded search, false disables it, and true forces it on for
+    /// eligible single-meta-block inputs. Complete-wire arbitration guarantees
+    /// that the selected stream is never larger than the unsplit candidate.
+    adaptive_distance_split: ?bool = null,
+    /// Override ratio mode's 64-shape NPOSTFIX/NDIRECT search. Null enables it
+    /// automatically for stable record-optimal plans, false disables it, and
+    /// true also enables it for the general bounded optimal candidate.
+    distance_parameter_search: ?bool = null,
+    /// Override q10/q11's bounded command-state work ceiling. The default
+    /// sentinel uses the evidence-backed 8 KiB policy limit, zero disables
+    /// the candidate, and a non-zero KiB value may extend it through that
+    /// quality's optimal-input ceiling (64 for q10, 32 for q11).
+    command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+    /// Borrowed RAW shared-prefix attachments used by the Brotli compound
+    /// dictionary. The descriptor and bytes must remain alive for the call.
+    shared_dictionary: SharedDictionary = .{},
+};
+/// Search budget for the ratio-oriented planner. These knobs affect token
+/// selection only; the resulting stream still uses the same Brotli command
+/// and prefix-code writer as the stable `.balanced` level.
+pub const PlannedParserOptions = struct {
+    window_len: usize = lz77.default_window_len,
+    max_chain: usize = 64,
+    nice_len: usize = 64,
+    lazy_min_gain: usize = 1,
+};
+
+fn plannedSharedDictionarySize(dictionary: SharedDictionary) Error!usize {
+    return dictionary.totalSize() catch |err| switch (err) {
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn mixSerializedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const command_plan.Command,
+    dictionary: *const SerializedSharedDictionary,
+    matcher: ?*const serialized_dictionary_matcher.Matcher,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) Error!command_plan.Plan {
+    return command_plan.mixSerializedDictionaryWithMatcherAlloc(
+        allocator,
+        input,
+        baseline,
+        dictionary,
+        matcher,
+        context_mode,
+        initial_previous,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn appendPreviousBytes(previous: *[2]u8, bytes: []const u8) void {
+    if (bytes.len == 0) return;
+    if (bytes.len == 1) {
+        previous.* = .{ previous[1], bytes[0] };
+    } else {
+        previous.* = .{ bytes[bytes.len - 2], bytes[bytes.len - 1] };
+    }
+}
+
+pub fn parseSerializedSharedDictionary(
+    encoded: []const u8,
+) SerializedSharedDictionaryError!SerializedSharedDictionary {
+    return serialized_dictionary.parse(encoded);
+}
+
+pub fn trainSerializedSharedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+) Error!?OwnedTrainedSerializedSharedDictionary {
+    if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
+        options.quality > 11 or
+        !validSerializedWordBucketProfiles(options) or
+        !validSerializedSparseWordProfiles(options) or
+        (options.optimize_word_bucket_caps and
+            (options.max_word_bucket_pruning_steps == 0 or
+                options.max_word_bucket_pruning_steps > max_serialized_word_bucket_pruning_steps)) or
+        (options.train_cover_words and
+            ((options.optimize_cover_words and
+                !validSerializedCoverGrid(options)) or
+                (!options.optimize_cover_words and
+                    ((options.cover_dmer_size != 6 and options.cover_dmer_size != 8) or
+                        options.cover_hash_log < serialized_dictionary_trainer.min_cover_hash_log or
+                        options.cover_hash_log > serialized_dictionary_trainer.max_cover_hash_log)) or
+                options.max_cover_corpus_size == 0)) or
+        (options.train_context_map and
+            (!validSerializedTrainingCutoffs(options.context_cutoffs) or
+                !validSerializedTrainingModes(options.context_modes) or
+                options.max_context_positions_per_group == 0 or
+                options.max_context_positions_per_group > serialized_dictionary_trainer.max_context_training_positions_per_group or
+                (options.train_context_clustering and
+                    (!validSerializedTrainingClusterCounts(options.context_cluster_counts) or
+                        options.max_context_signature_positions == 0 or
+                        options.max_context_signature_positions > serialized_dictionary_trainer.max_context_signature_positions)))) or
+        (options.train_prefix_suffix_transforms and
+            (options.max_prefix_suffix_len == 0 or
+                options.max_prefix_suffix_len > serialized_dictionary_trainer.max_learned_stringlet_len or
+                options.max_prefix_suffix_transforms == 0 or
+                options.max_prefix_suffix_transforms > serialized_dictionary_trainer.max_learned_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates < options.max_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates > 64 * 1024 or
+                options.max_prefix_suffix_words == 0 or
+                options.max_prefix_suffix_words > serialized_dictionary_trainer.max_learned_prefix_suffix_words or
+                options.max_prefix_suffix_positions == 0 or
+                options.max_prefix_suffix_positions > serialized_dictionary_trainer.max_learned_prefix_suffix_positions or
+                options.min_prefix_suffix_occurrences == 0)) or
+        (options.train_shift_transforms and
+            (options.max_shift_transforms == 0 or
+                options.max_shift_transforms > serialized_dictionary_trainer.max_learned_shift_transforms or
+                options.max_shift_candidates < options.max_shift_transforms or
+                options.max_shift_candidates > serialized_dictionary_trainer.max_learned_shift_candidates or
+                options.max_shift_words == 0 or
+                options.max_shift_words > serialized_dictionary_trainer.max_learned_shift_words or
+                options.max_shift_positions == 0 or
+                options.max_shift_positions > serialized_dictionary_trainer.max_learned_shift_positions or
+                options.min_shift_occurrences == 0)) or
+        (options.train_transform_clustering and
+            (options.max_transform_cluster_dictionaries < 2 or
+                options.max_transform_cluster_dictionaries > serialized_dictionary_transform_clusterer.max_dictionaries or
+                options.max_transform_scoring_positions == 0 or
+                options.max_transform_scoring_positions > serialized_dictionary_transform_clusterer.max_scoring_positions)))
+        return error.InvalidDictionaryTraining;
+    const core_options = serialized_dictionary_trainer.Options{
+        .min_word_len = options.min_word_len,
+        .max_word_len = options.max_word_len,
+        .max_words_per_length = options.max_words_per_length,
+        .max_phrases_per_length = options.max_phrases_per_length,
+        .cover_dmer_size = options.cover_dmer_size,
+        .cover_hash_log = options.cover_hash_log,
+        .max_cover_corpus_size = options.max_cover_corpus_size,
+        .train_context_map = options.train_context_map,
+        .context_cutoff = if (options.context_cutoffs.len == 0)
+            32
+        else
+            options.context_cutoffs[0],
+        .max_context_positions_per_group = options.max_context_positions_per_group,
+        .max_context_signature_positions = options.max_context_signature_positions,
+    };
+    const baseline_frame_bytes = try serializedTrainingFrameBytes(
+        allocator,
+        validation_samples,
+        options,
+        null,
+    );
+    var selection: SerializedTrainingSelection = .{};
+    errdefer if (selection.candidate) |candidate| candidate.deinit(allocator);
+    var cover_candidates_evaluated: u16 = 0;
+    var word_bucket_candidates_evaluated: u16 = 1;
+    try considerSerializedWordBucketCandidates(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        core_options,
+        0,
+        &selection,
+        &cover_candidates_evaluated,
+    );
+    if (options.optimize_word_bucket_caps) {
+        try considerSerializedMarginalWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            core_options,
+            &selection,
+            &word_bucket_candidates_evaluated,
+            &cover_candidates_evaluated,
+        );
+    }
+    for (options.word_bucket_profiles) |profile| {
+        var bucket_options = core_options;
+        bucket_options.min_word_len = profile.min_word_len;
+        bucket_options.max_word_len = profile.max_word_len;
+        bucket_options.max_words_per_length = profile.max_words_per_length;
+        try considerSerializedWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            bucket_options,
+            0,
+            &selection,
+            &cover_candidates_evaluated,
+        );
+        word_bucket_candidates_evaluated = std.math.add(
+            u16,
+            word_bucket_candidates_evaluated,
+            1,
+        ) catch return error.InvalidDictionaryTraining;
+    }
+    for (options.sparse_word_profiles, 0..) |profile, profile_index| {
+        var caps: [32]u16 = @splat(0);
+        for (profile.buckets) |bucket|
+            caps[bucket.word_len] = bucket.max_words;
+        var bucket_options = core_options;
+        bucket_options.word_count_caps_by_length = &caps;
+        bucket_options.sparse_word_profile_index = @intCast(profile_index);
+        try considerSerializedWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            bucket_options,
+            0,
+            &selection,
+            &cover_candidates_evaluated,
+        );
+        word_bucket_candidates_evaluated = std.math.add(
+            u16,
+            word_bucket_candidates_evaluated,
+            1,
+        ) catch return error.InvalidDictionaryTraining;
+    }
+    const candidate = selection.candidate orelse return null;
+    if (selection.total_bytes >= baseline_frame_bytes or
+        baseline_frame_bytes - selection.total_bytes < options.min_savings_bytes)
+    {
+        candidate.deinit(allocator);
+        return null;
+    }
+    const result = OwnedTrainedSerializedSharedDictionary{
+        .bytes = candidate.encoded,
+        .id = candidate.id,
+        .bucket_count = candidate.bucket_count,
+        .word_count = candidate.word_count,
+        .baseline_frame_bytes = baseline_frame_bytes,
+        .trained_frame_bytes = selection.frame_bytes,
+        .charged_dictionary_bytes = selection.charged_dictionary_bytes,
+        .total_savings_bytes = baseline_frame_bytes - selection.total_bytes,
+        .selected_min_word_len = candidate.selected_min_word_len,
+        .selected_max_word_len = candidate.selected_max_word_len,
+        .selected_max_words_per_length = candidate.selected_max_words_per_length,
+        .selected_word_count_caps_by_length = selection.word_count_caps_by_length,
+        .word_bucket_pruning_steps = selection.word_bucket_pruning_steps,
+        .word_bucket_candidates_evaluated = word_bucket_candidates_evaluated,
+        .selected_sparse_word_profile = candidate.sparse_word_profile_index,
+        .word_selection_profile = candidate.word_selection_profile,
+        .cover_dmer_size = candidate.cover_dmer_size,
+        .cover_hash_log = candidate.cover_hash_log,
+        .cover_candidates_evaluated = cover_candidates_evaluated,
+        .context_based = candidate.context_based,
+        .trained_context_mode = candidate.context_mode,
+        .context_cutoff = candidate.context_cutoff,
+        .context_profile = candidate.context_profile,
+        .context_cluster_count = candidate.context_cluster_count,
+        .transform_profile = candidate.transform_profile,
+        .transform_list_count = candidate.transform_list_count,
+        .learned_stringlet_count = candidate.learned_stringlet_count,
+        .learned_prefix_suffix_transform_count = candidate.learned_prefix_suffix_transform_count,
+        .learned_shift_parameter_count = candidate.learned_shift_parameter_count,
+        .lea

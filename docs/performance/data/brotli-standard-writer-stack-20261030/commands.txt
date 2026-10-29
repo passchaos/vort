@@ -1,0 +1,30 @@
+Create independent baseline and candidate trees from commit 3d2ffb7b. Extract
+source-overlay.tar.xz over the candidate and symlink the repository's sibling
+vail checkout at the path expected by build.zig.
+
+Build and run the unchanged 8 MiB public gate:
+
+  zig build -j2 -Doptimize=Debug test-br-public-wasm --verbose
+
+Use the emitted direct `zig build-exe` command with `--stack 5767168` to build
+the baseline and candidate 5.5 MiB witnesses, then run:
+
+  node tools/br/wasm_public_gate.js WITNESS.wasm
+
+Extract frames:
+
+  python3 wasm_stack_frames.py PUBLIC_DEBUG.wasm
+
+Build the ordinary benchmark exactly as in the ranked-Huffman evidence epoch.
+Run `q8-formal.py` for the 36-case q8 matrix and `q10q11.py` for three
+alternating process sweeps per q10/q11 side.
+
+Validation:
+
+  zig build -j2 -Doptimize=ReleaseFast test-br-large-window --summary all
+  zig build -j2 -Doptimize=ReleaseFast test-br -Dbr-test-filter='Brotli HQ complete lengths actual public wire' --summary all
+  zig build -j2 -Dtarget=x86-linux-musl -Doptimize=ReleaseFast -Dbr-test-filter='Brotli HQ complete lengths actual public wire' test-br --summary all
+  zig build -j2 -Doptimize=ReleaseFast test-br-large-window-wasm --summary all
+  zig build -j2 -Doptimize=Debug test-br --summary all
+  zig build -j2 -Doptimize=ReleaseFast test-br --summary all
+  zig build -j2 check check-wasm --summary all

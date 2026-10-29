@@ -1,0 +1,45 @@
+Baseline: 3d2ffb7b9bffed4a425c8eebaf89ddb14b7e8aba
+Candidate production scope: src/br.zig
+
+Static and evidence validation
+- zig fmt --check src/br.zig wire_parity.zig: pass
+- python3 -m py_compile q8-formal.py q10q11.py wasm_stack_frames.py: pass
+- python3 -m json.tool on all five JSON reports: pass
+- git diff --check on the production and evidence scope: pass
+
+Compiled frame and real-stack validation
+- Debug wasm32-wasi public frame extraction: pass
+- public dispatcher frame: 2,166,384 -> 448 bytes
+- standard writer body: baseline in dispatcher -> candidate 2,165,968 bytes
+- Large Window dispatcher/body and HQ caller frames: unchanged
+- unchanged public gate at 8 MiB: baseline pass, candidate pass
+- unchanged public gate at 6 MiB: baseline pass, candidate pass
+- unchanged public gate at 5.5 MiB: baseline writer-chain trap, candidate pass
+- unchanged public gate at 5 MiB and 4 MiB: candidate HQ-parser trap
+- default public stack remains 8 MiB
+
+Wire and performance validation
+- dual-module q10/q11 wire oracle: 32/32 exact matches
+- q8 ordinary matrix: 36 cases, all wire/settings identities equal
+- q8 candidate/baseline time geomean: 1.0009947293167938
+- q8 4/16/64 KiB ratios: 0.9999704643672243 / 0.9997744924793959 / 1.0032430209754624
+- q8 sweep ratios: 1.0000919827801087 / 1.002403352957758 / 0.9989258253508962
+- q10 source32k median ratio: 1.0031652670114315, 15 samples/side
+- q11 source32k median ratio: 1.0044432753876553, 15 samples/side
+- q10/q11 wire/settings identities: equal
+
+Focused and full gates
+- counted adaptive-distance filter: 22/22 pass
+- native ReleaseFast HQ focused gate: 25/25 pass
+- x86-linux-musl ReleaseFast HQ focused gate: 25/25 pass
+- native ReleaseFast Large Window gate: 53/53 pass
+- ReleaseFast Large Window Wasm gate: 7/7 pass
+- ReleaseFast full Brotli gate: 1469 pass, 1 existing skip, exit 0
+- Debug full Brotli gate: 1469 pass, 1 existing skip, exit 0, 26m
+- zig build -j2 check check-wasm --summary all: 212/212 steps succeeded, exit 0
+
+Known configuration boundary
+- Debug test-br-large-window-wasm is not claimed as passing: baseline and
+  candidate retain WASI imports while that Node harness requires an empty
+  import list. The ReleaseFast execution gate and Debug compile/public WASI
+  gates cover the intended configurations without weakening the assertion.

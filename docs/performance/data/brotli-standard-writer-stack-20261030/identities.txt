@@ -1,0 +1,7 @@
+baseline_commit=3d2ffb7b9bffed4a425c8eebaf89ddb14b7e8aba
+upstream_brotli_commit=558fc647cdaf391228d614ca85f711e02e4e583b
+zig_version=0.16.0
+node_version=v26.10.0
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_affinity=2
+codec_threads=1

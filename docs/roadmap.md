@@ -24417,6 +24417,17 @@ reuse, so production keeps the simpler independently owned plans.
   [compact predecessor screen](performance/deflate-compact-predecessor-screen.md)
   shows that candidate checks, match extension and DP work dominate the
   current hot path more than predecessor bandwidth. Both layouts were removed.
+
+- 2026-10-30: Brotli's ordinary 79-symbol writer now has a dedicated noinline
+  specialization, removing its never-executed 2.17 MiB Debug Wasm frame from
+  Large Window calls. The public dispatcher frame falls `2,166,384 -> 448`
+  bytes; Large Window bodies and heap accounting remain unchanged. An unchanged
+  5.5 MiB public witness fails in the baseline Large Window writer chain and
+  passes in the candidate; 4/5 MiB still fail earlier in HQ parsing, so the
+  default 8 MiB stack is retained. [Stack evidence](performance/brotli-standard-writer-stack.md)
+  records 32 exact wire cases, a 36-case q8 ordinary ratio of `1.000995`, and
+  q10/q11 source32k ratios `1.003165/1.004443`, all within pre-registered
+  non-regression gates.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.

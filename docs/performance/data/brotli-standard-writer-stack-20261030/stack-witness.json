@@ -1,0 +1,10 @@
+{
+  "baseline_8m": {"stack_bytes":8388608,"ok":true,"wasm_sha256":"7dd7e3d4ba2d06fd6bba25390f6131dbcd7991da00dec8c9fce1b219656d8239"},
+  "candidate_8m": {"stack_bytes":8388608,"ok":true,"wasm_sha256":"ff3fb8c2db57dfe48ae1c23667dbb7a8d3e1847b120f05bc267039c946342f35"},
+  "baseline_6m": {"stack_bytes":6291456,"ok":true},
+  "candidate_6m": {"stack_bytes":6291456,"ok":true},
+  "baseline_5_5m": {"stack_bytes":5767168,"ok":false,"failure":"memory access out of bounds in Large Window writer chain","wasm_sha256":"765f27bf2e7b2a1b1ee05ebd2502c82ad8794120687375325506ad71b78d5a34"},
+  "candidate_5_5m": {"stack_bytes":5767168,"ok":true,"wasm_sha256":"2bc5d0384aa1fe3bb5f1b90d2a82269410bf40a4392a3dc35855c81cde9973fa"},
+  "candidate_5m": {"stack_bytes":5242880,"ok":false,"failure":"memory access out of bounds in HQ parser"},
+  "candidate_4m": {"stack_bytes":4194304,"ok":false,"failure":"memory access out of bounds in HQ parser","wasm_sha256":"0f5d9621b9363341468773247068d82c9461489c3f18d021f67111e298171fd4"}
+}

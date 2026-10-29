@@ -1,0 +1,17 @@
+{
+  "baseline": {
+    "dispatcher": 2166384,
+    "large_window_dispatcher": 400,
+    "large_window_adaptive_body": 3425488,
+    "large_window_ordinary_body": 2230176,
+    "hq_meta_block_caller": 164032
+  },
+  "candidate": {
+    "dispatcher": 448,
+    "standard_body": 2165968,
+    "large_window_dispatcher": 400,
+    "large_window_adaptive_body": 3425488,
+    "large_window_ordinary_body": 2230176,
+    "hq_meta_block_caller": 164032
+  }
+}

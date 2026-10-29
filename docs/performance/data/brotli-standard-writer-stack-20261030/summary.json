@@ -1,0 +1,21 @@
+{
+  "baseline_commit": "3d2ffb7b9bffed4a425c8eebaf89ddb14b7e8aba",
+  "candidate_scope": ["src/br.zig"],
+  "dispatcher_frame_ratio": 0.0002067950677467625,
+  "dispatcher_frame_bytes": {"baseline":2166384,"candidate":448},
+  "wire_parity_cases": 32,
+  "q8": {
+    "case_count": 36,
+    "time_geomean_ratio": 1.0009947293167938,
+    "time_worst_ratio": 1.020867621592845,
+    "sweep_geomeans": [1.0000919827801087,1.002403352957758,0.9989258253508962],
+    "bucket_4096_ratio": 0.9999704643672243,
+    "bucket_16384_ratio": 0.9997744924793959,
+    "bucket_65536_ratio": 1.0032430209754624,
+    "all_wires_settings_equal": true
+  },
+  "q10_source32k_ratio": 1.0031652670114315,
+  "q11_source32k_ratio": 1.0044432753876553,
+  "q10q11_sample_count_per_side": 15,
+  "q10q11_all_wires_settings_equal": true
+}
