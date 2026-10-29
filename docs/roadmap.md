@@ -24325,3 +24325,23 @@ reuse, so production keeps the simpler independently owned plans.
   6/9 totals of 912169/905780: a small level-6 lead remains a 4261-byte level-9
   gap. Continue with cross-block history and dynamic-Huffman-aware optimal
   refinement rather than adding more work to an inconsistent split objective.
+
+- 2026-10-29: DEFLATE levels 8 and 9 now run one bounded
+  dynamic-Huffman-aware optimal proposal for default-strategy, dictionary-free,
+  one-shot inputs of 4,096 through 65,535 bytes. Seed dynamic widths plus fixed
+  unseen-symbol priors price the proposal, but only a strictly smaller complete
+  raw/zlib/gzip member can replace the original; ties retain established bytes.
+  Generic planning, split/incremental/dictionary paths and levels 0 through 7
+  remain unchanged. Model, boundary, wrapper, exclusion, determinism and all
+  allocation-failure contracts are tested. [Dynamic optimal evidence](performance/deflate-dynamic-optimal-refinement.md)
+  records 36 Silesia prefix cases: both named best and numeric level 8 reduce
+  raw bytes `382528 -> 381768`, with 24 wins, 12 cap-controlled ties and no
+  regression. Active 4/16 KiB inputs improve 0.781%, while their ordinary
+  encode time is about 1.74x/1.62x; whole-matrix geometry is 1.406x. System
+  zlib 1.2.11 independently decodes all 216 level/wrapper wires, and Vort's
+  aggregate is about 1.96% smaller than its level-8/9 reference output on this
+  matrix. Debug/ReleaseFast each pass 549 tests and the project check passes
+  212/212 including Wasm. This is a deliberate best-level ratio tradeoff, not
+  a throughput lead. Next reduce the second-pass search cost or reuse seed
+  matching state, then extend entropy feedback to multi-block/history-aware
+  planning only with similarly strict complete-wire arbitration.

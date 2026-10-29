@@ -1,0 +1,52 @@
+{
+  "baseline_commit": "89d7d3f2751d96e9c9c80be8492a97217f825edf",
+  "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+  "cpu_affinity": "2",
+  "zig_version": "0.16.0",
+  "corpus": "Silesia 12 files at 4096, 16384, and 65536 byte prefixes",
+  "ordinary_ab": {
+    "iterations_per_process": 3,
+    "alternating_process_sweeps": 3,
+    "raw_best": {
+      "case_count": 36,
+      "candidate_over_baseline_geomean": 1.4061581252896982,
+      "worst_case_ratio": 1.8512675200495672,
+      "baseline_bytes": 382528,
+      "candidate_bytes": 381768,
+      "wins": 24,
+      "ties": 12,
+      "regressions": 0,
+      "buckets": {
+        "4096": { "time_ratio": 1.7373786932003692, "baseline_bytes": 20399, "candidate_bytes": 20269 },
+        "16384": { "time_ratio": 1.6173902149313577, "baseline_bytes": 76971, "candidate_bytes": 76341 },
+        "65536": { "time_ratio": 0.9894484663259248, "baseline_bytes": 285158, "candidate_bytes": 285158 }
+      }
+    },
+    "numeric_level_8": {
+      "case_count": 36,
+      "candidate_over_baseline_geomean": 1.4049222494553986,
+      "worst_case_ratio": 1.8330439752033383,
+      "baseline_bytes": 382528,
+      "candidate_bytes": 381768,
+      "wins": 24,
+      "ties": 12,
+      "regressions": 0
+    }
+  },
+  "rss_kib_nci_16384": { "baseline": 3560, "candidate": 3900 },
+  "system_zlib": {
+    "compile_version": "1.2.11",
+    "runtime_version": "1.2.11",
+    "decoded_wires": 216,
+    "decode_failures": 0
+  },
+  "validation": {
+    "deflate_debug": "549/549",
+    "deflate_release_fast": "549/549",
+    "x86_focused": "6/6",
+    "project_check": "212/212",
+    "python_zlib_differential": "success",
+    "libz_parameter_interop": "success",
+    "incremental_encode_gate": "success"
+  }
+}

@@ -1,0 +1,16 @@
+baseline_commit=89d7d3f2751d96e9c9c80be8492a97217f825edf
+candidate_source_epoch=working-tree overlay captured before documentation edits
+zig_version=0.16.0
+target=x86_64-linux-gnu
+target_cpu=skylake+pku+sgx
+cpu_model=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+ordinary_cpu_affinity=2
+benchmark_threads=1
+benchmark_policy=ordinary uninstrumented warmup plus three timed iterations
+bench_baseline_sha256=c94dbbb7def9616241389d1c67b713a30df67e479235b4c30ffe866cfcf60c4e
+bench_candidate_sha256=fdc44fa908c05bb06c8fce0cfbec91d1eaa300b14da37162ebdbe104f25b7cc0
+numeric_baseline_sha256=7aa666b2f84467fbb68cd5e2d5f6fce52d663aee79a72829e2215b9d631e60ca
+numeric_candidate_sha256=5edd80e906340e686dd0dbbcf90ecfd4de91514d08e75dfa23645f4ccafe2749
+wire_candidate_sha256=3d01191ed29fd46e384aeb3d809656a9e4da77b9090a3c2311f1f72e2c5a00d1
+python_zlib_compile_version=1.2.11
+python_zlib_runtime_version=1.2.11

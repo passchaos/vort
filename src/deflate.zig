@@ -14,6 +14,7 @@ const png_windowed_history =
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
 const sync = @import("deflate/sync.zig");
@@ -546,6 +547,10 @@ pub const CompressionOptions = struct {
     lz77_options: lz77.GreedyOptions = .{},
     block_selection: BlockSelection = .stored_fixed_dynamic,
     split_options: AdaptiveSplitOptions = .{},
+    /// For eligible one-shot encodes, propose one bounded optimal parse using
+    /// costs learned from the seed dynamic tree. The complete encoded member
+    /// remains authoritative, and ties retain the seed bytes.
+    dynamic_cost_refinement: bool = false,
 };
 
 pub const ResolvedDeflateParams = struct {
@@ -838,7 +843,7 @@ pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 6, .nice_len = 16, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 96, .min_savings_bits = 6 }, .block_selection = .stored_fixed_dynamic, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
         .fast => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 32, .nice_len = 16, .max_candidates = 2, .lazy_min_gain = 3, .min_match = 4, .max_match = 128, .min_savings_bits = 4 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
         .default => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 160, .nice_len = 80, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
-        .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.default_best_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
+        .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.default_best_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 }, .dynamic_cost_refinement = true },
     };
 }
 
@@ -855,7 +860,7 @@ pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
         5 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 64, .nice_len = 48, .max_candidates = 3, .lazy_min_gain = 1, .min_match = 3, .max_match = 224, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 10 * 1024, .max_block_len = max_stored_block_len, .sample_len = 3584, .search_step = 10 * 1024 } },
         6 => optionsForLevel(.default),
         7 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 256, .nice_len = 96, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 6 * 1024, .max_block_len = max_stored_block_len, .sample_len = 6144, .search_step = 6 * 1024 } },
-        8 => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 384, .nice_len = 128, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
+        8 => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 384, .nice_len = 128, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 }, .dynamic_cost_refinement = true },
         9 => optionsForLevel(.best),
         else => error.InvalidBlockPlan,
     };
@@ -969,6 +974,88 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
         .rle => try lz77.runLengthPlanAlloc(allocator, input, normalized.lz77_options),
     };
+}
+
+const dynamic_refinement_min_input_len: usize = 4 * 1024;
+const dynamic_refinement_max_input_len: usize = 65_535;
+
+fn useDynamicCostRefinement(input_len: usize, options: CompressionOptions) bool {
+    return options.dynamic_cost_refinement and options.strategy == .default and
+        options.parser == .optimal and options.block_selection == .stored_fixed_dynamic and
+        options.lz77_options.window_len > 0 and
+        options.lz77_options.window_len <= lz77.default_window_len and
+        input_len >= dynamic_refinement_min_input_len and
+        input_len <= dynamic_refinement_max_input_len;
+}
+
+const DeflateDynamicOptimalStrategy = struct {
+    pub fn lengthCode(value: usize) dynamic_optimal.Code {
+        const code = deflate.lengthCode(@intCast(value));
+        return .{ .symbol = code.symbol, .extra_bits = @intCast(code.extra_bits) };
+    }
+
+    pub fn distanceCode(value: usize) dynamic_optimal.Code {
+        const code = deflate.distanceCode(@intCast(value));
+        return .{ .symbol = code.symbol, .extra_bits = @intCast(code.extra_bits) };
+    }
+
+    pub fn fixedLiteralBits(symbol: usize) u4 {
+        return huffman.fixed_literal_encoder.bits[symbol];
+    }
+
+    pub fn fixedDistanceBits(symbol: usize) u4 {
+        return huffman.fixed_distance_encoder.bits[symbol];
+    }
+};
+
+noinline fn planDynamicRefinedOptimalProposalAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: CompressionOptions,
+    seed: *const lz77.GreedyPlan,
+) !?lz77.GreedyPlan {
+    std.debug.assert(useDynamicCostRefinement(input.len, options));
+    if (seed.stats.matches == 0) return null;
+
+    const seed_coding = try DynamicCodingPlan.init(seed.tokens);
+    var model = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &seed_coding.lit_lengths_full,
+        &seed_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model.deinit(allocator);
+    const seed_cost = try dynamic_optimal.tokenCost(&model, seed.tokens);
+    const candidate = try lz77.optimalPlanAllocWithCostModel(
+        allocator,
+        input,
+        options.lz77_options,
+        model.lz77Model(),
+    );
+    errdefer candidate.deinit(allocator);
+    const candidate_cost = try dynamic_optimal.tokenCost(&model, candidate.tokens);
+    if (candidate_cost > seed_cost or tokenSlicesEqual(candidate.tokens, seed.tokens)) {
+        candidate.deinit(allocator);
+        return null;
+    }
+    return candidate;
+}
+
+fn tokenSlicesEqual(a: []const lz77.Token, b: []const lz77.Token) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |a_token, b_token| switch (a_token) {
+        .literal => |a_literal| switch (b_token) {
+            .literal => |b_literal| if (a_literal != b_literal) return false,
+            .match => return false,
+        },
+        .match => |a_match| switch (b_token) {
+            .literal => return false,
+            .match => |b_match| if (a_match.length != b_match.length or
+                a_match.distance != b_match.distance) return false,
+        },
+    };
+    return true;
 }
 
 const OneShotTokenPlan = struct {
@@ -1093,6 +1180,13 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
     };
 }
 
+fn encodeRawBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
+    return writer.toOwnedSlice(allocator);
+}
+
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     if (options.block_selection == .stored_fixed_dynamic and usesOneShotDynamicStats(input, options)) {
@@ -1100,11 +1194,20 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
-    try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
-    const encoded = try writer.toOwnedSlice(allocator);
+    var encoded = try encodeRawBestTokensAlloc(allocator, input, plan.tokens, options);
     errdefer allocator.free(encoded);
+    if (useDynamicCostRefinement(input.len, options)) {
+        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
+            defer candidate.deinit(allocator);
+            const candidate_encoded = try encodeRawBestTokensAlloc(allocator, input, candidate.tokens, options);
+            if (candidate_encoded.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate_encoded;
+            } else {
+                allocator.free(candidate_encoded);
+            }
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeRawBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
@@ -7770,8 +7873,20 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
+    var encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
     errdefer allocator.free(encoded);
+    if (useDynamicCostRefinement(input.len, options)) {
+        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
+            defer candidate.deinit(allocator);
+            const candidate_encoded = try encodeZlibBestTokensAlloc(allocator, input, null, candidate.tokens, options);
+            if (candidate_encoded.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate_encoded;
+            } else {
+                allocator.free(candidate_encoded);
+            }
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeZlibBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
@@ -16572,8 +16687,20 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
     }
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
+    var encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
     errdefer allocator.free(encoded);
+    if (useDynamicCostRefinement(input.len, options)) {
+        if (try planDynamicRefinedOptimalProposalAlloc(allocator, input, options, &plan)) |candidate| {
+            defer candidate.deinit(allocator);
+            const candidate_encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, candidate.tokens, options, header_options);
+            if (candidate_encoded.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate_encoded;
+            } else {
+                allocator.free(candidate_encoded);
+            }
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeGzipBestWithHeaderAlloc(allocator, input, fallback_options, header_options);
         errdefer allocator.free(fallback);
@@ -23500,6 +23627,29 @@ const AdaptiveSplitTestAdapter = struct {
 
 test "adaptive split complete horizon scoring and resource contracts" {
     try @import("deflate/tests/adaptive_split.zig").contracts(AdaptiveSplitTestAdapter);
+}
+
+const DynamicOptimalTestAdapter = struct {
+    pub const Strategy = DeflateDynamicOptimalStrategy;
+    pub const eligible = useDynamicCostRefinement;
+    pub const encodeRaw = encodeRawBestAlloc;
+    pub const encodeZlib = encodeZlibBestAlloc;
+    pub const encodeGzip = encodeGzipBestAlloc;
+    pub const encodeRawDictionary = encodeRawBestWithDictionaryAlloc;
+    pub const encodeRawSplit = encodeRawBestSplitAlloc;
+    pub const plan = planTokensAlloc;
+    pub const rawBlockType = parseRawDeflateHeaderInfo;
+    pub const decodeRaw = decodeRawAutoAlloc;
+    pub const decodeZlib = decodeZlibAlloc;
+    pub const decodeGzip = decodeGzipAlloc;
+
+    pub fn options(level: u4) CompressionOptions {
+        return optionsForZlibLevel(level) catch unreachable;
+    }
+};
+
+test "dynamic optimal refinement complete-wire and resource contracts" {
+    try @import("deflate/tests/dynamic_optimal.zig").contracts(DynamicOptimalTestAdapter);
 }
 
 test "adaptive split falls back to one-shot when smaller" {

@@ -1,0 +1,89 @@
+Self-contained source/build setup used for replay:
+
+  REPO=/home/passchaos/project-z/vort
+  EVIDENCE=$REPO/docs/performance/data/deflate-dynamic-optimal-refinement-20261029
+  EPOCH=/tmp/vort-deflate-dynamic-optimal-refinement-replay
+  BASELINE_ROOT=$EPOCH/baseline-src
+  CANDIDATE_ROOT=$EPOCH/candidate-src
+  VAIL=/home/passchaos/project-z/vail/archive_crypto/src/root.zig
+  mkdir -p "$BASELINE_ROOT" "$CANDIDATE_ROOT" "$EPOCH/inputs" "$EPOCH/wires"
+  git -C "$REPO" archive 89d7d3f2751d96e9c9c80be8492a97217f825edf | tar -x -C "$BASELINE_ROOT"
+  git -C "$REPO" archive 89d7d3f2751d96e9c9c80be8492a97217f825edf | tar -x -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/source-overlay.tar.xz" -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/inputs.tar.xz" -C "$EPOCH/inputs"
+
+Rebuild linked objects from the frozen baseline source:
+
+  zig build-obj "$BASELINE_ROOT/src/br/encoder/record_optimal_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/record-optimal.o"
+  zig build-obj "$BASELINE_ROOT/src/zstd_huffman_x2_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/zstd-huffman-x2.o"
+
+Build named-best benchmark executables without using the calling worktree's
+dirty build.zig:
+
+  for side in baseline candidate; do
+    if [ "$side" = baseline ]; then ROOT=$BASELINE_ROOT; else ROOT=$CANDIDATE_ROOT; fi
+    zig build-exe -O ReleaseFast --dep vort --dep benchmark_provenance \
+      -Mroot="$ROOT/tools/zlib_encode_bench.zig" \
+      "$EPOCH/record-optimal.o" "$EPOCH/zstd-huffman-x2.o" \
+      --dep vail_archive_crypto -Mvort="$ROOT/src/root.zig" \
+      -O ReleaseFast -Mbenchmark_provenance="$ROOT/tools/benchmark_provenance.zig" \
+      -O ReleaseFast -Mvail_archive_crypto="$VAIL" -lc \
+      -femit-bin="$EPOCH/bench-$side"
+  done
+
+Build numeric-level executables and the candidate wire probe:
+
+  for side in baseline candidate; do
+    if [ "$side" = baseline ]; then ROOT=$BASELINE_ROOT; else ROOT=$CANDIDATE_ROOT; fi
+    zig build-exe -O ReleaseFast --dep vort \
+      -Mroot="$EVIDENCE/numeric_bench.zig" \
+      "$EPOCH/record-optimal.o" "$EPOCH/zstd-huffman-x2.o" \
+      --dep vail_archive_crypto -Mvort="$ROOT/src/root.zig" \
+      -O ReleaseFast -Mvail_archive_crypto="$VAIL" -lc \
+      -femit-bin="$EPOCH/numeric-$side"
+  done
+  zig build-exe -O ReleaseFast --dep vort \
+    -Mroot="$EVIDENCE/wire_probe.zig" \
+    "$EPOCH/record-optimal.o" "$EPOCH/zstd-huffman-x2.o" \
+    --dep vail_archive_crypto -Mvort="$CANDIDATE_ROOT/src/root.zig" \
+    -O ReleaseFast -Mvail_archive_crypto="$VAIL" -lc \
+    -femit-bin="$EPOCH/wire-candidate"
+
+Run the two ordinary case-paired campaigns:
+
+  python3 "$EVIDENCE/measure.py" "$EPOCH" "$EPOCH/inputs" \
+    "$EPOCH/raw-best-ab.json" --iterations 3 --sweeps 3 \
+    --mode raw-best --cpu 2
+  mkdir -p "$EPOCH/numeric-run"
+  ln -s "$EPOCH/numeric-baseline" "$EPOCH/numeric-run/bench-baseline"
+  ln -s "$EPOCH/numeric-candidate" "$EPOCH/numeric-run/bench-candidate"
+  python3 "$EVIDENCE/measure.py" "$EPOCH/numeric-run" "$EPOCH/inputs" \
+    "$EPOCH/level8-raw-ab.json" --iterations 3 --sweeps 3 \
+    --mode 8 --extra raw --cpu 2
+
+Regenerate all wrapper wires and independently decode them with system zlib:
+
+  python3 "$EVIDENCE/interop.py" "$EPOCH" "$EPOCH/inputs" \
+    "$EPOCH/interop.json"
+
+Representative RSS commands:
+
+  /usr/bin/time -v -o "$EPOCH/rss-baseline.txt" taskset -c 2 \
+    "$EPOCH/bench-baseline" "$EPOCH/inputs/nci-16384" 3 raw-best
+  /usr/bin/time -v -o "$EPOCH/rss-candidate.txt" taskset -c 2 \
+    "$EPOCH/bench-candidate" "$EPOCH/inputs/nci-16384" 3 raw-best
+
+Functional and project validation from the candidate source tree:
+
+  zig fmt --check src/deflate.zig src/deflate/dynamic_optimal.zig \
+    src/deflate/tests/dynamic_optimal.zig
+  zig test src/deflate.zig -ODebug
+  zig test src/deflate.zig -OReleaseFast
+  zig test src/deflate.zig -ODebug -target x86-linux \
+    --test-filter 'dynamic optimal refinement'
+  zig build run-python-zlib-diff -j2 --summary all
+  zig build run-deflate-params-interop -j2 --summary all
+  taskset -c 2 zig build run-deflate-incremental-encode-gate -j2 --summary all
+  zig build check -j2 --summary all
