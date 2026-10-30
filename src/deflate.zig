@@ -10,6 +10,7 @@ const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
+const semantic_full_output = @import("deflate/semantic/full_output.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const semantic_match_bits = @import("deflate/semantic/match_bits.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
@@ -5644,7 +5645,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
-) Error!usize {
+) align(64) linksection(semantic_full_output.text_section) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         false,
         false,
@@ -5924,9 +5925,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime std.debug.assert(!rle1_distance or single_distance);
     const Decoder = @TypeOf(decoder.*);
     // Machine-word counts avoid repeated narrow-integer masks and spills in
-    // the measured PNG window and distance-one loops. Preserve each packed
-    // field's mask; the other semantic specializations retain their u6 counts.
-    const Count = if (rle1_distance or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
+    // the measured complete-output, PNG window, and distance-one loops.
+    // Preserve each packed field's mask when widening.
+    const ordinary_full_output = !single_distance and !rle258_pair and !inline_non_overlap and !pause_at_output_boundary;
+    const Count = if (rle1_distance or ordinary_full_output or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -14115,8 +14117,22 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
 }
 
+test "semantic full-output hot loop preserves aligned tails and checked failures" {
+    try @import("deflate/semantic/linear/one_distance_tests.zig").check(struct {
+        pub const Reference = SemanticDynamicDecoder;
+        pub const Active = SemanticDynamicDecoder;
+        pub const initReference = SemanticDynamicDecoder.initSingleDistance;
+        pub const initActive = SemanticDynamicDecoder.init;
+        pub const decodeReference = decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader;
+
+        pub fn decodeActive(reader: *bitstream.BufferedBitReader, output: []u8, decoder: *const Active) Error!usize {
+            return decodeSemanticDynamicBlockIntoBufferedReader(reader, output, 0, decoder);
+        }
+    });
+}
+
 test "semantic RLE1 hot loop preserves aligned tails and checked failures" {
-    try @import("deflate/semantic/rle1/linear_tests.zig").check(struct {
+    try @import("deflate/semantic/linear/one_distance_tests.zig").check(struct {
         pub const Reference = SemanticDynamicDecoder;
         pub const Active = SemanticRle1DynamicDecoder;
         pub const initReference = SemanticDynamicDecoder.initSingleDistance;
