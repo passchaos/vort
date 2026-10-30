@@ -360,11 +360,12 @@ The library is under active development. Its current capabilities include:
   dense-prefix optimal parsing reuses validated adjacent match queries;
   [reverse-match evidence](docs/png-match-reuse.md) records full DP/PNG
   exactness, complete CPU gains and remaining performance deficits;
-  numeric level 8 uses bounded forward lazy parsing with zlib-rs-derived
-  good/lazy/nice limits and a corpus-bounded four-candidate chain, while named
-  best and numeric level 9 retain global optimal parsing. [Level-8 evidence](docs/png-level8-forward-lazy.md)
-  records the complete speed/ratio/memory frontier, rejected tiny-layout
-  variants, and dual-decoder PNG proof;
+  numeric levels 8 and 9 use bounded forward lazy parsing with zlib-rs-derived
+  good/lazy/nice limits and corpus-bounded four-candidate chains, while named
+  best retains global optimal parsing. [Level-8 evidence](docs/png-level8-forward-lazy.md)
+  records its speed/ratio/memory frontier and rejected tiny-layout variants;
+  [level-9 evidence](docs/png-level9-forward-lazy.md) records the separate
+  numeric-9 frontier and preserved named-best boundary;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while

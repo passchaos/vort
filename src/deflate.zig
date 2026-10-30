@@ -877,7 +877,14 @@ pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
         6 => optionsForLevel(.default),
         7 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 256, .nice_len = 96, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 6 * 1024, .max_block_len = max_stored_block_len, .sample_len = 6144, .search_step = 6 * 1024 } },
         8 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 4, .nice_len = 258, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .lazy_tuning = .{ .good_length = 32, .max_lazy = 128 }, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
-        9 => optionsForLevel(.best),
+        9 => forward: {
+            var options = optionsForLevel(.best);
+            options.parser = .lazy;
+            options.lz77_options.max_chain = 4;
+            options.lz77_options.nice_len = 258;
+            options.lz77_options.lazy_tuning = .{ .good_length = 32, .max_lazy = 258 };
+            break :forward options;
+        },
         else => error.InvalidBlockPlan,
     };
 }
@@ -22641,12 +22648,12 @@ test "best preset falls back when default parser writes smaller frames" {
     try std.testing.expectEqualSlices(u8, &input, gzip_decoded);
 }
 
-test "zlib numeric compression levels preserve named presets and use forward level eight" {
+test "zlib numeric compression levels preserve named presets and use forward high levels" {
     try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(0));
     try std.testing.expectEqual(optionsForLevel(.fastest).parser, (try optionsForZlibLevel(1)).parser);
     try std.testing.expectEqual(optionsForLevel(.fast).parser, (try optionsForZlibLevel(3)).parser);
     try std.testing.expectEqual(optionsForLevel(.default).parser, (try optionsForZlibLevel(6)).parser);
-    try std.testing.expectEqual(optionsForLevel(.best).parser, (try optionsForZlibLevel(9)).parser);
+    try std.testing.expectEqual(ParserMode.lazy, (try optionsForZlibLevel(9)).parser);
     try std.testing.expectEqual(optionsForLevel(.fastest).lz77_options.max_chain, (try optionsForZlibLevel(1)).lz77_options.max_chain);
     try std.testing.expect((try optionsForZlibLevel(2)).lz77_options.max_chain > (try optionsForZlibLevel(1)).lz77_options.max_chain);
     try std.testing.expectEqual(ParserMode.lazy, (try optionsForZlibLevel(4)).parser);
@@ -22656,7 +22663,8 @@ test "zlib numeric compression levels preserve named presets and use forward lev
     try std.testing.expectEqual(@as(usize, 128), (try optionsForZlibLevel(8)).lz77_options.lazy_tuning.?.max_lazy);
     try std.testing.expectEqual(ParserMode.optimal, optionsForLevel(.best).parser);
     try std.testing.expectEqual(@as(usize, 4), (try optionsForZlibLevel(8)).lz77_options.max_chain);
-    try std.testing.expectEqual(optionsForLevel(.best).lz77_options.max_chain, (try optionsForZlibLevel(9)).lz77_options.max_chain);
+    try std.testing.expectEqual(@as(usize, 4), (try optionsForZlibLevel(9)).lz77_options.max_chain);
+    try std.testing.expectEqual(@as(usize, 258), (try optionsForZlibLevel(9)).lz77_options.lazy_tuning.?.max_lazy);
     try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(10));
 }
 
@@ -22709,7 +22717,7 @@ test "runtime deflate parameters resolve the complete zlib domain" {
     const fixed = try resolveDeflateParams(.{ .level = 9, .strategy = .fixed });
     try std.testing.expectEqual(CompressionStrategy.default, fixed.compression.strategy);
     try std.testing.expectEqual(BlockSelection.stored_fixed, fixed.compression.block_selection);
-    try std.testing.expectEqual(ParserMode.optimal, fixed.compression.parser);
+    try std.testing.expectEqual(ParserMode.lazy, fixed.compression.parser);
 
     const stored_fixed = try resolveDeflateParams(.{ .level = 0, .strategy = .fixed });
     try std.testing.expect(stored_fixed.stored_only);

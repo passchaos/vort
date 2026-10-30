@@ -2970,3 +2970,23 @@ candidate still measured Exoplanet near `0.994x` and Lohengrin/Adaptive at a
 four-chain full-head baseline. [Level-8 evidence](png-level8-forward-lazy.md)
 records the rejected boundary; do not reintroduce a tiny branch without an
 isolation strategy that preserves large-image code generation.
+
+## PNG numeric level-9 forward lazy frontier (2026-10-31)
+
+Numeric level 9 now uses a four-chain forward lazy parser with good length 32,
+maximum lazy length 258 and nice length 258. Named `CompressionLevel.best`
+remains global optimal. Boundary probes emit 36,213,317 bytes at chain 1024,
+37,272,736 at chain four and 37,654,031 at chain two; Rust emits 37,444,262,
+so four is the fastest tested total-size-leading point.
+
+The 30-row AArch64 matrix improves every previous numeric-9 row by
+`23.689024x` geometrically and `26.957716x` in aggregate, with a `2.675008x`
+minimum. Aggregate throughput reaches `97.218 MiB/s` versus Rust's
+`21.188 MiB/s`; native/Rust is `3.892176x` geometric and `4.588261x` aggregate
+with 28/30 wins.
+
+All 180 image-png/libpng observations reproduce original pixels. Requested heap
+falls `0.580439x` geometrically and the maximum drops from 91,161,494 to
+77,247,343 bytes. Full LZ77/DEFLATE, incremental high-level, bounded PNG,
+allocation-failure and cross-target gates pass. [Full evidence](png-level9-forward-lazy.md)
+records the named-best boundary and complete tradeoff.
