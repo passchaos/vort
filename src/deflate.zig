@@ -6,6 +6,7 @@ const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
+const png_ultrafast_compact = @import("png_ultrafast_compact.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
@@ -7680,6 +7681,27 @@ pub fn encodeZlibPngUltraFastAlloc(
 ) ![]u8 {
     return png_ultrafast.encodeAlloc(allocator, input);
 }
+
+/// PNG-trained ultrafast zlib with a compact literal-pair lookup. The wire
+/// output is byte-identical to `encodeZlibPngUltraFastAlloc`; callers should
+/// select it only for workload classes where the smaller lookup is measured.
+pub fn encodeZlibPngUltraFastCompactAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+) ![]u8 {
+    return png_ultrafast_compact.encodeAlloc(allocator, input);
+}
+
+/// Return whether a bounded fixed-Up payload probe prefers the compact PNG
+/// ultrafast literal-pair lookup. The two encoders remain byte-identical.
+pub fn pngUltraFastCompactPairsPreferred(
+    input: []const u8,
+) bool {
+    return png_ultrafast_compact.prefersCompactPairs(input);
+}
+
+pub const png_ultrafast_compact_pairs_minimum_input_bytes =
+    png_ultrafast_compact.minimum_input_bytes;
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
@@ -23553,6 +23575,12 @@ test "PNG ultrafast zlib streams round trip through general decoder" {
             input,
         );
         defer std.testing.allocator.free(encoded);
+        const compact = try encodeZlibPngUltraFastCompactAlloc(
+            std.testing.allocator,
+            input,
+        );
+        defer std.testing.allocator.free(compact);
+        try std.testing.expectEqualSlices(u8, encoded, compact);
         const decoded = try decodeZlibAlloc(std.testing.allocator, encoded);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);

@@ -2856,6 +2856,24 @@ removed, so future work should not revisit adjacent 68--71-byte tail spellings.
 Evidence is in
 `docs/performance/data/zstd-second-70-overlap-tail-x86-20261007.json`.
 
+## PNG ultrafast fixed-Up compact pair selection (2026-10-30)
+
+The canonical 64-bit literal-pair encoder remains source-identical. A separate
+aligned 32-bit-pair specialization plus a bounded fixed-Up selector improves
+the locked 15-row AArch64 Up corpus by `1.015754x` geometrically and
+`1.043704x` in aggregate over 21 CPU-12 rounds. The strongest retained row is
+Lohengrin at `1.133324x`; a 61-round investigation turns the apparent weakest
+Kodak row into `1.002133x` against a `0.999625x` same-binary control.
+
+Against pinned image-png/fdeflate, overall geomean/aggregate rise to
+`1.046704x`/`1.062827x` and fixed-Up rises to `0.968269x`. The result narrows
+but does not close Rust parity. All outputs retain exact native bytes and
+pixels; 60 external cross-decodes, exact Up filtered payloads, zero swaps,
+bounded RSS, allocation-failure coverage, and x86_64/big-endian PowerPC64
+compilation pass. [Full evidence](performance/png-ultrafast-fixed-up-compact-aarch64.md)
+and its [machine summary](performance/data/png-ultrafast-fixed-up-compact-aarch64-20261030.json)
+record the selection policy, stage profiles, samples and remaining weak rows.
+
 ## Zstd shifted single-beam match reuse (2026-09-15)
 
 The speed-oriented one-state Zstd parser now reuses the exact length of an

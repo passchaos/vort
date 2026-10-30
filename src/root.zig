@@ -3441,6 +3441,12 @@ pub const encodeZlibFixedSplitWithDictionaryAlloc = deflate.encodeZlibFixedSplit
 pub const encodeZlibFixedSplitWithDictionaryAppend = deflate.encodeZlibFixedSplitWithDictionaryAppend;
 pub const encodeZlibBestAlloc = deflate.encodeZlibBestAlloc;
 pub const encodeZlibPngUltraFastAlloc = deflate.encodeZlibPngUltraFastAlloc;
+pub const encodeZlibPngUltraFastCompactAlloc =
+    deflate.encodeZlibPngUltraFastCompactAlloc;
+pub const pngUltraFastCompactPairsPreferred =
+    deflate.pngUltraFastCompactPairsPreferred;
+pub const png_ultrafast_compact_pairs_minimum_input_bytes =
+    deflate.png_ultrafast_compact_pairs_minimum_input_bytes;
 pub const ZlibIncrementalPngUltraFastEncoder = deflate.ZlibIncrementalPngUltraFastEncoder;
 pub const encodeZlibBestAppend = deflate.encodeZlibBestAppend;
 pub const encodeZlibBestWithDictionaryAlloc = deflate.encodeZlibBestWithDictionaryAlloc;

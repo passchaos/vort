@@ -1,0 +1,99 @@
+{
+  "schema": "vort.png_ultrafast_fixed_up_compact.v1",
+  "measured_at": "2026-10-30T16:59:39.885510365+08:00",
+  "source_parent_head": "eeb5ca879c533687bf654dac2d6a54d4c1ddbe4c",
+  "archive": "/nav_env/Temp/imx-png-fixed-up-stage-20261030.NFrH5w",
+  "source_sha256": {
+    "src/png_ultrafast.zig": "61f78d98966724200f1d3b502a49b1183b935a84ab8232958b5c267d9c7fe1ad",
+    "src/png_ultrafast_compact.zig": "52b43d1aa13f68f967bca606a190bb5324079d46f2c1ecdbc4c22f6bc8f20423",
+    "src/deflate.zig": "c0c95e5088a003852791dd2a3c08537390785091ca982390bd3b0488a3931eaa",
+    "src/root.zig": "a6f188915b11113e8a22e2f88947a2745c93d61a327db3fbd791dcba6d5bba64",
+    "imx/src/codecs/png.zig": "f955d580a0cb522087edf2943b1bdb6545e8cd3872fdabd46c411062d9efee4a"
+  },
+  "binaries": {
+    "before": "562607742029bee591e6d36999d35e01814533d5217c3c8e4c4a924f1c885033",
+    "candidate": "4e9332ecbb12f99cedc58645bfc778d6a3dc8e529f407234d9dfc314f5c403a5"
+  },
+  "policy": {
+    "minimum_input_bytes": 1310720,
+    "sample_words": 64,
+    "minimum_zero_words": 32,
+    "pair_bloom_bits": 256,
+    "minimum_pair_bloom_occupancy": 140,
+    "selected_corpus_rows": [
+      "Exoplanet_Phase_Curve_(Diagram)_indexed_gimp.png",
+      "Exoplanet_Phase_Curve_(Diagram).png",
+      "Lohengrin_-_Illustrated_Sporting_and_Dramatic_News.png",
+      "lorem_ipsum_oxipng.png",
+      "lorem_ipsum_screenshot.png",
+      "paletted-zune.png"
+    ]
+  },
+  "native_ab": {
+    "cpu": 12,
+    "rounds": 21,
+    "target_elapsed_ns": 500000000,
+    "geomean": 1.0157541149534368,
+    "aggregate": 1.0437042686471956,
+    "minimum": 0.9977965282515027,
+    "wins": 11,
+    "cases": 15,
+    "all_encoded_bytes_checksums_and_pixels_exact": true,
+    "rows": [
+      { "case": "Exoplanet_Phase_Curve_(Diagram)_indexed_gimp.png", "speedup": 1.0276363466846778 },
+      { "case": "Exoplanet_Phase_Curve_(Diagram).png", "speedup": 1.029563368772797 },
+      { "case": "Fantasy_Digital_Painting.png", "speedup": 1.0013641400087014 },
+      { "case": "kodim02.png", "speedup": 0.9977965282515027 },
+      { "case": "kodim07.png", "speedup": 0.9998518662187131 },
+      { "case": "kodim17.png", "speedup": 1.0031137331285664 },
+      { "case": "kodim23.png", "speedup": 1.0026781337543518 },
+      { "case": "Lohengrin_-_Illustrated_Sporting_and_Dramatic_News.png", "speedup": 1.1333237820202442 },
+      { "case": "lorem_ipsum_oxipng.png", "speedup": 1.020573447816845 },
+      { "case": "lorem_ipsum_screenshot.png", "speedup": 1.0079120323736623 },
+      { "case": "paletted-zune.png", "speedup": 1.0159213770407896 },
+      { "case": "tango-icon-address-book-new-128-rsvg-convert.png", "speedup": 0.9997181496574372 },
+      { "case": "tango-icon-address-book-new-16.png", "speedup": 1.0020026719254718 },
+      { "case": "tango-icon-address-book-new-32.png", "speedup": 1.0024735926076305 },
+      { "case": "Transparency.png", "speedup": 0.9998952805073815 }
+    ]
+  },
+  "kodim02_long_control": {
+    "rounds": 61,
+    "target_elapsed_ns": 700000000,
+    "candidate_speedup": 1.0021332538530043,
+    "same_binary_ratio": 0.9996253167204996
+  },
+  "image_png": {
+    "revision": "05ccdb9c8ae7fc50f4787ba2888a1c515adad944",
+    "repeat": 5,
+    "overall_geomean": 1.0467041653799216,
+    "overall_aggregate": 1.0628268065510305,
+    "adaptive_geomean": 1.1314928427570663,
+    "up_geomean": 0.9682691471155008,
+    "size_geomean": 0.9981076402327558,
+    "raw_byte_exact_files": 15,
+    "pixel_checksum_matched_rows": 30,
+    "cross_decoded_outputs": 60,
+    "up_filtered_payload_exact_rows": 15,
+    "up_native_not_larger_rows": 15,
+    "native_peak_rss_median_bytes": 246480896,
+    "rust_peak_rss_median_bytes": 234127360,
+    "peak_rss_ratio": 1.0527641707487754,
+    "swaps": 0,
+    "gate_passed": true
+  },
+  "validation": {
+    "native_release_safe_tests": 98,
+    "allocation_failure_sweep": true,
+    "x86_64_linux_gnu_compile": true,
+    "powerpc64_linux_gnu_compile": true,
+    "imx_targeted_tests": true,
+    "imx_corpus_smoke_cases": 30,
+    "canonical_wide_source_unchanged": true,
+    "canonical_zlib_payload_text_bytes": 8332
+  },
+  "artifact_sha256": {
+    "native_ab": "5d308f620c3707db136c6404bd7cff69876fd007a91a66082cf202064d3a4854",
+    "image_png": "3ec47a8ad374a6656833f1154dd9ce5963e9f65a5a4785c747c33763131bea49"
+  }
+}
