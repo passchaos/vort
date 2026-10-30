@@ -363,8 +363,8 @@ The library is under active development. Its current capabilities include:
   numeric level 8 uses bounded forward lazy parsing with zlib-rs-derived
   good/lazy/nice limits and a corpus-bounded four-candidate chain, while named
   best and numeric level 9 retain global optimal parsing. [Level-8 evidence](docs/png-level8-forward-lazy.md)
-  records the complete speed/ratio/memory frontier, the outlined tiny i16
-  planner, and dual-decoder PNG proof;
+  records the complete speed/ratio/memory frontier, rejected tiny-layout
+  variants, and dual-decoder PNG proof;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while

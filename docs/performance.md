@@ -2955,23 +2955,18 @@ This establishes corpus aggregate/geometric speed and total-size leadership,
 not uniform per-image or format-wide leadership. [Full evidence](png-level8-forward-lazy.md)
 records the sweep and verification boundary.
 
-## PNG numeric level-8 outlined tiny planning (2026-10-31)
+## Rejected PNG numeric level-8 tiny planners (2026-10-31)
 
-Tuned one-shot inputs through 32 KiB now use an outlined 4096-bucket tiny
-planner with exact signed-16-bit heads and predecessors. A maximum-size `isize`
-reference matches every token and statistic. The full planner is separately
-outlined after early variants exposed up to about one percent of large-image
-code-layout regression.
+Four <=32 KiB variants tested 4096-bucket stack or heap heads, exact i16
+positions, outlined tiny/full bodies and a single shared parse body. They
+improved the 16px rows by roughly `1.6x...1.8x` and passed token, replay, OOM,
+dual-decoder and cross-target checks, but all changed unrelated large-image
+code generation.
 
-The 16px Adaptive/Up rows improve `1.802455x` / `1.673778x` versus the prior
-four-chain binary and `1.518259x` / `1.136720x` versus Rust. The complete
-30-row matrix changes by `1.060719x` geometrically and `1.005833x` in aggregate
-with a `0.991498x` minimum. Against Rust it reaches `2.795128x` geometric,
-`2.880994x` aggregate and 30/30 wins.
-
-Total output grows only 22 bytes to 37,272,889 and remains below Rust's
-37,442,939. Requested heap is non-increasing on every row and falls to
-`0.726663x` geometrically; 16px falls from 142,512 to 7,280 bytes and 32px from
-176,288 to 28,704 bytes. All 180 dual-decoder observations, allocation-failure,
-full LZ77/DEFLATE, bounded PNG and cross-target gates pass. [Full evidence](png-level8-forward-lazy.md)
-records the dispatch and isolation boundary.
+The source-identical built consumer after error-contract repair put the 128px
+rows at `0.976412x` / `0.982147x`. A final four-line single-body heap-head
+candidate still measured Exoplanet near `0.994x` and Lohengrin/Adaptive at a
+`0.988720x` paired median. The product source is restored to the published
+four-chain full-head baseline. [Level-8 evidence](png-level8-forward-lazy.md)
+records the rejected boundary; do not reintroduce a tiny branch without an
+isolation strategy that preserves large-image code generation.
