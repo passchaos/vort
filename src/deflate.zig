@@ -1559,7 +1559,7 @@ fn writeBestAdaptiveSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream
     while (offset < input.len) {
         const remaining = input.len - offset;
         const n = if (dictionary == null)
-            try chooseDriftAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options)
+            try chooseDriftAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, writer.bit_index, options)
         else
             try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
         const chunk_len = @min(n, remaining);
@@ -1658,6 +1658,7 @@ fn chooseDriftAdaptiveBlockLen(
     max_block_len: usize,
     sample_len: usize,
     search_step: usize,
+    initial_bit_index: u3,
     options: CompressionOptions,
 ) !usize {
     const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
@@ -1666,8 +1667,14 @@ fn chooseDriftAdaptiveBlockLen(
     const evidence = blk: {
         const plan = try planTokensAlloc(allocator, input[0..horizon], options);
         defer plan.deinit(allocator);
+        const scored = try scoreTokenPlanFromBitState(
+            horizon,
+            plan.tokens,
+            options,
+            .{ .bit_index = initial_bit_index },
+        );
         break :blk .{
-            .score = try scoreTokenPlan(horizon, plan.tokens, options),
+            .score = scored.state.added_bits,
             .proposals = try adaptive_split_proposal.proposeTokenBoundaries(
                 plan.tokens,
                 horizon,
@@ -1690,11 +1697,12 @@ fn chooseDriftAdaptiveBlockLen(
         );
         if (previous_proposal == aligned_proposal) continue;
         previous_proposal = aligned_proposal;
-        const score = try scoreAdaptiveSplitAt(
+        const score = try scoreAdaptiveSplitAtBitState(
             allocator,
             input,
             horizon,
             aligned_proposal,
+            initial_bit_index,
             options,
         );
         retainAdaptiveSplitCandidate(&best_score, &best_len, score, aligned_proposal);
@@ -1709,11 +1717,12 @@ fn chooseDriftAdaptiveBlockLen(
                 step,
             );
             if (horizon - fallback_proposal >= min_block_len) {
-                const score = try scoreAdaptiveSplitAt(
+                const score = try scoreAdaptiveSplitAtBitState(
                     allocator,
                     input,
                     horizon,
                     fallback_proposal,
+                    initial_bit_index,
                     options,
                 );
                 retainAdaptiveSplitCandidate(
@@ -1735,11 +1744,12 @@ fn chooseDriftAdaptiveBlockLen(
         );
     }
     if (heuristic < horizon and !heuristic_is_proposed) {
-        const score = try scoreAdaptiveSplitAt(
+        const score = try scoreAdaptiveSplitAtBitState(
             allocator,
             input,
             horizon,
             heuristic,
+            initial_bit_index,
             options,
         );
         retainAdaptiveSplitCandidate(&best_score, &best_len, score, heuristic);
@@ -1777,6 +1787,179 @@ fn scoreAdaptiveSplitAt(
         options,
     );
     return combineAdaptiveSplitScores(first, second);
+}
+
+const AdaptiveBitScoreState = struct {
+    complete_bytes: usize = 0,
+    bit_index: u3 = 0,
+    added_bits: usize = 0,
+
+    fn bitPosition(self: AdaptiveBitScoreState) !usize {
+        const complete_bits = std.math.mul(usize, self.complete_bytes, 8) catch
+            return error.IntegerOverflow;
+        return std.math.add(usize, complete_bits, self.bit_index) catch
+            return error.IntegerOverflow;
+    }
+};
+
+const BlockBitCost = struct {
+    block_type: RawDeflateBlockType,
+    added_bits: usize,
+    end_bit_index: u3,
+    closed_bytes: usize,
+};
+
+const AdaptivePredictedBlock = struct {
+    state: AdaptiveBitScoreState,
+    cost: BlockBitCost,
+};
+
+fn scoreAdaptiveSplitAtBitState(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    horizon: usize,
+    candidate: usize,
+    initial_bit_index: u3,
+    options: CompressionOptions,
+) !usize {
+    if (horizon == 0 or horizon > input.len or candidate == 0 or candidate > horizon)
+        return error.InvalidBlockPlan;
+    const first_plan = try planTokensAlloc(allocator, input[0..candidate], options);
+    defer first_plan.deinit(allocator);
+    const first = try scoreTokenPlanFromBitState(
+        candidate,
+        first_plan.tokens,
+        options,
+        .{ .bit_index = initial_bit_index },
+    );
+    if (candidate == horizon) return first.state.added_bits;
+
+    const second_plan = try planTokensAlloc(
+        allocator,
+        input[candidate..horizon],
+        options,
+    );
+    defer second_plan.deinit(allocator);
+    const second = try scoreTokenPlanFromBitState(
+        horizon - candidate,
+        second_plan.tokens,
+        options,
+        first.state,
+    );
+    return second.state.added_bits;
+}
+
+fn scoreTokenPlanFromBitState(
+    input_len: usize,
+    tokens: []const lz77.Token,
+    options: CompressionOptions,
+    state: AdaptiveBitScoreState,
+) !AdaptivePredictedBlock {
+    const fixed_bits = lz77.fixedBitCost(tokens);
+    const dynamic_bits: ?usize = if (options.block_selection == .stored_fixed)
+        null
+    else blk: {
+        const dynamic_plan = try DynamicCodingPlan.init(tokens);
+        break :blk dynamic_plan.bitCost();
+    };
+    const selected = try selectBestBlockBitCost(
+        state.bit_index,
+        input_len,
+        fixed_bits,
+        dynamic_bits,
+        options.block_selection,
+    );
+
+    var next = state;
+    const total_bits = std.math.add(
+        usize,
+        next.bit_index,
+        selected.added_bits,
+    ) catch return error.IntegerOverflow;
+    next.complete_bytes = std.math.add(
+        usize,
+        next.complete_bytes,
+        total_bits / 8,
+    ) catch return error.IntegerOverflow;
+    next.added_bits = std.math.add(
+        usize,
+        next.added_bits,
+        selected.added_bits,
+    ) catch return error.IntegerOverflow;
+    next.bit_index = selected.end_bit_index;
+    return .{ .state = next, .cost = selected };
+}
+
+fn selectBestBlockBitCost(
+    start_bit_index: u3,
+    plain_len: usize,
+    fixed_bits: usize,
+    dynamic_bits: ?usize,
+    selection: BlockSelection,
+) !BlockBitCost {
+    if ((selection == .stored_fixed) != (dynamic_bits == null))
+        return error.InvalidBlockPlan;
+    const shape = bitstream.BitWriter{ .bit_index = start_bit_index };
+    const stored_bytes = storedBlocksEncodedSizeFromState(shape, plain_len);
+    const fixed_bytes = encodedBytesForBitsFromState(shape, fixed_bits);
+    const stored_total_bits = std.math.mul(usize, stored_bytes, 8) catch
+        return error.IntegerOverflow;
+    const stored_bits = std.math.sub(
+        usize,
+        stored_total_bits,
+        start_bit_index,
+    ) catch return error.IntegerOverflow;
+
+    if (selection == .stored_fixed) {
+        if (stored_bytes <= fixed_bytes) return .{
+            .block_type = .stored,
+            .added_bits = stored_bits,
+            .end_bit_index = 0,
+            .closed_bytes = stored_bytes,
+        };
+        return compressedBlockBitCost(
+            .fixed,
+            start_bit_index,
+            fixed_bits,
+            fixed_bytes,
+        );
+    }
+
+    const dynamic = dynamic_bits.?;
+    const dynamic_bytes = encodedBytesForBitsFromState(shape, dynamic);
+    if (stored_bytes <= fixed_bytes and stored_bytes <= dynamic_bytes) return .{
+        .block_type = .stored,
+        .added_bits = stored_bits,
+        .end_bit_index = 0,
+        .closed_bytes = stored_bytes,
+    };
+    if (fixed_bytes <= dynamic_bytes) return compressedBlockBitCost(
+        .fixed,
+        start_bit_index,
+        fixed_bits,
+        fixed_bytes,
+    );
+    return compressedBlockBitCost(
+        .dynamic,
+        start_bit_index,
+        dynamic,
+        dynamic_bytes,
+    );
+}
+
+fn compressedBlockBitCost(
+    block_type: RawDeflateBlockType,
+    start_bit_index: u3,
+    bit_count: usize,
+    closed_bytes: usize,
+) BlockBitCost {
+    std.debug.assert(block_type != .stored);
+    return .{
+        .block_type = block_type,
+        .added_bits = bit_count,
+        .end_bit_index = @intCast((@as(usize, start_bit_index) + bit_count) % 8),
+        .closed_bytes = closed_bytes,
+    };
 }
 
 fn combineAdaptiveSplitScores(first: usize, second: usize) !usize {
@@ -1892,48 +2075,83 @@ fn writeBestTokensBlockWithStats(allocator: std.mem.Allocator, writer: *bitstrea
 }
 
 fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: ?*const incremental_dynamic_stats.Stats) !void {
-    const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
-
     if (options.block_selection == .stored_fixed) {
-        const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
-        if (stored_len <= fixed_len) {
-            return writeStoredBlocks(allocator, writer, plain, final);
-        }
-        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
-        return writeFixedTokens(allocator, writer, tokens, final);
+        const selected = try selectBestBlockBitCost(
+            writer.bit_index,
+            plain.len,
+            lz77.fixedBitCost(tokens),
+            null,
+            options.block_selection,
+        );
+        return switch (selected.block_type) {
+            .stored => writeStoredBlocks(allocator, writer, plain, final),
+            .fixed => blk: {
+                try writer.bytes.ensureTotalCapacity(
+                    allocator,
+                    writer.bytes.items.len + selected.closed_bytes,
+                );
+                break :blk writeFixedTokens(allocator, writer, tokens, final);
+            },
+            .dynamic => unreachable,
+        };
     }
 
     const dynamic_plan = if (stats) |cached|
         try DynamicCodingPlan.initFromIncrementalStats(cached)
     else
         try DynamicCodingPlan.init(tokens);
-    const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
-    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
-    if (stored_len <= fixed_len and stored_len <= dynamic_len) {
-        return writeStoredBlocks(allocator, writer, plain, final);
-    }
-    if (fixed_len <= dynamic_len) {
-        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
-        return writeFixedTokens(allocator, writer, tokens, final);
-    }
-    try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + dynamic_len);
-    return dynamic_plan.writeReserved(writer, tokens, final);
+    const selected = try selectBestBlockBitCost(
+        writer.bit_index,
+        plain.len,
+        dynamic_plan.fixed_bits,
+        dynamic_plan.bitCost(),
+        options.block_selection,
+    );
+    return switch (selected.block_type) {
+        .stored => writeStoredBlocks(allocator, writer, plain, final),
+        .fixed => blk: {
+            try writer.bytes.ensureTotalCapacity(
+                allocator,
+                writer.bytes.items.len + selected.closed_bytes,
+            );
+            break :blk writeFixedTokens(allocator, writer, tokens, final);
+        },
+        .dynamic => blk: {
+            try writer.bytes.ensureTotalCapacity(
+                allocator,
+                writer.bytes.items.len + selected.closed_bytes,
+            );
+            break :blk dynamic_plan.writeReserved(writer, tokens, final);
+        },
+    };
 }
 
 fn writeBestTokensBlockWithOneShotStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, stats: *const OneShotDynamicStats) !void {
-    const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
     const dynamic_plan = try DynamicCodingPlan.initFromOneShotStats(stats);
-    const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
-    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
-    if (stored_len <= fixed_len and stored_len <= dynamic_len) {
-        return writeStoredBlocks(allocator, writer, plain, final);
-    }
-    if (fixed_len <= dynamic_len) {
-        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
-        return writeFixedTokens(allocator, writer, tokens, final);
-    }
-    try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + dynamic_len);
-    return dynamic_plan.writeReserved(writer, tokens, final);
+    const selected = try selectBestBlockBitCost(
+        writer.bit_index,
+        plain.len,
+        dynamic_plan.fixed_bits,
+        dynamic_plan.bitCost(),
+        .stored_fixed_dynamic,
+    );
+    return switch (selected.block_type) {
+        .stored => writeStoredBlocks(allocator, writer, plain, final),
+        .fixed => blk: {
+            try writer.bytes.ensureTotalCapacity(
+                allocator,
+                writer.bytes.items.len + selected.closed_bytes,
+            );
+            break :blk writeFixedTokens(allocator, writer, tokens, final);
+        },
+        .dynamic => blk: {
+            try writer.bytes.ensureTotalCapacity(
+                allocator,
+                writer.bytes.items.len + selected.closed_bytes,
+            );
+            break :blk dynamic_plan.writeReserved(writer, tokens, final);
+        },
+    };
 }
 
 fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) usize {
@@ -23806,6 +24024,148 @@ const AdaptiveSplitProposalTestAdapter = struct {
 
 test "adaptive split token-distribution proposals" {
     try @import("deflate/tests/adaptive_split_proposal.zig").contracts(AdaptiveSplitProposalTestAdapter);
+}
+
+const AdaptiveBitScoreTestAdapter = struct {
+    pub const Token = lz77.Token;
+    pub const Options = CompressionOptions;
+    pub const State = AdaptiveBitScoreState;
+    pub const Kind = RawDeflateBlockType;
+    pub const Predicted = AdaptivePredictedBlock;
+    pub const Actual = struct {
+        state: State,
+        block_type: Kind,
+    };
+    pub const ActualPair = struct {
+        first_state: State,
+        state: State,
+        first_type: Kind,
+        second_type: Kind,
+    };
+    pub const options = optionsForLevel;
+    pub const predict = scoreTokenPlanFromBitState;
+    pub const select = selectBestBlockBitCost;
+
+    pub fn actual(
+        allocator: std.mem.Allocator,
+        start_bit_index: u3,
+        plain: []const u8,
+        tokens: []const Token,
+        options_value: Options,
+        final: bool,
+    ) !Actual {
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(allocator);
+        try writer.writeBits(allocator, 0, start_bit_index);
+        try writeBestTokensBlock(
+            allocator,
+            &writer,
+            plain,
+            tokens,
+            final,
+            options_value,
+        );
+        const state = try writerState(start_bit_index, writer);
+        const wire = try writer.toOwnedSlice(allocator);
+        defer allocator.free(wire);
+        return .{
+            .state = state,
+            .block_type = try blockTypeAt(wire, start_bit_index),
+        };
+    }
+
+    pub fn actualPair(
+        allocator: std.mem.Allocator,
+        start_bit_index: u3,
+        first_plain: []const u8,
+        first_tokens: []const Token,
+        first_options: Options,
+        second_plain: []const u8,
+        second_tokens: []const Token,
+        second_options: Options,
+    ) !ActualPair {
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(allocator);
+        try writer.writeBits(allocator, 0, start_bit_index);
+        try writeBestTokensBlock(
+            allocator,
+            &writer,
+            first_plain,
+            first_tokens,
+            false,
+            first_options,
+        );
+        const first_state = try writerState(start_bit_index, writer);
+        const second_offset = try first_state.bitPosition();
+        try writeBestTokensBlock(
+            allocator,
+            &writer,
+            second_plain,
+            second_tokens,
+            true,
+            second_options,
+        );
+        const state = try writerState(start_bit_index, writer);
+        const wire = try writer.toOwnedSlice(allocator);
+        defer allocator.free(wire);
+        return .{
+            .first_state = first_state,
+            .state = state,
+            .first_type = try blockTypeAt(wire, start_bit_index),
+            .second_type = try blockTypeAt(wire, second_offset),
+        };
+    }
+
+    pub fn actualStored(
+        allocator: std.mem.Allocator,
+        start_bit_index: u3,
+        plain: []const u8,
+    ) !State {
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(allocator);
+        try writer.writeBits(allocator, 0, start_bit_index);
+        try writeStoredBlocks(allocator, &writer, plain, true);
+        return writerState(start_bit_index, writer);
+    }
+
+    fn writerState(start_bit_index: u3, writer: bitstream.BitWriter) !State {
+        const complete_bits = std.math.mul(
+            usize,
+            writer.bytes.items.len,
+            8,
+        ) catch return error.IntegerOverflow;
+        const position = std.math.add(
+            usize,
+            complete_bits,
+            writer.bit_index,
+        ) catch return error.IntegerOverflow;
+        return .{
+            .complete_bytes = writer.bytes.items.len,
+            .bit_index = writer.bit_index,
+            .added_bits = std.math.sub(
+                usize,
+                position,
+                start_bit_index,
+            ) catch return error.IntegerOverflow,
+        };
+    }
+
+    fn blockTypeAt(input: []const u8, bit_offset: usize) !Kind {
+        if (bit_offset > input.len * 8 -| 3) return error.TruncatedFrame;
+        const low = bitAt(input, bit_offset + 1);
+        const high = bitAt(input, bit_offset + 2);
+        return std.enums.fromInt(Kind, low | (@as(u2, high) << 1)) orelse
+            return error.CorruptFrame;
+    }
+
+    fn bitAt(input: []const u8, bit_offset: usize) u2 {
+        const shift: u3 = @intCast(bit_offset % 8);
+        return @truncate(input[bit_offset / 8] >> shift);
+    }
+};
+
+test "adaptive split bit-state score matches production writer" {
+    try @import("deflate/tests/adaptive_bit_score.zig").contracts(AdaptiveBitScoreTestAdapter);
 }
 
 test "adaptive split complete horizon scoring and resource contracts" {
