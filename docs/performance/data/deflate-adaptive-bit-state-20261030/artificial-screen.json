@@ -1,0 +1,9 @@
+{
+  "description": "64 deterministic mixed random, text, JSON, periodic, and copied-window multi-block inputs",
+  "cases": 64,
+  "changed": 0,
+  "smaller": 0,
+  "larger": 0,
+  "baseline_bytes": 9353648,
+  "candidate_bytes": 9353648
+}

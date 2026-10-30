@@ -92,3 +92,10 @@ are separate follow-ups rather than claims covered by this result.
 Raw timings, commands, executable and source identities, source overlay, exact
 wires, and independent decode records are retained in
 [`data/deflate-adaptive-split-drift-20261030/`](data/deflate-adaptive-split-drift-20261030/).
+
+## Later bit-state follow-up
+
+The K2 proposal policy remains unchanged, but dictionary-free one-shot scoring
+now starts from the live writer bit offset and shares production's exact BTYPE
+selector. See
+[`deflate-adaptive-bit-state.md`](deflate-adaptive-bit-state.md).

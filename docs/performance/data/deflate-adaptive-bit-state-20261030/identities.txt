@@ -1,0 +1,11 @@
+baseline_commit=d4a802995b4cdd385241b0926271cc7aa31b8cb7
+zig_version=0.16.0
+kernel=Linux 6.8.0-79-generic x86_64
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_topology=1 socket, 8 cores, 16 threads
+benchmark_cpu=2
+baseline_executable_sha256=37b7c111657c781faa22c4752fdce156b3615ded720544d12fa114e32a4ae5d5
+candidate_executable_sha256=9d131d73a040ac1fd527b5eee89debaf709fe9cd1d60efe38f4fea98b49f95e6
+probe_executable_sha256=a8929ea16f93e6c2a2f8bcbceece55bcc9c4e98ef9a9c236ed6f91fb5d43261e
+inputs_archive_sha256=51cbf9b523f88c6ca8a1402acafa2fa3ef7e563465fbeeb6faec3d2f2fef3539
+captured_at=2026-10-30 10:53:03 CST (+0800)

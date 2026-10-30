@@ -1,0 +1,2545 @@
+{
+  "baseline_commit": "d4a802995b4cdd385241b0926271cc7aa31b8cb7",
+  "baseline_sha256": "37b7c111657c781faa22c4752fdce156b3615ded720544d12fa114e32a4ae5d5",
+  "candidate_sha256": "9d131d73a040ac1fd527b5eee89debaf709fe9cd1d60efe38f4fea98b49f95e6",
+  "input_count": 12,
+  "input_sha256": {
+    "dickens-196608": "ac1d7cd6459fb3cf08858b94677ad128e4d90e74bedba2fc73dec1ade5e220fd",
+    "mozilla-196608": "6a4f8345762024da36e0d3fe57e78437c3b98a0f4bc8f34bbad47ee33c851dac",
+    "mr-196608": "1f27161f14ca594cfbe437d72b7a1ac4c1556d309ba2787daff42eeeb305b9cd",
+    "nci-196608": "15e1b0e4b6f77e0937152069d04fff2a84846b6437abff3180ac1721de99f591",
+    "ooffice-196608": "674925ddbb48e23520af52cfc00d9d9b20b97c1fd4ebaa62cf2aefbe7766dcd4",
+    "osdb-196608": "5303c1aa86931e0b324424c3339fd15bda7cedc0952bfc7655126856a94f422b",
+    "reymont-196608": "b716df3deeb656beeb892253a824bb0ad5c71cf1d237d45f48b072c701a88662",
+    "samba-196608": "64e8b1d387091c73732d5d0c00a433456f658a81f0ad5d6bf551c9abeeeb302e",
+    "sao-196608": "d9c99f870733b07c57bfd4c881baef935f27789cd1260f6a25ded6a0ddeaf5f2",
+    "webster-196608": "c2c9cbeaba4190d1ec61d74bf62f37c354ce759e9bb9b3f94b254bd53c99c72c",
+    "x-ray-196608": "ba1e2ea9dd698f70eefdfd1de82f247ee5eb00eeb4d9a3b812dfc657954dc17f",
+    "xml-196608": "754bf47d1dd24dac5298db3497ee3ef34bff753451847aa5cb1f4e2a6bcb8573"
+  },
+  "sweeps": 5,
+  "iterations": 1,
+  "time_geomean": 0.9904082094413676,
+  "sweep_geomeans": [
+    0.9857203971492468,
+    0.9960637158321424,
+    0.986451859168521,
+    0.9904955403486915,
+    0.9879064364658195
+  ],
+  "all_sizes_non_regressive": true,
+  "total_baseline_bytes": 910041,
+  "total_candidate_bytes": 910041,
+  "rows": [
+    {
+      "case": "dickens",
+      "baseline_ns": 41803397,
+      "candidate_ns": 41139383,
+      "time_ratio": 0.9841157884848449,
+      "baseline_bytes": 74693,
+      "candidate_bytes": 74693,
+      "size_delta": 0
+    },
+    {
+      "case": "mozilla",
+      "baseline_ns": 537083361,
+      "candidate_ns": 536260046,
+      "time_ratio": 0.9984670629183763,
+      "baseline_bytes": 64439,
+      "candidate_bytes": 64439,
+      "size_delta": 0
+    },
+    {
+      "case": "mr",
+      "baseline_ns": 153630835,
+      "candidate_ns": 152264322,
+      "time_ratio": 0.991105216605768,
+      "baseline_bytes": 53100,
+      "candidate_bytes": 53100,
+      "size_delta": 0
+    },
+    {
+      "case": "nci",
+      "baseline_ns": 95204891,
+      "candidate_ns": 93196951,
+      "time_ratio": 0.9789092768353677,
+      "baseline_bytes": 16583,
+      "candidate_bytes": 16583,
+      "size_delta": 0
+    },
+    {
+      "case": "ooffice",
+      "baseline_ns": 30199781,
+      "candidate_ns": 30153144,
+      "time_ratio": 0.9984557172782147,
+      "baseline_bytes": 104687,
+      "candidate_bytes": 104687,
+      "size_delta": 0
+    },
+    {
+      "case": "osdb",
+      "baseline_ns": 19257161,
+      "candidate_ns": 19281996,
+      "time_ratio": 1.001289650120285,
+      "baseline_bytes": 75075,
+      "candidate_bytes": 75075,
+      "size_delta": 0
+    },
+    {
+      "case": "reymont",
+      "baseline_ns": 48745224,
+      "candidate_ns": 48715193,
+      "time_ratio": 0.9993839191302106,
+      "baseline_bytes": 55001,
+      "candidate_bytes": 55001,
+      "size_delta": 0
+    },
+    {
+      "case": "samba",
+      "baseline_ns": 26802067,
+      "candidate_ns": 26433143,
+      "time_ratio": 0.9862352407372162,
+      "baseline_bytes": 104700,
+      "candidate_bytes": 104700,
+      "size_delta": 0
+    },
+    {
+      "case": "sao",
+      "baseline_ns": 38223273,
+      "candidate_ns": 37623619,
+      "time_ratio": 0.9843118091954083,
+      "baseline_bytes": 148245,
+      "candidate_bytes": 148245,
+      "size_delta": 0
+    },
+    {
+      "case": "webster",
+      "baseline_ns": 26661529,
+      "candidate_ns": 26878489,
+      "time_ratio": 1.008137567804157,
+      "baseline_bytes": 60549,
+      "candidate_bytes": 60549,
+      "size_delta": 0
+    },
+    {
+      "case": "x-ray",
+      "baseline_ns": 26325060,
+      "candidate_ns": 25491104,
+      "time_ratio": 0.9683208319373251,
+      "baseline_bytes": 139345,
+      "candidate_bytes": 139345,
+      "size_delta": 0
+    },
+    {
+      "case": "xml",
+      "baseline_ns": 9542613,
+      "candidate_ns": 9417221,
+      "time_ratio": 0.9868597835833854,
+      "baseline_bytes": 13624,
+      "candidate_bytes": 13624,
+      "size_delta": 0
+    }
+  ],
+  "raw": [
+    {
+      "sweep": 0,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328544737887694,
+      "process_end_ns": 1793328544825028449,
+      "elapsed_ns": 41694694,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 0,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328544825053441,
+      "process_end_ns": 1793328544913869965,
+      "elapsed_ns": 42439928,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 0,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328544913911201,
+      "process_end_ns": 1793328546034409445,
+      "elapsed_ns": 571349502,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 0,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328546034451909,
+      "process_end_ns": 1793328547170478265,
+      "elapsed_ns": 561397692,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 0,
+      "case": "mr",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328547170521279,
+      "process_end_ns": 1793328547491138988,
+      "elapsed_ns": 156667915,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 0,
+      "case": "mr",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328547491177086,
+      "process_end_ns": 1793328547808788191,
+      "elapsed_ns": 155382926,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 0,
+      "case": "nci",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328547808829053,
+      "process_end_ns": 1793328548002849693,
+      "elapsed_ns": 93604564,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 0,
+      "case": "nci",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548002882322,
+      "process_end_ns": 1793328548198218484,
+      "elapsed_ns": 96072072,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 0,
+      "case": "ooffice",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548198256430,
+      "process_end_ns": 1793328548264024275,
+      "elapsed_ns": 31049372,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 0,
+      "case": "ooffice",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548264060654,
+      "process_end_ns": 1793328548329054642,
+      "elapsed_ns": 30240505,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 0,
+      "case": "osdb",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548329090617,
+      "process_end_ns": 1793328548372638596,
+      "elapsed_ns": 20402748,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 0,
+      "case": "osdb",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548372660600,
+      "process_end_ns": 1793328548415976027,
+      "elapsed_ns": 19452121,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 0,
+      "case": "reymont",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548416000799,
+      "process_end_ns": 1793328548521511396,
+      "elapsed_ns": 50273391,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 0,
+      "case": "reymont",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548521543197,
+      "process_end_ns": 1793328548626426006,
+      "elapsed_ns": 50702685,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 0,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548626459415,
+      "process_end_ns": 1793328548684524514,
+      "elapsed_ns": 27173166,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 0,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548684551908,
+      "process_end_ns": 1793328548741874309,
+      "elapsed_ns": 27204577,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 0,
+      "case": "sao",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548741904493,
+      "process_end_ns": 1793328548823403250,
+      "elapsed_ns": 38732465,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 0,
+      "case": "sao",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548823464629,
+      "process_end_ns": 1793328548906284045,
+      "elapsed_ns": 39286259,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 0,
+      "case": "webster",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548906318924,
+      "process_end_ns": 1793328548966361961,
+      "elapsed_ns": 27481575,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 0,
+      "case": "webster",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328548966387963,
+      "process_end_ns": 1793328549026394618,
+      "elapsed_ns": 28258313,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 0,
+      "case": "x-ray",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549026424598,
+      "process_end_ns": 1793328549084401379,
+      "elapsed_ns": 27205570,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 0,
+      "case": "x-ray",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549084427648,
+      "process_end_ns": 1793328549141410125,
+      "elapsed_ns": 25890499,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 0,
+      "case": "xml",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549141437466,
+      "process_end_ns": 1793328549164915229,
+      "elapsed_ns": 9417292,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 0,
+      "case": "xml",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549164939466,
+      "process_end_ns": 1793328549188657765,
+      "elapsed_ns": 10822355,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 1,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549188683506,
+      "process_end_ns": 1793328549275730899,
+      "elapsed_ns": 41674345,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 1,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549275756672,
+      "process_end_ns": 1793328549362915667,
+      "elapsed_ns": 41803397,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 1,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328549362945479,
+      "process_end_ns": 1793328550497831725,
+      "elapsed_ns": 561317274,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 1,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328550497872713,
+      "process_end_ns": 1793328551626129961,
+      "elapsed_ns": 561507220,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 1,
+      "case": "mr",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328551626171808,
+      "process_end_ns": 1793328551946138412,
+      "elapsed_ns": 158097487,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 1,
+      "case": "mr",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328551946176793,
+      "process_end_ns": 1793328552266026199,
+      "elapsed_ns": 156629710,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 1,
+      "case": "nci",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552266066981,
+      "process_end_ns": 1793328552463838120,
+      "elapsed_ns": 96772557,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 1,
+      "case": "nci",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552463872581,
+      "process_end_ns": 1793328552658828024,
+      "elapsed_ns": 94344158,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 1,
+      "case": "ooffice",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552658863521,
+      "process_end_ns": 1793328552723739108,
+      "elapsed_ns": 30205727,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 1,
+      "case": "ooffice",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552723782813,
+      "process_end_ns": 1793328552789296615,
+      "elapsed_ns": 30990045,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 1,
+      "case": "osdb",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552789325038,
+      "process_end_ns": 1793328552832414921,
+      "elapsed_ns": 19257161,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 1,
+      "case": "osdb",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552832441071,
+      "process_end_ns": 1793328552875406030,
+      "elapsed_ns": 19325894,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 1,
+      "case": "reymont",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552875435796,
+      "process_end_ns": 1793328552977232237,
+      "elapsed_ns": 48715193,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 1,
+      "case": "reymont",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328552977261067,
+      "process_end_ns": 1793328553079602857,
+      "elapsed_ns": 48745224,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 1,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553079632725,
+      "process_end_ns": 1793328553138093589,
+      "elapsed_ns": 26996458,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 1,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553138120976,
+      "process_end_ns": 1793328553194322760,
+      "elapsed_ns": 26981235,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 1,
+      "case": "sao",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553194350140,
+      "process_end_ns": 1793328553274963633,
+      "elapsed_ns": 38352164,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 1,
+      "case": "sao",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553274990747,
+      "process_end_ns": 1793328553356229309,
+      "elapsed_ns": 38223273,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 1,
+      "case": "webster",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553356260959,
+      "process_end_ns": 1793328553413660824,
+      "elapsed_ns": 26327963,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 1,
+      "case": "webster",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553413685616,
+      "process_end_ns": 1793328553473440222,
+      "elapsed_ns": 28203522,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 1,
+      "case": "x-ray",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553473466302,
+      "process_end_ns": 1793328553531002253,
+      "elapsed_ns": 27260422,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 1,
+      "case": "x-ray",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553531029295,
+      "process_end_ns": 1793328553587669890,
+      "elapsed_ns": 27246873,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 1,
+      "case": "xml",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553587694658,
+      "process_end_ns": 1793328553610941306,
+      "elapsed_ns": 10102804,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 1,
+      "case": "xml",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553610965154,
+      "process_end_ns": 1793328553632916559,
+      "elapsed_ns": 9345527,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 2,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553632938540,
+      "process_end_ns": 1793328553721298416,
+      "elapsed_ns": 42118204,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 2,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553721329115,
+      "process_end_ns": 1793328553807780710,
+      "elapsed_ns": 41139383,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 2,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328553807809724,
+      "process_end_ns": 1793328554911852810,
+      "elapsed_ns": 536050541,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 2,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328554911893761,
+      "process_end_ns": 1793328555991295796,
+      "elapsed_ns": 537083361,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 2,
+      "case": "mr",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328555991336987,
+      "process_end_ns": 1793328556299671760,
+      "elapsed_ns": 152560662,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 2,
+      "case": "mr",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328556299732732,
+      "process_end_ns": 1793328556607257415,
+      "elapsed_ns": 150973741,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 2,
+      "case": "nci",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328556607298038,
+      "process_end_ns": 1793328556793445332,
+      "elapsed_ns": 90942514,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 2,
+      "case": "nci",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328556793481331,
+      "process_end_ns": 1793328556984989627,
+      "elapsed_ns": 95204891,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 2,
+      "case": "ooffice",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328556985033063,
+      "process_end_ns": 1793328557049160990,
+      "elapsed_ns": 30199781,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 2,
+      "case": "ooffice",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557049191671,
+      "process_end_ns": 1793328557112203044,
+      "elapsed_ns": 29550265,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 2,
+      "case": "osdb",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557112234122,
+      "process_end_ns": 1793328557154250275,
+      "elapsed_ns": 19082060,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 2,
+      "case": "osdb",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557154275067,
+      "process_end_ns": 1793328557196076597,
+      "elapsed_ns": 19100391,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 2,
+      "case": "reymont",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557196103193,
+      "process_end_ns": 1793328557296344173,
+      "elapsed_ns": 48174588,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 2,
+      "case": "reymont",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557296373305,
+      "process_end_ns": 1793328557396275590,
+      "elapsed_ns": 47731293,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 2,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557396309226,
+      "process_end_ns": 1793328557453455417,
+      "elapsed_ns": 26433143,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 2,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557453490993,
+      "process_end_ns": 1793328557510644356,
+      "elapsed_ns": 26764664,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 2,
+      "case": "sao",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557510672346,
+      "process_end_ns": 1793328557589806732,
+      "elapsed_ns": 37544098,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 2,
+      "case": "sao",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557589837606,
+      "process_end_ns": 1793328557668370702,
+      "elapsed_ns": 37165277,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 2,
+      "case": "webster",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557668402331,
+      "process_end_ns": 1793328557725860113,
+      "elapsed_ns": 26602239,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 2,
+      "case": "webster",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557725888367,
+      "process_end_ns": 1793328557783559779,
+      "elapsed_ns": 26923248,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 2,
+      "case": "x-ray",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557783587302,
+      "process_end_ns": 1793328557838843656,
+      "elapsed_ns": 25828020,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 2,
+      "case": "x-ray",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557838871672,
+      "process_end_ns": 1793328557893853343,
+      "elapsed_ns": 25466154,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 2,
+      "case": "xml",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557893881815,
+      "process_end_ns": 1793328557916274551,
+      "elapsed_ns": 9529894,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 2,
+      "case": "xml",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557916299935,
+      "process_end_ns": 1793328557938676441,
+      "elapsed_ns": 9542613,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 3,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328557938702520,
+      "process_end_ns": 1793328558023543654,
+      "elapsed_ns": 40536622,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 3,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328558023571637,
+      "process_end_ns": 1793328558109466605,
+      "elapsed_ns": 40969748,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 3,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328558109496797,
+      "process_end_ns": 1793328559189011699,
+      "elapsed_ns": 536467179,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 3,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328559189054083,
+      "process_end_ns": 1793328560268211653,
+      "elapsed_ns": 536260046,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 3,
+      "case": "mr",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328560268257811,
+      "process_end_ns": 1793328560576846695,
+      "elapsed_ns": 152264322,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 3,
+      "case": "mr",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328560576886374,
+      "process_end_ns": 1793328560884702969,
+      "elapsed_ns": 151595248,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 3,
+      "case": "nci",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328560884781750,
+      "process_end_ns": 1793328561071983509,
+      "elapsed_ns": 91553469,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 3,
+      "case": "nci",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561072019493,
+      "process_end_ns": 1793328561258595838,
+      "elapsed_ns": 91292793,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 3,
+      "case": "ooffice",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561258631063,
+      "process_end_ns": 1793328561321533410,
+      "elapsed_ns": 29151780,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 3,
+      "case": "ooffice",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561321565308,
+      "process_end_ns": 1793328561385617751,
+      "elapsed_ns": 30099148,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 3,
+      "case": "osdb",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561385650148,
+      "process_end_ns": 1793328561427883741,
+      "elapsed_ns": 19361436,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 3,
+      "case": "osdb",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561427908394,
+      "process_end_ns": 1793328561469879050,
+      "elapsed_ns": 19081711,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 3,
+      "case": "reymont",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561469903881,
+      "process_end_ns": 1793328561570228717,
+      "elapsed_ns": 48244508,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 3,
+      "case": "reymont",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561570257421,
+      "process_end_ns": 1793328561672540601,
+      "elapsed_ns": 48937732,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 3,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561672571428,
+      "process_end_ns": 1793328561729451248,
+      "elapsed_ns": 26336545,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 3,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561729480079,
+      "process_end_ns": 1793328561785736929,
+      "elapsed_ns": 26250705,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 3,
+      "case": "sao",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561785763303,
+      "process_end_ns": 1793328561865142510,
+      "elapsed_ns": 37623619,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 3,
+      "case": "sao",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561865177263,
+      "process_end_ns": 1793328561944012027,
+      "elapsed_ns": 37275684,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 3,
+      "case": "webster",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328561944041353,
+      "process_end_ns": 1793328562001255910,
+      "elapsed_ns": 26593818,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 3,
+      "case": "webster",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562001280997,
+      "process_end_ns": 1793328562058376088,
+      "elapsed_ns": 26656217,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 3,
+      "case": "x-ray",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562058404722,
+      "process_end_ns": 1793328562112586896,
+      "elapsed_ns": 25286505,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 3,
+      "case": "x-ray",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562112613827,
+      "process_end_ns": 1793328562168673415,
+      "elapsed_ns": 26325060,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 3,
+      "case": "xml",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562168699937,
+      "process_end_ns": 1793328562191090876,
+      "elapsed_ns": 9527817,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 3,
+      "case": "xml",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562191115446,
+      "process_end_ns": 1793328562213242113,
+      "elapsed_ns": 9409875,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 4,
+      "case": "dickens",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562213266161,
+      "process_end_ns": 1793328562301999301,
+      "elapsed_ns": 42824700,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 4,
+      "case": "dickens",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/dickens-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562302025032,
+      "process_end_ns": 1793328562386700306,
+      "elapsed_ns": 40364424,
+      "frame_bytes": 74693,
+      "zlib_bytes": 74693,
+      "mix": 74813
+    },
+    {
+      "sweep": 4,
+      "case": "mozilla",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328562386786046,
+      "process_end_ns": 1793328563460322895,
+      "elapsed_ns": 533618507,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 4,
+      "case": "mozilla",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mozilla-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328563460363602,
+      "process_end_ns": 1793328564543348001,
+      "elapsed_ns": 534804893,
+      "frame_bytes": 64439,
+      "zlib_bytes": 64439,
+      "mix": 64559
+    },
+    {
+      "sweep": 4,
+      "case": "mr",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328564543390981,
+      "process_end_ns": 1793328564855850457,
+      "elapsed_ns": 153630835,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 4,
+      "case": "mr",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/mr-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328564855889227,
+      "process_end_ns": 1793328565162436783,
+      "elapsed_ns": 151118673,
+      "frame_bytes": 53100,
+      "zlib_bytes": 53100,
+      "mix": 53220
+    },
+    {
+      "sweep": 4,
+      "case": "nci",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565162481872,
+      "process_end_ns": 1793328565351593136,
+      "elapsed_ns": 93196951,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 4,
+      "case": "nci",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/nci-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565351630259,
+      "process_end_ns": 1793328565541270266,
+      "elapsed_ns": 93778114,
+      "frame_bytes": 16583,
+      "zlib_bytes": 16583,
+      "mix": 16703
+    },
+    {
+      "sweep": 4,
+      "case": "ooffice",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565541303200,
+      "process_end_ns": 1793328565605172591,
+      "elapsed_ns": 30129935,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 4,
+      "case": "ooffice",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/ooffice-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565605200876,
+      "process_end_ns": 1793328565669438806,
+      "elapsed_ns": 30153144,
+      "frame_bytes": 104687,
+      "zlib_bytes": 104687,
+      "mix": 104807
+    },
+    {
+      "sweep": 4,
+      "case": "osdb",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565669468799,
+      "process_end_ns": 1793328565711646486,
+      "elapsed_ns": 19281996,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 4,
+      "case": "osdb",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/osdb-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565711671335,
+      "process_end_ns": 1793328565753572178,
+      "elapsed_ns": 19084434,
+      "frame_bytes": 75075,
+      "zlib_bytes": 75075,
+      "mix": 75195
+    },
+    {
+      "sweep": 4,
+      "case": "reymont",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565753597136,
+      "process_end_ns": 1793328565853724590,
+      "elapsed_ns": 48629447,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 4,
+      "case": "reymont",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/reymont-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565853756985,
+      "process_end_ns": 1793328565955260278,
+      "elapsed_ns": 48766698,
+      "frame_bytes": 55001,
+      "zlib_bytes": 55001,
+      "mix": 55121
+    },
+    {
+      "sweep": 4,
+      "case": "samba",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328565955290910,
+      "process_end_ns": 1793328566011390152,
+      "elapsed_ns": 25835467,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 4,
+      "case": "samba",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/samba-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566011418818,
+      "process_end_ns": 1793328566068149638,
+      "elapsed_ns": 26802067,
+      "frame_bytes": 104700,
+      "zlib_bytes": 104700,
+      "mix": 104820
+    },
+    {
+      "sweep": 4,
+      "case": "sao",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566068176127,
+      "process_end_ns": 1793328566148485756,
+      "elapsed_ns": 38453839,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 4,
+      "case": "sao",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/sao-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566148513510,
+      "process_end_ns": 1793328566226574899,
+      "elapsed_ns": 36797742,
+      "frame_bytes": 148245,
+      "zlib_bytes": 148245,
+      "mix": 148365
+    },
+    {
+      "sweep": 4,
+      "case": "webster",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566226602928,
+      "process_end_ns": 1793328566283919896,
+      "elapsed_ns": 26878489,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 4,
+      "case": "webster",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/webster-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566283947710,
+      "process_end_ns": 1793328566340623090,
+      "elapsed_ns": 26661529,
+      "frame_bytes": 60549,
+      "zlib_bytes": 60549,
+      "mix": 60669
+    },
+    {
+      "sweep": 4,
+      "case": "x-ray",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566340651880,
+      "process_end_ns": 1793328566395777810,
+      "elapsed_ns": 25525802,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 4,
+      "case": "x-ray",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/x-ray-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566395803646,
+      "process_end_ns": 1793328566450352316,
+      "elapsed_ns": 25491104,
+      "frame_bytes": 139345,
+      "zlib_bytes": 139345,
+      "mix": 139465
+    },
+    {
+      "sweep": 4,
+      "case": "xml",
+      "side": "final",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-final",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566450380403,
+      "process_end_ns": 1793328566472440275,
+      "elapsed_ns": 9417221,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    },
+    {
+      "sweep": 4,
+      "case": "xml",
+      "side": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "2",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/bench-baseline",
+        "/tmp/vort-deflate-bitstate-20261030.Qwb5CW/inputs/xml-196608",
+        "1",
+        "adaptive-default"
+      ],
+      "process_start_ns": 1793328566472463796,
+      "process_end_ns": 1793328566494178299,
+      "elapsed_ns": 9434145,
+      "frame_bytes": 13624,
+      "zlib_bytes": 13624,
+      "mix": 13744
+    }
+  ]
+}

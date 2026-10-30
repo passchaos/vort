@@ -1,0 +1,13 @@
+{
+  "baseline_commit": "d4a802995b4cdd385241b0926271cc7aa31b8cb7",
+  "input_archive_sha256": "51cbf9b523f88c6ca8a1402acafa2fa3ef7e563465fbeeb6faec3d2f2fef3539",
+  "baseline_executable_sha256": "37b7c111657c781faa22c4752fdce156b3615ded720544d12fa114e32a4ae5d5",
+  "candidate_executable_sha256": "9d131d73a040ac1fd527b5eee89debaf709fe9cd1d60efe38f4fea98b49f95e6",
+  "probe_executable_sha256": "a8929ea16f93e6c2a2f8bcbceece55bcc9c4e98ef9a9c236ed6f91fb5d43261e",
+  "source_overlay_sha256": "4dff7e65a7eb3b126b4f33f7bd62680353364eb07d191fe7a0aa214d080065ca",
+  "wires_sha256": "53f36ae56b51877950f6022b78fd4273a65606f74bfca3cab17a4ca564c42697",
+  "sources": {
+    "src/deflate.zig": "61758b4acc539f4fab6900b92c09843bc878365b3128b5a29a04ab1a60225f19",
+    "src/deflate/tests/adaptive_bit_score.zig": "d1ebca748a0d3ef32c7440a4d4cd25dc7967981560e4ecb9adf6acd47ade1406"
+  }
+}
