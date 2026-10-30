@@ -1,0 +1,16 @@
+Focused gates completed before migration:
+
+- selector exhaustive oracle and overflow groups: pass
+- reuse plan equality and strict priced-edge reduction: pass
+- sparse-prefix gate preserves unpruned work: pass
+- finite price budget N succeeds and N-1 refuses: pass
+- Debug test-zstd-hq: 156/156
+- ReleaseFast test-zstd-hq: 156/156
+- Debug test-zstd-hq-search: 85/85
+- Wasm HQ search gate: 7/7 steps, status ok
+- public HQ search differential: 41 rows plus 8 frozen baseline rows
+- eight-sweep benchmark: all inputs/settings/wires equal, peak memory unchanged
+- Debug full test-zstd: 1202/1202
+- ReleaseFast full test-zstd: 1202/1202
+- clean candidate `zig build -j2 check check-wasm --summary all`: exit 0,
+  211/211 steps succeeded

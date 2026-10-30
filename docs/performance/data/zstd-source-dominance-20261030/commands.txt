@@ -1,0 +1,43 @@
+Replay setup:
+
+  REPO=/home/passchaos/project-z/vort
+  EVIDENCE=$REPO/docs/performance/data/zstd-source-dominance-20261030
+  EPOCH=/tmp/vort-zstd-source-dominance-replay
+  BASELINE_ROOT=$EPOCH/baseline
+  CANDIDATE_ROOT=$EPOCH/candidate
+  mkdir -p "$BASELINE_ROOT" "$CANDIDATE_ROOT" "$EPOCH/inputs"
+  git -C "$REPO" archive 88eebd7f211674c820a4c94e82b2da6a2d7930fc | tar -x -C "$BASELINE_ROOT"
+  git -C "$REPO" archive 88eebd7f211674c820a4c94e82b2da6a2d7930fc | tar -x -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/source-overlay.tar.xz" -C "$CANDIDATE_ROOT"
+  tar -xJf "$EVIDENCE/inputs.tar.xz" -C "$EPOCH/inputs"
+
+Build the shared object and independent benchmark executables:
+
+  zig build-obj "$BASELINE_ROOT/src/zstd_huffman_x2_object.zig" \
+    -O ReleaseFast -femit-bin="$EPOCH/zstd-huffman-x2.o"
+  for side in baseline candidate; do
+    if [ "$side" = baseline ]; then ROOT=$BASELINE_ROOT; else ROOT=$CANDIDATE_ROOT; fi
+    zig build-exe -O ReleaseFast --dep vort_zstd --dep benchmark_provenance \
+      -Mroot="$ROOT/tools/zstd/encode_bench.zig" "$EPOCH/zstd-huffman-x2.o" \
+      -O ReleaseFast -Mvort_zstd="$ROOT/src/zstd.zig" \
+      -O ReleaseFast -Mbenchmark_provenance="$ROOT/tools/benchmark_provenance.zig" \
+      -lc -femit-bin="$EPOCH/bench-$side"
+  done
+
+Run the retained campaign:
+
+  python3 "$EVIDENCE/measure.py" "$EPOCH" "$EPOCH/formal" --sweeps 8
+
+Focused and broad validation in the candidate tree:
+
+  ln -s /home/passchaos/project-z/vail "$EPOCH/vail"
+  zig build -Doptimize=Debug test-zstd-hq -j2 --summary all
+  zig build -Doptimize=ReleaseFast test-zstd-hq -j2 --summary all
+  zig build test-zstd-hq-search -j2 --summary all
+  zig build test-zstd-hq-search-wasm -j2 --summary all
+  zig build run-zstd-hq-search-diff -j2 --summary all -- \
+    --reference /tmp/vort-zstd-hq-reference.so --output-dir "$EPOCH/hq-search"
+  zig build -Doptimize=Debug test-zstd -j2 --summary all
+  zig build -Doptimize=ReleaseFast test-zstd -j2 --summary all
+  zig build -j2 check check-wasm --summary all
+  python3 "$EVIDENCE/audit.py"

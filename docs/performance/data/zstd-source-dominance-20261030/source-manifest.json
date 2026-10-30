@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "88eebd7f211674c820a4c94e82b2da6a2d7930fc",
+  "baseline_executable_sha256": "87877b6e7a8a08f2c93fdad9e1b0cb0f9c5929b39e049318e909959f5c62fd6a",
+  "candidate_executable_sha256": "a12dbc632e1e9e8a4fe2b9715aac197dea5641260ca688370e8e5ec8d53b1c7e",
+  "reference_library_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+  "search_reference_sha256": "dabbc64c08485df739db35e4159d7319d155e18e2314a9bf4946d2b076dc7201",
+  "inputs_sha256": "0c09dee0198bb8853160831079164f39b39e6c60c3eff6318f9d77ee36749846",
+  "source_overlay_sha256": "58a78ceaca17f3ca650a5fe1c7e271f60ea49af1ad50ec49c8914074b8aa81d8",
+  "sources": {
+    "src/zstd/match/hq_parser/dp_reuse.zig": "bf57f66c99b895920172728ffc14a0057bcd4feaa7ddc6373d68558cbb4f3fef",
+    "src/zstd/match/hq_parser/tests.zig": "b7419fc8af1ddf06326872ec5d2cf06500f4a051d9d8aa563063851db1521668",
+    "src/zstd/match/hq_parser/source_dominance.zig": "aed7c13cf02d0c13701fefb2ec8462e0d7a96d035f7cd7e8fd22ad27f4fe0c3e",
+    "src/zstd/match/hq_parser/source_dominance_tests.zig": "11e025e0331388adef5510c53afc0b5b6d6299a3bb071963279c787b1d49b50e"
+  }
+}
