@@ -3,7 +3,7 @@ const tree = @import("../hq_tree.zig");
 
 pub fn contracts(comptime C: type) !void {
     try std.testing.expectEqual(
-        @as(usize, 5 * @sizeOf(u32) + 16 * @sizeOf(tree.Match)),
+        @as(usize, 5 * @sizeOf(u32) + 4 * C.matches_per_position * @sizeOf(tree.Match)),
         try C.Cache.estimatedBytes(4),
     );
 

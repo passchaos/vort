@@ -2,7 +2,10 @@
 const std = @import("std");
 const tree = @import("../hq_tree.zig");
 
-pub const matches_per_position: usize = 4;
+// Real bounded frontiers average below 1.2 retained matches per position on
+// the locked 4/16 KiB corpus. Two slots per position preserve those replays;
+// denser inputs invalidate the optional cache and perform the original search.
+pub const matches_per_position: usize = 2;
 
 pub const Cache = struct {
     offsets: []u32 = &.{},
