@@ -2874,6 +2874,22 @@ compilation pass. [Full evidence](performance/png-ultrafast-fixed-up-compact-aar
 and its [machine summary](performance/data/png-ultrafast-fixed-up-compact-aarch64-20261030.json)
 record the selection policy, stage profiles, samples and remaining weak rows.
 
+## PNG ultrafast zero-run tail fusion (2026-10-30)
+
+The canonical wide and compact PNG-trained encoders now combine a nonterminal
+zero run's length symbol, extra bits, and zero distance symbol into one
+reservoir update. The emitted bitstream stays exact while the AArch64
+`writeZeroRun` instance shrinks from `0x4d4` to `0x480` bytes.
+
+Twenty-one CPU-12 rounds improve all 15 fixed-Up rows: `1.014500x` geometric,
+`1.010116x` aggregate, and `1.001720x` minimum. The 128/32/16 icon rows improve
+`1.049199x/1.034051x/1.014543x`. Against pinned image-png, overall geometric
+and aggregate throughput reach `1.065875x/1.083984x`, while fixed-Up rises from
+`0.968269x` to `0.985374x`. All byte, pixel, size, OOM, RSS, no-swap and
+cross-target gates pass. [Full evidence](performance/png-ultrafast-zero-run-tail-fusion-aarch64.md)
+and its [machine summary](performance/data/png-ultrafast-zero-run-tail-fusion-aarch64-20261030.json)
+retain the profiles, rejected neighbors and complete ratios.
+
 ## Zstd shifted single-beam match reuse (2026-09-15)
 
 The speed-oriented one-state Zstd parser now reuses the exact length of an

@@ -460,12 +460,14 @@ fn writeZeroRun(
     }
     if (remaining > 4) {
         const length = lengthCode(remaining);
-        try writeSymbol(allocator, writer, length.symbol);
-        // The length extra bits are followed by distance symbol zero.
+        const symbol_bits: u6 = literal_lengths[length.symbol];
+        const bits = @as(u64, literal_codes[length.symbol]) |
+            (@as(u64, length.extra) << symbol_bits);
+        // Distance symbol zero contributes one zero bit after the extra bits.
         try writer.writeBits(
             allocator,
-            length.extra,
-            length.extra_bits + 1,
+            bits,
+            symbol_bits + length.extra_bits + 1,
         );
     } else {
         var i: usize = 0;
