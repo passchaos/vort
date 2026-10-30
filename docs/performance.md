@@ -2933,3 +2933,24 @@ bytes. All 180 image-png/libpng decodes reproduce original pixels, and LZ77,
 DEFLATE, incremental, OOM, bounded PNG and cross-target gates pass. This is an
 explicit level-8 speed/ratio policy improvement, not format-wide leadership.
 [Full evidence](png-level8-forward-lazy.md) records boundaries and commands.
+
+## PNG numeric level-8 bounded-chain frontier (2026-10-31)
+
+The forward level-8 parser now limits each main match search to four candidates.
+Complete output sweeps at chain budgets 1024, 512, 256, 128, 64, 32, 16, 8,
+4 and 2 identify the corpus size boundary: four emits 37,272,867 bytes versus
+image-png/zlib-rs at 37,442,939, while two grows past Rust to 37,654,088.
+
+Against the prior 1024-chain delivery, the 30-row complete AArch64 matrix is
+`3.098020x` faster geometrically and `3.936697x` in aggregate, with every row
+improving and a `1.062143x` minimum. Aggregate throughput reaches
+`97.744 MiB/s` versus Rust's `33.967 MiB/s`; candidate/Rust is `2.636772x`
+geometrically and `2.877578x` in aggregate, with 28/30 native wins. The two
+remaining deficits are 16px controls.
+
+All 180 image-png/libpng observations reproduce original pixels. Requested
+heap rises `1.035425x` geometrically as output buffers grow, but the matrix
+maximum changes only from 76,903,445 to 77,247,343 bytes under the 1 GiB cap.
+This establishes corpus aggregate/geometric speed and total-size leadership,
+not uniform per-image or format-wide leadership. [Full evidence](png-level8-forward-lazy.md)
+records the sweep and verification boundary.

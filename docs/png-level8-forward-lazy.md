@@ -1,10 +1,11 @@
 # Numeric DEFLATE level 8 uses bounded forward lazy parsing
 
-Numeric zlib level 8 now follows the same high-level parsing family as local
+Numeric zlib level 8 follows the same high-level parsing family as local
 zlib-rs 0.6.8: a forward one-position lazy parser with a 32 KiB history,
-1024-entry chain budget, good-match threshold 32, maximum lazy length 128 and
-nice length 258. Named `CompressionLevel.best` and numeric level 9 retain
-Vort's global optimal parser and complete default/filtered arbitration.
+good-match threshold 32, maximum lazy length 128 and nice length 258. A complete
+corpus sweep bounds the active chain budget to four candidates. Named
+`CompressionLevel.best` and numeric level 9 retain Vort's global optimal parser
+and complete default/filtered arbitration.
 
 The level-8 matcher uses the standard four-byte multiplicative hash with the
 reference shift of 16. Inputs larger than 64 KiB retain only the live
@@ -25,29 +26,31 @@ alternating process-CPU rounds were pinned to CPU 10. Every peer calibrated its
 own iteration count, and output construction, encoding, ownership transfer and
 free stayed inside the timed region.
 
-| Metric | Current optimal | Forward lazy | image-png/zlib-rs |
+| Metric | Previous 1024-chain forward | Four-chain forward | image-png/zlib-rs |
 | --- | ---: | ---: | ---: |
-| Aggregate throughput | 3.684 MiB/s | 24.807 MiB/s | 33.939 MiB/s |
-| Complete PNG bytes | 35,318,177 | 36,217,269 | 37,442,939 |
-| Largest requested heap peak | 91,228,195 | 76,903,445 | not measured by the Zig allocator |
+| Aggregate throughput | 24.829 MiB/s | 97.744 MiB/s | 33.967 MiB/s |
+| Complete PNG bytes | 36,217,269 | 37,272,867 | 37,442,939 |
+| Largest requested heap peak | 76,903,445 | 77,247,343 | not measured by the Zig allocator |
 
-Forward lazy improves all 30 rows. Its geometric speedup is `7.514707x`, its
-aggregate speedup is `6.733136x`, and its minimum is `2.530084x`. Against the
-Rust peer it reaches `0.851037x` geometrically and `0.730929x` in aggregate,
-with 11 of 30 rows faster.
+The bounded chain improves all 30 rows over the previous forward parser. Its
+geometric speedup is `3.098020x`, its aggregate speedup is `3.936697x`, and its
+minimum is `1.062143x`. Against Rust it reaches `2.636772x` geometrically and
+`2.877578x` in aggregate, with 28 of 30 rows faster.
 
-The speed/ratio tradeoff remains explicit: total output grows `2.545692%`
-against Vort's global optimal baseline, but remains `3.273434%` smaller than
-the Rust total. Twenty-seven rows grow, three shrink, and individual size
-ratios span `0.989585x...1.259671x`. Numeric levels do not promise byte
+The speed/ratio tradeoff remains explicit: total output grows `2.914626%`
+against the 1024-chain forward baseline, but remains `0.454216%` smaller than
+the Rust total. A sweep of chain budgets 1024, 512, 256, 128, 64, 32, 16, 8,
+4 and 2 keeps total output below Rust through four; two grows to 37,654,088
+bytes, `0.563922%` above Rust. Four is therefore the fastest measured point
+that preserves the corpus-wide size lead. Numeric levels do not promise byte
 stability or monotonic size.
 
 All 90 complete baseline/candidate/Rust PNGs were decoded by both image-png and
 libpng. All 180 observations reproduce the original dimensions, layout and
-pixels. All candidate allocations are released. Allocation counts and total
-requested bytes fall on every row; requested-heap peak falls geometrically to
-`0.560460x`. One 32px Adaptive row increases by 2,250 bytes (`1.012928x`),
-while the maximum peak across the matrix drops by about 14.3 MiB.
+pixels. All candidate allocations are released. Larger encoded outputs make
+requested heap rise `1.035425x` geometrically, with a `1.222858x` worst row;
+the matrix maximum changes only from 76,903,445 to 77,247,343 bytes and stays
+inside the 1 GiB runtime limit.
 
 ## Verification
 
@@ -63,7 +66,7 @@ while the maximum peak across the matrix drops by about 14.3 MiB.
   a 1 GiB address-space cap.
 
 Frozen binaries and complete PNGs remain under
-`/nav_env/Temp/imx-png-level8-forward-20261030/`. The committed imx evidence
+`/nav_env/Temp/imx-png-level8-chain4-20261031/`. The committed imx evidence
 retains the full per-row JSON, executable/source identities and reproduction
-commands. Level 8 still trails zlib-rs on 19 of 30 rows, particularly photos
-and Lohengrin, so broader throughput leadership remains open.
+commands. Two 16px rows still trail Rust, so uniform per-case leadership and
+broader format leadership remain open.
