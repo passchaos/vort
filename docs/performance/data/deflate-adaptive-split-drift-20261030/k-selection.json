@@ -1,0 +1,41 @@
+{
+  "scope": "ordinary ReleaseFast size screen before final K2 token-boundary refinement",
+  "baseline_192k_bytes": 910041,
+  "baseline_512k_bytes": 801878,
+  "policies": [
+    {
+      "k": 1,
+      "bytes_192k": 910103,
+      "bytes_512k": 802556,
+      "decision": "reject",
+      "reason": "Mozilla and Samba regress at both sizes"
+    },
+    {
+      "k": 2,
+      "bytes_192k": 910041,
+      "bytes_512k": 801621,
+      "decision": "retain",
+      "reason": "smallest K with no individual regression"
+    },
+    {
+      "k": 3,
+      "bytes_192k": 910041,
+      "bytes_512k": 801878,
+      "decision": "reject",
+      "reason": "no ratio benefit over K2"
+    },
+    {
+      "k": 4,
+      "bytes_192k": 910041,
+      "bytes_512k": 801878,
+      "decision": "reject",
+      "reason": "no ratio benefit over K2"
+    }
+  ],
+  "final_k2_revalidated": {
+    "bytes_192k": 910041,
+    "bytes_512k": 801621,
+    "time_geomean_192k": 0.43436556266039905,
+    "time_geomean_512k": 0.4278063024361726
+  }
+}

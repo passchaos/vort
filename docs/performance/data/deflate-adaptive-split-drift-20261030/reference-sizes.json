@@ -1,0 +1,92 @@
+{
+  "zlib_version": "1.2.11",
+  "runtime_version": "1.2.11",
+  "rows": [
+    {
+      "case": "dickens",
+      "input_bytes": 196608,
+      "input_sha256": "ac1d7cd6459fb3cf08858b94677ad128e4d90e74bedba2fc73dec1ade5e220fd",
+      "zlib_1_2_11_level6_bytes": 74755,
+      "zlib_1_2_11_level9_bytes": 74358
+    },
+    {
+      "case": "mozilla",
+      "input_bytes": 196608,
+      "input_sha256": "6a4f8345762024da36e0d3fe57e78437c3b98a0f4bc8f34bbad47ee33c851dac",
+      "zlib_1_2_11_level6_bytes": 62577,
+      "zlib_1_2_11_level9_bytes": 62175
+    },
+    {
+      "case": "mr",
+      "input_bytes": 196608,
+      "input_sha256": "1f27161f14ca594cfbe437d72b7a1ac4c1556d309ba2787daff42eeeb305b9cd",
+      "zlib_1_2_11_level6_bytes": 52907,
+      "zlib_1_2_11_level9_bytes": 52496
+    },
+    {
+      "case": "nci",
+      "input_bytes": 196608,
+      "input_sha256": "15e1b0e4b6f77e0937152069d04fff2a84846b6437abff3180ac1721de99f591",
+      "zlib_1_2_11_level6_bytes": 17137,
+      "zlib_1_2_11_level9_bytes": 15953
+    },
+    {
+      "case": "ooffice",
+      "input_bytes": 196608,
+      "input_sha256": "674925ddbb48e23520af52cfc00d9d9b20b97c1fd4ebaa62cf2aefbe7766dcd4",
+      "zlib_1_2_11_level6_bytes": 105049,
+      "zlib_1_2_11_level9_bytes": 104903
+    },
+    {
+      "case": "osdb",
+      "input_bytes": 196608,
+      "input_sha256": "5303c1aa86931e0b324424c3339fd15bda7cedc0952bfc7655126856a94f422b",
+      "zlib_1_2_11_level6_bytes": 75522,
+      "zlib_1_2_11_level9_bytes": 75145
+    },
+    {
+      "case": "reymont",
+      "input_bytes": 196608,
+      "input_sha256": "b716df3deeb656beeb892253a824bb0ad5c71cf1d237d45f48b072c701a88662",
+      "zlib_1_2_11_level6_bytes": 55386,
+      "zlib_1_2_11_level9_bytes": 54449
+    },
+    {
+      "case": "samba",
+      "input_bytes": 196608,
+      "input_sha256": "64e8b1d387091c73732d5d0c00a433456f658a81f0ad5d6bf551c9abeeeb302e",
+      "zlib_1_2_11_level6_bytes": 105911,
+      "zlib_1_2_11_level9_bytes": 105396
+    },
+    {
+      "case": "sao",
+      "input_bytes": 196608,
+      "input_sha256": "d9c99f870733b07c57bfd4c881baef935f27789cd1260f6a25ded6a0ddeaf5f2",
+      "zlib_1_2_11_level6_bytes": 147957,
+      "zlib_1_2_11_level9_bytes": 147475
+    },
+    {
+      "case": "webster",
+      "input_bytes": 196608,
+      "input_sha256": "c2c9cbeaba4190d1ec61d74bf62f37c354ce759e9bb9b3f94b254bd53c99c72c",
+      "zlib_1_2_11_level6_bytes": 60857,
+      "zlib_1_2_11_level9_bytes": 60319
+    },
+    {
+      "case": "x-ray",
+      "input_bytes": 196608,
+      "input_sha256": "ba1e2ea9dd698f70eefdfd1de82f247ee5eb00eeb4d9a3b812dfc657954dc17f",
+      "zlib_1_2_11_level6_bytes": 139941,
+      "zlib_1_2_11_level9_bytes": 139940
+    },
+    {
+      "case": "xml",
+      "input_bytes": 196608,
+      "input_sha256": "754bf47d1dd24dac5298db3497ee3ef34bff753451847aa5cb1f4e2a6bcb8573",
+      "zlib_1_2_11_level6_bytes": 14170,
+      "zlib_1_2_11_level9_bytes": 13171
+    }
+  ],
+  "level6_total_bytes": 912169,
+  "level9_total_bytes": 905780
+}

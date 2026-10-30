@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "790ea6a37c9fa1eec11a28ae7698d41e97f619a9",
+  "input_archive_sha256": "51cbf9b523f88c6ca8a1402acafa2fa3ef7e563465fbeeb6faec3d2f2fef3539",
+  "baseline_executable_sha256": "ca449f47dc8a78e8ddd9397dfa0eb04e1cb99c97a84a40c417d405b0704b66a0",
+  "candidate_executable_sha256": "6ad22f102fa9f98b8d39cd3492acf6769c946a4435530b59af776c7a4f64f2aa",
+  "probe_executable_sha256": "8e832be6ea2a9b9cfa5ac64aa1ed5f0c5dc7028fcbe331afd4803035e24ffa07",
+  "source_overlay_sha256": "e88968990502daec0ceb35df2e36171d783b6d5a4eef2ef187b23bcfb4093603",
+  "wires_sha256": "317b6c76d57c92348aa3af765d36357991bbf0dab61a6d579fbbe701032d336d",
+  "sources": {
+    "src/deflate.zig": "163750aa9769b6157b54eb2b6bf7bf33f71041296a24a971fb6ddcc8630da512",
+    "src/deflate/adaptive_split_proposal.zig": "9d04e4e69a2529f45e3404291f3947983fa6acde1e5f9f70eb7b8661bd520b57",
+    "src/deflate/tests/adaptive_split.zig": "73d0c358a541d881477647d1bd1544a9809c51ece2647c3f12e623248103f29f",
+    "src/deflate/tests/adaptive_split_proposal.zig": "ff3a4a9854feb3bfb63c30bc87d660730ba19aa5b9ba35ee4969946667ea325a"
+  }
+}

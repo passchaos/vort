@@ -77,3 +77,11 @@ dynamic-Huffman-aware optimal refinement remain separate targets.
 Raw rounds, exact inputs, wrapper hashes, executable identities, commands, and
 a machine-checkable audit are retained in
 [`data/deflate-adaptive-split-horizon-20261029/`](data/deflate-adaptive-split-horizon-20261029/).
+
+## Later proposal-search follow-up
+
+The complete-horizon score and final one-shot arbitration remain authoritative,
+but dictionary-free one-shot encoding no longer enumerates the full split grid.
+The retained follow-up uses one token plan and libdeflate-style distribution
+drift to propose at most two exact-score points; see
+[`deflate-adaptive-split-drift.md`](deflate-adaptive-split-drift.md).
