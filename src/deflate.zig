@@ -5923,10 +5923,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 ) Error!SemanticLinearResult(pause_at_output_boundary) {
     comptime std.debug.assert(!rle1_distance or single_distance);
     const Decoder = @TypeOf(decoder.*);
-    // Machine-word counts keep this resumable PNG hot loop free of repeated
-    // narrow-integer masks and spills. Preserve each packed field's mask when
-    // widening; the other semantic specializations retain their u6 counts.
-    const Count = if (inline_non_overlap and pause_at_output_boundary) usize else u6;
+    // Machine-word counts avoid repeated narrow-integer masks and spills in
+    // the measured PNG window and distance-one loops. Preserve each packed
+    // field's mask; the other semantic specializations retain their u6 counts.
+    const Count = if (rle1_distance or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -14113,6 +14113,17 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     );
     try fallback_sink.finish();
     try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
+}
+
+test "semantic RLE1 hot loop preserves aligned tails and checked failures" {
+    try @import("deflate/semantic/rle1/linear_tests.zig").check(struct {
+        pub const Reference = SemanticDynamicDecoder;
+        pub const Active = SemanticRle1DynamicDecoder;
+        pub const initReference = SemanticDynamicDecoder.initSingleDistance;
+        pub const initActive = SemanticRle1DynamicDecoder.init;
+        pub const decodeReference = decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader;
+        pub const decodeActive = decodeSemanticDynamicBlockIntoRle1BufferedReader;
+    });
 }
 
 test "semantic RLE1 primary table covers 12-bit literals" {
