@@ -876,7 +876,7 @@ pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
         5 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 64, .nice_len = 48, .max_candidates = 3, .lazy_min_gain = 1, .min_match = 3, .max_match = 224, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 10 * 1024, .max_block_len = max_stored_block_len, .sample_len = 3584, .search_step = 10 * 1024 } },
         6 => optionsForLevel(.default),
         7 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 256, .nice_len = 96, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 6 * 1024, .max_block_len = max_stored_block_len, .sample_len = 6144, .search_step = 6 * 1024 } },
-        8 => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 384, .nice_len = 128, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
+        8 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 1024, .nice_len = 258, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .lazy_tuning = .{ .good_length = 32, .max_lazy = 128 }, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
         9 => optionsForLevel(.best),
         else => error.InvalidBlockPlan,
     };
@@ -22641,7 +22641,7 @@ test "best preset falls back when default parser writes smaller frames" {
     try std.testing.expectEqualSlices(u8, &input, gzip_decoded);
 }
 
-test "zlib numeric compression levels map to stable Vort presets" {
+test "zlib numeric compression levels preserve named presets and use forward level eight" {
     try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(0));
     try std.testing.expectEqual(optionsForLevel(.fastest).parser, (try optionsForZlibLevel(1)).parser);
     try std.testing.expectEqual(optionsForLevel(.fast).parser, (try optionsForZlibLevel(3)).parser);
@@ -22652,8 +22652,11 @@ test "zlib numeric compression levels map to stable Vort presets" {
     try std.testing.expectEqual(ParserMode.lazy, (try optionsForZlibLevel(4)).parser);
     try std.testing.expect((try optionsForZlibLevel(5)).lz77_options.max_chain > (try optionsForZlibLevel(4)).lz77_options.max_chain);
     try std.testing.expect((try optionsForZlibLevel(7)).lz77_options.max_chain > (try optionsForZlibLevel(6)).lz77_options.max_chain);
-    try std.testing.expectEqual(ParserMode.optimal, (try optionsForZlibLevel(8)).parser);
-    try std.testing.expect((try optionsForZlibLevel(8)).lz77_options.max_chain < (try optionsForZlibLevel(9)).lz77_options.max_chain);
+    try std.testing.expectEqual(ParserMode.lazy, (try optionsForZlibLevel(8)).parser);
+    try std.testing.expectEqual(@as(usize, 128), (try optionsForZlibLevel(8)).lz77_options.lazy_tuning.?.max_lazy);
+    try std.testing.expectEqual(ParserMode.optimal, optionsForLevel(.best).parser);
+    try std.testing.expectEqual(@as(usize, 1024), (try optionsForZlibLevel(8)).lz77_options.max_chain);
+    try std.testing.expectEqual(optionsForLevel(.best).lz77_options.max_chain, (try optionsForZlibLevel(9)).lz77_options.max_chain);
     try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(10));
 }
 

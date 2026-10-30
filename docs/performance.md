@@ -2916,3 +2916,20 @@ reaches a `1.0012x` row-median geometric mean, and has a `0.9926x` weakest row.
 The formal libzstd gate reports about 100.05 MiB/s at 643 bytes versus libzstd
 1.5.5's 1445.50 MiB/s at 912 bytes, so this is a measured parser improvement,
 not an overall Zstd encoder parity claim.
+
+## PNG numeric level-8 forward lazy parsing (2026-10-31)
+
+Numeric level 8 now uses a bounded forward lazy parser with zlib-rs-aligned
+chain/good/lazy/nice limits, while named best and numeric level 9 keep Vort's
+global optimal parser. On the locked 30-row AArch64 PNG level-8 matrix, all
+rows improve: `7.514707x` geometric, `6.733136x` aggregate and `2.530084x`
+minimum speedup. Aggregate throughput moves from `3.684` to `24.807 MiB/s`;
+the image-png/zlib-rs peer reaches `33.939 MiB/s`, leaving Vort at `0.730929x`
+aggregate with 11/30 row wins.
+
+Total size grows `2.545692%` versus Vort optimal but remains `3.273434%`
+smaller than Rust. Maximum requested heap falls from 91,228,195 to 76,903,445
+bytes. All 180 image-png/libpng decodes reproduce original pixels, and LZ77,
+DEFLATE, incremental, OOM, bounded PNG and cross-target gates pass. This is an
+explicit level-8 speed/ratio policy improvement, not format-wide leadership.
+[Full evidence](png-level8-forward-lazy.md) records boundaries and commands.

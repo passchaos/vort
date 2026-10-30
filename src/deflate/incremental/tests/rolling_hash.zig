@@ -1,6 +1,27 @@
 const std = @import("std");
 const deflate = @import("../../../deflate.zig");
 
+test "raw deflate incremental tuned level eight covers lazy tails dictionaries and reset" {
+    const dictionary = "abcdefghijklmnopqrstuvwxyz0123456789-shared-pattern" ** 8;
+    const payload = ("abcdefghijklmnopqrstuvwxyz0123456789-shared-pattern" ** 32) ++ "tail";
+    for ([_]usize{ 1, 3, 17, 128, 259, 1024 }) |block_len| {
+        var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithDictionary(std.testing.allocator, .{
+            .block_len = block_len,
+            .compression = try deflate.optionsForZlibLevel(8),
+        }, dictionary);
+        defer encoder.deinit();
+        const encoded = try encodeStream(&encoder, payload);
+        defer std.testing.allocator.free(encoded);
+        const decoded = try deflate.decodeRawAutoAllocWithDictionary(std.testing.allocator, encoded, dictionary);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+        encoder.reset();
+        const again = try encodeStream(&encoder, payload);
+        defer std.testing.allocator.free(again);
+        try std.testing.expectEqualSlices(u8, encoded, again);
+    }
+}
+
 test "raw deflate incremental hash encoder persists index across blocks and reset" {
     const phrase = "persistent-hash-chain-across-incremental-blocks-0123456789";
     const payload = (phrase ** 10) ++ ("separator" ** 5) ++ (phrase ** 10);

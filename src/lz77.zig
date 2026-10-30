@@ -1,6 +1,7 @@
 const std = @import("std");
 const byte_scan = @import("lz77/byte_scan.zig");
 const scan_lazy = @import("lz77/scan/lazy.zig");
+const forward_lazy = @import("lz77/forward_lazy.zig");
 const scan_indexed_match = @import("lz77/scan/indexed_match.zig");
 const scan_prefix_match = @import("lz77/scan/prefix_match.zig");
 const optimal_length_minima = @import("lz77/optimal/length_minima.zig");
@@ -28,7 +29,7 @@ const hash_head_init_words: usize = hash_head_table_size / 64;
 const tiny_hash_head_table_size: usize = 4096;
 const tiny_hash_head_init_words: usize = tiny_hash_head_table_size / 64;
 const packed_optimal_length_choices = @bitSizeOf(usize) >= 64;
-const HashAnchor = enum { three, four };
+const HashAnchor = enum { three, four, zlib_standard };
 // Keep inputs through 64 KiB on the full predecessor table so common binary
 // and image blocks retain their established allocation/cache behavior. Larger
 // one-shot inputs can bound the table to the active power-of-two history
@@ -133,12 +134,16 @@ pub const OptimalSearchProfile = struct {
     }
 };
 
+pub const LazyTuning = forward_lazy.Tuning;
+
 pub const GreedyOptions = struct {
     window_len: usize = default_window_len,
     max_chain: usize = 128,
     nice_len: usize = 64,
     max_candidates: usize = 1,
     lazy_min_gain: usize = 2,
+    /// Optional zlib-style lazy-search floor, good-match budget and stop length.
+    lazy_tuning: ?LazyTuning = null,
     min_match: usize = min_match_len,
     max_match: usize = max_match_len,
     min_savings_bits: usize = 0,
@@ -769,6 +774,7 @@ pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options:
 }
 
 pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (options.lazy_tuning != null) return hashLazyGreedyPlanAlloc(allocator, input, options);
     if (preferScanLazy(input)) return scanLazyGreedyPlanAlloc(allocator, input, options);
     if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyAlloc(allocator, input, options);
     return hashLazyGreedyPlanAlloc(allocator, input, options);
@@ -779,6 +785,7 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 /// token capacity across independent inputs.
 pub fn lazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    if (options.lazy_tuning != null) return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
     if (preferScanLazy(input)) return scanLazyGreedyPlanReuse(tokens, allocator, input, options);
     return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
 }
@@ -1032,6 +1039,13 @@ pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []
 pub fn lazyGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch: *DictionaryGreedyScratch, allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !PlanStats {
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) {
+        if (options.lazy_tuning != null) {
+            try scratch.head.resize(allocator, hash_head_table_size);
+            try scratch.prev.resize(allocator, hashPrevTableLen(input.len, options.window_len));
+            @memset(scratch.head.items, -1);
+            tokens.clearRetainingCapacity();
+            return hashLazyGreedyPlanWithPolicyReuse(tokens, allocator, input, options, scratch.head.items, scratch.prev.items);
+        }
         if (preferScanLazy(input)) return scanLazyGreedyPlanReuse(tokens, allocator, input, options);
         if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
     }
@@ -1057,10 +1071,11 @@ pub fn lazyGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch:
         }
 
         var current_inserted = false;
-        if (pos + 1 < input.len) {
+        if (pos + 1 < input.len and forward_lazy.probeOptions(options, best.length) != null) {
             insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             current_inserted = true;
-            const next = findBestCombinedHashMatchLazy(dict, input, current + 1, options, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
+            const probe = forward_lazy.probeOptions(options, best.length).?;
+            const next = findBestCombinedHashMatchLazy(dict, input, current + 1, probe, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
                 try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
@@ -1192,8 +1207,15 @@ fn hashLazyGreedyPlanAllocWithPosition(
     const head = try allocator.alloc(Position, table_size);
     defer allocator.free(head);
     @memset(head, hashPositionEmpty(Position));
-    const prev = try allocator.alloc(Position, input.len);
+    const previous_len = if (options.lazy_tuning != null) hashPrevTableLen(input.len, options.window_len) else input.len;
+    const prev = try allocator.alloc(Position, previous_len);
     defer allocator.free(prev);
+    if (options.lazy_tuning != null) {
+        var tokens = try initTokenList(allocator, input.len);
+        errdefer tokens.deinit(allocator);
+        const stats = try hashLazyGreedyPlanWithPolicyReuse(&tokens, allocator, input, options, head, prev);
+        return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    }
     return hashLazyGreedyPlanWithTables(allocator, input, options, head, prev);
 }
 
@@ -1236,27 +1258,39 @@ pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std
 }
 
 fn hashLazyGreedyPlanWithTablesReuse(tokens: anytype, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
+    if (options.lazy_tuning != null) return hashLazyGreedyPlanWithPolicyReuse(tokens, allocator, input, options, head, prev);
+    return hashLazyGreedyPlanWithLayoutReuse(tokens, allocator, input, options, head, prev, false, .three);
+}
+
+fn hashLazyGreedyPlanWithPolicyReuse(tokens: anytype, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
+    if (prev.len != input.len)
+        return hashLazyGreedyPlanWithLayoutReuse(tokens, allocator, input, options, head, prev, true, .zlib_standard);
+    return hashLazyGreedyPlanWithLayoutReuse(tokens, allocator, input, options, head, prev, false, .zlib_standard);
+}
+
+fn hashLazyGreedyPlanWithLayoutReuse(tokens: anytype, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype, comptime ring: bool, comptime anchor: HashAnchor) !PlanStats {
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
-        const best = findBestHashMatchWithLayout(input, pos, options, head, prev, false, false, {}, .three);
+        const best = findBestHashMatchWithLayout(input, pos, options, head, prev, ring, false, {}, anchor);
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertHashWithLayout(input, pos, head, prev, false, false, {}, .three);
+            insertHashWithLayout(input, pos, head, prev, ring, false, {}, anchor);
             pos += 1;
             continue;
         }
 
         var current_inserted = false;
-        if (pos + 1 < input.len) {
+        if (pos + 1 < input.len and forward_lazy.probeOptions(options, best.length) != null) {
             // Insert the current position before the lazy probe so distance-1
             // runs can be discovered at pos+1. If we keep the current match we
             // skip re-inserting pos below and only seed the skipped positions.
-            insertHashWithLayout(input, pos, head, prev, false, false, {}, .three);
+            insertHashWithLayout(input, pos, head, prev, ring, false, {}, anchor);
             current_inserted = true;
-            const next = findBestHashMatchWithLayout(input, pos + 1, options, head, prev, false, false, {}, .three);
+            const probe = forward_lazy.probeOptions(options, best.length).?;
+            const next = findBestHashMatchWithLayout(input, pos + 1, probe, head, prev, ring, false, {}, anchor);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
                 try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
@@ -1271,7 +1305,7 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: anytype, allocator: std.mem.Allocat
         var insert_pos = if (current_inserted) pos + 1 else pos;
         const end = @min(input.len, pos + best.length);
         while (insert_pos < end) : (insert_pos += 1)
-            insertHashWithLayout(input, insert_pos, head, prev, false, false, {}, .three);
+            insertHashWithLayout(input, insert_pos, head, prev, ring, false, {}, anchor);
         pos += best.length;
     }
 
@@ -2870,6 +2904,7 @@ pub fn hashGreedyPlanAutoTinyAlloc(allocator: std.mem.Allocator, input: []const 
     return switch (anchor) {
         .three => hashGreedyPlanTinyAllocWithAnchor(allocator, input, options, .three),
         .four => hashGreedyPlanTinyAllocWithAnchor(allocator, input, options, .four),
+        else => unreachable,
     };
 }
 
@@ -2885,6 +2920,7 @@ pub fn hashGreedyPlanAutoTinyReuse(tokens: *std.ArrayList(Token), allocator: std
     return switch (anchor) {
         .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .three),
         .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .four),
+        else => unreachable,
     };
 }
 
@@ -2900,6 +2936,7 @@ pub fn hashGreedyPlanAutoTinyScratchReuse(tokens: *std.ArrayList(Token), scratch
     return switch (anchor) {
         .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .three),
         .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .four),
+        else => unreachable,
     };
 }
 
@@ -3283,7 +3320,10 @@ fn findBestHashMatchWithLayoutAndHashLimits(
     var walked: usize = 0;
     const max_len = @min(limits.maximum, input.len - pos);
     const earliest = if (comptime ring) pos -| limits.window_len else 0;
-    var best = MatchCandidate{};
+    var best = if (comptime anchor == .zlib_standard)
+        MatchCandidate{ .length = minimum - 1 }
+    else
+        MatchCandidate{};
     while (candidate_i != empty and walked < limits.max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         if (comptime ring) {
@@ -3331,14 +3371,20 @@ fn findBestHashMatchWithLayoutAndHashLimits(
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
             if (len >= limits.nice_len) break;
-            if (comptime ring) {
+            if (comptime anchor == .zlib_standard) {
+                if (len == max_len) break;
+            } else if (comptime ring) {
                 if (len == max_len) break;
             }
         }
         if (checked == limits.max_chain) break;
         candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
     }
-    return .{ .best = best, .hash = hash };
+    const result = if (comptime anchor == .zlib_standard)
+        if (best.distance == 0) MatchCandidate{} else best
+    else
+        best;
+    return .{ .best = result, .hash = hash };
 }
 
 fn maxHashChainWalks(options: GreedyOptions, minimum: usize) usize {
@@ -3604,6 +3650,11 @@ fn hashAtInput(
             if (pos + 4 > input.len) return null;
             const word = std.mem.readInt(u32, input[pos..][0..4], .little);
             return ((word *% 2654435761) >> 17) & (head_len - 1);
+        },
+        .zlib_standard => {
+            if (pos + 4 > input.len) return null;
+            const word = std.mem.readInt(u32, input[pos..][0..4], .little);
+            return ((word *% 2654435761) >> 16) & (head_len - 1);
         },
     };
 }
@@ -4497,6 +4548,7 @@ test "64 KiB lazy hash u16 positions match i32 reference" {
         const minimum: usize = switch (anchor) {
             .three => 3,
             .four => 4,
+            else => unreachable,
         };
         const options: GreedyOptions = .{
             .window_len = 16 * 1024,
@@ -5144,4 +5196,55 @@ test "literal token runs preserve the lazy allocator error contract" {
     const dictionary: *const fn (std.mem.Allocator, []const u8, []const u8, GreedyOptions) error{ OutOfMemory, InvalidBlockPlan }!GreedyPlan = lazyGreedyPlanAllocWithDictionary;
     std.mem.doNotOptimizeAway(lazy);
     std.mem.doNotOptimizeAway(dictionary);
+}
+
+test "zlib level-eight tuned lazy plans preserve scalar indexed and prefix results" {
+    try @import("lz77/scan/tests/forward_tuned.zig").compare(Token, PlanStats, GreedyOptions, ScanLazyContext);
+}
+
+test "zlib level-eight tuned lazy plans retain replay and allocation failures" {
+    try @import("lz77/forward_lazy/tests.zig").replay();
+}
+
+test "zlib level-eight hash history ring preserves full-table tokens" {
+    var input: [65539]u8 = undefined;
+    var state: u32 = 0x57342bbe;
+    for (&input, 0..) |*byte, pos| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = if (pos % 97 < 89) @intCast(pos % 7) else @truncate(state >> 24);
+    }
+    var before: std.ArrayList(Token) = .empty;
+    defer before.deinit(std.testing.allocator);
+    var after: std.ArrayList(Token) = .empty;
+    defer after.deinit(std.testing.allocator);
+    const full_head = try std.testing.allocator.alloc(u32, hash_head_table_size);
+    defer std.testing.allocator.free(full_head);
+    const ring_head = try std.testing.allocator.alloc(u32, hash_head_table_size);
+    defer std.testing.allocator.free(ring_head);
+    const full_prev = try std.testing.allocator.alloc(u32, input.len);
+    defer std.testing.allocator.free(full_prev);
+    const ring_prev = try std.testing.allocator.alloc(u32, default_window_len);
+    defer std.testing.allocator.free(ring_prev);
+    @memset(full_head, std.math.maxInt(u32));
+    @memset(ring_head, std.math.maxInt(u32));
+    const options: GreedyOptions = .{ .max_chain = 1024, .nice_len = 258, .lazy_min_gain = 1, .min_savings_bits = 0, .lazy_tuning = .{ .good_length = 32, .max_lazy = 128 } };
+    const expected = try hashLazyGreedyPlanWithLayoutReuse(&before, std.testing.allocator, &input, options, full_head, full_prev, false, .zlib_standard);
+    const actual = try hashLazyGreedyPlanWithLayoutReuse(&after, std.testing.allocator, &input, options, ring_head, ring_prev, true, .zlib_standard);
+    try std.testing.expectEqual(expected, actual);
+    try std.testing.expectEqualSlices(Token, before.items, after.items);
+    try expectDictionaryPlanReplays("", &input, after.items);
+}
+
+test "zlib level-eight tuned dictionary and reusable paths retain ownership" {
+    try @import("lz77/forward_lazy/tests.zig").dictionary();
+    try @import("lz77/forward_lazy/tests.zig").reuse();
+}
+
+test "zlib level-eight standard hash matches independent multiplication" {
+    var bytes: [4]u8 = undefined;
+    const cases = [_][2]u32{ .{ 807411760, 65468 }, .{ 540024864, 42837 }, .{ 538980384, 33760 }, .{ 775430176, 8925 }, .{ 941629472, 42053 } };
+    for (cases) |case| {
+        std.mem.writeInt(u32, &bytes, case[0], .little);
+        try std.testing.expectEqual(@as(usize, case[1] & 32767), hashAtInput(&bytes, 0, 32768, .zlib_standard).?);
+    }
 }

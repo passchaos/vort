@@ -3,6 +3,7 @@ const lz77 = @import("../../../../lz77.zig");
 const hash = @import("hash.zig");
 const profitability = @import("profitability.zig");
 const dynamic_stats = @import("dynamic_stats.zig");
+const forward_lazy = @import("../../../../lz77/forward_lazy.zig");
 
 const invalid_position = std.math.maxInt(usize);
 
@@ -124,13 +125,16 @@ pub const Matcher = struct {
             }
 
             var current_inserted = false;
-            if (lazy and pos + 1 < block.len) {
+            if (lazy and pos + 1 < block.len and forward_lazy.probeOptions(options, best.length) != null) {
                 // Insert before the one-byte probe so distance-1 matches are
                 // available at the next position, matching the existing lazy
                 // planner's ordering and deterministic tie behavior.
                 self.insertBlockPosition(history, block, pos, anchor_len);
                 current_inserted = true;
-                const next = self.findBest(history, block, pos + 1, options, anchor_len, minimum, maximum_match, max_walks);
+                const probe = forward_lazy.probeOptions(options, best.length).?;
+                const probe_minimum = if (options.lazy_tuning == null) minimum else probe.min_match;
+                const probe_walks = if (options.lazy_tuning == null) max_walks else probe.max_chain;
+                const next = self.findBest(history, block, pos + 1, probe, anchor_len, probe_minimum, maximum_match, probe_walks);
                 if (next.length >= best.length + options.lazy_min_gain and
                     acceptMatch(block, pos + 1, next.length, next.distance, options, minimum))
                 {
@@ -218,7 +222,7 @@ pub const Matcher = struct {
         maximum_match: usize,
         max_walks: usize,
     ) Candidate {
-        if (pos + anchor_len > block.len) return .{};
+        if (pos + @max(anchor_len, minimum) > block.len) return .{};
         const current = self.absolute_position + pos;
         const h = hash.block(block, pos, anchor_len);
         if (self.head_epoch.items[h] != self.epoch) return .{};
