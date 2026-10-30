@@ -1,0 +1,20 @@
+{
+  "baseline_commit": "ff7c65e95ffd531b0675a3fb561494f5d442cd46",
+  "ways_per_position": 4,
+  "bytes_per_position_if_retained": 32,
+  "rows": {
+    "dickens_4096": {"requests":38634,"hits":15888,"request_hit_rate":0.41124398198478024,"hits_per_aggregate_probe":0.20884927833425349,"entries":16318},
+    "mozilla_4096": {"requests":44900,"hits":14916,"request_hit_rate":0.33220489977728285,"hits_per_aggregate_probe":0.15846001848487745,"entries":16351},
+    "mr_4096": {"requests":33069,"hits":16020,"request_hit_rate":0.48444162206295927,"hits_per_aggregate_probe":0.2408117249154453,"entries":16345},
+    "dickens_16384": {"requests":170896,"hits":64023,"request_hit_rate":0.3746313547420653,"hits_per_aggregate_probe":0.18745223881034012,"entries":65461,"resumes":2},
+    "mozilla_16384": {"requests":175840,"hits":58904,"request_hit_rate":0.33498635122838943,"hits_per_aggregate_probe":0.16766432977248727,"entries":65436},
+    "mr_16384": {"requests":182065,"hits":57896,"request_hit_rate":0.31799631999560596,"hits_per_aggregate_probe":0.15508452556660657,"entries":63391}
+  },
+  "aggregate": {
+    "4096_request_hit_rate": 0.4015677126660549,
+    "4096_hits_per_aggregate_probe": 0.19779495627930554,
+    "16384_request_hit_rate": 0.34194905077713544,
+    "16384_hits_per_aggregate_probe": 0.16959846480388452
+  },
+  "decision": "reject_before_production_timing"
+}

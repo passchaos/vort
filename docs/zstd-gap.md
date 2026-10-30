@@ -1804,3 +1804,10 @@ reduce the millions of beam transitions or share evidence with safeguard
 searches without leaking cache setup into btopt, dictionary or initialized
 single-pass paths. Detailed evidence is in
 [`performance/zstd-cold-btultra2-reuse.md`](performance/zstd-cold-btultra2-reuse.md).
+
+A follow-up cross-pass repeat-length diagnostic found insufficient leverage for
+another evidence cache. A four-way-per-position table was nearly full but
+eliminated only 15.5%–24.1% of aggregate actual probes; the two 16 KiB frontier
+fallback rows hit only 31.8%–33.5% of second-pass requests. Adding up to
+32 bytes per position is therefore rejected before ordinary timing. See
+[`performance/zstd-cross-pass-rep-diagnostic.md`](performance/zstd-cross-pass-rep-diagnostic.md).

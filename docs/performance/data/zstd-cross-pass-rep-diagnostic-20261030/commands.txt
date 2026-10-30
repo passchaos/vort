@@ -1,0 +1,12 @@
+Build a ReleaseFast `vort-zstd-encode-bench` from clean ff7c65e9 plus
+source-overlay.tar.xz. Run on logical CPU 2 with the pinned libzstd 1.6.0:
+
+  taskset -c 2 BENCH --match-hq --strategy btultra2 --window-log 15 \
+    --iterations 1 --rounds 1 --limit 4096 --libzstd LIBZSTD \
+    --path dickens-4096 --path mozilla-4096 --path mr-4096 \
+    --csv diag4.csv --samples-json diag4.json
+
+  taskset -c 2 BENCH --match-hq --strategy btultra2 --window-log 17 \
+    --iterations 1 --rounds 1 --limit 16384 --libzstd LIBZSTD \
+    --path dickens-16384 --path mozilla-16384 --path mr-16384 \
+    --csv diag16.csv --samples-json diag16.json

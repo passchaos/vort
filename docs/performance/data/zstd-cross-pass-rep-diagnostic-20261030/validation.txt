@@ -1,0 +1,19 @@
+Scope
+- diagnostic candidate still executes every original matchLength
+- no ordinary timing result is used as a retention claim
+- source, candidate order, prices, state insertion and wire are unchanged
+- key is global block position plus physical distance
+- exact/capped evidence classification accounts for changing maximum
+
+Results
+- four-way table nearly fills on every 4/16 KiB row
+- 4 KiB aggregate request hit rate: 0.4015677126660549
+- 4 KiB hits / aggregate actual probes: 0.19779495627930554
+- 16 KiB aggregate request hit rate: 0.34194905077713544
+- 16 KiB hits / aggregate actual probes: 0.16959846480388452
+- Mozilla/MR 16 KiB frontier-fallback hit rates: 0.33498635122838943 / 0.31799631999560596
+- fallback hit rates fail the pre-registered 0.50 threshold
+
+Rollback
+- diagnostic was built and run only in an independent clean archive
+- shared production and test source remained identical to ff7c65e9

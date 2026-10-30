@@ -24405,6 +24405,15 @@ reuse, so production keeps the simpler independently owned plans.
   entries per position: relative time stays `0.998411/0.996996` at 4/16 KiB,
   while requested peak falls another 131,072/524,288 bytes.
 
+- 2026-10-30: A diagnostic-only four-way table measured whether repeat-distance
+  match lengths should also persist across cold `btultra2` passes. Exact global
+  position/distance evidence is semantically reusable, but the nearly full
+  table eliminated only 15.5%–24.1% of aggregate actual probes. Mozilla/MR
+  16 KiB frontier-fallback rows reached only 33.5%/31.8% second-pass request
+  hits, below the 50% screen, so no production cache was added. The complete
+  [negative diagnostic](performance/zstd-cross-pass-rep-diagnostic.md) redirects
+  the next HQ work toward transition and state-update cost.
+
 - 2026-10-30: Prepared DEFLATE now releases its build-only 32K-entry hash head
   before allocating the fixed/modeled DP arrays. Exact planner tokens and all
   216 level/wrapper wires remain unchanged. The ordinary
