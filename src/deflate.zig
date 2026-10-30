@@ -5927,8 +5927,8 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     // Machine-word counts avoid repeated narrow-integer masks and spills in
     // the measured complete-output, PNG window, and distance-one loops.
     // Preserve each packed field's mask when widening.
-    const ordinary_full_output = !single_distance and !rle258_pair and !inline_non_overlap and !pause_at_output_boundary;
-    const Count = if (rle1_distance or ordinary_full_output or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
+    const ordinary_output = !single_distance and !rle258_pair and !inline_non_overlap;
+    const Count = if (rle1_distance or ordinary_output or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -14117,6 +14117,24 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
 }
 
+test "semantic ordinary window preserves aligned tails and checked failures" {
+    try @import("deflate/semantic/linear/one_distance_tests.zig").check(struct {
+        pub const Reference = SemanticDynamicDecoder;
+        pub const Active = SemanticDynamicDecoder;
+        pub const initReference = SemanticDynamicDecoder.initSingleDistance;
+        pub const initActive = SemanticDynamicDecoder.init;
+        pub const decodeReference = decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader;
+
+        pub fn decodeActive(reader: *bitstream.BufferedBitReader, output: []u8, decoder: *const Active) Error!usize {
+            const step = try decodeSemanticDynamicBlockIntoWindow(reader, output, 0, decoder);
+            return switch (step.status) {
+                .end_of_block => step.output_written,
+                .need_output => error.OutputTooSmall,
+            };
+        }
+    });
+}
+
 test "semantic full-output hot loop preserves aligned tails and checked failures" {
     try @import("deflate/semantic/linear/one_distance_tests.zig").check(struct {
         pub const Reference = SemanticDynamicDecoder;
@@ -14721,6 +14739,13 @@ test "semantic long match after two literal pairs preserves checked decode" {
     try std.testing.expectEqual(expected.len, result.output_written);
     try std.testing.expectEqualSlices(u8, expected, active);
     try std.testing.expectEqual(checked.bitPosition(), buffered.bitPosition());
+    @memset(active[vectors.history_len..], 0xa5);
+    var ordinary_reader = bitstream.BufferedBitReader.init(&vectors.symbol_stream);
+    const ordinary_result = try decodeSemanticDynamicBlockIntoWindow(&ordinary_reader, active, vectors.history_len, &decoder);
+    try std.testing.expectEqual(SemanticLinearStatus.end_of_block, ordinary_result.status);
+    try std.testing.expectEqual(expected.len, ordinary_result.output_written);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(checked.bitPosition(), ordinary_reader.bitPosition());
     var sink = LinearSemanticSink{ .output = active, .pos = vectors.history_len };
     var sink_reader = bitstream.BufferedBitReader.init(&vectors.symbol_stream);
     try decodeSemanticDynamicBlockIntoSink(&sink_reader, &sink, &decoder);
