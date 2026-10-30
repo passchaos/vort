@@ -15,6 +15,7 @@ const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
+const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
 const sync = @import("deflate/sync.zig");
@@ -1516,6 +1517,7 @@ pub const AdaptiveSplitOptions = struct {
 };
 
 const max_adaptive_split_candidates: usize = 64;
+const adaptive_drift_proposal_limit: usize = 2;
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
@@ -1556,7 +1558,10 @@ fn writeBestAdaptiveSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream
     var offset: usize = 0;
     while (offset < input.len) {
         const remaining = input.len - offset;
-        const n = try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
+        const n = if (dictionary == null)
+            try chooseDriftAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options)
+        else
+            try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
         const chunk_len = @min(n, remaining);
         const chunk = input[offset..][0..chunk_len];
         const final = offset + chunk_len == input.len;
@@ -1646,6 +1651,102 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
     return best_len;
 }
 
+fn chooseDriftAdaptiveBlockLen(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    min_block_len: usize,
+    max_block_len: usize,
+    sample_len: usize,
+    search_step: usize,
+    options: CompressionOptions,
+) !usize {
+    const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
+    if (input.len <= min_block_len) return heuristic;
+    const horizon = @min(input.len, max_block_len);
+    const evidence = blk: {
+        const plan = try planTokensAlloc(allocator, input[0..horizon], options);
+        defer plan.deinit(allocator);
+        break :blk .{
+            .score = try scoreTokenPlan(horizon, plan.tokens, options),
+            .proposals = try adaptive_split_proposal.proposeTokenBoundaries(
+                plan.tokens,
+                horizon,
+                min_block_len,
+                adaptive_drift_proposal_limit,
+            ),
+        };
+    };
+
+    var best_len = horizon;
+    var best_score = evidence.score;
+    const step = adaptiveSplitSearchStep(horizon, min_block_len, search_step);
+    var previous_proposal: ?usize = null;
+    for (evidence.proposals.slice()) |proposal| {
+        const aligned_proposal = nearestAdaptiveSplitGridBoundary(
+            proposal,
+            min_block_len,
+            horizon,
+            step,
+        );
+        if (previous_proposal == aligned_proposal) continue;
+        previous_proposal = aligned_proposal;
+        const score = try scoreAdaptiveSplitAt(
+            allocator,
+            input,
+            horizon,
+            aligned_proposal,
+            options,
+        );
+        retainAdaptiveSplitCandidate(&best_score, &best_len, score, aligned_proposal);
+    }
+    if (evidence.proposals.len == 0 and horizon == max_block_len) {
+        const fallback_target = horizon - horizon / 4;
+        if (fallback_target >= min_block_len) {
+            const fallback_proposal = nearestAdaptiveSplitGridBoundary(
+                fallback_target,
+                min_block_len,
+                horizon,
+                step,
+            );
+            if (horizon - fallback_proposal >= min_block_len) {
+                const score = try scoreAdaptiveSplitAt(
+                    allocator,
+                    input,
+                    horizon,
+                    fallback_proposal,
+                    options,
+                );
+                retainAdaptiveSplitCandidate(
+                    &best_score,
+                    &best_len,
+                    score,
+                    fallback_proposal,
+                );
+            }
+        }
+    }
+    var heuristic_is_proposed = false;
+    for (evidence.proposals.slice()) |proposal| {
+        heuristic_is_proposed = heuristic_is_proposed or heuristic == nearestAdaptiveSplitGridBoundary(
+            proposal,
+            min_block_len,
+            horizon,
+            step,
+        );
+    }
+    if (heuristic < horizon and !heuristic_is_proposed) {
+        const score = try scoreAdaptiveSplitAt(
+            allocator,
+            input,
+            horizon,
+            heuristic,
+            options,
+        );
+        retainAdaptiveSplitCandidate(&best_score, &best_len, score, heuristic);
+    }
+    return best_len;
+}
+
 fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !usize {
     return chooseCostedAdaptiveBlockLen(
         allocator,
@@ -1712,6 +1813,14 @@ fn adaptiveSplitGridContains(candidate: usize, min_block_len: usize, horizon: us
         (candidate - min_block_len) % step == 0;
 }
 
+fn nearestAdaptiveSplitGridBoundary(candidate: usize, min_block_len: usize, horizon: usize, step: usize) usize {
+    std.debug.assert(step != 0 and candidate >= min_block_len and candidate < horizon);
+    const lower = min_block_len + (candidate - min_block_len) / step * step;
+    if (step >= horizon - lower) return lower;
+    const upper = lower + step;
+    return if (candidate - lower < upper - candidate) lower else upper;
+}
+
 fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: CompressionOptions) !usize {
     if (target == 0 or target >= input.len) return target;
     const plan = if (history.len == 0)
@@ -1742,10 +1851,14 @@ fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidat
     const len = @min(candidate_len, input.len);
     const plan = try planTokensAlloc(allocator, input[0..len], options);
     defer plan.deinit(allocator);
+    return scoreTokenPlan(len, plan.tokens, options);
+}
+
+fn scoreTokenPlan(len: usize, tokens: []const lz77.Token, options: CompressionOptions) !usize {
     const stored = std.math.add(usize, len, 5) catch return error.IntegerOverflow;
-    const fixed = (lz77.fixedBitCost(plan.tokens) + 7) / 8;
+    const fixed = (lz77.fixedBitCost(tokens) + 7) / 8;
     if (options.block_selection == .stored_fixed) return @min(stored, fixed);
-    const dynamic = (try dynamicTokenBitCost(plan.tokens) + 7) / 8;
+    const dynamic = (try dynamicTokenBitCost(tokens) + 7) / 8;
     return @min(@min(stored, fixed), dynamic);
 }
 
@@ -23677,10 +23790,23 @@ const AdaptiveSplitTestAdapter = struct {
     pub const retain = retainAdaptiveSplitCandidate;
     pub const searchStep = adaptiveSplitSearchStep;
     pub const gridContains = adaptiveSplitGridContains;
+    pub const nearestGrid = nearestAdaptiveSplitGridBoundary;
     pub const chooseIncremental = chooseNonRegressiveIncrementalBlockLen;
     pub const encode = encodeRawBestAdaptiveSplitAlloc;
     pub const decode = decodeRawAutoAlloc;
 };
+
+const AdaptiveSplitProposalTestAdapter = struct {
+    pub const Token = lz77.Token;
+    pub const class = adaptive_split_proposal.observationClass;
+    pub const propose = adaptive_split_proposal.proposeTokenBoundary;
+    pub const proposeMany = adaptive_split_proposal.proposeTokenBoundaries;
+    pub const changed = adaptive_split_proposal.distributionChanged;
+};
+
+test "adaptive split token-distribution proposals" {
+    try @import("deflate/tests/adaptive_split_proposal.zig").contracts(AdaptiveSplitProposalTestAdapter);
+}
 
 test "adaptive split complete horizon scoring and resource contracts" {
     try @import("deflate/tests/adaptive_split.zig").contracts(AdaptiveSplitTestAdapter);

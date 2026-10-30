@@ -104,6 +104,12 @@ fn grid(comptime C: type) !void {
     try std.testing.expect(C.gridContains(96, minimum, horizon, step));
     try std.testing.expect(!C.gridContains(50, minimum, horizon, step));
     try std.testing.expect(!C.gridContains(horizon, minimum, horizon, step));
+    try std.testing.expectEqual(@as(usize, 16), C.nearestGrid(17, minimum, horizon, step));
+    try std.testing.expectEqual(@as(usize, 32), C.nearestGrid(24, minimum, horizon, step));
+    try std.testing.expectEqual(
+        @as(usize, 16),
+        C.nearestGrid(17, minimum, horizon, std.math.maxInt(usize)),
+    );
 
     var best_score: usize = 100;
     var best_len = horizon;
