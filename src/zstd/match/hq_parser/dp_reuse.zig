@@ -9,8 +9,15 @@ const extension = @import("extension.zig");
 const frontier_cache = @import("match_frontier_cache.zig");
 const rep_length_cache = @import("rep_length_cache.zig");
 const row_tags = @import("row_tags.zig");
+const source_dominance = @import("source_dominance.zig");
 const tree = @import("../hq_tree.zig");
 const PriceBudget = @import("price_budget.zig").PriceBudget;
+
+// Source grouping has a fixed per-position cost. Sample the already-produced
+// matcher frontier first, and enable it only when the longest matches average
+// at least two bytes per position. Sparse inputs retain the original loop.
+const dominance_sample_positions: usize = 256;
+const dominance_min_best_match_bytes: usize = dominance_sample_positions * 2;
 
 pub fn Scratch(comptime Matcher: type) type {
     return struct {
@@ -125,6 +132,9 @@ fn planMode(comptime whole: bool, comptime complete: bool, comptime Matcher: typ
     var pending_literals: usize = 0;
     var repeats = parameters.initial_repeated_offsets;
     var repeat_lengths: rep_length_cache.Cache = .{};
+    var sampled_positions: usize = 0;
+    var sampled_best_match_bytes: usize = 0;
+    var dominance_enabled = false;
     while (base < source.block.len) {
         const goal = if (whole) source.block.len else @min(state.horizon, source.block.len - base);
         @memset(nodes[0 .. (goal + 1) * width], .{});
@@ -151,8 +161,28 @@ fn planMode(comptime whole: bool, comptime complete: bool, comptime Matcher: typ
                 .record => |cache| cache.record(global, matches),
                 else => {},
             }
+            if (price_budget.limit == null and
+                sampled_positions < dominance_sample_positions)
+            {
+                sampled_positions += 1;
+                sampled_best_match_bytes = std.math.add(
+                    usize,
+                    sampled_best_match_bytes,
+                    matches.best().length,
+                ) catch return error.IntegerOverflow;
+                if (sampled_positions == dominance_sample_positions)
+                    dominance_enabled = sampled_best_match_bytes >=
+                        dominance_min_best_match_bytes;
+            }
             if (parameters.profile) |profile| profile.recordParsePositions(position + 1);
             const row = nodes[position * width ..][0..width];
+            const materialize_mask: u16 = if (dominance_enabled)
+                source_dominance.materializeMask(
+                    row,
+                    &parameters.entropy.ll_prices,
+                )
+            else
+                std.math.maxInt(u16);
             for (row, 0..) |node, slot| {
                 if (node.cost == std.math.maxInt(u64)) break;
                 _ = row_tags.insert(nodes[(position + 1) * width ..][0..width], &tag_rows[position + 1], .{
@@ -162,6 +192,8 @@ fn planMode(comptime whole: bool, comptime complete: bool, comptime Matcher: typ
                     .previous_position = @intCast(position),
                     .previous_slot = @intCast(slot),
                 });
+                if (materialize_mask & (@as(u16, 1) << @intCast(slot)) == 0)
+                    continue;
                 const maximum = if (complete) source.block.len - global else goal - position;
                 for (matches.slice()) |candidate| {
                     // Matcher retained frontier entries have full actual

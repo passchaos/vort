@@ -14,6 +14,7 @@ test {
     _ = @import("storage_controls_tests.zig");
     _ = @import("search_controls_tests.zig");
     _ = @import("lazy2_tests.zig");
+    _ = @import("source_dominance.zig");
 }
 
 fn oracle(source: source_mod.Source, model: *const hq.EntropyModel, position: usize, literals: usize, repeats: hq.rep.Repeats) !u64 {
@@ -92,6 +93,182 @@ test "Zstd HQ cold reuse record and replay preserve independent DP plans" {
     );
     defer replayed.deinit(actual_allocator);
     try expectSamePlan(expected, replayed);
+}
+
+test "Zstd HQ cold reuse dominance preserves plans and reduces priced edges" {
+    const input = ("dominance shared repeats and literal lengths abcabcabcabc 0123456789\n" ** 96);
+    const source = source_mod.Source.init("", "", input, 8192);
+    var expected_profile: controls.Profile = .{};
+    const expected_parameters: hq.Parameters = .{
+        .strategy = .btultra,
+        .profile = &expected_profile,
+    };
+    var expected_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const expected_allocator = expected_budget.allocator();
+    const expected = try dp.plan(
+        expected_allocator,
+        &expected_budget,
+        source,
+        expected_parameters,
+        tree.Matcher,
+    );
+    defer expected.deinit(expected_allocator);
+
+    var actual_profile: controls.Profile = .{};
+    const actual_parameters: hq.Parameters = .{
+        .strategy = .btultra,
+        .profile = &actual_profile,
+    };
+    var actual_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const actual_allocator = actual_budget.allocator();
+    var scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer scratch.deinit(actual_allocator);
+    const actual = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        actual_allocator,
+        &actual_budget,
+        source,
+        actual_parameters,
+        .search,
+    );
+    defer actual.deinit(actual_allocator);
+
+    try expectSamePlan(expected, actual);
+    try std.testing.expect(actual_profile.price_evaluations <
+        expected_profile.price_evaluations);
+    try std.testing.expect(actual_profile.optimal_transitions <
+        expected_profile.optimal_transitions);
+    try std.testing.expectEqual(
+        expected_profile.tree_nodes,
+        actual_profile.tree_nodes,
+    );
+
+    // A finite public price budget disables dominance so admission order and
+    // the exact success/failure boundary remain unchanged.
+    var limited_profile: controls.Profile = .{};
+    const limited_parameters: hq.Parameters = .{
+        .strategy = .btultra,
+        .hq_options = .{
+            .max_price_evaluations = expected_profile.price_evaluations,
+        },
+        .profile = &limited_profile,
+    };
+    var limited_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const limited_allocator = limited_budget.allocator();
+    var limited_scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer limited_scratch.deinit(limited_allocator);
+    const limited = try dp_reuse.planReuse(
+        tree.Matcher,
+        &limited_scratch,
+        limited_allocator,
+        &limited_budget,
+        source,
+        limited_parameters,
+        .search,
+    );
+    defer limited.deinit(limited_allocator);
+    try expectSamePlan(expected, limited);
+    try std.testing.expectEqual(
+        expected_profile.price_evaluations,
+        limited_profile.price_evaluations,
+    );
+
+    var refused_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const refused_allocator = refused_budget.allocator();
+    var refused_scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer refused_scratch.deinit(refused_allocator);
+    var refused_parameters = limited_parameters;
+    refused_parameters.profile = null;
+    refused_parameters.hq_options.max_price_evaluations =
+        expected_profile.price_evaluations - 1;
+    try std.testing.expectError(
+        error.SearchLimitExceeded,
+        dp_reuse.planReuse(
+            tree.Matcher,
+            &refused_scratch,
+            refused_allocator,
+            &refused_budget,
+            source,
+            refused_parameters,
+            .search,
+        ),
+    );
+}
+
+test "Zstd HQ cold reuse dominance gate preserves sparse-prefix work" {
+    var input: [1024]u8 = undefined;
+    for (input[0..256], 0..) |*byte, index| byte.* = @intCast(index);
+    for (input[256..], 0..) |*byte, index| byte.* = "xyz"[index % 3];
+    const source = source_mod.Source.init("", "", &input, 2048);
+
+    var expected_profile: controls.Profile = .{};
+    const expected_parameters: hq.Parameters = .{
+        .strategy = .btultra,
+        .profile = &expected_profile,
+    };
+    var expected_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const expected_allocator = expected_budget.allocator();
+    const expected = try dp.plan(
+        expected_allocator,
+        &expected_budget,
+        source,
+        expected_parameters,
+        tree.Matcher,
+    );
+    defer expected.deinit(expected_allocator);
+
+    var actual_profile: controls.Profile = .{};
+    const actual_parameters: hq.Parameters = .{
+        .strategy = .btultra,
+        .profile = &actual_profile,
+    };
+    var actual_budget = resources.WorkingAllocator.init(
+        std.testing.allocator,
+        std.math.maxInt(usize),
+    );
+    const actual_allocator = actual_budget.allocator();
+    var scratch: dp_reuse.Scratch(tree.Matcher) = .{};
+    defer scratch.deinit(actual_allocator);
+    const actual = try dp_reuse.planReuse(
+        tree.Matcher,
+        &scratch,
+        actual_allocator,
+        &actual_budget,
+        source,
+        actual_parameters,
+        .search,
+    );
+    defer actual.deinit(actual_allocator);
+
+    try expectSamePlan(expected, actual);
+    try std.testing.expectEqual(
+        expected_profile.price_evaluations,
+        actual_profile.price_evaluations,
+    );
+    try std.testing.expectEqual(
+        expected_profile.optimal_transitions,
+        actual_profile.optimal_transitions,
+    );
+    try std.testing.expectEqual(
+        expected_profile.tree_nodes,
+        actual_profile.tree_nodes,
+    );
 }
 
 test "Zstd HQ DP tiny path matches exhaustive cost and exact final repeated offsets" {
