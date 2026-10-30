@@ -448,8 +448,39 @@ fn writeZeroRun(
     run_len: usize,
 ) !void {
     std.debug.assert(run_len > 0);
-    try writeSymbol(allocator, writer, 0);
+    const zero_symbol_bits: u6 = literal_lengths[0];
     var remaining = run_len - 1;
+    if (remaining >= 258) {
+        // Fuse the first literal zero with the first full-length run token.
+        try writer.writeBits(
+            allocator,
+            @as(u64, literal_codes[0]) |
+                (@as(u64, literal_codes[285]) << zero_symbol_bits),
+            zero_symbol_bits + literal_lengths[285] + 1,
+        );
+        remaining -= 258;
+    } else if (remaining > 4) {
+        const length = lengthCode(remaining);
+        const length_symbol_bits: u6 = literal_lengths[length.symbol];
+        const length_bits = @as(u64, literal_codes[length.symbol]) |
+            (@as(u64, length.extra) << length_symbol_bits);
+        try writer.writeBits(
+            allocator,
+            @as(u64, literal_codes[0]) |
+                (length_bits << zero_symbol_bits),
+            zero_symbol_bits + length_symbol_bits +
+                length.extra_bits + 1,
+        );
+        return;
+    } else {
+        std.debug.assert(literal_codes[0] == 0);
+        try writer.writeBits(
+            allocator,
+            0,
+            @intCast((remaining + 1) * @as(usize, zero_symbol_bits)),
+        );
+        return;
+    }
     while (remaining >= 258) : (remaining -= 258) {
         // Length symbol 285 followed by the one-bit distance-zero code.
         try writer.writeBits(
@@ -561,6 +592,73 @@ test "PNG ultrafast length lookup matches RFC range reference" {
             lengthCodeReference(length),
             lengthCode(length),
         );
+    }
+}
+
+test "fused PNG ultrafast zero runs match scalar bit sequence" {
+    const Oracle = struct {
+        fn writeReference(
+            allocator: std.mem.Allocator,
+            writer: anytype,
+            run_len: usize,
+        ) !void {
+            std.debug.assert(run_len > 0);
+            try writeSymbol(allocator, writer, 0);
+            var remaining = run_len - 1;
+            while (remaining >= 258) : (remaining -= 258) {
+                try writer.writeBits(
+                    allocator,
+                    literal_codes[285],
+                    literal_lengths[285] + 1,
+                );
+            }
+            if (remaining > 4) {
+                const length = lengthCode(remaining);
+                const symbol_bits: u6 = literal_lengths[length.symbol];
+                const bits = @as(u64, literal_codes[length.symbol]) |
+                    (@as(u64, length.extra) << symbol_bits);
+                try writer.writeBits(
+                    allocator,
+                    bits,
+                    symbol_bits + length.extra_bits + 1,
+                );
+            } else {
+                var i: usize = 0;
+                while (i < remaining) : (i += 1) {
+                    try writeSymbol(allocator, writer, 0);
+                }
+            }
+        }
+
+        fn expectRun(run_len: usize) !void {
+            var fused = try ReservoirWriter.init(
+                std.testing.allocator,
+                run_len,
+            );
+            defer fused.deinit(std.testing.allocator);
+            var reference = try ReservoirWriter.init(
+                std.testing.allocator,
+                run_len,
+            );
+            defer reference.deinit(std.testing.allocator);
+
+            try writeZeroRun(std.testing.allocator, &fused, run_len);
+            try writeReference(
+                std.testing.allocator,
+                &reference,
+                run_len,
+            );
+            try std.testing.expectEqual(reference.bit_count, fused.bit_count);
+            try std.testing.expectEqual(reference.buffer, fused.buffer);
+            try std.testing.expectEqualSlices(
+                u8,
+                reference.bytes.items,
+                fused.bytes.items,
+            );
+        }
+    };
+    for (1..1036) |run_len| {
+        try Oracle.expectRun(run_len);
     }
 }
 
