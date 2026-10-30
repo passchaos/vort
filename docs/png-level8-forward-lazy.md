@@ -52,9 +52,32 @@ requested heap rise `1.035425x` geometrically, with a `1.222858x` worst row;
 the matrix maximum changes only from 76,903,445 to 77,247,343 bytes and stays
 inside the 1 GiB runtime limit.
 
+## Tuned tiny one-shot path
+
+Tuned one-shot inputs through 32 KiB now use the existing 4096-bucket tiny
+planner instead of allocating and clearing the 32768-bucket full table. Its
+hash heads and predecessors use signed 16-bit positions: three- and four-byte
+anchors can insert at most positions 32765 and 32764, preserving every value
+plus the `-1` sentinel. An independent maximum-size `isize` planner matches
+every token and statistic. The tiny and full implementations remain separately
+outlined so the full-input match loop keeps its code shape.
+
+On the 16px Adaptive/Up rows, complete encoding improves `1.802455x` and
+`1.673778x` over the four-chain baseline, and reaches `1.518259x` and
+`1.136720x` against Rust. Across all 30 rows, the incremental change is
+`1.060719x` geometrically and `1.005833x` in aggregate, with a `0.991498x`
+minimum. Candidate/Rust becomes `2.795128x` geometrically and `2.880994x` in
+aggregate with 30/30 wins.
+
+Complete output grows by only 22 bytes, from 37,272,867 to 37,272,889, and
+remains below Rust's 37,442,939. Requested-heap peak falls on every row or stays
+exact, reaching `0.726663x` geometrically. The 16px peak drops from 142,512 to
+7,280 bytes and the 32px peak from 176,288 to 28,704 bytes; the matrix maximum
+stays 77,247,343 bytes.
+
 ## Verification
 
-- all 148 ReleaseFast LZ77 tests;
+- all 149 ReleaseFast LZ77 tests;
 - 141 selected ReleaseFast DEFLATE best/optimal/dictionary/numeric and
   incremental tests;
 - all tuned scalar/indexed/prefix tokens, full-table/ring tokens, dictionary
@@ -66,7 +89,7 @@ inside the 1 GiB runtime limit.
   a 1 GiB address-space cap.
 
 Frozen binaries and complete PNGs remain under
-`/nav_env/Temp/imx-png-level8-chain4-20261031/`. The committed imx evidence
+`/nav_env/Temp/imx-png-level8-tiny-split-20261031/`. The committed imx evidence
 retains the full per-row JSON, executable/source identities and reproduction
-commands. Two 16px rows still trail Rust, so uniform per-case leadership and
-broader format leadership remain open.
+commands. This matrix now has 30/30 speed wins over Rust and a smaller aggregate
+output, but broader formats, corpora and APIs remain open.

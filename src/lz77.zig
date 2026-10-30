@@ -776,7 +776,10 @@ pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options:
 pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     if (options.lazy_tuning != null) return hashLazyGreedyPlanAlloc(allocator, input, options);
     if (preferScanLazy(input)) return scanLazyGreedyPlanAlloc(allocator, input, options);
-    if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyAlloc(allocator, input, options);
+    if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyAlloc(allocator, input, options) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidBlockPlan => unreachable,
+    };
     return hashLazyGreedyPlanAlloc(allocator, input, options);
 }
 
@@ -1191,6 +1194,25 @@ test "prefix scan hash collisions preserve first-byte budgets and full-window en
 }
 
 fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (options.lazy_tuning != null and input.len <= 32 * 1024) {
+        @branchHint(.unlikely);
+        return @call(
+            .never_inline,
+            hashLazyGreedyPlanTinyAlloc,
+            .{ allocator, input, options },
+        ) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidBlockPlan => unreachable,
+        };
+    }
+    return @call(
+        .never_inline,
+        hashLazyGreedyPlanFullAlloc,
+        .{ allocator, input, options },
+    );
+}
+
+noinline fn hashLazyGreedyPlanFullAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     if (hashPositionFitsU32(input.len)) {
         return hashLazyGreedyPlanAllocWithPosition(u32, allocator, input, options);
     }
@@ -1220,10 +1242,13 @@ fn hashLazyGreedyPlanAllocWithPosition(
 }
 
 fn hashLazyGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
-    if (input.len > 32 * 1024) return hashLazyGreedyPlanAlloc(allocator, input, options);
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
 
-    var head: [4096]isize = @splat(-1);
-    var prev_stack: [32 * 1024]isize = undefined;
+    // Four- and three-byte anchors can insert at most position 32764/32765
+    // for the maximum tiny input, so signed 16-bit positions preserve every
+    // predecessor plus the -1 empty sentinel while halving stack traffic.
+    var head: [4096]i16 = @splat(-1);
+    var prev_stack: [32 * 1024]i16 = undefined;
     return hashLazyGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
@@ -1252,8 +1277,8 @@ noinline fn hashLazyRunTokensWithTables(allocator: std.mem.Allocator, input: []c
 pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     if (input.len > 32 * 1024) return error.InvalidBlockPlan;
     tokens.clearRetainingCapacity();
-    var head: [4096]isize = @splat(-1);
-    var prev_stack: [32 * 1024]isize = undefined;
+    var head: [4096]i16 = @splat(-1);
+    var prev_stack: [32 * 1024]i16 = undefined;
     return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
@@ -4419,6 +4444,45 @@ test "reusable tiny lazy hash planner preserves tokens and capacity" {
     const capacity = tokens.capacity;
     _ = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "tiny lazy i16 positions preserve isize tokens through the maximum input" {
+    var input: [32 * 1024]u8 = undefined;
+    var state: u32 = 0x91e1_0da5;
+    for (&input, 0..) |*byte, pos| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (pos % 97 < 89) @intCast(pos % 7) else @truncate(state >> 24);
+    }
+    const options: GreedyOptions = .{
+        .max_chain = 4,
+        .nice_len = 258,
+        .lazy_min_gain = 1,
+        .min_savings_bits = 0,
+        .lazy_tuning = .{ .good_length = 32, .max_lazy = 128 },
+    };
+    var compact_head: [4096]i16 = @splat(-1);
+    var compact_prev: [input.len]i16 = undefined;
+    const compact = try hashLazyGreedyPlanWithTables(
+        std.testing.allocator,
+        &input,
+        options,
+        &compact_head,
+        &compact_prev,
+    );
+    defer compact.deinit(std.testing.allocator);
+    var reference_head: [4096]isize = @splat(-1);
+    var reference_prev: [input.len]isize = undefined;
+    const reference = try hashLazyGreedyPlanWithTables(
+        std.testing.allocator,
+        &input,
+        options,
+        &reference_head,
+        &reference_prev,
+    );
+    defer reference.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(reference.tokens, compact.tokens);
+    try std.testing.expectEqual(reference.stats, compact.stats);
+    try expectPlanStatsConsistent(compact, input.len);
 }
 
 test "reusable lazy planner preserves production scan and hash policies" {

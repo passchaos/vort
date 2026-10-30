@@ -2954,3 +2954,24 @@ maximum changes only from 76,903,445 to 77,247,343 bytes under the 1 GiB cap.
 This establishes corpus aggregate/geometric speed and total-size leadership,
 not uniform per-image or format-wide leadership. [Full evidence](png-level8-forward-lazy.md)
 records the sweep and verification boundary.
+
+## PNG numeric level-8 outlined tiny planning (2026-10-31)
+
+Tuned one-shot inputs through 32 KiB now use an outlined 4096-bucket tiny
+planner with exact signed-16-bit heads and predecessors. A maximum-size `isize`
+reference matches every token and statistic. The full planner is separately
+outlined after early variants exposed up to about one percent of large-image
+code-layout regression.
+
+The 16px Adaptive/Up rows improve `1.802455x` / `1.673778x` versus the prior
+four-chain binary and `1.518259x` / `1.136720x` versus Rust. The complete
+30-row matrix changes by `1.060719x` geometrically and `1.005833x` in aggregate
+with a `0.991498x` minimum. Against Rust it reaches `2.795128x` geometric,
+`2.880994x` aggregate and 30/30 wins.
+
+Total output grows only 22 bytes to 37,272,889 and remains below Rust's
+37,442,939. Requested heap is non-increasing on every row and falls to
+`0.726663x` geometrically; 16px falls from 142,512 to 7,280 bytes and 32px from
+176,288 to 28,704 bytes. All 180 dual-decoder observations, allocation-failure,
+full LZ77/DEFLATE, bounded PNG and cross-target gates pass. [Full evidence](png-level8-forward-lazy.md)
+records the dispatch and isolation boundary.
