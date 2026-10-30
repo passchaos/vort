@@ -40,12 +40,14 @@ states and the per-position repeat-length cache. Price admission is independent
 per pass. First-pass final repeats are never used to seed the refinement.
 
 The frontier uses the existing naturally aligned `tree.Match`, so matcher
-layout and code generation remain unchanged outside the cold path. Its fixed
-requested heap is:
+layout and code generation remain unchanged outside the cold path. The initial
+evidence epoch reserved four entries per position. A retained density follow-up
+reduced that to two entries per position; denser inputs safely fall back. The
+current fixed requested heap is:
 
 ```text
-(positions + 1) * 4 + positions * 4 * sizeof(tree.Match)
-= 68 * positions + 4 bytes on x86-64
+(positions + 1) * 4 + positions * 2 * sizeof(tree.Match)
+= 36 * positions + 4 bytes on x86-64
 ```
 
 This is included in `requiredWorkingMemory`; exact cap succeeds and cap minus
@@ -92,3 +94,26 @@ wire identity. Non-cache profile fields are unchanged where the original path
 is selected. Raw reports, scripts, inputs, source overlay and differential
 reports are retained in
 [`data/zstd-cold-btultra2-reuse-20261030/`](data/zstd-cold-btultra2-reuse-20261030/).
+
+## Two-entry density follow-up
+
+The locked successful frontiers contain only 3,087–5,638 entries at 4 KiB and
+18,502 entries at 16 KiB, all below `2 * positions`. Reducing fixed capacity
+from four to two entries per position preserves every replay/fallback decision
+in the matrix while cutting the frontier allocation in half.
+
+Against the retained four-entry implementation:
+
+| Scope | Time ratio | Requested peak |
+| --- | ---: | ---: |
+| 4 KiB btultra2 geomean | `0.998411` | `4,747,820 -> 4,616,748` |
+| 16 KiB btultra2 geomean | `0.996996` | `6,205,996 -> 5,681,708` |
+| trained dictionary control | `1.002141` | unchanged |
+
+The short btopt screen contained one noisy MR row; a fifteen-pair control is
+`0.991915` with 9/15 wins and zero cache counters. Exact evidence is retained
+in [`data/zstd-frontier-density-20261030/`](data/zstd-frontier-density-20261030/).
+
+Relative to the original pre-reuse implementation, the final frontier adds
+147,460 bytes at 4 KiB and 589,828 bytes at 16 KiB rather than the initial
+278,532 / 1,114,116 bytes.

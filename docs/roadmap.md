@@ -24401,7 +24401,9 @@ reuse, so production keeps the simpler independently owned plans.
   with 14/15 wins, exact wire identity and bounded requested-heap deltas equal
   to the fixed frontier allocation. Incomplete frontiers fall back to a real
   second search; exact-cap, OOM, x86, Wasm and dual-reference gates remain
-  strict.
+  strict. A density follow-up halves fixed frontier capacity from four to two
+  entries per position: relative time stays `0.998411/0.996996` at 4/16 KiB,
+  while requested peak falls another 131,072/524,288 bytes.
 
 - 2026-10-30: Prepared DEFLATE now releases its build-only 32K-entry hash head
   before allocating the fixed/modeled DP arrays. Exact planner tokens and all

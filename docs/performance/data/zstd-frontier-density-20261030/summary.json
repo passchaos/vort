@@ -1,0 +1,32 @@
+{
+  "baseline_commit": "01335e97036c9f63d5ec6b43d0441ddd49ce4e1a",
+  "capacity_per_position": {
+    "baseline": 4,
+    "candidate": 2
+  },
+  "all_input_wire_settings_equal": true,
+  "primary": {
+    "btultra2_geomean": 0.9984113978814638,
+    "btultra2_maximum": 1.0026211320833307,
+    "btopt_control_geomean": 1.0055493970524563,
+    "btopt_control_maximum": 1.0191732689278226,
+    "baseline_peak": 4747820,
+    "candidate_peak": 4616748,
+    "saved_requested_bytes": 131072
+  },
+  "secondary": {
+    "btultra2_geomean": 0.9969961725590296,
+    "btultra2_maximum": 1.0000438445617323,
+    "trained_dictionary_control": 1.0021409234228145,
+    "baseline_peak": 6205996,
+    "candidate_peak": 5681708,
+    "saved_requested_bytes": 524288
+  },
+  "btopt_mr_long": {
+    "ratio": 0.9919151794204872,
+    "pairs": 15,
+    "paired_wins": 9,
+    "samples_per_side": 30
+  },
+  "decision": "retain_two_entries_per_position"
+}

@@ -1792,8 +1792,11 @@ workspace capacity. Other strategies and non-cold inputs stay on the original
 DP specialization. Independent ordinary A/B improves the 4 KiB three-file
 geomean to `0.963346` and the 16 KiB geomean to `0.979910`; a separate
 Mozilla fifteen-pair run is `0.989001` with 14/15 wins. Complete wires remain
-identical. The fixed native frontier raises requested peak by 278,532 bytes at
-4 KiB and 1,114,116 bytes at 16 KiB, both represented in exact preflight.
+identical. The final two-entry-per-position native frontier raises requested
+peak by 147,460 bytes at 4 KiB and 589,828 bytes at 16 KiB, both represented
+in exact preflight. A separate density A/B against the initial four-entry
+implementation is performance-neutral at `0.998411/0.996996` while saving
+another 131,072/524,288 requested bytes.
 
 This narrows one measured HQ encoding gap but does not change the broader
 conclusion: matched-HQ still remains far slower than libzstd. Next work should

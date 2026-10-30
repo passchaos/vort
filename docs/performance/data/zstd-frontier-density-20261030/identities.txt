@@ -1,0 +1,8 @@
+baseline_commit=01335e97036c9f63d5ec6b43d0441ddd49ce4e1a
+zig_version=0.16.0
+cpu=Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz
+cpu_affinity=2
+codec_threads=1
+baseline_executable_sha256=56e1993761e4500019409f1389c9d8ab98acf6a777eb996b211ecbf36ef0edff
+candidate_executable_sha256=ad440b58f1b2c5a56d89d88f9b8a317f1a009bddd134acca3428c16813ec3f18
+libzstd_1_6_0_sha256=c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e

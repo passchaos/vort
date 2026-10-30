@@ -1,0 +1,22 @@
+Behavior and resources
+- Debug test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq: 154/154 pass
+- ReleaseFast x86-linux-musl test-zstd-hq-search: 85/85 pass
+- ReleaseFast test-zstd-hq-search-wasm: 7/7 steps, all operations status 0
+- ReleaseFast full test-zstd: 1199/1199 pass
+- zig build -j2 check check-wasm --summary all: 212/212 steps succeeded
+- complete input/settings/wire identity in every A/B row
+- all locked 4/16 KiB successful replays remain successful
+- dense/discontinuous fallback rows remain fallback rows
+- exact-cap and cap-minus-one resource tests pass under the smaller formula
+
+Performance and memory versus four-entry baseline
+- 4 KiB active geomean: 0.9984113978814638
+- 4 KiB maximum: 1.0026211320833307
+- 4 KiB requested peak: 4,747,820 -> 4,616,748 bytes
+- 16 KiB active geomean: 0.9969961725590296
+- 16 KiB maximum: 1.0000438445617323
+- 16 KiB requested peak: 6,205,996 -> 5,681,708 bytes
+- dictionary control: 1.0021409234228145 with zero cache counters
+- btopt MR fifteen-pair control: 0.9919151794204872, 9/15 wins
