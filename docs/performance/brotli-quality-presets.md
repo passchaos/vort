@@ -57,6 +57,16 @@ ordinary dictionary matcher also consumes the complete 16-bit retained
 history, rather than truncating cross-meta-block search to the generic 32 KiB
 default.
 
+General q2...q11 and legacy planned paths now admit entropy-coded insertion-only
+plans when a deterministic whole-input one-tree Huffman estimate pays for the
+literal tree plus an eight-byte reserve. They then compare the full context/split
+candidate with stored output. This fixes the former no-match stored shortcut for
+small alphabets without running all context candidates on near-uniform no-copy
+input. Dedicated q0/q1 keep their own existing policies. The budget is not a
+proof that every rejected context model is unprofitable;
+[literal entropy evidence](brotli-literal-entropy.md) records its compression,
+latency and total-memory contracts across the planned APIs.
+
 Bounded stream planning uses a quality-specific automatic block size: q0 uses
 16 KiB for lower latency; q1, q6, q7, and q11 use 32 KiB; q2...q5 and q8...q10
 use 64 KiB to amortize meta-block headers. Legacy fast uses 32 KiB; balanced

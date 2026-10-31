@@ -8,6 +8,8 @@ const literal_context = @import("literal_context.zig");
 const literal_entropy_plan = @import("literal_entropy_plan.zig");
 
 const Histogram = histogram_model.Histogram(256);
+const kernels = @import("joint_context/kernels.zig");
+const joint_assignment = @import("joint_context/assignment.zig");
 const contexts_per_type = literal_entropy_plan.contexts_per_type;
 
 pub const Options = struct {
@@ -81,6 +83,7 @@ pub fn chooseAlloc(
     defer allocator.free(trees);
     const symbol_costs = try allocator.alloc([256]u16, max_trees);
     defer allocator.free(symbol_costs);
+    const cost_matrix = @as([*]u16, @ptrCast(symbol_costs.ptr))[0 .. max_trees * 256];
 
     @memset(context_modes, 0);
     @memset(best_mode_costs, std.math.maxInt(u64));
@@ -89,8 +92,9 @@ pub fn chooseAlloc(
         try collectHistograms(input, commands, block_plan, null, @intCast(mode_value), contexts);
         for (0..type_count) |block_type| {
             var cost: u64 = 0;
-            for (contexts[block_type * contexts_per_type ..][0..contexts_per_type]) |*histogram|
-                cost +|= histogram.populationCostQ8();
+            for (contexts[block_type * contexts_per_type ..][0..contexts_per_type]) |*histogram| {
+                if (histogram.total != 0) cost +|= histogram.populationCostQ8();
+            }
             if (cost < best_mode_costs[block_type]) {
                 best_mode_costs[block_type] = cost;
                 context_modes[block_type] = @intCast(mode_value);
@@ -101,7 +105,7 @@ pub fn chooseAlloc(
     clearHistograms(contexts);
     try collectHistograms(input, commands, block_plan, context_modes, null, contexts);
     var populated_count: usize = 0;
-    for (contexts, 0..) |histogram, context_index| {
+    for (contexts, 0..) |*histogram, context_index| {
         if (histogram.total == 0) continue;
         populated[populated_count] = @intCast(context_index);
         populated_count += 1;
@@ -121,36 +125,27 @@ pub fn chooseAlloc(
                     .interleaved => rank % requested,
                 });
             }
-            aggregateTrees(contexts, candidate_assignment, requested, trees);
+            kernels.aggregateTrees(contexts, candidate_assignment, requested, trees, literal_count);
             for (0..options.iterations) |_| {
-                for (trees[0..requested], symbol_costs[0..requested]) |*tree, *costs|
-                    costs.* = tree.symbolCostsQ8();
+                joint_assignment.prepare(trees[0..requested], cost_matrix[0 .. requested * 256], requested);
                 var changed = false;
                 for (populated[0..populated_count]) |context_index| {
-                    var best_tree: usize = 0;
-                    var best_cost = assignmentCost(&contexts[context_index], &symbol_costs[0]);
-                    for (1..requested) |tree| {
-                        const cost = assignmentCost(&contexts[context_index], &symbol_costs[tree]);
-                        if (cost < best_cost) {
-                            best_cost = cost;
-                            best_tree = tree;
-                        }
-                    }
+                    const best_tree = joint_assignment.chooseGrouped(&contexts[context_index], cost_matrix[0 .. requested * 256], requested, requested).tree;
                     if (candidate_assignment[context_index] != best_tree) {
                         candidate_assignment[context_index] = @intCast(best_tree);
                         changed = true;
                     }
                 }
-                aggregateTrees(contexts, candidate_assignment, requested, trees);
+                kernels.aggregateTrees(contexts, candidate_assignment, requested, trees, literal_count);
                 if (!changed) break;
             }
 
             var remap: [literal_entropy_plan.max_tree_count]u8 = @splat(0xff);
             var tree_count: usize = 0;
-            for (trees[0..requested], 0..) |tree, old_tree| {
+            for (trees[0..requested], 0..) |*tree, old_tree| {
                 if (tree.total == 0) continue;
                 remap[old_tree] = @intCast(tree_count);
-                if (tree_count != old_tree) trees[tree_count] = tree;
+                if (tree_count != old_tree) trees[tree_count] = tree.*;
                 tree_count += 1;
             }
             if (tree_count < 2) continue;
@@ -195,7 +190,8 @@ fn countLiterals(input: []const u8, commands: []const command_plan.Command) Erro
 }
 
 fn clearHistograms(histograms: []Histogram) void {
-    for (histograms) |*histogram| histogram.* = Histogram.init();
+    // Zero total marks an unused context; its counts are initialized on first touch.
+    for (histograms) |*histogram| histogram.total = 0;
 }
 
 fn collectHistograms(
@@ -222,27 +218,14 @@ fn collectHistograms(
             const previous = if (position == 0) 0 else input[position - 1];
             const second_previous = if (position < 2) 0 else input[position - 2];
             const context = literal_context.value(mode, previous, second_previous);
-            try histograms[block_type * contexts_per_type + context].add(literal);
+            const histogram = &histograms[block_type * contexts_per_type + context];
+            if (histogram.total == 0) histogram.* = Histogram.init();
+            try histogram.add(literal);
             literal_index += 1;
         }
     }
     if (block_index + 1 != block_plan.blockCount() or block_end != literal_index)
         return error.InvalidInput;
-}
-
-fn aggregateTrees(contexts: []const Histogram, assignment: []const u8, tree_count: usize, trees: []Histogram) void {
-    clearHistograms(trees[0..tree_count]);
-    for (contexts, assignment) |*context, tree| {
-        if (context.total == 0) continue;
-        trees[tree].addHistogram(context) catch unreachable;
-    }
-}
-
-fn assignmentCost(context: *const Histogram, costs: *const [256]u16) u64 {
-    var result: u64 = 0;
-    for (context.counts, costs) |frequency, cost|
-        result +|= @as(u64, frequency) * cost;
-    return result;
 }
 
 fn treeBitCost(allocator: std.mem.Allocator, histogram: *const Histogram) !u64 {

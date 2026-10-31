@@ -46,6 +46,7 @@ const code_length_rle = @import("br/encoder/code_length_rle.zig");
 const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
 const entropy_feedback = @import("br/encoder/entropy_feedback.zig");
+const literal_entropy_policy = @import("br/encoder/literal_entropy_policy.zig");
 const hq_command_parser = @import("br/encoder/hq_command_parser.zig");
 const hq_options = @import("br/encoder/hq_options.zig");
 const hq_types = @import("br/encoder/hq_types.zig");
@@ -133,6 +134,10 @@ pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const QualityCommandStateProfile = encoder_stats.QualityCommandStateProfile;
 pub const QualityQ8Profile = quality_profile.Profile;
+
+test "Brotli literal entropy contracts" {
+    try @import("tests/br_literal_entropy_contracts.zig").contracts(@This());
+}
 
 test "Brotli q8 quality profile complete wire and bounded diagnostic contracts" {
     try @import("tests/br_quality_profile_contracts.zig").contracts(@This());
@@ -4671,7 +4676,6 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     var serialized_plans: [4]?command_plan.Plan = .{ null, null, null, null };
     defer for (serialized_plans) |plan|
         if (plan) |active| active.deinit(allocator);
-    var has_serialized_match = false;
     if (options.shared_dictionary.hasSerializedStatic()) {
         const serialized = options.shared_dictionary.serialized.?;
         const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
@@ -4689,14 +4693,15 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 plan.deinit(allocator);
             } else {
                 serialized_plans[mode] = plan;
-                has_serialized_match = true;
             }
         }
     }
-    const has_base_match = (mixed != null and mixed.?.match_count != 0) or
-        has_serialized_match or lz_plan.stats.matches != 0;
-    if (!has_base_match and !largeWindowInputSearchEnabled(options, window_bits, input.len))
-        return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+
+    if (!commandPlanHasCopy(base_commands) and !try literal_entropy_policy.shouldTry(allocator, input)) {
+        var has_serialized_match = false;
+        for (serialized_plans) |plan| has_serialized_match = has_serialized_match or plan != null;
+        if (!has_serialized_match and !largeWindowInputSearchEnabled(options, window_bits, input.len)) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+    }
 
     var stats: encoder_stats.PlannedEncodeStats = .{};
     var lazy_options: LazyWireOptions = if (schedule) |active|
@@ -4717,9 +4722,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             .metadata = options.metadata,
         };
     lazy_options.compound_dictionary_size = compound_size;
-    var best = (if (!has_base_match)
-        encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options)
-    else if (options.level == .fast and options.quality == null)
+    var best = (if (options.level == .fast and options.quality == null)
         encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
             .large_window = options.large_window,
             .window_bits = window_bits,
@@ -5236,7 +5239,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     defer command_stream.deinit(allocator);
     const wire_options = qualityWireOptions(schedule, options, window_bits);
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    var best = if (lz_plan.stats.matches == 0)
+    var best = if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input))
         try encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, stream_options)
     else
         try encodeLazyCommandPlanAllocRecorded(trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &stats, wire_options);
@@ -5898,7 +5901,7 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     profile.lazy_match_count = lazy_plan.stats.matches;
     profile.lazy_matched_bytes = lazy_plan.stats.matched_bytes;
     profile.lazy_fixed_bits = lz77.fixedBitCost(lazy_plan.tokens);
-    if (lazy_plan.stats.matches == 0) {
+    if (lazy_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input)) {
         stage_start = std.Io.Clock.awake.now(io);
         const stored = try encodeStoredStreamAlloc(allocator, input);
         profile.selection_ns = elapsedNs(stage_start, io);
@@ -6110,7 +6113,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(allocator);
-    if (lz_plan.stats.matches == 0) {
+    if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input)) {
         if (input.len <= ratio_static_dictionary_max_input_len) {
             return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input, window_bits, options.large_window, options.metadata);
         }
@@ -8275,10 +8278,15 @@ fn considerPlannedMetaBlockPolicy(
             );
     }
     const q0_one_pass = policy.fragment_variant == .q0 and !state.adaptive_blocks;
+    const literal_entropy = if (match_count == 0 and policy.fragment_variant == null) try literal_entropy_policy.shouldTry(allocator, input) else false;
     const has_serialized_static = state.shared_dictionary.hasSerializedStatic();
+    // Far-only matches remain eligible when the near parser has no copy and
+    // the literal-only proposal cannot improve the stored block.
+    const long_distance_search = policy.fragment_variant == null and state.window_bits >= 17 and
+        (state.large_window or (policy.family == .ratio and state.history.items.len != 0));
     if (match_count != 0 or state.compound_dictionary_size != 0 or
         has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass or
-        (state.large_window and policy.fragment_variant == null))
+        literal_entropy or long_distance_search)
     {
         const mixed = if (state.compound_dictionary_size != 0)
             try command_plan.mixCompoundDictionaryAlloc(
@@ -8292,7 +8300,7 @@ fn considerPlannedMetaBlockPolicy(
             null;
         defer if (mixed) |plan| plan.deinit(allocator);
         const commands = if (mixed) |plan| plan.commands else state.commands.items;
-        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0) or q0_one_pass)
+        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0) or q0_one_pass or literal_entropy)
             try considerPlannedMetaBlockCommands(
                 allocator,
                 state,
@@ -9307,7 +9315,7 @@ fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, inp
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(allocator);
-    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input)) return error.InvalidBlockPlan;
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -9560,8 +9568,8 @@ fn encodePlannedStreamAllocWithStatsTimedForWindow(allocator: std.mem.Allocator,
     });
     defer lz_plan.deinit(allocator);
     if (io) |active| stats.lz77_ns = elapsedNs(lz_start.?, active);
-    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
     const command_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input)) return error.InvalidBlockPlan;
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     if (io) |active| stats.command_plan_ns = elapsedNs(command_start.?, active);
@@ -9599,7 +9607,7 @@ pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(scratch_allocator);
-    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(scratch_allocator, input)) return error.InvalidBlockPlan;
     const plan = try command_plan.buildAlloc(scratch_allocator, input, lz_plan.tokens);
     defer plan.deinit(scratch_allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -9793,7 +9801,7 @@ pub const PlannedStreamEncoder = struct {
             }),
             .ratio => unreachable,
         };
-        if (stats.matches == 0) return encodeStoredStreamAlloc(allocator, input);
+        if (stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input)) return encodeStoredStreamAlloc(allocator, input);
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         const compressed = if (options.level == .balanced)
@@ -9941,7 +9949,7 @@ pub const PlannedStreamEncoder = struct {
             }),
             .ratio => unreachable,
         };
-        if (stats.matches == 0) {
+        if (stats.matches == 0 and !try literal_entropy_policy.shouldTry(self.allocator, input)) {
             try encodeStoredStreamAppend(self.allocator, &self.output, input);
             return self.output.items;
         }
@@ -10010,7 +10018,7 @@ pub const PlannedStreamEncoder = struct {
             .min_match = 3,
             .max_match = lz77.max_match_len,
         });
-        if (stats.matches == 0) return encodeStoredStreamInto(input, output);
+        if (stats.matches == 0 and !try literal_entropy_policy.shouldTry(self.allocator, input)) return encodeStoredStreamInto(input, output);
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
@@ -11344,6 +11352,17 @@ const EntropySymbolSplits = struct {
     }
 };
 
+const SplitSymbolProjectionStrategy = struct {
+    pub const Context = PlannedWireContext;
+    pub const Error = br.Error;
+    pub const wireDistance = commandWireDistance;
+    pub const resolve = resolveHqCommand;
+    pub const short = recentDistanceSymbol;
+    pub const push = pushLastDistance;
+    pub const forLengthsAndDistance = commandEntryForLengthsAndDistance;
+    pub const forLengths = commandEntryForLengths;
+};
+
 /// Command and distance splitting consume the same derived command encoding
 /// and recent-distance state. Collect both in one pass so ratio mode does not
 /// allocate and parse the complete command stream twice.
@@ -11371,27 +11390,20 @@ fn chooseCommandAndDistanceSplitsAlloc(
     var distance_symbol_count: usize = 0;
     var last_distances = wire_context.starting_last_distances;
     for (commands, 0..) |command, command_index| {
-        const wire_distance = if (command.has_copy) try commandWireDistance(
+        const projected = try @import("br/encoder/symbol_projection.zig").project(
+            SplitSymbolProjectionStrategy,
             command,
-            wire_context.window_bits,
-            wire_context.compound_dictionary_size,
-            wire_context.initial_output_pos,
-        ) else 0;
-        const recent_symbol = if (use_recent_distances and command.has_copy and compound_wire.canUseRecentDistance(command.source))
-            recentDistanceSymbol(wire_distance, &last_distances)
-        else
-            null;
-        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, recent_symbol == 0) orelse
-            commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        if (command_accumulator) |*accumulator| if (!accumulator.add(encoding.symbol)) return error.InvalidBlockPlan;
-        if (command_symbols) |symbols| symbols[command_index] = encoding.symbol;
-        if (collect_distances and command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encodeWithFormat(wire_distance, encoder_distance.Parameters.init(0, 15), encoder_window_format.format(wire_context.large_window)) orelse return error.InvalidBlockPlan;
+            use_recent_distances,
+            wire_context,
+            last_distances,
+        );
+        if (command_accumulator) |*accumulator| if (!accumulator.add(projected.command.symbol)) return error.InvalidBlockPlan;
+        if (command_symbols) |symbols| symbols[command_index] = projected.command.symbol;
+        if (collect_distances) if (projected.distance) |distance| {
             distance_symbols.?[distance_symbol_count] = distance.symbol;
             distance_symbol_count += 1;
-        }
-        if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
-            pushLastDistance(&last_distances, wire_distance);
+        };
+        last_distances = projected.repeats;
     }
     const adaptive_command = if (collect_adaptive_commands) command_block_split.chooseAdaptiveAlloc(
         allocator,
@@ -11867,6 +11879,7 @@ const PreparedLiteralEmissionStrategy = struct {
     pub const Options = CommandPlanEncodeOptions;
     pub const literalEncoder = initPlannedLiteralEncoder;
     pub const wireDistance = commandWireDistance;
+    pub const resolveExact = resolveHqCommand;
     pub const recentDistance = recentDistanceSymbol;
     pub const pushDistance = pushLastDistance;
     pub const writeExtras = writeCommandLengthExtras;
@@ -26328,11 +26341,8 @@ test "br ratio block profile reproduces the production wire" {
 }
 
 test "br ratio block profile preserves stored fallback without optimal search" {
-    var payload: [4 * 1024]u8 = undefined;
-    for (0..payload.len / 2) |i| {
-        payload[2 * i] = @intCast(i >> 8);
-        payload[2 * i + 1] = @truncate(i);
-    }
+    // Uniform bytes with no repeated triples exercise the stored fast exit.
+    const payload = @embedFile("tests/literal_entropy_fixtures/random-no3-4096.bin").*;
     const expected = try encodePlannedStreamRatioAlloc(std.testing.allocator, &payload);
     defer std.testing.allocator.free(expected);
     var profile: RatioEncodeProfile = .{};
@@ -27497,7 +27507,10 @@ test "br ratio extended dictionary probes can start from a literal-only plan" {
 
     const baseline = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{ .level = .ratio });
     defer std.testing.allocator.free(baseline);
-    try std.testing.expect((try summarizeStream(baseline)).stored_only);
+    const baseline_summary = try summarizeStream(baseline);
+    try std.testing.expectEqual(input.len, baseline_summary.decoded_bytes);
+    try std.testing.expectEqual(@as(usize, 0), baseline_summary.lz77_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), baseline_summary.static_dictionary_copy_count);
     const extended = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{
         .level = .ratio,
         .extended_dictionary_probes = 1,
@@ -38057,13 +38070,9 @@ test "br serialized dictionary trainer selects case transforms on held-out wire"
         },
     )) orelse return error.TestUnexpectedResult;
     defer trained.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 4_608), trained.baseline_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 2_424), trained.trained_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 178), trained.charged_dictionary_bytes);
-    try std.testing.expectEqual(@as(usize, 2_006), trained.total_savings_bytes);
-    try std.testing.expect(
-        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 40,
-    );
+    // Literal entropy coding lowers the ordinary baseline; measure both wires.
+    try @import("tests/br_trainer_wire_accounting.zig").check(@This(), &validation_samples, trained, 30);
+
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.ascii_case,
         trained.transform_profile,
@@ -38120,13 +38129,9 @@ test "br serialized dictionary trainer selects omit transforms on held-out wire"
         },
     )) orelse return error.TestUnexpectedResult;
     defer trained.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 3_584), trained.baseline_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 2_647), trained.trained_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 226), trained.charged_dictionary_bytes);
-    try std.testing.expectEqual(@as(usize, 711), trained.total_savings_bytes);
-    try std.testing.expect(
-        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 15,
-    );
+    // Literal entropy coding lowers the ordinary baseline; measure both wires.
+    try @import("tests/br_trainer_wire_accounting.zig").check(@This(), &validation_samples, trained, 9);
+
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.omit,
         trained.transform_profile,
@@ -38332,10 +38337,8 @@ test "br serialized dictionary trainer learns prefix suffix stringlets" {
     defer repeated.deinit(std.testing.allocator);
     try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
     try std.testing.expectEqual(trained.id, repeated.id);
-    try std.testing.expectEqual(@as(usize, 5_120), trained.baseline_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 1_279), trained.trained_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 179), trained.charged_dictionary_bytes);
-    try std.testing.expectEqual(@as(usize, 3_662), trained.total_savings_bytes);
+    // Literal entropy coding lowers the ordinary baseline; measure both wires.
+    try @import("tests/br_trainer_wire_accounting.zig").check(@This(), &validation_samples, trained, 65);
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.prefix_suffix,
         trained.transform_profile,
@@ -38345,9 +38348,7 @@ test "br serialized dictionary trainer learns prefix suffix stringlets" {
         @as(usize, 1),
         trained.learned_prefix_suffix_transform_count,
     );
-    try std.testing.expect(
-        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 70,
-    );
+
     const parsed = try trained.parse();
     try std.testing.expectEqual(@as(usize, 2), parsed.transform_lists[0].transformCount());
     const words = &parsed.word_lists[0];
@@ -41633,6 +41634,64 @@ test "Brotli prepared literal exact count emission and lifecycle contracts" {
 
 test "Brotli counted context candidate policy and output ownership contracts" {
     try @import("br/encoder/context_candidate_group_tests.zig").run();
+}
+
+const exact_wire_test_support = @import("br/encoder/exact_wire_tests/support.zig").Support(struct {
+    pub const Error = br.Error;
+    pub const Command = command_plan.Command;
+    pub const Context = PlannedWireContext;
+    pub const Split = block_split_plan.Plan;
+    pub const Splits = EntropySymbolSplits;
+    pub const ProjectionStrategy = SplitSymbolProjectionStrategy;
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Common = prepared_command_distance.Prepared;
+    pub const Literal = prepared_literal.State;
+    pub const Stats = PlannedEncodeStats;
+    pub const choose = chooseCommandAndDistanceSplitsAlloc;
+    pub const deinitSplits = EntropySymbolSplits.deinit;
+    pub const wireDistance = commandWireDistance;
+    pub const resolve = resolveHqCommand;
+    pub const write = encodeCommandPlanWithOptionsAlloc;
+    pub const writeInto = encodeCommandPlanWithOptionsInto;
+    pub const prepare = prepareCommandPlanWithOptionsRecorded;
+    pub const emit = emitPreparedCommandPlanWithOptionsRecorded;
+    pub const decode = decodeStreamAllocExactSize;
+    pub const decodeOptions = decodeStreamAllocExactSizeWithOptions;
+    pub const summarize = summarizeStreamAlloc;
+});
+const exact_projection_tests = @import("br/encoder/exact_wire_tests/projection.zig");
+const exact_prepared_tests = @import("br/encoder/exact_wire_tests/prepared.zig");
+
+test "Brotli exact wire projection retains code zero regular aliases and terminal" {
+    try exact_projection_tests.selectors(exact_wire_test_support);
+}
+test "Brotli exact wire adaptive splits count and emit the same distance ordinals" {
+    _ = try exact_projection_tests.writer(exact_wire_test_support, std.testing.allocator);
+}
+test "Brotli exact wire adaptive writer releases every failed allocation" {
+    const H = struct {
+        fn run(a: std.mem.Allocator) !void {
+            _ = try exact_projection_tests.writer(exact_wire_test_support, a);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, H.run, .{});
+}
+test "Brotli exact wire prepared cold warm capture and large command fallback agree" {
+    for ([_]usize{ 32, 128, 513 }) |n| try exact_prepared_tests.compatibility(exact_wire_test_support, std.testing.allocator, n);
+}
+test "Brotli exact wire prepared changed keys and dirty scratch remain scoped" {
+    try exact_prepared_tests.keys(exact_wire_test_support, std.testing.allocator);
+}
+test "Brotli exact wire prepared static and compound distance cache effects agree" {
+    try exact_prepared_tests.dictionaries(exact_wire_test_support, std.testing.allocator);
+}
+test "Brotli exact wire prepared writer releases every failed allocation" {
+    const H = struct {
+        fn run(a: std.mem.Allocator) !void {
+            try exact_prepared_tests.compatibility(exact_wire_test_support, a, 32);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, H.run, .{});
 }
 
 test "Brotli incremental header Into parsing preserves active fields and truncated retries" {

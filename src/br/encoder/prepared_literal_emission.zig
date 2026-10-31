@@ -22,11 +22,17 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
     var last_distances = options.starting_last_distances;
     for (commands, 0..) |command, index| {
         const wire_distance = if (command.has_copy) try S.wireDistance(command, options.window_bits, options.compound_dictionary_size, options.initial_output_pos) else 0;
-        const recent_symbol = if (command.has_copy and compound_wire.canUseRecentDistance(command.source))
+        const exact = if (command.hq_encoding != null)
+            try S.resolveExact(command, wire_distance, options.distance_parameters, last_distances, .standard)
+        else
+            null;
+        const recent_symbol = if (exact) |selection|
+            selection.recent_symbol
+        else if (command.has_copy and compound_wire.canUseRecentDistance(command.source))
             S.recentDistance(wire_distance, &last_distances)
         else
             null;
-        const encoding = try S.commandEncoding(common, index, commands.len, command, recent_symbol);
+        const encoding = if (exact) |selection| selection.command else try S.commandEncoding(common, index, commands.len, command, recent_symbol);
         if (common.command_alphabet.len > 1) {
             if (common.command_alphabet.len <= 4) {
                 const code = common.command_alphabet.simpleCode(encoding.symbol).?;
@@ -43,7 +49,12 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
             if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
         }
         if (command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encodeWithFormat(wire_distance, options.distance_parameters, .standard) orelse return error.InvalidBlockPlan;
+            const distance = if (exact) |selection|
+                selection.distance orelse return error.InvalidBlockPlan
+            else if (recent_symbol) |symbol|
+                encoder_distance.Encoding{ .symbol = symbol }
+            else
+                encoder_distance.encodeWithFormat(wire_distance, options.distance_parameters, .standard) orelse return error.InvalidBlockPlan;
             if (common.distance_alphabet.len > 1) {
                 if (common.distance_alphabet.len <= 4) {
                     const code = common.distance_alphabet.simpleCode(distance.symbol).?;
@@ -52,7 +63,9 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
             }
             if (distance.extra_bits != 0) try writer.writeBits(allocator, distance.extra, distance.extra_bits);
         }
-        if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
+        if (exact) |selection|
+            last_distances = selection.repeated_distances
+        else if (command.has_copy and compound_wire.updatesRecentDistance(command.source, recent_symbol == 0))
             S.pushDistance(&last_distances, wire_distance);
     }
     if (writer.bit_index != 0) writer.alignToByte();

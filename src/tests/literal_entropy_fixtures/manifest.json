@@ -1,0 +1,47 @@
+{
+  "generator": {
+    "de_bruijn": "FKM lexicographic sequence, no cyclic wrap appended; B32,3 and B64,2 and B16,2",
+    "text": "bijective alphabet ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef applied to B32,3",
+    "font": "(symbol*37+11) modulo 256 applied to B64,2",
+    "opaque": "1024 bytes, LCG seed 1, state=state*1664525+1013904223 modulo 2^32, output=state>>24"
+  },
+  "files": {
+    "b32-3.bin": {
+      "bytes": 32768,
+      "order": 3,
+      "unique_linear_anchors": 32766,
+      "sha256": "b0d4cf70d0ad1d34b75cd9ce023907195d8b2d90c7ae92c9e31f811ac5b1f518"
+    },
+    "b32-3-text.bin": {
+      "bytes": 32768,
+      "order": 3,
+      "unique_linear_anchors": 32766,
+      "sha256": "a1cabf53ce62496df9e0acfc008d58ef432eeb0cb23afd057b80b9b8a5b0cb85"
+    },
+    "b64-2-font.bin": {
+      "bytes": 4096,
+      "order": 2,
+      "unique_linear_anchors": 4095,
+      "sha256": "080716fdc4153b5d5371cdb3d8ed3468b437f32b149a2d9961d2aa4a9ffe3ea8"
+    },
+    "opaque.bin": {
+      "bytes": 1024,
+      "order": 3,
+      "unique_linear_anchors": 1022,
+      "sha256": "c52da3e1169c84258b1126207c45426f115d5bb62243ceb38f50176331cdc8d6"
+    },
+    "b16-2.bin": {
+      "bytes": 256,
+      "order": 2,
+      "unique_linear_anchors": 255,
+      "sha256": "b5e8ba234e71f1c0682579c252b1da773a73fc673885016c1b90b502eaa1d870"
+    },
+    "random-no3-4096.bin": {
+      "bytes": 4096,
+      "order": 3,
+      "seed": 1,
+      "unique_linear_anchors": 4094,
+      "sha256": "28c74f56d2c959955f64ec0e740be7d08a023a0abf032c257e8ef7586a6bb775"
+    }
+  }
+}

@@ -60,7 +60,9 @@ pub const Key = struct {
 pub fn supported(options: anytype, has_exact_commands: bool) bool {
     return !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and
         options.distance_parameters.alphabetSize() <= distance_capacity and options.use_recent_distances and
-        !has_exact_commands and options.hq_model_output == null and options.final_wire_state == null and
+        (!has_exact_commands or (std.meta.eql(options.distance_parameters, distance.Parameters.init(0, 15)) and
+            options.write_stream_prefix and options.final_meta_block and options.metadata.len == 0)) and
+        options.hq_model_output == null and options.final_wire_state == null and
         options.command_split == null and options.adaptive_command_split == null and
         options.distance_split == null and options.adaptive_distance_split == null and
         options.literal_split == null and options.adaptive_literal_split == null and options.literal_entropy_plan == null;
@@ -127,6 +129,9 @@ const TestOptions = struct {
     use_utf8_text_contexts: bool = false,
     literal_context_mode: u2 = 0,
     optimize_literal_tree_wire: bool = false,
+    write_stream_prefix: bool = true,
+    final_meta_block: bool = true,
+    metadata: []const u8 = "",
 };
 
 fn testCommands() [2]command_plan.Command {
@@ -209,12 +214,24 @@ test "prepared command distance support preserves recent defaults and rejects sp
         @field(changed, field) = 1;
         try std.testing.expect(!prepared.matches(changed, &commands));
     }
-    try std.testing.expect(!supported(options, true));
+    try std.testing.expect(supported(options, true));
+    changed = options;
+    changed.distance_parameters = distance.Parameters.init(0, 0);
+    try std.testing.expect(!supported(changed, true));
+    changed = options;
+    changed.write_stream_prefix = false;
+    try std.testing.expect(!supported(changed, true));
+    changed = options;
+    changed.final_meta_block = false;
+    try std.testing.expect(!supported(changed, true));
+    changed = options;
+    changed.metadata = "meta";
+    try std.testing.expect(!supported(changed, true));
     commands[0].hq_encoding = .{ .command_symbol = 0 };
     prepared = Prepared.init(options, &commands);
     prepared.ready = true;
     try std.testing.expect(prepared.has_exact_commands);
-    try std.testing.expect(!prepared.matches(options, &commands));
+    try std.testing.expect(prepared.matches(options, &commands));
 }
 
 test "prepared command distance init and reset publish no scratch or allocation" {
