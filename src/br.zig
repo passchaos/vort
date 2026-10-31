@@ -1416,6 +1416,27 @@ const IncrementalCopyCodec = struct {
         block.remaining = state.remaining;
     }
 
+    /// Every meta-block installs fresh prefix tables. Clear lazy lookup state
+    /// for inline trees and the reusable packed-tree slots before decoding.
+    pub fn resetLookupStates(header: *Header) void {
+        const compressed = &header.compressed;
+        for (compressed.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
+        for (compressed.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
+        for (compressed.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
+        compressed.active_packed_literal_tree.resetPreparedLookup();
+        compressed.active_packed_insert_copy_tree.resetPreparedLookup();
+        compressed.active_packed_distance_tree.resetPreparedLookup();
+    }
+
+    pub fn parseMetaBlockHeaderInto(prefix: []const u8, bit_len: usize, decoded_len: Counter, final: bool, large_window: bool, out: *Header) IncrementalCopyCodec.Error!usize {
+        var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
+        try readMinimalCompressedHeaderIntoWithOptions(&reader, &out.compressed, large_window);
+        out.decoded_len = decoded_len;
+        out.final = final;
+        out.large_window = large_window;
+        return bit_count_math.toLocal(reader.bitPosition());
+    }
+
     pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: Counter, final: bool, large_window: bool) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
         const compressed = try readMinimalCompressedHeaderWithOptions(&reader, large_window);
@@ -1433,7 +1454,7 @@ const IncrementalCopyCodec = struct {
         const tree_index = header.compressed.literal_context_map[@as(usize, block_type) * 64 + context];
         if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
         const tree = try largeLiteralPrefixForDecode(&header.compressed, tree_index);
-        const symbol = try tree.decode(reader);
+        const symbol = try tree.decodePrepared(reader);
         if (symbol > 0xff) return error.InvalidHuffmanCode;
         if (header.compressed.literal_block.remaining != 0) header.compressed.literal_block.remaining -= 1;
         return @intCast(symbol);
@@ -1474,7 +1495,7 @@ const IncrementalCopyCodec = struct {
         const tree_index = header.compressed.distance_context_map[@as(usize, block_type) * 4 + distanceContext(copy_len)];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
         const tree = try largeDistancePrefixForDecode(&header.compressed, tree_index);
-        const symbol = try tree.decode(reader);
+        const symbol = try tree.decodePrepared(reader);
         if (header.compressed.distance_block.remaining != 0) header.compressed.distance_block.remaining -= 1;
         if (symbol < 16) return .{
             .distance = try resolveShortDistance(symbol, last_distances),
@@ -3866,12 +3887,51 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
     return struct {
         single_symbol: ?u16 = null,
         table: huffman.HuffmanTable(alphabet_size) = .{},
+        /// Lazily built fixed-width lookup owned by this tree. The header
+        /// resets it whenever a meta-block installs fresh tables, so decoded
+        /// symbols can never come from a stale tree.
+        prepared_lookup: [256]u16 = @splat(0),
+        prepared: bool = false,
 
         const Self = @This();
 
         pub fn decode(self: *const Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return try self.table.decodeValue(reader);
+        }
+
+        /// Decode through an owned 8-bit lookup. Codes longer than eight bits
+        /// fall back to the canonical table scan after the same zero-padded
+        /// peek, preserving truncation and malformed-code behavior.
+        pub fn decodePrepared(self: *Self, reader: anytype) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            if (!self.prepared) {
+                self.buildPreparedLookup();
+                self.prepared = true;
+            }
+            const packed_entry = self.prepared_lookup[reader.peekBitsPadded(u16, 8)];
+            if (packed_entry == 0) return self.table.decodeValueLongAfterLookup(reader, 8);
+            const bits: u4 = @truncate(packed_entry);
+            if (!reader.hasStagedBits(bits)) return error.TruncatedFrame;
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
+        fn buildPreparedLookup(self: *Self) void {
+            @memset(&self.prepared_lookup, 0);
+            for (self.table.entries[0..self.table.len]) |entry| {
+                if (entry.bits > 8) continue;
+                const fill = @as(usize, 1) << @intCast(8 - entry.bits);
+                const packed_entry: u16 = (@as(u16, entry.symbol) + 1) << 4 | entry.bits;
+                var i: usize = 0;
+                while (i < fill) : (i += 1)
+                    self.prepared_lookup[entry.code | (i << entry.bits)] = packed_entry;
+            }
+        }
+
+        /// Drop the prepared lookup after the owner installs a different tree.
+        pub fn resetPreparedLookup(self: *Self) void {
+            self.prepared = false;
         }
 
         pub fn prepareTailLookup(self: *Self) bool {
@@ -21665,12 +21725,12 @@ fn readLargeCommandSymbolAny(header: *LargeWindowCompressedHeader, reader: anyty
         try switchBlockAny(max_command_block_types, &header.command_block, reader);
     if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
     const tree = try largeCommandPrefixForDecode(header);
-    const symbol = try tree.decode(reader);
+    const symbol = try tree.decodePrepared(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
 }
 
-fn largeCommandPrefixForDecode(header: *LargeWindowCompressedHeader) Error!*const PrefixCode(large_command_alphabet_capacity) {
+fn largeCommandPrefixForDecode(header: *LargeWindowCompressedHeader) Error!*PrefixCode(large_command_alphabet_capacity) {
     const index = header.command_block.current_type;
     if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
     if (header.active_packed_insert_copy_tree_index != index) {
@@ -41573,4 +41633,13 @@ test "Brotli prepared literal exact count emission and lifecycle contracts" {
 
 test "Brotli counted context candidate policy and output ownership contracts" {
     try @import("br/encoder/context_candidate_group_tests.zig").run();
+}
+
+test "Brotli incremental header Into parsing preserves active fields and truncated retries" {
+    try @import("br/incremental/header_into_tests.zig").run(IncrementalCopyCodec, IncrementalTestSupport);
+}
+
+test "Brotli prepared prefix lookup and reader peek contracts" {
+    _ = @import("br/incremental/bit_reader.zig");
+    _ = @import("br/incremental/prepared_lookup_tests.zig");
 }

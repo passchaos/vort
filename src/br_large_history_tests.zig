@@ -31,6 +31,11 @@ fn Suite(comptime Br: type) type {
             const distance: usize = 65536 + 3;
             const prefix = try h.prefixAlloc(a, distance);
             defer a.free(prefix);
+            // The final block has three opaque prefix bytes followed by the
+            // unique 258-byte anchor at distance 65539. Its near parser finds
+            // no match and its random literal tree does not beat stored bytes.
+            // Far search must therefore be admitted independently of both
+            // near-match count and literal-entropy profitability.
             const input = try h.repeatedAlloc(a, prefix, h.anchor_len);
             defer a.free(input);
             const chunks = [_][]const u8{ prefix, "", input[distance..] };

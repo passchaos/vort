@@ -2,31 +2,33 @@ const std = @import("std");
 const h = @import("br_stream_counter_helpers.zig");
 const br = h.br;
 
-test "Brotli stream counters independent dacd500a decoder wire and local progress" {
-    inline for (h.goldens) |golden| {
-        const wire = try h.goldenAlloc(golden);
-        defer h.allocator.free(wire);
-        var scratch: [257]u8 = undefined;
-        var general = try br.StreamDecoder.init(wire, &scratch);
-        var output: [257]u8 = undefined;
-        var offset: usize = 0;
-        while (true) {
-            const result = try general.step(output[offset..@min(output.len, offset + 3)]);
-            offset += result.progress.output_written;
-            if (result.status == .done) break;
-        }
-        try std.testing.expectEqualSlices(u8, golden.payload, output[0..offset]);
-        try std.testing.expectEqual(usize, @TypeOf(general.snapshot().output_written));
-        try std.testing.expectEqual(usize, @TypeOf(general.offset));
-        try std.testing.expectEqual(usize, @FieldType(h.core.Progress, "input_read"));
-        try std.testing.expectEqual(usize, @FieldType(h.core.Progress, "output_written"));
-        var history: [64]u8 = undefined;
-        var copy = br.IncrementalCopyStreamDecoder.init(&history);
-        try h.decodeSplit(&copy, wire, golden.payload);
-        var owned = br.IncrementalStreamDecoder.init(h.allocator);
-        defer owned.deinit();
-        try h.decodeSplit(&owned, wire, golden.payload);
+noinline fn checkGoldenDecoders(golden: h.Golden) !void {
+    const wire = try h.goldenAlloc(golden);
+    defer h.allocator.free(wire);
+    var scratch: [257]u8 = undefined;
+    var general = try br.StreamDecoder.init(wire, &scratch);
+    var output: [257]u8 = undefined;
+    var offset: usize = 0;
+    while (true) {
+        const result = try general.step(output[offset..@min(output.len, offset + 3)]);
+        offset += result.progress.output_written;
+        if (result.status == .done) break;
     }
+    try std.testing.expectEqualSlices(u8, golden.payload, output[0..offset]);
+    try std.testing.expectEqual(usize, @TypeOf(general.snapshot().output_written));
+    try std.testing.expectEqual(usize, @TypeOf(general.offset));
+    try std.testing.expectEqual(usize, @FieldType(h.core.Progress, "input_read"));
+    try std.testing.expectEqual(usize, @FieldType(h.core.Progress, "output_written"));
+    var history: [64]u8 = undefined;
+    var copy = br.IncrementalCopyStreamDecoder.init(&history);
+    try h.decodeSplit(&copy, wire, golden.payload);
+    var owned = br.IncrementalStreamDecoder.init(h.allocator);
+    defer owned.deinit();
+    try h.decodeSplit(&owned, wire, golden.payload);
+}
+
+test "Brotli stream counters independent dacd500a decoder wire and local progress" {
+    for (h.goldens) |golden| try checkGoldenDecoders(golden);
 }
 
 test "Brotli stream counters independent dacd500a stored literal and RLE subsets" {

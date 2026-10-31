@@ -1,3 +1,4 @@
+const std = @import("std");
 const core = @import("../../core.zig");
 
 /// Fixed-reservoir reader used once an incremental Brotli decoder has parsed
@@ -65,6 +66,43 @@ pub const Reader = struct {
         self.stream_bits.* = saved.stream_bits;
     }
 
+    /// Total bits still available across the staged reservoir and unread input.
+    /// Huffman fast paths use this after a zero-padded peek so a padded lookup
+    /// hit cannot publish a symbol that the real input cannot reach.
+    pub fn hasStagedBits(self: *const Reader, count: u4) bool {
+        return @as(usize, self.staged_bit_count.*) + (self.input.len - self.input_read.*) * 8 >= count;
+    }
+
+    /// Look ahead without mutating the reader. Missing bytes are zero padding;
+    /// callers must pair this with `hasStagedBits` before advancing.
+    pub fn peekBitsPadded(self: Reader, comptime T: type, count: u6) T {
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0) return 0;
+        var bits = self.staged_bits.*;
+        var have: usize = self.staged_bit_count.*;
+        var index = self.input_read.*;
+        while (have < count and index < self.input.len) : (index += 1) {
+            bits |= @as(u128, self.input[index]) << @intCast(have);
+            have += 8;
+        }
+        const mask = (@as(u128, 1) << @intCast(count)) - 1;
+        return @intCast(bits & mask);
+    }
+
+    /// Consume bits proven available by `hasStagedBits`. Bytes needed to
+    /// complete the staged reservoir are pulled from the caller's input.
+    pub fn advanceBitsStagedAssumeAvailable(self: *Reader, count: u6) void {
+        std.debug.assert(self.hasStagedBits(@intCast(count)));
+        while (self.staged_bit_count.* < count) {
+            self.staged_bits.* |= @as(u128, self.input[self.input_read.*]) << @intCast(self.staged_bit_count.*);
+            self.staged_bit_count.* += 8;
+            self.input_read.* += 1;
+        }
+        self.staged_bits.* >>= @intCast(count);
+        self.staged_bit_count.* -= count;
+        self.stream_bits.* +%= count;
+    }
+
     pub fn readBits(self: *Reader, comptime T: type, count: u6) core.Error!T {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
         while (self.staged_bit_count.* < count) {
@@ -83,3 +121,40 @@ pub const Reader = struct {
         return value;
     }
 };
+
+test "Brotli incremental reader peek and advance match committed reads" {
+    var input: [40]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    var ref_read: usize = 0;
+    var ref_bits: u128 = 0;
+    var ref_count: u8 = 0;
+    var ref_stream: usize = 0;
+    var fast_read: usize = 0;
+    var fast_bits: u128 = 0;
+    var fast_count: u8 = 0;
+    var fast_stream: usize = 0;
+    var reference = Reader.init(&input, &ref_read, &ref_bits, &ref_count, &ref_stream);
+    var fast = Reader.init(&input, &fast_read, &fast_bits, &fast_count, &fast_stream);
+    const widths = [_]u6{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
+    var index: usize = 0;
+    while (index < 64) : (index += 1) {
+        const width = widths[index % widths.len];
+        const peeked = fast.peekBitsPadded(u16, width);
+        const committed = reference.readBits(u16, width) catch break;
+        try std.testing.expectEqual(committed, peeked);
+        try std.testing.expect(fast.hasStagedBits(@intCast(width)));
+        fast.advanceBitsStagedAssumeAvailable(width);
+        try std.testing.expectEqual(ref_read, fast_read);
+        try std.testing.expectEqual(ref_bits, fast_bits);
+        try std.testing.expectEqual(ref_count, fast_count);
+        try std.testing.expectEqual(ref_stream, fast_stream);
+    }
+    // A short tail is zero-padded by peek but is not reported as decodable.
+    while (fast.hasStagedBits(1)) fast.advanceBitsStagedAssumeAvailable(1);
+    try std.testing.expect(!fast.hasStagedBits(8));
+    try std.testing.expectEqual(@as(u16, 0), fast.peekBitsPadded(u16, 8));
+}

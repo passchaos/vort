@@ -354,27 +354,27 @@ pub fn Decoder(comptime Codec: type) type {
                         // the ordinary parser can inspect the final retained
                         // byte without treating synthetic high padding as input.
                         if (self.header_len != 0) {
-                            const parsed = Codec.parseMetaBlockHeader(
-                                self.headerStorage()[0..self.header_len],
-                                self.header_bit_count,
-                                self.decoded_len,
-                                self.final_meta_block,
-                                self.large_window,
-                            ) catch |err| switch (err) {
+                            const parsed_bits = (if (comptime @hasDecl(Codec, "parseMetaBlockHeaderInto"))
+                                Codec.parseMetaBlockHeaderInto(
+                                    self.headerStorage()[0..self.header_len],
+                                    self.header_bit_count,
+                                    self.decoded_len,
+                                    self.final_meta_block,
+                                    self.large_window,
+                                    &self.header,
+                                )
+                            else
+                                self.parseReturnedHeader()) catch |err| switch (err) {
                                 error.TruncatedFrame => null,
                                 else => return self.fail(.compressed_header, err),
                             };
-                            if (parsed) |ready| {
-                                // Batched probing may include complete bytes
-                                // after the compressed header. Return those to
-                                // this call's input cursor; only a sub-byte tail
-                                // belongs in the cross-phase bit reservoir.
-                                const unread_bytes = (self.header_bit_count - ready.bits_read) / 8;
+                            if (parsed_bits) |bits_read| {
+                                const unread_bytes = (self.header_bit_count - bits_read) / 8;
                                 std.debug.assert(unread_bytes <= input_read);
                                 input_read -= unread_bytes;
                                 self.header_bit_count -= unread_bytes * 8;
                                 self.header_len = (self.header_bit_count + 7) / 8;
-                                try self.installCompressedHeader(ready);
+                                try self.installCompressedHeaderBits(bits_read);
                                 break;
                             }
                         }
@@ -392,7 +392,12 @@ pub fn Decoder(comptime Codec: type) type {
                             self.header_storage_exhausted = true;
                             return self.fail(.compressed_header, error.UnsupportedBrotliFeature);
                         }
-                        const append_end = input_read + @min(available, @min(@as(usize, 4096), input.len - input_read));
+                        // Into-style hooks can rewind whole-byte lookahead before
+                        // the common installation. Returned headers must validate
+                        // their retained-bit suffix, so legacy codecs retry one
+                        // byte at a time and never over-read the header prefix.
+                        const batch_size: usize = if (comptime @hasDecl(Codec, "parseMetaBlockHeaderInto")) 4096 else 1;
+                        const append_end = input_read + @min(available, @min(batch_size, input.len - input_read));
                         while (input_read < append_end) : (input_read += 1)
                             try self.appendHeaderByte(input[input_read]);
                     }
@@ -868,21 +873,30 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_bit_count += 8;
             self.header_len = (self.header_bit_count + 7) / 8;
         }
-        fn installCompressedHeader(self: *Self, parsed: Codec.ParsedHeader) Error!void {
+        // Compatibility path is isolated so codecs without the Into hook do
+        // not add a large returned-header temporary to the normal step frame.
+        noinline fn parseReturnedHeader(self: *Self) Error!usize {
+            const parsed = try Codec.parseMetaBlockHeader(self.headerStorage()[0..self.header_len], self.header_bit_count, self.decoded_len, self.final_meta_block, self.large_window);
             if (parsed.bits_read > self.header_bit_count) return self.fail(.compressed_header, error.CorruptFrame);
-            const remaining = self.header_bit_count - parsed.bits_read;
+            if (self.header_bit_count - parsed.bits_read > 127) return self.fail(.compressed_header, error.CorruptFrame);
+            self.header = parsed.header;
+            return parsed.bits_read;
+        }
+        fn installCompressedHeaderBits(self: *Self, bits_read: usize) Error!void {
+            if (bits_read > self.header_bit_count) return self.fail(.compressed_header, error.CorruptFrame);
+            const remaining = self.header_bit_count - bits_read;
             if (remaining > 127) return self.fail(.compressed_header, error.CorruptFrame);
             var staged: u128 = 0;
             const storage = self.headerStorage();
             for (0..remaining) |bit| {
-                const source = parsed.bits_read + bit;
+                const source = bits_read + bit;
                 const value = (storage[source / 8] >> @intCast(source % 8)) & 1;
                 staged |= @as(u128, value) << @intCast(bit);
             }
             self.staged_bits = staged;
             self.staged_bit_count = @intCast(remaining);
-            self.stream_bits +%= parsed.bits_read;
-            self.header = parsed.header;
+            self.stream_bits +%= bits_read;
+            if (comptime @hasDecl(Codec, "resetLookupStates")) Codec.resetLookupStates(&self.header);
             self.header_len = 0;
             self.header_bit_count = 0;
             self.phase = .command;
@@ -952,4 +966,8 @@ pub fn Decoder(comptime Codec: type) type {
 
 test {
     _ = @import("copy_counter_tests.zig");
+}
+
+test "Brotli returned header fallback validation precedes state publication" {
+    _ = @import("header_fallback_tests.zig");
 }

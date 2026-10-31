@@ -333,32 +333,47 @@ test "byte-progressive compressed copy decoder enforces history and framing" {
     defer std.testing.allocator.free(encoded);
     var output: [257]u8 = undefined;
 
-    var no_history = br.IncrementalCopyStreamDecoder.init(&.{});
-    try std.testing.expectError(error.OutputTooSmall, no_history.step(encoded, &output));
+    try expectCopyStepError(encoded, &.{}, &output, .{}, error.OutputTooSmall);
     const wider_distance = try br.encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 8);
     defer std.testing.allocator.free(wider_distance);
     var short_history: [1]u8 = undefined;
-    var invalid_match = br.IncrementalCopyStreamDecoder.init(&short_history);
-    try std.testing.expectError(error.InvalidMatch, invalid_match.step(wider_distance, &output));
+    try expectCopyStepError(wider_distance, &short_history, &output, .{}, error.InvalidMatch);
     var history: [2]u8 = undefined;
-    var limited = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .max_output_len = 256 });
-    try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &output));
+    try expectCopyStepError(encoded, &history, &output, .{ .max_output_len = 256 }, error.OutputLimitExceeded);
 
-    var truncated = br.IncrementalCopyStreamDecoder.init(&history);
-    _ = try truncated.step(encoded[0 .. encoded.len - 1], &output);
+    try expectCopyTruncatedFinish(encoded, &history, &output);
+    try expectCopyTrailingError(encoded, &history, &output);
+    try expectCopyRecoverableSuffix(encoded, &history, &output);
+}
+
+// The decoder's inline entropy state is large. Keep independent error cases
+// in separate call frames so Debug does not retain six states and their init
+// temporaries simultaneously in the test's ordinary 8 MiB stack.
+noinline fn expectCopyStepError(encoded: []const u8, history: []u8, output: []u8, options: br.IncrementalCopyStreamDecoder.Options, expected: anyerror) !void {
+    var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(history, options);
+    try std.testing.expectError(expected, decoder.step(encoded, output));
+}
+
+noinline fn expectCopyTruncatedFinish(encoded: []const u8, history: []u8, output: []u8) !void {
+    var truncated = br.IncrementalCopyStreamDecoder.init(history);
+    _ = try truncated.step(encoded[0 .. encoded.len - 1], output);
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
     try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
+}
 
+noinline fn expectCopyTrailingError(encoded: []const u8, history: []u8, output: []u8) !void {
     var trailing_bytes: [128]u8 = undefined;
     @memcpy(trailing_bytes[0..encoded.len], encoded);
     trailing_bytes[encoded.len] = 0xff;
-    var trailing = br.IncrementalCopyStreamDecoder.init(&history);
-    try std.testing.expectError(error.TrailingData, trailing.step(trailing_bytes[0 .. encoded.len + 1], &output));
+    var trailing = br.IncrementalCopyStreamDecoder.init(history);
+    try std.testing.expectError(error.TrailingData, trailing.step(trailing_bytes[0 .. encoded.len + 1], output));
+}
 
+noinline fn expectCopyRecoverableSuffix(encoded: []const u8, history: []u8, output: []u8) !void {
     const suffix = "NEXT-BROTLI-MEMBER";
     const joined = try std.mem.concat(std.testing.allocator, u8, &.{ encoded, suffix });
     defer std.testing.allocator.free(joined);
-    var recoverable = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+    var recoverable = br.IncrementalCopyStreamDecoder.initWithOptions(history, .{
         .expected_output_len = output.len,
         .allow_trailing_data = true,
     });

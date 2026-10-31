@@ -31,27 +31,30 @@ fn expectFailedProgress(decoder: anytype, read: br.Counter, written: usize) !voi
     try std.testing.expectEqual(snap.error_output_offset, diagnostic.error_output_offset);
 }
 
+noinline fn checkStoredKnownUnknown(payload: []const u8, known: bool) !void {
+    const wire = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, payload);
+    defer std.testing.allocator.free(wire);
+    var decoder = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_compressed_len = if (known) wire.len else null,
+        .expected_output_len = payload.len,
+        .max_total_output_len = payload.len,
+        .max_working_memory = payload.len,
+    });
+    defer decoder.deinit();
+    try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+    const first = try decoder.step(&.{}, &.{});
+    try std.testing.expectEqualDeep(core.Progress{}, first.progress);
+    const output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(output);
+    try drain(&decoder, wire, output, 1, 1);
+    try std.testing.expectEqualSlices(u8, payload, output);
+    try std.testing.expectEqual(payload.len, decoder.snapshot().total_output);
+    try std.testing.expect(decoder.peakWorkingMemoryBytes() <= payload.len);
+}
+
 test "Brotli stream contracts known unknown bounds zero output and tiny chunks" {
-    inline for (.{ "", "x", "small Brotli streaming contracts" }) |payload| {
-        const wire = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, payload);
-        defer std.testing.allocator.free(wire);
-        inline for (.{ false, true }) |known| {
-            var decoder = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{
-                .expected_compressed_len = if (known) wire.len else null,
-                .expected_output_len = payload.len,
-                .max_total_output_len = payload.len,
-                .max_working_memory = payload.len,
-            });
-            defer decoder.deinit();
-            try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
-            const first = try decoder.step(&.{}, &.{});
-            try std.testing.expectEqualDeep(core.Progress{}, first.progress);
-            var output: [payload.len]u8 = undefined;
-            try drain(&decoder, wire, &output, 1, 1);
-            try std.testing.expectEqualSlices(u8, payload, &output);
-            try std.testing.expectEqual(payload.len, decoder.snapshot().total_output);
-            try std.testing.expect(decoder.peakWorkingMemoryBytes() <= payload.len);
-        }
+    for ([_][]const u8{ "", "x", "small Brotli streaming contracts" }) |payload| {
+        for ([_]bool{ false, true }) |known| try checkStoredKnownUnknown(payload, known);
     }
     const wire = try br.IncrementalTestSupport.encodeCompressedHello(std.testing.allocator);
     defer std.testing.allocator.free(wire);
@@ -370,24 +373,27 @@ test "Brotli stream contracts caller header exhaustion can grow and retry withou
     try std.testing.expectError(error.TruncatedFrame, decoder.replaceCompressedHeaderScratch(scratch));
 }
 
+noinline fn checkMovingParsedState(comptime owned: bool, wire: []const u8) !void {
+    var history: [4]u8 = undefined;
+    var source = if (owned)
+        br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 256, .max_history_len = 4, .max_working_memory = 4 })
+    else
+        br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .expected_output_len = 256 });
+    var output: [256]u8 = undefined;
+    const first = try source.step(wire, output[0..5]);
+    try std.testing.expectEqual(.need_output, first.status);
+    var decoder = source;
+    source = undefined;
+    defer if (owned) decoder.deinit();
+    try drain(&decoder, wire[first.progress.input_read..], output[first.progress.output_written..], 1, 1);
+    try std.testing.expectEqualSlices(u8, "abcd" ** 64, &output);
+}
+
 test "Brotli stream contracts moving active parsed copy state keeps owned pointers stable" {
     const wire = try br.encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 64);
     defer std.testing.allocator.free(wire);
-    inline for (.{ false, true }) |owned| {
-        var history: [4]u8 = undefined;
-        var source = if (owned)
-            br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 256, .max_history_len = 4, .max_working_memory = 4 })
-        else
-            br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .expected_output_len = 256 });
-        var output: [256]u8 = undefined;
-        const first = try source.step(wire, output[0..5]);
-        try std.testing.expectEqual(.need_output, first.status);
-        var decoder = source;
-        source = undefined;
-        defer if (owned) decoder.deinit();
-        try drain(&decoder, wire[first.progress.input_read..], output[first.progress.output_written..], 1, 1);
-        try std.testing.expectEqualSlices(u8, "abcd" ** 64, &output);
-    }
+    try checkMovingParsedState(false, wire);
+    try checkMovingParsedState(true, wire);
 }
 
 test "Brotli stream contracts caller header capacity boundaries do not retain payload across retry" {

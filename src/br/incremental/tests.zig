@@ -32,23 +32,13 @@ test "Brotli incremental decoder accepts split input and tiny output" {
     try std.testing.expectEqual(br.IncrementalStreamDecoder.Phase.input, decoder.snapshot().phase);
 }
 
-test "Brotli incremental decoder enforces input output and exact limits" {
-    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "bounded");
-    defer std.testing.allocator.free(encoded);
+noinline fn checkStepLimit(encoded: []const u8, options: br.IncrementalStreamDecoder.Options, expected_error: br.Error, output: []u8) !void {
+    var decoder = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, options);
+    defer decoder.deinit();
+    try std.testing.expectError(expected_error, decoder.step(encoded, output));
+}
 
-    var compressed_limited = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .max_compressed_len = encoded.len - 1 });
-    defer compressed_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, compressed_limited.step(encoded, &.{}));
-
-    var output_limited = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .max_output_len = 3 });
-    defer output_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, output_limited.step(encoded, &.{}));
-
-    var exact = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 8 });
-    defer exact.deinit();
-    var exact_output: [8]u8 = undefined;
-    try std.testing.expectError(error.SizeMismatch, exact.step(encoded, &exact_output));
-
+noinline fn checkTruncatedStored(encoded: []const u8) !void {
     var truncated = br.IncrementalStreamDecoder.init(std.testing.allocator);
     defer truncated.deinit();
     var truncated_output: [7]u8 = undefined;
@@ -66,16 +56,22 @@ test "Brotli incremental decoder enforces input output and exact limits" {
     try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
 }
 
-test "Brotli incremental decoder auto completes pledged compressed input" {
-    const payload = "pledged compressed Brotli input" ** 8;
-    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, payload);
+test "Brotli incremental decoder enforces input output and exact limits" {
+    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "bounded");
     defer std.testing.allocator.free(encoded);
+    try checkStepLimit(encoded, .{ .max_compressed_len = encoded.len - 1 }, error.OutputLimitExceeded, &.{});
+    try checkStepLimit(encoded, .{ .max_output_len = 3 }, error.OutputLimitExceeded, &.{});
+    var exact_output: [8]u8 = undefined;
+    try checkStepLimit(encoded, .{ .expected_output_len = 8 }, error.SizeMismatch, &exact_output);
+    try checkTruncatedStored(encoded);
+}
+
+noinline fn checkPledgedStored(encoded: []const u8, payload: []const u8, output: []u8) !void {
     var decoder = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
         .expected_output_len = payload.len,
     }, encoded.len);
     defer decoder.deinit();
 
-    var output: [payload.len]u8 = undefined;
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (input_offset < encoded.len) {
@@ -91,17 +87,29 @@ test "Brotli incremental decoder auto completes pledged compressed input" {
         output_offset += result.progress.output_written;
         try std.testing.expect(result.status == .need_output or result.status == .done);
     }
-    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqualSlices(u8, payload, output);
     try std.testing.expectEqual(@as(?br.Counter, encoded.len), decoder.snapshot().expected_compressed_len);
+}
 
-    var short = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{}, encoded.len);
-    defer short.deinit();
-    _ = try short.step(encoded[0 .. encoded.len - 1], &.{});
-    try std.testing.expectError(error.SizeMismatch, short.finish());
+noinline fn checkPledgedMismatch(encoded: []const u8, short_input: bool) !void {
+    var decoder = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{}, encoded.len - @intFromBool(!short_input));
+    defer decoder.deinit();
+    if (short_input) {
+        _ = try decoder.step(encoded[0 .. encoded.len - 1], &.{});
+        try std.testing.expectError(error.SizeMismatch, decoder.finish());
+    } else {
+        try std.testing.expectError(error.SizeMismatch, decoder.step(encoded, &.{}));
+    }
+}
 
-    var long = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{}, encoded.len - 1);
-    defer long.deinit();
-    try std.testing.expectError(error.SizeMismatch, long.step(encoded, &.{}));
+test "Brotli incremental decoder auto completes pledged compressed input" {
+    const payload = "pledged compressed Brotli input" ** 8;
+    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var output: [payload.len]u8 = undefined;
+    try checkPledgedStored(encoded, payload, &output);
+    try checkPledgedMismatch(encoded, true);
+    try checkPledgedMismatch(encoded, false);
 }
 
 test "Brotli incremental decoder auto completes compressed meta-block input" {
