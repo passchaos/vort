@@ -24821,3 +24821,19 @@ reuse, so production keeps the simpler independently owned plans.
   1504/1505 with one platform skip. The copy path, long-code fallback,
   non-power-of-two history and one-shot API epochs remain work; the three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The incremental Brotli reader's padded peek now stages gathered
+  bytes into the shared reservoir, so the paired advance only shifts and never
+  reloads the same bytes. Truncation still pads and rejects through
+  `hasStagedBits`, and every caller restores its checkpoint on `TruncatedFrame`.
+  [Evidence](performance/brotli-staging-peek.md) records a 576-process four-sweep
+  paired epoch: the peek increment alone reduces time to `0.9347` geometric mean
+  (`0.9369/0.9306/0.9427/0.9288` for q6/q11 at 64 KiB/1 MiB), with independent
+  sweeps `0.9361/0.9340/0.9367/0.9325`. The best row is Mozilla 1 MiB q11
+  `0.894` and the worst is Webster 1 MiB q6 `0.993`; every row is faster.
+  Combined with the prepared lookup, literal-context, ring-mask and
+  batched-literal increments, the incremental decoder reaches `0.4752` of the
+  frozen baseline (`0.5228/0.4532/0.4975/0.4327`). The complete ReleaseFast
+  Brotli suite passes 1504/1505 with one platform skip. Pair refill, the copy
+  path, long-code fallback, non-power-of-two history and one-shot API epochs
+  remain work; the three-codec industry-best goal stays active.

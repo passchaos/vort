@@ -73,20 +73,20 @@ pub const Reader = struct {
         return @as(usize, self.staged_bit_count.*) + (self.input.len - self.input_read.*) * 8 >= count;
     }
 
-    /// Look ahead without mutating the reader. Missing bytes are zero padding;
-    /// callers must pair this with `hasStagedBits` before advancing.
+    /// Stage just enough input bytes for a zero-padded lookahead and return the
+    /// low `count` bits. Staging here means the paired advance does not load
+    /// the same bytes a second time. Truncated lookups pad with zeros; callers
+    /// must check `hasStagedBits` before consuming.
     pub fn peekBitsPadded(self: Reader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0) return 0;
-        var bits = self.staged_bits.*;
-        var have: usize = self.staged_bit_count.*;
-        var index = self.input_read.*;
-        while (have < count and index < self.input.len) : (index += 1) {
-            bits |= @as(u128, self.input[index]) << @intCast(have);
-            have += 8;
+        while (self.staged_bit_count.* < count and self.input_read.* < self.input.len) {
+            self.staged_bits.* |= @as(u128, self.input[self.input_read.*]) << @intCast(self.staged_bit_count.*);
+            self.staged_bit_count.* += 8;
+            self.input_read.* += 1;
         }
         const mask = (@as(u128, 1) << @intCast(count)) - 1;
-        return @intCast(bits & mask);
+        return @intCast(self.staged_bits.* & mask);
     }
 
     /// Consume bits proven available by `hasStagedBits`. Bytes needed to
