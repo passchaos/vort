@@ -70,14 +70,14 @@ pub const Reader = struct {
         return self.peekStaged(T, count);
     }
 
-    pub fn peekBits9Padded(self: *Reader) u9 {
+    pub inline fn peekBits9Padded(self: *Reader) u9 {
         // Auxiliary command/distance tables always probe exactly nine bits.
         // Keep that hot path free of the generic width check and mask.
         self.fill(9);
         return @truncate(self.bit_buffer);
     }
 
-    pub fn peekBits10Padded(self: *Reader) u10 {
+    pub inline fn peekBits10Padded(self: *Reader) u10 {
         self.fill(10);
         return @truncate(self.bit_buffer);
     }

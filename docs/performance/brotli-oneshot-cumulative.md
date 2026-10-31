@@ -33,5 +33,24 @@ of one change, and the reference library is not part of this epoch. It does not
 establish one-shot leadership; it records that the shared ring and context
 changes did not regress the API overall and improved the high-tree path.
 
+## Inlined one-shot peeks
+
+A `perf` profile of the one-shot q6 payload loop attributed 63.6% to the
+external literal lookup loop and 17.7% to
+`fast_bit_reader.Reader.peekBits10Padded`. The 9-bit and 10-bit peek helpers were
+ordinary calls wrapping the already-inlined `fill`; marking them inline removes
+the call boundary and lets the refill fuse into the literal loop.
+
+A paired 384-process four-sweep screen against the previous current-source build
+gives q6 64 KiB/1 MiB `0.9833/0.9794` and q11 `1.0022/1.0067`. All 48 rows
+reduce to `0.9928`, with independent sweeps
+`0.9932/0.9955/0.9935/0.9936`. The best row is OSDB 1 MiB q6 at `0.929` and the
+worst is XML 64 KiB q6 at `1.040`. The q6 path benefits from the fused external
+lookup; q11 is neutral within code-layout variance. The change is retained
+because the q6 gain is consistent and the helpers are trivial.
+
+The complete ReleaseFast Brotli suite passes 1504/1505 with one 32-bit-specific
+skip and zero failures.
+
 Raw records and comparison files stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.

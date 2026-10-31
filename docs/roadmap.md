@@ -24851,3 +24851,16 @@ reuse, so production keeps the simpler independently owned plans.
   also passes with the committed source. The copy path, long-code fallback,
   non-power-of-two history, reference one-shot epochs and Zstd/Deflate decoder
   work remain; the three-codec industry-best goal stays active.
+
+- 2026-11-01: The fast Brotli reader's 9-bit and 10-bit padded peek helpers are
+  now inline, letting the refill fuse into the one-shot external literal loop.
+  [Evidence](performance/brotli-oneshot-cumulative.md) records a paired
+  384-process four-sweep screen against the previous current-source build:
+  q6 64 KiB/1 MiB are `0.9833/0.9794`, q11 are `1.0022/1.0067`, all 48 rows
+  reduce to `0.9928`, and the sweeps independently give
+  `0.9932/0.9955/0.9935/0.9936`. The best row is OSDB 1 MiB q6 `0.929` and the
+  worst is XML 64 KiB q6 `1.040`. The q6 path benefits; q11 is neutral within
+  code-layout variance. The complete ReleaseFast Brotli suite passes 1504/1505
+  with one platform skip. Reference one-shot epochs, the copy path, long-code
+  fallback and Zstd/Deflate decoder work remain; the three-codec industry-best
+  goal stays active.
