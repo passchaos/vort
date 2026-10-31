@@ -24837,3 +24837,17 @@ reuse, so production keeps the simpler independently owned plans.
   Brotli suite passes 1504/1505 with one platform skip. Pair refill, the copy
   path, long-code fallback, non-power-of-two history and one-shot API epochs
   remain work; the three-codec industry-best goal stays active.
+
+- 2026-11-01: A cumulative one-shot screen compares the frozen header-ownership
+  baseline with the current source through the public `br.decodeStreamInto`
+  route on the same 48 Silesia rows. [Evidence](performance/brotli-oneshot-cumulative.md)
+  records 384 processes over four alternating sweeps: q6 64 KiB/1 MiB are
+  `1.0018/1.0126`, q11 are `0.9078/0.8736`, all rows reduce to `0.9471`, and
+  the sweeps independently give `0.9484/0.9447/0.9492/0.9469`. The median row
+  is `1.0003`; the gain is concentrated in high-tree q11 frames, best Mozilla
+  1 MiB q11 `0.482` and worst ooffice 64 KiB q6 `1.041`. This is a cumulative
+  screen, not a paired single-change isolation or a reference comparison, and
+  it does not establish one-shot leadership. Project-wide `zig build -j2 check`
+  also passes with the committed source. The copy path, long-code fallback,
+  non-power-of-two history, reference one-shot epochs and Zstd/Deflate decoder
+  work remain; the three-codec industry-best goal stays active.
