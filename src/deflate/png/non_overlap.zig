@@ -11,33 +11,37 @@ pub const text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
-// Keep both implementations linked on every target so architecture policy
-// does not perturb the ordinary inflater's text layout. The caller hoists this
-// volatile read out of its dynamic-block loop.
-var specialization_enabled: u8 = @intFromBool(builtin.cpu.arch == .x86_64);
-
 /// Select the measured Kodak-style table shape: a primary-coverable literal
 /// tree paired with a deep distance tree dominated by short non-overlap
 /// matches. Fifteen-bit literal trees such as the Fantasy fixture retain the
 /// ordinary window loop, where this specialization is a measured regression.
-/// The specialized branch layout was selected on x86-64; AArch64 measurements
-/// favor the ordinary semantic window loop for the same shape.
-pub noinline fn enabled() linksection(text_section) bool {
-    return @as(*const volatile u8, &specialization_enabled).* != 0;
-}
-
+/// The 14-bit branch layout was selected on x86-64. Other architectures keep
+/// the specialization only for shorter primary-coverable literal trees until
+/// equivalent target-local evidence justifies widening the policy.
 pub noinline fn shouldUse(
     literal_max_bits: u4,
     distance_max_bits: u4,
-) linksection(text_section) bool {
-    return shapeEligible(literal_max_bits, distance_max_bits);
-}
+) linksection(text_section) u32 {
+    if (comptime builtin.cpu.arch == .aarch64 or
+        builtin.cpu.arch == .aarch64_be)
+    {
+        return asm volatile (
+            \\and w8, %[distance:w], #0xf
+            \\mov w9, #14
+            \\bics wzr, w9, %[literal:w]
+            \\ccmp w8, #11, #0, ne
+            \\cset %[result:w], hi
+            : [result] "={x0}" (-> u32),
+            : [literal] "{x0}" (literal_max_bits),
+              [distance] "{x1}" (distance_max_bits),
+            : .{ .nzcv = true, .x8 = true, .x9 = true });
+    }
 
-inline fn shapeEligible(
-    literal_max_bits: u4,
-    distance_max_bits: u4,
-) bool {
-    return literal_max_bits <= 14 and distance_max_bits >= 12;
+    const literal_mask: u32 = if (builtin.cpu.arch == .x86_64) 0xf else 0xe;
+    return @intFromBool(
+        (literal_mask & ~@as(u32, literal_max_bits)) != 0 and
+            distance_max_bits >= 12,
+    );
 }
 
 /// Copy a short non-overlapping match inside the resumable window fast loop.
@@ -62,14 +66,14 @@ pub inline fn copyShortWindowMatch(
 }
 
 test "deep-distance PNG non-overlap policy has an exact threshold" {
-    try std.testing.expect(!shapeEligible(14, 11));
-    try std.testing.expect(shapeEligible(14, 12));
-    try std.testing.expect(shapeEligible(14, 15));
-    try std.testing.expect(!shapeEligible(15, 12));
-    try std.testing.expect(!shapeEligible(15, 15));
+    try std.testing.expectEqual(@as(u32, 0), shouldUse(13, 11));
+    try std.testing.expectEqual(@as(u32, 1), shouldUse(13, 12));
+    try std.testing.expectEqual(@as(u32, 1), shouldUse(13, 15));
+    try std.testing.expectEqual(@as(u32, 0), shouldUse(15, 12));
+    try std.testing.expectEqual(@as(u32, 0), shouldUse(15, 15));
     try std.testing.expectEqual(
-        builtin.cpu.arch == .x86_64,
-        enabled(),
+        @as(u32, @intFromBool(builtin.cpu.arch == .x86_64)),
+        shouldUse(14, 12),
     );
 }
 

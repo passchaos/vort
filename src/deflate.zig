@@ -13090,7 +13090,6 @@ pub fn decodePngWindowedZlibImageWithOptions(
     var reader = bitstream.BufferedBitReader.init(
         input[zlib_header.data_offset..],
     );
-    const allow_non_overlap = png_non_overlap.enabled();
     var stream_done = false;
     while (!stream_done) {
         const header = try readBlockHeader(&reader);
@@ -13186,10 +13185,10 @@ pub fn decodePngWindowedZlibImageWithOptions(
                     &distance_table_,
                     if (semantic) &semantic_decoder else null,
                     single_distance,
-                    allow_non_overlap and png_non_overlap.shouldUse(
+                    png_non_overlap.shouldUse(
                         parsed.literal_max_bits,
                         parsed.distance_max_bits,
-                    ),
+                    ) != 0,
                 );
             },
             else => return error.InvalidDeflateBlockType,
