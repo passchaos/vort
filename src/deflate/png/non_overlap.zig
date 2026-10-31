@@ -12,8 +12,8 @@ pub const text_section = switch (builtin.object_format) {
 };
 
 // Keep both implementations linked on every target so architecture policy
-// does not perturb the ordinary inflater's text layout. The volatile read is
-// once per dynamic block, outside the token loop.
+// does not perturb the ordinary inflater's text layout. The caller hoists this
+// volatile read out of its dynamic-block loop.
 var specialization_enabled: u8 = @intFromBool(builtin.cpu.arch == .x86_64);
 
 /// Select the measured Kodak-style table shape: a primary-coverable literal
@@ -22,13 +22,15 @@ var specialization_enabled: u8 = @intFromBool(builtin.cpu.arch == .x86_64);
 /// ordinary window loop, where this specialization is a measured regression.
 /// The specialized branch layout was selected on x86-64; AArch64 measurements
 /// favor the ordinary semantic window loop for the same shape.
+pub noinline fn enabled() linksection(text_section) bool {
+    return @as(*const volatile u8, &specialization_enabled).* != 0;
+}
+
 pub noinline fn shouldUse(
     literal_max_bits: u4,
     distance_max_bits: u4,
 ) linksection(text_section) bool {
-    if (!shapeEligible(literal_max_bits, distance_max_bits)) return false;
-    const enabled = @as(*const volatile u8, &specialization_enabled).*;
-    return enabled != 0;
+    return shapeEligible(literal_max_bits, distance_max_bits);
 }
 
 inline fn shapeEligible(
@@ -67,7 +69,7 @@ test "deep-distance PNG non-overlap policy has an exact threshold" {
     try std.testing.expect(!shapeEligible(15, 15));
     try std.testing.expectEqual(
         builtin.cpu.arch == .x86_64,
-        shouldUse(14, 12),
+        enabled(),
     );
 }
 
