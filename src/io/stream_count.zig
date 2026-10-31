@@ -39,8 +39,12 @@ pub fn bounded(value: Counter, limit: usize) usize {
 }
 
 /// Convert a logical stream position to an index in a nonempty history ring.
+/// Power-of-two capacities, including the common bounded-history sizes, use a
+/// mask instead of a per-symbol division.
 pub fn ringIndex(position: Counter, capacity: usize) usize {
     std.debug.assert(capacity != 0);
+    if (std.math.isPowerOfTwo(capacity))
+        return @intCast(position & fromLocal(capacity - 1));
     return @intCast(position % fromLocal(capacity));
 }
 
@@ -54,6 +58,14 @@ test "stream count preserves native types and crosses the 32-bit byte boundary" 
     try std.testing.expectEqual(boundary + 17, try addLocal(boundary - 3, 20));
     try std.testing.expectEqual(@as(usize, 17), bounded(boundary + 17, 17));
     try std.testing.expectEqual(@as(usize, @intCast((boundary + 17) % 31)), ringIndex(boundary + 17, 31));
+    // Power-of-two rings use a mask; every position must match the modulo.
+    for ([_]usize{ 1, 2, 64, 1024, 1 << 20 }) |capacity| {
+        try std.testing.expectEqual(@as(usize, 0), ringIndex(0, capacity));
+        try std.testing.expectEqual(capacity - 1, ringIndex(capacity - 1, capacity));
+        try std.testing.expectEqual(@as(usize, 0), ringIndex(capacity, capacity));
+        try std.testing.expectEqual(@as(usize, 7 & (capacity - 1)), ringIndex(7, capacity));
+        try std.testing.expectEqual(@as(usize, @intCast((boundary + 17) % capacity)), ringIndex(boundary + 17, capacity));
+    }
 }
 
 test "stream count overflow refuses an advance without changing state" {

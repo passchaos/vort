@@ -24787,3 +24787,20 @@ reuse, so production keeps the simpler independently owned plans.
   `0.951`. The complete ReleaseFast Brotli suite passes 1504/1505 with one
   platform skip. The literal loop, copy dispatch and per-step bookkeeping remain
   the next decoder targets; the three-codec industry-best goal stays active.
+
+- 2026-11-01: `stream_count.ringIndex` now masks power-of-two history capacities
+  instead of dividing per access; non-power-of-two capacities keep the modulo.
+  The change is shared by Brotli, Deflate, Zstd and other incremental decoders,
+  and the stream-count test covers capacities 1/2/64/1024/2^20 and a position
+  above the 32-bit boundary. [Evidence](performance/stream-ring-index-mask.md)
+  records a 576-process four-sweep paired epoch over the same 48 Silesia
+  rows. The ring increment alone reduces time to `0.9542` geometric mean
+  (`0.9605/0.9535/0.9481/0.9548` for q6/q11 at 64 KiB/1 MiB), with independent
+  sweeps `0.9482/0.9542/0.9554/0.9533`; every row is faster, from OSDB 1 MiB
+  q11 `0.918` to NCI 64 KiB q6 `0.983`. Combined with the prepared lookup and
+  literal-context increments, the incremental decoder reaches `0.5117` of the
+  frozen baseline (`0.5600/0.4904/0.5307/0.4703`), best Mozilla 1 MiB q6
+  `0.172`, worst x-ray 1 MiB q11 `0.954`. The complete ReleaseFast Brotli
+  suite passes 1504/1505 with one platform skip. Non-power-of-two history and
+  the literal/copy/per-step paths remain work; the three-codec industry-best
+  goal stays active.
