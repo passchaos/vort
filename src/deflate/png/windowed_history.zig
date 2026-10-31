@@ -266,3 +266,50 @@ test "windowed history compacts only at an output boundary" {
     try std.testing.expect(!window.shouldCompactAfterStep(false));
     try std.testing.expect(!window.shouldCompactAfterStep(true));
 }
+
+test "windowed history respects lookback tails and publishes only valid rows" {
+    const info = try png.pngImageInfo(3, 5, 8, .grayscale);
+    const filtered = [_]u8{
+        0, 11, 22, 33,
+        1, 7,  1,  1,
+        2, 1,  2,  3,
+        0, 5,  6,  7,
+        2, 1,  1,  1,
+    };
+    const expected = [_]u8{ 11, 22, 33, 7, 8, 9, 8, 10, 12, 5, 6, 7, 6, 7, 8 };
+    var scratch: [general_scratch_len]u8 = undefined;
+    @memcpy(scratch[0..filtered.len], &filtered);
+    var output: [15]u8 = @splat(0xaa);
+    var state = try ImageState.init(&scratch, info, &output, true);
+    // Exactly four complete rows are outside lookback; a three-byte partial
+    // row cannot be released even when its filter and two pixels are present.
+    state.window.write_pos = lookback_len + 19;
+    try state.drainRows(false);
+    try std.testing.expectEqual(@as(usize, 4), state.row_index);
+    try std.testing.expectEqual(@as(usize, 16), state.window.row_start);
+    try std.testing.expectEqualSlices(u8, expected[0..12], output[0..12]);
+    try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xaa, 0xaa }, output[12..]);
+    try state.drainRows(false);
+    try std.testing.expectEqual(@as(usize, 4), state.row_index);
+    state.window.write_pos = lookback_len + filtered.len;
+    try state.drainRows(false);
+    try std.testing.expectEqualSlices(u8, &expected, &output);
+    var reference_adler = checksum.Adler32{};
+    reference_adler.update(&filtered);
+    try std.testing.expectEqual(reference_adler.digest(), state.adlerDigest());
+
+    // Final draining sees complete rows without the 32-KiB subtraction.
+    @memcpy(scratch[0..filtered.len], &filtered);
+    scratch[8] = 5;
+    @memset(&output, 0xbb);
+    state = try ImageState.init(&scratch, info, &output, true);
+    state.window.write_pos = filtered.len;
+    try std.testing.expectError(error.CorruptFrame, state.drainRows(true));
+    try std.testing.expectEqual(@as(usize, 2), state.row_index);
+    try std.testing.expectEqual(@as(usize, 8), state.window.row_start);
+    try std.testing.expectEqualSlices(u8, expected[0..6], output[0..6]);
+    for (output[6..]) |byte| try std.testing.expectEqual(@as(u8, 0xbb), byte);
+    reference_adler = .{};
+    reference_adler.update(filtered[0..8]);
+    try std.testing.expectEqual(reference_adler.digest(), state.adlerDigest());
+}

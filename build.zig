@@ -226,6 +226,7 @@ pub fn build(b: *std.Build) void {
         .filters = &.{
             "PNG windowed decoder",
             "windowed history releases and compacts complete rows only",
+            "windowed history respects lookback tails and publishes only valid rows",
             "deep-distance PNG non-overlap",
         },
     });
