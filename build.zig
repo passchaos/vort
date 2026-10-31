@@ -220,6 +220,26 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const png_windowed_tests = b.addTest(.{
+        .name = "vort-png-windowed-tests",
+        .root_module = tests_mod,
+        .filters = &.{
+            "PNG windowed decoder",
+            "windowed history releases and compacts complete rows only",
+            "deep-distance PNG non-overlap",
+        },
+    });
+    const run_png_windowed_tests = b.addRunArtifact(png_windowed_tests);
+    const png_windowed_test_step = b.step(
+        "test-png-windowed",
+        "Run focused PNG windowed inflate and row-lifecycle tests",
+    );
+    png_windowed_test_step.dependOn(&run_png_windowed_tests.step);
+    const png_windowed_build_step = b.step(
+        "build-png-windowed-tests",
+        "Compile focused PNG windowed tests without running them",
+    );
+    png_windowed_build_step.dependOn(&png_windowed_tests.step);
     const tar_incremental_writer_tests = b.addTest(.{
         .name = "vort-tar-incremental-writer-tests",
         .root_module = tests_mod,

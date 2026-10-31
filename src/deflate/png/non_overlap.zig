@@ -11,14 +11,30 @@ pub const text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
+// Keep both implementations linked on every target so architecture policy
+// does not perturb the ordinary inflater's text layout. The volatile read is
+// once per dynamic block, outside the token loop.
+var specialization_enabled: u8 = @intFromBool(builtin.cpu.arch == .x86_64);
+
 /// Select the measured Kodak-style table shape: a primary-coverable literal
 /// tree paired with a deep distance tree dominated by short non-overlap
 /// matches. Fifteen-bit literal trees such as the Fantasy fixture retain the
 /// ordinary window loop, where this specialization is a measured regression.
+/// The specialized branch layout was selected on x86-64; AArch64 measurements
+/// favor the ordinary semantic window loop for the same shape.
 pub noinline fn shouldUse(
     literal_max_bits: u4,
     distance_max_bits: u4,
 ) linksection(text_section) bool {
+    if (!shapeEligible(literal_max_bits, distance_max_bits)) return false;
+    const enabled = @as(*const volatile u8, &specialization_enabled).*;
+    return enabled != 0;
+}
+
+inline fn shapeEligible(
+    literal_max_bits: u4,
+    distance_max_bits: u4,
+) bool {
     return literal_max_bits <= 14 and distance_max_bits >= 12;
 }
 
@@ -44,11 +60,15 @@ pub inline fn copyShortWindowMatch(
 }
 
 test "deep-distance PNG non-overlap policy has an exact threshold" {
-    try std.testing.expect(!shouldUse(14, 11));
-    try std.testing.expect(shouldUse(14, 12));
-    try std.testing.expect(shouldUse(14, 15));
-    try std.testing.expect(!shouldUse(15, 12));
-    try std.testing.expect(!shouldUse(15, 15));
+    try std.testing.expect(!shapeEligible(14, 11));
+    try std.testing.expect(shapeEligible(14, 12));
+    try std.testing.expect(shapeEligible(14, 15));
+    try std.testing.expect(!shapeEligible(15, 12));
+    try std.testing.expect(!shapeEligible(15, 15));
+    try std.testing.expectEqual(
+        builtin.cpu.arch == .x86_64,
+        shouldUse(14, 12),
+    );
 }
 
 test "short non-overlapping window match matches reference and bounds speculation" {
