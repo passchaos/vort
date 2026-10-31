@@ -24864,3 +24864,13 @@ reuse, so production keeps the simpler independently owned plans.
   with one platform skip. Reference one-shot epochs, the copy path, long-code
   fallback and Zstd/Deflate decoder work remain; the three-codec industry-best
   goal stays active.
+
+- 2026-11-01: A one-shot raw Deflate profile on Mozilla 1 MiB level 6 attributes
+  about 80% of decoder cycles to
+  `deflate.decodeSemanticDynamicBlockIntoBufferedReader`. The top source lines
+  are the multi-literal table loads (`entry3`, `entry4`, `entry12`), the 64-bit
+  reservoir refill and the batched 64-byte literal stores. The loop is already
+  multi-literal, unrolled and table-driven; the next Deflate step needs a wider
+  literal table, a different staging shape or a new semantic decoder layout
+  rather than another local check removal. This profile is the current Deflate
+  decoder work item; the three-codec industry-best goal stays active.
