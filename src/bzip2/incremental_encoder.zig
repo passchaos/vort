@@ -3,6 +3,7 @@ const bit_writer = @import("bit_writer.zig");
 const bzip2_crc = @import("crc.zig");
 const core = @import("../core.zig");
 const encoder = @import("encoder.zig");
+const rle_buffer = @import("rle_buffer.zig");
 
 /// Block-bounded Bzip2 encoder. RLE1 runs and the partially filled MSB-first
 /// output byte survive arbitrary caller input/output boundaries, making the
@@ -280,7 +281,7 @@ pub const Encoder = struct {
             try self.emitBlock();
             return true;
         }
-        try self.rle_block.ensureTotalCapacityPrecise(self.allocator, self.block_limit);
+        try rle_buffer.ensure(self.allocator, &self.rle_block, encoded_len, self.block_limit);
         const byte = self.run_byte orelse return error.InvalidBzip2Stream;
         if (group_len < 4) {
             for (0..group_len) |_| self.rle_block.appendAssumeCapacity(byte);

@@ -30,6 +30,8 @@ test {
     _ = @import("bzip2/bwt_period_tests.zig");
     _ = @import("bzip2/huffman_lengths_tests.zig");
     _ = @import("bzip2/huffman_plan_tests.zig");
+    _ = @import("bzip2/rle_buffer_tests.zig");
+    _ = @import("bzip2/encoder_memory_tests.zig");
     _ = @import("bzip2/output_cursor.zig");
     _ = @import("bzip2/incremental/contracts_tests.zig");
     _ = decoder;

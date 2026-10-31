@@ -5,6 +5,7 @@ const bzip2_crc = @import("crc.zig");
 const decoder = @import("decoder.zig");
 const huffman_plan = @import("huffman_plan.zig");
 const huffman_writer = @import("huffman_writer.zig");
+const rle_buffer = @import("rle_buffer.zig");
 
 pub const Error = decoder.Error;
 pub const EncodeStrategy = huffman_plan.Strategy;
@@ -26,10 +27,9 @@ pub const BwtBlock = bwt.Block;
 pub const bwtTransformAlloc = bwt.transformAlloc;
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) ![]u8 {
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-    _ = try encodeAppend(allocator, &output, input, options);
-    return output.toOwnedSlice(allocator);
+    var encoded = try buildStream(allocator, input, options);
+    errdefer encoded.deinit(allocator);
+    return encoded.toOwnedSlice(allocator);
 }
 
 pub fn encodeInto(
@@ -52,24 +52,33 @@ pub fn encodeAppend(
     input: []const u8,
     options: EncodeOptions,
 ) !usize {
+    var encoded = try buildStream(allocator, input, options);
+    defer encoded.deinit(allocator);
+    try out.ensureUnusedCapacity(allocator, encoded.items.len);
+    out.appendSliceAssumeCapacity(encoded.items);
+    return encoded.items.len;
+}
+
+/// Build one owned stream. Allocating convenience APIs keep this storage;
+/// append publishes it only after the complete encoding has succeeded.
+fn buildStream(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) !std.ArrayList(u8) {
     if (options.block_size_100k < 1 or options.block_size_100k > 9)
         return error.InvalidBzip2Header;
     const block_limit = @as(usize, options.block_size_100k) * 100_000;
 
     var encoded: std.ArrayList(u8) = .empty;
-    defer encoded.deinit(allocator);
+    errdefer encoded.deinit(allocator);
     try encoded.appendSlice(allocator, "BZh");
     try encoded.append(allocator, '0' + @as(u8, options.block_size_100k));
     var writer = bit_writer.BitWriter.init(allocator, &encoded);
 
     var rle_block: std.ArrayList(u8) = .empty;
     defer rle_block.deinit(allocator);
-    try rle_block.ensureTotalCapacity(allocator, block_limit);
 
     var input_offset: usize = 0;
     var combined_crc: u32 = 0;
     while (input_offset < input.len) {
-        const block_result = try fillRleBlock(&rle_block, input[input_offset..], block_limit);
+        const block_result = try fillRleBlock(allocator, &rle_block, input[input_offset..], block_limit);
         if (block_result.input_read == 0) return error.InvalidBzip2Stream;
         input_offset += block_result.input_read;
 
@@ -81,12 +90,10 @@ pub fn encodeAppend(
 
     try writeStreamEnd(&writer, combined_crc);
 
-    try out.ensureUnusedCapacity(allocator, encoded.items.len);
-    out.appendSliceAssumeCapacity(encoded.items);
-    return encoded.items.len;
+    return encoded;
 }
 
-fn fillRleBlock(block: *std.ArrayList(u8), input: []const u8, block_limit: usize) !RleBlock {
+fn fillRleBlock(allocator: std.mem.Allocator, block: *std.ArrayList(u8), input: []const u8, block_limit: usize) !RleBlock {
     block.clearRetainingCapacity();
     var input_offset: usize = 0;
     var crc = bzip2_crc.Crc32{};
@@ -102,6 +109,7 @@ fn fillRleBlock(block: *std.ArrayList(u8), input: []const u8, block_limit: usize
                 if (block.items.len == 0) return error.InvalidBzip2Stream;
                 return .{ .input_read = input_offset, .crc32 = crc.digest() };
             }
+            try rle_buffer.ensure(allocator, block, encoded_len, block_limit);
             if (run_len < 4) {
                 for (0..run_len) |_| block.appendAssumeCapacity(byte);
             } else {

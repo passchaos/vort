@@ -3158,6 +3158,24 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| bzip2_bwt_bench_run.addArgs(args);
     b.step("run-bzip2-bwt-bench", "Measure Bzip2 BWT or one-shot encoding on a caller file").dependOn(&bzip2_bwt_bench_run.step);
 
+    const bzip2_resource_mod = b.createModule(.{
+        .root_source_file = b.path("tools/bzip2/encoder_resource_probe.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "bzip2", .module = bzip2_tests_mod },
+            .{ .name = "benchmark_provenance", .module = b.createModule(.{ .root_source_file = b.path("tools/benchmark_provenance.zig"), .target = target, .optimize = optimize }) },
+        },
+    });
+    const bzip2_resource_probe = b.addExecutable(.{ .name = "vort-bzip2-encoder-resource-probe", .root_module = bzip2_resource_mod });
+    b.step("build-bzip2-resource-probe", "Build encoder allocation and retained-capacity probe").dependOn(&b.addInstallArtifact(bzip2_resource_probe, .{}).step);
+    const run_bzip2_resource_probe = b.addRunArtifact(bzip2_resource_probe);
+    if (b.args) |args| run_bzip2_resource_probe.addArgs(args);
+    b.step("run-bzip2-resource-probe", "Inspect allocation-inclusive Bzip2 encoder storage").dependOn(&run_bzip2_resource_probe.step);
+    const bzip2_resource_tests = b.addTest(.{ .name = "vort-bzip2-resource-probe-tests", .root_module = bzip2_resource_mod });
+    b.step("test-bzip2-resource-probe", "Validate encoder allocation telemetry").dependOn(&b.addRunArtifact(bzip2_resource_tests).step);
+
     const bzip2_contract_probe = b.addExecutable(.{ .name = "vort-bzip2-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/bzip2/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "bzip2", .module = bzip2_tests_mod }} }) });
     const bzip2_contract_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/stream_contract_diff.py", "--probe" });
     bzip2_contract_diff.addArtifactArg(bzip2_contract_probe);
@@ -7716,6 +7734,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_interop_probe_exe.step);
     check_step.dependOn(&bzip2_contract_probe.step);
     check_step.dependOn(&bzip2_bwt_bench.step);
+    check_step.dependOn(&bzip2_resource_probe.step);
     check_step.dependOn(&snappy_contract_probe.step);
     check_step.dependOn(&snappy_framing_contract_probe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);

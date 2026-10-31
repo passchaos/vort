@@ -47,10 +47,12 @@ pub fn main(init: std.process.Init) !void {
     if (options.iterations == 0 or options.samples == 0 or
         options.block_size < 1 or options.block_size > 9 or
         (options.scope != .bwt and options.algorithm != .current)) return error.InvalidArgument;
-    // The reader needs room to observe EOF after an exactly maximum-size file.
-    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, options.input orelse return error.MissingArgument, init.gpa, .limited(900_001));
+    // Whole-encode comparisons may cover multi-block files. Raw BWT remains
+    // bounded to one format block, with one extra byte needed to observe EOF.
+    const input_limit: usize = if (options.scope == .bwt) 900_000 else 64 * 1024 * 1024;
+    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, options.input orelse return error.MissingArgument, init.gpa, .limited(input_limit + 1));
     defer init.gpa.free(input);
-    if ((input.len == 0 and options.scope == .bwt) or input.len > 900_000) return error.InvalidArgument;
+    if ((input.len == 0 and options.scope == .bwt) or input.len > input_limit) return error.InvalidArgument;
     var encode_options: encoder.EncodeOptions = .{ .block_size_100k = options.block_size };
     if (comptime @hasField(encoder.EncodeOptions, "strategy")) {
         if (options.strategy) |name|
@@ -63,9 +65,9 @@ pub fn main(init: std.process.Init) !void {
     defer info.deinit(init.gpa);
 
     // Exact comparison and hashes are outside the timed allocation/transform loop.
-    const current = if (input.len != 0) try encoder.bwtTransformAlloc(init.gpa, input) else null;
+    const current = if (input.len != 0 and input.len <= 900_000) try encoder.bwtTransformAlloc(init.gpa, input) else null;
     defer if (current) |block| block.deinit(init.gpa);
-    const full = if (input.len != 0) try reference.transformAlloc(init.gpa, input) else null;
+    const full = if (input.len != 0 and input.len <= 900_000) try reference.transformAlloc(init.gpa, input) else null;
     defer if (full) |block| block.deinit(init.gpa);
     if (current) |block| {
         if (block.original_pointer != full.?.original_pointer or !std.mem.eql(u8, block.bytes, full.?.bytes))
