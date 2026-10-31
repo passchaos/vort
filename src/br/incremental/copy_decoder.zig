@@ -429,21 +429,47 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = if (self.pending_literals == 0) .distance else .literals;
                 },
                 .literals => {
-                    while (self.pending_literals != 0 and output_written < output.len) {
-                        var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    // Keep one reader and one ring cursor for the whole run.
+                    // The output limit is checked once for the largest run this
+                    // buffer can accept instead of once per literal.
+                    var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    const output_room = output.len - output_written;
+                    const total_room = self.outputLimit() -| self.total_output;
+                    const cap = @min(output_room, total_room);
+                    if (cap == 0 and output_room != 0 and self.pending_literals != 0)
+                        return self.fail(.literals, error.OutputLimitExceeded);
+                    var emitted: usize = 0;
+                    var ring = stream_count.ringIndex(self.total_output, self.history.len);
+                    while (self.pending_literals != 0 and emitted < cap) {
                         const saved = reader.checkpoint();
                         const saved_literal = Codec.literalState(&self.header);
                         const literal = Codec.readLiteral(&self.header, &reader, self.previous[1], self.previous[0]) catch |err| switch (err) {
                             error.TruncatedFrame => {
                                 Codec.restoreLiteralState(&self.header, saved_literal);
                                 try reader.restoreKeepingInput(saved);
+                                output_written += emitted;
+                                self.total_output += emitted;
                                 return result(input_read, output_written, .need_input);
                             },
-                            else => return self.fail(.literals, err),
+                            else => {
+                                output_written += emitted;
+                                self.total_output += emitted;
+                                return self.fail(.literals, err);
+                            },
                         };
-                        try self.emit(output, &output_written, literal);
+                        output[output_written + emitted] = literal;
+                        self.history[ring] = literal;
+                        ring += 1;
+                        if (ring == self.history.len) ring = 0;
+                        self.previous[0] = self.previous[1];
+                        self.previous[1] = literal;
+                        emitted += 1;
                         self.pending_literals -= 1;
                     }
+                    output_written += emitted;
+                    // `cap` was checked against the cumulative limit above, so
+                    // this add cannot overflow.
+                    self.total_output += emitted;
                     if (self.pending_literals != 0) return result(input_read, output_written, .need_output);
                     if (self.total_output == self.decoded_len) {
                         self.pending_copy = 0;

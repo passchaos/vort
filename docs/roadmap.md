@@ -24804,3 +24804,20 @@ reuse, so production keeps the simpler independently owned plans.
   suite passes 1504/1505 with one platform skip. Non-power-of-two history and
   the literal/copy/per-step paths remain work; the three-codec industry-best
   goal stays active.
+
+- 2026-11-01: The Brotli incremental literal phase now keeps one bit reader and
+  one history ring cursor for the whole command run, computes the accepted run
+  length from the caller output room and cumulative limit once, and commits
+  output and total counters in one step. The limit-exceeded path still returns
+  `OutputLimitExceeded` rather than `need_output`.
+  [Evidence](performance/brotli-batched-literal-run.md) records a 576-process
+  four-sweep paired epoch: the batched run reduces time to `0.9927` geometric
+  mean versus the ring-mask build (`0.9974/0.9898/0.9932/0.9905` for q6/q11 at
+  64 KiB/1 MiB), with independent sweeps `0.9918/0.9927/0.9947/0.9917`. The
+  best row is Mozilla 1 MiB q6 `0.899` and the worst is Mozilla 64 KiB q6
+  `1.029`. Combined with the prepared lookup, literal-context and ring-mask
+  increments, the incremental decoder reaches `0.5076` of the frozen baseline
+  (`0.5553/0.4861/0.5288/0.4650`). The complete ReleaseFast Brotli suite passes
+  1504/1505 with one platform skip. The copy path, long-code fallback,
+  non-power-of-two history and one-shot API epochs remain work; the three-codec
+  industry-best goal stays active.
