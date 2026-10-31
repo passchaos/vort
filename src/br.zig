@@ -21350,7 +21350,7 @@ fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, wr
 }
 
 fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usize {
-    return literal_context.value(mode, previous, second_previous);
+    return literal_context.valueClustered(mode, previous, second_previous);
 }
 
 const DecodedBrotliDistance = struct { distance: usize, update_ring: bool };

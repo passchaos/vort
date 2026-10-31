@@ -12,16 +12,15 @@ pub fn value(mode: u2, previous: u8, second_previous: u8) usize {
     };
 }
 
-/// Table-driven equivalent used only by the high-tree Brotli payload loop.
-/// Keeping the ordinary branch classifier intact avoids perturbing compact
-/// streams while clustered streams replace its character-range branches with
-/// two cache-resident byte loads.
+/// Table-driven equivalent used by the incremental payload loop. UTF-8 and
+/// signed modes replace their character-range branches with cache-resident
+/// byte loads; the two compact modes stay single bit operations.
 pub inline fn valueClustered(mode: u2, previous: u8, second_previous: u8) usize {
     return switch (mode) {
         0 => previous & 0x3f,
         1 => previous >> 2,
         mode_utf8 => utf8_last_byte_table[previous] | utf8_second_last_byte_table[second_previous],
-        3 => (signedBucket(previous) << 3) | signedBucket(second_previous),
+        3 => (@as(usize, signed_bucket_table[previous]) << 3) | signed_bucket_table[second_previous],
     };
 }
 
@@ -60,6 +59,12 @@ const utf8_last_byte_table = blk: {
 const utf8_second_last_byte_table = blk: {
     var table: [256]u8 = undefined;
     for (&table, 0..) |*slot, byte| slot.* = @intCast(utf8SecondLastByte(@intCast(byte)));
+    break :blk table;
+};
+
+const signed_bucket_table = blk: {
+    var table: [256]u8 = undefined;
+    for (&table, 0..) |*slot, byte| slot.* = @intCast(signedBucket(@intCast(byte)));
     break :blk table;
 };
 

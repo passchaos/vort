@@ -24770,3 +24770,20 @@ reuse, so production keeps the simpler independently owned plans.
   one-shot or streaming leadership. Per-step bookkeeping, context selection,
   copy dispatch, one-shot API epochs and broader CPU/RSS comparisons remain
   work; the three-codec industry-best goal stays active.
+
+- 2026-11-01: Brotli's incremental literal context selection is now table-driven.
+  UTF-8 and signed modes replace their character-range branches with 256-byte
+  table loads, while LSB6/MSB6 stay a mask or shift; the exhaustive
+  `value`/`valueClustered` equivalence test remains the oracle. A paired
+  three-way 288-process epoch measures the frozen baseline, the lookup-only
+  build and the context-table build in two sweeps.
+  [Evidence](performance/brotli-literal-context-tables.md) records
+  lookup/baseline geometric means `0.6556/0.5914/0.6317/0.5648`, context/lookup
+  `0.8853/0.8680/0.8837/0.8707` and combined `0.5805/0.5133/0.5582/0.4918`
+  for q6/q11 at 64 KiB/1 MiB. All 48 rows reduce to `0.6099`, `0.8769` and
+  `0.5348`, with independent sweeps `0.6085/0.6113`, `0.8781/0.8756` and
+  `0.5343/0.5352`. The context increment's best row is Mozilla 1 MiB q6 at
+  `0.624`; the combined best is `0.178` and the worst is x-ray 1 MiB q11 at
+  `0.951`. The complete ReleaseFast Brotli suite passes 1504/1505 with one
+  platform skip. The literal loop, copy dispatch and per-step bookkeeping remain
+  the next decoder targets; the three-codec industry-best goal stays active.
