@@ -1,5 +1,10 @@
 # DEFLATE prepared optimal workspace
 
+These measurements describe the earlier hash-chain prepared path. The
+[subsequent BT increment](deflate-bt-optimal.md) uses a separate compact
+DEFLATE-only owner for one-shot refinement; the generic `PreparedOptimal`
+interface and its arbitrary distance-cost behavior remain available.
+
 Levels 8 and 9 still perform the same fixed-cost seed parse and one
 dynamic-Huffman-aware modeled proposal described in
 [`deflate-dynamic-optimal-refinement.md`](deflate-dynamic-optimal-refinement.md).

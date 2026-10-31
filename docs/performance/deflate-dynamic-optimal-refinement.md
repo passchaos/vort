@@ -1,5 +1,10 @@
 # DEFLATE dynamic-Huffman optimal refinement
 
+This document retains the 2026-10-29 source and evidence epoch. The later
+[BT optimal increment](deflate-bt-optimal.md) changes the eligible path's
+matching algorithm, includes a full 65,536-byte input and supplies separate
+current-source time/size/requested-heap comparisons against libdeflate 1.26.
+
 Numeric levels 8 and 9, including the named `best` preset, now perform one
 bounded entropy-feedback parse for eligible one-shot inputs. The ordinary
 fixed-cost optimal parse remains the seed. Its provisional dynamic Huffman

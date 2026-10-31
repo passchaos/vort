@@ -374,9 +374,11 @@ pub const OptimalCostModel = struct {
     length: *const [max_match_len + 1]u16,
     /// Entry zero is unused. The slice must cover every distance permitted by
     /// the matching window supplied to the parser.
+    /// A zero window needs only the unused entry and produces literal tokens.
     distance: []const u16,
 
     fn validate(self: OptimalCostModel, window_len: usize, input_len: usize) Error!void {
+        if (window_len > max_window_len) return error.InvalidBlockPlan;
         if (self.distance.len <= window_len) return error.InvalidBlockPlan;
         for (self.literal) |cost| if (cost == 0) return error.InvalidBlockPlan;
         for (self.length[min_match_len..]) |cost| if (cost == 0) return error.InvalidBlockPlan;
@@ -384,7 +386,8 @@ pub const OptimalCostModel = struct {
 
         const max_literal = std.mem.max(u16, self.literal);
         const max_length = std.mem.max(u16, self.length[min_match_len..]);
-        const max_distance = std.mem.max(u16, self.distance[1 .. window_len + 1]);
+        // A zero window has no priced match distances; entry zero is unused.
+        const max_distance: u16 = if (window_len == 0) 0 else std.mem.max(u16, self.distance[1 .. window_len + 1]);
         const literal_bound = std.math.mul(usize, input_len, max_literal) catch
             return error.InvalidBlockPlan;
         const match_edge_bound = @as(usize, max_length) + max_distance;
@@ -460,6 +463,7 @@ pub const PreparedOptimal = struct {
     }
 
     pub fn planFixedAlloc(self: *PreparedOptimal, allocator: std.mem.Allocator) !GreedyPlan {
+        try validateFixedOptimalWindow(self.options.window_len);
         self.scratch.tokens.clearRetainingCapacity();
         const stats = try optimalPlanReuseWithIndex(
             &self.scratch,
@@ -508,6 +512,10 @@ fn validateOptimalInputLength(len: usize) error{InvalidBlockPlan}!void {
     if (comptime packed_optimal_length_choices)
         if (len > (std.math.maxInt(usize) >> optimal_length_bits) / 9)
             return error.InvalidBlockPlan;
+}
+
+fn validateFixedOptimalWindow(window_len: usize) error{InvalidBlockPlan}!void {
+    if (window_len > default_window_len) return error.InvalidBlockPlan;
 }
 
 pub const RepBeamScratch = struct {
@@ -1312,6 +1320,8 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
     return stats;
 }
 
+/// Fixed-Huffman proxy parsing permits windows 0...32 KiB. A zero window
+/// produces only literals; wider token windows need a caller-supplied model.
 pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
@@ -1612,6 +1622,7 @@ fn optimalPlanReuseInternalProfiled(
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
+    if (comptime !modeled) try validateFixedOptimalWindow(options.window_len);
     const n = input.len;
     // A literal-only path costs at most nine bits per byte. This bound is far
     // above any addressable allocation on supported targets and keeps the
@@ -4763,4 +4774,10 @@ fn acceptsEveryHashMatchReference(options: GreedyOptions) bool {
         if (match_cost > literal_min_cost or options.min_savings_bits > literal_min_cost - match_cost) return false;
     }
     return true;
+}
+
+test {
+    _ = @import("lz77/zero_window_cost_model_tests.zig");
+    _ = @import("lz77/optimal_cost_model_window_tests.zig");
+    _ = @import("lz77/fixed_optimal_window_tests.zig");
 }

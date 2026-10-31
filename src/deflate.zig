@@ -15,6 +15,7 @@ const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const dynamic_optimal = @import("deflate/dynamic_optimal.zig");
+const bt_optimal = @import("deflate/bt_optimal.zig");
 const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
@@ -441,6 +442,7 @@ pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) 
 }
 
 test {
+    _ = bt_optimal;
     _ = incremental_tests;
     _ = @import("deflate/gzip/alloc_hint_tests.zig");
 }
@@ -978,7 +980,7 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
 }
 
 const dynamic_refinement_min_input_len: usize = 4 * 1024;
-const dynamic_refinement_max_input_len: usize = 65_535;
+const dynamic_refinement_max_input_len: usize = 65_536;
 
 fn useDynamicCostRefinement(input_len: usize, options: CompressionOptions) bool {
     return options.dynamic_cost_refinement and options.strategy == .default and
@@ -1026,7 +1028,7 @@ noinline fn planDynamicRefinedOptimalPairAlloc(
     options: CompressionOptions,
 ) !RefinedOptimalPlans {
     std.debug.assert(useDynamicCostRefinement(input.len, options));
-    var prepared = try lz77.PreparedOptimal.init(allocator, input, options.lz77_options);
+    var prepared = try bt_optimal.Prepared.init(allocator, input, options.lz77_options);
     defer prepared.deinit(allocator);
     var seed = try prepared.planFixedAlloc(allocator);
     errdefer seed.deinit(allocator);
@@ -6626,7 +6628,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const start: usize = @intCast(entry >> 16);
             const mask: usize = @intCast(entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bit_buffer >> Decoder.literal_lookup_bits)) & mask);
+                @import("deflate/decoder/secondary_index.zig").suffix(bit_buffer, Decoder.literal_lookup_bits, mask);
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -6746,7 +6748,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const start: usize = @intCast(distance_entry >> 16);
             const mask: usize = @intCast(distance_entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bits >> SemanticDynamicDecoder.distance_lookup_bits)) & mask);
+                @import("deflate/decoder/secondary_index.zig").suffix(bits, SemanticDynamicDecoder.distance_lookup_bits, mask);
             if (secondary_index >= decoder.distance_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.distance_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -6808,6 +6810,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (length > output.len - out_pos) return error.OutputTooSmall;
             const byte = output[out_pos - 1];
             fillLinearRle(output, out_pos, length, byte);
+        } else if (distance >= length) {
+            if (distance > out_pos) return error.InvalidMatch;
+            if (length > output.len - out_pos) return error.OutputTooSmall;
+            @import("deflate/decoder/shortcopy.zig").copy(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }
@@ -7172,7 +7178,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             const start: usize = @intCast(entry >> 16);
             const mask: usize = @intCast(entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bit_buffer >> Decoder.literal_lookup_bits)) & mask);
+                @import("deflate/decoder/secondary_index.zig").suffix(bit_buffer, Decoder.literal_lookup_bits, mask);
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -7237,7 +7243,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             const start: usize = @intCast(distance_entry >> 16);
             const mask: usize = @intCast(distance_entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bits >> SemanticDynamicDecoder.distance_lookup_bits)) & mask);
+                @import("deflate/decoder/secondary_index.zig").suffix(bits, SemanticDynamicDecoder.distance_lookup_bits, mask);
             if (secondary_index >= decoder.distance_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.distance_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -24247,4 +24253,12 @@ test "PNG ultrafast zlib streams round trip through general decoder" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+}
+
+test "deflate portable secondary lookups decode the guarded reference OSDB dynamic block" {
+    try @import("deflate/decoder/portable_secondary_tests.zig").check(@This());
+}
+
+test "deflate exact short nonoverlapping copies preserve all lengths alignments and guards" {
+    try @import("deflate/decoder/shortcopy_tests.zig").check();
 }

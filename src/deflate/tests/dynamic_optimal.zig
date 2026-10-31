@@ -119,7 +119,8 @@ fn policy(comptime C: type) !void {
     try std.testing.expect(C.eligible(4096, level8));
     try std.testing.expect(C.eligible(4096, level9));
     try std.testing.expect(C.eligible(65_535, level9));
-    try std.testing.expect(!C.eligible(65_536, level9));
+    try std.testing.expect(C.eligible(65_536, level9));
+    try std.testing.expect(!C.eligible(65_537, level9));
 
     var disabled = level9;
     disabled.dynamic_cost_refinement = false;

@@ -1,0 +1,15 @@
+{
+  "id": "osdb.64k.rawdeflate.6",
+  "wire_sha256": "cb731c66afe83c470f5ef4f6e24807c3590e8b145adac9d2511474fff1e7b91f",
+  "input_sha256": "f8fe629325a07588118ba0b65880a87ded43ef249ccbc91f0e977bbacae0c125",
+  "wire_bytes": 27584,
+  "input_bytes": 65536,
+  "options": {
+    "flush": "Z_FINISH",
+    "format": "raw",
+    "level": 6,
+    "mem_level": 8,
+    "strategy": "Z_DEFAULT_STRATEGY",
+    "window_bits": -15
+  }
+}
