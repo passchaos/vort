@@ -16,7 +16,10 @@ pub const Options = struct {
     minimum: u8 = 3,
     depth: u32 = 8,
     nice_len: u32 = 16,
-    quota: ?u64 = null,
+    // The frozen DP oracle isolates row indexing and caching. A finite
+    // maximum keeps full choice enumeration so every original price/profile
+    // assertion stays strict; explicit quota prefixes below remain unchanged.
+    quota: ?u64 = std.math.maxInt(u64),
     working_limit: usize = std.math.maxInt(usize),
     repeats: [3]usize = .{ 1, 4, 8 },
 };

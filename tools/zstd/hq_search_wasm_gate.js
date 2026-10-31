@@ -8,6 +8,7 @@ assert.ok(artifact, "usage: node hq_search_wasm_gate.js artifact.wasm [report.js
 const bytes = fs.readFileSync(artifact);
 const moduleObject = new WebAssembly.Module(bytes);
 const imports = WebAssembly.Module.imports(moduleObject);
+const declaredExports = WebAssembly.Module.exports(moduleObject);
 for (const entry of imports) {
     assert.equal(entry.module, "wasi_snapshot_preview1");
     assert.equal(entry.kind, "function");
@@ -22,12 +23,14 @@ if (imports.length) {
 const instance = new WebAssembly.Instance(moduleObject, host);
 if (wasi && typeof instance.exports._initialize === "function") wasi.initialize(instance);
 const wasmExports = instance.exports;
-const operations = ["zstdHqSearchWholeComplete", "zstdHqSearchFullSpan", "zstdHqSearchIncrementalRetry", "zstdHqSearchUnsupported"];
+const operations = ["zstdHqSearchWholeComplete", "zstdHqSearchFullSpan", "zstdHqSearchIncrementalRetry", "zstdHqSearchUnsupported", "zstdHqSearchLocalOptimal", "zstdHqSearchLocalIncrementalRetry"];
 for (const name of [...operations, "zstdHqSearchReport"]) assert.equal(typeof wasmExports[name], "function", name);
+assert.ok(wasmExports.memory instanceof WebAssembly.Memory, "actual public consumer must export Wasm memory");
+for (const name of [...operations, "zstdHqSearchReport"]) assert.ok(declaredExports.some((entry) => entry.name === name && entry.kind === "function"), `missing declared export ${name}`);
 const statuses = {};
 for (const name of operations) {
     statuses[name] = wasmExports[name]();
-    assert.equal(statuses[name], 0, `${name} failed in the actual public Wasm consumer`);
+    assert.equal(statuses[name], 0, `${name} failed in the actual public Wasm consumer; local retry stage=${wasmExports.zstdHqSearchReport(71)} error_id=${wasmExports.zstdHqSearchReport(72)}`);
 }
 function value(index) {
     const result = wasmExports.zstdHqSearchReport(index);
@@ -61,6 +64,28 @@ assert.equal(value(38), 0n);
 assert.equal(value(39), 6n);
 assert.equal(value(40), 32n);
 assert.equal(value(41), 64n);
+assert.equal(value(42), 512n);
+assert.ok(value(43) > 0n);
+assert.equal(value(44), 1n, "public default must actually use local_optimal");
+for (const index of [45, 46, 47]) assert.ok(value(index) > 0n, `missing local bounded/sampled work at ${index}`);
+assert.ok(value(48) > 0n && value(48) <= cap);
+assert.equal(value(49), value(43));
+assert.equal(value(50), value(48), "exact local admission cap must preserve requested heap peak");
+assert.ok(value(51) >= 2n);
+assert.equal(value(52), 0n);
+assert.equal(value(53), 1n, "local refusals must restore emitted counters");
+for (const index of [54, 55, 56, 57]) assert.equal(value(index), 0n, `local bounded/sampled operation ran expanded or safeguard work at ${index}`);
+assert.equal(value(60), 2048n);
+assert.ok(value(61) > 0n);
+assert.equal(value(62), 1n);
+for (const index of [63, 64, 65, 66]) assert.ok(value(index) > 0n);
+assert.ok(value(67) > 0n && value(67) <= cap);
+for (const index of [68, 69, 70]) assert.equal(value(index), 0n);
+assert.equal(value(71), 9n);
+assert.equal(value(72), 0n);
+assert.equal(value(73), 1n);
+assert.equal(value(74), 1n);
+assert.ok(value(75) <= cap && value(76) <= cap);
 assert.ok(wasmExports.memory.buffer.byteLength <= 256 * 1024 * 1024, "Wasm memory exceeds this bounded gate's 256 MiB envelope");
 
 const decimal = (index) => value(index).toString();
@@ -74,6 +99,7 @@ const report = {
     consumer_source_sha256: crypto.createHash("sha256").update(fs.readFileSync("src/tests/zstd_hq_search_wasm.zig")).digest("hex"),
     node_gate_sha256: crypto.createHash("sha256").update(fs.readFileSync(__filename)).digest("hex"),
     imports,
+    declared_exports: declaredExports,
     wasi_host: imports.length ? "node:wasi preview1; no preopened directories" : null,
     operations: statuses,
     integer_transport: "Wasm i64 via JavaScript BigInt; JSON quantities are decimal strings",
@@ -111,6 +137,25 @@ const report = {
         safeguard_scope: "Each block starts its requested and baseline search from the same committed state; it is not the one-shot complete-frame guard.",
     },
     unsupported: { strategy: "lazy2", invalid_controls: ["whole_block", "complete", "max_price_evaluations=0"], public_calls: decimal(39), allocator_attempts: decimal(38), error: "InvalidBlockPlan", caller_output_untouched: true },
+    local_optimal: {
+        requested_engine: "public HQ default", actual_effective_engine: "local_optimal",
+        parse_mode: "bounded", match_lengths: "sampled",
+        input_bytes: decimal(42), wire_bytes: decimal(43), bounded_passes: decimal(45), sampled_passes: decimal(46),
+        per_plan_price_admissions: decimal(47), uncapped_heap_peak: decimal(48), exact_cap_wire_bytes: decimal(49), exact_cap_heap_peak: decimal(50),
+        search_refusals: decimal(51), live_after_calls: decimal(52),
+        exact_cap_same_wire_and_heap: true, zero_and_one_below_refused: true,
+        failed_caller_output_untouched: true, failed_emitted_counters_restored: true, both_actual_wires_roundtrip: true,
+        scope: "Actual public bounded sampled local_optimal encoder; no old beam whole/complete work or synthetic checkpoints.",
+    },
+    local_incremental: {
+        requested_engine: "local_optimal", actual_effective_engine: "local_optimal",
+        input_bytes: decimal(60), wire_bytes: decimal(61), bounded_passes: decimal(63), sampled_passes: decimal(64),
+        search_refusals: decimal(65), per_plan_price_admissions: decimal(66), heap_peak: decimal(67), live_after_deinit: decimal(70),
+        zero_cap_refused: true, failed_caller_output_state_and_emitted_preserved: true,
+        live_heap_before_refusal: decimal(75), live_heap_after_refusal: decimal(76),
+        heap_scope: "Retry may retain encoder-owned scratch capacity; actual live bytes stay bounded and deinit releases them.",
+        raised_cap_same_state_empty_input_retry: true, actual_complete_wire_roundtrip: true,
+    },
 };
 const json = JSON.stringify(report, null, 2) + "\n";
 if (process.argv[3]) fs.writeFileSync(process.argv[3], json);

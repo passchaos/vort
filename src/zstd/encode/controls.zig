@@ -2,6 +2,7 @@ const std = @import("std");
 pub const HqOptions = @import("hq_options.zig").HqOptions;
 pub const HqParseMode = @import("hq_options.zig").ParseMode;
 pub const HqMatchLengthPolicy = @import("hq_options.zig").MatchLengthPolicy;
+pub const HqParserEngine = @import("hq_options.zig").ParserEngine;
 
 pub const min_level: c_int = -131072;
 pub const max_level: c_int = 22;
@@ -72,6 +73,7 @@ pub const Profile = struct {
     effective_hq_nice_len: u32 = 0,
     effective_hq_min_match: u8 = 0,
     effective_hq_max_working_memory: usize = 0,
+    effective_hq_parser_engine: ?HqParserEngine = null,
     effective_hq_parse_mode: ?HqParseMode = null,
     effective_hq_match_lengths: ?HqMatchLengthPolicy = null,
     effective_hq_max_price_evaluations: ?u64 = null,
@@ -126,6 +128,10 @@ pub const Profile = struct {
         self.effective_hq_nice_len = if (options) |hq| hq.nice_len else 0;
         self.effective_hq_min_match = if (options) |hq| hq.min_match else 0;
         self.effective_hq_max_working_memory = if (options) |hq| hq.max_working_memory else 0;
+        self.effective_hq_parser_engine = if (options) |hq| switch (self.resolved_strategy) {
+            .btopt, .btultra, .btultra2 => hq.effectiveParserEngine(),
+            else => null,
+        } else null;
         self.effective_hq_parse_mode = if (options) |hq| hq.parse_mode else null;
         self.effective_hq_match_lengths = if (options) |hq| hq.match_lengths else null;
         self.effective_hq_max_price_evaluations = if (options) |hq| hq.max_price_evaluations else null;
@@ -167,7 +173,7 @@ pub const Profile = struct {
         if (other.controls_used) {
             self.resolved_strategy = other.resolved_strategy;
             self.fast_acceleration = other.fast_acceleration;
-            inline for (.{ "hq_used", "effective_hq_search_depth", "effective_hq_nice_len", "effective_hq_min_match", "effective_hq_max_working_memory", "effective_hq_parse_mode", "effective_hq_match_lengths", "effective_hq_max_price_evaluations" }) |field|
+            inline for (.{ "hq_used", "effective_hq_search_depth", "effective_hq_nice_len", "effective_hq_min_match", "effective_hq_max_working_memory", "effective_hq_parser_engine", "effective_hq_parse_mode", "effective_hq_match_lengths", "effective_hq_max_price_evaluations" }) |field|
                 @field(self, field) = @field(other, field);
         }
         inline for (.{ "positions_tested", "short_hash_probes", "long_hash_probes", "rep_probes", "rep_length_cache_hits", "skipped_positions", "dictionary_seed_positions", "history_seed_positions", "parser_matches", "parser_matched_bytes", "candidate_checks", "lazy_deferrals", "optimal_transitions", "tree_nodes", "byte_comparisons", "depth_stops", "nice_stops", "price_evaluations", "hq_passes", "refinement_passes", "bounded_passes", "whole_block_passes", "sampled_length_passes", "complete_length_passes", "baseline_searches", "guarded_frames", "price_limit_refusals", "shared_seed_reuses", "match_frontier_cache_entries", "match_frontier_replay_positions", "match_frontier_cache_fallbacks", "raw_blocks", "rle_blocks", "compressed_blocks", "baseline_selected_blocks", "baseline_selected_frames", "dictionary_sequences", "history_sequences" }) |field|

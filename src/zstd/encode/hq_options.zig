@@ -5,6 +5,7 @@ pub const max_search_depth: u32 = 65536;
 pub const max_nice_len: u32 = 128 * 1024;
 pub const ParseMode = enum { bounded, whole_block };
 pub const MatchLengthPolicy = enum { sampled, complete };
+pub const ParserEngine = enum { local_optimal, beam };
 
 /// Dedicated search and working-allocation controls for the opt-in HQ engines.
 /// This depth is independent of the older match_search_budget option. Zero
@@ -14,8 +15,11 @@ pub const HqOptions = struct {
     nice_len: u32 = 128,
     min_match: u8 = 3,
     max_working_memory: usize = std.math.maxInt(usize),
-    /// Optimal HQ parsers may search every position in the current format
-    /// block. The bounded default preserves its 4096-position segmentation.
+    /// Local optimal parsing uses a deterministic single path and adaptive
+    /// match-triggered windows. Beam preserves the former multi-state search.
+    parser_engine: ParserEngine = .local_optimal,
+    /// Whole-block mode gives every position a row; bounded mode limits the
+    /// local table to 4096 positions and may end a window on a long match.
     parse_mode: ParseMode = .bounded,
     /// Complete enumerates every legal length of each admitted match/offset
     /// choice. Bounded parsing retains a finite cross-window continuation;
@@ -27,10 +31,14 @@ pub const HqOptions = struct {
     max_price_evaluations: ?u64 = null,
 
     pub fn hasSearchControls(self: HqOptions) bool {
-        return self.hasExpandedSearch() or self.max_price_evaluations != null;
+        return self.hasExpandedSearch() or self.max_price_evaluations != null or self.parser_engine != .local_optimal;
     }
     pub fn hasExpandedSearch(self: HqOptions) bool {
         return self.parse_mode != .bounded or self.match_lengths != .sampled;
+    }
+
+    pub fn effectiveParserEngine(self: HqOptions) ParserEngine {
+        return if (self.hasExpandedSearch()) .beam else self.parser_engine;
     }
 
     pub fn validate(self: HqOptions) Error!void {

@@ -12,6 +12,7 @@ pub fn contracts() !void {
                 var params: h.state.Parameters = .{
                     .strategy = selected.strategy,
                     .hq_options = .{
+                        .parser_engine = .beam,
                         .search_depth = 8,
                         .nice_len = 16,
                         .parse_mode = if (whole) .whole_block else .bounded,

@@ -15,6 +15,9 @@ test {
     _ = @import("search_controls_tests.zig");
     _ = @import("lazy2_tests.zig");
     _ = @import("source_dominance.zig");
+    _ = @import("prepared_price_tests.zig");
+    _ = @import("choice_dominance_tests.zig");
+    _ = @import("enumeration_count_tests.zig");
 }
 
 fn oracle(source: source_mod.Source, model: *const hq.EntropyModel, position: usize, literals: usize, repeats: hq.rep.Repeats) !u64 {
@@ -99,7 +102,10 @@ test "Zstd HQ cold reuse dominance preserves plans and reduces priced edges" {
     const input = ("dominance shared repeats and literal lengths abcabcabcabc 0123456789\n" ** 96);
     const source = source_mod.Source.init("", "", input, 8192);
     var expected_profile: controls.Profile = .{};
+    // A finite maximum requests the complete original admission ledger;
+    // this remains the unpruned oracle for source/choice dominance.
     const expected_parameters: hq.Parameters = .{
+        .hq_options = .{ .max_price_evaluations = std.math.maxInt(u64) },
         .strategy = .btultra,
         .profile = &expected_profile,
     };
@@ -271,12 +277,12 @@ test "Zstd HQ cold reuse dominance gate preserves sparse-prefix work" {
     );
 }
 
-test "Zstd HQ DP tiny path matches exhaustive cost and exact final repeated offsets" {
+test "Zstd HQ legacy beam tiny path matches exhaustive cost and exact final repeated offsets" {
     const source = source_mod.Source.init("abcde", "", "abcabcabc", 1024);
     const model: hq.EntropyModel = .{};
     const optimal = try oracle(source, &model, 0, 0, hq.rep.initial_repeats);
     for ([_]controls.Strategy{ .btopt, .btultra }) |strategy| {
-        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model });
+        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .hq_options = .{ .parser_engine = .beam } });
         defer plan.deinit(std.testing.allocator);
         try std.testing.expectEqual(optimal, plan.estimated_cost);
         const decoded = try replay(std.testing.allocator, source, plan, hq.rep.initial_repeats);
@@ -285,7 +291,7 @@ test "Zstd HQ DP tiny path matches exhaustive cost and exact final repeated offs
     }
 }
 
-test "Zstd HQ parser exact offset choice follows entropy instead of a cheaper repeat alias" {
+test "Zstd HQ legacy beam and lazy parser exact offset choice follows entropy instead of a cheaper repeat alias" {
     const source = source_mod.Source.init("abcaabc", "", "abc", 1024);
     var model: hq.EntropyModel = .{};
     model.of_prices[0] = hq.prices.maximum_symbol_price;
@@ -293,7 +299,7 @@ test "Zstd HQ parser exact offset choice follows entropy instead of a cheaper re
     model.of_prices[2] = 0;
     const repeats: hq.rep.Repeats = .{ 3, 3, 8 };
     for ([_]controls.Strategy{ .btlazy2, .btopt, .btultra }) |strategy| {
-        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = repeats });
+        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = repeats, .hq_options = .{ .parser_engine = if (strategy == .btlazy2) .local_optimal else .beam } });
         defer plan.deinit(std.testing.allocator);
         try std.testing.expectEqual(@as(usize, 1), plan.records.len);
         try std.testing.expectEqual(@as(usize, 3), plan.records[0].distance);
@@ -303,7 +309,7 @@ test "Zstd HQ parser exact offset choice follows entropy instead of a cheaper re
     }
 }
 
-test "Zstd HQ full block DP uses distinct beams and consumes a hundred twenty eight KiB" {
+test "Zstd HQ legacy beam full block DP uses distinct beams and consumes a hundred twenty eight KiB" {
     const input = try std.testing.allocator.alloc(u8, 128 * 1024);
     defer std.testing.allocator.free(input);
     var random = std.Random.DefaultPrng.init(0x234567);
@@ -314,7 +320,7 @@ test "Zstd HQ full block DP uses distinct beams and consumes a hundred twenty ei
     try std.testing.expectEqual(@as(usize, 16), dp.beamWidth(.btultra));
     for ([_]controls.Strategy{ .btopt, .btultra }) |strategy| {
         var profile: controls.Profile = .{};
-        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .profile = &profile });
+        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .profile = &profile, .hq_options = .{ .parser_engine = .beam } });
         defer plan.deinit(std.testing.allocator);
         try std.testing.expect(plan.statistics.literal_count < 2 * 1024);
         try std.testing.expectEqual(source.block.len, plan.records[plan.records.len - 1].match_end);
@@ -329,11 +335,11 @@ test "Zstd HQ full block DP uses distinct beams and consumes a hundred twenty ei
     }
 }
 
-test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models use one pass" {
+test "Zstd HQ legacy beam ultra2 cold pass learns prices and retained or initialized models use one pass" {
     const initial: hq.EntropyModel = .{};
     const source = source_mod.Source.init("", "", "abcabcabcabcabcabcabcabc", 1024);
     var profile: controls.Profile = .{};
-    const cold = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra2, .entropy = &initial, .profile = &profile });
+    const cold = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra2, .entropy = &initial, .profile = &profile, .hq_options = .{ .parser_engine = .beam } });
     defer cold.deinit(std.testing.allocator);
     try std.testing.expect(cold.used_refinement);
     try std.testing.expectEqual(@as(u8, 2), cold.passes);
@@ -354,7 +360,7 @@ test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models 
         source_mod.Source.init("", "abc", source.block, 1024),
     }) |retained| {
         profile.reset();
-        const plan = try hq.planAlloc(std.testing.allocator, retained, .{ .strategy = .btultra2, .profile = &profile });
+        const plan = try hq.planAlloc(std.testing.allocator, retained, .{ .strategy = .btultra2, .profile = &profile, .hq_options = .{ .parser_engine = .beam } });
         defer plan.deinit(std.testing.allocator);
         try std.testing.expectEqual(@as(u8, 1), plan.passes);
         try std.testing.expectEqual(@as(u64, 1), profile.hq_passes);
@@ -367,7 +373,7 @@ test "Zstd HQ ultra2 cold pass learns prices and retained or initialized models 
     var previous = initial;
     previous.initialized = true;
     profile.reset();
-    const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra2, .entropy = &previous, .profile = &profile });
+    const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra2, .entropy = &previous, .profile = &profile, .hq_options = .{ .parser_engine = .beam } });
     defer plan.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(u8, 1), plan.passes);
     try std.testing.expectEqual(@as(u64, 0), profile.refinement_passes);
@@ -418,7 +424,7 @@ test "Zstd HQ parser empty metadata costs no heap and configured seven byte mini
     try std.testing.expectEqual(@as(usize, 0), failing.alloc_index);
 }
 
-test "Zstd HQ terminal extension compares ML boundaries and retains equal cost original" {
+test "Zstd HQ legacy beam terminal extension compares ML boundaries and retains equal cost original" {
     var input: [4099]u8 = @splat('a');
     var model: hq.EntropyModel = .{};
     model.literal_prices = @splat(hq.prices.scale);
@@ -429,7 +435,7 @@ test "Zstd HQ terminal extension compares ML boundaries and retains equal cost o
     const repeats: hq.rep.Repeats = .{ 1, 1, 1 };
     for ([_]controls.Strategy{ .btopt, .btultra }) |strategy| {
         const source = source_mod.Source.init("", "a", &input, 8192);
-        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = repeats });
+        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = repeats, .hq_options = .{ .parser_engine = .beam } });
         defer plan.deinit(std.testing.allocator);
         const retained_cost = try model.sequencePrice(0, 4096, 1);
         const literal_tail_cost = @as(u64, 3) * model.literal_prices['a'];
@@ -446,7 +452,7 @@ test "Zstd HQ terminal extension compares ML boundaries and retains equal cost o
         var cheaper_next = model;
         cheaper_next.ml_prices[47] = 12 * hq.prices.scale;
         cheaper_next.ml_prices[48] = 0;
-        const extended = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &cheaper_next, .initial_repeated_offsets = repeats });
+        const extended = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &cheaper_next, .initial_repeated_offsets = repeats, .hq_options = .{ .parser_engine = .beam } });
         defer extended.deinit(std.testing.allocator);
         try std.testing.expectEqual(@as(usize, 4099), extended.records[0].match_len);
         try std.testing.expectEqual(@as(u64, 12 * hq.prices.scale), extended.estimated_cost);
@@ -457,7 +463,7 @@ test "Zstd HQ terminal extension compares ML boundaries and retains equal cost o
     const distant: hq.rep.Repeats = @splat(input.len);
     for ([_]controls.Strategy{ .btopt, .btultra }) |strategy| {
         const source = source_mod.Source.init(&input, "", &input, 8192);
-        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = distant });
+        const plan = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = strategy, .entropy = &model, .initial_repeated_offsets = distant, .hq_options = .{ .parser_engine = .beam } });
         defer plan.deinit(std.testing.allocator);
         try std.testing.expectEqual(@as(usize, 4096), plan.records[0].match_len);
         try std.testing.expectEqual(@as(u64, 11 * hq.prices.scale), plan.estimated_cost);

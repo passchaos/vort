@@ -1,9 +1,10 @@
 # Zstd HQ position, length and price controls
 
-`ZstdHqOptions` adds three independent search controls:
+`ZstdHqOptions` exposes parser selection and three independent coverage/budget controls:
 
 | Field | Default | Requested behavior |
 | --- | --- | --- |
+| `parser_engine` | `.local_optimal` | Deterministic single-path local parsing for bounded/sample requests; `.beam` selects the former 8/16-state search. Whole/complete coverage resolves to beam. |
 | `parse_mode` | `.bounded` | `.whole_block` keeps one DP table across every position and endpoint in the current format block. |
 | `match_lengths` | `.sampled` | `.complete` prices every legal length of each admitted match and exact offset choice. |
 | `max_price_evaluations` | `null` | A `u64` admission limit for sequence-edge prices in each actual DP plan. |
@@ -17,14 +18,28 @@ not perform the corresponding DP search. Unsupported requests fail explicitly.
 
 A format block is bounded by the configured block size and window, with a
 maximum of 128 KiB. Whole-block search uses a traceback coordinate wide enough
-for the final position at 131072. The bounded default retains its 4096-position
-tables and existing layout.
+for the final position at 131072. Bounded local-optimal parsing starts after a
+match, advances through a dynamic reachable span and can end on a sufficiently
+long copy. Its table capacity remains 4096 positions. Explicit beam keeps the
+previous multi-state layout and segmentation.
+
+Bounded sampled local-optimal parsing sizes its hash tables from
+`min(prefixLen + block.len, window_len + 1)`. Values up to 32768 select a
+smaller table; larger values retain the full matcher. Dictionary/history
+prefixes remain fully indexed. Only a prefix-free parse with smaller tables
+samples skipped spans longer than 128 positions, retaining every eighth
+position and the final 64 positions. Finite and unlimited price budgets use
+the same matcher policy. Explicit beam and whole/complete coverage retain full
+matching. See the [matcher evidence](../performance/zstd-adaptive-matcher.md)
+for resource boundaries and measured quality/work tradeoffs.
 
 The matcher admits a finite frontier of distances under the caller's depth and
 nice-length settings. Complete length search enumerates each admitted distance,
 its legal repeat selectors and direct offset, and every legal match prefix.
 It does not enumerate every historical distance or every repeat-cache state.
-The beam remains finite, so neither mode promises a globally optimal parse.
+The selected path/beam remains finite, so neither mode promises a globally
+optimal parse. `parser_engine` applies to btopt/btultra/btultra2; the CLI exposes
+`--hq-parser-engine=local_optimal|beam` for those strategies.
 
 Bounded complete search also prices endpoints past the current 4096-position
 table. It keeps a finite continuation candidate, evaluated with the remaining
@@ -49,7 +64,9 @@ exceed one plan's limit.
 
 The optional encoder-control profile separates policy, work and publication:
 
-- Effective fields report the requested parse mode, length policy and limit.
+- Effective fields report parse mode, length policy and limit;
+  `effective_hq_parser_engine` reports the actual engine, including beam for
+  whole/complete coverage, and is null for non-optimal engines.
 - Pass counters distinguish bounded/whole and sampled/complete searches.
 - `max_parse_positions` records positions actually processed in a plan, not
   allocated capacity. A failed early request cannot report the whole block as
@@ -57,6 +74,9 @@ The optional encoder-control profile separates policy, work and publication:
 - `max_match_length_considered` records lengths actually admitted for pricing.
 - `max_plan_price_evaluations` records the largest single-plan count;
   `price_evaluations` accumulates across calls, refinements and safeguards.
+  Beam includes reserved allowances for eliminated offset aliases in that
+  logical maximum. Its maximum can therefore exceed cumulative physical
+  evaluations; these two counters measure different quantities.
 - `price_limit_refusals` and search work survive failed attempts. Published
   block/frame selection counters roll back when output is not committed.
 
@@ -85,11 +105,14 @@ frames, simultaneous output storage and alias snapshots remain subject to the
 existing requested-heap policy. A caller-buffer or seekable publication failure
 must preserve previously visible output and caller-owned state.
 
-Default bounded/sampled settings and a price-limit-only request use the
-existing single search path, with no extra baseline allocation. Seekable
+Default bounded/sampled settings and a price-limit-only request use one selected
+search path, with no extra baseline allocation. Finite/unlimited limits use the
+same engine and data-dependent decisions. Seekable
 requests with a price limit still stage publication and entry metadata so that
-a later-frame failure cannot expose partial caller output. Default wire bytes
-are checked against a separately archived pre-change implementation.
+a later-frame failure cannot expose partial caller output. Explicit beam and
+unaffected legacy/default-auto wire bytes retain independently archived
+pre-change tests. Local-optimal output may differ and has separate reference
+decode, determinism, quota and ownership gates.
 
 ## Verification and remaining limits
 

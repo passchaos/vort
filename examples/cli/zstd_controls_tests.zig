@@ -103,6 +103,7 @@ test "Zstd CLI HQ search controls preserve omitted defaults and accept either ar
     const defaults = try (try parse(&.{"--strategy=btopt"})).resolved();
     try std.testing.expectEqual(.bounded, defaults.hq.?.parse_mode);
     try std.testing.expectEqual(.sampled, defaults.hq.?.match_lengths);
+    try std.testing.expectEqual(.local_optimal, defaults.hq.?.parser_engine);
     try std.testing.expectEqual(@as(?u64, null), defaults.hq.?.max_price_evaluations);
     inline for (.{ "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=0" }) |flag| {
         const partial = try (try parse(&.{ "--strategy=btopt", flag })).resolved();
@@ -112,11 +113,11 @@ test "Zstd CLI HQ search controls preserve omitted defaults and accept either ar
         if (!std.mem.startsWith(u8, flag, "--hq-match-lengths=")) try std.testing.expectEqual(.sampled, partial.hq.?.match_lengths);
         if (!std.mem.startsWith(u8, flag, "--hq-max-prices=")) try std.testing.expectEqual(@as(?u64, null), partial.hq.?.max_price_evaluations);
     }
-    const a = try parse(&.{ "--strategy=btultra2", "--level=20", "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=18446744073709551615" });
-    const b = try parse(&.{ "--hq-max-prices", "18446744073709551615", "--hq-match-lengths", "complete", "--hq-parse-mode", "whole_block", "--level", "20", "--strategy", "btultra2" });
+    const a = try parse(&.{ "--strategy=btultra2", "--level=20", "--hq-parser-engine=beam", "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=18446744073709551615" });
+    const b = try parse(&.{ "--hq-max-prices", "18446744073709551615", "--hq-match-lengths", "complete", "--hq-parse-mode", "whole_block", "--hq-parser-engine", "beam", "--level", "20", "--strategy", "btultra2" });
     try std.testing.expectEqualDeep(a, b);
     try std.testing.expectEqual(@as(?u64, std.math.maxInt(u64)), a.hq_max_prices);
-    inline for (.{ "--hq-parse-mode", "--hq-parse-mode=bounded", "--hq-match-lengths", "--hq-match-lengths=complete", "--hq-max-prices", "--hq-max-prices=0" }) |flag|
+    inline for (.{ "--hq-parser-engine", "--hq-parser-engine=beam", "--hq-parse-mode", "--hq-parse-mode=bounded", "--hq-match-lengths", "--hq-match-lengths=complete", "--hq-max-prices", "--hq-max-prices=0" }) |flag|
         try std.testing.expect(cli.isControlArgument(flag));
 }
 
@@ -148,17 +149,19 @@ test "Zstd CLI HQ search controls keep level defaults and map to native and fram
 }
 
 test "Zstd CLI HQ search controls reject malformed duplicate and unsupported options" {
-    inline for (.{ "--hq-parse-mode=bounded", "--hq-match-lengths=sampled", "--hq-max-prices=0" }) |flag|
+    inline for (.{ "--hq-parser-engine=beam", "--hq-parse-mode=bounded", "--hq-match-lengths=sampled", "--hq-max-prices=0" }) |flag|
         try std.testing.expectError(error.DuplicateZstdOption, parse(&.{ flag, flag }));
-    inline for (.{ "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices" }) |flag|
+    inline for (.{ "--hq-parser-engine", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices" }) |flag|
         try std.testing.expectError(error.MissingZstdOptionValue, parse(&.{flag}));
     try std.testing.expectError(error.InvalidZstdHqParseMode, parse(&.{"--hq-parse-mode=whole-block"}));
+    try std.testing.expectError(error.InvalidZstdHqParserEngine, parse(&.{"--hq-parser-engine=local-optimal"}));
+    try std.testing.expectError(error.InvalidZstdHqParserEngine, parse(&.{"--hq-parser-engine="}));
     try std.testing.expectError(error.InvalidZstdHqMatchLengths, parse(&.{"--hq-match-lengths="}));
     try std.testing.expectError(error.InvalidCharacter, parse(&.{"--hq-max-prices="}));
     try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-prices=-1"}));
     try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-prices=18446744073709551616"}));
     inline for (.{ "auto", "fast", "double_fast", "greedy", "lazy", "optimal", "lazy2", "btlazy2" }) |strategy| {
-        inline for (.{ "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=0", "--hq-max-prices=18446744073709551615" }) |flag| {
+        inline for (.{ "--hq-parser-engine=beam", "--hq-parser-engine=local_optimal", "--hq-parse-mode=whole_block", "--hq-match-lengths=complete", "--hq-max-prices=0", "--hq-max-prices=18446744073709551615" }) |flag| {
             const parsed = try parse(&.{ "--strategy=" ++ strategy, flag });
             try std.testing.expectError(error.InvalidBlockPlan, parsed.resolved());
             try std.testing.expectError(error.InvalidBlockPlan, parsed.frameOptionsWithProfile(null));
@@ -172,15 +175,42 @@ test "Zstd CLI HQ search profile formats optional controls without narrowing" {
     try cli.printProfile(&writer, .{
         .effective_hq_parse_mode = .whole_block,
         .effective_hq_match_lengths = .complete,
+        .effective_hq_parser_engine = .beam,
         .effective_hq_max_price_evaluations = std.math.maxInt(u64),
         .max_plan_price_evaluations = 4294967313,
     });
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_profile strategy=") != null);
-    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_search_profile parse_mode=whole_block match_lengths=complete max_prices=18446744073709551615 ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "zstd_search_profile parse_mode=whole_block match_lengths=complete parser_engine=beam max_prices=18446744073709551615 ") != null);
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "max_plan_price_evaluations=4294967313 ") != null);
     writer = std.Io.Writer.fixed(&bytes);
     try cli.printProfile(&writer, .{});
-    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "parse_mode=none match_lengths=none max_prices=unlimited ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "parse_mode=none match_lengths=none parser_engine=none max_prices=unlimited ") != null);
+}
+
+test "Zstd CLI parser engines forward to both APIs and metadata reports actual engine" {
+    inline for (.{ "btopt", "btultra", "btultra2" }) |strategy| {
+        inline for (.{ "local_optimal", "beam" }) |engine| {
+            const parsed = try parse(&.{ "--hq-parser-engine=" ++ engine, "--strategy=" ++ strategy });
+            const native = try parsed.resolved();
+            const frame = try parsed.frameOptionsWithProfile(null);
+            try std.testing.expectEqualStrings(engine, @tagName(native.hq.?.parser_engine));
+            try std.testing.expectEqualDeep(native.hq, frame.hq);
+            var profile: vort.ZstdEncoderControlProfile = .{ .resolved_strategy = native.strategy };
+            profile.recordEffectiveHq(try native.effectiveHq());
+            try std.testing.expectEqualStrings(engine, @tagName(profile.effective_hq_parser_engine.?));
+            inline for (.{ "--hq-parse-mode=whole_block", "--hq-match-lengths=complete" }) |expanded| {
+                const expanded_options = try (try parse(&.{ "--strategy=" ++ strategy, "--hq-parser-engine=" ++ engine, expanded })).resolved();
+                profile.recordEffectiveHq(try expanded_options.effectiveHq());
+                try std.testing.expectEqual(.beam, profile.effective_hq_parser_engine.?);
+            }
+        }
+    }
+    inline for (.{ "auto", "lazy2", "btlazy2" }) |strategy| {
+        const native = try (try parse(&.{"--strategy=" ++ strategy})).resolved();
+        var profile: vort.ZstdEncoderControlProfile = .{ .resolved_strategy = native.strategy };
+        profile.recordEffectiveHq(try native.effectiveHq());
+        try std.testing.expect(profile.effective_hq_parser_engine == null);
+    }
 }
 
 test "Zstd CLI level helper rejects native-only selection arguments" {

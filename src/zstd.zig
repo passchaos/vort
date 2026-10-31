@@ -14,6 +14,7 @@ const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const sequence_field_group = @import("zstd/sequence/field_group.zig");
+const sequence_transition_group = @import("zstd/sequence/transition_group.zig");
 const sequence_decode_policy = @import("zstd/sequence/decode_policy.zig");
 const sequence_split_profile = @import("zstd/sequence/split_profile.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
@@ -48,6 +49,7 @@ const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const double_fast_match = @import("zstd/match/double_fast.zig");
 const encode_controls = @import("zstd/encode/controls.zig");
+const repeated_pattern = @import("zstd/encode/repeated_pattern.zig");
 const controlled_source = @import("zstd/match/controlled_source.zig");
 const controlled_encoder = @import("zstd/encode/controlled_frame.zig");
 const hq_parser = @import("zstd/match/hq_parser.zig");
@@ -133,6 +135,7 @@ pub const min_compression_level: c_int = encode_controls.min_level;
 pub const max_compression_level: c_int = 22;
 pub const Strategy = encode_controls.Strategy;
 pub const HqOptions = encode_controls.HqOptions;
+pub const HqParserEngine = encode_controls.HqParserEngine;
 pub const HqParseMode = encode_controls.HqParseMode;
 pub const HqMatchLengthPolicy = encode_controls.HqMatchLengthPolicy;
 pub const CanonicalCompressionParameters = @import("zstd/encode/canonical_presets.zig").Parameters;
@@ -14131,9 +14134,10 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
         );
         if (remaining != 0) {
             if (fields_are_grouped) {
-                ll_state = ll_next_state + field_group.?.read(ll_state_bits);
-                ml_state = ml_next_state + field_group.?.read(ml_state_bits);
-                of_state = of_next_state + field_group.?.read(of_state_bits);
+                const transitions = sequence_transition_group.read(&field_group.?, ll_state_bits, ml_state_bits, of_state_bits);
+                ll_state = ll_next_state + transitions[0];
+                ml_state = ml_next_state + transitions[1];
+                of_state = of_next_state + transitions[2];
             } else {
                 ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
                 ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
@@ -14165,12 +14169,20 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
                         &literal_offset,
                         literal_len,
                     );
-                _ = sequence_match_copy.appendForwardWildcopy(
-                    output,
-                    &output_cursor,
-                    output_cursor - match_offset,
-                    match_len,
-                );
+                if (match_len <= 16)
+                    sequence_match_copy.appendForwardWildcopy16Once(
+                        output,
+                        &output_cursor,
+                        output_cursor - match_offset,
+                        match_len,
+                    )
+                else
+                    _ = sequence_match_copy.appendForwardWildcopy(
+                        output,
+                        &output_cursor,
+                        output_cursor - match_offset,
+                        match_len,
+                    );
                 continue;
             }
         }
@@ -32226,12 +32238,7 @@ fn emitSequenceCount(allocator: std.mem.Allocator, out: *std.ArrayList(u8), coun
     try out.append(allocator, @truncate(adjusted >> 8));
 }
 
-const RepeatedPatternSegment = struct {
-    start: usize,
-    period: usize,
-    match_len: usize,
-    tail_len: usize,
-};
+const RepeatedPatternSegment = repeated_pattern.Segment;
 
 const BitField = struct {
     value: usize,
@@ -32761,28 +32768,7 @@ fn findRepeatedPatternSegmentReference(block: []const u8, start_min: usize, end:
 }
 
 fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize) ?RepeatedPatternSegment {
-    if (block.len < 8) return null;
-    if (start_min >= end or end - start_min < 8) return null;
-    const max_start = @min(start_min + repeated_pattern_start_scan, end - 4);
-    var best: ?RepeatedPatternSegment = null;
-    for (start_min..max_start + 1) |start| {
-        if (end - start < 8) break;
-        for (2..@min((end - start) / 2, repeated_pattern_period_max) + 1) |period| {
-            // A usable Zstd match needs at least three bytes. Reject the
-            // overwhelmingly common non-periods before entering the dependent
-            // extension loop.
-            if (!std.mem.eql(u8, block[start..][0..3], block[start + period ..][0..3])) continue;
-            var i = start + period;
-            while (i < end and block[i] == block[start + ((i - start) % period)]) : (i += 1) {}
-            const repeated_len = i - start;
-            const match_len = repeated_len - period;
-            if (match_len < 3) continue;
-            const tail_len = end - i;
-            const candidate: RepeatedPatternSegment = .{ .start = start, .period = period, .match_len = match_len, .tail_len = tail_len };
-            if (best == null or candidate.match_len > best.?.match_len) best = candidate;
-        }
-    }
-    return best;
+    return repeated_pattern.findIn(block, start_min, end);
 }
 
 test "zstd repeated pattern anchor filter matches reference" {
@@ -46671,4 +46657,20 @@ noinline fn compressedSequencePlanStrictlyDominatesPredefinedCodeSlice(
     const compressed_bytes = std.math.add(usize, plan.table_payload_len, (compressed_bits + 1 + 7) / 8) catch return error.IntegerOverflow;
     const predefined_bytes = (predefined_bits + 1 + 7) / 8;
     return compressed_bytes < predefined_bytes;
+}
+
+test "Zstd dense transition extraction kernel contracts" {
+    _ = @import("zstd/sequence/transition_group.zig");
+}
+
+test "Zstd incremental finish is recoverable until tiny output drains" {
+    try @import("zstd/incremental/small_output_contract_tests.zig").check(@This());
+}
+
+test "Zstd dense short match copy writes only its proven sixteen byte window" {
+    try @import("zstd/sequence/dense_copy16_tests.zig").isolated();
+}
+
+test "Zstd dense short match copy preserves chained initialized history" {
+    try @import("zstd/sequence/dense_copy16_tests.zig").chained();
 }

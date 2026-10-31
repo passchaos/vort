@@ -4,7 +4,7 @@ const std = @import("std");
 const vort = @import("vort");
 const heap_cap: usize = 128 * 1024 * 1024;
 const text = "Wasm HQ search abcdefghabcdefghXabcdefgh tail\n";
-var report: [48]u64 = @splat(0);
+var report: [80]u64 = @splat(0);
 
 fn require(condition: bool) error{HqSearchConsumerMismatch}!void {
     if (!condition) return error.HqSearchConsumerMismatch;
@@ -34,7 +34,7 @@ fn wholeComplete() !void {
     var memory: vort.ZstdEncodeMemoryProfile = .{};
     var options: vort.ZstdNativeFrameOptions = .{
         .strategy = .btopt,
-        .hq = .{ .parse_mode = .whole_block, .match_lengths = .complete, .search_depth = 8, .nice_len = 32, .max_working_memory = heap_cap },
+        .hq = .{ .parser_engine = .beam, .parse_mode = .whole_block, .match_lengths = .complete, .search_depth = 8, .nice_len = 32, .max_working_memory = heap_cap },
         .content_checksum = true,
         .control_profile = &profile,
         .memory_profile = &memory,
@@ -107,7 +107,7 @@ fn fullSpan() !void {
     var memory: vort.ZstdEncodeMemoryProfile = .{};
     const options: vort.ZstdNativeFrameOptions = .{
         .strategy = .btopt,
-        .hq = .{ .parse_mode = .whole_block, .match_lengths = .sampled, .min_match = 7, .nice_len = 32, .search_depth = 8, .max_working_memory = heap_cap },
+        .hq = .{ .parser_engine = .beam, .parse_mode = .whole_block, .match_lengths = .sampled, .min_match = 7, .nice_len = 32, .search_depth = 8, .max_working_memory = heap_cap },
         .content_checksum = true,
         .control_profile = &profile,
         .memory_profile = &memory,
@@ -155,7 +155,7 @@ fn incrementalRetry() !void {
     var memory: vort.ZstdEncodeMemoryProfile = .{};
     const options: vort.ZstdNativeFrameOptions = .{
         .strategy = .btopt,
-        .hq = .{ .parse_mode = .whole_block, .match_lengths = .sampled, .search_depth = 8, .nice_len = 32, .max_price_evaluations = 0, .max_working_memory = heap_cap },
+        .hq = .{ .parser_engine = .beam, .parse_mode = .whole_block, .match_lengths = .sampled, .search_depth = 8, .nice_len = 32, .max_price_evaluations = 0, .max_working_memory = heap_cap },
         .block_size_max = 8192,
         .content_checksum = true,
         .control_profile = &profile,
@@ -255,5 +255,150 @@ fn unsupported() !void {
 
 export fn zstdHqSearchUnsupported() u32 {
     unsupported() catch return 401;
+    return 0;
+}
+
+fn localOptimal() !void {
+    const a = std.heap.page_allocator;
+    var input: [512]u8 = undefined;
+    fillText(&input);
+    var profile: vort.ZstdEncoderControlProfile = .{};
+    var memory: vort.ZstdEncodeMemoryProfile = .{};
+    var options: vort.ZstdNativeFrameOptions = .{
+        .strategy = .btopt,
+        // Omit parser_engine: exercise the actual new public HQ default.
+        .hq = .{ .search_depth = 8, .nice_len = 32, .max_working_memory = heap_cap },
+        .content_checksum = true,
+        .control_profile = &profile,
+        .memory_profile = &memory,
+        .max_total_working_memory = heap_cap,
+    };
+    const uncapped = try vort.zstdEncodeNativeFrameWithOptionsAlloc(a, &input, options);
+    defer a.free(uncapped.frame);
+    try require(profile.effective_hq_parser_engine == .local_optimal and profile.effective_hq_parse_mode == .bounded and profile.effective_hq_match_lengths == .sampled);
+    try require(profile.bounded_passes > 0 and profile.sampled_length_passes > 0 and profile.whole_block_passes == 0 and profile.complete_length_passes == 0);
+    try require(profile.baseline_searches == 0 and profile.guarded_frames == 0 and profile.max_plan_price_evaluations > 1);
+    try require(memory.live_requested_bytes == 0 and memory.peak_requested_bytes > 0 and memory.peak_requested_bytes <= heap_cap);
+    try roundtrip(uncapped.frame, &input);
+    report[42] = input.len;
+    report[43] = uncapped.frame.len;
+    report[44] = @intFromBool(profile.effective_hq_parser_engine == .local_optimal);
+    report[45] = profile.bounded_passes;
+    report[46] = profile.sampled_length_passes;
+    report[47] = profile.max_plan_price_evaluations;
+    report[48] = memory.peak_requested_bytes;
+    const cap = profile.max_plan_price_evaluations;
+    const peak = memory.peak_requested_bytes;
+    profile.reset();
+    memory = .{};
+    options.hq.?.max_price_evaluations = cap;
+    const exact = try vort.zstdEncodeNativeFrameWithOptionsAlloc(a, &input, options);
+    defer a.free(exact.frame);
+    try require(std.mem.eql(u8, uncapped.frame, exact.frame));
+    try require(profile.effective_hq_parser_engine == .local_optimal and profile.effective_hq_max_price_evaluations == cap and profile.max_plan_price_evaluations == cap);
+    try require(memory.peak_requested_bytes == peak and memory.live_requested_bytes == 0);
+    try roundtrip(exact.frame, &input);
+    report[49] = exact.frame.len;
+    report[50] = memory.peak_requested_bytes;
+    const emitted = profile.emitted();
+    var output: [1024]u8 = @splat(0xa5);
+    for ([_]u64{ 0, cap - 1 }) |limit| {
+        options.hq.?.max_price_evaluations = limit;
+        if (vort.zstdEncodeNativeFrameIntoSlice(a, &input, options, &output)) |_| return error.ExpectedSearchRefusal else |err| try require(err == error.SearchLimitExceeded);
+        try untouched(&output);
+        try require(std.meta.eql(emitted, profile.emitted()) and memory.live_requested_bytes == 0);
+    }
+    report[51] = profile.price_limit_refusals;
+    report[52] = memory.live_requested_bytes;
+    report[53] = @intFromBool(std.meta.eql(emitted, profile.emitted()));
+    report[54] = profile.whole_block_passes;
+    report[55] = profile.complete_length_passes;
+    report[56] = profile.baseline_searches;
+    report[57] = profile.guarded_frames;
+}
+
+export fn zstdHqSearchLocalOptimal() u32 {
+    localOptimal() catch return 501;
+    return 0;
+}
+
+fn localIncrementalRetry() !void {
+    report[71] = 1;
+    const a = std.heap.page_allocator;
+    var input: [2048]u8 = undefined;
+    fillText(&input);
+    var profile: vort.ZstdEncoderControlProfile = .{};
+    var memory: vort.ZstdEncodeMemoryProfile = .{};
+    const options: vort.ZstdNativeFrameOptions = .{
+        .strategy = .btopt,
+        .hq = .{ .parser_engine = .local_optimal, .search_depth = 8, .nice_len = 32, .max_price_evaluations = 0, .max_working_memory = heap_cap },
+        .block_size_max = 1024,
+        .content_checksum = true,
+        .control_profile = &profile,
+        .memory_profile = &memory,
+        .max_total_working_memory = heap_cap,
+    };
+    var encoder = try vort.ZstdNativeIncrementalFrameEncoder.initExactSize(a, options, input.len);
+    report[71] = 2;
+    var live = true;
+    defer if (live) encoder.deinit();
+    var wire: std.ArrayList(u8) = .empty;
+    defer wire.deinit(a);
+    var output: [64]u8 = undefined;
+    const header = try encoder.step("", &output);
+    try wire.appendSlice(a, output[0..header.progress.output_written]);
+    const first = try encoder.step(input[0..1024], &.{});
+    report[71] = 3;
+    try require(first.progress.input_read == 1024 and first.progress.output_written == 0);
+    encoder.flush();
+    const before = encoder.snapshot();
+    const emitted = profile.emitted();
+    const heap_before = memory.live_requested_bytes;
+    @memset(&output, 0xa5);
+    if (encoder.step("", &output)) |_| return error.ExpectedFlushRefusal else |err| try require(err == error.SearchLimitExceeded);
+    report[71] = 4;
+    try untouched(&output);
+    report[71] = 5;
+    report[73] = @intFromBool(std.meta.eql(before, encoder.snapshot()));
+    report[74] = @intFromBool(std.meta.eql(emitted, profile.emitted()));
+    report[75] = heap_before;
+    report[76] = memory.live_requested_bytes;
+    try require(report[73] == 1 and report[74] == 1 and memory.live_requested_bytes <= heap_cap);
+    encoder.options.hq.?.max_price_evaluations = null;
+    try drain(&encoder, &wire, true);
+    report[71] = 6;
+    const tail = try encoder.step(input[1024..], &.{});
+    try require(tail.progress.input_read == 1024);
+    encoder.finish();
+    try drain(&encoder, &wire, false);
+    report[71] = 7;
+    try require(encoder.snapshot().done and encoder.snapshot().frame_input == input.len);
+    try require(profile.effective_hq_parser_engine == .local_optimal and profile.bounded_passes > 0 and profile.sampled_length_passes > 0);
+    try require(profile.whole_block_passes == 0 and profile.complete_length_passes == 0 and profile.baseline_searches == 0 and profile.guarded_frames == 0);
+    try require(profile.price_limit_refusals > 0 and profile.max_plan_price_evaluations > 0);
+    try roundtrip(wire.items, &input);
+    report[71] = 8;
+    report[60] = input.len;
+    report[61] = wire.items.len;
+    report[62] = @intFromBool(profile.effective_hq_parser_engine == .local_optimal);
+    report[63] = profile.bounded_passes;
+    report[64] = profile.sampled_length_passes;
+    report[65] = profile.price_limit_refusals;
+    report[66] = profile.max_plan_price_evaluations;
+    report[67] = memory.peak_requested_bytes;
+    report[68] = profile.baseline_searches;
+    report[69] = profile.guarded_frames;
+    encoder.deinit();
+    live = false;
+    try require(memory.live_requested_bytes == 0);
+    report[71] = 9;
+    report[70] = memory.live_requested_bytes;
+}
+
+export fn zstdHqSearchLocalIncrementalRetry() u32 {
+    localIncrementalRetry() catch |err| {
+        report[72] = @intFromError(err);
+        return 601;
+    };
     return 0;
 }

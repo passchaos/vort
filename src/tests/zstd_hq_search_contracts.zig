@@ -8,7 +8,7 @@ test {
     _ = h;
 }
 
-test "Zstd HQ search controls default bounded sampled paths keep the independently archived wire" {
+test "Zstd HQ search controls legacy beam frozen wire and unchanged default level paths" {
     const dictionary: zstd.NativeDictionary = .{ .id = 42, .content = h.prefix };
     for (h.frozen_wires) |sample| {
         const expected = try h.frozenAlloc(a, sample);
@@ -25,20 +25,20 @@ test "Zstd HQ search controls default bounded sampled paths keep the independent
                     .btultra2 => .btultra2,
                     else => unreachable,
                 };
-                break :block (try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, .{ .strategy = strategy })).frame;
+                break :block (try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, .{ .strategy = strategy, .hq = .{ .parser_engine = .beam } })).frame;
             },
-            .dictionary => (try zstd.encodeNativeFrameWithDictionaryAlloc(a, h.plain, .{ .strategy = .btopt }, dictionary)).frame,
+            .dictionary => (try zstd.encodeNativeFrameWithDictionaryAlloc(a, h.plain, .{ .strategy = .btopt, .hq = .{ .parser_engine = .beam } }, dictionary)).frame,
             .reusable => block: {
                 var encoder = zstd.NativeFrameEncoder.init(a);
                 defer encoder.deinit();
-                break :block (try encoder.encodeWithOptionsAlloc(h.plain, .{ .strategy = .btultra })).frame;
+                break :block (try encoder.encodeWithOptionsAlloc(h.plain, .{ .strategy = .btultra, .hq = .{ .parser_engine = .beam } })).frame;
             },
             .incremental => block: {
-                var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(a, .{ .strategy = .btopt }, h.plain.len);
+                var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(a, .{ .strategy = .btopt, .hq = .{ .parser_engine = .beam } }, h.plain.len);
                 defer encoder.deinit();
                 break :block try h.drive(a, &encoder, h.plain, 31, 17);
             },
-            .seekable => try zstd.encodeNativeSeekableStreamAlloc(a, h.plain, .{ .frame_size = 64, .frame_options = .{ .strategy = .btopt } }),
+            .seekable => try zstd.encodeNativeSeekableStreamAlloc(a, h.plain, .{ .frame_size = 64, .frame_options = .{ .strategy = .btopt, .hq = .{ .parser_engine = .beam } } }),
         };
         defer a.free(actual);
         try std.testing.expectEqualSlices(u8, expected, actual);
@@ -50,7 +50,7 @@ test "Zstd HQ search controls default bounded sampled paths keep the independent
                 else => unreachable,
             };
             var profile: zstd.EncoderControlProfile = .{};
-            const explicit = try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, .{ .strategy = strategy, .hq = .{ .parse_mode = .bounded, .match_lengths = .sampled }, .control_profile = &profile });
+            const explicit = try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, .{ .strategy = strategy, .hq = .{ .parser_engine = .beam, .parse_mode = .bounded, .match_lengths = .sampled }, .control_profile = &profile });
             defer a.free(explicit.frame);
             try std.testing.expectEqualSlices(u8, expected, explicit.frame);
             try std.testing.expectEqual(@as(u64, 0), profile.baseline_searches);
@@ -113,7 +113,7 @@ test "Zstd HQ search controls complete interior lengths beat sampled paths under
     }
 }
 
-test "Zstd HQ search controls whole 4098 plan crosses the old horizon with independently priced sequence benefit" {
+test "Zstd HQ search controls whole 4098 plan crosses legacy beam horizon with independently priced sequence benefit" {
     const input = try h.boundaryInput(a);
     defer a.free(input);
     var model: parser.EntropyModel = .{ .initialized = true };
@@ -128,7 +128,7 @@ test "Zstd HQ search controls whole 4098 plan crosses the old horizon with indep
     try std.testing.expectEqual(@as(u64, 32775 * 256), expected);
     const source = parser.Source.init("", "", input, 8192);
     var profile: zstd.EncoderControlProfile = .{};
-    var parameters: parser.Parameters = .{ .strategy = .btopt, .hq_options = .{ .parse_mode = .bounded }, .entropy = &model, .profile = &profile };
+    var parameters: parser.Parameters = .{ .strategy = .btopt, .hq_options = .{ .parser_engine = .beam, .parse_mode = .bounded }, .entropy = &model, .profile = &profile };
     const bounded = try parser.planAlloc(a, source, parameters);
     defer bounded.deinit(a);
     try std.testing.expectEqual(@as(u64, 32784 * 256), bounded.estimated_cost);

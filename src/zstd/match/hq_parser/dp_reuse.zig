@@ -106,6 +106,10 @@ fn planMode(comptime whole: bool, comptime complete: bool, comptime Matcher: typ
         result.peak_working_memory = budget.peak;
         return result;
     }
+    const choice_pruning = source.block.len <= 128 * 1024 and blk: {
+        parameters.entropy.validate() catch break :blk false;
+        break :blk true;
+    };
     const width = dp.beamWidth(parameters.strategy);
     const layout = try resources.nodeLayout(source.block.len, width, whole);
     const nodes = try scratch.nodeSlice(whole, allocator, layout.node_count);
@@ -142,7 +146,7 @@ fn planMode(comptime whole: bool, comptime complete: bool, comptime Matcher: typ
         @memset(tag_rows[0 .. goal + 1], @splat(row_tags.key(@as(Node, .{}))));
         tag_rows[0] = row_tags.init(nodes[0..width]);
         if (spill) |pointer| pointer.* = .{};
-        var context: edges.Context(whole, complete) = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .parameters = parameters, .price_budget = &price_budget, .literal_prefix = literal_prefix, .spill = spill, .tag_rows = tag_rows };
+        var context: edges.SortedContext(whole, complete) = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .parameters = parameters, .price_budget = &price_budget, .literal_prefix = literal_prefix, .spill = spill, .tag_rows = tag_rows, .choice_pruning = choice_pruning };
         for (0..goal) |position| {
             repeat_lengths.beginPosition();
             const global = base + position;

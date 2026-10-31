@@ -98,7 +98,7 @@ test "Zstd HQ btopt effective prices round integers and penalize exact long offs
     try std.testing.expectEqual(@as(u32, 2 * 512) + prices.maximum_symbol_price + 55 * prices.scale, try unknown.sequencePrice(0, 3, @as(u32, 1) << 31));
 }
 
-test "Zstd HQ btopt effective fractional trap changes actual parse with exact repeat value" {
+test "Zstd HQ legacy beam btopt effective fractional trap changes actual parse with exact repeat value" {
     const hq = @import("../hq_parser.zig");
     const source = hq.Source.init("abc", "", "abc", 1024);
     var model: prices.EntropyModel = .{};
@@ -110,7 +110,7 @@ test "Zstd HQ btopt effective fractional trap changes actual parse with exact re
     model.ml_prices[0] = 257;
     model.of_prices[0] = 1;
     const initial: rep.Repeats = .{ 3, 3, 8 };
-    const fractional = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra, .entropy = &model, .initial_repeated_offsets = initial });
+    const fractional = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btultra, .entropy = &model, .initial_repeated_offsets = initial, .hq_options = .{ .parser_engine = .beam } });
     defer fractional.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), fractional.records.len);
     try std.testing.expectEqual(@as(u64, 515), fractional.estimated_cost);
@@ -118,7 +118,7 @@ test "Zstd HQ btopt effective fractional trap changes actual parse with exact re
     const choice = try rep.resolve(0, fractional.offset_values[0], initial);
     try std.testing.expectEqual(@as(usize, 3), choice.distance);
     try std.testing.expectEqual(choice.repeats, fractional.final_repeated_offsets);
-    const integer = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btopt, .entropy = &model, .initial_repeated_offsets = initial });
+    const integer = try hq.planAlloc(std.testing.allocator, source, .{ .strategy = .btopt, .entropy = &model, .initial_repeated_offsets = initial, .hq_options = .{ .parser_engine = .beam } });
     defer integer.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 0), integer.records.len);
     try std.testing.expectEqual(@as(u64, 3 * prices.scale), integer.estimated_cost);

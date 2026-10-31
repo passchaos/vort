@@ -160,13 +160,17 @@ def main():
         (folder / "legacy-wire.json").write_text(json.dumps(frozen, indent=2) + "\n")
         for row in frozen:
             expected = corpus[row["sample"]]
+            strategy = row["args"][0].removeprefix("--strategy=") if row["args"] else None
+            compatibility_flags = ("--hq-parser-engine=beam",) if strategy in OPTIMAL else ()
             for instrumented in (False, True):
-                flags = tuple(row["args"]) + (("--profile",) if instrumented else ())
-                frame, _ = encode(FILE_COMMANDS[0], (paths[row["sample"]], output), flags, expected)
+                flags = tuple(row["args"]) + compatibility_flags + (("--profile",) if instrumented else ())
+                frame, log = encode(FILE_COMMANDS[0], (paths[row["sample"]], output), flags, expected)
                 assert len(frame) == row["bytes"] and digest(frame) == row["sha256"], row
+                if instrumented:
+                    assert profile(log, "zstd_search_profile")["parser_engine"] == ("beam" if strategy in OPTIMAL else "none")
                 report["legacy_wire_checks"] += 1
             if row["args"] and row["args"][0].removeprefix("--strategy=") in ("lazy2", "btlazy2", *OPTIMAL):
-                flags = tuple(row["args"]) + ("--hq-parse-mode=bounded", "--hq-match-lengths=sampled", "--profile")
+                flags = tuple(row["args"]) + compatibility_flags + ("--hq-parse-mode=bounded", "--hq-match-lengths=sampled", "--profile")
                 frame, _ = encode(FILE_COMMANDS[0], (paths[row["sample"]], output), flags, expected)
                 assert len(frame) == row["bytes"] and digest(frame) == row["sha256"], row
                 report["legacy_wire_checks"] += 1
@@ -176,12 +180,13 @@ def main():
         for strategy in OPTIMAL:
             for mode in ("bounded", "whole_block"):
                 for lengths in ("sampled", "complete"):
-                    flags = (f"--strategy={strategy}", f"--hq-parse-mode={mode}", f"--hq-match-lengths={lengths}")
+                    flags = (f"--strategy={strategy}", "--hq-parser-engine=beam", f"--hq-parse-mode={mode}", f"--hq-match-lengths={lengths}")
                     plain, _ = encode(FILE_COMMANDS[0], (paths["repeated"], output), flags, payload)
                     measured, log = encode(FILE_COMMANDS[0], (paths["repeated"], output), flags + ("--profile",), payload)
                     assert plain == measured, "profile changed the wire"
                     report["profile_wire_checks"] += 1
                     search = profile(log, "zstd_search_profile")
+                    assert search["parser_engine"] == "beam", search
                     assert search["parse_mode"] == mode and search["match_lengths"] == lengths and search["max_prices"] == "unlimited", search
                     assert search[f"{mode}_passes"] > 0 and search[f"{lengths}_length_passes"] > 0, search
                     boundary = search["max_plan_price_evaluations"]
@@ -210,7 +215,34 @@ def main():
             measured, log = encode(command, positional, flags + ("--profile",), data)
             assert plain == measured
             assert profile(log, "zstd_search_profile")["max_prices"] == U64_MAX
+            assert profile(log, "zstd_search_profile")["parser_engine"] == "beam"
             report["profile_wire_checks"] += 1
+
+        # Default local parsing and explicit engines are validated independently
+        # of frozen beam wires. Each bound is observed for its actual engine.
+        for strategy in OPTIMAL:
+            for engine in (None, "local_optimal", "beam"):
+                engine_flags = () if engine is None else (f"--hq-parser-engine={engine}",)
+                actual_engine = engine or "local_optimal"
+                flags = (f"--strategy={strategy}",) + engine_flags
+                for command in FILE_COMMANDS:
+                    plain, _ = encode(command, (paths["repeated"], output), flags, payload)
+                    measured, log = encode(command, (paths["repeated"], output), flags + ("--profile",), payload)
+                    assert plain == measured
+                    search = profile(log, "zstd_search_profile")
+                    assert search["parser_engine"] == actual_engine, search
+                    boundary = search["max_plan_price_evaluations"]
+                    assert boundary > 0 and search["baseline_searches"] == 0 and search["guarded_frames"] == 0, search
+                    exact, _ = encode(command, (paths["repeated"], output), flags + (f"--hq-max-prices={boundary}",), payload)
+                    assert exact == plain
+                    failure(command, flags + (f"--hq-max-prices={boundary - 1}",), "SearchLimitExceeded")
+                    report["profile_wire_checks"] += 1
+            # The resolver reports beam for expanded requests even when the
+            # caller explicitly selects local_optimal.
+            for expanded in ("--hq-parse-mode=whole_block", "--hq-match-lengths=complete"):
+                flags = (f"--strategy={strategy}", "--hq-parser-engine=local_optimal", expanded, "--profile")
+                _, log = encode(FILE_COMMANDS[0], (paths["repeated"], output), flags, payload)
+                assert profile(log, "zstd_search_profile")["parser_engine"] == "beam"
 
         # Rejections precede input I/O, and runtime refusal preserves both outputs and same-path sources.
         for strategy in ("auto", "fast", "double_fast", "greedy", "lazy", "optimal", "lazy2", "btlazy2"):
@@ -220,6 +252,11 @@ def main():
             failure(command, ("--strategy=lazy2", "--hq-match-lengths=complete"), "InvalidBlockPlan", absent=True)
             failure(command, ("--strategy=btopt", "--hq-max-prices=0"), "SearchLimitExceeded", same_path=True)
             failure(command, ("--strategy=btopt", "--hq-max-prices=0", "--hq-max-prices=1"), "DuplicateZstdOption")
+            failure(command, ("--strategy=btopt", "--hq-parser-engine=beam", "--hq-parser-engine=local_optimal"), "DuplicateZstdOption")
+            failure(command, ("--strategy=btopt", "--hq-parser-engine=invalid"), "InvalidZstdHqParserEngine", absent=True)
+            for strategy in ("auto", "fast", "double_fast", "greedy", "lazy", "optimal", "lazy2", "btlazy2"):
+                for engine in ("local_optimal", "beam"):
+                    failure(command, (f"--strategy={strategy}", f"--hq-parser-engine={engine}"), "InvalidBlockPlan", absent=True)
             same = folder / "same-path-success.raw"
             same.write_bytes(payload)
             encode(command, (same, same), flags, payload, destination=same)

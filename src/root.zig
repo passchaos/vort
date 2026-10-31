@@ -2655,6 +2655,7 @@ pub const zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = zstd.enc
 pub const ZstdFrameOptions = zstd.FrameOptions;
 pub const ZstdStrategy = zstd.Strategy;
 pub const ZstdHqOptions = zstd.HqOptions;
+pub const ZstdHqParserEngine = @import("zstd/encode/hq_options.zig").ParserEngine;
 pub const ZstdHqParseMode = @import("zstd/encode/hq_options.zig").ParseMode;
 pub const ZstdHqMatchLengthPolicy = @import("zstd/encode/hq_options.zig").MatchLengthPolicy;
 pub const ZstdCanonicalCompressionParameters = zstd.CanonicalCompressionParameters;

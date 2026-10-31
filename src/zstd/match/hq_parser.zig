@@ -2,10 +2,12 @@ const std = @import("std");
 const controls = @import("../encode/controls.zig");
 const source_mod = @import("controlled_source.zig");
 const tree = @import("hq_tree.zig");
+const adaptive_tree = @import("adaptive_tree.zig");
 const lazy2 = @import("lazy2.zig");
 const match_frontier_cache = @import("hq_parser/match_frontier_cache.zig");
 const state = @import("hq_parser/state.zig");
 const dp = @import("hq_parser/dp.zig");
+const frontier_parser = @import("hq_parser/frontier_parser.zig");
 const dp_reuse = @import("hq_parser/dp_reuse.zig");
 const resources = @import("hq_parser/resources.zig");
 pub const prices = @import("hq_parser/prices.zig");
@@ -22,6 +24,11 @@ pub fn requiredWorkingMemory(source: Source, parameters: Parameters) !usize {
     if (parameters.strategy != .btopt and parameters.strategy != .btultra and parameters.strategy != .btultra2)
         return error.InvalidBlockPlan;
     if (source.block.len < parameters.hq_options.min_match) return 0;
+    if (useFrontier(parameters)) {
+        var required = try resources.add(try frontier_parser.ownWorkingBytes(source, parameters), if (useAdaptiveMatcher(source)) try adaptive_tree.Matcher.requiredWorkingMemory(source, parameters.hq_options) else try tree.Matcher.requiredWorkingMemory(source, parameters.hq_options));
+        if (warmUp(source, parameters)) required = try resources.add(required, try resources.resultBytes(source, parameters.hq_options.min_match));
+        return required;
+    }
     var required = try resources.add(try dp.ownWorkingBytes(source, parameters), try tree.Matcher.requiredWorkingMemory(source, parameters.hq_options));
     if (warmUp(source, parameters)) {
         required = try resources.add(required, try resources.resultBytes(source, parameters.hq_options.min_match));
@@ -63,6 +70,7 @@ fn warmUp(source: Source, parameters: Parameters) bool {
         !parameters.entropy.initialized and parameters.entropy.origin == .predefined;
 }
 fn run(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: Source, parameters: Parameters) !Plan {
+    if (useFrontier(parameters)) return frontierRun(allocator, budget, source, parameters);
     if (!warmUp(source, parameters))
         return dp.plan(allocator, budget, source, parameters, tree.Matcher);
     var scratch: dp_reuse.Scratch(tree.Matcher) = .{};
@@ -124,6 +132,52 @@ fn run(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source
     return result;
 }
 
+fn useFrontier(parameters: Parameters) bool {
+    return parameters.hq_options.effectiveParserEngine() == .local_optimal;
+}
+fn useAdaptiveMatcher(source: Source) bool {
+    // Both entry points validate the source before computing this intersection.
+    const available = @min(source.prefixLen() + source.block.len, source.window_len + 1);
+    return available <= 32768;
+}
+fn frontierRun(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: Source, parameters: Parameters) !Plan {
+    if (useAdaptiveMatcher(source)) return frontierWithMatcher(adaptive_tree.Matcher, allocator, budget, source, parameters);
+    return frontierWithMatcher(tree.Matcher, allocator, budget, source, parameters);
+}
+fn frontierWithMatcher(comptime Matcher: type, allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: Source, parameters: Parameters) !Plan {
+    if (!warmUp(source, parameters)) return frontier_parser.plan(allocator, budget, source, parameters, Matcher);
+    var pass = parameters;
+    pass.strategy = .btultra;
+    var first = try frontier_parser.plan(allocator, budget, source, pass, Matcher);
+    errdefer first.deinit(allocator);
+    const initial_cost = first.estimated_cost;
+    const refined = parameters.entropy.refined(&first.statistics);
+    var measurement = parameters;
+    measurement.entropy = &refined;
+    measurement.profile = null;
+    try resources.finish(&first, source, parameters.initial_repeated_offsets, measurement);
+    const baseline_cost = first.estimated_cost;
+    if (parameters.profile) |profile| profile.add("refinement_passes", 1);
+    pass.entropy = &refined;
+    const second = try frontier_parser.plan(allocator, budget, source, pass, Matcher);
+    var result: Plan = undefined;
+    if (second.estimated_cost <= baseline_cost) {
+        first.deinit(allocator);
+        result = second;
+    } else {
+        second.deinit(allocator);
+        result = first;
+    }
+    result.passes = 2;
+    result.used_refinement = true;
+    result.first_pass_cost = initial_cost;
+    result.refined_first_pass_cost = baseline_cost;
+    result.peak_working_memory = budget.peak;
+    return result;
+}
+
 test {
     _ = @import("hq_parser/tests.zig");
+    _ = @import("hq_parser/parser_engine_tests.zig");
+    _ = @import("hq_parser/matcher_policy_tests.zig");
 }

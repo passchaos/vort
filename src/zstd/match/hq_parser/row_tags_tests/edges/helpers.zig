@@ -24,6 +24,7 @@ pub const Case = struct {
     pricing: enum { predefined, varied, zero } = .varied,
     entropy: ?*const prices.EntropyModel = null,
     seed_rows: bool = true,
+    full_cost: ?u64 = null,
     repetitions: usize = 1,
     instrument: bool = true,
     tagged: bool = false,
@@ -89,6 +90,10 @@ const Probes = struct {
 fn initializeRow(comptime Node: type, row: []Node, index: usize, case: Case) void {
     @memset(row, .{});
     if (!case.seed_rows) return;
+    if (case.full_cost) |cost| {
+        for (row, 0..) |*node, slot| node.* = .{ .cost = cost +| @as(u64, @intCast(slot)), .repeats = .{ 99, 101, 103 }, .previous_slot = @intCast(slot) };
+        return;
+    }
     row[0] = .{
         .cost = 47 + (index % 13) * prices.scale,
         .repeats = case.repeats,
@@ -181,6 +186,7 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
         .literal_prefix = prefix,
         .spill = &actual_spill,
     };
+    if (@hasDecl(Codec, "choice_pruning")) context.choice_pruning = Codec.choice_pruning;
     const tags = try a.alloc(@import("../../row_tags.zig").Tags, goal + 1);
     defer a.free(tags);
     const expected_tags = try a.alloc(@import("../../row_tags.zig").Tags, goal + 1);
@@ -222,8 +228,18 @@ pub fn compare(comptime Codec: type, comptime whole: bool, comptime complete: bo
     expected_budget.finish();
     try std.testing.expectEqual(expected_failure, actual_failure);
     try std.testing.expectEqual(expected_budget.limit, actual_budget.limit);
-    try std.testing.expectEqual(expected_budget.admitted, actual_budget.admitted);
-    try std.testing.expectEqualDeep(expected_profile, actual_profile);
+    if (@hasDecl(Codec, "allow_price_reduction") and Codec.allow_price_reduction) {
+        try std.testing.expectEqual(expected_budget.admitted, actual_budget.admitted);
+        var normalized = actual_profile;
+        inline for (.{ "price_evaluations", "optimal_transitions" }) |field| {
+            try std.testing.expect(@field(actual_profile, field) <= @field(expected_profile, field));
+            @field(normalized, field) = @field(expected_profile, field);
+        }
+        try std.testing.expectEqualDeep(expected_profile, normalized);
+    } else {
+        try std.testing.expectEqual(expected_budget.admitted, actual_budget.admitted);
+        try std.testing.expectEqualDeep(expected_profile, actual_profile);
+    }
     try std.testing.expectEqualDeep(expected_spill.node, actual_spill.node);
     try std.testing.expectEqual(expected_spill.end_position, actual_spill.end_position);
     try std.testing.expectEqual(expected_spill.continuation_cost, actual_spill.continuation_cost);

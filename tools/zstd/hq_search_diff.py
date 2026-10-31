@@ -60,7 +60,7 @@ def corpus(directory, references):
         for parse, lengths in (("whole_block", "sampled"), ("bounded", "complete"), ("whole_block", "complete")):
             for api in ("one_shot", "reusable", "incremental", "seekable"):
                 cases.append({"name": strategy + "-" + parse + "-" + lengths + "-" + api, "payload": text,
-                              "config": {**base, "strategy": strategy, "api": api, "parse_mode": parse, "match_lengths": lengths}, "dictionary": b""})
+                              "config": {**base, "strategy": strategy, "api": api, "parser_engine": "beam", "parse_mode": parse, "match_lengths": lengths}, "dictionary": b""})
     raw = random.Random(0x97c4ad99).randbytes(4096)
     raw_path = directory / "raw.dictionary"
     if raw_path.exists():require(raw_path.read_bytes() == raw, "fixed raw prefix changed")
@@ -73,18 +73,25 @@ def corpus(directory, references):
     for name, dictionary, path, payload, standard in (("raw", raw, raw_path, raw[-75:] + b"end", False),
                                                    ("standard", full, full_path, text, True)):
         cases.append({"name": "dictionary-" + name, "payload": payload, "dictionary": dictionary,
-                      "config": {**base, "strategy": "btultra2", "api": "one_shot", "parse_mode": "whole_block", "match_lengths": "complete",
+                      "config": {**base, "strategy": "btultra2", "api": "one_shot", "parser_engine": "beam", "parse_mode": "whole_block", "match_lengths": "complete",
                                  "dictionary_path": str(path), "full_dictionary": standard, "content_size": False}})
     rng = random.Random(0x131072)
     large = bytearray(rng.randbytes(131072));large[131072 - 96:] = large[64:64 + 96]
     cases.append({"name": "full-128k-position-span", "payload": bytes(large), "dictionary": b"",
-                  "config": {**base, "strategy": "btopt", "api": "one_shot", "parse_mode": "whole_block", "match_lengths": "sampled",
+                  "config": {**base, "strategy": "btopt", "api": "one_shot", "parser_engine": "beam", "parse_mode": "whole_block", "match_lengths": "sampled",
                              "block_size": 131072, "search_depth": 4, "nice_len": 32}})
     for length in (69, 75):
         prefix = random.Random(length).randbytes(112)
         payload = prefix + prefix[:length] + b"tail-interior-copy-choice!"
         cases.append({"name": "ordinary-interior-" + str(length), "payload": payload, "dictionary": b"",
-                      "config": {**base, "strategy": "btopt", "api": "one_shot", "parse_mode": "whole_block", "match_lengths": "complete"}})
+                      "config": {**base, "strategy": "btopt", "api": "one_shot", "parser_engine": "beam", "parse_mode": "whole_block", "match_lengths": "complete"}})
+    for strategy in STRATEGIES:
+        for engine in (None, "local_optimal", "beam"):
+            for api in ("one_shot", "reusable", "incremental", "seekable"):
+                config = {**base, "strategy": strategy, "api": api, "parse_mode": "bounded", "match_lengths": "sampled"}
+                if engine is not None:config["parser_engine"] = engine
+                cases.append({"name": strategy + "-engine-" + (engine or "default") + "-" + api,
+                              "payload": text, "config": config, "dictionary": b""})
     return cases, base, text
 
 
@@ -115,8 +122,11 @@ def campaign(args, cases, references, old, base, text):
         for row in old["rows"]:
             payload, expected = [(args.output_dir / row[field]).read_bytes() for field in ("input", "wire")]
             require(digest(payload) == row["input_sha256"] and digest(expected) == row["wire_sha256"], "frozen old wire hash")
-            current, _ = call(args.probe, args.output_dir, "regression-" + row["name"], payload, row["config"])
-            require(current == expected, "default bounded sampled wire changed")
+            config = dict(row["config"])
+            if config.get("strategy") in STRATEGIES:config["parser_engine"] = "beam"
+            current, stats = call(args.probe, args.output_dir, "regression-" + row["name"], payload, config)
+            require(current == expected, "frozen old beam or non-HQ wire changed")
+            if config.get("strategy") in STRATEGIES:require(stats["resolved"]["parser_engine"] == "beam", "frozen HQ row did not request beam")
     for case in cases:
         name, payload, config, dictionary = case["name"], case["payload"], case["config"], case["dictionary"]
         if args.case and name not in args.case:continue
@@ -125,11 +135,15 @@ def campaign(args, cases, references, old, base, text):
         wire, stats = call(args.probe, args.output_dir, name, payload, config)
         require(stats["resolved"]["parse_mode"] == config["parse_mode"] and stats["resolved"]["match_lengths"] == config["match_lengths"], "requested search controls resolution")
         profile = stats["profile"]
-        require(profile["baseline_searches"] > 0, "expanded mode did not execute its safeguard search")
+        expanded = config["parse_mode"] == "whole_block" or config["match_lengths"] == "complete"
+        effective_engine = "beam" if expanded else config.get("parser_engine", "local_optimal")
+        require(stats["resolved"]["parser_engine"] == effective_engine and profile["effective_hq_parser_engine"] == effective_engine, "actual parser engine metadata mismatch")
+        if expanded:require(profile["baseline_searches"] > 0, "expanded mode did not execute its safeguard search")
+        else:require(profile["baseline_searches"] == 0 and profile["guarded_frames"] == 0, "bounded sampled engine added expanded safeguards")
         if config["parse_mode"] == "whole_block":require(profile["whole_block_passes"] > 0, "whole mode ran no actual whole parse")
         if config["match_lengths"] == "complete":require(profile["complete_length_passes"] > 0, "complete mode ran no actual complete length choices")
         if name == "full-128k-position-span":require(profile["max_parse_positions"] == 131072, "whole block failed to search full format-block span")
-        if config["api"] != "incremental":
+        if expanded and config["api"] != "incremental":
             require(len(wire) <= len(bounded) and profile["guarded_frames"] > 0, "complete frame safeguard wire/counter mismatch")
         off, off_stats = call(args.probe, args.output_dir, name + "-off", payload, {**config, "profile_enabled": False, "total_profile_enabled": False})
         require(off == wire and off_stats["resolved"] == stats["resolved"], "instrumentation changed wire or resolution")
@@ -137,6 +151,17 @@ def campaign(args, cases, references, old, base, text):
         if config["content_size"]:require(envelope["content_size_sum"] == len(payload), "independent FCS accounting")
         if dictionary:require(profile["dictionary_sequences"] > 0, "dictionary case emitted no dictionary reference")
         references.verify(wire, payload, dictionary)
+        if not expanded:
+            cap = profile["max_plan_price_evaluations"]
+            require(cap > 0, "bounded engine admitted no sequence prices")
+            exact, exact_stats = call(args.probe, args.output_dir, name + "-cap-exact", payload, {**config, "max_price_evaluations": cap})
+            require(exact == wire and exact_stats["profile"]["max_plan_price_evaluations"] <= cap, "bounded engine exact cap changed wire")
+            _, refused = call(args.probe, args.output_dir, name + "-cap-below", payload, {**config, "max_price_evaluations": cap - 1}, "SearchLimitExceeded")
+            require(refused["owned_heap_after_operation"] == 0 and refused["owned_heap_after_output_free"] == 0, "bounded engine cap refusal retained actual owned heap")
+            if config["api"] == "one_shot":
+                into, _ = call(args.probe, args.output_dir, name + "-into-exact", payload, {**config, "api": "into", "output_capacity": len(wire)})
+                require(into == wire, "exact-capacity engine transaction changed wire")
+                call(args.probe, args.output_dir, name + "-into-short", payload, {**config, "api": "into", "output_capacity": len(wire) - 1}, "OutputTooSmall")
         result_rows = []
         for layer, independent in references.encoded(payload, config["strategy"], dictionary):
             decoded, _ = call(args.probe, args.output_dir, name + "-reverse-" + layer, independent, {**config, "operation": "decode"})
@@ -148,7 +173,7 @@ def campaign(args, cases, references, old, base, text):
                      "probe": stats, "envelope": envelope, "reference_results": result_rows})
     budget = None
     if not args.case:
-        config = {**base, "strategy": "btultra2", "parse_mode": "whole_block", "match_lengths": "complete"}
+        config = {**base, "strategy": "btultra2", "parser_engine": "beam", "parse_mode": "whole_block", "match_lengths": "complete"}
         wire, measured = call(args.probe, args.output_dir, "budget-measure", text, config)
         peak = measured["profile"]["max_plan_price_evaluations"]
         require(peak > 1, "per-plan budget has no counted choices")
@@ -166,6 +191,8 @@ def campaign(args, cases, references, old, base, text):
         require(stats_only["profile"]["baseline_searches"] == 0 and stats_only["profile"]["guarded_frames"] == 0, "budget-only controls added a search safeguard")
         call(args.probe, args.output_dir, "unsupported-strategy", text, {**config, "strategy": "lazy2"}, "InvalidBlockPlan")
         call(args.probe, args.output_dir, "invalid-parse-mode", text, {**config, "parse_mode": "invalid"}, "InvalidBlockPlan")
+        call(args.probe, args.output_dir, "invalid-parser-engine", text, {**config, "parser_engine": "invalid"}, "InvalidBlockPlan")
+        call(args.probe, args.output_dir, "unsupported-parser-engine-strategy", text, {**base, "strategy": "lazy2", "parser_engine": "local_optimal"}, "InvalidBlockPlan")
         call(args.probe, args.output_dir, "into-error", text, {**config, "api": "into", "output_capacity": 0}, "OutputTooSmall")
         call(args.probe, args.output_dir, "workspace-zero", text, {**config, "max_working_memory": 0}, "WorkingMemoryLimitExceeded")
         cycle_wire, cycle = call(args.probe, args.output_dir, "reusable-profile-cycle", text,

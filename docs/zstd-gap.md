@@ -1811,3 +1811,97 @@ eliminated only 15.5%–24.1% of aggregate actual probes; the two 16 KiB frontie
 fallback rows hit only 31.8%–33.5% of second-pass requests. Adding up to
 32 bytes per position is therefore rejected before ordinary timing. See
 [`performance/zstd-cross-pass-rep-diagnostic.md`](performance/zstd-cross-pass-rep-diagnostic.md).
+
+## 2026-10-30 strict-cost DP filtering
+
+A checked match edge whose cost is strictly above the final cost of its ordered
+DP destination now skips insertion. Equal costs, all price admissions and
+validation, arbitrary-row contexts and cross-horizon spill updates retain their
+original behavior. Eight ordinary AB/BA sweeps preserve every wire, diagnostic
+counter and requested memory peak while reducing real-file btultra2 geometric
+time to `0.860430/0.777708` at 4/16 KiB and trained-dictionary time to `0.796049`.
+The periodic btultra2 control is `1.015668` and remains a measured regression.
+Matched requested HQ controls still leave real-file time at `58.37x/65.74x`
+libzstd 1.6.0, so reducing state and transition count remains a larger priority.
+See [strict-cost evidence](performance/zstd-strict-cost.md).
+
+## 2026-10-31 per-choice pricing and inlined edges
+
+Ordered HQ enumeration reuses the exact LL/OF terms after the first admitted
+sequence price succeeds; every subsequent ML price, quota admission, profile
+update and checked accumulated cost remains in place. Preparation uses a
+per-choice nullable local cache for longer ranges, and edge extension is
+explicitly inlined. Generic contexts retain complete pricing. No search
+settings, candidate order or requested heap allocation changes.
+
+Eight new ordinary AB/BA sweeps measure 4/16 KiB real-file btultra2 time ratios
+`0.891906/0.845568` against the preceding implementation, with dictionary time
+`0.841684`; complete wires, settings, profiles and memory peaks agree. The new
+matched libzstd time ratios are `51.864742/55.863803`, while size ratios remain
+`0.985492/0.995786`. Periodic synthetic time is still `37826.011/5363.705` for
+btultra2/btopt despite equal wire sizes. Those excessive search costs, larger
+real/streaming inputs and broad speed/ratio/memory coverage keep the objective
+open. Pure-repetition control variation is retained in both exploratory and
+formal campaigns. See [choice-price evidence](performance/zstd-choice-price.md).
+
+## 2026-10-31 repeated-offset choice dominance
+
+Validated ordered DP compacts adjacent offset choices with identical complete
+successor repeat histories, retaining the lowest OF price and original tie
+winner. It keeps the original length enumeration and reserves skipped choices'
+original budget allowance; finite quota prefixes and measured-cap behavior
+remain intact. An inline early-return wrapper also avoids entering heavy
+materialization for insufficient matches.
+
+Eight ordinary sweeps measure real 4/16 KiB btultra2 time ratios
+`0.922351/0.929304` against the preceding shipping source, all 24 pairs won in
+each group. Six 64 KiB files measure `0.901950` with 18/18 wins. Full wires,
+settings, requested heap and logical allowances agree. Periodic btultra2
+physical prices fall from 34,000,436 to 23,968,313. Pure-repetition btopt retains
+a `1.016304` point regression. New matched real 4/16/64 KiB time remains
+`47.751724/51.911422/61.934751` libzstd 1.6.0, so wider algorithmic work is still
+required. See [choice-dominance evidence](performance/zstd-choice-dominance.md).
+
+## 2026-10-31 local optimal parser
+
+Bounded sampled HQ now uses a pending-LL-aware single path, increasing-length
+frontiers, adaptive local endpoints and long-match termination. The previous
+beam remains explicit, with whole/complete coverage unchanged. Independent
+periodic-segment caching and strict upper bounds eliminate repeated identical
+scans while preserving exact Segment and tie behavior.
+
+All twelve Silesia64/128KiB prefixes record time ratios0.062327/0.064724
+against the preceding beam, at size1.017088/1.017637. Current direct reference
+checks take3.154517x/3.216303x libzstd1.6.0 time at size1.004801/1.005144.
+Three actual1MiB multi-block inputs take4.632625x reference time at size0.992800.
+Old beam can still produce substantially smaller outputs on individual cases,
+and is available through `parser_engine = .beam`. Sparse index maintenance,
+data-dependent hash sizing, compact stretches and improved cost models remain
+open. [Evidence and contracts](performance/zstd-local-optimal.md) retain
+all ablations, slower observations, new actual-engine/quota checks and the
+original strict legacy oracles. The industry-best objective remains active.
+
+## 2026-10-31 matcher sizing and block indexing
+
+The subsequent [matcher increment](performance/zstd-adaptive-matcher.md)
+shares a single kernel between full and source-sized matchers. Bounded sampled
+local-optimal parsing uses smaller tables when the validated source/window
+intersection is at most 32768 positions. Prefix-backed matching stays dense;
+prefix-free long skips use a stride of eight and a dense 64-position tail.
+Explicit beam and whole/complete modes retain the full matcher.
+
+Against the preceding local-optimal source, three real 4 KiB btultra2 inputs
+record time `0.875936` with equal compressed sizes. Real 256-byte prefixes
+record `0.200969`; one parser requested peak shrinks `552656 -> 30416` bytes.
+The selected policy preserves all 27 large-input complete wires. Unselected
+all-source sparse and cold-reuse variants retain their dictionary-size and
+large-input time regressions in the evidence package.
+
+A separate final-source epoch records libzstd 1.6.0 time ratios
+`3.127111/3.176228/4.569109`, at size `1.004801/1.005144/0.992800`, for
+all twelve 64/128 KiB Silesia prefixes and three actual 1 MiB inputs. These
+current observations replace the prior epoch for this measured slice without
+chaining speed factors. Persistent cross-block indexes, larger-input matching
+and entropy models remain algorithm work. Debug/ReleaseFast each pass 1246
+Zstd tests, broad native/Wasm checks pass 212 steps, and independent baseline,
+public resource and actual WASI contracts pass. The long-term goal stays active.

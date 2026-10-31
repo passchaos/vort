@@ -4,9 +4,9 @@ const parser = @import("../zstd/match/hq_parser.zig");
 const h = @import("zstd_hq_search_helpers.zig");
 const a = std.testing.allocator;
 
-test "Zstd HQ search controls limits refuse requested work instead of publishing a baseline fallback" {
+test "Zstd HQ search controls legacy beam limits refuse requested work instead of publishing a baseline fallback" {
     var profile: zstd.EncoderControlProfile = .{};
-    var options: zstd.NativeFrameOptions = .{ .strategy = .btopt, .hq = .{ .parse_mode = .whole_block, .match_lengths = .complete }, .control_profile = &profile };
+    var options: zstd.NativeFrameOptions = .{ .strategy = .btopt, .hq = .{ .parser_engine = .beam, .parse_mode = .whole_block, .match_lengths = .complete }, .control_profile = &profile };
     const baseline = try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, options);
     defer a.free(baseline.frame);
     const cap = profile.max_plan_price_evaluations;
@@ -25,6 +25,31 @@ test "Zstd HQ search controls limits refuse requested work instead of publishing
     defer a.free(exact.frame);
     try std.testing.expectEqualSlices(u8, baseline.frame, exact.frame);
     try std.testing.expect(profile.price_evaluations > cap);
+    try std.testing.expect(profile.price_limit_refusals > 0);
+}
+
+test "Zstd HQ search controls local safeguard preserves independent logical quota and refuses publication" {
+    var profile: zstd.EncoderControlProfile = .{};
+    var options: zstd.NativeFrameOptions = .{ .strategy = .btopt, .hq = .{ .parse_mode = .whole_block, .match_lengths = .complete }, .control_profile = &profile };
+    const original = try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, options);
+    defer a.free(original.frame);
+    const cap = profile.max_plan_price_evaluations;
+    try std.testing.expect(cap > 0 and profile.price_evaluations > 0);
+    try std.testing.expect(profile.whole_block_passes > 0 and profile.complete_length_passes > 0);
+    try std.testing.expect(profile.baseline_searches > 0 and profile.bounded_passes > 0 and profile.sampled_length_passes > 0);
+    try std.testing.expectEqual(zstd.HqParserEngine.beam, profile.effective_hq_parser_engine.?);
+    const emitted = profile.emitted();
+    for ([_]u64{ 0, cap - 1 }) |limit| {
+        options.hq.?.max_price_evaluations = limit;
+        var destination: [1024]u8 = @splat(0xa5);
+        try std.testing.expectError(error.SearchLimitExceeded, zstd.encodeNativeFrameIntoSlice(a, h.plain, options, &destination));
+        try h.untouched(&destination);
+        try std.testing.expectEqualDeep(emitted, profile.emitted());
+    }
+    options.hq.?.max_price_evaluations = cap;
+    const exact = try zstd.encodeNativeFrameWithOptionsAlloc(a, h.plain, options);
+    defer a.free(exact.frame);
+    try std.testing.expectEqualSlices(u8, original.frame, exact.frame);
     try std.testing.expect(profile.price_limit_refusals > 0);
 }
 

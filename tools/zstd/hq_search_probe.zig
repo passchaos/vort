@@ -3,12 +3,66 @@ const vort = @import("vort");
 const codec = vort.zstd;
 const Profile = codec.EncoderControlProfile;
 
+/// Independent harness meter. The reusable total-memory profile is an
+/// end-of-call snapshot; this owner observes real frees during encoder deinit.
+/// All callbacks preserve the backing allocator's actual success/failure.
+const OperationMeter = struct {
+    backing: std.mem.Allocator,
+    live: usize = 0,
+    peak: usize = 0,
+    allocations: usize = 0,
+    frees: usize = 0,
+    resizes: usize = 0,
+    remaps: usize = 0,
+    allocations_80: usize = 0,
+    frees_80: usize = 0,
+
+    fn allocator(self: *OperationMeter) std.mem.Allocator {
+        return .{ .ptr = self, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+    fn changed(self: *OperationMeter, old: usize, new: usize) void {
+        std.debug.assert(old <= self.live);
+        self.live = self.live - old + new;
+        self.peak = @max(self.peak, self.live);
+    }
+    fn alloc(raw: *anyopaque, len: usize, alignment: std.mem.Alignment, address: usize) ?[*]u8 {
+        const self: *OperationMeter = @ptrCast(@alignCast(raw));
+        const memory = self.backing.rawAlloc(len, alignment, address) orelse return null;
+        self.changed(0, len);
+        self.allocations += 1;
+        self.allocations_80 += @intFromBool(len == 80);
+        return memory;
+    }
+    fn resize(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, address: usize) bool {
+        const self: *OperationMeter = @ptrCast(@alignCast(raw));
+        if (!self.backing.rawResize(memory, alignment, len, address)) return false;
+        self.changed(memory.len, len);
+        self.resizes += 1;
+        return true;
+    }
+    fn remap(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, address: usize) ?[*]u8 {
+        const self: *OperationMeter = @ptrCast(@alignCast(raw));
+        const result = self.backing.rawRemap(memory, alignment, len, address) orelse return null;
+        self.changed(memory.len, len);
+        self.remaps += 1;
+        return result;
+    }
+    fn free(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, address: usize) void {
+        const self: *OperationMeter = @ptrCast(@alignCast(raw));
+        self.backing.rawFree(memory, alignment, address);
+        self.changed(memory.len, 0);
+        self.frees += 1;
+        self.frees_80 += @intFromBool(memory.len == 80);
+    }
+};
+
 const Config = struct {
     operation: []const u8 = "encode",
     api: []const u8 = "one_shot",
     mode: []const u8 = "level",
     level: c_int = 3,
     strategy: []const u8 = "auto",
+    parser_engine: ?[]const u8 = null,
     parse_mode: ?[]const u8 = null,
     match_lengths: ?[]const u8 = null,
     max_price_evaluations: ?u64 = null,
@@ -44,6 +98,7 @@ const Resolved = struct {
     min_match: ?usize = null,
     max_working_memory: ?usize = null,
     parse_mode: ?[]const u8 = null,
+    parser_engine: ?[]const u8 = null,
     match_lengths: ?[]const u8 = null,
     max_price_evaluations: ?u64 = null,
     max_total_working_memory: ?usize = null,
@@ -62,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
     const json = try read(init, config_path, 65536);
     defer init.gpa.free(json);
     const parsed = std.json.parseFromSlice(Config, init.gpa, json, .{}) catch |err| {
-        try printJson(init, .{ .@"error" = @errorName(err), .input_bytes = input.len, .output_bytes = 0, .resolved = @as(?Resolved, null), .profile = Profile{}, .memory_profile = codec.EncodeMemoryProfile{}, .reusable_cycle_verified = false, .output_preserved_on_error = true });
+        try printJson(init, .{ .@"error" = @errorName(err), .input_bytes = input.len, .output_bytes = 0, .resolved = @as(?Resolved, null), .profile = Profile{}, .memory_profile = codec.EncodeMemoryProfile{}, .owned_heap_after_operation = 0, .owned_heap_after_output_free = 0, .reusable_cycle_verified = false, .output_preserved_on_error = true });
         return;
     };
     defer parsed.deinit();
@@ -71,26 +126,38 @@ pub fn main(init: std.process.Init) !void {
     var resolved: ?Resolved = null;
     var reusable_cycle_verified = false;
     var failure: ?[]const u8 = null;
-    const output: ?[]u8 = operation(init, input, parsed.value, &profile, if (parsed.value.total_profile_enabled) &memory else null, &resolved, &reusable_cycle_verified) catch |err| blk: {
+    var meter: OperationMeter = .{ .backing = init.gpa };
+    var tracked_init = init;
+    tracked_init.gpa = meter.allocator();
+    var output: ?[]u8 = operation(tracked_init, input, parsed.value, &profile, if (parsed.value.total_profile_enabled) &memory else null, &resolved, &reusable_cycle_verified) catch |err| blk: {
         failure = @errorName(err);
         break :blk null;
     };
-    defer if (output) |bytes| init.gpa.free(bytes);
+    defer if (output) |bytes| tracked_init.gpa.free(bytes);
+    const output_len = if (output) |bytes| bytes.len else 0;
+    const owned_heap_after_operation = std.math.sub(usize, meter.live, output_len) catch return error.OperationHeapAccountingMismatch;
     if (output) |bytes| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });
+    if (output) |bytes| tracked_init.gpa.free(bytes);
+    output = null;
     const peak: ?usize = if (@hasField(Profile, "peak_working_memory")) profile.peak_working_memory else null;
     try printJson(init, .{
         .@"error" = failure,
         .input_bytes = input.len,
-        .output_bytes = if (output) |bytes| bytes.len else 0,
+        .output_bytes = output_len,
         .resolved = resolved,
         .profile = profile,
         .memory_profile = memory,
+        .memory_profile_scope = "Reusable API observer preserves the detached end-of-call snapshot; actual cleanup is measured independently.",
+        .owned_heap_after_operation = owned_heap_after_operation,
+        .owned_heap_after_output_free = meter.live,
+        .operation_allocator = .{ .peak_requested_bytes = meter.peak, .allocations = meter.allocations, .frees = meter.frees, .resizes = meter.resizes, .remaps = meter.remaps, .allocations_80 = meter.allocations_80, .frees_80 = meter.frees_80 },
         .reusable_cycle_verified = reusable_cycle_verified,
         .guard_scope = if (std.mem.eql(u8, parsed.value.api, "incremental")) "expanded controls use same-state per-block safeguards" else "expanded controls use complete-frame safeguards; budget-only controls do not add safeguards",
         .work_memory = .{ .hq_requested_peak = peak, .limit = parsed.value.max_working_memory },
         .output_preserved_on_error = failure != null,
         .build_mode = @tagName(@import("builtin").mode),
     });
+    if (owned_heap_after_operation != 0 or meter.live != 0) return error.OperationOwnedHeapLeak;
 }
 fn printJson(init: std.process.Init, value: anytype) !void {
     const report = try std.json.Stringify.valueAlloc(init.gpa, value, .{});
@@ -103,11 +170,20 @@ fn printJson(init: std.process.Init, value: anytype) !void {
 
 fn configureHq(options: anytype, config: Config) !void {
     const explicit = config.search_depth != null or config.nice_len != null or config.min_match != null or config.max_working_memory != null or
-        config.parse_mode != null or config.match_lengths != null or config.max_price_evaluations != null;
+        config.parser_engine != null or config.parse_mode != null or config.match_lengths != null or config.max_price_evaluations != null;
     if (!explicit) return;
     if (@hasField(@TypeOf(options.*), "hq")) {
         const Hq = std.meta.Child(@FieldType(@TypeOf(options.*), "hq"));
         var hq: Hq = .{};
+        if (config.parser_engine) |value| {
+            if (@hasField(Hq, "parser_engine")) {
+                hq.parser_engine = std.meta.stringToEnum(@FieldType(Hq, "parser_engine"), value) orelse return error.InvalidBlockPlan;
+                switch (options.strategy) {
+                    .btopt, .btultra, .btultra2 => {},
+                    else => return error.InvalidBlockPlan,
+                }
+            } else if (!std.mem.eql(u8, value, "beam")) return error.UnsupportedSearchControls;
+        }
         if (config.search_depth) |value| hq.search_depth = std.math.cast(@TypeOf(hq.search_depth), value) orelse return error.InvalidBlockPlan;
         if (config.nice_len) |value| hq.nice_len = std.math.cast(@TypeOf(hq.nice_len), value) orelse return error.InvalidBlockPlan;
         if (config.min_match) |value| hq.min_match = std.math.cast(@TypeOf(hq.min_match), value) orelse return error.InvalidBlockPlan;
@@ -165,6 +241,17 @@ fn describe(options: codec.NativeFrameOptions, config: Config) !Resolved {
             resolved.nice_len = hq.nice_len;
             resolved.min_match = hq.min_match;
             resolved.max_working_memory = hq.max_working_memory;
+            switch (options.strategy) {
+                .btopt, .btultra, .btultra2 => {
+                    resolved.parser_engine = if (@hasDecl(@TypeOf(hq), "effectiveParserEngine"))
+                        @tagName(hq.effectiveParserEngine())
+                    else if (@hasField(@TypeOf(hq), "parser_engine"))
+                        @tagName(hq.parser_engine)
+                    else
+                        "beam";
+                },
+                else => {},
+            }
             if (@hasField(@TypeOf(hq), "parse_mode")) {
                 resolved.parse_mode = @tagName(hq.parse_mode);
                 resolved.match_lengths = @tagName(hq.match_lengths);

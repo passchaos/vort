@@ -17,6 +17,14 @@ pub const PriceBudget = struct {
         self.admitted = std.math.add(u64, self.admitted, 1) catch return self.refuse();
     }
 
+    /// Preserve the original allowance for choices eliminated without pricing.
+    /// Finite limits use the original enumeration instead; an eligible caller
+    /// has already reserved headroom for skipped and materialized choices.
+    pub fn reserveUnpriced(self: *PriceBudget, count: u64) error{SearchLimitExceeded}!void {
+        std.debug.assert(self.limit == null);
+        self.admitted = std.math.add(u64, self.admitted, count) catch return self.refuse();
+    }
+
     fn refuse(self: *PriceBudget) error{SearchLimitExceeded} {
         if (self.profile) |profile| profile.add("price_limit_refusals", 1);
         return error.SearchLimitExceeded;
