@@ -84,3 +84,9 @@ selection and copy dispatch. The one-shot path already uses a different literal
 lookup strategy and is not covered by this epoch. Next decoder work should
 compare the one-shot and incremental APIs separately, then target the hot
 context/copy dependencies rather than adding wider lookup roots.
+
+A separate prototype routed the one-shot literal fallback through the same
+prepared lookup. Its 288-process two-sweep screen measured 1.0336/1.0172 for q6
+and 1.0285/1.0189 for q11 versus the frozen baseline, so it was not adopted. The
+one-shot path keeps its existing tail-lookup strategy; its own clean-source
+epoch remains separate work.
