@@ -160,10 +160,22 @@ None of these results establishes overall decoder leadership. Allocating,
 reusable, dictionary and incremental performance, hostile-input/resource
 behavior, RSS and broader CPUs require their own current-source comparisons.
 
+## Prepared prefix lookups
+
+The later [prepared prefix lookup increment](brotli-prepared-prefix-lookup.md)
+replaces the incremental decoder's canonical scalar scan with a per-tree 8-bit
+lookup, cleared after every header parse. A 288-process two-sweep epoch over the
+same 48 Silesia 64 KiB/1 MiB rows reduces incremental time to geometric means
+0.6513/0.5937 for q6 and 0.6308/0.5687 for q11 versus the frozen header-ownership
+baseline. The complete ReleaseFast Brotli suite passes 1504/1505 with one
+platform skip. The reference column in that epoch is a different lifecycle and
+does not establish one-shot or streaming leadership.
+
 ## Reproduction
 
 The [evidence package](data/decoder-priority-20261101/README.md) retains actual
 inputs and frames, source overlays, exact commands, raw stdout, guards,
 reference pins, process exits and independent audits. The full corpus is
-archived separately from the smaller source/test evidence. Existing unrelated
-Bzip2 working-tree changes prevent a commit or push under repository rules.
+archived separately from the smaller source/test evidence. The prepared-lookup
+epoch's raw records stay under `/tmp/vort-br-lookup-20261101/`; only its Markdown
+report is tracked under the lean-evidence policy.

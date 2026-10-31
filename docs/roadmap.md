@@ -24748,3 +24748,25 @@ reuse, so production keeps the simpler independently owned plans.
   dictionary/streaming graphs, more efficient pricing and entropy convergence,
   Zstd persistent indexing and Brotli final-model command parsing remain work;
   the three-codec industry-best goal stays active.
+
+- 2026-11-01: Brotli's public incremental decoder now resolves literal, command
+  and distance symbols through a lazily built 8-bit lookup instead of the
+  canonical scalar scan. Long codes retain the canonical fallback after the
+  same zero-padded peek, and every compressed-header parse clears lookup
+  readiness so the shared non-incremental large-window command reader cannot
+  observe an undefined header or a stale tree. The incremental reader gains
+  padded peek, staged-availability and advance primitives with a reference test
+  against committed reads. [Evidence](performance/brotli-prepared-prefix-lookup.md)
+  records a 288-process two-sweep epoch over the same 48 Silesia 64 KiB/1 MiB
+  rows: final/baseline time geometric means are `0.6513/0.5937` for q6 and
+  `0.6308/0.5687` for q11, all 48 rows reduce to `0.6103`, and the two sweeps
+  independently reduce to `0.6092/0.6114`. Mozilla 1 MiB q11/q6 reaches
+  `0.278/0.282`; the only parity row is x-ray 1 MiB q11 at `1.017`. The complete
+  ReleaseFast Brotli suite passes 1504/1505 with one platform skip, and focused
+  Debug runs pass the prepared-lookup, reader, large-window, whole-block and
+  complete-length contracts. The lookup adds 512 bytes per tree (about 86 KiB
+  for the large-window header) while staying below the decoder size contract.
+  The reference column uses a different lifecycle and does not establish
+  one-shot or streaming leadership. Per-step bookkeeping, context selection,
+  copy dispatch, one-shot API epochs and broader CPU/RSS comparisons remain
+  work; the three-codec industry-best goal stays active.
