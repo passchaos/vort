@@ -1,5 +1,36 @@
 # Vort roadmap
 
+The current priority is best practical decompression functionality and
+performance for Deflate, Zstd and Brotli. The
+[decoder study](performance/decoder-priority.md) records current-source
+reference gaps over all twelve Silesia files, including actual full files.
+Deflate now masks 64-bit secondary lookup suffixes before narrowing on 32-bit
+targets and uses exact short non-overlapping copies in its main semantic loop.
+Zstd and Brotli candidates without stable whole-call gains remain experimental.
+Encoder entropy-plan work is preserved as an unmerged experiment. Continue
+with the measured specialized Zstd sequence/table work and Brotli external
+literal payload dependencies, while retaining malformed-input, dictionary,
+incremental progress and resource contracts.
+
+The [dense Zstd sequence increment](performance/zstd-dense-transitions.md)
+reduces three grouped state-field extractions to one in the measured main
+path. The existing small-output streaming contract is now explicitly tested:
+early finish may be recoverable, and the caller drains output before the final
+finish. Reference-frame and per-sequence proofs retain exact state and output;
+final-source timing is recorded separately from prototype results. Continue
+raising the decoder bar with actual whole-file and dictionary/reusable
+comparisons, rather than treating this increment as overall leadership.
+
+The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)
+uses one proven 16-byte move for short dense Zstd matches and parses Brotli
+incremental headers into their owned state. It also repairs oversized decoder
+test fixtures while preserving their original assertions under explicit 8 MiB
+stack limits. Final-source timing and gate evidence remain separate from the
+earlier screens. The next concrete decoder capabilities are resumable Brotli
+entropy-header parsing, prepared Zstd decode dictionaries, and optional Deflate
+block-boundary pause/checkpoint controls. Full streaming/dictionary, memory and
+multi-platform comparisons remain required for the industry-best objective.
+
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
@@ -154,6 +185,17 @@ per-plan copy-command pricing allowance. Sampled remains the default; finite
 beam and matcher candidates still bound the search. Independent full-wire
 sampled safeguards preserve the corresponding complete-frame result, and
 search denial remains a hard error rather than skipping requested work.
+
+The [complete-command cost-model study](performance/brotli-command-start-model.md)
+adds exact split-symbol/prepared-emission decisions and repairs far-only
+incremental search admission. Native Debug/ReleaseFast contracts and fixed
+Brotli1.2.0 saved-wire checks pass; the final complete Brotli family passes
+1496 tests with one skip, and native/WASI checks pass212 build steps.
+Command-start queues, unseen-symbol priors, price caches, minimum bounds and
+incremental length frontiers remain experimental: measured full-encoder time
+and control regressions prevent default adoption. Prioritize retained entropy
+plans and exact bit-count arbitration for the existing fixed-symbol-split
+literal candidate group, then broader parsing/ratio and memory evidence.
 
 Remaining priorities include broader global Brotli quality planning, lower-peak
 whole-stream comparison, standard dictionary finalization
@@ -24472,3 +24514,237 @@ reuse, so production keeps the simpler independently owned plans.
   Vort/reference size remains `0.995561`, but encode time remains 33.44x, so
   next work should reuse model-independent q10/q11 match frontiers and reduce
   context/candidate search rather than claim broad Brotli leadership.
+
+- 2026-10-30: Zstd HQ edge extension now filters strictly higher costs against
+  the ordered destination tail after admission, pricing and checked construction.
+  Eight ordinary AB/BA sweeps retain complete wires, all counters and requested
+  memory peaks; real-file btultra2 time becomes `0.860430/0.777708` at 4/16 KiB
+  and trained-dictionary time `0.796049`. The periodic btultra2 control regresses
+  to `1.015668`, and matched real-file time remains `58.37x/65.74x` libzstd 1.6.0.
+  [Exactness and placement evidence](performance/zstd-strict-cost.md) retains the
+  withdrawn insertion guard, selected edge guard and all raw clocks. Next work
+  should reduce HQ state/transition count and cache bounded actual Brotli q10/q11
+  match evidence; the full deflate/zstd/brotli objective remains active.
+
+- 2026-10-30: Bounded exact Brotli q10/q11 match-evidence reuse is rejected
+  after a serialized three-way real-file screen: q10/q11 time ratios are
+  `1.042078/1.050528`, with exact wires/settings. Most stored lengths remain
+  unknown and dense inputs fall back; retained known lengths cover only
+  `0.23%–11.77%` of second-pass requests. The [screen and live follow-up](performance/brotli-match-evidence.md)
+  records the separate modeled-prefix-bound experiment. The complete six-file
+  gated matrix preserves all wires/settings but is also rejected: combined time
+  is `0.990929`, with stable q11 64 KiB regressions up to `1.016184`. Zero-window `OptimalCostModel` validation now avoids taking a maximum
+  over an empty distance range and returns literal-only plans for valid models.
+
+- 2026-10-30: Brotli joint literal-context discovery now avoids immutable
+  histogram copies, uses a proven non-saturating u64 assignment sum and merges
+  disjoint contexts directly when validated literal population fits u32. The
+  cohesive `joint_context/kernels` module preserves the original checked merge
+  for larger populations. Four ordinary q10/q11 AB/BA sweeps across six files
+  at 32/64 KiB measure combined candidate/baseline time `0.761766`; all complete
+  wires and requested-memory peaks remain equal. NCI 32 KiB retains two stable
+  regressions (`1.032144/1.009577`). Independent complete-plan, native/x86/Wasm
+  integer, public exact-cap and libbrotli 1.2.0 decode oracles pass; the final
+  gate succeeds at 215/215 steps and 67/67 memory tests. The
+  [kernel evidence](performance/brotli-joint-kernels.md) preserves all raw clocks
+  and frozen inputs/wires. Next work should group exact joint assignments under
+  their own entropy model and reduce remaining tree/map scoring; the overall
+  deflate/zstd/brotli objective remains active.
+
+- 2026-10-30: Joint Brotli assignment now evaluates immutable sparse contexts
+  against four adjacent trees in a compact transposed price prefix, reusing
+  the existing heap allocation and preserving the original unsmoothed prices,
+  earliest-tree ties, seed/round order and complete-wire arbitration. Four
+  ordinary q10/q11 AB/BA sweeps across six files at 32/64 KiB measure time
+  `0.771994` relative to the preceding kernel increment; separate 256 KiB
+  source/documentation/structured inputs measure `0.888481`. All wires and
+  requested peaks remain equal. NCI q10 32 KiB (`1.002999`) and structured
+  256 KiB (`1.007588/1.002156`) point regressions remain recorded. The
+  [grouped evidence](performance/brotli-joint-grouped.md) includes 396 serial
+  records, exact native/x86/generic-Wasm/SIMD128 integer contracts, 60 external
+  decodes and the successful 215-step/68-test final gate. Matched local Brotli
+  1.2.0 q10/q11 64 KiB time ratios remain `4.844650/2.425075`, and size ratios
+  `1.097600/1.121350`. Next ratio work should test full window16 modeled
+  distances beyond the optimal parser's 32 KiB clamp and native command-state
+  pricing beyond its default 8 KiB scope. The full compression goal remains
+  active.
+
+- 2026-10-30: Full-window Brotli modeled refinement and exact command-duplicate
+  controls were screened and rejected: q10/q11 ordinary time regressed to
+  `1.373308/1.301129` for size `0.998778`; duplicate suppression did not recover
+  throughput. [The independent window screen](performance/brotli-wide-modeled-screen.md)
+  verifies far distances 32,768/32,769/65,520, same-model no-far equivalence,
+  model/OOM/x86/Wasm contracts and all raw records. The separately found generic
+  modeled-window safety fix rejects fully priced windows beyond u16 distance.
+  Planned Brotli now admits literal-only entropy candidates across ordinary,
+  incremental, chunked, legacy/reusable, fixed-scratch and unused-dictionary
+  paths using a deterministic one-tree cost budget. B32,3 q8/q10/q11 wires fall
+  `32772 -> 17859`; its q10/q11 chunked/incremental wire falls
+  `32781 -> 18876`. The [literal evidence](performance/brotli-literal-entropy.md)
+  retains the rejected unconditional search, bounded admission, actual resource
+  caps, 88 external decodes, 28/28 public native/Wasm tests and 215-step/68-test
+  final gate. The final 44-config matrix keeps real-file wires at time `0.997357`
+  and near-uniform wires at `1.039592`, with small 4 KiB regressions retained.
+  Low-entropy size geomean is `0.563544` at time `5.484688` versus the former
+  stored-only work. Next work should reduce no-copy context cost, consider
+  globally uniform but context-predictable candidates, and close the retained
+  native command/distance pricing gaps; the full compression objective stays
+  active.
+
+- 2026-10-31: Brotli histogram Q8 logs now use a compile-time exact table for
+  counts 0–1,024, preserving the original nine-round integer squaring/rounding
+  above that range. The cohesive histogram_model/log_q8 module adds 2,050 bytes
+  of read-only data and no requested heap. A 704-record four-way public matrix
+  retains all wires; the selected 1K table measures real-file time `0.979934`,
+  B32 q10/q11 `0.970417/0.955344`, and random controls `0.980598`. Larger 4K
+  tables regress NCI points and adjacent-count memoization has no broad gain;
+  all point regressions remain in the [exact-log evidence](performance/brotli-exact-log.md).
+  Independent integer/model/plan tests cover 209,481 log comparisons, 228 full
+  models and 32 split plans across native/x86/Wasm. Public histogram tests
+  pass 20/20, literal contracts 29/29 and requested-peak/exact-cap comparisons
+  remain strict. The final gate passes 215/215 steps and 69/69 memory tests.
+  The next safety increment must reject unsupported fixed-price LZ77 windows
+  before parsing: a 32,769-distance witness currently reaches beyond its
+  32 KiB table, independently of the histogram cache. Internal format callers
+  already clamp/validate the fixed window. The full compression objective
+  remains active.
+
+- 2026-10-31: Fixed-Huffman LZ77 optimal parsing now rejects windows above its
+  32 KiB price-table range before allocation or scratch mutation, including
+  prepared fixed solve and both profiled entry points. Wide prepared/model
+  solves remain valid through the u16 distance range. The
+  [window contract](formats/lz77-optimal-windows.md) records the repaired
+  32,769-distance panic, 64 early invalid calls, 150 supported fixed API
+  comparisons, actual far modeled copies, native/x86/Wasm contracts and zero
+  allocation under fail-at-zero. Core Debug/ReleaseFast tests pass 98/98;
+  36 independent DEFLATE/Zstd/Brotli complete wires remain identical and decode
+  through native and external oracles. Native/Wasm compile checks pass
+  212/212 steps. This is a safety/behavior increment; further performance and
+  ratio work should continue on native command pricing and context preparation.
+  The full compression objective remains active.
+
+- 2026-10-31: Zstd ordered HQ edges now reuse exact LL/OF terms for one immutable
+  node/choice after a successful first sequence price, and inline edge extension.
+  Longer-range preparation uses a nullable local cache; every admitted edge,
+  ML validation, profile update, checked cost, tie and spill remains exact.
+  Eight ordinary AB/BA sweeps over sixteen configurations measure real-file
+  4/16 KiB btultra2 time `0.891906/0.845568`, btopt `0.881483` and dictionary
+  `0.841684` against the preceding increment, with identical wires, settings,
+  counters and requested peaks. [Choice-price evidence](performance/zstd-choice-price.md)
+  retains all screens, pure-repetition control variation and independent
+  native/x86/actual-Wasm price/state/quota oracles. New matched real-file time
+  remains `51.864742/55.863803` libzstd 1.6.0; periodic synthetic search remains
+  thousands to tens of thousands of times slower at equal compressed size.
+  Next work should reduce that excessive admitted work, then validate larger
+  real files and persistent stream/dictionary paths. The full goal stays active.
+
+- 2026-10-31: Ordered Zstd HQ now compacts offset aliases with identical full
+  successor histories before the existing length loop; an inline short-match
+  return avoids heavy materialization on empty matches. The initial lower
+  reported allowance failed the original measured-cap public regression, so
+  skipped aliases now reserve their exact original enumeration allowance.
+  Actual price/transition counters decrease, while logical caps and all finite
+  prefixes remain unchanged. [Evidence](performance/zstd-choice-dominance.md)
+  records four-platform scalar/mask/compact/state/quota oracles, exhaustive
+  enumeration counts, unchanged assertions and real N/N-1 parser checks.
+  Eight ordinary sweeps measure 4/16 KiB real-file btultra2 time
+  `0.922351/0.929304`; six 64 KiB files measure `0.901950`, all paired wins.
+  Wires, settings and requested heap agree; pure-repetition btopt retains a
+  `1.016304` point regression. Matched time remains about 48x/52x/62x libzstd
+  at 4/16/64 KiB. Reduce remaining rejected length/state work next while
+  preserving these allowances; Deflate and Brotli remain active priorities.
+
+- 2026-10-31: Eight short-edge/literal batching experiments were screened and
+  rejected. Global/group price bounds preserve exact states and logical caps
+  but add probe overhead; four-lane exact prices improve periodic data while
+  ordinary btopt files regress. A literal strict-cost guard yields only a small
+  larger-file gain with other control regressions. Native reference contracts
+  pass, complete outputs and budgets agree, and the frozen audit proves the
+  live 286-file codec closure unchanged. The
+  [negative screen](performance/zstd-short-batch-screen.md) preserves all
+  ordinary clocks, source variants and oracle evidence. Change rejected-work
+  representation/generation next instead of layering more scans on the dense
+  loop; the full Deflate/Zstd/Brotli goal remains active.
+
+- 2026-10-31: Brotli joint literal contexts now initialize bins on first use,
+  skip private total-zero contexts, and copy the first nonempty aggregate
+  contribution. Empty returned trees remain fully initialized; populations
+  above u32 maximum retain the original checked merge. The
+  [histogram initialization evidence](performance/brotli-hist-init.md) records
+  a four-way screen followed by six ordinary AB/BA sweeps: real-file time is
+  `0.984406`, literal controls `0.977994` and random controls `1.008688` versus
+  the preceding source. Complete wires remain identical; all control
+  regressions are retained. Independent full-plan/poison/ownership and
+  executed native/x86/WASI contracts cover the initialization boundaries.
+  A separate current-source 96-process six-file window16 reference campaign
+  records q10/q11 time `4.659184/2.327070` and size `1.097600/1.121350` versus
+  Brotli 1.2.0. No compressed-size gain or memory/throughput lead is assigned.
+  Next reduce command/context pricing work and expand to full-file/streaming
+  measurements; the Deflate/Zstd/Brotli industry-best goal remains active.
+
+- 2026-10-31: A local-optimal Zstd algorithm replaces the default bounded sampled
+  8/16-state search with pending-LL-aware single paths, increasing-length
+  frontiers, match-triggered adaptive endpoints and long-match termination.
+  The old beam remains explicit; whole/complete coverage and strict legacy
+  oracles are retained. An exact repeated-segment cache and upper bounds remove
+  redundant modulo scans. [Evidence](performance/zstd-local-optimal.md) records
+  all-twelve Silesia 64/128 KiB time ratios `0.062327/0.064724` versus old,
+  at size `1.017088/1.017637`; three actual 1 MiB inputs record `0.078287`.
+  Current-source time remains `3.154517/3.216303/4.632625` libzstd 1.6.0, with
+  size `1.004801/1.005144/0.992800`. Debug/RF each pass 1235/1235, actual x86/WASI
+  module and public-Wasm quota/retry tests pass, CLI and 77 reference groups
+  pass, and build checks complete 212/212. Sparse matching/index lifetime,
+  table sizing, compact stretches and better cost models remain priorities.
+  The [three-codec algorithm study](performance/codec-algorithm-reference-study.md)
+  also identifies Brotli prepared-entropy/command-parser and Deflate BT-frontier
+  work. This is an algorithm milestone; the industry-best goal remains active.
+
+- 2026-10-31: Zstd local-optimal matching now uses source-sized tables for
+  source/window intersections up to 32768 positions, with a shared full/adaptive
+  kernel and checked active masks independent of retained capacity. Prefixes
+  stay fully indexed; only prefix-free small-table long skips use stride-eight
+  insertion with a dense 64-position tail. Beam and whole/complete modes retain
+  the original full matcher. [Evidence](performance/zstd-adaptive-matcher.md)
+  records real 4 KiB btultra2 time `0.875936`, real 256-byte prefixes `0.200969`
+  and one parser requested peak `552656 -> 30416` bytes versus the preceding
+  local-optimal source. All 27 selected large-input complete wires agree.
+  Separate final-source/reference time is `3.127111/3.176228/4.569109` on
+  all-twelve 64/128 KiB prefixes and three actual 1 MiB inputs, at size
+  `1.004801/1.005144/0.992800`. Nine serial campaigns retain 404 process records
+  and 165 case/configuration rows, including rejected variants. Debug/RF Zstd
+  suites each pass 1246/1246, broad checks complete 212/212, and named independent
+  matcher/public-policy, x86/WASI, reference, CLI and public-Wasm gates pass.
+  Persistent cross-block index reuse and entropy-model quality remain next
+  Zstd work; Brotli prepared entropy/command parsing and Deflate compact BT
+  frontiers remain separate algorithm priorities. The industry-best goal stays
+  active. Unrelated Bzip2 work keeps this increment uncommitted under repository
+  workflow instructions.
+
+- 2026-10-31: Deflate high-level dictionary-free one-shot refinement now uses
+  a three-byte hash BT to generate per-distance-price-class maxima directly,
+  with 258-length covered positions retaining full tree insertion/literal
+  edges. The immutable evidence is shared by fixed/model reverse solves;
+  three-byte match records and proven `u32` costs reduce overlap. Complete
+  65536-byte inputs retain a safe `u16` link sentinel and checked maximum
+  positive-`u16` model costs. Generic `lz77.PreparedOptimal` stays separate.
+  [Evidence](performance/deflate-bt-optimal.md) records final-source level-9
+  time `0.630066/0.589154/0.456402/0.713807` and size
+  `0.999910/0.998569/0.997163/0.985241` versus the preceding encoder across all
+  twelve 4 KiB/16 KiB/65535/65536-byte prefixes. Requested peak sums are
+  `0.729363/0.799264/0.844218/0.832807`, retaining a 12.6% NCI-65535 point
+  increase. Pinned libdeflate 1.26 level 12 time is still
+  `1.916330/1.853619/1.879912/1.914154`, at size
+  `1.000685/1.002773/1.012366/1.012369`; no full-file leadership is assigned.
+  Initial scalar/word caches, cache-free forward replay, exact price intervals,
+  narrow forward costs and 150/128 thresholds retain separate measurements.
+  Native Debug/RF Deflate suites each pass 578/578 with 18 new named tests,
+  selected six native/x86/WASI target/mode suites pass 21/21 and actual
+  Deflate/package root registration includes the new tests. Final-source
+  288 wires and 60 outside-scope wrapper control pairs pass, 48 heaps match
+  selected accounting and 3792 ordinary process records independently reduce.
+  Whole-project native/Wasm checks complete 212/212, and the existing stream
+  smoke passes five cases/9 build steps. Frozen and live package audits pass
+  all 3792 ordinary records with final status/no pending gates. Full-file,
+  dictionary/streaming graphs, more efficient pricing and entropy convergence,
+  Zstd persistent indexing and Brotli final-model command parsing remain work;
+  the three-codec industry-best goal stays active.

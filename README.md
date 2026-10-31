@@ -644,6 +644,35 @@ performance. The [current industry gap audit](docs/performance/industry-gap-audi
 records the remaining API/encoder capabilities, dated competitor evidence and
 next functionality-first priorities.
 
+The [latest Zstd local-optimal evidence](docs/performance/zstd-local-optimal.md)
+records about16.0x/15.5x faster btultra2 encoding on all twelve Silesia64/128KiB
+prefixes, with1.71%/1.76% larger outputs than the preceding beam source.
+The subsequent [matcher sizing and index policy](docs/performance/zstd-adaptive-matcher.md)
+reduces real 4 KiB btultra2 time by 12.4% and 256-byte prefix time by 79.9%
+versus that local-optimal source. Larger tables and retained prefixes keep full
+indexing. A separate final-source reference check records libzstd 1.6.0 time
+ratios `3.13x/3.18x` at size `1.0048x/1.0051x` on all twelve 64/128 KiB
+prefixes; three actual 1 MiB inputs take `4.57x` reference time at size `0.9928x`.
+Bounded sampled HQ defaults to deterministic `local_optimal`; callers can
+request `beam` for the former search, while whole/complete modes keep that
+coverage. Dictionaries, quotas and error/retry behavior remain validated.
+The algorithm study and isolated matcher candidates retain ratio, time and
+requested-memory evidence; measured gains from separate epochs are not chained.
+Earlier [choice-price](docs/performance/zstd-choice-price.md) and
+[offset-choice](docs/performance/zstd-choice-dominance.md) measurements retain
+their separate source epochs. Full industry-best performance remains unproven.
+
+The [Deflate BT evidence and optimal parser](docs/performance/deflate-bt-optimal.md)
+now replaces dense hash-chain discovery in dictionary-free one-shot level 8/9
+refinement through a full 64 KiB input. A three-byte BT, per-distance-price-class
+maxima and 258-length covered graph feed two reverse cost solves; three-byte
+records and checked `u32` costs reduce requested heap. Final-source level-9
+time versus the prior encoder is `0.6301/0.5892/0.4564/0.7138` on all twelve
+4 KiB/16 KiB/65535/65536-byte Silesia prefixes, at size
+`0.99991/0.99857/0.99716/0.98524`. Pinned libdeflate 1.26 level 12 still takes
+about half the live time at similar sizes. Full-file, dictionary/streaming and
+whole-platform leadership remain open.
+
 Brotli and Zstd incremental APIs use `StreamCount` for cumulative bytes,
 pledges and diagnostic offsets: `u64` on 32-bit targets, with native 64-bit
 public types preserved. Local buffers and `StepResult.progress` retain
@@ -2556,6 +2585,19 @@ level. Generic and text currently use identical parser, context, and
 dictionary policy. Font differs only from q4 onward, when it adds a complete
 wire candidate using `NPOSTFIX=1, NDIRECT=12`; it does not replace the common
 policy.
+When general planned matching finds no copies, a deterministic one-tree
+Huffman budget can admit a literal-only entropy candidate. This allows small
+alphabets to compress across quality, legacy-level, reusable, chunked and
+incremental APIs while complete stored/compressed comparison chooses the
+result. The budget keeps near-uniform no-copy input on the stored path; it
+does not search every possible context model. [Evidence and resource
+contracts](docs/performance/brotli-literal-entropy.md) document the tradeoff.
+The [joint-context initialization follow-up](docs/performance/brotli-hist-init.md)
+preserves complete wires and requested memory while reducing q10/q11 real-file
+encode time about 1.6% in its frozen prefix matrix. Random controls retain a
+0.87% aggregate regression. Its current six-file, window16 q10/q11 reference
+comparison still takes about 4.66x/2.33x Brotli 1.2.0 time with 9.76%/12.14%
+larger output; full-file and broader reference comparisons remain open.
 For example:
 
 ```zig

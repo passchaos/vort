@@ -4,3 +4,6 @@ zig-out/
 .DS_Store
 *.tmp
 __pycache__
+perf.data
+perf.data.old
+docs/performance/data/

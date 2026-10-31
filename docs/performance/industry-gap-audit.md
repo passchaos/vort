@@ -10,6 +10,107 @@ The objective of exceeding the best competing libraries in both functionality
 and performance remains incomplete. Format interoperability, API coverage,
 encoder quality and throughput are separate claims.
 
+The user prioritized decompression on 2026-10-31. The subsequent
+[decoder reference study](decoder-priority.md) tests all twelve Silesia files
+at 64 KiB, 1 MiB and actual full lengths using 216 externally produced frames.
+Current direct-output decoders pass complete-content and guard checks, but the
+new reference epochs still show substantial gaps. The Deflate increment fixes
+32-bit secondary-lookup narrowing and adopts exact short non-overlapping
+copies; its prototype full-file time falls 6.2–6.6% at unchanged output.
+Zstd generic reservoir and Brotli packed/fused-command experiments remain
+isolated because their actual coverage or ordinary throughput results do not
+meet the adoption bar. Encoder work is frozen and unmerged while decoder
+functionality, throughput, resource behavior and platform coverage take
+priority. Final-source evidence remains separate from prototype timing.
+
+The [Zstd dense transition increment](zstd-dense-transitions.md) subsequently
+joins LL/ML/OF transition extraction in the existing specialized grouped path,
+without new tables, allocations or decoding modes. A clean four-sweep
+prototype epoch records 4.6–5.3% less full-file time. The independent metadata,
+FSE spreading and Brotli literal-chunk candidates remain isolated; their work
+reduction or coverage did not establish a sufficient whole-call gain. The
+small-output incremental regression confirms the existing drain-before-finish
+contract with 72 actual frames. Broader performance leadership remains open.
+
+The [short-match and header ownership study](brotli-header-ownership.md) follows
+the decompression priority with a narrower dense Zstd copy and an in-place
+Brotli incremental header parser. It retains the rejected Reader experiment,
+explicit 8 MiB stack failures and isolated fixture repairs. The live-source
+performance epoch is kept separately. Remaining concrete control/reuse gaps
+include Brotli entropy-header substate continuation, a prepared standard Zstd
+decode-dictionary handle, and Deflate block-boundary pause/checkpoint APIs;
+ordinary streaming and standard dictionaries are already supported.
+
+The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
+bounded sampled 8/16-state graph with one pending-LL-aware path, incremental
+length frontiers and adaptive local termination. All twelve Silesia64/128KiB
+prefixes take about16.0x/15.5x less time than the preceding source, with
+1.71%/1.76% larger outputs. A separate current-source epoch records respective
+libzstd1.6.0 time ratios3.154517/3.216303 and size ratios1.004801/1.005144;
+three actual1MiB multi-block inputs take4.632625x reference time at size0.992800.
+The previous [choice-dominance epoch](zstd-choice-dominance.md) retains its
+47.8x/51.9x/61.9x results; they are not current ranking or chained speed factors.
+The beam option retains its different ratio/work tradeoff. The subsequent
+[matcher sizing/index epoch](zstd-adaptive-matcher.md) shrinks tables for
+source/window intersections up to 32768 positions and sparsely indexes selected
+prefix-free skipped spans. Real 4 KiB btultra2 time falls 12.4% and 256-byte
+prefix time falls 79.9% versus the local-optimal source. Larger inputs retain
+full matching. A separate final-source reference epoch records time
+`3.127111/3.176228/4.569109` and size `1.004801/1.005144/0.992800` for
+all-twelve 64/128 KiB prefixes and three actual 1 MiB inputs. Periodic 4 KiB
+btopt/btultra2 still take `8.169298x/13.303064x` reference time. Broader sparse
+matching, persistent index lifetime and model quality remain work; the old and
+new epochs are not multiplied. The preceding
+[Brotli histogram initialization/reference epoch](brotli-hist-init.md) records
+q10/q11 64 KiB time ratios 4.659184/2.327070 and size ratios
+1.097600/1.121350 versus Brotli 1.2.0. Its separate internal A/B follow-up
+records a 1.56% real-file time reduction with exact wires and a retained 0.87%
+random-control regression. The earlier [joint-assignment reference
+epoch](brotli-joint-grouped.md) retains its original results; those ratios and
+internal gains are not multiplied across epochs. Deflate's [BT evidence increment](deflate-bt-optimal.md) replaces dense
+hash-chain candidate generation in the one-shot default-strategy,
+dictionary-free level-8/9 refinement slice and includes complete 64 KiB inputs.
+Its three-byte matcher, per-distance-cost-class evidence and 258-length graph
+coverage feed fixed/model reverse solves with compact records and `u32` costs.
+Final-source level-9 time ratios against the prior encoder are
+`0.630066/0.589154/0.456402/0.713807` on all twelve 4 KiB/16 KiB/65535/65536-byte
+Silesia prefixes, at size `0.999910/0.998569/0.997163/0.985241`. Pinned
+libdeflate 1.26 level 12 time ratios are `1.916330/1.853619/1.879912/1.914154`,
+at size `1.000685/1.002773/1.012366/1.012369`; canonical levels and search
+algorithms differ. Requested-heap aggregate savings retain a 12.6% NCI-65535
+point increase against the prior encoder. Streaming, dictionaries, split
+planning, larger files and encoder entropy convergence remain work. The prior
+[dynamic refinement](deflate-dynamic-optimal-refinement.md) keeps its separate
+zlib 1.2.11 evidence epoch.
+These additions retain their separate source and timing epochs.
+
+The subsequent [complete-command/model study](brotli-command-start-model.md)
+adds exact command/distance projection and prepared emission, and repairs
+far-only incremental candidate admission. The final Brotli family passes
+1496/1497 tests with one skip, and native/WASI build checks pass212/212.
+A fresh all-twelve-file32/64KiB q10/q11 epoch directly records current-source
+Brotli1.2.0 time ratios `6.616182/4.882923` for q10 and
+`5.195849/2.318273` for q11, at size `1.072352/1.075770` and
+`1.098585/1.103076`. The smaller-corpus histogram epoch above retains its
+scope. Native command-start queues, actual-tree priors, price caches,
+minimum-cost bounds and new-length frontiers improve isolated parse work or
+size but still fail default end-to-end throughput/control criteria. They
+remain isolated experiments. Repeated entropy fitting/full-wire candidate
+serialization and model/graph quality remain the next algorithm priorities;
+these prefix epochs do not establish full-file or memory leadership.
+
+For the active deflate/zstd/brotli objective, remaining algorithm gaps include
+Zstd matcher/index lifecycle across blocks, larger-input search policies and
+entropy costs, and Brotli encoder time and compressed size. Native local-optimal
+and beam modes retain different
+search/model choices from upstream. Brotli still bounds admitted match candidates and search states;
+complete lengths within a candidate do not establish global optimality.
+Deflate needs entropy-aware quality work across streaming, dictionaries and
+multi-block inputs, and broader versions/levels/full-file comparisons beyond
+the current libdeflate prefix matrix. None of the three has a complete matched current-source
+ratio/encode/decode/requested-heap/RSS matrix across levels, full files, CPUs and
+streaming/dictionary modes. Earlier decoder wins remain dated measurements.
+
 For the five core user-facing families—gzip, ZIP, XZ, Brotli and Zstd—the
 evidence below supports specific compatibility and optimization slices, not an
 overall best-library ranking. None of gzip, ZIP, XZ, Brotli or Zstd has established
@@ -27,7 +128,7 @@ coverage must be assessed alongside archive throughput and resource behavior.
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
 | [ZIP container](../formats/zip.md) | ZIP32/ZIP64, local/central metadata and descriptors; Stored, Shrink, Reduce, Implode, Deflate/Deflate64, DCL Implode, Bzip2, LZMA, legacy/current Zstandard, XZ and PPMd methods; borrowed/owned and incremental I/O, match-producing adaptive Deflate64, split-volume adapters, ZipCrypto, WinZip AES and password-based PKWARE AES Strong Encryption | Certificate recipients, other Strong Encryption ciphers and encrypted central directories remain unsupported. Broad archive interoperability and a current cross-library archive ratio/throughput/memory matrix are not established. |
-| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams; explicit native one-shot and persistent incremental single-frame job MT, including ZIP composition | Reference algorithm, quality and throughput parity remains unproven. Persistent owned-prefix/history/sealing/delivery/retry and ZIP contracts now have native, synchronous, Wasm32, saved-wire and fixed-libzstd functional evidence; existing candidate and seekable-frame MT remain separate capabilities. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
+| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams; explicit native one-shot and persistent incremental single-frame job MT, including ZIP composition | Reference algorithm, quality and throughput parity remains unproven. Persistent owned-prefix/history/sealing/delivery/retry and ZIP contracts now have native, synchronous, Wasm32, saved-wire and fixed-libzstd functional evidence; existing candidate and seekable-frame MT remain separate capabilities. Native HQ defaults to bounded sampled local-optimal parsing, retains an explicit 8/16-state beam for other coverage and uses its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; signed native acceleration, independent chain depth and actual work profiles; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | Native chain/lazy defaults and accelerated search differ from liblz4's single-hash fast parser. Empty raw input retains the legacy API-only empty-slice convention. Full corpus/platform fast/HC ratio, throughput and memory leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching remains fragment-local. Explicit Large Window q2+ and legacy non-fragment history grows to the advertised bound, while shared near matching retains its 65535-byte suffix. Far matching still uses bounded chain/stride candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
