@@ -1424,13 +1424,7 @@ const IncrementalCopyCodec = struct {
     /// Every meta-block installs fresh prefix tables. Clear lazy lookup state
     /// for inline trees and the reusable packed-tree slots before decoding.
     pub fn resetLookupStates(header: *Header) void {
-        const compressed = &header.compressed;
-        for (compressed.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
-        for (compressed.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
-        for (compressed.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
-        compressed.active_packed_literal_tree.resetPreparedLookup();
-        compressed.active_packed_insert_copy_tree.resetPreparedLookup();
-        compressed.active_packed_distance_tree.resetPreparedLookup();
+        resetCompressedHeaderLookupStates(&header.compressed);
     }
 
     pub fn parseMetaBlockHeaderInto(prefix: []const u8, bit_len: usize, decoded_len: Counter, final: bool, large_window: bool, out: *Header) IncrementalCopyCodec.Error!usize {
@@ -15259,6 +15253,15 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     finishCompressedHeader(header, shape, tree_counts);
 }
 
+fn resetCompressedHeaderLookupStates(compressed: *LargeWindowCompressedHeader) void {
+    for (compressed.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
+    for (compressed.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
+    for (compressed.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
+    compressed.active_packed_literal_tree.resetPreparedLookup();
+    compressed.active_packed_insert_copy_tree.resetPreparedLookup();
+    compressed.active_packed_distance_tree.resetPreparedLookup();
+}
+
 noinline fn readMinimalCompressedHeaderIntoWithOptions(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, large_window: bool) linksection(large_window_text_section) Error!void {
     const shape = try readLargeCompressedHeaderBlockSwitches(reader, header, large_window);
     const tree_counts = try readLargeCompressedHeaderContextMaps(reader, header, shape);
@@ -15273,6 +15276,9 @@ noinline fn readMinimalCompressedHeaderIntoWithOptions(reader: *bitstream.BitRea
         shape.distance_alphabet_size,
     );
     finishLargeCompressedHeader(header, shape, tree_counts);
+    // The owner may pass an undefined header. Clear lazy lookup state after
+    // every parse so freshly written tables never inherit stale readiness.
+    resetCompressedHeaderLookupStates(header);
 }
 
 const CompressedHeaderShape = struct {
