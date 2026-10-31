@@ -59,3 +59,14 @@ default build.
 The remaining refill cost is the byte-at-a-time staging loop itself. A 16-bit
 pair refill or a wider reservoir for the command loop is the next candidate.
 The copy path, long-code fallback and non-power-of-two history remain work.
+
+## Rejected follow-ups
+
+Two follow-ups were measured and reverted. A 16-bit pair refill combined with a
+direct staged-count check reduced time only to `0.9924`, and the staged-count
+check alone to `0.9944`, with a worst row at `1.055`; neither was robust enough
+to keep. A single-block literal specialization that skipped the block-switch and
+remaining checks regressed to `1.027/1.044/1.037/1.050` for q6/q11 at
+64 KiB/1 MiB because most frames use several literal block types and the extra
+per-literal branch dominates. The ordinary switch path stays.
+
