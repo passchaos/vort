@@ -225,22 +225,35 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
         .filters = &.{
             "PNG windowed decoder",
+            "PNG general windowed helper",
             "windowed history releases and compacts complete rows only",
             "windowed history respects lookback tails and publishes only valid rows",
             "deep-distance PNG non-overlap",
         },
     });
     const run_png_windowed_tests = b.addRunArtifact(png_windowed_tests);
+    const png_windowed_exports_tests = b.addTest(.{
+        .name = "vort-png-windowed-exports-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/test_png_windowed_exports.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .filters = &.{"PNG general windowed helper"},
+    });
+    const run_png_windowed_exports_tests = b.addRunArtifact(png_windowed_exports_tests);
     const png_windowed_test_step = b.step(
         "test-png-windowed",
         "Run focused PNG windowed inflate and row-lifecycle tests",
     );
     png_windowed_test_step.dependOn(&run_png_windowed_tests.step);
+    png_windowed_test_step.dependOn(&run_png_windowed_exports_tests.step);
     const png_windowed_build_step = b.step(
         "build-png-windowed-tests",
         "Compile focused PNG windowed tests without running them",
     );
     png_windowed_build_step.dependOn(&png_windowed_tests.step);
+    png_windowed_build_step.dependOn(&png_windowed_exports_tests.step);
     const tar_incremental_writer_tests = b.addTest(.{
         .name = "vort-tar-incremental-writer-tests",
         .root_module = tests_mod,

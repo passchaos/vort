@@ -108,6 +108,28 @@ test "PNG general windowed helper matches full scratch across block types" {
         minimum_output,
     );
     try std.testing.expectEqualSlices(u8, expected, minimum_output);
+
+    // Compressed chunk boundaries may split every Huffman field and stored
+    // byte. Borrowed spans preserve exact input accounting and output without
+    // a concatenated compressed allocation inside the decoder.
+    for ([_][]const u8{ dynamic, fixed, stored }) |encoded| {
+        for ([_]usize{ 1, 2, 7, 4093 }) |chunk_size| {
+            const count = try std.math.divCeil(usize, encoded.len, chunk_size);
+            const chunks = try std.testing.allocator.alloc([]const u8, count + 2);
+            defer std.testing.allocator.free(chunks);
+            chunks[0] = &.{};
+            chunks[chunks.len - 1] = &.{};
+            for (chunks[1 .. chunks.len - 1], 0..) |*span, index| {
+                const start = index * chunk_size;
+                span.* = encoded[start..@min(encoded.len, start + chunk_size)];
+            }
+            var chunk_history: [history.general_scratch_len]u8 = undefined;
+            const result = try deflate.decodePngWindowedZlibImageFromChunksWithOptions(chunks, &chunk_history, info, .{}, minimum_output);
+            try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+            try std.testing.expectEqual(expected.len, result.output_written);
+            try std.testing.expectEqualSlices(u8, expected, minimum_output);
+        }
+    }
 }
 
 test "PNG general windowed helper requires two-window minimum scratch" {
@@ -168,6 +190,9 @@ test "PNG general windowed helper validates wrapper and filter errors" {
             output,
         ),
     );
+    var split_adler = [_][]const u8{ bad_adler[0..1], &.{}, bad_adler[1 .. bad_adler.len - 1], bad_adler[bad_adler.len - 1 ..] };
+    try std.testing.expectError(error.ChecksumMismatch, deflate.decodePngWindowedZlibImageFromChunksWithOptions(&split_adler, &window, info, .{}, output));
+    _ = try deflate.decodePngWindowedZlibImageFromChunksWithOptions(&split_adler, &window, info, .{ .ignore_adler = true }, output);
     _ = try deflate.decodePngWindowedZlibImageWithOptions(
         bad_adler,
         &window,

@@ -13213,6 +13213,34 @@ pub fn decodePngWindowedZlibImageWithOptions(
     };
 }
 
+/// Complete PNG reconstruction from borrowed zlib chunks, retaining bounded
+/// filtered history without joining compressed IDAT payloads.
+pub fn decodePngWindowedZlibImageFromChunksWithOptions(
+    chunks: []const []const u8,
+    history_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const Kernels = struct {
+        pub const parse_header = parseZlibHeaderFromChunks;
+        pub const read_header = readBlockHeader;
+        pub const read_length = decodeLength;
+        pub const read_distance = decodeDistance;
+        pub const copy_match = copyMatchAt;
+        pub fn step() SemanticLinearStep {
+            return .{ .output_written = 0, .status = .need_output };
+        }
+        pub const commit = commitPngWindowStep;
+        pub const footer = validateZlibFooterChunksWithKnownTotal;
+        pub const overlap = slicesOverlapForSemanticDecode;
+        pub fn result() PngImageDecodeResult {
+            return .{ .rows = 0, .output_written = 0, .zlib_input_read = 0 };
+        }
+    };
+    return @import("deflate/png/windowed_chunks.zig").decode(Kernels, chunks, history_scratch, info, options, output);
+}
+
 fn decodePngWindowedBlock(
     reader: *bitstream.BufferedBitReader,
     image: *png_windowed_history.ImageState,
