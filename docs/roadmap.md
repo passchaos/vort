@@ -25582,3 +25582,17 @@ reuse, so production keeps the simpler independently owned plans.
   with one platform skip.
   [Evidence](performance/brotli-incremental-history-copy-fastpath.md). The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: Inlining the incremental Brotli command reader into the decode
+  step was neutral and reverted. The 48-row A/B screen gives
+  `1.0010/1.0012/0.9998/1.0004` for q6/q11 at 64 KiB/1 MiB. The out-of-line
+  call is cheap next to the Huffman lookup it wraps, and the larger step body
+  offsets the saved call. The command reader stays out of line.
+  The three-codec industry-best goal stays active.
+
+- 2026-11-01: Inlining the incremental short-distance resolution (the shared
+  helper is deliberately `noinline` for the one-shot payload) was neutral and
+  reverted. The 48-row A/B screen gives `0.9975/1.0031/0.9975/0.9971` for
+  q6/q11 at 64 KiB/1 MiB. The helper's call is already cheap and its error
+  union widens the caller's return path. The `noinline` helper stays.
+  The three-codec industry-best goal stays active.
