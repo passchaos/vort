@@ -25179,3 +25179,11 @@ reuse, so production keeps the simpler independently owned plans.
   branch and an exact 17...32-byte head/tail pair all regressed and were
   rejected. The standalone Deflate suite passes 581/581 tests. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Zeroing only the unwritten tail of the complex-prefix `lengths`
+  buffer (instead of `@splat(0)` for the whole max alphabet) was neutral and
+  reverted. Two four-sweep 48-row screens give `0.9942/1.0016/0.9962/1.0031` and
+  `0.9961/1.0011/0.9954/1.0010` for q6/q11 at 64 KiB/1 MiB; a 24-row two-sweep
+  full-file screen gives `1.0005/1.0037`. The 64 KiB gain does not survive full
+  files. [Evidence](performance/brotli-prefix-length-tail.md). The three-codec
+  industry-best goal stays active.
