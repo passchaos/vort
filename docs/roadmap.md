@@ -25063,3 +25063,10 @@ reuse, so production keeps the simpler independently owned plans.
   there is no single removable local check. The next Deflate step needs a wider
   literal table, a different copy-length split or a new semantic loop layout.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: A 12-bit Deflate semantic literal table was tried and reverted.
+  Mozilla 1 MiB raw level 6 moved from `213.28` to `214.93` ms (0.77% slower)
+  and Dickens level 9 from `193.06` to `194.80` ms (0.90% slower). The wider
+  16 KiB table did not reduce secondary lookups enough to offset its cache and
+  build cost, so the 11-bit table stays. The three-codec industry-best goal
+  stays active.
