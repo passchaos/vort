@@ -24874,3 +24874,18 @@ reuse, so production keeps the simpler independently owned plans.
   literal table, a different staging shape or a new semantic decoder layout
   rather than another local check removal. This profile is the current Deflate
   decoder work item; the three-codec industry-best goal stays active.
+
+- 2026-11-01: A 720-process two-sweep epoch measures the committed Brotli
+  incremental increments across all 72 reference frames at 64 KiB, 1 MiB and
+  actual full lengths with 1/7/4096-byte input chunks.
+  [Evidence](performance/brotli-stream720.md) records 4096-chunk groups at
+  `0.5139/0.4527/0.6726` for q6 and `0.4892/0.4320/0.6183` for q11
+  (64 KiB/1 MiB/full), 7-byte groups at `0.7341/0.8257`, and the 1-byte groups
+  at `0.9503/1.0349`. The two sweeps agree within about one percent. Full-file
+  results are not uniform: q6 SAO `0.306` and Mozilla `0.459` lead, while
+  webster `1.069`, samba `1.147` and xml `1.166` regress; q11 SAO `0.255` and
+  OSDB `0.364` lead, while x-ray `0.963`, Mozilla `1.002` and ooffice `1.031`
+  are neutral. The reference lifecycle differs and is not an apples-to-apples
+  comparison. The full-file q6 and 1-byte q11 regressions need a dedicated
+  investigation before any full-file leadership claim; the three-codec
+  industry-best goal stays active.
