@@ -25900,3 +25900,10 @@ reuse, so production keeps the simpler independently owned plans.
   costs about as much as the overlapped latency saves; the compiler already
   schedules the read well. The load stays after the group width is known.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Moving the Deflate match copy (and `out_pos += length`) ahead of
+  the reservoir shift and refill regressed and was reverted:
+  `1.0309/1.0296/1.0354/1.0339` for level 6/9 at 64 KiB/1 MiB. The copy's
+  branches and stores then delay the bit-buffer chain that feeds the next
+  entry, which costs more than the overlap gains. The copy stays after the
+  shift/preload block. The three-codec industry-best goal stays active.
