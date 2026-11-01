@@ -38,11 +38,12 @@ largest gains are `dickens.64k.l6 0.948`, `webster.64k.l9 0.959`,
 `dickens.64k.l9 1.007`. Every group improves, and the full-file level-9 group
 improves about 1%.
 
-Two wider variants were rejected. Adding a 32-byte branch for
+Three wider variants were rejected. Adding a 32-byte branch for
 `length <= 32 and distance >= 32` moved the 64 KiB/1 MiB screen to
 `1.0063/0.9998/1.0086/1.0013`; adding an 8-byte branch before the 16-byte path
-moved it to `1.0083/1.0119/1.0049/1.0150`. The standalone Deflate suite passes
-581/581 tests.
+moved it to `1.0083/1.0119/1.0049/1.0150`; an exact 17...32-byte head/tail pair
+of two 16-byte copies moved it to `1.0036/1.0038/1.0074/1.0014`. The standalone
+Deflate suite passes 581/581 tests.
 
 ## Conclusion
 
