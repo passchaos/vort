@@ -25915,3 +25915,12 @@ reuse, so production keeps the simpler independently owned plans.
   shorter refill-decision sum, the extra reservoir shift costs more than the
   saved copy; the non-destructive `bits` form stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Consuming the litlen codeword and its length extra bits with one
+  destructive reservoir shift (total from the entry fields, extras from the
+  saved pre-shift buffer, distance peek one shift earlier) regressed and was
+  reverted: `1.0266/1.0286/1.0276/1.0252` for level 6/9 at 64 KiB/1 MiB.
+  Extra destructive shifts on the reservoir chain that feeds the next token
+  cost more than the shorter distance-load path saves. The single non-destructive
+  `bits` copy plus one final reservoir shift stays.
+  The three-codec industry-best goal stays active.
