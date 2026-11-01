@@ -25487,3 +25487,13 @@ reuse, so production keeps the simpler independently owned plans.
   bits, while six 10-bit symbols can consume 60, which exhausts the sentinel
   (the first version failed on `mozilla.64k.l19`). The five-symbol loop stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: A profile of the incremental Brotli decoder on
+  `samba.64k.q6` attributes 36.95% self to `copy_decoder.step`, 18.96% to
+  `readDistance`, 18.32% to `readCommand`, 15.39% to `copySpan`, 5.67% to
+  `beginCopy` and 2.86% to the command long-code fallback. Widening the
+  prepared command lookup from nine to ten bits for alphabet 704+ regressed the
+  incremental screen to `1.0025/1.0049/1.0069/1.0075` for q6/q11 at
+  64 KiB/1 MiB; the extra 1 KiB per command tree costs more than the avoided
+  fallback. The nine-bit prepared lookup stays. The three-codec industry-best
+  goal stays active.
