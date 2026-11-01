@@ -25350,3 +25350,9 @@ reuse, so production keeps the simpler independently owned plans.
   semantic table reuse would never trigger on the measured corpus, so the
   `buildLiteralTable` cost stays and the proposed cache was not implemented.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Recomputing the literal bit sums inline instead of keeping
+  `entry12_bits`/`entry123_bits` live was neutral and reverted. The 48-row
+  screen gives `0.9968/1.0003/0.9998/1.0000` for level 6/9 at 64 KiB/1 MiB.
+  The compiler common-subexpresses the sums, so the entry spill is unchanged.
+  The three-codec industry-best goal stays active.
