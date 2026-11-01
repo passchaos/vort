@@ -25090,3 +25090,14 @@ reuse, so production keeps the simpler independently owned plans.
   passes 1504/1505 with one platform skip. Command/distance packed caching,
   raw Deflate and the Zstd sequence decode remain work; the three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The packed literal caches in both header types grew from four to
+  eight round-robin slots. A one-shot samba.full q6 profile after the four-slot
+  cache still showed `PackedPrefixCode(256).expand` at 7.3%; eight slots reduce
+  samba.full q6 from 53.77 to 48.77 ms. A 24-row two-sweep full-file screen gives
+  `0.9886` overall versus four slots (samba q6 `0.912`, x-ray q11 `0.948`;
+  worst dickens q11 `1.028`), while the 64 KiB/1 MiB prefixes stay neutral
+  (`0.9971/1.0017/0.9947/0.9913`). The caches add another about 6 KiB per header
+  type. The complete ReleaseFast Brotli suite passes 1504/1505 with one platform
+  skip. Command/distance packed caching, raw Deflate and the Zstd sequence
+  decode remain work; the three-codec industry-best goal stays active.

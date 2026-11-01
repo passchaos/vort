@@ -7,10 +7,10 @@ rebuilt the Huffman table on every switch.
 
 ## Change
 
-The standard header now uses the same four-slot round-robin cache keyed by tree
-index. The indices clear after every compressed-header parse and the prepared
-flags clear with the rest of the header. The cache adds about 6 KiB to the
-standard header. Command and distance packed trees keep their single active
+The standard header now uses the same eight-slot round-robin cache keyed by
+tree index. The indices clear after every compressed-header parse and the
+prepared flags clear with the rest of the header. The cache adds about 12 KiB to
+the standard header. Command and distance packed trees keep their single active
 slot because they are expanded far less often.
 
 ## Measurement
@@ -28,6 +28,17 @@ gains are samba q6 `0.879`, ooffice q11 `0.913`, x-ray q11 `0.933` and samba
 q11 `0.953`. The largest regressions are dickens q11 `1.021`, sao q6 `1.014`,
 webster q11 `1.013` and nci q11 `1.011`. The win is concentrated in frames with
 many literal block-type switches.
+
+### Eight-slot follow-up
+
+A one-shot samba.full q6 profile after the four-slot cache still attributed
+7.3% to `PackedPrefixCode(256).expand`. Doubling the cache to eight slots
+(round-robin cursor widened to `u3`) reduced samba.full q6 from 53.77 to
+48.77 ms. A 24-row two-sweep full-file screen gives `0.9886` overall versus the
+four-slot build (samba q6 `0.912`, x-ray q11 `0.948`; worst dickens q11 `1.028`),
+and the 64 KiB/1 MiB prefixes are neutral
+(`0.9971/1.0017/0.9947/0.9913`). The cache adds another about 6 KiB per header
+type.
 
 ## Validation
 

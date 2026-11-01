@@ -4013,7 +4013,7 @@ fn PackedPrefixCode(comptime alphabet_size: usize) type {
 }
 
 const inline_literal_tree_count = 64;
-const packed_literal_cache_slots = 4;
+const packed_literal_cache_slots = 8;
 const inline_command_tree_count = 32;
 const inline_distance_tree_count = 64;
 
@@ -4069,7 +4069,7 @@ fn MinimalCompressedHeaderType(comptime literal_alphabet_capacity: usize, compti
         /// switch.
         packed_literal_cache: [packed_literal_cache_slots]PrefixCode(literal_alphabet_capacity) = @splat(.{}),
         packed_literal_cache_indices: [packed_literal_cache_slots]u16 = @splat(std.math.maxInt(u16)),
-        packed_literal_cache_next: u2 = 0,
+        packed_literal_cache_next: u3 = 0,
         command_block: BlockSwitchState(max_command_block_types),
         insert_copy_trees: [inline_command_tree_count]PrefixCode(command_alphabet_capacity),
         packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(command_alphabet_capacity) = @splat(.{}),
@@ -4098,7 +4098,7 @@ const MinimalCompressedHeader = struct {
     /// types would otherwise rebuild a full Huffman table on every switch.
     packed_literal_cache: [packed_literal_cache_slots]PrefixCode(256) = @splat(.{}),
     packed_literal_cache_indices: [packed_literal_cache_slots]u16 = @splat(std.math.maxInt(u16)),
-    packed_literal_cache_next: u2 = 0,
+    packed_literal_cache_next: u3 = 0,
     command_block: BlockSwitchState(max_command_block_types),
     insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
     packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(704) = @splat(.{}),
