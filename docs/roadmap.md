@@ -25478,3 +25478,12 @@ reuse, so production keeps the simpler independently owned plans.
   cost, and genericizing the parser over both reader types doubles that
   instantiation without a measurable win. The BitReader header parse stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Widening the Zstd Huffman reservoir batch from five symbols to
+  seven (width <=8) or six (width <=9) was neutral and reverted. The 48-row
+  screen gives `1.0015/0.9990/1.0022/1.0005` for level 3/19 at 64 KiB/1 MiB.
+  The reservoir path is only 1.84% of the level-3 profile. A six-symbol batch
+  at width 10 is also unsafe: after a reload the reservoir can hold only 57
+  bits, while six 10-bit symbols can consume 60, which exhausts the sentinel
+  (the first version failed on `mozilla.64k.l19`). The five-symbol loop stays.
+  The three-codec industry-best goal stays active.
