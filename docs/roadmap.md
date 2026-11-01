@@ -24978,3 +24978,17 @@ reuse, so production keeps the simpler independently owned plans.
   peak-memory leadership. The raw Deflate semantic loop is the largest target,
   then the Zstd sequence decode and Brotli per-call setup; the three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The four one-shot Brotli literal fallback sites now use
+  `decodePrepared`, and the standard header parser clears prepared flags after
+  each parse. A profile had shown `PrefixCode(256).decode` at 43.9% for Mozilla
+  64 KiB q6. [Evidence](performance/brotli-oneshot-fallback-lut.md) records a
+  384-process four-sweep paired screen at `0.9090/0.9965/0.8902/0.9989` for
+  q6/q11 at 64 KiB/1 MiB, all 48 rows `0.9474` and sweeps
+  `0.9466/0.9493/0.9504/0.9480`; best Mozilla 64 KiB q6 `0.644`, worst reymont
+  64 KiB q6 `1.028`. The follow-up 1,296-process epoch reduces the Brotli
+  64 KiB reference gap from `1.8833` to `1.7448` for q6 and from `1.7536` to
+  `1.5542` for q11; 1 MiB and full gaps stay `1.13–1.15x` and `1.39–1.44x`.
+  The complete ReleaseFast Brotli suite passes 1504/1505 with one platform skip.
+  Deflate's semantic loop remains the largest gap, then the Zstd sequence decode
+  and Brotli per-call setup; the three-codec industry-best goal stays active.

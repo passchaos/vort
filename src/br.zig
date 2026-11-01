@@ -15263,6 +15263,16 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     try readCompressedHeaderCommandTrees(reader, header, shape.command_block_types);
     try readCompressedHeaderDistanceTrees(reader, header, tree_counts.distance, shape.distance_alphabet_size);
     finishCompressedHeader(header, shape, tree_counts);
+    resetMinimalHeaderLookupStates(header);
+}
+
+fn resetMinimalHeaderLookupStates(header: *MinimalCompressedHeader) void {
+    for (header.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
+    for (header.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
+    for (header.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
+    header.active_packed_literal_tree.resetPreparedLookup();
+    header.active_packed_insert_copy_tree.resetPreparedLookup();
+    header.active_packed_distance_tree.resetPreparedLookup();
 }
 
 fn resetCompressedHeaderLookupStates(compressed: *LargeWindowCompressedHeader) void {
@@ -16059,7 +16069,7 @@ fn processMinimalCompressedMetaBlockImpl(
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try literalPrefixForDecode(&header, tree_index);
-            const literal = try tree.decode(reader);
+            const literal = try tree.decodePrepared(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -16146,7 +16156,7 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try largeLiteralPrefixForDecode(&header, tree_index);
-            const literal = try tree.decode(reader);
+            const literal = try tree.decodePrepared(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -16801,7 +16811,7 @@ noinline fn processDecodedCompressedPayload(
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try literalPrefixForDecode(header, tree_index);
-            const literal = try tree.decode(reader);
+            const literal = try tree.decodePrepared(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -17864,7 +17874,7 @@ noinline fn processDecodedCompressedPayloadLargeWindow(
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const tree = try largeLiteralPrefixForDecode(header, tree_index);
-            const literal = try tree.decode(reader);
+            const literal = try tree.decodePrepared(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;

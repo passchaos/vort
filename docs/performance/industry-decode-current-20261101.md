@@ -53,6 +53,12 @@ These ratios use different reference lifecycles and describe warmed one-shot
 calls only. They do not establish cold-start, streaming, dictionary or peak-memory
 leadership.
 
+A follow-up [one-shot fallback lookup](brotli-oneshot-fallback-lut.md) then
+moved the standard and large-window literal fallbacks to the prepared lookup.
+The same 1,296-process epoch now gives Brotli 64 KiB reference gaps `1.7448`
+for q6 and `1.5542` for q11, with 1 MiB and full-file gaps about `1.13–1.15x`
+and `1.39–1.44x`; Deflate and Zstd stay within run-to-run variation.
+
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.
 
