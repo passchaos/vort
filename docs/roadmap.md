@@ -25813,3 +25813,12 @@ reuse, so production keeps the simpler independently owned plans.
   free and reproducible. The standalone Deflate suite passes 581/581.
   [Evidence](performance/deflate-loop-alignment.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Aligning the main Brotli payload function
+  (`processExternalLiteralLookupCompressedPayload`) to 64 bytes was neutral and
+  reverted. The 48-row screen gives `1.0031/0.9983/0.9989/0.9974` for q6/q11
+  at 64 KiB/1 MiB (geometric mean about 0.999). The wide payload variant is
+  already aligned, and the function is large enough that entry alignment does
+  not move the measured rows. The alignment attribute stays only on the
+  Deflate loop.
+  The three-codec industry-best goal stays active.
