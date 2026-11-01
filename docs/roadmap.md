@@ -25248,6 +25248,8 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9925/0.9972/1.0069/1.0135` and `0.9955/0.9984/1.0117/1.0105` for
   q6/q11 at 64 KiB/1 MiB. Quality 6 gains 0.2–0.8%, but quality 11 regresses
   0.7–1.3% because the 2 KiB command table and fused lookup cost more than the
-  avoided long-code fallback.
+  avoided long-code fallback. A tree-shape diagnostic shows q6 and q11 command
+  trees have similar active lengths and long-code counts, so a shape gate
+  cannot separate them.
   [Evidence](performance/brotli-command-tail-lookup-10.md). The three-codec
   industry-best goal stays active.

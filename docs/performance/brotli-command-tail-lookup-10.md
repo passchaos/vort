@@ -35,12 +35,29 @@ about 0.7–1.3%. The wider 2 KiB command table and fused lookup path help the
 smaller quality-6 trees but cost more than the avoided long-code fallback on
 quality-11 blocks.
 
+## Tree shape
+
+A temporary diagnostic printed each 64 KiB command tree's active length and
+per-width code counts:
+
+| Source | Quality | len | 9-bit | 10-bit | 11-bit | 12+ bit |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| samba | 6 | 236 | 14 | 17 | 27 | 138 |
+| samba | 11 | 228 | 18 | 24 | 11 | 133 |
+| dickens | 6 | 175 | 18 | 10 | 9 | 107 |
+| dickens | 11 | 179 | 15 | 14 | 9 | 100 |
+
+Both qualities fit a ten-bit tail and have a substantial population of codes
+longer than nine bits, so a tree-shape gate would not separate the quality-6
+gain from the quality-11 regression. The regression is more consistent with the
+2 KiB table's cache footprint and code layout than with the lookup width.
+
 ## Conclusion
 
 The wiring was reverted. The ten-bit command machinery stays test-only; the
 nine-bit command tail remains the production path. A future attempt would need
-a per-block decision that only widens trees where the measured long-code miss
-rate justifies the larger table.
+a long-code structure with a smaller footprint, or a way to reuse the nine-bit
+table without doubling every command tree.
 
 Raw comparison, records and binaries stay local under
 `/tmp/vort-br-lookup-20261101/` (`oneshot-cmd10tail-comparison.json`,
