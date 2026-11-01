@@ -25070,3 +25070,10 @@ reuse, so production keeps the simpler independently owned plans.
   16 KiB table did not reduce secondary lookups enough to offset its cache and
   build cost, so the 11-bit table stays. The three-codec industry-best goal
   stays active.
+
+- 2026-11-01: Routing the non-overlap inline Deflate copy through
+  `shortcopy.copy` was tried and reverted. Mozilla 1 MiB level 6 improved 1.0%
+  (`215.56 -> 213.40` ms), but Dickens level 9 regressed 5.2%
+  (`192.68 -> 202.73` ms; a repeat run moved `194.2 -> 203.6` ms). The
+  memcpy/ERMS path stays for that specialization. The three-codec industry-best
+  goal stays active.
