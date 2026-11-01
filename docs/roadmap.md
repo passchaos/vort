@@ -25708,3 +25708,13 @@ reuse, so production keeps the simpler independently owned plans.
   comparable, and Brotli at 1 MiB is the closest at 1.13x.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Promoting the Zstd sequence loop's caller `written` cursor to a
+  local with a scope-exit store was neutral and reverted. The 48-row Zstd
+  screen gives `1.0022/1.0073/1.0041/1.0073` for level 3/19 at 64 KiB/1 MiB.
+  The inlined copy helpers already let the compiler keep the cursor value, and
+  the added exit stores cost the rest. `perf stat` shows the Zstd gap is
+  instruction count at equal IPC (13.54B vs 9.08B instructions, 3.51 vs 3.57
+  IPC for 600 decodes of `dickens.1m`), so the next Zstd work must remove
+  per-sequence work rather than cursor traffic. The caller-owned cursor stays.
+  The three-codec industry-best goal stays active.
