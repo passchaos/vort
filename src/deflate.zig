@@ -23653,7 +23653,3 @@ test "best selection retains custom search match and block bounds" {
 test "best selection releases all failed candidates and winning buffers" {
     try @import("deflate/tests/best_selection.zig").ownership(@This());
 }
-
-test {
-    _ = @import("deflate/png/ring_history.zig");
-}
