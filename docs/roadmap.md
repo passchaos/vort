@@ -25363,3 +25363,9 @@ reuse, so production keeps the simpler independently owned plans.
   branch does not remove the entry spill, and the extra loop iterations cancel
   the fewer loads. The four-entry form stays. The three-codec industry-best
   goal stays active.
+
+- 2026-11-01: Widening the Deflate semantic distance primary table from eight
+  to nine bits was neutral and reverted. The 48-row screen gives
+  `1.0000/0.9998/0.9993/0.9993` for level 6/9 at 64 KiB/1 MiB. The extra
+  primary fill offsets the reduced secondary lookups; the eight-bit distance
+  table stays. The three-codec industry-best goal stays active.
