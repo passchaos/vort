@@ -9,12 +9,12 @@ pub const Error = core.Error;
 /// 32 KiB region gives the inflater contiguous append room while the retained
 /// lookback stays immutable, matching image-png's logical buffer model without
 /// copying every emitted byte into a separate ring. The general whole-image
-/// path uses four windows to amortize compaction; the narrow RLE258 path keeps
+/// path uses eight windows to amortize compaction; the narrow RLE258 path keeps
 /// the original two-window footprint.
 pub const lookback_len: usize = 32 * 1024;
 pub const minimum_scratch_len: usize = 2 * lookback_len;
 pub const scratch_len: usize = 2 * lookback_len;
-pub const general_scratch_len: usize = 4 * lookback_len;
+pub const general_scratch_len: usize = 8 * lookback_len;
 
 pub const Window = struct {
     scratch: []u8,
