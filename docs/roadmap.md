@@ -25393,3 +25393,11 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0460/1.0699/1.0354/1.0664` for q6/q11 at 64 KiB/1 MiB. The wider AVX2
   move is slower than the two ordered 16-byte moves it replaced. The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: Adopting libdeflate's five ordered 8-byte moves per 40-byte
+  chunk for Deflate matches at `distance >= 8` was neutral and reverted. The
+  48-row screen gives `1.0008/0.9997/0.9930/1.0000` for level 6/9 at
+  64 KiB/1 MiB. Vort's existing 16-byte overcopy plus `shortcopy`/`memcpy`
+  selection is already at parity with the reference copy kernel; the overlap
+  tests pass 581/581. [Evidence](performance/deflate-libdeflate-word-copy.md).
+  The three-codec industry-best goal stays active.
