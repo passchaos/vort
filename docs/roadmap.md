@@ -25187,3 +25187,11 @@ reuse, so production keeps the simpler independently owned plans.
   full-file screen gives `1.0005/1.0037`. The 64 KiB gain does not survive full
   files. [Evidence](performance/brotli-prefix-length-tail.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Deferring the fourth speculative literal-entry load in the
+  non-overlap Deflate loop until after `refillSemanticBits` was tried and
+  reverted. The 48-row screen gives `1.0317/1.0372/1.0334/1.0355` for level 6/9
+  at 64 KiB/1 MiB. The deferred load becomes dependent on the refill chain,
+  while the existing speculative load hides that latency; the register spill it
+  avoids is cheaper than the lost overlap. The three-codec industry-best goal
+  stays active.
