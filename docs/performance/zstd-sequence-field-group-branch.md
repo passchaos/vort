@@ -53,6 +53,12 @@ at 64 KiB/1 MiB. Besides the lack of a measurable gain, the single-Huffman loop
 reads `state.reader` directly, so moving its transition reads ahead of
 `resolveSequenceOffset` would advance reader progress on an error path.
 
+The wide split loop's field reads were also consolidated into one
+grouped/ungrouped branch, relying on the zero-width compact fields consuming
+nothing. Two screens give `1.0028/0.9981/0.9969/0.9967` and
+`0.9990/0.9974/1.0018/0.9978`, a wash, and the change was reverted. The wide
+loop's remaining repeated transition branch stays as-is.
+
 Raw comparison, records and binaries stay local under
 `/tmp/vort-br-lookup-20261101/` (`oneshot-seqgroup-comparison.json`,
 `oneshot-seqgroup-1.json`, `oneshot-seqgroup-full-comparison.json`,

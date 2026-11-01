@@ -25224,3 +25224,11 @@ reuse, so production keeps the simpler independently owned plans.
   single-Huffman loop also reads `state.reader` directly, so moving its
   transition reads ahead of `resolveSequenceOffset` would change reader
   progress on an error path. The three-codec industry-best goal stays active.
+
+- 2026-11-01: Consolidating the wide split sequence loop's three extra-field
+  reads into one grouped/ungrouped branch was a wash and reverted. Two
+  four-sweep screens give `1.0028/0.9981/0.9969/0.9967` and
+  `0.9990/0.9974/1.0018/0.9978` for level 3/19 at 64 KiB/1 MiB. The zero-width
+  compact literal-rep0 fields already consume nothing, so the branch removal
+  does not change the hot path. The three-codec industry-best goal stays
+  active.
