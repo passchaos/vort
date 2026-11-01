@@ -24889,3 +24889,16 @@ reuse, so production keeps the simpler independently owned plans.
   comparison. The full-file q6 and 1-byte q11 regressions need a dedicated
   investigation before any full-file leadership claim; the three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The full-file q6 regression was traced to packed-tree expansion
+  zeroing and copying the 512-byte prepared lookup on every expansion.
+  `PackedPrefixCode.expand` now writes only the single-symbol, prepared and
+  table fields and leaves the lookup undefined; the owner clears `prepared` and
+  builds it on first use. xml.full q6 moves from baseline 44.76 ms and pre-fix
+  52.47 ms (`1.172`) to post-fix 45.20 ms (`1.010`).
+  [Evidence](performance/brotli-stream720.md) records a four-sweep 48-row paired
+  epoch: post-fix/pre-fix `0.9946/0.9853/0.9932/0.9908` and post-fix/baseline
+  `0.5173/0.4455/0.4935/0.4292` for q6/q11 at 64 KiB/1 MiB. The complete
+  ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Webster and
+  samba full-file q6 plus the 1-byte q11 case remain to investigate; the
+  three-codec industry-best goal stays active.

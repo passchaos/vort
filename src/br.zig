@@ -3988,16 +3988,23 @@ fn PackedPrefixCode(comptime alphabet_size: usize) type {
         }
 
         fn expand(self: *const Self) Error!PrefixCode(alphabet_size) {
-            if (self.single_symbol_plus_one != 0)
-                return .{ .single_symbol = self.single_symbol_plus_one - 1 };
+            // Leave the prepared lookup undefined: the owner clears `prepared`
+            // and builds the lookup on first use, so expanding a packed tree
+            // must not zero or copy 512 bytes of unused slots.
+            var tree: PrefixCode(alphabet_size) = undefined;
+            if (self.single_symbol_plus_one != 0) {
+                tree.single_symbol = self.single_symbol_plus_one - 1;
+                tree.prepared = false;
+                return tree;
+            }
             var lengths: [alphabet_size]u4 = undefined;
             for (&lengths, 0..) |*length, symbol| {
                 const shift: u3 = @intCast((symbol & 1) * 4);
                 length.* = @truncate(self.lengths[symbol / 2] >> shift);
             }
-            const tree: PrefixCode(alphabet_size) = .{
-                .table = try huffman.HuffmanTable(alphabet_size).init(&lengths),
-            };
+            tree.single_symbol = null;
+            tree.prepared = false;
+            tree.table = try huffman.HuffmanTable(alphabet_size).init(&lengths);
             if (tree.table.len != self.active_entries) return error.InvalidHuffmanCode;
             return tree;
         }

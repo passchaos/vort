@@ -60,10 +60,25 @@ The complete ReleaseFast Brotli suite passes 1504/1505 with one 32-bit-specific
 skip and zero failures on the committed source. Project-wide
 `zig build -j2 check` passes.
 
+## Packed-tree expansion fix
+
+The full-file q6 regression was traced to `PackedPrefixCode.expand`. The
+`PrefixCode` struct literal initialized the 512-byte prepared lookup to zero and
+returned it by value on every packed-tree expansion. A `perf` profile of
+xml.full q6 attributed 35.8% to expansion and 10.4% to `memset` in the candidate.
+`expand` now writes only the single-symbol, prepared flag and table fields and
+leaves the lookup undefined; the owner clears `prepared` and builds the lookup
+on first use, so the unused slots are never zeroed or copied.
+
+xml.full q6 changes from baseline 44.76 ms and pre-fix 52.47 ms (ratio `1.172`)
+to post-fix 45.20 ms (`1.010`). A four-sweep 48-row paired epoch gives
+post-fix/pre-fix `0.9946/0.9853/0.9932/0.9908` for q6/q11 at 64 KiB/1 MiB and
+post-fix/baseline `0.5173/0.4455/0.4935/0.4292`. The full ReleaseFast suite
+passes 1504/1505 with one platform skip.
+
 ## Next work
 
-The full-file q6 regressions (webster, samba, xml) and the 1-byte q11
-regression need a dedicated investigation before any full-file leadership claim.
-Candidates include non-power-of-two history indexing, per-meta-block lookup
-rebuild cost and code layout. The copy path, long-code fallback and one-shot
-reference epochs remain separate work.
+The webster and samba full-file q6 cases still need a dedicated check, as does
+the 1-byte q11 regression. Candidates include non-power-of-two history indexing,
+per-meta-block lookup rebuild cost and code layout. The copy path, long-code
+fallback and one-shot reference epochs remain separate work.
