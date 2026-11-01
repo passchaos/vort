@@ -25924,3 +25924,10 @@ reuse, so production keeps the simpler independently owned plans.
   cost more than the shorter distance-load path saves. The single non-destructive
   `bits` copy plus one final reservoir shift stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Pairing the Zstd match-length and offset state reads into one
+  shifted window (`Group.readPair`) was neutral and reverted:
+  `1.0008/0.9999/1.0001/1.0022` for level 3/19 at 64 KiB/1 MiB. The two reads
+  were already cheap and their chain was hidden; one saved shift changes
+  nothing measurable. The separate reads stay.
+  The three-codec industry-best goal stays active.
