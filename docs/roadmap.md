@@ -25530,3 +25530,12 @@ reuse, so production keeps the simpler independently owned plans.
   Zstd `1.47–1.56x` and Brotli `1.12–1.49x`.
   [Evidence](performance/deflate-litlen-width-live-range.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Committing an incremental Brotli literal run to the history ring
+  once instead of storing per literal was neutral and reverted. The 48-row
+  screen gives `1.0034/0.9959/1.0166/1.0015` for q6/q11 at 64 KiB/1 MiB. The
+  per-literal ring store is one cheap cache-resident write, while the run
+  commit adds two `memcpy` calls and an extra bookkeeping branch on every run.
+  The per-literal loop stays, and the shared `commitSpanToHistory` helper now
+  serves the copy and dictionary spans.
+  The three-codec industry-best goal stays active.

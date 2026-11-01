@@ -760,14 +760,21 @@ pub fn Decoder(comptime Codec: type) type {
             // Commit that suffix once instead of repeatedly round-tripping each
             // full ring through history while the output already contains the
             // complete forward-copy recurrence.
-            const retained_len = @min(output.len, self.history.len);
-            const retained = output[output.len - retained_len ..];
-            const destination = stream_count.ringIndex(self.total_output + stream_count.fromLocal(output.len - retained_len), self.history.len);
+            self.commitSpanToHistory(output);
+            self.updatePreviousFromSpan(output);
+        }
+        /// Write the newest history-sized suffix of `span` into the ring. The
+        /// caller already has the full span in its output buffer, so anything
+        /// older than the ring capacity is dropped.
+        fn commitSpanToHistory(self: *Self, span: []const u8) void {
+            if (span.len == 0) return;
+            const retained_len = @min(span.len, self.history.len);
+            const retained = span[span.len - retained_len ..];
+            const destination = stream_count.ringIndex(self.total_output + stream_count.fromLocal(span.len - retained_len), self.history.len);
             const first_destination_len = @min(retained.len, self.history.len - destination);
             @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
             if (first_destination_len != retained.len)
                 @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
-            self.updatePreviousFromSpan(output);
         }
         fn copySpanScalar(self: *Self, output: []u8) void {
             var source = stream_count.ringIndex(self.total_output - self.copy_distance, self.history.len);
@@ -793,13 +800,7 @@ pub fn Decoder(comptime Codec: type) type {
         fn commitDictionarySpan(self: *Self, output: []const u8) Error!void {
             std.debug.assert(output.len != 0);
             const next_output = try self.outputEnd(output.len);
-            const retained_len = @min(output.len, self.history.len);
-            const retained = output[output.len - retained_len ..];
-            const destination = stream_count.ringIndex(self.total_output + stream_count.fromLocal(output.len - retained_len), self.history.len);
-            const first_destination_len = @min(retained.len, self.history.len - destination);
-            @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
-            if (first_destination_len != retained.len)
-                @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
+            self.commitSpanToHistory(output);
             self.updatePreviousFromSpan(output);
             self.total_output = next_output;
         }
