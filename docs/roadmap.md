@@ -24992,3 +24992,18 @@ reuse, so production keeps the simpler independently owned plans.
   The complete ReleaseFast Brotli suite passes 1504/1505 with one platform skip.
   Deflate's semantic loop remains the largest gap, then the Zstd sequence decode
   and Brotli per-call setup; the three-codec industry-best goal stays active.
+
+- 2026-11-01: The standard one-shot Brotli command reader and the distance
+  fallback readers now use `decodePrepared`. [Evidence](performance/brotli-oneshot-command-distance-lut.md)
+  records a 384-process four-sweep paired screen at
+  `0.8942/0.9976/0.9140/1.0047` for q6/q11 at 64 KiB/1 MiB, all 48 rows
+  `0.9514` and sweeps `0.9561/0.9506/0.9497/0.9515`; best MR 64 KiB q6 `0.670`,
+  worst OSDB 64 KiB q6 `1.018`. Cumulatively the two fallback increments make
+  the 48-row one-shot set about 10% faster and the 64 KiB groups about 19%
+  faster. The follow-up 1,296-process epoch gives Brotli current/reference
+  `1.5342/1.1595/1.2693` for q6 and `1.3822/1.1546/1.2665` for q11 at
+  64 KiB/1 MiB/full; Brotli now has the smallest remaining gap at 1 MiB and
+  full. The complete ReleaseFast Brotli suite passes 1504/1505 with one platform
+  skip. Raw Deflate's semantic loop is still the largest gap, then the Zstd
+  sequence decode and Brotli per-call setup; the three-codec industry-best goal
+  stays active.

@@ -21294,12 +21294,12 @@ fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error
     }
     if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
     const tree = try commandPrefixForDecode(header);
-    const symbol = try tree.decode(reader);
+    const symbol = try tree.decodePrepared(reader);
     if (header.command_block.remaining != 0) header.command_block.remaining -= 1;
     return symbol;
 }
 
-fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*const PrefixCode(704) {
+fn commandPrefixForDecode(header: *MinimalCompressedHeader) Error!*PrefixCode(704) {
     const index = header.command_block.current_type;
     if (index < inline_command_tree_count) return &header.insert_copy_trees[index];
     if (header.active_packed_insert_copy_tree_index != index) {
@@ -21392,7 +21392,7 @@ fn readMinimalDistance(
         const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
         const tree = try distancePrefixForDecode(header, tree_index);
-        const decoded = try tree.decode(reader);
+        const decoded = try tree.decodePrepared(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
@@ -21416,7 +21416,7 @@ fn readMinimalDistanceLargeWindow(
         const tree_index = header.distance_context_map[@as(usize, header.distance_block.current_type) * 4 + context];
         if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
         const tree = try largeDistancePrefixForDecode(header, tree_index);
-        const decoded = try tree.decode(reader);
+        const decoded = try tree.decodePrepared(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
@@ -21472,7 +21472,7 @@ fn readSummaryMinimalDistance(
         const decoded = if (comptime tail_lookup)
             try tree.decodeTailLookup9(reader)
         else
-            try tree.decode(reader);
+            try tree.decodePrepared(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
@@ -21511,7 +21511,7 @@ fn readSummaryMinimalDistanceLargeWindow(
         const decoded = if (comptime tail_lookup)
             try tree.decodeTailLookup9(reader)
         else
-            try tree.decode(reader);
+            try tree.decodePrepared(reader);
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
