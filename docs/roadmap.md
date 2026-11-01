@@ -25166,3 +25166,15 @@ reuse, so production keeps the simpler independently owned plans.
   [Evidence](performance/brotli-header-lut-zeroing.md). LLVM already removes the
   unused zeroed lookup, so the header cost is not the LUT clear. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Non-overlapping raw Deflate matches with `length <= 16` and
+  `distance >= 16` now use one unaligned 16-byte load/store instead of a
+  runtime-length memcpy call in the full-output semantic loop. A profile of
+  `dickens.1m.rawdeflate.9` had attributed 17.05% to `memcpyFast`, including
+  spills around the call. [Evidence](performance/deflate-sixteen-byte-overcopy.md)
+  records a 384-process four-sweep 64 KiB/1 MiB screen at
+  `0.9902/0.9896/0.9944/0.9923` for level 6/9 and a 24-row two-sweep full-file
+  screen at `0.9953/0.9897`; the worst row is `dickens.64k.l9 1.007` and the
+  best is `dickens.64k.l6 0.948`. A 32-byte extension and an additional 8-byte
+  branch both regressed and were rejected. The standalone Deflate suite passes
+  581/581 tests. The three-codec industry-best goal stays active.

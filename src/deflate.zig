@@ -6798,9 +6798,20 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 } else {
                     // The full-output specialization enters this loop with
                     // room for two paired literals plus a maximum-length
-                    // match, so destination capacity is already proven.
+                    // match, so destination capacity is already proven. Short
+                    // matches can use one 16-byte load/store without a
+                    // memcpy call; the extra bytes stay inside the loop's
+                    // guaranteed 262-byte headroom and are overwritten by
+                    // later tokens before they become history.
                     std.debug.assert(length <= output.len - out_pos);
-                    @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+                    if (length <= 16 and distance >= 16) {
+                        @branchHint(.likely);
+                        const source: *align(1) const [16]u8 = @ptrCast(output[out_pos - distance ..].ptr);
+                        const destination: *align(1) [16]u8 = @ptrCast(output[out_pos..].ptr);
+                        destination.* = source.*;
+                    } else {
+                        @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+                    }
                 }
             } else {
                 try copyMatchAt(output, out_pos, length, distance);
