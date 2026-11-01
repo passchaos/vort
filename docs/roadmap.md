@@ -25381,3 +25381,9 @@ reuse, so production keeps the simpler independently owned plans.
   `ooffice` (no block at or below 10). A ten-bit semantic table would not cover
   these blocks, so the eleven-bit primary plus secondary design stays. The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: A four-byte match-copy fast path for `len <= 4` in the Brotli
+  wide policy regressed and was reverted. The 48-row screen gives
+  `1.0214/1.0044/1.0120/1.0101` for q6/q11 at 64 KiB/1 MiB. The extra branch
+  and narrower move cost more than the 16-byte move it replaced, even for the
+  shortest matches. The three-codec industry-best goal stays active.
