@@ -25691,3 +25691,11 @@ reuse, so production keeps the simpler independently owned plans.
   add-and-compare pairs, confirming that live-value count dominates instruction
   count in this loop. The original loop condition stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Retesting the early litlen-consume form (destructive
+  `bit_buffer >>= match_bits`, `bits = bit_buffer`, `total_bits` without the
+  litlen width) on top of the packed length/distance entries still regressed:
+  `1.0060/1.0165/1.0122/1.0198` for level 6/9 at 64 KiB/1 MiB. One extra
+  variable shift on the reservoir chain costs more than the register saved by
+  dropping the shifted copy. The non-destructive `bits` copy stays.
+  The three-codec industry-best goal stays active.
