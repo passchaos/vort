@@ -24902,3 +24902,12 @@ reuse, so production keeps the simpler independently owned plans.
   ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Webster and
   samba full-file q6 plus the 1-byte q11 case remain to investigate; the
   three-codec industry-best goal stays active.
+
+- 2026-11-01: A second 720-process epoch after the packed-expansion fix gives
+  4096-chunk groups `0.5101/0.4469/0.6436` for q6 and `0.4852/0.4301/0.6030`
+  for q11 (64 KiB/1 MiB/full), 7-byte groups `0.7243/0.8247`, and 1-byte groups
+  `0.9524/1.0329`. The q6 full group improves from `0.6726` to `0.6436` and
+  q11 from `0.6183` to `0.6030`, with q6 full sweeps `0.6416/0.6457`. Full-file
+  q6 now has webster `0.959`, xml `0.986` and samba `1.059`; every q11 full row
+  is at or below `0.958`. Only samba.full q6 and the 1-byte q11 case remain
+  below parity; the three-codec industry-best goal stays active.

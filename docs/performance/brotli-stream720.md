@@ -76,9 +76,17 @@ post-fix/pre-fix `0.9946/0.9853/0.9932/0.9908` for q6/q11 at 64 KiB/1 MiB and
 post-fix/baseline `0.5173/0.4455/0.4935/0.4292`. The full ReleaseFast suite
 passes 1504/1505 with one platform skip.
 
+A second 720-process epoch after the fix gives 4096-chunk groups
+`0.5101/0.4469/0.6436` for q6 and `0.4852/0.4301/0.6030` for q11
+(64 KiB/1 MiB/full), the 7-byte groups `0.7243/0.8247`, and the 1-byte groups
+`0.9524/1.0329`. The q6 full group improves from `0.6726` to `0.6436` and q11
+from `0.6183` to `0.6030`; the two sweeps of the q6 full group are
+`0.6416/0.6457`. Full-file q6 now has webster `0.959`, xml `0.986` and samba
+`1.059`; every q11 full row is at or below `0.958`.
+
 ## Next work
 
-The webster and samba full-file q6 cases still need a dedicated check, as does
-the 1-byte q11 regression. Candidates include non-power-of-two history indexing,
+The samba full-file q6 case (`1.059`) and the 1-byte q11 case (`1.0329`) still
+need a dedicated check. Candidates include non-power-of-two history indexing,
 per-meta-block lookup rebuild cost and code layout. The copy path, long-code
 fallback and one-shot reference epochs remain separate work.
