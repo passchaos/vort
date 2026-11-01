@@ -25664,3 +25664,11 @@ reuse, so production keeps the simpler independently owned plans.
   retired instructions than libdeflate.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Replacing the Deflate semantic loop's byte cursor with a
+  pointer cursor (`in_ptr` plus a precomputed integer fast-end, deriving the
+  byte index only at exits) regressed and was reverted. The 48-row screen
+  gives `1.0281/1.0181/1.0370/1.0173` for level 6/9 at 64 KiB/1 MiB. The
+  integer form of the pointer comparison and the mutable many-pointer keep the
+  compiler from allocating better than the plain index, so the index-based
+  cursor stays. The three-codec industry-best goal stays active.
