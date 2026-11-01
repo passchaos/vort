@@ -25548,3 +25548,37 @@ reuse, so production keeps the simpler independently owned plans.
   out-of-line `readBits` samples were not on the dominant row. The existing
   split between staged and general readers stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Giving the generic Deflate semantic loop a libdeflate-style
+  wide headroom so its per-match destination checks could be removed was
+  neutral and reverted. The generic variant reserved only 16 bytes and
+  re-checked `length > output.len - out_pos` per match; a 262-byte-headroom
+  variant (dispatched when at least 1 KiB of output remains) removes both that
+  check and the `out_pos + 16 <= output.len` term, leaving the tail path to
+  retire the last 262 bytes. The 48-row A/B screen gives
+  `1.0018/0.9967/0.9948/0.9954` for level 6/9 at 64 KiB/1 MiB, inside noise.
+  The branches were already well predicted and the extra tail work cancels the
+  removed compares. The small-headroom generic loop stays.
+  The three-codec industry-best goal stays active.
+
+- 2026-11-01: Moving the Zstd short-match branch ahead of the inlined
+  sixteen-byte literal copy, so the common `match_len <= 16` path no longer
+  keeps the match length live across the copy, was neutral and reverted. The
+  48-row A/B screen gives `0.9994/0.9995/1.0040/1.0010` for level 3/19 at
+  64 KiB/1 MiB. The literal copy's register set is small enough that the
+  spilled match length is reloaded cheaply, and the duplicated copy grows the
+  already large dense loop. The single branch after the copy stays.
+  The three-codec industry-best goal stays active.
+
+- 2026-11-01: The incremental Brotli `.distance` phase now decides plain
+  history copies inline instead of calling the out-of-line `beginCopy` for
+  every command. After the short-span copy change the `samba.64k.q6` profile
+  still attributes 5.88% to `beginCopy`, whose annotation is dominated by its
+  prologue, decoder-field reloads and the phase store. `tryBeginHistoryCopy`
+  mirrors `classifyDistance` exactly when no shared dictionary is attached and
+  falls through to `beginCopy` for compound and static targets. The 48-row A/B
+  screen gives `0.9782/0.9782/0.9853/0.9834` for q6/q11 at 64 KiB/1 MiB, with
+  46 of 48 rows faster. The complete ReleaseFast Brotli suite passes 1504/1505
+  with one platform skip.
+  [Evidence](performance/brotli-incremental-history-copy-fastpath.md). The
+  three-codec industry-best goal stays active.

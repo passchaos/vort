@@ -490,6 +490,7 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.implicit_last_distance) {
                         self.copy_distance = self.last_distances[3];
                         self.update_distance_ring = false;
+                        if (try self.tryBeginHistoryCopy()) continue;
                         try self.beginCopy();
                         continue;
                     }
@@ -506,6 +507,7 @@ pub fn Decoder(comptime Codec: type) type {
                     };
                     self.copy_distance = decoded.distance;
                     self.update_distance_ring = decoded.update_ring;
+                    if (try self.tryBeginHistoryCopy()) continue;
                     try self.beginCopy();
                 },
                 .copy => {
@@ -803,6 +805,21 @@ pub fn Decoder(comptime Codec: type) type {
             self.commitSpanToHistory(output);
             self.updatePreviousFromSpan(output);
             self.total_output = next_output;
+        }
+        /// Common case: no shared dictionary and the distance fits the RFC
+        /// window, so the reference is a plain history copy. Keeping this inline
+        /// avoids the out-of-line classifier call for almost every command.
+        inline fn tryBeginHistoryCopy(self: *Self) Error!bool {
+            if (self.shared_dictionary_size != 0) return false;
+            const distance = self.copy_distance;
+            if (distance == 0 or distance > self.maxBackwardDistance()) return false;
+            const remaining = self.decoded_len - self.total_output;
+            if (distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+            if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
+            if (self.update_distance_ring) pushLastDistance(&self.last_distances, distance);
+            self.update_distance_ring = false;
+            self.phase = .copy;
+            return true;
         }
         fn beginCopy(self: *Self) Error!void {
             const remaining = self.decoded_len - self.total_output;
