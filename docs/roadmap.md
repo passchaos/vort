@@ -25718,3 +25718,14 @@ reuse, so production keeps the simpler independently owned plans.
   IPC for 600 decodes of `dickens.1m`), so the next Zstd work must remove
   per-sequence work rather than cursor traffic. The caller-owned cursor stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: The Zstd sequence loop now uses plain offset adds on 64-bit
+  targets. `resolveSequenceOffset` performed three `std.math.add` overflow
+  checks per sequence; the offset base is u32-bounded (packed in the FSE
+  symbol's low 32 bits) and `readSequenceField` rejects fields wider than 32
+  bits, so a 64-bit `usize` sum cannot overflow. A comptime-gated helper keeps
+  the checked form on 32-bit targets. The 48-row screen gives
+  `0.9722/0.9789/0.9547/0.9698` for level 3/19 at 64 KiB/1 MiB, geometric mean
+  about 0.969, with five rows about 1.6–1.8% slower and the rest faster. The
+  Zstd suite passes 1251/1251. [Evidence](performance/zstd-plain-offset-adds.md).
+  The three-codec industry-best goal stays active.

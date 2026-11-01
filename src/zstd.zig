@@ -16029,6 +16029,15 @@ test "wide sequence transition matches bounded reader" {
 /// and profiling showed the tiny helper's call/return boundary consuming a
 /// measurable share of FSE-heavy blocks. The resolver's focused selector tests
 /// below remain the behavior oracle for the expanded hot path.
+/// Offset bases and extras are u32-bounded: the FSE symbol packs the base in
+/// the low 32 bits and the reader rejects fields wider than 32 bits. A 64-bit
+/// usize sum therefore cannot overflow, so the hot path can use a plain add.
+/// Narrow targets keep the checked form.
+inline fn addOffsetParts(a: usize, b: usize) Error!usize {
+    if (comptime @bitSizeOf(usize) >= 64) return a + b;
+    return std.math.add(usize, a, b) catch return error.IntegerOverflow;
+}
+
 inline fn resolveSequenceOffset(
     offset_base: usize,
     offset_bits: u8,
@@ -16037,7 +16046,7 @@ inline fn resolveSequenceOffset(
     repeated_offsets: *[3]usize,
 ) Error!usize {
     if (offset_bits > 1) {
-        const offset = std.math.add(usize, offset_base, offset_extra) catch return error.IntegerOverflow;
+        const offset = try addOffsetParts(offset_base, offset_extra);
         updateRepeatedOffsets(repeated_offsets, offset);
         return offset;
     }
@@ -16047,12 +16056,8 @@ inline fn resolveSequenceOffset(
         return try useRepeatedOffset(repeated_offsets, if (literal_len_is_zero) 1 else 0);
     }
 
-    const raw_base = std.math.add(usize, offset_base, if (literal_len_is_zero) 1 else 0) catch return error.IntegerOverflow;
-    const raw_offset = std.math.add(
-        usize,
-        raw_base,
-        offset_extra,
-    ) catch return error.IntegerOverflow;
+    const raw_base = try addOffsetParts(offset_base, @intFromBool(literal_len_is_zero));
+    const raw_offset = try addOffsetParts(raw_base, offset_extra);
     if (raw_offset == 3) {
         if (repeated_offsets[0] == 0) return error.InvalidMatch;
         const offset = repeated_offsets[0] - 1;
