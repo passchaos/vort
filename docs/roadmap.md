@@ -25470,3 +25470,11 @@ reuse, so production keeps the simpler independently owned plans.
   across 2, 26, 76, 2, 6 and 52 dynamic blocks). A small cross-block table
   cache would never trigger, so the `buildLiteralTable` cost cannot be skipped
   this way. The three-codec industry-best goal stays active.
+
+- 2026-11-01: Parsing the Brotli meta-block header through the fast staged
+  reader was neutral and reverted. Two 48-row screens give
+  `0.9972/0.9989/1.0025/1.0012` and `0.9984/0.9990/0.9972/1.0009` for q6/q11
+  at 64 KiB/1 MiB. The header parser's bit reads are not the dominant 64 KiB
+  cost, and genericizing the parser over both reader types doubles that
+  instantiation without a measurable win. The BitReader header parse stays.
+  The three-codec industry-best goal stays active.
