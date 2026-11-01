@@ -25286,3 +25286,10 @@ reuse, so production keeps the simpler independently owned plans.
   The paired screens remain the adoption authority.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Widening the Zstd literal-run copy from 16-byte chunks to a
+  32-byte whole-chunk plus 32-byte tail dispatch was rejected. The 48-row
+  screen gives `1.0020/1.0027/1.0109/1.0057` for level 3/19 at 64 KiB/1 MiB.
+  The added width dispatch and wider unaligned moves cost more than the
+  reduced chunk count; the 16-byte bulk copy stays. The three-codec
+  industry-best goal stays active.
