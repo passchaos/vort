@@ -25855,3 +25855,8 @@ reuse, so production keeps the simpler independently owned plans.
   slightly faster, 1 MiB rows slightly slower). The 12 threshold remains the
   measured optimum for this corpus.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Marking the Zstd wildcopy predicate's taken branch as likely was
+  neutral and reverted: `1.0004/1.0013/0.9998/0.9982` for level 3/19 at
+  64 KiB/1 MiB. The predicate's layout is already good and the hint changes
+  nothing measurable. The three-codec industry-best goal stays active.
