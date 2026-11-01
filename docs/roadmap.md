@@ -25729,3 +25729,12 @@ reuse, so production keeps the simpler independently owned plans.
   about 0.969, with five rows about 1.6–1.8% slower and the rest faster. The
   Zstd suite passes 1251/1251. [Evidence](performance/zstd-plain-offset-adds.md).
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: The dense Zstd wildcopy predicate now uses one literal bound
+  (`literal_offset + literal_len <= regenerated_size`) instead of the
+  offset-in-range plus remaining-length pair; `literal_len <= 16` is already
+  required, so the sum is exact and cannot overflow. The 48-row screen gives
+  `0.9959/0.9944/0.9960/0.9957` for level 3/19 at 64 KiB/1 MiB, a small but
+  uniform win with the worst row at `1.0044`. The Zstd suite passes 1251/1251.
+  [Evidence](performance/zstd-wildcopy-literal-bound.md). The three-codec
+  industry-best goal stays active.

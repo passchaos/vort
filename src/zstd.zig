@@ -14638,11 +14638,13 @@ inline fn decodeAllFseSplitHuffmanSequences(
         }
 
         const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
+        // `literal_len <= 16` bounds the sum, so one compare replaces the
+        // offset-in-range plus remaining-length pair.
+        const literal_end = literal_offset + literal_len;
         if (use_sequence_wildcopy and
             allow_wildcopy and
             literal_len <= 16 and
-            literal_offset <= section.regenerated_size and
-            section.regenerated_size - literal_offset >= literal_len and
+            literal_end <= section.regenerated_size and
             match_offset >= 16 and
             match_offset <= written.* - frame_output_start + literal_len and
             output.len - written.* >= literal_len + rounded_match_len)
