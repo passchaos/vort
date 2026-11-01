@@ -25242,3 +25242,12 @@ reuse, so production keeps the simpler independently owned plans.
   and Brotli `1.1320–1.4995`.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Wiring the existing ten-bit Brotli command tail into the
+  large-meta-block payload was mixed and reverted. Two four-sweep screens give
+  `0.9925/0.9972/1.0069/1.0135` and `0.9955/0.9984/1.0117/1.0105` for
+  q6/q11 at 64 KiB/1 MiB. Quality 6 gains 0.2–0.8%, but quality 11 regresses
+  0.7–1.3% because the 2 KiB command table and fused lookup cost more than the
+  avoided long-code fallback.
+  [Evidence](performance/brotli-command-tail-lookup-10.md). The three-codec
+  industry-best goal stays active.
