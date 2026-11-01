@@ -25415,3 +25415,12 @@ reuse, so production keeps the simpler independently owned plans.
   specialized X2 decoder does not beat the reservoir loop for the newly
   included lower-ratio blocks, so the 0.660 threshold stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Zstd's forward wildcopy now always uses libzstd's 16-byte
+  `WILDCOPY_VECLEN` tier instead of selecting 32/64-byte chunks at larger
+  distances. Three four-sweep 48-row screens give
+  `0.9974/0.9871/0.9986/0.9931`, `0.9964/0.9870/1.0075/0.9958` and
+  `0.9965/0.9846/0.9952/0.9929` for level 3/19 at 64 KiB/1 MiB; a 24-row
+  two-sweep full-file screen gives `0.9954/0.9927`. The complete Zstd suite
+  passes 1251/1251 tests. [Evidence](performance/zstd-sixteen-byte-wildcopy.md).
+  The three-codec industry-best goal stays active.

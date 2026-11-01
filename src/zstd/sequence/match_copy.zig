@@ -446,18 +446,9 @@ pub inline fn appendForwardWildcopy(
     repeat_start: usize,
     match_len: usize,
 ) bool {
-    const destination_start = written.*;
-    const distance = destination_start - repeat_start;
-    const rounded_len_64 = (match_len + 63) & ~@as(usize, 63);
-    if (distance >= 64 and output.len - destination_start >= rounded_len_64) {
-        appendForwardWildcopy64(output, written, repeat_start, match_len);
-        return true;
-    }
-    const rounded_len_32 = (match_len + 31) & ~@as(usize, 31);
-    if (distance >= 32 and output.len - destination_start >= rounded_len_32) {
-        appendForwardWildcopy32(output, written, repeat_start, match_len);
-        return true;
-    }
+    // Keep the 16-byte tier used by libzstd's wildcopy. The wider 32/64-byte
+    // tiers measured slower on the decode corpus; the return value now always
+    // reports that no wider tier was selected.
     appendForwardWildcopy16(output, written, repeat_start, match_len);
     return false;
 }
@@ -861,7 +852,7 @@ test "Zstd bounded 64-byte forward wildcopy handles overlapping matches" {
     }
 }
 
-test "Zstd adaptive forward wildcopy selects only a fully bounded wide copy" {
+test "Zstd forward wildcopy keeps the bounded sixteen-byte tier" {
     var expected: [256]u8 = undefined;
     for (&expected, 0..) |*byte, index| byte.* = @truncate(index * 43 + 17);
 
@@ -869,7 +860,7 @@ test "Zstd adaptive forward wildcopy selects only a fully bounded wide copy" {
     var expected_written: usize = 96;
     var wide_written = expected_written;
     append(&expected, &expected_written, 64, 33);
-    try std.testing.expect(appendForwardWildcopy(&wide, &wide_written, 64, 33));
+    try std.testing.expect(!appendForwardWildcopy(&wide, &wide_written, 64, 33));
     try std.testing.expectEqual(expected_written, wide_written);
     try std.testing.expectEqualSlices(u8, expected[0..expected_written], wide[0..wide_written]);
 
