@@ -25343,3 +25343,10 @@ reuse, so production keeps the simpler independently owned plans.
   plus 1.54% store. The next Deflate target is the literal live-range/spill
   structure, not the copy path. The three-codec industry-best goal stays
   active.
+
+- 2026-11-01: A diagnostic of consecutive dynamic-block code lengths found no
+  identical literal/distance tree pairs in `dickens.64k.l9`, `dickens.1m.l9`,
+  `mozilla.1m.l6` or `samba.64k.l6` (2, 26, 76 and 2 dynamic blocks). Cross-block
+  semantic table reuse would never trigger on the measured corpus, so the
+  `buildLiteralTable` cost stays and the proposed cache was not implemented.
+  The three-codec industry-best goal stays active.
