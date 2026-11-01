@@ -25654,3 +25654,13 @@ reuse, so production keeps the simpler independently owned plans.
   faster and only noise-level outliers above 1.0. The standalone Deflate suite
   passes 581/581. [Evidence](performance/deflate-length-entry-live-range.md).
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: A 1,296-process epoch after the Deflate reservoir-position and
+  length-entry changes gives current/reference Deflate
+  `1.6264/1.5331/1.5589` (level 6) and `1.6153/1.5178/1.5545` (level 9) at
+  64 KiB/1 MiB/full, down from `1.6890/1.5975/1.6084` and
+  `1.6725/1.5825/1.6089`. Zstd stays `1.48–1.56x` and Brotli `1.13–1.48x`.
+  The remaining Deflate gap is instruction count: equal IPC but about 77% more
+  retired instructions than libdeflate.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.

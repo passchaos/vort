@@ -203,3 +203,24 @@ largest gap is still raw Deflate at about 1.58–1.69x, then Zstd at about
 1.47–1.56x, then Brotli at about 1.12–1.49x. The [incremental short-span
 copy](brotli-short-span-copy.md) also improves the streaming API by about 5%
 without moving these one-shot rows.
+
+## Epoch after the Deflate reservoir-position and length-entry changes
+
+A 1,296-process epoch after the [derived bit position](deflate-derived-consumed-bits.md)
+and the [length-entry live range](deflate-length-entry-live-range.md) gives
+current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.6264 | 1.5331 | 1.5589 |
+| Deflate 9 | 1.6153 | 1.5178 | 1.5545 |
+| Zstd 3 | 1.5536 | 1.5625 | 1.4793 |
+| Zstd 19 | 1.5590 | 1.5446 | 1.5137 |
+| Brotli 6 | 1.4799 | 1.1381 | 1.2099 |
+| Brotli 11 | 1.4006 | 1.1268 | 1.2273 |
+
+The Deflate 1 MiB and full gaps move from about 1.58–1.60 to about
+1.52–1.56, and the 64 KiB gap from about 1.67–1.69 to about 1.62–1.63,
+consistent with the paired about 4% win. Zstd and Brotli are unchanged inside
+epoch noise. The largest gap is still raw Deflate at about 1.52–1.63x, then
+Zstd at about 1.48–1.56x, then Brotli at about 1.13–1.48x.
