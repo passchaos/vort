@@ -25827,3 +25827,9 @@ reuse, so production keeps the simpler independently owned plans.
   wrapper was mixed and reverted: `1.0012/0.9994/1.0068/1.0013` for level 6/9
   at 64 KiB/1 MiB, net about 0.2% worse. Only the generic semantic loop keeps
   the alignment attribute. The three-codec industry-best goal stays active.
+
+- 2026-11-02: Aligning the incremental Brotli `step` entry to 64 bytes was
+  neutral and reverted: `1.0003/0.9990/1.0019/0.9990` for q6/q11 at
+  64 KiB/1 MiB. Only the Deflate semantic loop gains from entry alignment; the
+  Brotli state machine's cost is spread through its phases.
+  The three-codec industry-best goal stays active.
