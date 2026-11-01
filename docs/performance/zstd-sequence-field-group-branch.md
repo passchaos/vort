@@ -44,7 +44,16 @@ The consolidation is adopted. It removes five repeated conditions per sequence
 and shortens the optional group's live range while preserving the grouped
 fast path.
 
+## Extended paths
+
+Applying the same consolidation to the medium-split, single-Huffman and raw
+sequence loops was neutral and reverted. Two four-sweep screens give
+`1.0000/0.9991/0.9964/0.9991` and `0.9996/1.0002/0.9960/0.9977` for level 3/19
+at 64 KiB/1 MiB. Besides the lack of a measurable gain, the single-Huffman loop
+reads `state.reader` directly, so moving its transition reads ahead of
+`resolveSequenceOffset` would advance reader progress on an error path.
+
 Raw comparison, records and binaries stay local under
 `/tmp/vort-br-lookup-20261101/` (`oneshot-seqgroup-comparison.json`,
 `oneshot-seqgroup-1.json`, `oneshot-seqgroup-full-comparison.json`,
-`decode-seqgroup`, `decode-def16b`).
+`oneshot-seqgroup-all-comparison.json`, `decode-seqgroup`, `decode-def16b`).

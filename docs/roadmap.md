@@ -25216,3 +25216,11 @@ reuse, so production keeps the simpler independently owned plans.
   The worst rows are `nci.64k.l19 1.044` and `nci.1m.l19 1.015`; the focused
   `test-zstd` ReleaseFast suite exits 0. The three-codec industry-best goal
   stays active.
+
+- 2026-11-01: Extending the Zstd sequence field-group consolidation to the
+  medium-split, single-Huffman and raw sequence loops was neutral and reverted.
+  Two four-sweep screens give `1.0000/0.9991/0.9964/0.9991` and
+  `0.9996/1.0002/0.9960/0.9977` for level 3/19 at 64 KiB/1 MiB. The
+  single-Huffman loop also reads `state.reader` directly, so moving its
+  transition reads ahead of `resolveSequenceOffset` would change reader
+  progress on an error path. The three-codec industry-best goal stays active.
