@@ -25822,3 +25822,8 @@ reuse, so production keeps the simpler independently owned plans.
   not move the measured rows. The alignment attribute stays only on the
   Deflate loop.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Extending the 64-byte alignment to the non-overlap Deflate
+  wrapper was mixed and reverted: `1.0012/0.9994/1.0068/1.0013` for level 6/9
+  at 64 KiB/1 MiB, net about 0.2% worse. Only the generic semantic loop keeps
+  the alignment attribute. The three-codec industry-best goal stays active.
