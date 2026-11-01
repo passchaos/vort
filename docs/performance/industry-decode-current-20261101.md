@@ -224,3 +224,22 @@ The Deflate 1 MiB and full gaps move from about 1.58–1.60 to about
 consistent with the paired about 4% win. Zstd and Brotli are unchanged inside
 epoch noise. The largest gap is still raw Deflate at about 1.52–1.63x, then
 Zstd at about 1.48–1.56x, then Brotli at about 1.13–1.48x.
+
+## Epoch after the Deflate distance-entry live range
+
+A 1,296-process epoch after the [packed distance entry](deflate-distance-entry-live-range.md)
+gives current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.5607 | 1.4696 | 1.4793 |
+| Deflate 9 | 1.5429 | 1.4687 | 1.4759 |
+| Zstd 3 | 1.5293 | 1.5437 | 1.4774 |
+| Zstd 19 | 1.5839 | 1.5415 | 1.5263 |
+| Brotli 6 | 1.4870 | 1.1376 | 1.2169 |
+| Brotli 11 | 1.3926 | 1.1283 | 1.2309 |
+
+The Deflate gap moves from about 1.52–1.63 to about 1.47–1.56, consistent with
+the paired about 4.5% win. Raw Deflate, Zstd and the Brotli 64 KiB rows are now
+within about 1.47–1.58x of their references; Brotli at 1 MiB remains the
+closest at 1.13x.

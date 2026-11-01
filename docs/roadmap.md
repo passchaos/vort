@@ -25699,3 +25699,12 @@ reuse, so production keeps the simpler independently owned plans.
   variable shift on the reservoir chain costs more than the register saved by
   dropping the shifted copy. The non-destructive `bits` copy stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: A 1,296-process epoch after the packed Deflate distance entry
+  gives current/reference Deflate `1.5607/1.4696/1.4793` (level 6) and
+  `1.5429/1.4687/1.4759` (level 9) at 64 KiB/1 MiB/full, down from
+  `1.6264/1.5331/1.5589` and `1.6153/1.5178/1.5545`. Zstd stays about
+  `1.48–1.58x` and Brotli about `1.13–1.49x`. Deflate and Zstd gaps are now
+  comparable, and Brotli at 1 MiB is the closest at 1.13x.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
