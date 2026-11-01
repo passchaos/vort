@@ -40,6 +40,15 @@ and the 64 KiB/1 MiB prefixes are neutral
 (`0.9971/1.0017/0.9947/0.9913`). The cache adds another about 6 KiB per header
 type.
 
+### Incremental 720-process epoch
+
+The large-window header also uses eight slots. A 720-process two-sweep epoch
+gives q6 `0.5975/0.5261/0.4360/0.3824/0.3909` and q11
+`0.6000/0.5437/0.4451/0.3834/0.3993` at 64 KiB 1/7/4096, 1 MiB and full. The
+full groups improve from `0.4929/0.4605` (four slots) to `0.3909/0.3993`; their
+sweeps are `0.3916/0.3903` and `0.3995/0.3991`. Every full row is at or below
+`0.643`; the best are SAO q6 `0.239` and ooffice q11 `0.208`.
+
 ## Validation
 
 The complete ReleaseFast Brotli suite passes 1504/1505 with one 32-bit-specific

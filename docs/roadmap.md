@@ -25122,3 +25122,14 @@ reuse, so production keeps the simpler independently owned plans.
   Dickens 1 MiB level 19 moved `76.71 -> 76.86` ms and Mozilla level 3
   `33.98 -> 34.14` ms. The running-position `Group` stays for the generic path.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: A 720-process epoch with the eight-slot packed literal caches
+  gives the incremental decoder q6 `0.5975/0.5261/0.4360/0.3824/0.3909` and
+  q11 `0.6000/0.5437/0.4451/0.3834/0.3993` at 64 KiB 1/7/4096, 1 MiB and full.
+  The full groups improve from `0.4929/0.4605` (four slots) to
+  `0.3909/0.3993`, with sweeps `0.3916/0.3903` and `0.3995/0.3991`; every full
+  row is at or below `0.643`, best SAO q6 `0.239` and ooffice q11 `0.208`.
+  [Evidence](performance/brotli-standard-packed-cache.md). The complete
+  ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Command/
+  distance packed caching, raw Deflate and the Zstd sequence decode remain
+  work; the three-codec industry-best goal stays active.
