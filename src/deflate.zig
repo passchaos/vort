@@ -6531,10 +6531,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             {
                 bit_buffer >>= 2;
                 bit_count -= 2;
-                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-                entry = decoder.literal[
-                    @intCast(bit_buffer & Decoder.literal_lookup_mask)
-                ];
+                if (bit_count >= Decoder.literal_lookup_bits) {
+                    entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                } else {
+                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                    entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                }
 
                 const byte = output[out_pos - 1];
                 fillLinearRle(output, out_pos, 258, byte);
@@ -6628,8 +6631,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                     bit_count -= secondary_bits;
                     output[out_pos] = @truncate(symbol);
                     out_pos += 1;
-                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-                    entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                    if (bit_count >= Decoder.literal_lookup_bits) {
+                        entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                    } else {
+                        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                        entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                    }
                     continue;
                 }
                 if (symbol == 256) {
@@ -6704,8 +6712,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const total_bits: u6 = match_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
-            refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-            entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+            if (bit_count >= Decoder.literal_lookup_bits) {
+                entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+            } else {
+                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+            }
 
             if (out_pos == 0) return error.InvalidMatch;
             if (length > output.len - out_pos) return error.OutputTooSmall;
@@ -6751,8 +6764,16 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
-        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-        entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+        if (bit_count >= Decoder.literal_lookup_bits) {
+            // The refill only writes bits above the valid reservoir, so the
+            // low lookup bits are unchanged; preloading first lets the table
+            // load overlap the refill instead of waiting on it.
+            entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+            refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+        } else {
+            refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+            entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+        }
         if (comptime inline_non_overlap) {
             // This specialization is selected only for match-heavy blocks whose
             // distance alphabet is deep enough to justify a separate loop. Keep

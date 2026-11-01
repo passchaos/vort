@@ -25860,3 +25860,18 @@ reuse, so production keeps the simpler independently owned plans.
   neutral and reverted: `1.0004/1.0013/0.9998/0.9982` for level 3/19 at
   64 KiB/1 MiB. The predicate's layout is already good and the hint changes
   nothing measurable. The three-codec industry-best goal stays active.
+
+- 2026-11-02: The Deflate semantic loop now preloads the next literal entry
+  before the reservoir refill when at least eleven lookup bits remain staged.
+  The refill only writes bits above the valid reservoir, so the low lookup bits
+  are unchanged; issuing the table load first lets it overlap the refill's
+  eight-byte load and shift instead of waiting on them. The guard falls back
+  only for tokens wider than 45 bits. Two 48-row screens give
+  `0.9632/0.9745/0.9613/0.9776` and `0.9615/0.9760/0.9621/0.9780` against the
+  committed decoder (47/48 rows faster, best `nci.64k.l6` `0.9046`). Applying
+  the same pattern to the secondary-literal, RLE-1 and RLE-258 sites adds
+  another `0.9917/0.9842/0.9951/0.9821` and `0.9930/0.9823/0.9948/0.9830`,
+  trading about 3–4% on `xml.64k` for about 1.5% at 1 MiB and a positive group
+  mean. Combined about 4–5%. The standalone Deflate suite passes 581/581.
+  [Evidence](performance/deflate-preload-before-refill.md). The three-codec
+  industry-best goal stays active.
