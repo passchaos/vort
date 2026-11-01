@@ -25848,3 +25848,10 @@ reuse, so production keeps the simpler independently owned plans.
   about 1.45–1.56x for Deflate and Zstd and 1.13–1.48x for Brotli.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Raising the Deflate non-overlap loop selection threshold from
+  `distance_max_bits >= 12` to `>= 13` was mixed and reverted:
+  `0.9967/1.0034/0.9977/1.0018` for level 6/9 at 64 KiB/1 MiB (64 KiB rows
+  slightly faster, 1 MiB rows slightly slower). The 12 threshold remains the
+  measured optimum for this corpus.
+  The three-codec industry-best goal stays active.
