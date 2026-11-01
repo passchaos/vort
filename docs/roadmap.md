@@ -25463,3 +25463,10 @@ reuse, so production keeps the simpler independently owned plans.
   cache and its per-block-type rebuild cost more than the removed map load and
   address computation. The direct map lookup stays. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Extending the Deflate tree diagnostic to the previous four
+  dynamic blocks still finds no repeated literal/distance length pairs in
+  `dickens` 64 KiB/1 MiB, `mozilla`, `samba`, `x-ray` or `ooffice` (0 hits
+  across 2, 26, 76, 2, 6 and 52 dynamic blocks). A small cross-block table
+  cache would never trigger, so the `buildLiteralTable` cost cannot be skipped
+  this way. The three-codec industry-best goal stays active.
