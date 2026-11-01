@@ -25271,3 +25271,9 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9911/0.9994`. The complete ReleaseFast Brotli suite passes 1504/1505 with
   one platform skip. [Evidence](performance/brotli-wide-match-copy.md). The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: Extending the wide match-copy policy to the five remaining
+  `written`-cursor Brotli payload sites was neutral and reverted. The 48-row
+  screen gives `1.0022/1.0013/1.0007/0.9994` for q6/q11 at 64 KiB/1 MiB; those
+  paths are not on the measured prefix rows. The tail-lookup sites keep the
+  adopted wide policy. The three-codec industry-best goal stays active.
