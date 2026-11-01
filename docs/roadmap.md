@@ -25833,3 +25833,10 @@ reuse, so production keeps the simpler independently owned plans.
   64 KiB/1 MiB. Only the Deflate semantic loop gains from entry alignment; the
   Brotli state machine's cost is spread through its phases.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Placing the aligned Deflate semantic loop in a dedicated text
+  section (`.text.vort_deflate_semantic_hot`) regressed and was reverted:
+  `1.0114/1.0020/1.0117/1.0031` for level 6/9 at 64 KiB/1 MiB. The section
+  moves the loop away from its tail helper and callers, hurting locality more
+  than the isolation helps. The plain `align(64)` placement stays.
+  The three-codec industry-best goal stays active.
