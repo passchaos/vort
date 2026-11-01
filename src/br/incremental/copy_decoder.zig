@@ -734,7 +734,11 @@ pub fn Decoder(comptime Codec: type) type {
         }
         fn copySpan(self: *Self, output: []u8) void {
             std.debug.assert(output.len != 0 and self.copy_distance <= self.history.len);
-            if (output.len < 16) return self.copySpanScalar(output);
+            // Brotli copy lengths are mostly small; the vectorized seed/double
+            // path wins from four bytes up, while one-to-three bytes stay on
+            // the single-pass scalar loop (libbrotli's memmove16 shortcut needs
+            // ring-buffer slack that a caller-owned output slice does not have).
+            if (output.len < 4) return self.copySpanScalar(output);
             const seed_len = @min(output.len, self.copy_distance);
             const source = stream_count.ringIndex(self.total_output - self.copy_distance, self.history.len);
             const first_source_len = @min(seed_len, self.history.len - source);
@@ -768,7 +772,6 @@ pub fn Decoder(comptime Codec: type) type {
         fn copySpanScalar(self: *Self, output: []u8) void {
             var source = stream_count.ringIndex(self.total_output - self.copy_distance, self.history.len);
             var destination = stream_count.ringIndex(self.total_output, self.history.len);
-            var previous = self.previous;
             for (output) |*out| {
                 const value = self.history[source];
                 out.* = value;
@@ -777,10 +780,8 @@ pub fn Decoder(comptime Codec: type) type {
                 if (source == self.history.len) source = 0;
                 destination += 1;
                 if (destination == self.history.len) destination = 0;
-                previous[0] = previous[1];
-                previous[1] = value;
             }
-            self.previous = previous;
+            self.updatePreviousFromSpan(output);
         }
         fn updatePreviousFromSpan(self: *Self, output: []const u8) void {
             if (output.len == 1) {

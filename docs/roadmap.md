@@ -25497,3 +25497,20 @@ reuse, so production keeps the simpler independently owned plans.
   64 KiB/1 MiB; the extra 1 KiB per command tree costs more than the avoided
   fallback. The nine-bit prepared lookup stays. The three-codec industry-best
   goal stays active.
+
+- 2026-11-01: The incremental Brotli `copySpan` now sends four-byte-and-longer
+  spans through the vectorized seed/double/commit path; only one-to-three-byte
+  spans keep the single-pass scalar loop. A 15.39% `copySpan` share in the
+  `samba.64k.q6` profile was dominated by that byte loop. The 48-row screen
+  sweeps `<16` (baseline), `<8` `0.9810/0.9760/0.9905/0.9785`, `<6`
+  `0.9714/0.9575/0.9707/0.9661`, `<4` `0.9530/0.9483/0.9604/0.9566` and `<2`
+  `0.9581/0.9532/0.9760/0.9648` for q6/q11 at 64 KiB/1 MiB. The scalar loop
+  also drops its per-byte `previous` window update and derives it from the
+  final two output bytes; the final binary reproduces
+  `0.9477/0.9490/0.9639/0.9549`. `libbrotli` can issue one 16-byte `memmove16`
+  for any length because its ring buffer has slack; a caller-owned output
+  slice cannot, so the exact-length seed/commit pair is the equivalent.
+  The complete ReleaseFast Brotli suite passes 1504/1505 with one platform
+  skip and `zig build -j2 check` exits zero.
+  [Evidence](performance/brotli-short-span-copy.md). The three-codec
+  industry-best goal stays active.
