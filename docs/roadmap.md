@@ -25764,3 +25764,10 @@ reuse, so production keeps the simpler independently owned plans.
   predicted and it also skips the nine-bit peek-and-fill that the folded form
   now performs for every single-symbol decode. The early return stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Adding `@branchHint(.unlikely)` to the Deflate distance-one
+  branch (and `.likely` to the non-overlap branch) regressed and was reverted.
+  The 48-row screen gives `1.0128/1.0069/1.0116/1.0060` for level 6/9 at
+  64 KiB/1 MiB. The hint moves cold code into the loop's fall-through layout and
+  disturbs an already-tuned arrangement. The branch order and layout stay.
+  The three-codec industry-best goal stays active.
