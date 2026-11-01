@@ -25055,3 +25055,11 @@ reuse, so production keeps the simpler independently owned plans.
   ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Deflate's
   semantic loop remains the largest gap, then the Zstd sequence decode and
   Brotli per-call setup; the three-codec industry-best goal stays active.
+
+- 2026-11-01: A Deflate text profile (Dickens 1 MiB raw level 9) attributes
+  68.5% to `decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline`,
+  15.4% to `memcpyFast`, 9.5% to the generic semantic loop and 2.2% to `mem.eql`.
+  The literal dependent-load chain and non-overlapping match copies dominate;
+  there is no single removable local check. The next Deflate step needs a wider
+  literal table, a different copy-length split or a new semantic loop layout.
+  The three-codec industry-best goal stays active.
