@@ -25116,3 +25116,9 @@ reuse, so production keeps the simpler independently owned plans.
   current/baseline is `0.772/0.992/0.842` for q6 and `0.727/0.872/0.810` for
   q11. These are warmed one-shot calls with different reference lifecycles. The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: Routing the generic Zstd sequence field group through
+  `ShiftingGroup.init` (the pair-path shift extractor) was tried and reverted.
+  Dickens 1 MiB level 19 moved `76.71 -> 76.86` ms and Mozilla level 3
+  `33.98 -> 34.14` ms. The running-position `Group` stays for the generic path.
+  The three-codec industry-best goal stays active.
