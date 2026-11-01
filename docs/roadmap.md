@@ -25401,3 +25401,10 @@ reuse, so production keeps the simpler independently owned plans.
   selection is already at parity with the reference copy kernel; the overlap
   tests pass 581/581. [Evidence](performance/deflate-libdeflate-word-copy.md).
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: A diagnostic of the Zstd dense sequence loop shows the
+  `Group.init` field-group path covers more than 99.9% of sequences:
+  `dickens.1m.l3` 214,286 sequences with 38 misses, `dickens.1m.l19` 227,424
+  with 70, `mozilla.1m.l3` 30,520 with 30 and `samba.64k.l3` 11,434 with 6.
+  Optimizing the ungrouped fallback would not move the benchmark; the grouped
+  path stays. The three-codec industry-best goal stays active.
