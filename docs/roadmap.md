@@ -25277,3 +25277,12 @@ reuse, so production keeps the simpler independently owned plans.
   screen gives `1.0022/1.0013/1.0007/0.9994` for q6/q11 at 64 KiB/1 MiB; those
   paths are not on the measured prefix rows. The tail-lookup sites keep the
   adopted wide policy. The three-codec industry-best goal stays active.
+
+- 2026-11-01: A 1,296-process epoch after the Brotli wide match copy gives
+  current/reference Brotli `1.4891/1.1332/1.2171` (q6) and
+  `1.3949/1.1254/1.2295` (q11) at 64 KiB/1 MiB/full, moving the prefix gaps
+  from `1.4995/1.1460` and `1.4012/1.1320` to `1.4891/1.1332` and
+  `1.3949/1.1254`. Deflate remains `1.6868–1.8133` and Zstd `1.5159–1.5730`.
+  The paired screens remain the adoption authority.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.

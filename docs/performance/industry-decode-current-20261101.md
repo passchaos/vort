@@ -106,6 +106,27 @@ evidence](zstd-sequence-field-group-branch.md) remain the adoption authority.
 The largest gap is still raw Deflate at about 1.68–1.81x, then Zstd at about
 1.49–1.60x, then Brotli at about 1.13–1.50x.
 
+## Epoch after the Brotli wide match copy
+
+A 1,296-process epoch with the wide tail-lookup match copy gives
+current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.7987 | 1.6875 | 1.7129 |
+| Deflate 9 | 1.8133 | 1.6868 | 1.7100 |
+| Zstd 3 | 1.5607 | 1.5730 | 1.5159 |
+| Zstd 19 | 1.5690 | 1.5556 | 1.5480 |
+| Brotli 6 | 1.4891 | 1.1332 | 1.2171 |
+| Brotli 11 | 1.3949 | 1.1254 | 1.2295 |
+
+Brotli moves from `1.4995/1.1460` to `1.4891/1.1332` for q6 and from
+`1.4012/1.1320` to `1.3949/1.1254` for q11 at 64 KiB/1 MiB, consistent with the
+paired 0.5–1.3% win; full-file rows stay inside epoch noise. The paired screens
+in [the wide-copy evidence](brotli-wide-match-copy.md) remain the adoption
+authority. The largest gap is still raw Deflate at about 1.69–1.81x, then Zstd
+at about 1.52–1.57x, then Brotli at about 1.13–1.49x.
+
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.
 
