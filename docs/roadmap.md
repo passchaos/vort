@@ -25883,3 +25883,12 @@ reuse, so production keeps the simpler independently owned plans.
   The Deflate 1 MiB gap is now about 1.43x.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Using the destructive `ShiftingGroup` for the main Zstd
+  per-sequence field group (instead of the `consumed`-tracking `Group`) was
+  neutral and reverted: `1.0014/1.0007/1.0007/0.9997` for level 3/19 at
+  64 KiB/1 MiB. The running-consumed add per field is already hidden by the
+  destructive shift's latency, so removing it changes nothing measurable.
+  The `Group` form stays on the main path; `ShiftingGroup` remains on the
+  paired path where it was measured.
+  The three-codec industry-best goal stays active.
