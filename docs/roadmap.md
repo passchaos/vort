@@ -25139,3 +25139,12 @@ reuse, so production keeps the simpler independently owned plans.
   q6/q11 at 64 KiB/1 MiB) and was reverted; the 8-bit distance table stays. The
   distance long-code fallback is not a hot path. The three-codec industry-best
   goal stays active.
+
+- 2026-11-01: The Zstd level-3 `memset` was traced to the
+  `HuffmanLiteralLookup.build` zeroing inside `initHuffmanLiteralDecodeState`
+  (src/zstd.zig:12975). `buildComplete` fills the table when nodes are in prefix
+  order; the fallback zeroes 4 KiB and then fills. The earlier scattered
+  `buildUnordered` was slower than the sequential clear plus fill, so the
+  remaining cost is the fill pattern, not the clear. A redesign would need
+  prefix-ordered node iteration or a different lookup layout. The three-codec
+  industry-best goal stays active.
