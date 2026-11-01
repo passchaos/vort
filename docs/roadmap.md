@@ -25148,3 +25148,11 @@ reuse, so production keeps the simpler independently owned plans.
   remaining cost is the fill pattern, not the clear. A redesign would need
   prefix-ordered node iteration or a different lookup layout. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: A one-shot 64 KiB Brotli profile attributes 12.2% to
+  `readStreamMetaBlockHeader`, 11.7% to the literal context dispatch, 7.2% to
+  bit-reader fill, 6.2% to UTF-8 context table loads and 6.1% to the literal
+  loop. Rewriting the context switch as a compare chain was neutral
+  (`0.9979/1.0026/1.0056/0.9951` for q6/q11 at 64 KiB/1 MiB) and was reverted.
+  The per-meta-block header parse and the literal loop remain the 64 KiB setup
+  cost; the three-codec industry-best goal stays active.
