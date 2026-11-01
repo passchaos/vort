@@ -25253,3 +25253,10 @@ reuse, so production keeps the simpler independently owned plans.
   cannot separate them.
   [Evidence](performance/brotli-command-tail-lookup-10.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Narrowing the one-shot external literal lookup from ten to nine
+  bits was rejected. The 48-row screen gives
+  `1.0875/1.0949/0.9956/0.9982` for q6/q11 at 64 KiB/1 MiB: quality 6 regresses
+  about 9% because many literal codes need the tenth bit, while quality 11 is
+  only 0.4–0.5% faster. The ten-bit literal table stays.
+  The three-codec industry-best goal stays active.
