@@ -25796,3 +25796,11 @@ reuse, so production keeps the simpler independently owned plans.
   parameters, so the profile's refill share is dependency latency, not spill
   traffic. The pointer-based helper stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Lowering the Deflate non-overlap loop selection threshold from
+  `distance_max_bits >= 12` to `>= 11` was mixed and reverted. The 48-row
+  screen gives `0.9916/1.0001/0.9980/1.0032` for level 6/9 at 64 KiB/1 MiB:
+  64 KiB rows gain slightly while 1 MiB rows are neutral to slightly worse,
+  for a net of about 0.2%. The blocks that newly qualify are too rare and too
+  mixed to justify a policy change. The `>= 12` threshold stays.
+  The three-codec industry-best goal stays active.
