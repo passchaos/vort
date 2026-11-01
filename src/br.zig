@@ -16319,8 +16319,8 @@ noinline fn processSingleTreeExternalLookupCompressedPayload(
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        if (lengths.copy_len == 0 or lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -16963,8 +16963,8 @@ noinline fn processTailLookupCompressedPayload(
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        if (lengths.copy_len == 0 or lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -17075,8 +17075,8 @@ noinline fn processExternalLiteralLookupCompressedPayload(
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        if (lengths.copy_len == 0 or lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -17209,8 +17209,8 @@ inline fn processWideExternalLiteralLookupCompressedPayloadCore(
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        if (lengths.copy_len == 0 or lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 
@@ -17620,8 +17620,8 @@ inline fn processWideExternalLiteralLookup10AuxiliaryPayloadCore(
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
-        if (lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
-        match_copy.append(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
+        if (lengths.copy_len == 0 or lengths.copy_len > meta_block_end - output_cursor) return error.CorruptFrame;
+        match_copy.appendWideNonZero(output, &output_cursor, distance, lengths.copy_len, meta_block_end);
     }
 }
 

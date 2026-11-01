@@ -25260,3 +25260,14 @@ reuse, so production keeps the simpler independently owned plans.
   about 9% because many literal codes need the tenth bit, while quality 11 is
   only 0.4–0.5% faster. The ten-bit literal table stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: The tail-lookup Brotli payload now uses the wide match-copy
+  policy for its five match sites instead of the compact `append` policy, and
+  the existing bounds check rejects zero-length matches before the wide copy.
+  A full-file q11 profile had put 25.81% of samples on one 16-byte match-copy
+  load. Two four-sweep 48-row screens give
+  `0.9944/0.9870/0.9958/0.9941` and `0.9898/0.9889/0.9965/0.9921` for
+  q6/q11 at 64 KiB/1 MiB; a 24-row two-sweep full-file screen gives
+  `0.9911/0.9994`. The complete ReleaseFast Brotli suite passes 1504/1505 with
+  one platform skip. [Evidence](performance/brotli-wide-match-copy.md). The
+  three-codec industry-best goal stays active.
