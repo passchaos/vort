@@ -25892,3 +25892,11 @@ reuse, so production keeps the simpler independently owned plans.
   The `Group` form stays on the main path; `ShiftingGroup` remains on the
   paired path where it was measured.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Loading the Zstd sequence bit container before extracting the
+  three FSE symbol fields (so the eight-byte read can overlap the symbol-word
+  loads) was neutral and reverted: `1.0047/0.9978/1.0012/1.0018` for level 3/19
+  at 64 KiB/1 MiB. Keeping the loaded container live across the extractions
+  costs about as much as the overlapped latency saves; the compiler already
+  schedules the read well. The load stays after the group width is known.
+  The three-codec industry-best goal stays active.
