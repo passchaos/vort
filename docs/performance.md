@@ -28,6 +28,19 @@ explicit memory-proof scope.
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,
 and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
+The 2026-11-01/02 decoder session added live-range and per-sequence work
+evidence: [Deflate litlen live range](performance/deflate-litlen-width-live-range.md),
+[derived bit position](performance/deflate-derived-consumed-bits.md),
+[length-entry live range](performance/deflate-length-entry-live-range.md) and
+[distance-entry live range](performance/deflate-distance-entry-live-range.md)
+record about 13% on the 48-row Deflate screen; [Zstd plain offset
+adds](performance/zstd-plain-offset-adds.md) and [wildcopy literal
+bound](performance/zstd-wildcopy-literal-bound.md) record about 3.5% on Zstd;
+[Brotli incremental short-span copy](performance/brotli-short-span-copy.md) and
+[history-copy fast path](performance/brotli-incremental-history-copy-fastpath.md)
+record about 7% on the incremental decoder. The
+[three-codec epoch](performance/industry-decode-current-20261101.md) records the
+current one-shot gaps against libdeflate, libzstd 1.6.0 and libbrotli 1.2.0.
 [Zstd COVER trainer context reuse](performance/zstd-cover-trainer-context-reuse-x86.md)
 records byte-exact `(d, hash_log)` corpus-state reuse across `k` candidates,
 allocation reductions, and the permanent shared-versus-separate ReleaseFast
