@@ -6824,7 +6824,16 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         } else if (distance >= length) {
             if (distance > out_pos) return error.InvalidMatch;
             if (length > output.len - out_pos) return error.OutputTooSmall;
-            @import("deflate/decoder/shortcopy.zig").copy(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
+            if (length <= 16 and distance >= 16 and out_pos + 16 <= output.len) {
+                // One unaligned vector move replaces the short-copy dispatch
+                // whenever the destination has a complete 16-byte window.
+                @branchHint(.likely);
+                const source: *align(1) const [16]u8 = @ptrCast(output[out_pos - distance ..].ptr);
+                const destination: *align(1) [16]u8 = @ptrCast(output[out_pos..].ptr);
+                destination.* = source.*;
+            } else {
+                @import("deflate/decoder/shortcopy.zig").copy(output[out_pos..][0..length], output[out_pos - distance ..][0..length], length);
+            }
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }

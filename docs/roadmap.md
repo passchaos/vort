@@ -25307,3 +25307,15 @@ reuse, so production keeps the simpler independently owned plans.
   The scan and per-tree skip cost more than the avoided 1 KiB clears; the
   distance trees are effectively all referenced. The all-tree preparation
   stays. The three-codec industry-best goal stays active.
+
+- 2026-11-01: The generic Deflate semantic loop now uses one unaligned 16-byte
+  move for non-overlapping matches with `length <= 16`, `distance >= 16` and a
+  complete destination window, instead of the `shortcopy.copy` width dispatch.
+  A 64 KiB level-9 profile had put 94.5% of samples in this loop. Two
+  four-sweep 48-row screens give `0.9646/0.9614/0.9475/0.9606` and
+  `0.9632/0.9621/0.9475/0.9595` for level 6/9 at 64 KiB/1 MiB; a 24-row
+  two-sweep full-file screen gives `0.9523/0.9524`. The explicit
+  `out_pos + 16 <= output.len` check is required because literal batching can
+  advance past the loop-entry headroom. The standalone Deflate suite passes
+  581/581 tests. [Evidence](performance/deflate-generic-sixteen-byte-overcopy.md).
+  The three-codec industry-best goal stays active.
