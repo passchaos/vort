@@ -25408,3 +25408,10 @@ reuse, so production keeps the simpler independently owned plans.
   with 70, `mozilla.1m.l3` 30,520 with 30 and `samba.64k.l3` 11,434 with 6.
   Optimizing the ungrouped fallback would not move the benchmark; the grouped
   path stays. The three-codec industry-best goal stays active.
+
+- 2026-11-01: Relaxing the Zstd X2 Huffman policy from a 0.660 to a 0.800
+  compressed/regenerated ratio was neutral and reverted. The 48-row screen
+  gives `1.0034/1.0003/0.9994/1.0005` for level 3/19 at 64 KiB/1 MiB. The
+  specialized X2 decoder does not beat the reservoir loop for the newly
+  included lower-ratio blocks, so the 0.660 threshold stays.
+  The three-codec industry-best goal stays active.
