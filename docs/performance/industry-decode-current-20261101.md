@@ -58,12 +58,33 @@ standard and large-window literal fallbacks to the prepared lookup, a
 [further command/distance increment](brotli-oneshot-command-distance-lut.md)
 extended it to the command and distance readers, and the
 [standard packed literal cache](brotli-standard-packed-cache.md) removed repeated
-packed-tree expansion from the one-shot standard path. The latest
-current-source epoch gives Brotli current/reference
+packed-tree expansion from the one-shot standard path. The epoch before the
+Deflate overcopy gives Brotli current/reference
 `1.5093/1.1563/1.1727` for q6 and `1.3869/1.1271/1.2267` for q11 at
 64 KiB/1 MiB/full. Raw Deflate remains the largest gap at about 1.69–1.77x,
 followed by Zstd at about 1.52–1.61x. Brotli has the smallest gap at 1 MiB and
 full.
+
+## Epoch after the Deflate overcopy
+
+A further 1,296-process epoch with the sixteen-byte Deflate overcopy gives
+current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.7863 | 1.6890 | 1.7115 |
+| Deflate 9 | 1.8288 | 1.6807 | 1.7030 |
+| Zstd 3 | 1.6016 | 1.5921 | 1.5200 |
+| Zstd 19 | 1.6089 | 1.5731 | 1.5632 |
+| Brotli 6 | 1.4935 | 1.1073 | 1.2234 |
+| Brotli 11 | 1.4017 | 1.1353 | 1.2296 |
+
+Epoch-to-epoch variation is 1–3%, larger than the about 1% paired Deflate gain,
+so this table describes the current gap rather than proving the increment. The
+paired screens in [the overcopy evidence](deflate-sixteen-byte-overcopy.md)
+remain the adoption authority. The largest gap is still raw Deflate at about
+1.68–1.83x, then Zstd at about 1.52–1.61x, then Brotli at about 1.11–1.49x.
+
 
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.

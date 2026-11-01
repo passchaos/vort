@@ -25195,3 +25195,13 @@ reuse, so production keeps the simpler independently owned plans.
   while the existing speculative load hides that latency; the register spill it
   avoids is cheaper than the lost overlap. The three-codec industry-best goal
   stays active.
+
+- 2026-11-01: A 1,296-process epoch after the Deflate overcopy gives
+  current/reference Deflate `1.7863/1.6890/1.7115` (level 6) and
+  `1.8288/1.6807/1.7030` (level 9), Zstd `1.6016/1.5921/1.5200` (level 3) and
+  `1.6089/1.5731/1.5632` (level 19), and Brotli `1.4935/1.1073/1.2234` (q6)
+  and `1.4017/1.1353/1.2296` (q11) at 64 KiB/1 MiB/full. Epoch-to-epoch
+  variation is 1–3%, larger than the about 1% paired Deflate gain, so this
+  table describes the current gap rather than proving the increment.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
