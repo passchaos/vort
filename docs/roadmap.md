@@ -25334,3 +25334,12 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0005/1.0005/1.0002/1.0007` for level 6/9 at 64 KiB/1 MiB. The entry
   spill and table-load layout are unchanged. The three-codec industry-best
   goal stays active.
+
+- 2026-11-01: Re-profiling `dickens.64k.rawdeflate.9` after the generic
+  overcopy shows 94.06% still in `decodeSemanticDynamicBlockIntoBufferedReader`.
+  The remaining single costs are the entry `bit_buffer` spill at 6.35%, the
+  literal table loads at 3.00/4.04/2.56%, the distance secondary load at 2.57%
+  and `buildLiteralTable` at 1.78%; the adopted overcopy itself is 2.36% load
+  plus 1.54% store. The next Deflate target is the literal live-range/spill
+  structure, not the copy path. The three-codec industry-best goal stays
+  active.
