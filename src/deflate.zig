@@ -6221,7 +6221,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
-) Error!usize {
+) align(64) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         false,
         false,

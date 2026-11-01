@@ -25804,3 +25804,12 @@ reuse, so production keeps the simpler independently owned plans.
   for a net of about 0.2%. The blocks that newly qualify are too rare and too
   mixed to justify a policy change. The `>= 12` threshold stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Aligning the generic Deflate semantic loop entry to 64 bytes
+  (`align(64)` on `decodeSemanticDynamicBlockIntoBufferedReader`, symbol moves
+  to a 64-byte boundary) improves every group on two independent 48-row
+  screens: `0.9978/0.9992/0.9969/0.9951` and `0.9982/0.9964/0.9986/0.9957`
+  for level 6/9 at 64 KiB/1 MiB, geometric mean about 0.997. The change is
+  free and reproducible. The standalone Deflate suite passes 581/581.
+  [Evidence](performance/deflate-loop-alignment.md). The three-codec
+  industry-best goal stays active.
