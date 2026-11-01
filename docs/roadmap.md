@@ -25682,3 +25682,12 @@ reuse, so production keeps the simpler independently owned plans.
   the loop so far. The standalone Deflate suite passes 581/581.
   [Evidence](performance/deflate-distance-entry-live-range.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Precomputing the Deflate semantic loop's fast-loop limits
+  (`out_pos <= output.len - headroom`, `byte_index <= input.len - 8`) regressed
+  and was reverted. The 48-row screen gives
+  `1.0223/1.0151/1.0290/1.0154` for level 6/9 at 64 KiB/1 MiB. The two extra
+  loop-invariant values cost more register pressure than the removed
+  add-and-compare pairs, confirming that live-value count dominates instruction
+  count in this loop. The original loop condition stays.
+  The three-codec industry-best goal stays active.
