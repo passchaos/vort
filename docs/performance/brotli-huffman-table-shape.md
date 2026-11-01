@@ -31,16 +31,29 @@ small part of the fallback. That matches the measured 10-bit-root result:
 quality 6 gained 0.2–0.8%, while quality 11 regressed 0.7–1.3% from the 2 KiB
 table's cache cost.
 
-## Next structural candidate
+## Prototype result
 
 A two-level command table with a 9-bit root and direct second-level tables for
-11–15-bit codes would remove the linear scan the way libbrotli does, without
-widening every root slot. The secondary table can live in the unused slack
-between the canonical entries and the 9-bit tail when it fits; otherwise it
-needs an explicit per-tree array. The size budget is the open question:
-`alphabet_size_limit + 376` is libbrotli's empirical bound for its 4-byte
-entries, while Vort's u16 packed entries have different packing.
+10–15-bit codes was implemented in the entry slack. The measured command trees
+need only 126–188 secondary u16 slots, well inside the 891–1074 slots available
+between the canonical entries and the 9-bit tail, so it adds no table bytes.
 
-This candidate should be evaluated separately for quality 6 and quality 11,
-and must keep the malformed-code and truncation contracts. It is not a
-drop-in 10-bit root.
+Two four-sweep screens compare the committed `decode-defgen16b` with the
+candidate `decode-br2level`:
+
+| Run | q6 64 KiB | q6 1 MiB | q11 64 KiB | q11 1 MiB |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.9966 | 1.0041 | 1.0050 | 1.0038 |
+| 2 | 0.9998 | 1.0042 | 1.0060 | 1.0010 |
+
+Quality 6 at 64 KiB is neutral or slightly faster, but the 1 MiB and quality-11
+rows regress 0.1–0.6%. The marker branch on every command decode and the
+runtime-width second-level peek cost more than the removed linear scan on the
+measured corpus. The complete ReleaseFast Brotli suite passes 1504/1505.
+
+## Conclusion
+
+The two-level prototype was reverted. The memory budget is viable, but Vort's
+existing 9-bit flat tail plus scan is already competitive for these trees; a
+future attempt would need a cheaper marker encoding or a branch-free
+second-level path to win.

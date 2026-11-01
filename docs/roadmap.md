@@ -25430,8 +25430,10 @@ reuse, so production keeps the simpler independently owned plans.
   per tree), while Vort's command path uses a 9-bit flat tail and a linear
   long-code scan. The measured 64 KiB command trees carry 100–138 codes of 12
   bits or wider, so a 10-bit flat root covers only a small part of the 5.8%
-  fallback and previously regressed quality 11. The next Brotli candidate is a
-  two-level command table with a 9-bit root and direct 11–15-bit subtables,
-  evaluated separately for quality 6 and 11.
+  fallback and previously regressed quality 11. A two-level command prototype
+  fits in the entry slack (126–188 secondary slots against 891–1074 available)
+  but two screens give `0.9966/1.0041/1.0050/1.0038` and
+  `0.9998/1.0042/1.0060/1.0010`; the marker branch and runtime-width peek
+  outweigh the removed scan, so it was reverted.
   [Evidence](performance/brotli-huffman-table-shape.md). The three-codec
   industry-best goal stays active.
