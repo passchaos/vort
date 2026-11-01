@@ -25300,3 +25300,10 @@ reuse, so production keeps the simpler independently owned plans.
   context maps reference every declared literal tree, so the scan and unused
   slots save nothing. The all-tree preparation stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Preparing auxiliary tail lookups only for distance trees
+  referenced by the distance context maps regressed and was reverted. The
+  48-row screen gives `1.0100/1.0017/1.0021/1.0035` for q6/q11 at 64 KiB/1 MiB.
+  The scan and per-tree skip cost more than the avoided 1 KiB clears; the
+  distance trees are effectively all referenced. The all-tree preparation
+  stays. The three-codec industry-best goal stays active.
