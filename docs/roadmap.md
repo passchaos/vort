@@ -25007,3 +25007,19 @@ reuse, so production keeps the simpler independently owned plans.
   skip. Raw Deflate's semantic loop is still the largest gap, then the Zstd
   sequence decode and Brotli per-call setup; the three-codec industry-best goal
   stays active.
+
+- 2026-11-01: Brotli literal prefix trees now build a nine-bit prepared lookup
+  while command/distance/block trees keep eight bits. The larger literal table
+  adds about 33 KiB to the header. [Evidence](performance/brotli-nine-bit-literal-lookup.md)
+  records a 48-row paired screen at `0.8978/0.9167/0.9534/0.9711` for q6/q11 at
+  64 KiB/1 MiB and a 720-process epoch at
+  `0.5979/0.5344/0.4512/0.4057/0.4924` for q6 and
+  `0.5986/0.5531/0.4608/0.3929/0.4609` for q11 at 64 KiB 1/7/4096, 1 MiB and
+  full. The 4096-chunk groups improve from `0.5007/0.4399/0.5208` to
+  `0.4512/0.4057/0.4924` for q6 and from `0.4769/0.4028/0.4621` to
+  `0.4608/0.3929/0.4609` for q11; the 1-byte groups regress from
+  `0.5774/0.5678` to `0.5979/0.5986` and 7-byte q11 from `0.5372` to `0.5531`.
+  The one-shot API is neutral within about one percent. The complete ReleaseFast
+  Brotli suite passes 1504/1505 with one platform skip. Avoiding the full lookup
+  build on tiny frames, Deflate's semantic loop and the Zstd sequence decode
+  remain work; the three-codec industry-best goal stays active.

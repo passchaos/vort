@@ -3886,12 +3886,13 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
     return struct {
         single_symbol: ?u16 = null,
         table: huffman.HuffmanTable(alphabet_size) = .{},
-        /// Lazily built fixed-width lookup owned by this tree. The header
-        /// resets it whenever a meta-block installs fresh tables, so decoded
-        /// symbols can never come from a stale tree.
-        prepared_lookup: [256]u16 = @splat(0),
+        /// Lazily built fixed-width lookup owned by this tree. Literal trees
+        /// use nine bits to cover more codes without the canonical fallback;
+        /// larger alphabets keep the smaller eight-bit table.
+        prepared_lookup: [@as(usize, 1) << lookup_bits]u16 = @splat(0),
         prepared: bool = false,
 
+        const lookup_bits: u4 = if (alphabet_size <= 257) 9 else 8;
         const Self = @This();
 
         pub fn decode(self: *const Self, reader: anytype) Error!u16 {
@@ -3899,17 +3900,17 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             return try self.table.decodeValue(reader);
         }
 
-        /// Decode through an owned 8-bit lookup. Codes longer than eight bits
-        /// fall back to the canonical table scan after the same zero-padded
-        /// peek, preserving truncation and malformed-code behavior.
+        /// Decode through an owned fixed-width lookup. Codes longer than the
+        /// lookup width fall back to the canonical table scan after the same
+        /// zero-padded peek, preserving truncation and malformed-code behavior.
         pub fn decodePrepared(self: *Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             if (!self.prepared) {
                 self.buildPreparedLookup();
                 self.prepared = true;
             }
-            const packed_entry = self.prepared_lookup[reader.peekBitsPadded(u16, 8)];
-            if (packed_entry == 0) return self.table.decodeValueLongAfterLookup(reader, 8);
+            const packed_entry = self.prepared_lookup[reader.peekBitsPadded(u16, lookup_bits)];
+            if (packed_entry == 0) return self.table.decodeValueLongAfterLookup(reader, lookup_bits);
             const bits: u4 = @truncate(packed_entry);
             if (!reader.hasStagedBits(bits)) return error.TruncatedFrame;
             reader.advanceBitsStagedAssumeAvailable(bits);
@@ -3919,8 +3920,8 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
         fn buildPreparedLookup(self: *Self) void {
             @memset(&self.prepared_lookup, 0);
             for (self.table.entries[0..self.table.len]) |entry| {
-                if (entry.bits > 8) continue;
-                const fill = @as(usize, 1) << @intCast(8 - entry.bits);
+                if (entry.bits > lookup_bits) continue;
+                const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
                 const packed_entry: u16 = (@as(u16, entry.symbol) + 1) << 4 | entry.bits;
                 var i: usize = 0;
                 while (i < fill) : (i += 1)
