@@ -25023,3 +25023,11 @@ reuse, so production keeps the simpler independently owned plans.
   Brotli suite passes 1504/1505 with one platform skip. Avoiding the full lookup
   build on tiny frames, Deflate's semantic loop and the Zstd sequence decode
   remain work; the three-codec industry-best goal stays active.
+
+- 2026-11-01: A Zstd `buildUnordered` Huffman lookup fill that skips the zeroing
+  builder when canonical ranges cover the table but are not stored in prefix
+  order was tried for level 3. It regressed Mozilla 1 MiB zstd3 by 2.8%
+  (`33.61 -> 34.56` ms) and was neutral at level 19 (`77.45 -> 76.74` ms), so it
+  was reverted. The level-3 `memset` attribution needs a more precise caller
+  breakdown before another attempt. The three-codec industry-best goal stays
+  active.
