@@ -25611,3 +25611,16 @@ reuse, so production keeps the simpler independently owned plans.
   is not the limiter; the dependent lookup chain and per-entry advance work
   dominate. The two byte stores stay on the generic path.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: The generic Deflate semantic loop now derives its bit position
+  from the staged reservoir (`byte_index * 8 - bit_count`) instead of tracking
+  a `consumed_bits` accumulator per token. `perf stat` showed the loop is
+  instruction-bound at the same IPC as libdeflate (2.57 vs 2.52) with 77% more
+  retired instructions, and the accumulator was both a per-token add and one
+  more live value in a register-starved loop (one stack slot alone held 6.5%
+  of retired instructions). The non-overlap instantiation already relied on
+  this invariant. The 48-row screen gives
+  `0.9713/0.9744/0.9681/0.9741` for level 6/9 at 64 KiB/1 MiB, with 46 of 48
+  rows faster and 3.4–3.6% median gains. The standalone Deflate suite passes
+  581/581. [Evidence](performance/deflate-derived-consumed-bits.md). The
+  three-codec industry-best goal stays active.

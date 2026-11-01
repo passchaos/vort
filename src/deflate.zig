@@ -6504,7 +6504,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
     var byte_index = reader.byte_index;
-    var consumed_bits = reader.consumed_bits;
     var out_pos = initial_out_offset;
 
     // The fast semantic loop only needs enough destination room for its
@@ -6532,7 +6531,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             {
                 bit_buffer >>= 2;
                 bit_count -= 2;
-                if (comptime !inline_non_overlap) consumed_bits += 2;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                 entry = decoder.literal[
                     @intCast(bit_buffer & Decoder.literal_lookup_mask)
@@ -6598,7 +6596,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                     bit_buffer >>= @intCast(entry123_bits);
                     bit_count -= entry123_bits;
-                    if (comptime !inline_non_overlap) consumed_bits += entry123_bits;
                     entry = entry4;
                     refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                     continue;
@@ -6606,12 +6603,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                 bit_buffer >>= @intCast(entry12_bits);
                 bit_count -= entry12_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry12_bits;
                 entry = entry3;
             } else {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
                 entry = entry2;
             }
         }
@@ -6634,7 +6629,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol < 256) {
                 bit_buffer >>= @intCast(secondary_bits);
                 bit_count -= secondary_bits;
-                if (comptime !inline_non_overlap) consumed_bits += secondary_bits;
                 output[out_pos] = @truncate(symbol);
                 out_pos += 1;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
@@ -6644,18 +6638,12 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol == 256) {
                 bit_buffer >>= @intCast(secondary_bits);
                 bit_count -= secondary_bits;
-                if (comptime !inline_non_overlap) consumed_bits += secondary_bits;
                 storeFusedReaderState(
                     reader,
                     bit_buffer,
                     bit_count,
                     byte_index,
-                    semanticConsumedBits(
-                        inline_non_overlap,
-                        consumed_bits,
-                        byte_index,
-                        bit_count,
-                    ),
+                    semanticConsumedBits(byte_index, bit_count),
                 );
                 return semanticLinearResult(
                     pause_at_output_boundary,
@@ -6672,18 +6660,12 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (match_bits == 0) return error.InvalidHuffmanCode;
             bit_buffer >>= @intCast(match_bits);
             bit_count -= match_bits;
-            if (comptime !inline_non_overlap) consumed_bits += match_bits;
             storeFusedReaderState(
                 reader,
                 bit_buffer,
                 bit_count,
                 byte_index,
-                semanticConsumedBits(
-                    inline_non_overlap,
-                    consumed_bits,
-                    byte_index,
-                    bit_count,
-                ),
+                semanticConsumedBits(byte_index, bit_count),
             );
             return semanticLinearResult(
                 pause_at_output_boundary,
@@ -6721,7 +6703,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const total_bits: u6 = match_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
-            if (comptime !inline_non_overlap) consumed_bits += total_bits;
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
             entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
@@ -6771,7 +6752,6 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
-        if (comptime !inline_non_overlap) consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
         if (comptime inline_non_overlap) {
@@ -6844,12 +6824,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         bit_buffer,
         bit_count,
         byte_index,
-        semanticConsumedBits(
-            inline_non_overlap,
-            consumed_bits,
-            byte_index,
-            bit_count,
-        ),
+        semanticConsumedBits(byte_index, bit_count),
     );
     if (comptime pause_at_output_boundary) {
         return decodeSemanticTailWindow(
@@ -7474,21 +7449,13 @@ inline fn storeFusedReaderState(
     reader.consumed_bits = consumed_bits;
 }
 
-inline fn semanticConsumedBits(
-    comptime derive_from_reservoir: bool,
-    tracked: BitCount,
-    byte_index: usize,
-    bit_count: usize,
-) BitCount {
-    if (comptime derive_from_reservoir) {
-        // BufferedBitReader stages complete bytes and keeps every unread bit in
-        // the low end of the reservoir, so its logical position is recoverable
-        // without carrying another dependency through every semantic token.
-        const staged_position = bit_geometry.fromBytesAssumeBounded(byte_index);
-        std.debug.assert(@as(BitCount, bit_count) <= staged_position);
-        return staged_position - @as(BitCount, bit_count);
-    }
-    return tracked;
+inline fn semanticConsumedBits(byte_index: usize, bit_count: usize) BitCount {
+    // BufferedBitReader stages complete bytes and keeps every unread bit in
+    // the low end of the reservoir, so its logical position is recoverable
+    // without carrying another dependency through every semantic token.
+    const staged_position = bit_geometry.fromBytesAssumeBounded(byte_index);
+    std.debug.assert(@as(BitCount, bit_count) <= staged_position);
+    return staged_position - @as(BitCount, bit_count);
 }
 
 test "deflate fused reader metadata keeps wide bits and local reservoir offsets" {
@@ -7497,8 +7464,7 @@ test "deflate fused reader metadata keeps wide bits and local reservoir offsets"
     const byte_index: usize = (1 << 29) + 9;
     const staged: usize = 13;
     const expected: BitCount = (@as(BitCount, 1) << 32) + 72 - staged;
-    try std.testing.expectEqual(expected, semanticConsumedBits(true, 0, byte_index, staged));
-    try std.testing.expectEqual(expected, semanticConsumedBits(false, expected, 0, 0));
+    try std.testing.expectEqual(expected, semanticConsumedBits(byte_index, staged));
     const bytes: [*]const u8 = @ptrFromInt(1);
     var reader = bitstream.BufferedBitReader.init(bytes[0..byte_index]);
     storeFusedReaderState(&reader, 0x19, staged, byte_index, expected);
