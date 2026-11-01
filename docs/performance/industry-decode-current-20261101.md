@@ -56,11 +56,13 @@ leadership.
 A follow-up [one-shot fallback lookup](brotli-oneshot-fallback-lut.md) moved the
 standard and large-window literal fallbacks to the prepared lookup, and a
 [further command/distance increment](brotli-oneshot-command-distance-lut.md)
-extended it to the command and distance readers. The latest 1,296-process epoch
-gives Brotli current/reference `1.5342/1.1595/1.2693` for q6 and
-`1.3822/1.1546/1.2665` for q11 at 64 KiB/1 MiB/full. Brotli now has the smallest
-remaining gap at 1 MiB and full; raw Deflate remains the largest at about
-1.67–1.83x, followed by Zstd at about 1.52–1.63x.
+extended it to the command and distance readers. A final current-source epoch
+after the [nine-bit literal lookup](brotli-nine-bit-literal-lookup.md) gives
+Brotli current/reference `1.5323/1.1549/1.2686` for q6 and
+`1.4318/1.1417/1.2710` for q11 at 64 KiB/1 MiB/full; the 64 KiB q11 point moves
+between `1.38` and `1.43` across runs. Raw Deflate remains the largest gap at
+about 1.67–1.83x, followed by Zstd at about 1.51–1.61x. Brotli has the smallest
+gap at 1 MiB and full.
 
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.

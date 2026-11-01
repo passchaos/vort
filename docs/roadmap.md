@@ -25031,3 +25031,13 @@ reuse, so production keeps the simpler independently owned plans.
   was reverted. The level-3 `memset` attribution needs a more precise caller
   breakdown before another attempt. The three-codec industry-best goal stays
   active.
+
+- 2026-11-01: A final current-source 1,296-process epoch after the nine-bit
+  Brotli literal lookup gives one-shot current/reference gaps of about
+  `1.67–1.83x` for raw Deflate, `1.51–1.61x` for Zstd and
+  `1.14–1.53x` for Brotli; Brotli 1 MiB and full remain the closest at about
+  `1.14–1.15x` and `1.27x`. Brotli current/baseline is `0.79/1.00/0.87` for q6
+  and `0.74/0.88/0.84` for q11 at 64 KiB/1 MiB/full; the 64 KiB q11 point moves
+  between `1.38` and `1.43` across runs. Deflate and Zstd remain the largest
+  targets, followed by Brotli 64 KiB setup. The three-codec industry-best goal
+  stays active.
