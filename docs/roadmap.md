@@ -25107,3 +25107,12 @@ reuse, so production keeps the simpler independently owned plans.
   moved `211.46 -> 212.00` ms and Dickens level 9 `190.12 -> 195.75` ms (2.96%
   slower). The memcpy/ERMS path stays; both Deflate short-copy fast-path
   attempts regress. The three-codec industry-best goal stays active.
+
+- 2026-11-01: A 1,296-process epoch after the standard packed literal cache
+  gives Brotli one-shot current/reference `1.5093/1.1563/1.1727` for q6 and
+  `1.3869/1.1271/1.2267` for q11 at 64 KiB/1 MiB/full. The full-file gaps
+  improve from `1.2686/1.2710` to `1.1727/1.2267`. Raw Deflate remains the
+  largest at about 1.69–1.77x, followed by Zstd at about 1.52–1.61x. Brotli
+  current/baseline is `0.772/0.992/0.842` for q6 and `0.727/0.872/0.810` for
+  q11. These are warmed one-shot calls with different reference lifecycles. The
+  three-codec industry-best goal stays active.
