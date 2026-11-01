@@ -24963,3 +24963,18 @@ reuse, so production keeps the simpler independently owned plans.
   single removable local check. The next Zstd step is a sequence-scheduling /
   FSE-lifecycle redesign rather than another micro-edit. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: A 1,296-process two-sweep epoch re-measures all 216 reference
+  frames through the public one-shot decoders against the pinned libraries.
+  [Evidence](performance/industry-decode-current-20261101.md) records
+  current/baseline `0.9213/0.9378/0.9394` and `0.9043/0.9361/0.9364` for raw
+  Deflate 6/9 at 64 KiB/1 MiB/full, `0.9156/0.8864/0.8686` and
+  `0.8501/0.8738/0.8713` for Zstd 3/19, and `0.9679/0.9986/0.9862` and
+  `0.9096/0.8739/0.9161` for Brotli 6/11. The remaining current/reference gaps
+  are 1.67–1.82x for raw Deflate, 1.53–1.60x for Zstd and 1.14–1.88x for
+  Brotli; Brotli 1 MiB is closest at 1.14–1.16x and its 64 KiB fixed setup gap
+  is largest. These are warmed one-shot calls with different reference
+  lifecycles and do not establish cold-start, streaming, dictionary or
+  peak-memory leadership. The raw Deflate semantic loop is the largest target,
+  then the Zstd sequence decode and Brotli per-call setup; the three-codec
+  industry-best goal stays active.
