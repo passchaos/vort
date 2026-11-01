@@ -25907,3 +25907,11 @@ reuse, so production keeps the simpler independently owned plans.
   branches and stores then delay the bit-buffer chain that feeds the next
   entry, which costs more than the overlap gains. The copy stays after the
   shift/preload block. The three-codec industry-best goal stays active.
+
+- 2026-11-02: Retesting the early litlen consume (destructive `bit_buffer >>=
+  match_bits`, `bits = bit_buffer`, `total_bits` without the litlen width) on
+  top of the preload-before-refill change still regressed:
+  `1.0242/1.0216/1.0299/1.0241` for level 6/9 at 64 KiB/1 MiB. Even with the
+  shorter refill-decision sum, the extra reservoir shift costs more than the
+  saved copy; the non-destructive `bits` form stays.
+  The three-codec industry-best goal stays active.
