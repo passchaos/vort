@@ -25387,3 +25387,9 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0214/1.0044/1.0120/1.0101` for q6/q11 at 64 KiB/1 MiB. The extra branch
   and narrower move cost more than the 16-byte move it replaced, even for the
   shortest matches. The three-codec industry-best goal stays active.
+
+- 2026-11-01: A single 32-byte move for Brotli matches of 17–32 bytes at
+  distance ≥32 regressed sharply and was reverted. The 48-row screen gives
+  `1.0460/1.0699/1.0354/1.0664` for q6/q11 at 64 KiB/1 MiB. The wider AVX2
+  move is slower than the two ordered 16-byte moves it replaced. The
+  three-codec industry-best goal stays active.
