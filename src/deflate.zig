@@ -6715,17 +6715,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             continue;
         }
 
-        const distance_entry = if (single_distance)
+        var distance_entry: u32 = if (single_distance)
             decoder.single_distance
         else
             decoder.distance[@as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))];
-        var distance_base: usize = undefined;
-        var distance_extra_bits: u6 = undefined;
-        var distance_code_bits: u6 = @truncate(distance_entry);
-        if ((distance_entry & SemanticDynamicDecoder.literal_flag) != 0) {
-            distance_base = @intCast(distance_entry >> 16);
-            distance_extra_bits = @truncate(distance_entry >> 8);
-        } else if ((distance_entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+        if ((distance_entry & SemanticDynamicDecoder.literal_flag) == 0) {
+            if ((distance_entry & SemanticDynamicDecoder.secondary_flag) == 0)
+                return error.InvalidHuffmanCode;
             const start: usize = @intCast(distance_entry >> 16);
             const mask: usize = @intCast(distance_entry & 0xff);
             const secondary_index = start +
@@ -6734,21 +6730,23 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const secondary = decoder.distance_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
             if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
-            distance_code_bits = @truncate(secondary & 0x0f);
             const metadata = distance_table[symbol];
-            distance_base = metadata.base;
-            distance_extra_bits = metadata.extra_bits;
-        } else {
-            return error.InvalidHuffmanCode;
+            // Repack the compact metadata in the primary entry layout so the
+            // distance decode carries one value instead of three fields.
+            distance_entry = (@as(u32, @intCast(metadata.base)) << 16) |
+                (@as(u32, metadata.extra_bits) << 8) |
+                @as(u32, @truncate(secondary & 0x0f));
         }
+        const distance_code_bits: u6 = @truncate(distance_entry);
         if (single_distance and
             (bits & ((@as(u64, 1) << @intCast(distance_code_bits)) - 1)) != 0)
         {
             return error.InvalidHuffmanCode;
         }
         bits >>= @intCast(distance_code_bits);
+        const distance_extra_bits: u6 = @truncate(distance_entry >> 8);
         const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
-        const distance = distance_base + @as(usize, @intCast(bits & distance_mask));
+        const distance = @as(usize, @intCast(distance_entry >> 16)) + @as(usize, @intCast(bits & distance_mask));
         const total_bits: u6 = match_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
 
         bit_buffer >>= @intCast(total_bits);

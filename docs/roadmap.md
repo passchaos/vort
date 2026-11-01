@@ -25672,3 +25672,13 @@ reuse, so production keeps the simpler independently owned plans.
   integer form of the pointer comparison and the mutable many-pointer keep the
   compiler from allocating better than the plain index, so the index-based
   cursor stays. The three-codec industry-best goal stays active.
+
+- 2026-11-02: The Deflate semantic distance decode now carries one packed
+  `distance_entry` value (repacking the compact secondary metadata into the
+  primary layout) instead of `distance_base`, `distance_extra_bits` and
+  `distance_code_bits`. The 48-row screen gives
+  `0.9580/0.9570/0.9578/0.9544` for level 6/9 at 64 KiB/1 MiB: all 48 rows
+  faster, medians 0.9516–0.9552. This is the largest single live-range win in
+  the loop so far. The standalone Deflate suite passes 581/581.
+  [Evidence](performance/deflate-distance-entry-live-range.md). The three-codec
+  industry-best goal stays active.
