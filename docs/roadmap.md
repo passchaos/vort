@@ -25375,3 +25375,9 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9969/1.0004/0.9992/1.0000` for level 6/9 at 64 KiB/1 MiB. The saved
   11-bit pair writes are offset by losing two-literal batching for that width;
   the full pair table stays. The three-codec industry-best goal stays active.
+
+- 2026-11-01: A diagnostic of dynamic-block literal maximum code lengths shows
+  `lmb` 12–14 across `dickens` 64 KiB/1 MiB, `mozilla`, `samba`, `x-ray` and
+  `ooffice` (no block at or below 10). A ten-bit semantic table would not cover
+  these blocks, so the eleven-bit primary plus secondary design stays. The
+  three-codec industry-best goal stays active.
