@@ -25369,3 +25369,9 @@ reuse, so production keeps the simpler independently owned plans.
   `1.0000/0.9998/0.9993/0.9993` for level 6/9 at 64 KiB/1 MiB. The extra
   primary fill offsets the reduced secondary lookups; the eight-bit distance
   table stays. The three-codec industry-best goal stays active.
+
+- 2026-11-01: Capping Deflate literal-pair construction at ten combined bits
+  was neutral and reverted. The 48-row screen gives
+  `0.9969/1.0004/0.9992/1.0000` for level 6/9 at 64 KiB/1 MiB. The saved
+  11-bit pair writes are offset by losing two-literal batching for that width;
+  the full pair table stays. The three-codec industry-best goal stays active.
