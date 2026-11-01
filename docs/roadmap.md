@@ -25781,3 +25781,13 @@ reuse, so production keeps the simpler independently owned plans.
   56-bit reservoir (four maximum-width codes plus the next eleven-bit probe
   exceed 63 bits), so the current chain depth is at the design limit.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Building the Deflate semantic literal table with one literal per
+  entry (dropping the pair installation loop) regressed and was reverted. The
+  48-row screen gives `1.0114/1.0066/1.0092/1.0075` for level 6/9 at
+  64 KiB/1 MiB. Two literals per 11-bit lookup amortize the dependent load
+  chain better than the per-entry advance work it costs, so the packed-pair
+  table stays. Four speculative entries is also the maximum that fits the
+  56-bit reservoir (four maximum-width codes plus the next eleven-bit probe
+  exceed 63 bits), so the current chain depth is at the design limit.
+  The three-codec industry-best goal stays active.
