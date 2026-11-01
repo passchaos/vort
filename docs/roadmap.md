@@ -25293,3 +25293,10 @@ reuse, so production keeps the simpler independently owned plans.
   The added width dispatch and wider unaligned moves cost more than the
   reduced chunk count; the 16-byte bulk copy stays. The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Building flat literal tail lookups only for trees referenced by
+  the meta-block's context maps was neutral and reverted. The 48-row screen
+  gives `0.9995/1.0011/0.9995/0.9982` for q6/q11 at 64 KiB/1 MiB. The measured
+  context maps reference every declared literal tree, so the scan and unused
+  slots save nothing. The all-tree preparation stays.
+  The three-codec industry-best goal stays active.
