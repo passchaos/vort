@@ -25514,3 +25514,19 @@ reuse, so production keeps the simpler independently owned plans.
   skip and `zig build -j2 check` exits zero.
   [Evidence](performance/brotli-short-span-copy.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The Deflate semantic loop no longer keeps the litlen codeword
+  width live across a token. `entry_bits` was spilled to the stack before the
+  literal speculation chain and reloaded after it (a 5.75% reload in the
+  `dickens.64k.l9` annotation); it is now a scoped constant inside the chain
+  and a fresh `match_bits` is materialized after it. Consuming the width
+  immediately instead was rejected because it added a second reservoir shift
+  per match token and regressed `nci.64k.l9` to `1.0718` and `xml.64k.l6` to
+  `1.0459`. The single-shift form measures `0.9452/0.9385/0.9358/0.9364` for
+  level 6/9 at 64 KiB/1 MiB over four sweeps, with 44 of 48 rows faster and
+  text corpora 10–14% faster. The standalone Deflate suite passes 581/581. A
+  1,296-process epoch gives current/reference Deflate
+  `1.6890/1.5975/1.6084` (level 6) and `1.6725/1.5825/1.6089` (level 9), with
+  Zstd `1.47–1.56x` and Brotli `1.12–1.49x`.
+  [Evidence](performance/deflate-litlen-width-live-range.md). The three-codec
+  industry-best goal stays active.

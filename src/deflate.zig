@@ -6545,9 +6545,8 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             }
         }
 
-        var entry_bits: u6 = @truncate(entry);
-
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
+            const entry_bits: u6 = @truncate(entry);
             const entry2 = decoder.literal[
                 @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & Decoder.literal_lookup_mask))
             ];
@@ -6609,18 +6608,17 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 bit_count -= entry12_bits;
                 if (comptime !inline_non_overlap) consumed_bits += entry12_bits;
                 entry = entry3;
-                entry_bits = entry3_bits;
             } else {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
                 if (comptime !inline_non_overlap) consumed_bits += entry_bits;
                 entry = entry2;
-                entry_bits = entry2_bits;
             }
         }
 
         var length_base: usize = undefined;
         var length_extra_bits: u6 = undefined;
+        var match_bits: u6 = @truncate(entry);
         if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
             length_base = @intCast(entry >> 16);
             length_extra_bits = @truncate(entry >> 8);
@@ -6632,11 +6630,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
-            entry_bits = @truncate(secondary & 0x0f);
+            const secondary_bits: u6 = @truncate(secondary & 0x0f);
             if (symbol < 256) {
-                bit_buffer >>= @intCast(entry_bits);
-                bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                bit_buffer >>= @intCast(secondary_bits);
+                bit_count -= secondary_bits;
+                if (comptime !inline_non_overlap) consumed_bits += secondary_bits;
                 output[out_pos] = @truncate(symbol);
                 out_pos += 1;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
@@ -6644,9 +6642,9 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 continue;
             }
             if (symbol == 256) {
-                bit_buffer >>= @intCast(entry_bits);
-                bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                bit_buffer >>= @intCast(secondary_bits);
+                bit_count -= secondary_bits;
+                if (comptime !inline_non_overlap) consumed_bits += secondary_bits;
                 storeFusedReaderState(
                     reader,
                     bit_buffer,
@@ -6669,11 +6667,12 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const metadata = length_table[symbol - 257];
             length_base = metadata.base;
             length_extra_bits = metadata.extra_bits;
+            match_bits = secondary_bits;
         } else {
-            if (entry_bits == 0) return error.InvalidHuffmanCode;
-            bit_buffer >>= @intCast(entry_bits);
-            bit_count -= entry_bits;
-            if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+            if (match_bits == 0) return error.InvalidHuffmanCode;
+            bit_buffer >>= @intCast(match_bits);
+            bit_count -= match_bits;
+            if (comptime !inline_non_overlap) consumed_bits += match_bits;
             storeFusedReaderState(
                 reader,
                 bit_buffer,
@@ -6693,7 +6692,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             );
         }
 
-        var bits = bit_buffer >> @intCast(entry_bits);
+        var bits = bit_buffer >> @intCast(match_bits);
         const length = if (comptime inline_non_overlap and pause_at_output_boundary) blk: {
             // Kodak-style deep-distance blocks overwhelmingly use length codes
             // 257..264, which have no extra bits. Avoid two variable shifts and
@@ -6719,7 +6718,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             // loop avoids semantic-distance metadata and runtime match-class
             // dispatch entirely.
             if ((bits & 1) != 0) return error.InvalidHuffmanCode;
-            const total_bits: u6 = entry_bits + length_extra_bits + 1;
+            const total_bits: u6 = match_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
             if (comptime !inline_non_overlap) consumed_bits += total_bits;
@@ -6768,7 +6767,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         bits >>= @intCast(distance_code_bits);
         const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
         const distance = distance_base + @as(usize, @intCast(bits & distance_mask));
-        const total_bits: u6 = entry_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
+        const total_bits: u6 = match_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
