@@ -281,3 +281,22 @@ gives current/reference:
 The alignment is below epoch noise (about 0.3% on the paired screen), so the
 table matches the previous epoch within 1–2% variation. The current gaps are
 about 1.46–1.56x (Deflate), 1.45–1.50x (Zstd) and 1.13–1.48x (Brotli).
+
+## Epoch after the Deflate preload-before-refill change
+
+A 1,296-process epoch after the [preload-before-refill change](deflate-preload-before-refill.md)
+gives current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.5458 | 1.4383 | 1.4523 |
+| Deflate 9 | 1.5328 | 1.4332 | 1.4417 |
+| Zstd 3 | 1.5097 | 1.4966 | 1.4688 |
+| Zstd 19 | 1.4868 | 1.4804 | 1.5208 |
+| Brotli 6 | 1.4857 | 1.1356 | 1.2138 |
+| Brotli 11 | 1.3945 | 1.1201 | 1.2615 |
+
+The Deflate 1 MiB gap moves from about 1.47 to about 1.43–1.44 and the 64 KiB
+gap from about 1.56 to about 1.55, consistent with the paired 4–5% win inside
+epoch noise. The current gaps are about 1.43–1.55x (Deflate), 1.47–1.52x
+(Zstd) and 1.12–1.49x (Brotli).

@@ -25875,3 +25875,11 @@ reuse, so production keeps the simpler independently owned plans.
   mean. Combined about 4–5%. The standalone Deflate suite passes 581/581.
   [Evidence](performance/deflate-preload-before-refill.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: A 1,296-process epoch after the Deflate preload-before-refill
+  change gives current/reference Deflate `1.5458/1.4383/1.4523` (level 6) and
+  `1.5328/1.4332/1.4417` (level 9), down from `1.5586/1.4702/1.4759` and
+  `1.5515/1.4636/1.4660`. Zstd stays `1.47–1.52x` and Brotli `1.12–1.49x`.
+  The Deflate 1 MiB gap is now about 1.43x.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
