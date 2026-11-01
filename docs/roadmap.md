@@ -25788,3 +25788,11 @@ reuse, so production keeps the simpler independently owned plans.
   The two X2 shapes are performance-equivalent on this corpus, so the existing
   policy (and its pinned policy test) stays; neither variant is a lever.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Returning the refilled reservoir state by value from the Deflate
+  refill helper (instead of three out-pointers) was neutral and reverted. The
+  48-row screen gives `1.0020/1.0019/0.9997/1.0008` for level 6/9 at
+  64 KiB/1 MiB. The compiler already promotes the inline helper's pointer
+  parameters, so the profile's refill share is dependency latency, not spill
+  traffic. The pointer-based helper stays.
+  The three-codec industry-best goal stays active.
