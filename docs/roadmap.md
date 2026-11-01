@@ -25101,3 +25101,9 @@ reuse, so production keeps the simpler independently owned plans.
   type. The complete ReleaseFast Brotli suite passes 1504/1505 with one platform
   skip. Command/distance packed caching, raw Deflate and the Zstd sequence
   decode remain work; the three-codec industry-best goal stays active.
+
+- 2026-11-01: An 8-byte fixed copy for non-overlapping Deflate matches with
+  `length <= 8` and `distance >= 8` was tried and reverted. Mozilla 1 MiB level 6
+  moved `211.46 -> 212.00` ms and Dickens level 9 `190.12 -> 195.75` ms (2.96%
+  slower). The memcpy/ERMS path stays; both Deflate short-copy fast-path
+  attempts regress. The three-codec industry-best goal stays active.
