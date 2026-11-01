@@ -25738,3 +25738,13 @@ reuse, so production keeps the simpler independently owned plans.
   uniform win with the worst row at `1.0044`. The Zstd suite passes 1251/1251.
   [Evidence](performance/zstd-wildcopy-literal-bound.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: A 1,296-process epoch after the Zstd plain offset adds and the
+  folded wildcopy literal bound gives current/reference Zstd
+  `1.5187/1.4993/1.4638` (level 3) and `1.4930/1.4914/1.5166` (level 19) at
+  64 KiB/1 MiB/full, down from `1.5293/1.5437/1.4774` and
+  `1.5839/1.5415/1.5263`; level 19 at 64 KiB improves most (`1.5839` to
+  `1.4930`). Deflate stays `1.47–1.56x` and Brotli `1.12–1.45x`. All three
+  codecs are now within about 1.12–1.56x of their references.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.

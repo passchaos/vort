@@ -243,3 +243,23 @@ The Deflate gap moves from about 1.52–1.63 to about 1.47–1.56, consistent wi
 the paired about 4.5% win. Raw Deflate, Zstd and the Brotli 64 KiB rows are now
 within about 1.47–1.58x of their references; Brotli at 1 MiB remains the
 closest at 1.13x.
+
+## Epoch after the Zstd offset-add and literal-bound changes
+
+A 1,296-process epoch after the [plain offset adds](zstd-plain-offset-adds.md)
+and the [folded wildcopy literal bound](zstd-wildcopy-literal-bound.md) gives
+current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.5649 | 1.4661 | 1.4807 |
+| Deflate 9 | 1.5381 | 1.4675 | 1.4657 |
+| Zstd 3 | 1.5187 | 1.4993 | 1.4638 |
+| Zstd 19 | 1.4930 | 1.4914 | 1.5166 |
+| Brotli 6 | 1.4501 | 1.1376 | 1.2184 |
+| Brotli 11 | 1.4004 | 1.1241 | 1.2231 |
+
+Zstd moves from about 1.53–1.58 to about 1.46–1.52, with the largest change on
+level 19 at 64 KiB (`1.5839` to `1.4930`), consistent with the paired screens.
+Deflate and Brotli are unchanged inside epoch noise. The three codecs are now
+within about 1.46–1.56x (Deflate), 1.46–1.52x (Zstd) and 1.12–1.45x (Brotli).
