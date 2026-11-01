@@ -25176,9 +25176,10 @@ reuse, so production keeps the simpler independently owned plans.
   `0.9902/0.9896/0.9944/0.9923` for level 6/9 and a 24-row two-sweep full-file
   screen at `0.9953/0.9897`; the worst row is `dickens.64k.l9 1.007` and the
   best is `dickens.64k.l6 0.948`. A 32-byte extension, an additional 8-byte
-  branch and an exact 17...32-byte head/tail pair all regressed and were
-  rejected. The standalone Deflate suite passes 581/581 tests. The three-codec
-  industry-best goal stays active.
+  branch, an exact 17...32-byte head/tail pair and an exact 8-byte pair for
+  `length 8...16` with `distance < 16` all regressed and were rejected. The
+  standalone Deflate suite passes 581/581 tests. The three-codec industry-best
+  goal stays active.
 
 - 2026-11-01: Zeroing only the unwritten tail of the complex-prefix `lengths`
   buffer (instead of `@splat(0)` for the whole max alphabet) was neutral and
