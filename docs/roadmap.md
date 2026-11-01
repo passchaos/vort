@@ -25791,3 +25791,10 @@ reuse, so production keeps the simpler independently owned plans.
   56-bit reservoir (four maximum-width codes plus the next eleven-bit probe
   exceed 63 bits), so the current chain depth is at the design limit.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Forcing the dense Zstd X2 Huffman decoder instead of the
+  seven-bit wide variant (by disabling `use_wide_x2`) was neutral on the
+  benchmark: `1.0005/0.9992/1.0000/1.0012` for level 3/19 at 64 KiB/1 MiB.
+  The two X2 shapes are performance-equivalent on this corpus, so the existing
+  policy (and its pinned policy test) stays; neither variant is a lever.
+  The three-codec industry-best goal stays active.
