@@ -25077,3 +25077,16 @@ reuse, so production keeps the simpler independently owned plans.
   (`192.68 -> 202.73` ms; a repeat run moved `194.2 -> 203.6` ms). The
   memcpy/ERMS path stays for that specialization. The three-codec industry-best
   goal stays active.
+
+- 2026-11-01: The standard `MinimalCompressedHeader` now uses the same four-slot
+  round-robin packed literal cache as the large-window header. Indices clear
+  after every parse and prepared flags clear with the header; the cache adds
+  about 6 KiB. [Evidence](performance/brotli-standard-packed-cache.md) records a
+  384-process one-shot prefix screen at `0.9954/1.0036/0.9974/0.9968` (neutral)
+  and a 24-row two-sweep full-file screen at `0.9827` overall. The largest full
+  gains are samba q6 `0.879`, ooffice q11 `0.913`, x-ray q11 `0.933` and samba
+  q11 `0.953`; the largest regressions are dickens q11 `1.021`, sao q6 `1.014`,
+  webster q11 `1.013` and nci q11 `1.011`. The complete ReleaseFast Brotli suite
+  passes 1504/1505 with one platform skip. Command/distance packed caching,
+  raw Deflate and the Zstd sequence decode remain work; the three-codec
+  industry-best goal stays active.

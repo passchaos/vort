@@ -4094,8 +4094,11 @@ const MinimalCompressedHeader = struct {
     literal_context_map: [max_literal_block_types * 64]u8,
     literal_trees: [inline_literal_tree_count]PrefixCode(256),
     packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(256) = @splat(.{}),
-    active_packed_literal_tree: PrefixCode(256) = .{},
-    active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
+    /// Round-robin cache of expanded packed literal trees. Alternating block
+    /// types would otherwise rebuild a full Huffman table on every switch.
+    packed_literal_cache: [packed_literal_cache_slots]PrefixCode(256) = @splat(.{}),
+    packed_literal_cache_indices: [packed_literal_cache_slots]u16 = @splat(std.math.maxInt(u16)),
+    packed_literal_cache_next: u2 = 0,
     command_block: BlockSwitchState(max_command_block_types),
     insert_copy_trees: [inline_command_tree_count]PrefixCode(704),
     packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(704) = @splat(.{}),
@@ -15271,7 +15274,7 @@ fn resetMinimalHeaderLookupStates(header: *MinimalCompressedHeader) void {
     for (header.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
     for (header.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
     for (header.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
-    header.active_packed_literal_tree.resetPreparedLookup();
+    for (&header.packed_literal_cache) |*tree| tree.resetPreparedLookup();
     header.active_packed_insert_copy_tree.resetPreparedLookup();
     header.active_packed_distance_tree.resetPreparedLookup();
 }
@@ -15382,7 +15385,8 @@ inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header:
             header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
         }
     }
-    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+    @memset(&header.packed_literal_cache_indices, std.math.maxInt(u16));
+    header.packed_literal_cache_next = 0;
 }
 
 inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
@@ -15783,7 +15787,8 @@ fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitRe
             header.packed_literal_trees[tree_index - inline_literal_tree_count] = PackedPrefixCode(256).init(&tree);
         }
     }
-    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+    @memset(&header.packed_literal_cache_indices, std.math.maxInt(u16));
+    header.packed_literal_cache_next = 0;
 }
 
 fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
@@ -21318,11 +21323,14 @@ fn literalPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*P
 
 noinline fn expandPackedLiteralPrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(256) {
     std.debug.assert(index >= inline_literal_tree_count and index < header.literal_tree_count);
-    if (header.active_packed_literal_tree_index != index) {
-        header.active_packed_literal_tree = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
-        header.active_packed_literal_tree_index = index;
+    for (header.packed_literal_cache_indices, 0..) |cached, slot| {
+        if (cached == index) return &header.packed_literal_cache[slot];
     }
-    return &header.active_packed_literal_tree;
+    const slot = header.packed_literal_cache_next;
+    header.packed_literal_cache[slot] = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
+    header.packed_literal_cache_indices[slot] = index;
+    header.packed_literal_cache_next = @intCast((@as(usize, slot) + 1) % packed_literal_cache_slots);
+    return &header.packed_literal_cache[slot];
 }
 
 fn distancePrefixForDecode(header: *MinimalCompressedHeader, index: u16) Error!*PrefixCode(max_distance_alphabet_size) {
@@ -34514,12 +34522,13 @@ test "br packed literal lookup expands and caches the cold tree" {
     header.literal_trees[inline_literal_tree_count - 1] = .{ .single_symbol = 7 };
     const packed_source: PrefixCode(256) = .{ .single_symbol = 211 };
     header.packed_literal_trees[0] = PackedPrefixCode(256).init(&packed_source);
-    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+    @memset(&header.packed_literal_cache_indices, std.math.maxInt(u16));
+    header.packed_literal_cache_next = 0;
 
     try std.testing.expectEqual(@as(?u16, 7), (try literalPrefixForDecode(&header, inline_literal_tree_count - 1)).single_symbol);
     const first = try literalPrefixForDecode(&header, inline_literal_tree_count);
     try std.testing.expectEqual(@as(?u16, 211), first.single_symbol);
-    try std.testing.expectEqual(@as(u16, inline_literal_tree_count), header.active_packed_literal_tree_index);
+    try std.testing.expectEqual(@as(u16, inline_literal_tree_count), header.packed_literal_cache_indices[0]);
     try std.testing.expect((try literalPrefixForDecode(&header, inline_literal_tree_count)) == first);
 
     var invalid_index: u16 = inline_literal_tree_count + 1;
@@ -34765,7 +34774,8 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
         .table = try huffman.HuffmanTable(256).init(&long_lengths),
     };
     header.packed_literal_trees[2] = PackedPrefixCode(256).init(&long_source);
-    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+    @memset(&header.packed_literal_cache_indices, std.math.maxInt(u16));
+    header.packed_literal_cache_next = 0;
 
     var lookups: [external_literal_lookup_middle_tree_limit]ExternalLiteralLookup = undefined;
     try prepareWideExternalLiteralLookups(external_literal_lookup_middle_tree_limit, &header, &lookups);
@@ -34820,7 +34830,7 @@ test "br wide external literal lookups cover packed fast and canonical paths" {
     const expanded = try literalPrefixForDecode(&header, long_tree_index);
     try std.testing.expectEqual(@as(u16, 11), try expanded.decode(&long_reader));
     try std.testing.expectEqual(@as(usize, 11), long_reader.bitPosition());
-    try std.testing.expectEqual(@as(u16, long_tree_index), header.active_packed_literal_tree_index);
+    try std.testing.expect(std.mem.indexOfScalar(u16, &header.packed_literal_cache_indices, long_tree_index) != null);
     var long_reader9 = bitstream.BitReader.init(long_encoded);
     try std.testing.expectEqual(
         @as(?u16, null),
