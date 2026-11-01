@@ -25603,3 +25603,11 @@ reuse, so production keeps the simpler independently owned plans.
   overflow guards plus a limit compare per span, and inlining it expands the
   cold failure paths without removing work. The out-of-line helper stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Storing both packed literals of a Deflate semantic entry with
+  one 16-bit write (the already-tested `writeSemanticLiteralPair` helper)
+  instead of two byte stores was neutral and reverted. The 48-row screen gives
+  `0.9955/1.0020/1.0021/1.0037` for level 6/9 at 64 KiB/1 MiB. The store port
+  is not the limiter; the dependent lookup chain and per-entry advance work
+  dominate. The two byte stores stay on the generic path.
+  The three-codec industry-best goal stays active.
