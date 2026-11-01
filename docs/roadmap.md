@@ -25456,3 +25456,10 @@ reuse, so production keeps the simpler independently owned plans.
   Brotli about 1.09–1.43x. The paired screens remain the adoption authority.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Caching one literal lookup pointer per context for the active
+  Brotli literal block type regressed and was reverted. The 48-row screen gives
+  `1.0147/1.0196/1.0071/1.0076` for q6/q11 at 64 KiB/1 MiB. The 64-pointer
+  cache and its per-block-type rebuild cost more than the removed map load and
+  address computation. The direct map lookup stays. The three-codec
+  industry-best goal stays active.
