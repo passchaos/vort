@@ -24936,3 +24936,19 @@ reuse, so production keeps the simpler independently owned plans.
   must be measured against the current packed-cache decoder for both 1-byte and
   4096-byte chunks before adoption. The three-codec industry-best goal stays
   active.
+
+- 2026-11-01: The incremental compressed-header loop now records the retained
+  length at the last `TruncatedFrame` and skips parsing the identical prefix
+  before appending the next input. `beginCompressedHeader` resets the marker.
+  [Evidence](performance/brotli-header-parse-skip.md) records Mozilla 64 KiB q11
+  1-byte time `25.52/27.33/14.10` ms (baseline/pre-skip/post-skip) and 4096-byte
+  `1.015/0.536/0.520` ms. A 720-process two-sweep epoch gives
+  `0.5774/0.5443/0.5007/0.4399/0.5208` for q6 and
+  `0.5678/0.5372/0.4769/0.4028/0.4621` for q11 at 64 KiB 1/7/4096, 1 MiB and
+  full. The two sweeps agree within about half a percent and no scope has a row
+  above parity; the worst rows are NCI 64 KiB q6 1-byte `0.620`, MR 64 KiB q6
+  7/4096-byte `0.615/0.603`, Dickens 1 MiB q11 `0.616` and Dickens full q11
+  `0.660`. The complete ReleaseFast Brotli suite passes 1504/1505 with one
+  platform skip. The resumable header parser, copy path, long-code fallback,
+  one-shot reference epochs and Deflate/Zstd decoder work remain; the three-codec
+  industry-best goal stays active.
