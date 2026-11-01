@@ -13942,7 +13942,7 @@ inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
         } else try reader.expectEnd();
 
         const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
-        if (literal_len <= 15 and
+        if (literal_len <= 16 and
             literal_offset <= section.regenerated_size and
             section.regenerated_size - literal_offset >= literal_len and
             match_len >= 16 and
@@ -13950,7 +13950,7 @@ inline fn tryDecodeMediumSplitHuffmanSequencesImpl(
             match_offset <= output_cursor - frame_output_start + literal_len and
             output.len - output_cursor >= literal_len + rounded_match_len)
         {
-            literal_copy.appendUpTo15Wildcopy16(
+            literal_copy.appendUpTo16Wildcopy16(
                 output,
                 &output_cursor,
                 &literals,
@@ -14159,8 +14159,8 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
                 match_offset <= output_cursor - frame_output_start + literal_len and
                 output.len - output_cursor >= literal_len + rounded_match_len)
             {
-                if (literal_len <= 15)
-                    literal_copy.appendUpTo15Wildcopy16(
+                if (literal_len <= 16)
+                    literal_copy.appendUpTo16Wildcopy16(
                         output,
                         &output_cursor,
                         &literals,
@@ -14640,14 +14640,14 @@ inline fn decodeAllFseSplitHuffmanSequences(
         const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
         if (use_sequence_wildcopy and
             allow_wildcopy and
-            literal_len <= 15 and
+            literal_len <= 16 and
             literal_offset <= section.regenerated_size and
             section.regenerated_size - literal_offset >= literal_len and
             match_offset >= 16 and
             match_offset <= written.* - frame_output_start + literal_len and
             output.len - written.* >= literal_len + rounded_match_len)
         {
-            literal_copy.appendUpTo15Wildcopy16(
+            literal_copy.appendUpTo16Wildcopy16(
                 output,
                 written,
                 &literals,
@@ -14912,8 +14912,8 @@ noinline fn executeSplitHuffmanSequenceCold(
 ) Error!void {
     if (literal_offset.* > regenerated_size or regenerated_size - literal_offset.* < literal_len) return error.CorruptFrame;
     if (output.len - written.* < literal_len) return error.OutputTooSmall;
-    if (literal_len <= 15 and output.len - written.* >= 16) {
-        literal_copy.appendUpTo15Wildcopy16(output, written, literals, literal_offset, literal_len);
+    if (literal_len <= 16 and output.len - written.* >= 16) {
+        literal_copy.appendUpTo16Wildcopy16(output, written, literals, literal_offset, literal_len);
     } else if (literal_len != 0) {
         @memcpy(output[written.*..][0..literal_len], literals[literal_offset.*..][0..literal_len]);
         written.* += literal_len;

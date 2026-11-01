@@ -25437,3 +25437,13 @@ reuse, so production keeps the simpler independently owned plans.
   outweigh the removed scan, so it was reverted.
   [Evidence](performance/brotli-huffman-table-shape.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Zstd literal runs of exactly 16 bytes now take the single
+  16-byte move instead of the bulk whole-chunk loop, matching libzstd's
+  unconditional `ZSTD_copy16` for `litLength <= 16`. Two four-sweep 48-row
+  screens give `0.9960/0.9830/0.9950/0.9901` and
+  `0.9990/0.9832/0.9972/0.9927` for level 3/19 at 64 KiB/1 MiB; a 24-row
+  two-sweep full-file screen gives `0.9843/0.9661`. The complete Zstd suite
+  passes 1251/1251 tests.
+  [Evidence](performance/zstd-sixteen-byte-literal-copy.md). The three-codec
+  industry-best goal stays active.
