@@ -25041,3 +25041,17 @@ reuse, so production keeps the simpler independently owned plans.
   between `1.38` and `1.43` across runs. Deflate and Zstd remain the largest
   targets, followed by Brotli 64 KiB setup. The three-codec industry-best goal
   stays active.
+
+- 2026-11-01: Brotli command trees (`alphabet_size >= 704`) now use the same
+  nine-bit prepared lookup as literal trees; distance/block/context trees keep
+  eight bits. A one-shot profile had shown
+  `HuffmanTable(704).decodeValueLongAfterLookup` at 10.3%. The command tables
+  add about 33 KiB to the header. [Evidence](performance/brotli-nine-bit-literal-lookup.md)
+  records a 48-row paired incremental screen at `0.9967/0.9938/0.9932/0.9959`
+  and a 720-process epoch at `0.5979/0.5294/0.4445/0.3994/0.4929` for q6 and
+  `0.6000/0.5473/0.4505/0.3924/0.4605` for q11 at 64 KiB 1/7/4096, 1 MiB and
+  full. The 4096-chunk groups improve about 1–2% with no tiny-chunk regression;
+  the one-shot screen is neutral except a small q6 64 KiB gain. The complete
+  ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Deflate's
+  semantic loop remains the largest gap, then the Zstd sequence decode and
+  Brotli per-call setup; the three-codec industry-best goal stays active.

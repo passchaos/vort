@@ -59,6 +59,22 @@ the tiny-chunk groups remain far below parity.
 A paired 48-row screen gives `0.9908/1.0048/0.9878/0.9975` for q6/q11 at
 64 KiB/1 MiB, so the one-shot API is neutral within about one percent.
 
+## Command trees
+
+A one-shot 64 KiB profile after the literal change still attributed 10.3% to
+`HuffmanTable(704).decodeValueLongAfterLookup`, the command-tree canonical
+fallback. Command trees (`alphabet_size >= 704`) now also use the nine-bit
+prepared lookup; distance, block-type and context trees keep eight bits. The
+command tables add about 33 KiB to the header.
+
+A 48-row paired incremental screen gives `0.9967/0.9938/0.9932/0.9959` for
+q6/q11 at 64 KiB/1 MiB. The 720-process epoch moves the 4096-chunk groups from
+`0.4512/0.4057/0.4924` to `0.4445/0.3994/0.4929` for q6 and from
+`0.4608/0.3929/0.4609` to `0.4505/0.3924/0.4605` for q11; the 1-byte groups stay
+at `0.5979/0.6000` and the 7-byte groups are `0.5294/0.5473`. The one-shot
+screen is `0.9887/1.0005/1.0003/1.0010`, so the one-shot API is neutral except
+for a small q6 64 KiB gain.
+
 ## Validation
 
 The complete ReleaseFast Brotli suite passes 1504/1505 with one 32-bit-specific

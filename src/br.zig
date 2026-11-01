@@ -3892,7 +3892,7 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
         prepared_lookup: [@as(usize, 1) << lookup_bits]u16 = @splat(0),
         prepared: bool = false,
 
-        const lookup_bits: u4 = if (alphabet_size <= 257) 9 else 8;
+        const lookup_bits: u4 = if (alphabet_size <= 257 or alphabet_size >= 704) 9 else 8;
         const Self = @This();
 
         pub fn decode(self: *const Self, reader: anytype) Error!u16 {
