@@ -24928,3 +24928,11 @@ reuse, so production keeps the simpler independently owned plans.
   full row at or below `0.654`. The complete ReleaseFast Brotli suite passes
   1504/1505 with one platform skip. Only the 1-byte q11 case remains above
   parity; the three-codec industry-best goal stays active.
+
+- 2026-11-01: A 1-byte-chunk profile of mozilla.64k q11 attributes about 48% of
+  cycles to `readPrefixCodeRuntimeLimited` and 13% to `memset`. The decoder
+  re-parses the retained compressed header on every one-byte step; the rejected
+  resumable header parser is the known structural fix. Re-integrating it now
+  must be measured against the current packed-cache decoder for both 1-byte and
+  4096-byte chunks before adoption. The three-codec industry-best goal stays
+  active.
