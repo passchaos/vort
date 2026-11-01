@@ -149,13 +149,35 @@ inside their epoch noise. The paired screens in [the overcopy
 evidence](deflate-generic-sixteen-byte-overcopy.md) remain the adoption
 authority.
 
+## Epoch after the Zstd copy alignment
+
+A 1,296-process epoch with the 16-byte wildcopy and the 16-byte literal copy
+gives current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.7359 | 1.6420 | 1.6368 |
+| Deflate 9 | 1.6962 | 1.6147 | 1.6233 |
+| Zstd 3 | 1.5429 | 1.5486 | 1.4620 |
+| Zstd 19 | 1.5625 | 1.5400 | 1.4974 |
+| Brotli 6 | 1.4297 | 1.1401 | 1.2140 |
+| Brotli 11 | 1.3981 | 1.0931 | 1.2231 |
+
+Zstd moves from `1.5575/1.5750/1.4983` and `1.5881/1.5549/1.5315` to
+`1.5429/1.5486/1.4620` and `1.5625/1.5400/1.4974`, consistent with the paired
+1–3% wins. The Zstd gap is now about 1.46–1.56x, down from 1.50–1.59x. Deflate
+remains about 1.61–1.74x and Brotli about 1.09–1.43x, both inside their epoch
+noise. The paired screens in [the wildcopy evidence](zstd-sixteen-byte-wildcopy.md)
+and [the literal-copy evidence](zstd-sixteen-byte-literal-copy.md) remain the
+adoption authority.
+
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.
 
 ## Next work
 
-The largest remaining gap is still raw Deflate at about 1.61–1.72x, then the
-Zstd sequence decode at about 1.50–1.59x. Brotli's 1 MiB gap is already small;
+The largest remaining gap is still raw Deflate at about 1.61–1.74x, then the
+Zstd sequence decode at about 1.46–1.56x. Brotli's 1 MiB gap is already small;
 its 64 KiB gap needs per-call setup work. Each target requires its own
 current-source epoch and must keep the compatibility and malformed-input
 contracts.

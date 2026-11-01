@@ -25447,3 +25447,12 @@ reuse, so production keeps the simpler independently owned plans.
   passes 1251/1251 tests.
   [Evidence](performance/zstd-sixteen-byte-literal-copy.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: A 1,296-process epoch after the Zstd wildcopy and literal-copy
+  alignment gives current/reference Zstd `1.5429/1.5486/1.4620` (level 3) and
+  `1.5625/1.5400/1.4974` (level 19) at 64 KiB/1 MiB/full, down from
+  `1.5575/1.5750/1.4983` and `1.5881/1.5549/1.5315`. The Zstd gap is now about
+  1.46–1.56x, down from 1.50–1.59x. Deflate remains about 1.61–1.74x and
+  Brotli about 1.09–1.43x. The paired screens remain the adoption authority.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
