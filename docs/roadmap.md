@@ -25328,3 +25328,9 @@ reuse, so production keeps the simpler independently owned plans.
   about 1.50–1.59x and Brotli about 1.12–1.48x.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: Marking the Deflate literal branch as likely in the semantic
+  linear loop was neutral and reverted. The 48-row screen gives
+  `1.0005/1.0005/1.0002/1.0007` for level 6/9 at 64 KiB/1 MiB. The entry
+  spill and table-load layout are unchanged. The three-codec industry-best
+  goal stays active.
