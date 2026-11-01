@@ -6611,33 +6611,54 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             }
         }
 
-        var length_base: usize = undefined;
-        var length_extra_bits: u6 = undefined;
         var match_bits: u6 = @truncate(entry);
-        if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
-            length_base = @intCast(entry >> 16);
-            length_extra_bits = @truncate(entry >> 8);
-        } else if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
-            const start: usize = @intCast(entry >> 16);
-            const mask: usize = @intCast(entry & 0xff);
-            const secondary_index = start +
-                @import("deflate/decoder/secondary_index.zig").suffix(bit_buffer, Decoder.literal_lookup_bits, mask);
-            if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
-            const secondary = decoder.literal_secondary[secondary_index];
-            const symbol: u16 = secondary >> 4;
-            const secondary_bits: u6 = @truncate(secondary & 0x0f);
-            if (symbol < 256) {
-                bit_buffer >>= @intCast(secondary_bits);
-                bit_count -= secondary_bits;
-                output[out_pos] = @truncate(symbol);
-                out_pos += 1;
-                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-                entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
-                continue;
-            }
-            if (symbol == 256) {
-                bit_buffer >>= @intCast(secondary_bits);
-                bit_count -= secondary_bits;
+        var length_entry: u32 = entry;
+        if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0) {
+            if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+                const start: usize = @intCast(entry >> 16);
+                const mask: usize = @intCast(entry & 0xff);
+                const secondary_index = start +
+                    @import("deflate/decoder/secondary_index.zig").suffix(bit_buffer, Decoder.literal_lookup_bits, mask);
+                if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
+                const secondary = decoder.literal_secondary[secondary_index];
+                const symbol: u16 = secondary >> 4;
+                const secondary_bits: u6 = @truncate(secondary & 0x0f);
+                if (symbol < 256) {
+                    bit_buffer >>= @intCast(secondary_bits);
+                    bit_count -= secondary_bits;
+                    output[out_pos] = @truncate(symbol);
+                    out_pos += 1;
+                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                    entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+                    continue;
+                }
+                if (symbol == 256) {
+                    bit_buffer >>= @intCast(secondary_bits);
+                    bit_count -= secondary_bits;
+                    storeFusedReaderState(
+                        reader,
+                        bit_buffer,
+                        bit_count,
+                        byte_index,
+                        semanticConsumedBits(byte_index, bit_count),
+                    );
+                    return semanticLinearResult(
+                        pause_at_output_boundary,
+                        out_pos,
+                        .end_of_block,
+                    );
+                }
+                if (symbol > 285) return error.InvalidHuffmanCode;
+                const metadata = length_table[symbol - 257];
+                // Repack the compact length metadata in the primary entry layout
+                // so the common and secondary paths share one value.
+                length_entry = (@as(u32, @intCast(metadata.base)) << 16) |
+                    (@as(u32, metadata.extra_bits) << 8);
+                match_bits = secondary_bits;
+            } else {
+                if (match_bits == 0) return error.InvalidHuffmanCode;
+                bit_buffer >>= @intCast(match_bits);
+                bit_count -= match_bits;
                 storeFusedReaderState(
                     reader,
                     bit_buffer,
@@ -6651,45 +6672,25 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                     .end_of_block,
                 );
             }
-            if (symbol > 285) return error.InvalidHuffmanCode;
-            const metadata = length_table[symbol - 257];
-            length_base = metadata.base;
-            length_extra_bits = metadata.extra_bits;
-            match_bits = secondary_bits;
-        } else {
-            if (match_bits == 0) return error.InvalidHuffmanCode;
-            bit_buffer >>= @intCast(match_bits);
-            bit_count -= match_bits;
-            storeFusedReaderState(
-                reader,
-                bit_buffer,
-                bit_count,
-                byte_index,
-                semanticConsumedBits(byte_index, bit_count),
-            );
-            return semanticLinearResult(
-                pause_at_output_boundary,
-                out_pos,
-                .end_of_block,
-            );
         }
 
         var bits = bit_buffer >> @intCast(match_bits);
+        const length_extra_bits: u6 = @truncate(length_entry >> 8);
         const length = if (comptime inline_non_overlap and pause_at_output_boundary) blk: {
             // Kodak-style deep-distance blocks overwhelmingly use length codes
             // 257..264, which have no extra bits. Avoid two variable shifts and
             // a mask for that dominant case while leaving generic loops alone.
             if (length_extra_bits == 0) {
                 @branchHint(.likely);
-                break :blk length_base;
+                break :blk @as(usize, @intCast(length_entry >> 16));
             }
             const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
-            const decoded = length_base + @as(usize, @intCast(bits & length_mask));
+            const decoded = @as(usize, @intCast(length_entry >> 16)) + @as(usize, @intCast(bits & length_mask));
             bits >>= @intCast(length_extra_bits);
             break :blk decoded;
         } else blk: {
             const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
-            const decoded = length_base + @as(usize, @intCast(bits & length_mask));
+            const decoded = @as(usize, @intCast(length_entry >> 16)) + @as(usize, @intCast(bits & length_mask));
             bits >>= @intCast(length_extra_bits);
             break :blk decoded;
         };

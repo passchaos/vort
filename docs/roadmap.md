@@ -25642,3 +25642,15 @@ reuse, so production keeps the simpler independently owned plans.
   neutral. The branch was already macro-fused and its compare filled pipeline
   gaps rather than adding latency. The original order stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: The Deflate semantic match path now keeps one packed
+  `length_entry` value instead of the separate `length_base` and
+  `length_extra_bits` fields, so one fewer value stays live across the
+  distance decode; the secondary path repacks its compact metadata into the
+  same layout. The retired-instruction profile still put about 11% of
+  instructions on four stack slots, and freeing one live value has measured
+  value in this loop. The 48-row screen gives
+  `0.9906/0.9919/0.9877/0.9891` for level 6/9 at 64 KiB/1 MiB with every group
+  faster and only noise-level outliers above 1.0. The standalone Deflate suite
+  passes 581/581. [Evidence](performance/deflate-length-entry-live-range.md).
+  The three-codec industry-best goal stays active.
