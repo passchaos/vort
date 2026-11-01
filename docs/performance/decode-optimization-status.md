@@ -1,0 +1,81 @@
+# Decoder optimization status
+
+This note consolidates the 2026-11-01/02 decoder-performance session so the
+next work does not repeat rejected experiments. Raw evidence stays in
+`docs/performance/` and `/tmp/vort-decode-priority-20261031/`.
+
+## Current gaps
+
+Latest 1,296-process epoch (`industry-aln64-comparison.json`), current/reference
+against libdeflate, libzstd 1.6.0 and libbrotli 1.2.0:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.5586 | 1.4702 | 1.4759 |
+| Deflate 9 | 1.5515 | 1.4636 | 1.4660 |
+| Zstd 3 | 1.5000 | 1.4753 | 1.4501 |
+| Zstd 19 | 1.4817 | 1.4999 | 1.5040 |
+| Brotli 6 | 1.4798 | 1.1445 | 1.2170 |
+| Brotli 11 | 1.3920 | 1.1274 | 1.2251 |
+
+Relative to the frozen baseline the current source is 15–28% faster. `perf
+stat` shows both Deflate and Zstd are instruction-bound at the reference IPC
+(Deflate 2.57 vs 2.52 with 77% more retired instructions; Zstd 3.51 vs 3.57
+with 49% more).
+
+## Adopted in this session
+
+- Deflate live-range work: litlen width scoped to its token, reservoir-derived
+  bit position, one packed `length_entry`, one packed `distance_entry`
+  (about 13.5–14% on the 48-row screen).
+- Deflate 64-byte entry alignment for the generic semantic loop (about 0.3%).
+- Zstd plain offset adds on 64-bit targets and the folded wildcopy literal
+  bound (about 3.5%).
+- Brotli incremental short-span copy threshold and inline history-copy
+  decision (about 7% on the streaming screen).
+
+## Rejected directions (do not retry without new evidence)
+
+- Table shape: 8/9/10/11/12-bit primaries, single-literal entries, pair caps,
+  distance-table widening, prepared-lookup widening.
+- Speculation: chain depth 2/3/5, deferred fourth load, recomputed bit sums.
+- Cursors and checks: pointer cursors, precomputed fast-loop limits, hoisted
+  limits, per-match check removal with wide headroom, `outputEnd` inlining,
+  branch hints, `distance == 1` reorder.
+- Storage: merged 16-bit literal-pair store, 32/64-byte copy tiers, pair
+  variants.
+- Layout: dedicated sections, alignment on the non-overlap wrapper, Brotli
+  payload and incremental `step`, Zstd X2 wide policy, non-overlap selection
+  threshold.
+- Brotli tables: prepared-lookup zeroing skip, single-symbol folding, staged
+  extra-bit routing, literal-run history batching.
+- Zstd: cursor local promotion, short-match branch-first, X2 wide decoder.
+
+## Remaining structural options
+
+1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total
+   bits, single destructive consume, extras from the saved buffer). Measured
+   evidence says the extraction counts are equivalent, so the expected gain is
+   uncertain; it needs a new loop plus differential tests before any switch.
+2. Split the Deflate loop into a literal-run loop and a match loop to cut the
+   register set per body; the current loop is register-starved (about 11% of
+   instructions on four stack slots).
+3. Brotli payload state-machine fusion (goto style) to remove the per-command
+   phase/branch dispatch; the payload function is flat at about 1–5% per
+   instruction, so only a restructure can move it.
+4. Zstd field-decode consolidation (one bit-container read per sequence with
+   three compact slices) and a precomputed safe-bound wildcopy predicate.
+
+## Tooling notes
+
+- 48-row screens: `measure-matchbits.py` (Deflate), `measure-zstdbranch.py`
+  (Zstd), `measure-oneshot-brotli.py` (Brotli), `measure-stream-*.py`
+  (incremental) under `/tmp/vort-decode-priority-20261031/` and
+  `/tmp/vort-br-lookup-20261101/`.
+- Industry epoch: `measure-industry-*.py`, 1,296 processes, two alternating
+  sweeps, pinned CPU2.
+- `zig build test` compiles the aggregate `vort-tests` module for over an hour
+  at 100% CPU in this environment; use `test-br`, `test-zstd`, and
+  `zig test src/deflate.zig` instead.
+- The repository `.zig-cache` reached 73 GB and corrupted compiler state once;
+  clearing it restored builds (disk use dropped from 92% to 76%).

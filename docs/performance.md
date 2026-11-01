@@ -2895,3 +2895,7 @@ reaches a `1.0012x` row-median geometric mean, and has a `0.9926x` weakest row.
 The formal libzstd gate reports about 100.05 MiB/s at 643 bytes versus libzstd
 1.5.5's 1445.50 MiB/s at 912 bytes, so this is a measured parser improvement,
 not an overall Zstd encoder parity claim.
+[Decoder optimization status](performance/decode-optimization-status.md)
+consolidates the 2026-11-01/02 session: current gaps, adopted live-range and
+alignment wins, every rejected table/cursor/check/layout direction, and the
+four remaining structural options.
