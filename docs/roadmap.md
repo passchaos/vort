@@ -25624,3 +25624,21 @@ reuse, so production keeps the simpler independently owned plans.
   rows faster and 3.4–3.6% median gains. The standalone Deflate suite passes
   581/581. [Evidence](performance/deflate-derived-consumed-bits.md). The
   three-codec industry-best goal stays active.
+
+- 2026-11-01: Consuming literal codes with destructive reservoir shifts (and
+  dropping the cumulative bit sums and their register copies) was mixed and
+  reverted. Two 48-row screens give `1.0011/0.9846/1.0015/0.9849` and
+  `0.9968/0.9864/1.0017/0.9835` for level 6/9 at 64 KiB/1 MiB. Every 1 MiB row
+  gains about 1.5%, but `nci.64k` loses 3.4–4.4% and `xml.64k` 2.3–2.8%, so the
+  geometric mean is only about 0.7% and the scope behaviour is layout-sensitive
+  rather than a robust win. The cumulative-shift chain stays.
+  The three-codec industry-best goal stays active.
+
+- 2026-11-01: Moving the Deflate distance-one RLE test behind the
+  non-overlapping branch (matching the non-overlap specialization's comment)
+  was mixed and reverted. The 48-row screen gives
+  `0.9938/1.0041/0.9911/1.0047` for level 6/9 at 64 KiB/1 MiB: the compare
+  removal helps 64 KiB rows but loses at 1 MiB, and the net geometric mean is
+  neutral. The branch was already macro-fused and its compare filled pipeline
+  gaps rather than adding latency. The original order stays.
+  The three-codec industry-best goal stays active.
