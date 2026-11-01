@@ -132,7 +132,8 @@ pub fn compareActiveCompressed(x: anytype, y: @TypeOf(x)) !void {
     for (0..x.command_block.block_type_count) |i| {
         if (i < x.insert_copy_trees.len) try comparePrefix(&x.insert_copy_trees[i], &y.insert_copy_trees[i]) else try comparePacked(&x.packed_insert_copy_trees[i - x.insert_copy_trees.len], &y.packed_insert_copy_trees[i - y.insert_copy_trees.len]);
     }
-    try std.testing.expectEqual(x.active_packed_literal_tree_index, y.active_packed_literal_tree_index);
+    try std.testing.expectEqualSlices(u16, &x.packed_literal_cache_indices, &y.packed_literal_cache_indices);
+    try std.testing.expectEqual(x.packed_literal_cache_next, y.packed_literal_cache_next);
     try std.testing.expectEqual(x.active_packed_insert_copy_tree_index, y.active_packed_insert_copy_tree_index);
     try std.testing.expectEqual(x.active_packed_distance_tree_index, y.active_packed_distance_tree_index);
 }

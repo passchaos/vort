@@ -4012,6 +4012,7 @@ fn PackedPrefixCode(comptime alphabet_size: usize) type {
 }
 
 const inline_literal_tree_count = 64;
+const packed_literal_cache_slots = 4;
 const inline_command_tree_count = 32;
 const inline_distance_tree_count = 64;
 
@@ -4062,8 +4063,12 @@ fn MinimalCompressedHeaderType(comptime literal_alphabet_capacity: usize, compti
         literal_context_map: [max_literal_block_types * 64]u8,
         literal_trees: [inline_literal_tree_count]PrefixCode(literal_alphabet_capacity),
         packed_literal_trees: [max_literal_context_trees - inline_literal_tree_count]PackedPrefixCode(literal_alphabet_capacity) = @splat(.{}),
-        active_packed_literal_tree: PrefixCode(literal_alphabet_capacity) = .{},
-        active_packed_literal_tree_index: u16 = std.math.maxInt(u16),
+        /// Small round-robin cache of expanded packed literal trees. Alternating
+        /// block types would otherwise rebuild a full Huffman table on every
+        /// switch.
+        packed_literal_cache: [packed_literal_cache_slots]PrefixCode(literal_alphabet_capacity) = @splat(.{}),
+        packed_literal_cache_indices: [packed_literal_cache_slots]u16 = @splat(std.math.maxInt(u16)),
+        packed_literal_cache_next: u2 = 0,
         command_block: BlockSwitchState(max_command_block_types),
         insert_copy_trees: [inline_command_tree_count]PrefixCode(command_alphabet_capacity),
         packed_insert_copy_trees: [max_command_block_types - inline_command_tree_count]PackedPrefixCode(command_alphabet_capacity) = @splat(.{}),
@@ -15264,7 +15269,7 @@ fn resetCompressedHeaderLookupStates(compressed: *LargeWindowCompressedHeader) v
     for (compressed.literal_trees[0..]) |*tree| tree.resetPreparedLookup();
     for (compressed.insert_copy_trees[0..]) |*tree| tree.resetPreparedLookup();
     for (compressed.distance_trees[0..]) |*tree| tree.resetPreparedLookup();
-    compressed.active_packed_literal_tree.resetPreparedLookup();
+    for (&compressed.packed_literal_cache) |*tree| tree.resetPreparedLookup();
     compressed.active_packed_insert_copy_tree.resetPreparedLookup();
     compressed.active_packed_distance_tree.resetPreparedLookup();
 }
@@ -15510,7 +15515,8 @@ inline fn readLargeCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, he
             header.packed_literal_trees[literal_tree_index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&tree);
         }
     }
-    header.active_packed_literal_tree_index = std.math.maxInt(u16);
+    @memset(&header.packed_literal_cache_indices, std.math.maxInt(u16));
+    header.packed_literal_cache_next = 0;
 }
 
 inline fn readLargeCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, tree_count: u16) Error!void {
@@ -21774,11 +21780,14 @@ fn largeLiteralPrefixForDecode(header: *LargeWindowCompressedHeader, index: u16)
 
 noinline fn expandPackedLargeLiteralPrefixForDecode(header: *LargeWindowCompressedHeader, index: u16) Error!*PrefixCode(large_literal_alphabet_capacity) {
     std.debug.assert(index >= inline_literal_tree_count and index < header.literal_tree_count);
-    if (header.active_packed_literal_tree_index != index) {
-        header.active_packed_literal_tree = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
-        header.active_packed_literal_tree_index = index;
+    for (header.packed_literal_cache_indices, 0..) |cached, slot| {
+        if (cached == index) return &header.packed_literal_cache[slot];
     }
-    return &header.active_packed_literal_tree;
+    const slot = header.packed_literal_cache_next;
+    header.packed_literal_cache[slot] = try header.packed_literal_trees[index - inline_literal_tree_count].expand();
+    header.packed_literal_cache_indices[slot] = index;
+    header.packed_literal_cache_next = @intCast((@as(usize, slot) + 1) % packed_literal_cache_slots);
+    return &header.packed_literal_cache[slot];
 }
 
 fn largeDistancePrefixForDecode(header: *LargeWindowCompressedHeader, index: u16) Error!*PrefixCode(large_max_distance_alphabet_size) {

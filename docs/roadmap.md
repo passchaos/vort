@@ -24911,3 +24911,20 @@ reuse, so production keeps the simpler independently owned plans.
   q6 now has webster `0.959`, xml `0.986` and samba `1.059`; every q11 full row
   is at or below `0.958`. Only samba.full q6 and the 1-byte q11 case remain
   below parity; the three-codec industry-best goal stays active.
+
+- 2026-11-01: The large-window header now keeps a four-slot round-robin cache of
+  expanded packed literal trees. Frames with many literal block types no longer
+  rebuild a full Huffman table on every switch; indices clear after each header
+  parse and prepared-lookup flags clear with the header. The cache adds about
+  9.4 KiB to the header. [Evidence](performance/brotli-packed-literal-cache.md)
+  records samba.full q6 `880/927/438` ms (baseline/pre/post), webster.full q6
+  `708/686/404` ms, xml.full q6 `45.8/45.3/23.2` ms, samba.full q11
+  `367/282/121` ms and x-ray.full q11 `422/369/174` ms. The 48-row epoch is
+  `0.9848` post/pre (sweeps `0.9888/0.9873/0.9811/0.9798`) and `0.4619`
+  versus baseline. The 720-process epoch gives 4096-chunk groups
+  `0.5136/0.4345/0.5153` for q6 and `0.4862/0.3991/0.4534` for q11
+  (64 KiB/1 MiB/full), 7-byte groups `0.7329/0.8216` and 1-byte groups
+  `0.9532/1.0310`; every full-file q6 row is at or below `0.630` and every q11
+  full row at or below `0.654`. The complete ReleaseFast Brotli suite passes
+  1504/1505 with one platform skip. Only the 1-byte q11 case remains above
+  parity; the three-codec industry-best goal stays active.
