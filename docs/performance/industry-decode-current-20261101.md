@@ -85,6 +85,26 @@ paired screens in [the overcopy evidence](deflate-sixteen-byte-overcopy.md)
 remain the adoption authority. The largest gap is still raw Deflate at about
 1.68–1.83x, then Zstd at about 1.52–1.61x, then Brotli at about 1.11–1.49x.
 
+## Epoch after the Zstd field-group consolidation
+
+A 1,296-process epoch with the consolidated Zstd sequence branch gives
+current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.7937 | 1.6811 | 1.7021 |
+| Deflate 9 | 1.8070 | 1.6870 | 1.7034 |
+| Zstd 3 | 1.5596 | 1.5999 | 1.4876 |
+| Zstd 19 | 1.5971 | 1.5636 | 1.5437 |
+| Brotli 6 | 1.4995 | 1.1460 | 1.2147 |
+| Brotli 11 | 1.4012 | 1.1320 | 1.2267 |
+
+The Zstd level-3 full gap moves from 1.5200 to 1.4876 and level-19 full from
+1.5632 to 1.5437, consistent with the paired about 1% win; the 1 MiB rows
+remain inside epoch noise. The paired screens in [the field-group
+evidence](zstd-sequence-field-group-branch.md) remain the adoption authority.
+The largest gap is still raw Deflate at about 1.68–1.81x, then Zstd at about
+1.49–1.60x, then Brotli at about 1.13–1.50x.
 
 Raw records, comparison and process intervals stay local under
 `/tmp/vort-br-lookup-20261101/` under the lean-evidence policy.

@@ -25232,3 +25232,12 @@ reuse, so production keeps the simpler independently owned plans.
   compact literal-rep0 fields already consume nothing, so the branch removal
   does not change the hot path. The three-codec industry-best goal stays
   active.
+
+- 2026-11-01: A 1,296-process epoch after the Zstd field-group consolidation
+  gives current/reference Zstd `1.5596/1.5999/1.4876` (level 3) and
+  `1.5971/1.5636/1.5437` (level 19) at 64 KiB/1 MiB/full. The full gaps move
+  from `1.5200/1.5632` to `1.4876/1.5437`, consistent with the paired about 1%
+  win; the 1 MiB rows stay inside epoch noise. Deflate remains `1.6811–1.8070`
+  and Brotli `1.1320–1.4995`.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
