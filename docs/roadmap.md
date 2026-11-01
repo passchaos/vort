@@ -25356,3 +25356,10 @@ reuse, so production keeps the simpler independently owned plans.
   screen gives `0.9968/1.0003/0.9998/1.0000` for level 6/9 at 64 KiB/1 MiB.
   The compiler common-subexpresses the sums, so the entry spill is unchanged.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Reducing the Deflate literal speculation from four packed
+  entries to two was neutral and reverted. The 48-row screen gives
+  `0.9992/1.0001/0.9994/0.9994` for level 6/9 at 64 KiB/1 MiB. The shorter
+  branch does not remove the entry spill, and the extra loop iterations cancel
+  the fewer loads. The four-entry form stays. The three-codec industry-best
+  goal stays active.
