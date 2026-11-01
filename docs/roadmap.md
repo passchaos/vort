@@ -25205,3 +25205,14 @@ reuse, so production keeps the simpler independently owned plans.
   table describes the current gap rather than proving the increment.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-01: The Zstd split-Huffman sequence loop now makes one
+  grouped/ungrouped decision per sequence instead of repeating
+  `if (fields_are_grouped)` for each of the three extra fields and three FSE
+  transitions. Two four-sweep 48-row screens give
+  `0.9824/0.9892/0.9844/0.9900` and `0.9872/0.9903/0.9822/0.9933` for
+  level 3/19 at 64 KiB/1 MiB; a 24-row two-sweep full-file screen gives
+  `0.9904/0.9930`. [Evidence](performance/zstd-sequence-field-group-branch.md).
+  The worst rows are `nci.64k.l19 1.044` and `nci.1m.l19 1.015`; the focused
+  `test-zstd` ReleaseFast suite exits 0. The three-codec industry-best goal
+  stays active.

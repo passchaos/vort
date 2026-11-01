@@ -14113,18 +14113,36 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
         var field_group = sequence_field_group.Group.init(&reader, total_bits);
         const fields_are_grouped = field_group != null;
         if (builtin.is_test and fields_are_grouped) test_atomic_counter.add(&test_split_huffman_field_group_hits, 1);
-        const offset_extra = if (fields_are_grouped)
-            field_group.?.read(of_additional_bits)
-        else
-            try reader.readSequenceField(of_additional_bits);
-        const match_len = match_base_value + if (fields_are_grouped)
-            field_group.?.read(ml_additional_bits)
-        else
-            try reader.readSequenceField(ml_additional_bits);
-        const literal_len = literal_base_value + if (fields_are_grouped)
-            field_group.?.read(ll_additional_bits)
-        else
-            try reader.readSequenceField(ll_additional_bits);
+        // Keep the grouped and ungrouped field reads in one branch each. The
+        // previous per-field `if (fields_are_grouped)` chain repeated the same
+        // condition six times per sequence and kept the optional live across
+        // every extraction.
+        var offset_extra: usize = undefined;
+        var match_extra: usize = undefined;
+        var literal_extra: usize = undefined;
+        if (field_group) |*group| {
+            offset_extra = group.read(of_additional_bits);
+            match_extra = group.read(ml_additional_bits);
+            literal_extra = group.read(ll_additional_bits);
+            if (remaining != 0) {
+                const transitions = sequence_transition_group.read(group, ll_state_bits, ml_state_bits, of_state_bits);
+                ll_state = ll_next_state + transitions[0];
+                ml_state = ml_next_state + transitions[1];
+                of_state = of_next_state + transitions[2];
+            }
+        } else {
+            offset_extra = try reader.readSequenceField(of_additional_bits);
+            match_extra = try reader.readSequenceField(ml_additional_bits);
+            literal_extra = try reader.readSequenceField(ll_additional_bits);
+            if (remaining != 0) {
+                ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
+                ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
+                of_state = of_next_state + try reader.readSequenceField(of_state_bits);
+            }
+        }
+        if (remaining == 0) try reader.expectEnd();
+        const match_len = match_base_value + match_extra;
+        const literal_len = literal_base_value + literal_extra;
         const match_offset = try resolveSequenceOffset(
             offset_base_value,
             of_additional_bits,
@@ -14132,18 +14150,6 @@ inline fn tryDecodeAllFseSplitDenseHuffmanSequencesImpl(
             literal_len,
             &state.repeated_offsets,
         );
-        if (remaining != 0) {
-            if (fields_are_grouped) {
-                const transitions = sequence_transition_group.read(&field_group.?, ll_state_bits, ml_state_bits, of_state_bits);
-                ll_state = ll_next_state + transitions[0];
-                ml_state = ml_next_state + transitions[1];
-                of_state = of_next_state + transitions[2];
-            } else {
-                ll_state = ll_next_state + try reader.readSequenceField(ll_state_bits);
-                ml_state = ml_next_state + try reader.readSequenceField(ml_state_bits);
-                of_state = of_next_state + try reader.readSequenceField(of_state_bits);
-            }
-        } else try reader.expectEnd();
 
         if (comptime allow_wildcopy) {
             const rounded_match_len = (match_len + 15) & ~@as(usize, 15);
