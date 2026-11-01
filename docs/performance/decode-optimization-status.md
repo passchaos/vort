@@ -59,7 +59,11 @@ with 49% more).
    uncertain; it needs a new loop plus differential tests before any switch.
 2. Split the Deflate loop into a literal-run loop and a match loop to cut the
    register set per body; the current loop is register-starved (about 11% of
-   instructions on four stack slots).
+   instructions on four stack slots). Analysis 2026-11-02: the inner literal
+   loop would need the same input-availability and output-headroom checks
+   before each group (a refill advances the input cursor and two groups can
+   exhaust the sixteen-byte headroom), so the split re-creates the outer
+   condition and adds no savings. Do not implement it as described.
 3. Brotli payload state-machine fusion (goto style) to remove the per-command
    phase/branch dispatch; the payload function is flat at about 1–5% per
    instruction, so only a restructure can move it.
