@@ -24952,3 +24952,14 @@ reuse, so production keeps the simpler independently owned plans.
   platform skip. The resumable header parser, copy path, long-code fallback,
   one-shot reference epochs and Deflate/Zstd decoder work remain; the three-codec
   industry-best goal stays active.
+
+- 2026-11-01: A Zstd one-shot decode profile on Mozilla 1 MiB level 3 and
+  Dickens 1 MiB level 19 attributes 23% and 73% respectively to
+  `tryDecodeAllFseSplitDenseHuffmanSequencesNative`. Level 3 also spends about
+  9% in `normalized_counts.parse` and 6.5% in `decodeAllFseRawSequences`, with a
+  low-sample `memset` share that needs confirmation; level 19 table builds and
+  the four-stream Huffman reservoir are each about 3%. The hot source lines are
+  bit-reader extraction, 16-byte copy groups and FSE transition updates, with no
+  single removable local check. The next Zstd step is a sequence-scheduling /
+  FSE-lifecycle redesign rather than another micro-edit. The three-codec
+  industry-best goal stays active.
