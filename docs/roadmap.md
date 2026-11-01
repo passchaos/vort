@@ -25748,3 +25748,11 @@ reuse, so production keeps the simpler independently owned plans.
   codecs are now within about 1.12–1.56x of their references.
   [Evidence](performance/industry-decode-current-20261101.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Skipping the Brotli `PrefixCode.buildPreparedLookup` zeroing
+  when the tree's longest code fits the lookup width was neutral and reverted.
+  The 48-row screen gives `1.0021/1.0039/0.9997/0.9998` for q6/q11 at
+  64 KiB/1 MiB. Most decoded trees have codes longer than the eight- or
+  nine-bit primary, so the zero marker is still needed, and the remaining
+  `memset` is cheap next to the payload loop. The unconditional zeroing stays.
+  The three-codec industry-best goal stays active.
