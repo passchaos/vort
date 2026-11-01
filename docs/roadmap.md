@@ -25756,3 +25756,11 @@ reuse, so production keeps the simpler independently owned plans.
   nine-bit primary, so the zero marker is still needed, and the remaining
   `memset` is cheap next to the payload loop. The unconditional zeroing stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Folding Brotli single-symbol trees into the prepared lookup (fill
+  every slot with the symbol and drop the per-decode optional check) was
+  neutral and reverted. The 48-row screen gives
+  `1.0030/1.0038/0.9972/1.0020` for q6/q11 at 64 KiB/1 MiB. The check is well
+  predicted and it also skips the nine-bit peek-and-fill that the folded form
+  now performs for every single-symbol decode. The early return stays.
+  The three-codec industry-best goal stays active.
