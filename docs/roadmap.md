@@ -25156,3 +25156,13 @@ reuse, so production keeps the simpler independently owned plans.
   (`0.9979/1.0026/1.0056/0.9951` for q6/q11 at 64 KiB/1 MiB) and was reverted.
   The per-meta-block header parse and the literal loop remain the 64 KiB setup
   cost; the three-codec industry-best goal stays active.
+
+- 2026-11-01: Skipping `PrefixCode.prepared_lookup` zeroing in the standard,
+  profiled and Large Window header parsers (field-wise construction plus
+  `singleSymbolPrefixCode` returning `u16`) was neutral and reverted. A
+  384-process two-sweep one-shot screen gives
+  `1.0004/1.0052/0.9971/1.0077` for q6/q11 at 64 KiB/1 MiB, with the worst rows
+  `osdb.64k.q6 1.052`, `dickens.1m.q6 1.043` and `xml.1m.q6 1.032`.
+  [Evidence](performance/brotli-header-lut-zeroing.md). LLVM already removes the
+  unused zeroed lookup, so the header cost is not the LUT clear. The three-codec
+  industry-best goal stays active.
