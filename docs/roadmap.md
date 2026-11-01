@@ -25596,3 +25596,10 @@ reuse, so production keeps the simpler independently owned plans.
   q6/q11 at 64 KiB/1 MiB. The helper's call is already cheap and its error
   union widens the caller's return path. The `noinline` helper stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Inlining the incremental output-limit check (`outputEnd`) was
+  neutral and reverted. The 48-row screen gives
+  `1.0048/0.9981/1.0004/0.9979` for q6/q11 at 64 KiB/1 MiB. The check is two
+  overflow guards plus a limit compare per span, and inlining it expands the
+  cold failure paths without removing work. The out-of-line helper stays.
+  The three-codec industry-best goal stays active.
