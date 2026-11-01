@@ -25840,3 +25840,11 @@ reuse, so production keeps the simpler independently owned plans.
   moves the loop away from its tail helper and callers, hurting locality more
   than the isolation helps. The plain `align(64)` placement stays.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: A 1,296-process epoch after the Deflate loop alignment gives
+  current/reference Deflate `1.5586/1.4702/1.4759` (level 6) and
+  `1.5515/1.4636/1.4660` (level 9), Zstd `1.4817–1.5000` and Brotli
+  `1.1274–1.4798`. The alignment is below epoch noise; the gaps now read
+  about 1.45–1.56x for Deflate and Zstd and 1.13–1.48x for Brotli.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.

@@ -263,3 +263,21 @@ Zstd moves from about 1.53–1.58 to about 1.46–1.52, with the largest change 
 level 19 at 64 KiB (`1.5839` to `1.4930`), consistent with the paired screens.
 Deflate and Brotli are unchanged inside epoch noise. The three codecs are now
 within about 1.46–1.56x (Deflate), 1.46–1.52x (Zstd) and 1.12–1.45x (Brotli).
+
+## Epoch after the Deflate loop alignment
+
+A 1,296-process epoch after the [64-byte loop alignment](deflate-loop-alignment.md)
+gives current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.5586 | 1.4702 | 1.4759 |
+| Deflate 9 | 1.5515 | 1.4636 | 1.4660 |
+| Zstd 3 | 1.5000 | 1.4753 | 1.4501 |
+| Zstd 19 | 1.4817 | 1.4999 | 1.5040 |
+| Brotli 6 | 1.4798 | 1.1445 | 1.2170 |
+| Brotli 11 | 1.3920 | 1.1274 | 1.2251 |
+
+The alignment is below epoch noise (about 0.3% on the paired screen), so the
+table matches the previous epoch within 1–2% variation. The current gaps are
+about 1.46–1.56x (Deflate), 1.45–1.50x (Zstd) and 1.13–1.48x (Brotli).
