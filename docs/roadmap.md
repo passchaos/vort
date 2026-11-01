@@ -25133,3 +25133,9 @@ reuse, so production keeps the simpler independently owned plans.
   ReleaseFast Brotli suite passes 1504/1505 with one platform skip. Command/
   distance packed caching, raw Deflate and the Zstd sequence decode remain
   work; the three-codec industry-best goal stays active.
+
+- 2026-11-01: Extending the nine-bit prepared lookup to distance trees
+  (`alphabet_size >= 520`) was neutral (`0.9972/0.9967/1.0034/1.0020` for
+  q6/q11 at 64 KiB/1 MiB) and was reverted; the 8-bit distance table stays. The
+  distance long-code fallback is not a hot path. The three-codec industry-best
+  goal stays active.
