@@ -25319,3 +25319,12 @@ reuse, so production keeps the simpler independently owned plans.
   advance past the loop-entry headroom. The standalone Deflate suite passes
   581/581 tests. [Evidence](performance/deflate-generic-sixteen-byte-overcopy.md).
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: A 1,296-process epoch after the generic Deflate overcopy gives
+  current/reference Deflate `1.7249/1.6221/1.6316` (level 6) and
+  `1.7119/1.6138/1.6057` (level 9) at 64 KiB/1 MiB/full, down from
+  `1.7987/1.6875/1.7129` and `1.8133/1.6868/1.7100`. The Deflate gap is now
+  about 1.61–1.72x, consistent with the paired 3.5–5.2% win. Zstd remains
+  about 1.50–1.59x and Brotli about 1.12–1.48x.
+  [Evidence](performance/industry-decode-current-20261101.md). The three-codec
+  industry-best goal stays active.
