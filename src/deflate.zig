@@ -15129,7 +15129,13 @@ pub fn decodePngAdam7StreamingZlibImageWithOptions(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7StreamingDecodeBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch, output);
-    @memset(output[0..info.image_output_len], 0);
+    // One-byte pass placement is a scattered per-pixel loop; a sequential
+    // clear keeps those destination lines resident. Multi-byte layouts use
+    // per-pixel copies where the extra clear only costs a full-image pass.
+    switch (info.image.color_type) {
+        .grayscale, .indexed => @memset(output[0..info.image_output_len], 0),
+        else => {},
+    }
     var decoder = try PngAdam7StreamingZlibRowDecoder.initWithOptions(input, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     while (try decoder.step()) |row| try placePngAdam7Row(info, row.pass, row.pass_row_index, row.row, output);
     const snap = decoder.snapshot();
@@ -15193,7 +15199,13 @@ pub fn decodePngAdam7StreamingZlibImageFromChunksWithOptionsDirect(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7StreamingDecodeBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch, output);
-    @memset(output[0..info.image_output_len], 0);
+    // One-byte pass placement is a scattered per-pixel loop; a sequential
+    // clear keeps those destination lines resident. Multi-byte layouts use
+    // per-pixel copies where the extra clear only costs a full-image pass.
+    switch (info.image.color_type) {
+        .grayscale, .indexed => @memset(output[0..info.image_output_len], 0),
+        else => {},
+    }
     var decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     while (try decoder.step()) |row| try placePngAdam7Row(info, row.pass, row.pass_row_index, row.row, output);
     const snap = decoder.snapshot();
