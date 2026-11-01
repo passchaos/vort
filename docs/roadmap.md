@@ -25539,3 +25539,12 @@ reuse, so production keeps the simpler independently owned plans.
   The per-literal loop stays, and the shared `commitSpanToHistory` helper now
   serves the copy and dictionary spans.
   The three-codec industry-best goal stays active.
+
+- 2026-11-01: Routing the Brotli one-shot payload's non-staged insert/copy
+  length and distance extra-bit reads through the fast reader's inline
+  staged-first path was neutral and reverted. The 48-row screen gives
+  `0.9998/1.0010/0.9986/0.9996` for q6/q11 at 64 KiB/1 MiB. The measured
+  payload already reaches staged bits through the tail-lookup variants, so the
+  out-of-line `readBits` samples were not on the dominant row. The existing
+  split between staged and general readers stays.
+  The three-codec industry-best goal stays active.

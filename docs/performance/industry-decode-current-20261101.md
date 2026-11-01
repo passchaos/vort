@@ -20,34 +20,35 @@ libbrotli 1.2.0 with different lifecycle costs.
 
 Lower is faster. `current/baseline` compares the committed source with the
 frozen decoder-priority baseline; `current/reference` compares it with the
-pinned library.
+pinned library. This table is the 2026-11-01 epoch after the Zstd copy,
+incremental Brotli short-span and Deflate litlen live-range increments.
 
 | Codec / level / scope | Current / baseline | Current / reference |
 | --- | ---: | ---: |
-| Deflate 6 / 64 KiB | 0.9213 | 1.8222 |
-| Deflate 6 / 1 MiB | 0.9378 | 1.6828 |
-| Deflate 6 / full | 0.9394 | 1.7257 |
-| Deflate 9 / 64 KiB | 0.9043 | 1.8032 |
-| Deflate 9 / 1 MiB | 0.9361 | 1.6693 |
-| Deflate 9 / full | 0.9364 | 1.7283 |
-| Zstd 3 / 64 KiB | 0.9156 | 1.5840 |
-| Zstd 3 / 1 MiB | 0.8864 | 1.5738 |
-| Zstd 3 / full | 0.8686 | 1.5270 |
-| Zstd 19 / 64 KiB | 0.8501 | 1.6045 |
-| Zstd 19 / 1 MiB | 0.8738 | 1.5786 |
-| Zstd 19 / full | 0.8713 | 1.5578 |
-| Brotli 6 / 64 KiB | 0.9679 | 1.8833 |
-| Brotli 6 / 1 MiB | 0.9986 | 1.1621 |
-| Brotli 6 / full | 0.9862 | 1.4434 |
-| Brotli 11 / 64 KiB | 0.9096 | 1.7536 |
-| Brotli 11 / 1 MiB | 0.8739 | 1.1432 |
-| Brotli 11 / full | 0.9161 | 1.3885 |
+| Deflate 6 / 64 KiB | 0.8598 | 1.6890 |
+| Deflate 6 / 1 MiB | 0.8850 | 1.5975 |
+| Deflate 6 / full | 0.8736 | 1.6084 |
+| Deflate 9 / 64 KiB | 0.8508 | 1.6725 |
+| Deflate 9 / 1 MiB | 0.8854 | 1.5825 |
+| Deflate 9 / full | 0.8761 | 1.6089 |
+| Zstd 3 / 64 KiB | 0.8843 | 1.5608 |
+| Zstd 3 / 1 MiB | 0.8584 | 1.5463 |
+| Zstd 3 / full | 0.8517 | 1.4703 |
+| Zstd 19 / 64 KiB | 0.8312 | 1.5606 |
+| Zstd 19 / 1 MiB | 0.8652 | 1.5537 |
+| Zstd 19 / full | 0.8666 | 1.5145 |
+| Brotli 6 / 64 KiB | 0.7627 | 1.4888 |
+| Brotli 6 / 1 MiB | 0.9831 | 1.1421 |
+| Brotli 6 / full | 0.8299 | 1.2109 |
+| Brotli 11 / 64 KiB | 0.7254 | 1.3899 |
+| Brotli 11 / 1 MiB | 0.8641 | 1.1242 |
+| Brotli 11 / full | 0.8039 | 1.2258 |
 
-The current source is 6–15% faster than the frozen baseline for every group
-except Brotli q6 at 1 MiB, which is neutral. The remaining reference gaps are
-largest for raw Deflate (1.67–1.82x), then Zstd (1.53–1.60x), then Brotli
-(1.14–1.88x); Brotli 1 MiB is the closest at 1.14–1.16x. Small 64 KiB frames
-have the largest Brotli gap because fixed per-call setup dominates.
+The current source is 11–27% faster than the frozen baseline for every group.
+The remaining reference gaps are largest for raw Deflate (1.58–1.69x), then
+Zstd (1.47–1.56x), then Brotli (1.12–1.49x); Brotli 1 MiB is the closest at
+1.12–1.14x. Small 64 KiB frames have the largest Brotli gap because fixed
+per-call setup dominates.
 
 These ratios use different reference lifecycles and describe warmed one-shot
 calls only. They do not establish cold-start, streaming, dictionary or peak-memory
@@ -181,3 +182,24 @@ Zstd sequence decode at about 1.46–1.56x. Brotli's 1 MiB gap is already small;
 its 64 KiB gap needs per-call setup work. Each target requires its own
 current-source epoch and must keep the compatibility and malformed-input
 contracts.
+
+## Epoch after the Deflate litlen live-range
+
+A 1,296-process epoch after the [Deflate litlen live-range
+change](deflate-litlen-width-live-range.md) gives current/reference:
+
+| Codec / level | 64 KiB | 1 MiB | full |
+| --- | ---: | ---: | ---: |
+| Deflate 6 | 1.6890 | 1.5975 | 1.6084 |
+| Deflate 9 | 1.6725 | 1.5825 | 1.6089 |
+| Zstd 3 | 1.5608 | 1.5463 | 1.4703 |
+| Zstd 19 | 1.5606 | 1.5537 | 1.5145 |
+| Brotli 6 | 1.4888 | 1.1421 | 1.2109 |
+| Brotli 11 | 1.3899 | 1.1242 | 1.2258 |
+
+The Deflate 64 KiB gap moves from about 1.81 to 1.67–1.69 and the 1 MiB gap
+from about 1.69 to 1.58–1.60, consistent with the paired about 6% win. The
+largest gap is still raw Deflate at about 1.58–1.69x, then Zstd at about
+1.47–1.56x, then Brotli at about 1.12–1.49x. The [incremental short-span
+copy](brotli-short-span-copy.md) also improves the streaming API by about 5%
+without moving these one-shot rows.
