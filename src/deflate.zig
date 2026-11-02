@@ -5953,11 +5953,15 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     // Preserve each packed field's mask when widening.
     const ordinary_output = !single_distance and !rle258_pair and !inline_non_overlap;
     const Count = if (rle1_distance or ordinary_output or (inline_non_overlap and pause_at_output_boundary)) usize else u6;
+    // The windowed loop derives its logical bit position from the reservoir at
+    // exit, so it does not carry a per-token consumed-bit counter.
+    const track_consumed = comptime (!inline_non_overlap and !pause_at_output_boundary);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
     var byte_index = reader.byte_index;
     var consumed_bits = reader.consumed_bits;
+    if (comptime !track_consumed) consumed_bits = reader.consumed_bits;
     var out_pos = initial_out_offset;
 
     // The fast semantic loop only needs enough destination room for its
@@ -5985,7 +5989,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             {
                 bit_buffer >>= 2;
                 bit_count -= 2;
-                if (comptime !inline_non_overlap) consumed_bits += 2;
+                if (comptime track_consumed) consumed_bits += 2;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                 entry = decoder.literal[
                     @intCast(bit_buffer & Decoder.literal_lookup_mask)
@@ -6052,7 +6056,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                     bit_buffer >>= @intCast(entry123_bits);
                     bit_count -= entry123_bits;
-                    if (comptime !inline_non_overlap) consumed_bits += entry123_bits;
+                    if (comptime track_consumed) consumed_bits += entry123_bits;
                     entry = entry4;
                     refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                     continue;
@@ -6060,13 +6064,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                 bit_buffer >>= @intCast(entry12_bits);
                 bit_count -= entry12_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry12_bits;
+                if (comptime track_consumed) consumed_bits += entry12_bits;
                 entry = entry3;
                 entry_bits = entry3_bits;
             } else {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                if (comptime track_consumed) consumed_bits += entry_bits;
                 entry = entry2;
                 entry_bits = entry2_bits;
             }
@@ -6089,7 +6093,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol < 256) {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                if (comptime track_consumed) consumed_bits += entry_bits;
                 output[out_pos] = @truncate(symbol);
                 out_pos += 1;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
@@ -6099,14 +6103,14 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol == 256) {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                if (comptime track_consumed) consumed_bits += entry_bits;
                 storeFusedReaderState(
                     reader,
                     bit_buffer,
                     bit_count,
                     byte_index,
                     semanticConsumedBits(
-                        inline_non_overlap,
+                        inline_non_overlap or pause_at_output_boundary,
                         consumed_bits,
                         byte_index,
                         bit_count,
@@ -6126,14 +6130,14 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (entry_bits == 0) return error.InvalidHuffmanCode;
             bit_buffer >>= @intCast(entry_bits);
             bit_count -= entry_bits;
-            if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+            if (comptime track_consumed) consumed_bits += entry_bits;
             storeFusedReaderState(
                 reader,
                 bit_buffer,
                 bit_count,
                 byte_index,
                 semanticConsumedBits(
-                    inline_non_overlap,
+                    inline_non_overlap or pause_at_output_boundary,
                     consumed_bits,
                     byte_index,
                     bit_count,
@@ -6187,7 +6191,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const total_bits: Count = entry_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
-            if (comptime !inline_non_overlap) consumed_bits += total_bits;
+            if (comptime track_consumed) consumed_bits += total_bits;
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
             entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
@@ -6237,7 +6241,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
-        if (comptime !inline_non_overlap) consumed_bits += total_bits;
+        if (comptime track_consumed) consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
         if (comptime inline_non_overlap) {
@@ -6287,7 +6291,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         bit_count,
         byte_index,
         semanticConsumedBits(
-            inline_non_overlap,
+            inline_non_overlap or pause_at_output_boundary,
             consumed_bits,
             byte_index,
             bit_count,
