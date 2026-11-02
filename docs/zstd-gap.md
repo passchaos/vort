@@ -1905,3 +1905,19 @@ chaining speed factors. Persistent cross-block indexes, larger-input matching
 and entropy models remain algorithm work. Debug/ReleaseFast each pass 1246
 Zstd tests, broad native/Wasm checks pass 212 steps, and independent baseline,
 public resource and actual WASI contracts pass. The long-term goal stays active.
+
+## 2026-11-02: compact 64/128-state no-low decode tables
+
+Mozilla's real 1 MiB level-3 frame contains 76 small no-low tables. A dedicated
+builder now retains 234 bytes of declared scratch instead of the generic
+1,024-byte symbol/next-state arrays, and parser admission reuses validated
+normalized counts. Mapped templates were screened and removed in favor of the
+smaller scalar construction. Five 96-row Silesia/API sweeps verify 960
+processes: Mozilla one-shot/reusable medians improve by 1.67%/1.06%, while broad
+group means remain close to neutral. Fifteen longer pairs preserve a 1.63%
+target median improvement and resolve three noisy small controls. The 1,257
+ReleaseSafe tests, 3,484-table scalar oracles and serialized-header/truncation
+contracts pass. PowerPC64 BigEndian compilation passes. This narrows one table
+setup cost; Mozilla still has approximately a twofold gap to native libzstd
+1.6.0. Next work should address the sequence executor and actual memset
+callsite. [Evidence](performance/zstd/small-no-low-tables.md).

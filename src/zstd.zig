@@ -182,6 +182,7 @@ var test_split_huffman_compact_pair_hits: usize = 0;
 var test_split_huffman_short_rep0_fast_hits: usize = 0;
 var test_split_huffman_field_group_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
+var test_small_fse_no_low_builder_hits: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
@@ -12514,6 +12515,20 @@ fn readFseSequenceTableInto(
     table.len = decoded.table_len;
     table.accuracy_log = @intCast(std.math.log2_int(usize, decoded.table_len));
     const normalized = values[0..decoded.value_count];
+    if ((decoded.table_len == 64 or decoded.table_len == 128) and normalized.len <= 53) {
+        var no_low_probability = true;
+        for (normalized) |value| no_low_probability = no_low_probability and value != 0;
+        if (no_low_probability) {
+            if (builtin.is_test) test_atomic_counter.add(&test_small_fse_no_low_builder_hits, 1);
+            sequence_fse_builder.buildSmallNoLowAssumeValid(
+                normalized,
+                table.entries[0..decoded.table_len],
+                bases,
+                bits,
+            );
+            return;
+        }
+    }
     if (decoded.table_len == 256) {
         var no_low_probability = true;
         for (normalized) |value| no_low_probability = no_low_probability and value != 0;
@@ -12529,6 +12544,16 @@ fn readFseSequenceTableInto(
         }
     }
     try sequence_fse_builder.buildMapped(normalized, table.entries[0..decoded.table_len], bases, bits);
+}
+
+test "Zstd small no-low serialized parser routes and truncation" {
+    const route_tests = @import("zstd/sequence/small/route_tests.zig");
+    test_small_fse_no_low_builder_hits = 0;
+    try route_tests.check(SequenceFseTable, readFseSequenceTableInto, sequence_fse_builder, .{
+        .{ .bases = &of_base, .bits = &of_bits },
+        .{ .bases = &ml_base, .bits = &ml_bits },
+        .{ .bases = &ll_base, .bits = &ll_bits },
+    }, &test_small_fse_no_low_builder_hits);
 }
 
 noinline fn readOffsetFseTable32Into(

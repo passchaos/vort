@@ -26073,3 +26073,13 @@ reuse, so production keeps the simpler independently owned plans.
   construction and the actual memset callsite, while Brotli priorities follow
   payload/dictionary costs. [Evidence](performance/zstd-mozilla-fse-profile.md).
   The deflate/zstd/brotli industry-best goal remains active.
+
+- 2026-11-02: Added a portable 64/128-state no-low Zstd mapped-table builder
+  selected after normalized-count validation. Its declared scratch is 234
+  bytes versus the generic 1,024 bytes. Five alternating 96-row Silesia/API
+  sweeps verify 960 processes and improve Mozilla 1 MiB level-3 one-shot/reusable
+  medians by 1.67%/1.06%; long controls confirm the narrow target gain. All
+  1,257 ReleaseSafe Zstd tests pass, including new scalar table and serialized
+  header/offset/truncation oracles; BigEndian compilation passes. Existing
+  32-state and 256-state paths remain distinct. [Evidence](performance/zstd/small-no-low-tables.md).
+  The deflate/zstd/brotli industry-best objective remains active.

@@ -20,7 +20,8 @@ reference library decodes them back to the complete input.
 ## Table distribution
 
 `benchmarkNativeSequenceCopyProfile` independently reads serialized normalized
-counts. The route columns below are derived from the production condition
+counts. The route columns below describe Vort `86ca5489`, before the small-table
+optimization, and are derived from its production condition
 `table_len == 256 && no_low_probability`, rather than counters inserted into
 the hot decoder. Low counts tables containing at least one low-probability
 symbol, rather than the number of those symbols.
@@ -40,6 +41,10 @@ the final entries. Investigate these sizes before concentrating on the eight
 512-state tables. Prior bitset-builder experiments were negative on other
 workloads; these counts select a workload to study and do not establish a
 profitable replacement algorithm.
+
+The subsequent [small no-low builder](zstd/small-no-low-tables.md) implements
+this selected path and validates its narrow throughput and scratch benefit.
+The table above remains the baseline routing snapshot.
 
 The 81 blocks are 27 raw and 54 compressed, with zero RLE blocks. Compressed
 blocks contain 49 raw literal sections, four compressed Huffman sections and

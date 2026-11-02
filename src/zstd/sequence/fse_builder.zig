@@ -1,6 +1,28 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const large_fse_table = if (builtin.is_test) @import("large/fse_table.zig") else struct {};
+const compact_no_low = @import("small/compact_no_low.zig");
+pub const buildSmallNoLowAssumeValid = compact_no_low.buildAssumeValid;
+
+test "Zstd small no-low mapped kernel matches scalar transitions" {
+    try @import("small/no_low_tests.zig").checkTransitions(@This());
+}
+
+test "Zstd small no-low mapped kernel handles singleton and sparse symbols" {
+    try @import("small/no_low_tests.zig").checkSparse(@This());
+}
+
+test "Zstd small no-low mapped kernel handles unit probabilities" {
+    try @import("small/no_low_tests.zig").checkUnitProbabilities(@This());
+}
+
+test "Zstd small no-low mapped kernel matches random distributions and reuse" {
+    try @import("small/no_low_tests.zig").checkRandomAndReuse(@This());
+}
+
+test "Zstd small no-low mapped kernel preserves mapped layouts" {
+    try @import("small/no_low_tests.zig").checkLayouts(@This());
+}
 
 const mapped_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_zstd_zz_fse_mapped",
@@ -147,6 +169,15 @@ inline fn buildMappedBounded(
         }
     }
     if (normalized_total != entries.len) return error.CorruptFrame;
+
+    if (comptime max_table_size == 512) {
+        if ((entries.len == 64 or entries.len == 128) and
+            low_probability_count == 0 and values.len <= 53)
+        {
+            compact_no_low.buildAssumeValid(values, entries, bases, additional_bits);
+            return;
+        }
+    }
 
     const table_size: u16 = @intCast(entries.len);
     const accuracy_log = std.math.log2_int(u16, table_size);
