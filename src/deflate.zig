@@ -7849,72 +7849,11 @@ fn ensureOutputLimit(current_len: usize, additional_len: usize, max_output_len: 
     if (additional_len > limit or current_len > limit - additional_len) return error.OutputLimitExceeded;
 }
 
-const LengthEntry = struct { base: u16, extra_bits: u6 };
-const length_table = [_]LengthEntry{
-    .{ .base = 3, .extra_bits = 0 },
-    .{ .base = 4, .extra_bits = 0 },
-    .{ .base = 5, .extra_bits = 0 },
-    .{ .base = 6, .extra_bits = 0 },
-    .{ .base = 7, .extra_bits = 0 },
-    .{ .base = 8, .extra_bits = 0 },
-    .{ .base = 9, .extra_bits = 0 },
-    .{ .base = 10, .extra_bits = 0 },
-    .{ .base = 11, .extra_bits = 1 },
-    .{ .base = 13, .extra_bits = 1 },
-    .{ .base = 15, .extra_bits = 1 },
-    .{ .base = 17, .extra_bits = 1 },
-    .{ .base = 19, .extra_bits = 2 },
-    .{ .base = 23, .extra_bits = 2 },
-    .{ .base = 27, .extra_bits = 2 },
-    .{ .base = 31, .extra_bits = 2 },
-    .{ .base = 35, .extra_bits = 3 },
-    .{ .base = 43, .extra_bits = 3 },
-    .{ .base = 51, .extra_bits = 3 },
-    .{ .base = 59, .extra_bits = 3 },
-    .{ .base = 67, .extra_bits = 4 },
-    .{ .base = 83, .extra_bits = 4 },
-    .{ .base = 99, .extra_bits = 4 },
-    .{ .base = 115, .extra_bits = 4 },
-    .{ .base = 131, .extra_bits = 5 },
-    .{ .base = 163, .extra_bits = 5 },
-    .{ .base = 195, .extra_bits = 5 },
-    .{ .base = 227, .extra_bits = 5 },
-    .{ .base = 258, .extra_bits = 0 },
-};
-
-const DistanceEntry = struct { base: u16, extra_bits: u6 };
-const distance_table = [_]DistanceEntry{
-    .{ .base = 1, .extra_bits = 0 },
-    .{ .base = 2, .extra_bits = 0 },
-    .{ .base = 3, .extra_bits = 0 },
-    .{ .base = 4, .extra_bits = 0 },
-    .{ .base = 5, .extra_bits = 1 },
-    .{ .base = 7, .extra_bits = 1 },
-    .{ .base = 9, .extra_bits = 2 },
-    .{ .base = 13, .extra_bits = 2 },
-    .{ .base = 17, .extra_bits = 3 },
-    .{ .base = 25, .extra_bits = 3 },
-    .{ .base = 33, .extra_bits = 4 },
-    .{ .base = 49, .extra_bits = 4 },
-    .{ .base = 65, .extra_bits = 5 },
-    .{ .base = 97, .extra_bits = 5 },
-    .{ .base = 129, .extra_bits = 6 },
-    .{ .base = 193, .extra_bits = 6 },
-    .{ .base = 257, .extra_bits = 7 },
-    .{ .base = 385, .extra_bits = 7 },
-    .{ .base = 513, .extra_bits = 8 },
-    .{ .base = 769, .extra_bits = 8 },
-    .{ .base = 1025, .extra_bits = 9 },
-    .{ .base = 1537, .extra_bits = 9 },
-    .{ .base = 2049, .extra_bits = 10 },
-    .{ .base = 3073, .extra_bits = 10 },
-    .{ .base = 4097, .extra_bits = 11 },
-    .{ .base = 6145, .extra_bits = 11 },
-    .{ .base = 8193, .extra_bits = 12 },
-    .{ .base = 12289, .extra_bits = 12 },
-    .{ .base = 16385, .extra_bits = 13 },
-    .{ .base = 24577, .extra_bits = 13 },
-};
+const semantic_tables = @import("deflate/semantic/tables.zig");
+const LengthEntry = semantic_tables.LengthEntry;
+const length_table = semantic_tables.length_table;
+const DistanceEntry = semantic_tables.DistanceEntry;
+const distance_table = semantic_tables.distance_table;
 
 pub fn zlibStoredEncodedSize(input_len: usize) Error!usize {
     const raw_len = try rawStoredEncodedSize(input_len);
