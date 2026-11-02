@@ -5820,6 +5820,20 @@ const SemanticLinearStep = struct {
     status: SemanticLinearStatus,
 };
 
+const SemanticSinkStatus = enum { complete, need_output };
+
+fn SemanticSinkResult(comptime resumable: bool) type {
+    return if (resumable) SemanticSinkStatus else void;
+}
+
+inline fn semanticSinkResult(
+    comptime resumable: bool,
+    status: SemanticSinkStatus,
+) SemanticSinkResult(resumable) {
+    if (comptime resumable) return status;
+    std.debug.assert(status == .complete);
+}
+
 fn SemanticLinearResult(comptime resumable: bool) type {
     return if (resumable) SemanticLinearStep else usize;
 }
@@ -6509,6 +6523,7 @@ noinline fn decodeSemanticDynamicBlockIntoSink(
     return decodeSemanticDynamicBlockIntoSinkMode(
         false,
         false,
+        false,
         reader,
         sink,
         decoder,
@@ -6522,6 +6537,7 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceSink(
 ) Error!void {
     return decodeSemanticDynamicBlockIntoSinkMode(
         true,
+        false,
         false,
         reader,
         sink,
@@ -6537,6 +6553,22 @@ noinline fn decodeSemanticDynamicBlockIntoRle1Sink(
     return decodeSemanticDynamicBlockIntoSinkMode(
         true,
         true,
+        false,
+        reader,
+        sink,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoSinkStep(
+    noalias reader: *bitstream.BufferedBitReader,
+    sink: anytype,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!SemanticSinkStatus {
+    return decodeSemanticDynamicBlockIntoSinkMode(
+        false,
+        false,
+        true,
         reader,
         sink,
         decoder,
@@ -6546,10 +6578,11 @@ noinline fn decodeSemanticDynamicBlockIntoRle1Sink(
 noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     comptime single_distance: bool,
     comptime rle1_distance: bool,
+    comptime resumable: bool,
     noalias reader: *bitstream.BufferedBitReader,
     sink: anytype,
     noalias decoder: anytype,
-) Error!void {
+) Error!SemanticSinkResult(resumable) {
     comptime std.debug.assert(!rle1_distance or single_distance);
     const Decoder = @TypeOf(decoder.*);
     const input = reader.input;
@@ -6642,7 +6675,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
                 bit_count -= entry_bits;
                 consumed_bits += entry_bits;
                 storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-                return;
+                return semanticSinkResult(resumable, .complete);
             }
             if (symbol > 285) return error.InvalidHuffmanCode;
             const metadata = length_table[symbol - 257];
@@ -6654,7 +6687,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             bit_count -= entry_bits;
             consumed_bits += entry_bits;
             storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-            return;
+            return semanticSinkResult(resumable, .complete);
         }
 
         if (comptime !rle1_distance) {
@@ -6726,6 +6759,12 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
         try sink.copyMatch(length, distance);
     }
 
+    if (comptime resumable) {
+        if (!sink.hasHeadroom(8)) {
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            return .need_output;
+        }
+    }
     storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
     // The semantic loop intentionally stops before boundary conditions.
     // Decode the final handful of symbols through the compact reference tables.
@@ -6734,7 +6773,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
         if (symbol < 256) {
             try sink.emitByte(@truncate(symbol));
         } else if (symbol == 256) {
-            return;
+            return semanticSinkResult(resumable, .complete);
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
             const distance_symbol = try decoder.compact_distance.decodeValue(reader);
@@ -23652,4 +23691,86 @@ test "best selection retains custom search match and block bounds" {
 }
 test "best selection releases all failed candidates and winning buffers" {
     try @import("deflate/tests/best_selection.zig").ownership(@This());
+}
+
+test "resumable semantic sink pauses and resumes at the same bit position" {
+    const vectors = @import("deflate/semantic/long_match_vectors.zig");
+    const expected = try vectors.expectedAlloc(std.testing.allocator);
+    defer std.testing.allocator.free(expected);
+    const active = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(active);
+    @memcpy(active[0..vectors.history_len], expected[0..vectors.history_len]);
+    @memset(active[vectors.history_len..], 0xa5);
+
+    const literals = try huffman.HuffmanTable(286).init(&vectors.literal_lengths);
+    const distances = try huffman.HuffmanTable(30).init(&vectors.distance_lengths);
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literals, &distances));
+    var checked = bitstream.BitReader.init(&vectors.symbol_stream);
+    var checked_written: usize = vectors.history_len;
+    try decodeCompressedBlockIntoReaderNoDict(&checked, active, &checked_written, literals, distances);
+
+    const PauseSink = struct {
+        output: []u8,
+        pos: usize,
+        limit: usize,
+
+        inline fn hasHeadroom(self: *const @This(), count: usize) bool {
+            const needed = @max(count, 258);
+            return self.pos <= self.limit and self.limit - self.pos >= needed;
+        }
+
+        inline fn emitSemanticLiteral(self: *@This(), entry: u32) Error!void {
+            const advance: usize = @intCast((entry >> 8) & 0xf);
+            self.output[self.pos] = @truncate(entry >> 16);
+            self.output[self.pos + 1] = @truncate(entry >> 24);
+            self.pos += advance;
+        }
+
+        inline fn emitSemanticLiteralTriple(self: *@This(), first: u32, second: u32, third: u32) Error!void {
+            const first_advance: usize = @intCast((first >> 8) & 0xf);
+            const second_advance: usize = @intCast((second >> 8) & 0xf);
+            const third_advance: usize = @intCast((third >> 8) & 0xf);
+            const second_offset = first_advance;
+            const third_offset = first_advance + second_advance;
+            const advance = third_offset + third_advance;
+            self.output[self.pos] = @truncate(first >> 16);
+            self.output[self.pos + 1] = @truncate(first >> 24);
+            self.output[self.pos + second_offset] = @truncate(second >> 16);
+            self.output[self.pos + second_offset + 1] = @truncate(second >> 24);
+            self.output[self.pos + third_offset] = @truncate(third >> 16);
+            self.output[self.pos + third_offset + 1] = @truncate(third >> 24);
+            self.pos += advance;
+        }
+
+        inline fn emitByte(self: *@This(), byte: u8) Error!void {
+            self.output[self.pos] = byte;
+            self.pos += 1;
+        }
+
+        inline fn copyMatch(self: *@This(), length: usize, distance: usize) Error!void {
+            try copyMatchAt(self.output, self.pos, length, distance);
+            self.pos += length;
+        }
+    };
+
+    var sink = PauseSink{
+        .output = active,
+        .pos = vectors.history_len,
+        .limit = vectors.history_len + 400,
+    };
+    var reader = bitstream.BufferedBitReader.init(&vectors.symbol_stream);
+    try std.testing.expectEqual(
+        SemanticSinkStatus.need_output,
+        try decodeSemanticDynamicBlockIntoSinkStep(&reader, &sink, &decoder),
+    );
+    try std.testing.expect(sink.pos > vectors.history_len);
+    sink.limit = active.len;
+    try std.testing.expectEqual(
+        SemanticSinkStatus.complete,
+        try decodeSemanticDynamicBlockIntoSinkStep(&reader, &sink, &decoder),
+    );
+    try std.testing.expectEqual(expected.len, sink.pos);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(checked.bitPosition(), reader.bitPosition());
 }
