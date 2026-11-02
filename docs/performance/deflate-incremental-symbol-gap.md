@@ -277,6 +277,18 @@ falls back to one-byte input chunks, exact zlib footer ownership, nonzero
 initial reservoir accounting, and the pre-existing raw/zlib/gzip incremental
 matrices.
 
+## Seventh increment: lazy compact lookup preparation
+
+Dynamic semantic blocks now skip compact primary lookup construction; actual
+compact admission and transactional fallback expand it from the already
+validated canonical Huffman entries. Once-per-block preparation is outlined
+from `step`, and table helpers/window tests are split into cohesive modules.
+Five alternating twelve-source Silesia sweeps at levels 6/9 and 64 KiB/1 MiB
+reduce whole-input latency by 3.5–4.5%, while 4 KiB-input group means improve
+0.4–1.1%. All 960 processes verify content and guards; new tests cover poisoned
+lookups, changing block alphabets and reset/fallback. See
+[protocol and all rows](deflate/compact-tables.md).
+
 ## Status
 
 The first bounded semantic fast path is implemented for standard dynamic

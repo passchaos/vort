@@ -3,6 +3,12 @@ const core = @import("../../../core.zig");
 const huffman = @import("../../../huffman.zig");
 const bitstream = @import("../../../bitstream.zig");
 const semantic = @import("../../semantic/decoder.zig");
+const compact_tables = @import("compact_tables.zig");
+const buildCanonicalLookup = compact_tables.buildCanonicalLookup;
+const validCodeLengthAlphabet = compact_tables.validCodeLengthAlphabet;
+const validDynamicAlphabet = compact_tables.validDynamicAlphabet;
+const tableSymbol = compact_tables.tableSymbol;
+const canonicalSymbol = compact_tables.canonicalSymbol;
 
 pub const Format = struct {
     window_len: usize = 32 * 1024,
@@ -351,36 +357,15 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 .dynamic_lengths => {
                     const total = self.dynamic_hlit + self.dynamic_hdist;
                     if (self.dynamic_length_pos == total) {
-                        if (self.dynamic_literal_lengths[256] == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
-                        if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
-                            !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
-                            return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
-                        buildCanonicalLookup(11, &self.dynamic_literal_lookup, self.dynamic_literal_lengths[0..self.dynamic_hlit]);
-                        buildCanonicalLookup(10, &self.dynamic_distance_lookup, self.dynamic_distance_lengths[0..self.dynamic_hdist]);
-                        self.dynamic_literal_table = huffman.HuffmanTable(286).init(self.dynamic_literal_lengths[0..self.dynamic_hlit]) catch |err| return self.fail(.dynamic_lengths, err);
-                        self.dynamic_distance_table = huffman.HuffmanTable(format.distance_symbol_count).init(self.dynamic_distance_lengths[0..self.dynamic_hdist]) catch |err| return self.fail(.dynamic_lengths, err);
-                        if (comptime supports_semantic_window) {
-                            if (self.semantic_decoder != null and
-                                !self.options.stop_at_output_limit and
-                                self.options.max_distance == format.window_len and
-                                input.len - input_read >= semantic_min_contiguous_input and
-                                self.semantic_scratch.len >= recommended_history_len and
-                                self.semantic_decoder.?.init(
-                                    &self.dynamic_literal_table,
-                                    &self.dynamic_distance_table,
-                                ))
-                            {
-                                // Output produced earlier in this call belongs
-                                // to the fallback ring before it becomes the
-                                // semantic window prefix.
-                                if (history_record_start != output_written) {
-                                    self.recordStepOutput(output[history_record_start..output_written]);
-                                    history_record_start = output_written;
-                                }
-                                self.beginSemanticBlock();
-                                self.phase = .fast_dynamic_block;
-                                continue;
+                        if (try self.prepareDynamicTables(input.len - input_read)) {
+                            // Commit earlier output before linearizing its history.
+                            if (history_record_start != output_written) {
+                                self.recordStepOutput(output[history_record_start..output_written]);
+                                history_record_start = output_written;
                             }
+                            self.beginSemanticBlock();
+                            self.phase = .fast_dynamic_block;
+                            continue;
                         }
                         self.phase = .symbols;
                         continue;
@@ -521,6 +506,43 @@ pub fn DecoderWithFormat(comptime format: Format) type {
 
         const SemanticRunStatus = enum { need_input, need_output, fallback, block_end, done };
 
+        /// Dynamic header work is paid once per block. Keep canonical tree
+        /// preparation outside the symbol-heavy step so table building and
+        /// semantic admission do not enlarge its hot instruction footprint.
+        noinline fn prepareDynamicTables(self: *Self, contiguous_input_len: usize) Error!bool {
+            if (self.dynamic_literal_lengths[256] == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+            if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
+                !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
+                return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+            self.dynamic_literal_table = huffman.HuffmanTable(286).init(self.dynamic_literal_lengths[0..self.dynamic_hlit]) catch |err| return self.fail(.dynamic_lengths, err);
+            self.dynamic_distance_table = huffman.HuffmanTable(format.distance_symbol_count).init(self.dynamic_distance_lengths[0..self.dynamic_hdist]) catch |err| return self.fail(.dynamic_lengths, err);
+            if (comptime supports_semantic_window) {
+                if (self.semantic_decoder != null and
+                    !self.options.stop_at_output_limit and
+                    self.options.max_distance == format.window_len and
+                    contiguous_input_len >= semantic_min_contiguous_input and
+                    self.semantic_scratch.len >= recommended_history_len and
+                    self.semantic_decoder.?.init(
+                        &self.dynamic_literal_table,
+                        &self.dynamic_distance_table,
+                    ))
+                {
+                    return true;
+                }
+            }
+            self.buildDynamicLookups();
+            return false;
+        }
+
+        /// The compact run loop needs its own primary lookups, but a block
+        /// handled entirely by the semantic workspace does not. Build them at
+        /// compact admission or transactional fallback, after the canonical
+        /// tables have already validated both dynamic alphabets.
+        inline fn buildDynamicLookups(self: *Self) void {
+            compact_tables.buildLookupFromTable(11, 286, &self.dynamic_literal_lookup, &self.dynamic_literal_table);
+            compact_tables.buildLookupFromTable(10, format.distance_symbol_count, &self.dynamic_distance_lookup, &self.dynamic_distance_table);
+        }
+
         /// Convert the compact history ring into the chronological prefix used
         /// by the linear semantic decoder. The second caller window is a
         /// temporary here and becomes the generated-output region afterwards.
@@ -617,6 +639,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     error.InvalidHuffmanCode,
                     error.InvalidMatch,
                     => {
+                        self.buildDynamicLookups();
                         self.phase = .symbols;
                         return .fallback;
                     },
@@ -1227,36 +1250,6 @@ fn buildFixedTable(lengths: [288]u4) [288]FixedEntry {
     return out;
 }
 
-fn buildCanonicalLookup(
-    comptime lookup_bits: u4,
-    lookup: *[@as(usize, 1) << lookup_bits]u16,
-    lengths: []const u4,
-) void {
-    @memset(lookup, 0);
-    var counts: [16]u16 = @splat(0);
-    for (lengths) |bits| if (bits != 0) {
-        counts[bits] += 1;
-    };
-    var next: [16]u16 = @splat(0);
-    var code: u16 = 0;
-    for (1..16) |bits| {
-        code = (code + counts[bits - 1]) << 1;
-        next[bits] = code;
-    }
-    for (lengths, 0..) |bits, symbol| {
-        if (bits == 0) continue;
-        const canonical = next[bits];
-        next[bits] += 1;
-        if (bits > lookup_bits) continue;
-        const shift: u4 = @intCast(@as(u5, 16) - @as(u5, bits));
-        const reversed = @bitReverse(canonical) >> shift;
-        const lookup_entry: u16 = ((@as(u16, @intCast(symbol)) + 1) << 4) | bits;
-        const fill = @as(usize, 1) << @intCast(lookup_bits - bits);
-        for (0..fill) |suffix|
-            lookup[reversed | (suffix << bits)] = lookup_entry;
-    }
-}
-
 const BaseBits = struct { base: usize, bits: u6 };
 
 fn lengthBaseAndBitsForFormat(comptime format: Format, symbol: u16) ?BaseBits {
@@ -1299,63 +1292,6 @@ fn distanceMetaTable(comptime format: Format) [format.distance_symbol_count]u32 
 }
 
 const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
-
-fn validCodeLengthAlphabet(lengths: [19]u4) bool {
-    var counts: [8]usize = @splat(0);
-    var active: usize = 0;
-    for (lengths) |length| {
-        if (length > 7) return false;
-        if (length != 0) {
-            counts[length] += 1;
-            active += 1;
-        }
-    }
-    if (active == 0) return false;
-    var available: isize = 1;
-    for (1..8) |bits| {
-        available = available * 2 - @as(isize, @intCast(counts[bits]));
-        if (available < 0) return false;
-    }
-    return true;
-}
-
-fn validDynamicAlphabet(lengths: []const u4) bool {
-    var counts: [16]usize = @splat(0);
-    var active: usize = 0;
-    for (lengths) |length| {
-        if (length > 15) return false;
-        if (length != 0) {
-            counts[length] += 1;
-            active += 1;
-        }
-    }
-    if (active == 0) return false;
-    if (active == 1) return true; // RFC permits one-bit incomplete singleton.
-    var available: isize = 1;
-    for (1..16) |bits| {
-        available = available * 2 - @as(isize, @intCast(counts[bits]));
-        if (available < 0) return false;
-    }
-    return available == 0;
-}
-
-/// Scan the precomputed canonical entries at one code width. Entries are
-/// grouped by width, so this touches only the symbols that can match.
-inline fn tableSymbol(
-    comptime max_symbols: usize,
-    table: *const huffman.HuffmanTable(max_symbols),
-    wanted_code: u16,
-    wanted_bits: u4,
-) ?u16 {
-    const first = table.first_by_bits[wanted_bits];
-    const end = first + table.count_by_bits[wanted_bits];
-    var index: usize = first;
-    while (index < end) : (index += 1) {
-        const entry = table.entries[index];
-        if (entry.code == wanted_code) return entry.symbol;
-    }
-    return null;
-}
 
 /// Stage as many whole bytes as the reservoir can hold in one unaligned
 /// 8-byte load. The symbol loop only calls this when eight input bytes are
@@ -1449,25 +1385,4 @@ inline fn lookupSymbolLocal(
         bit_count.* += 8;
         input_read.* += 1;
     }
-}
-
-fn canonicalSymbol(lengths: []const u4, wanted_code: u16, wanted_bits: u4) ?u16 {
-    var counts: [16]u16 = @splat(0);
-    for (lengths) |length| if (length != 0) {
-        counts[length] += 1;
-    };
-    var next: [16]u16 = @splat(0);
-    var code: u16 = 0;
-    for (1..16) |bits| {
-        code = (code + counts[bits - 1]) << 1;
-        next[bits] = code;
-    }
-    for (lengths, 0..) |bits, symbol| {
-        if (bits == 0) continue;
-        const shift: u4 = @intCast(@as(u5, 16) - @as(u5, bits));
-        const reversed = @bitReverse(next[bits]) >> shift;
-        next[bits] += 1;
-        if (bits == wanted_bits and reversed == wanted_code) return @intCast(symbol);
-    }
-    return null;
 }

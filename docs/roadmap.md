@@ -26056,3 +26056,20 @@ reuse, so production keeps the simpler independently owned plans.
   proves selection and requires a whole-input structured-text win.
   [Evidence](performance/deflate-incremental-symbol-gap.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Incremental Deflate now constructs compact primary lookups only
+  when needed, expanding validated canonical entries instead of deriving codes
+  twice. Once-per-block preparation is outlined from `step`; table helpers and
+  window contracts move into cohesive modules. Five alternating 96-row Silesia
+  comparisons verify 960 processes and reduce whole-input latency 3.5–4.5%,
+  with 4 KiB-input group means improving 0.4–1.1%. The 590-test focused suite
+  and fresh gzip decode gate pass. The gate refreshes captured timing samples
+  and reports runtime zlib version. [Evidence](performance/deflate/compact-tables.md).
+- 2026-11-02: Reproduced the exact libzstd 1.6.0 Mozilla 1 MiB level-3 frame
+  and profiled serialized FSE shapes without timing: 76/91 tables are no-low
+  64/128-state tables; the general routing condition selects its specialized
+  builder for only one table. No RLE blocks/literals are present, so the earlier
+  `memset` attribution is corrected. Next work targets small generic table
+  construction and the actual memset callsite, while Brotli priorities follow
+  payload/dictionary costs. [Evidence](performance/zstd-mozilla-fse-profile.md).
+  The deflate/zstd/brotli industry-best goal remains active.
