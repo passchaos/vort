@@ -15517,6 +15517,29 @@ fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary:
     return decodeZlibWithOptionalDictionaryAndOptions(input, output, dictionary, .{});
 }
 
+pub const png_ring_scratch_len = png_ring_sink.ring_len;
+
+pub fn decodePngRingZlibImageWithOptions(
+    input: []const u8,
+    ring_scratch: []u8,
+    row_scratch: []u8,
+    info: png.PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!void {
+    var sink = try png_ring_sink.RingSemanticSink.init(
+        ring_scratch,
+        row_scratch,
+        output,
+        info.row_len,
+        info.height,
+        info.bytes_per_pixel,
+        info.zlib_payload_len,
+        !options.ignore_adler,
+    );
+    try decodeZlibPngRingSink(input, &sink, options);
+}
+
 pub fn decodeZlibPngRingSink(
     input: []const u8,
     sink: *png_ring_sink.RingSemanticSink,
