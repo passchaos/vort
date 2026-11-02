@@ -117,6 +117,12 @@ prefix/suffix transforms.
   literal and block fills was neutral on mozilla (156.8 vs 156.3 ms per 300
   decodes), so the memset samples are memory-bound stores rather than a
   slow loop shape.
+- Replacing the two 16-byte moves in the Brotli short-match copy with one
+  32-byte vector move for lengths 17-32 and distance at least 32 regressed
+  3.4% at 64 KiB and 7.5% at 1 MiB. The extra `len <= 16 or distance < 32`
+  branch and the wider overcopy cost more than the saved instruction; the
+  two 16-byte moves stay. A naive 32-byte move without the distance guard
+  also failed three overlapping-match tests.
 - `zig build test-zstd` failed under the build runner while the generated
   `vort-zstd-tests` binary passed 1251/1251 when run directly; treat the
   direct binary as the authoritative Zstd test result for now.
