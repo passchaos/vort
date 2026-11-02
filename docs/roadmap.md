@@ -25947,3 +25947,12 @@ reuse, so production keeps the simpler independently owned plans.
   than the per-literal check saves. The per-literal loop stays.
   [Evidence](performance/brotli-incremental-literal-run.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Reading the three Zstd extra-bit fields behind one grouped
+  check (instead of a per-field `fields_are_grouped` branch, with the compact
+  litlen/rep0 special cases folded into uniform zero-width reads) was mixed and
+  reverted. Two 48-row screens give `0.9990/0.9940/1.0019/0.9985` and
+  `0.9993/0.9937/0.9978/0.9972` for level 3/19 at 64 KiB/1 MiB: level 3 at
+  1 MiB gains about 0.6%, the other groups are neutral inside noise, net about
+  0.2%. The branch predictor already handled the per-field checks. The existing
+  per-field form stays. The three-codec industry-best goal stays active.
