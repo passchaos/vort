@@ -9,6 +9,7 @@ const png_ultrafast = @import("png_ultrafast.zig");
 const png_ultrafast_compact = @import("png_ultrafast_compact.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
+const png_ring_sink = @import("deflate/png/ring_sink.zig");
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_full_output = @import("deflate/semantic/full_output.zig");
@@ -15516,6 +15517,60 @@ fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary:
     return decodeZlibWithOptionalDictionaryAndOptions(input, output, dictionary, .{});
 }
 
+pub fn decodeZlibPngRingSink(
+    input: []const u8,
+    sink: *png_ring_sink.RingSemanticSink,
+    options: ZlibDecodeOptions,
+) Error!void {
+    const header = try parseZlibHeader(input, null);
+    if (header.uses_dictionary) return error.UnsupportedDeflateFeature;
+    var reader = bitstream.BufferedBitReader.init(input[header.data_offset..]);
+    while (true) {
+        const block = try readBlockHeader(&reader);
+        if (block.block_type != 2) return error.UnsupportedDeflateFeature;
+        const parsed = try huffman.parseDynamicLengthsAfterHeader(block.final, &reader);
+        const lit_table = try huffman.HuffmanTable(286).init(
+            parsed.literal_lengths[0..parsed.header.hlit],
+        );
+        const dist_table = try huffman.HuffmanTable(30).init(
+            parsed.distance_lengths[0..parsed.header.hdist],
+        );
+        var decoder: SemanticDynamicDecoder = undefined;
+        if (!decoder.init(&lit_table, &dist_table)) {
+            std.debug.print("ring decoder init failed\n", .{});
+            return error.UnsupportedDeflateFeature;
+        }
+        while (true) {
+            const status = try decodeSemanticDynamicBlockIntoSinkStep(
+                &reader,
+                sink,
+                &decoder,
+            );
+            if (status == .complete) break;
+            try sink.drainRows(false);
+            if (sink.hasHeadroom(8)) continue;
+            if (sink.ring.row_start != 0 and
+                sink.ring.write_pos >= sink.ring.row_start)
+            {
+                sink.ring.wrap();
+                continue;
+            }
+            return error.OutputTooSmall;
+        }
+        if (block.final) break;
+    }
+    try sink.drainRows(true);
+    try sink.finish();
+    const footer_offset = header.data_offset + reader.byteOffset();
+    const actual_adler = if (options.ignore_adler) 0 else sink.adlerDigest();
+    try validateZlibFooterWithOptions(
+        input,
+        footer_offset,
+        actual_adler,
+        options,
+    );
+}
+
 fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -23774,4 +23829,43 @@ test "resumable semantic sink pauses and resumes at the same bit position" {
     try std.testing.expectEqual(expected.len, sink.pos);
     try std.testing.expectEqualSlices(u8, expected, active);
     try std.testing.expectEqual(checked.bitPosition(), reader.bitPosition());
+}
+
+test "ring zlib driver decodes a dynamic block and validates Adler" {
+    var tokens: [semantic_non_overlap_mixed_tokens.len + 1]lz77.Token = undefined;
+    tokens[0] = .{ .literal = 0 };
+    @memcpy(tokens[1..], &semantic_non_overlap_mixed_tokens);
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+    const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(expected);
+    const adler = checksum.adler32(expected);
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &.{ 0x78, 0x01 });
+    try frame.appendSlice(std.testing.allocator, raw);
+    try frame.append(std.testing.allocator, @truncate(adler >> 24));
+    try frame.append(std.testing.allocator, @truncate(adler >> 16));
+    try frame.append(std.testing.allocator, @truncate(adler >> 8));
+    try frame.append(std.testing.allocator, @truncate(adler));
+
+    const scratch = try std.testing.allocator.alloc(u8, png_ring_sink.ring_len);
+    defer std.testing.allocator.free(scratch);
+    const row_scratch = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(row_scratch);
+    const output = try std.testing.allocator.alloc(u8, expected.len - 1);
+    defer std.testing.allocator.free(output);
+    var sink = try png_ring_sink.RingSemanticSink.init(
+        scratch,
+        row_scratch,
+        output,
+        expected.len - 1,
+        1,
+        1,
+        expected.len,
+        true,
+    );
+    try decodeZlibPngRingSink(frame.items, &sink, .{});
+    try std.testing.expectEqualSlices(u8, expected[1..], output);
+    try std.testing.expectEqual(adler, sink.adlerDigest());
 }

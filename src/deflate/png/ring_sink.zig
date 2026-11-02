@@ -11,6 +11,7 @@ const ring_history = @import("ring_history.zig");
 
 pub const Error = core.Error;
 pub const Ring = ring_history.Ring;
+pub const ring_len = ring_history.ring_len;
 
 pub const RingSemanticSink = struct {
     ring: Ring,
@@ -56,9 +57,13 @@ pub const RingSemanticSink = struct {
     }
 
     pub inline fn hasHeadroom(self: *const RingSemanticSink, count: usize) bool {
-        if (self.ring.total_written >= self.expected_virtual_len) return false;
-        const remaining = self.expected_virtual_len - self.ring.total_written;
-        const needed = @min(@max(count, 258), remaining);
+        const remaining = self.expected_virtual_len -| self.ring.total_written;
+        // At the exact virtual end, allow the compact tail to read the EOB
+        // token as long as the ring has room for a maximum match.
+        const needed = if (remaining == 0)
+            258
+        else
+            @min(@max(count, 258), remaining);
         const limit = self.ring.writeLimit();
         const space = if (self.ring.write_pos <= limit)
             limit - self.ring.write_pos
@@ -68,6 +73,8 @@ pub const RingSemanticSink = struct {
     }
 
     inline fn writeByte(self: *RingSemanticSink, byte: u8) Error!void {
+        if (self.ring.total_written >= self.expected_virtual_len)
+            return error.SizeMismatch;
         if (self.ring.write_pos >= self.ring.scratch.len) return error.OutputTooSmall;
         self.ring.scratch[self.ring.write_pos] = byte;
         try self.ring.advanceWrite(1);
@@ -170,27 +177,27 @@ pub const RingSemanticSink = struct {
 pub fn ringCopyMatch(ring: *Ring, length: usize, distance: usize) Error!void {
     if (length == 0 or distance == 0 or distance > ring.total_written)
         return error.InvalidMatch;
-    const ring_len = ring.scratch.len;
-    if (length > ring_len) return error.OutputTooSmall;
+    const ring_size = ring.scratch.len;
+    if (length > ring_size) return error.OutputTooSmall;
     const dest_start = ring.write_pos;
     const source_virtual = ring.total_written - distance;
     if (distance == 1) {
-        const byte = ring.scratch[source_virtual % ring_len];
+        const byte = ring.scratch[source_virtual % ring_size];
         var copied: usize = 0;
         while (copied < length) {
-            const destination = (dest_start + copied) % ring_len;
-            const chunk = @min(length - copied, ring_len - destination);
+            const destination = (dest_start + copied) % ring_size;
+            const chunk = @min(length - copied, ring_size - destination);
             @memset(ring.scratch[destination..][0..chunk], byte);
             copied += chunk;
         }
     } else if (distance >= length) {
         var copied: usize = 0;
         while (copied < length) {
-            const source = (source_virtual + copied) % ring_len;
-            const destination = (dest_start + copied) % ring_len;
+            const source = (source_virtual + copied) % ring_size;
+            const destination = (dest_start + copied) % ring_size;
             const chunk = @min(
                 length - copied,
-                @min(ring_len - source, ring_len - destination),
+                @min(ring_size - source, ring_size - destination),
             );
             @memcpy(
                 ring.scratch[destination..][0..chunk],
@@ -201,8 +208,8 @@ pub fn ringCopyMatch(ring: *Ring, length: usize, distance: usize) Error!void {
     } else {
         var copied: usize = 0;
         while (copied < length) : (copied += 1) {
-            const source = (source_virtual + copied) % ring_len;
-            const destination = (dest_start + copied) % ring_len;
+            const source = (source_virtual + copied) % ring_size;
+            const destination = (dest_start + copied) % ring_size;
             ring.scratch[destination] = ring.scratch[source];
         }
     }
