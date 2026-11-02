@@ -123,6 +123,9 @@ prefix/suffix transforms.
   branch and the wider overcopy cost more than the saved instruction; the
   two 16-byte moves stay. A naive 32-byte move without the distance guard
   also failed three overlapping-match tests.
+- Removing the `@branchHint(.unlikely)` on the Brotli context-independent
+  literal path regressed 1.8% at 64 KiB (518.8 → 528.6 ms per 2,000
+  decodes); the hint stays.
 - `zig build test-zstd` failed under the build runner while the generated
   `vort-zstd-tests` binary passed 1251/1251 when run directly; treat the
   direct binary as the authoritative Zstd test result for now.
