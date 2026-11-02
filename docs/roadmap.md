@@ -25956,3 +25956,14 @@ reuse, so production keeps the simpler independently owned plans.
   1 MiB gains about 0.6%, the other groups are neutral inside noise, net about
   0.2%. The branch predictor already handled the per-field checks. The existing
   per-field form stays. The three-codec industry-best goal stays active.
+
+- 2026-11-02: Converting the Brotli wide match-copy entry points
+  (`appendWide`/`appendWideNonZero`) from a `*usize` cursor to a by-value
+  destination plus returned cursor regressed and was reverted:
+  `1.0153/1.0224/1.0157/1.0184` for q6/q11 at 64 KiB/1 MiB. The full-file
+  profile attributes 24% of the tail-lookup payload's instructions to one
+  stack reload of the destination, but that sample is a stall, not extra work:
+  the pointer form lets the callee store directly into the caller's slot,
+  while the by-value form adds a move and keeps the cursor live across the
+  call. The pointer form stays. The three-codec industry-best goal stays
+  active.
