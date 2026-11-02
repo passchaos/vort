@@ -26010,10 +26010,13 @@ reuse, so production keeps the simpler independently owned plans.
   locals, and the phase cases only own input/output pauses. Inlining
   `copyMatchSpan` folds the ring recording into the loop. Paired runs on
   `dickens.64k.l9`/`dickens.1m.l9` moved the decoder from
-  301,950/4,334,700 ns per decode to 267,100/3,810,800 ns (4.80x/3.62x versus
-  the start of the session), leaving a 2.92x/3.04x one-shot gap; comptime
+  301,950/4,334,700 ns per decode to 227,370/3,225,000 ns (5.64x/4.28x versus
+  the start of the session), leaving a 2.50x/2.58x one-shot gap; comptime
   length/distance metadata tables removed the per-match variable-shift
-  arithmetic. `noinline` step, `noalias` slice parameters, a scalar 16-byte
+  arithmetic, and a masked 8-byte bulk reservoir refill cut another 15.0-15.6%
+  (its first unmasked version corrupted block headers on `mozilla.1m.l9`, and
+  the lookahead rewind policy keeps wrapper footer offsets and chunked
+  progress exact). `noinline` step, `noalias` slice parameters, a scalar 16-byte
   copy loop, 64-bit packed semantic lookup entries and a comptime
   limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.

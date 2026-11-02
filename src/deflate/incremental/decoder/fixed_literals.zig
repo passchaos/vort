@@ -428,7 +428,11 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
 
             while (true) {
-                if (output_written.* == output.len and output.len != 0) return .need_output;
+                if (output_written.* == output.len and output.len != 0) {
+                    rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
+                    return .need_output;
+                }
+                refillBitsBulk(input, input_read, &bit_buffer, &bit_count);
                 const symbol = (try self.readLiteralSymbolRun(
                     input,
                     input_read,
@@ -443,6 +447,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                         // space. Preserve it as a one-symbol continuation.
                         code = @intCast(symbol);
                         code_bits = 15;
+                        rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                         return .need_output;
                     }
                     if (self.total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
@@ -456,6 +461,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 }
                 if (symbol == 256) {
                     self.phase = if (self.final_block) .done else .block_header;
+                    rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     if (self.phase == .done) {
                         if (self.options.expected_output_len) |expected| {
                             if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
@@ -506,12 +512,18 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 }
                 try self.beginMatch();
                 self.phase = .match_copy;
-                if (output_written.* == output.len) return .need_output;
+                if (output_written.* == output.len) {
+                    rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
+                    return .need_output;
+                }
                 const n = @min(self.match_remaining, output.len - output_written.*);
                 self.copyMatchSpan(output[output_written.*..][0..n]);
                 output_written.* += n;
                 self.match_remaining -= n;
-                if (self.match_remaining != 0) return .need_output;
+                if (self.match_remaining != 0) {
+                    rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
+                    return .need_output;
+                }
                 self.match_len = 0;
                 self.phase = .symbols;
             }
@@ -999,6 +1011,40 @@ inline fn tableSymbol(
         if (entry.code == wanted_code) return entry.symbol;
     }
     return null;
+}
+
+/// Stage as many whole bytes as the reservoir can hold in one unaligned
+/// 8-byte load. The symbol loop only calls this when eight input bytes are
+/// available, so the byte-at-a-time helpers handle the tail.
+inline fn refillBitsBulk(
+    input: []const u8,
+    input_read: *usize,
+    bit_buffer: *u64,
+    bit_count: *u6,
+) void {
+    if (bit_count.* >= 56 or input_read.* + 8 > input.len) return;
+    const stage = (63 - bit_count.*) / 8;
+    const staged_bits = stage * 8;
+    const staged = std.mem.readInt(u64, input[input_read.*..][0..8], .little) << bit_count.*;
+    // Discard the lookahead bytes above the staged width so a later refill
+    // cannot inherit stale bits from this load.
+    const keep = (@as(u64, 1) << @intCast(bit_count.* + staged_bits)) - 1;
+    bit_buffer.* = (bit_buffer.* | staged) & keep;
+    bit_count.* += staged_bits;
+    input_read.* += stage;
+}
+
+/// Drop complete unconsumed lookahead bytes before a pause or block boundary
+/// and report them as unread, so the caller re-supplies them and progress stays
+/// exact. Only safe when no incomplete token depends on those bytes.
+inline fn rewindStagedLookahead(bit_buffer: *u64, bit_count: *u6, input_read: *usize) void {
+    // Only the most recently staged bytes belong to this call. Older whole
+    // bytes were already reported by a previous call and must stay resident.
+    const rewind: usize = @min(@as(usize, bit_count.* / 8), input_read.*);
+    if (rewind == 0) return;
+    bit_count.* -= @intCast(rewind * 8);
+    bit_buffer.* &= (@as(u64, 1) << bit_count.*) - 1;
+    input_read.* -= rewind;
 }
 
 /// Local-reservoir bit read used by the fused symbol loop. The caller keeps

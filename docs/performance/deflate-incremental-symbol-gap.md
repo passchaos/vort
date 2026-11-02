@@ -106,17 +106,38 @@ computation and ring recording fold into the loop.
 | Fused local-reservoir run loop | 286,940 | 4,125,970 |
 | Inline `copyMatchSpan` | 270,700 | 3,842,200 |
 | Comptime length/distance metadata tables | 267,100 | 3,810,800 |
+| Bulk 8-byte reservoir refill | 227,370 | 3,225,000 |
 
 The fused loop cuts 4.9% at both sizes; inlining `copyMatchSpan` cuts another
 5.9% at 64 KiB and 6.4% at 1 MiB. Replacing the per-match length/distance
 metadata arithmetic with comptime `base | extra << 16` tables cuts another
-1.2% at both sizes and 1.2% of instructions (52.1M → 51.5M per 1 MiB). Against
-the untouched start of this session the streaming decoder is now 4.80x faster
-at 64 KiB (1,282,030 → 267,100 ns) and 3.62x at 1 MiB
-(13,805,130 → 3,810,800 ns). One-shot `decodeRawAuto` on the same rows is
-91,480 and 1,255,070 ns, so the remaining gap is 2.92x and 3.04x instead of
-14.0x and 11.2x. `memcpy` is 19.4% of the remaining instructions, and `step`
-itself is 79.5%.
+1.2% at both sizes and 1.2% of instructions (52.1M → 51.5M per 1 MiB). The
+bulk refill stages up to seven whole bytes with one unaligned 8-byte load
+instead of one byte per refill; it cuts 15.0% at 64 KiB and 15.6% at 1 MiB
+and 7.7% of instructions (51.5M → 47.6M per 1 MiB). Against the untouched
+start of this session the streaming decoder is now 5.64x faster at 64 KiB
+(1,282,030 → 227,370 ns) and 4.28x at 1 MiB (13,805,130 → 3,225,000 ns).
+One-shot `decodeRawAuto` on the same rows is 90,860 and 1,249,270 ns, so the
+remaining gap is 2.50x and 2.58x instead of 14.0x and 11.2x. `memcpy` remains
+the largest non-step component.
+
+Two correctness lessons came out of this increment. First, the initial version
+ORed the full 8-byte load into the reservoir and relied on the lookahead bits
+being re-staged identically later; that assumption failed across some block
+boundaries (`mozilla.1m.l9` reported `InvalidDeflateBlockType` at 17/5, 64/16,
+4096/65536 and 65536/1 chunk shapes), so the reservoir is now masked to the
+staged width. Second, lookahead must not be reported as consumed across pauses.
+Rewinding it unconditionally deadlocked one-byte chunks (the caller re-supplied
+the same byte while the decoder needed the next one), while never rewinding let
+gzip/zlib wrappers lose the footer offset. The adopted policy rewinds complete
+unconsumed bytes at output pauses, block ends and the final EOB, but never when
+input is exhausted, because those bytes belong to the incomplete token. The
+rewind is bounded by the current call's staged byte count, so whole bytes
+already reported by an earlier call stay resident instead of being dropped.
+
+The trailing probe covers dynamic, fixed and stored streams with 0-24 appended
+bytes across seven input/output chunk shapes in strict and
+`allow_trailing_data` modes; all pass with exact EOB progress.
 
 A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
 12%, and a 16-byte scalar copy loop regressed 25%; all were reverted. Packing
