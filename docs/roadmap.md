@@ -26016,7 +26016,12 @@ reuse, so production keeps the simpler independently owned plans.
   arithmetic, a masked 8-byte bulk reservoir refill cut another 15.0-15.6%
   (its first unmasked version corrupted block headers on `mozilla.1m.l9`, and
   the lookahead rewind policy keeps wrapper footer offsets and chunked
-  progress exact), and run-loop history/output locals cut another 1.8-2.2%. `noinline` step, `noalias` slice parameters, a scalar 16-byte
+  progress exact), run-loop history/output locals cut another 1.8-2.2%, and
+  deferred step-end history recording cut another 3.6-7.8% across the corpus
+  by writing only to the caller's output during a step and updating the ring
+  once at step end (6.13x/4.73x versus the session start, 2.29x/2.35x
+  one-shot gap; the streaming decoder now beats classic zlib 1.2.11 on five
+  of eleven Silesia sources). `noinline` step, `noalias` slice parameters, a scalar 16-byte
   copy loop, 64-bit packed semantic lookup entries and a comptime
   limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.

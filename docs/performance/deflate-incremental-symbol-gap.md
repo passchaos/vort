@@ -142,6 +142,32 @@ The trailing probe covers dynamic, fixed and stored streams with 0-24 appended
 bytes across seven input/output chunk shapes in strict and
 `allow_trailing_data` modes; all pass with exact EOB progress.
 
+## Third increment: deferred step-end history recording
+
+Inside one `step` call the decoder now writes literals and matches only to the
+caller's output slice. Match sources are resolved against the combined history
+(pre-step ring followed by this step's output prefix), and the ring is updated
+once at step end with a single bulk copy of `output[0..output_written]`.
+
+| Step | `dickens.64k.l9` ns | `dickens.1m.l9` ns |
+| --- | ---: | ---: |
+| Local history/output state | 223,370 | 3,153,250 |
+| Deferred step-end history recording | 209,230 | 2,917,280 |
+
+The win is 3.6-7.8% across all eleven Silesia sources at 1 MiB level 9
+(Dickens 7.4%, XML 7.8%, reymont 7.1%, x-ray 7.0%, nci 6.2%, mozilla 1.8%),
+and 6.3-7.5% on the two Dickens rows. Against the start of this session the
+streaming decoder is now 6.13x faster at 64 KiB (1,282,030 → 209,230 ns) and
+4.73x at 1 MiB (13,805,130 → 2,917,280 ns). The one-shot gap is 2.29x and
+2.35x.
+
+A fresh C harness against classic zlib 1.2.11 raw `inflate` (same 65536/4096
+chunks, CPU2, `-O3 -march=skylake`) now puts the decoder ahead on Dickens
+(0.94x), nci (0.88x), reymont (0.93x), XML (0.89x) and osdb (0.96x), about
+even on ooffice (1.02x), and still behind mozilla (1.51x), sao (1.22x), x-ray
+(1.12x), mr (1.11x) and samba (1.10x). Those remaining rows are dominated by
+literal/short-match work rather than history copying.
+
 A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
 12%, and a 16-byte scalar copy loop regressed 25%; all were reverted. Packing
 the length/distance metadata into the lookup entry as a 64-bit semantic table

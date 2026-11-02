@@ -180,6 +180,9 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
             var input_read: usize = 0;
             var output_written: usize = 0;
+            defer {
+                if (output_written != 0) self.recordStepOutput(output[0..output_written]);
+            }
             while (!self.options.stop_at_output_limit or self.total_output < self.options.max_output_len) switch (self.phase) {
                 .block_header => {
                     const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
@@ -229,7 +232,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                         const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
                         output[output_written] = @intCast(byte);
                         output_written += 1;
-                        try self.recordByte(@intCast(byte));
+                        self.total_output += 1;
                         self.stored_remaining -= 1;
                     }
                     if (self.stored_remaining != 0 and
@@ -243,7 +246,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                         if (n != 0) {
                             const produced = output[output_written..][0..n];
                             @memcpy(produced, input[input_read..][0..n]);
-                            self.recordSpan(produced);
+                            self.total_output += n;
                             input_read += n;
                             self.total_input += n;
                             output_written += n;
@@ -348,12 +351,12 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     self.match_distance = distance.base;
                     self.length_extra_bits = distance.bits;
                     self.phase = if (distance.bits == 0) .match_copy else .distance_extra;
-                    if (self.phase == .match_copy) try self.beginMatch();
+                    if (self.phase == .match_copy) try self.beginMatchAt(output_written);
                 },
                 .distance_extra => {
                     const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
                     self.match_distance += extra;
-                    try self.beginMatch();
+                    try self.beginMatchAt(output_written);
                     self.phase = .match_copy;
                 },
                 .match_copy => {
@@ -368,8 +371,17 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     }
                     if (output_written == output.len) return result(input_read, output_written, .need_output);
                     const n = @min(self.match_remaining, output.len - output_written);
-                    self.copyMatchSpan(output[output_written..][0..n]);
+                    self.copyMatchSpanAt(
+                        output,
+                        output_written,
+                        n,
+                        self.history.len,
+                        self.history_pos,
+                        self.history_len,
+                        self.match_distance,
+                    );
                     output_written += n;
+                    self.total_output += n;
                     self.match_remaining -= n;
                     if (self.match_remaining == 0) {
                         self.match_len = 0;
@@ -414,14 +426,12 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             var dynamic_code_bits = self.dynamic_code_bits;
             var distance_code = self.distance_code;
             var distance_code_bits = self.distance_code_bits;
-            var history_pos = self.history_pos;
-            var history_len = self.history_len;
             var total_output = self.total_output;
             const history_capacity = self.history.len;
+            const history_pos = self.history_pos;
+            const history_len = self.history_len;
             const start_input = input_read.*;
             defer {
-                self.history_pos = history_pos;
-                self.history_len = history_len;
                 self.total_output = total_output;
                 self.bit_buffer = bit_buffer;
                 self.bit_count = bit_count;
@@ -463,7 +473,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     }
                     output[output_written.*] = @intCast(symbol);
                     output_written.* += 1;
-                    self.recordByteLocal(@intCast(symbol), &history_pos, &history_len, &total_output);
+                    total_output += 1;
                     continue;
                 }
                 if (symbol == 256) {
@@ -517,21 +527,24 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     };
                     self.match_distance += extra;
                 }
-                try self.beginMatchWith(history_capacity, history_len, total_output);
+                try self.beginMatchWith(history_capacity, history_len, output_written.*, total_output);
                 self.phase = .match_copy;
                 if (output_written.* == output.len) {
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     return .need_output;
                 }
                 const n = @min(self.match_remaining, output.len - output_written.*);
-                self.copyMatchSpanLocal(
-                    output[output_written.*..][0..n],
+                self.copyMatchSpanAt(
+                    output,
+                    output_written.*,
+                    n,
                     history_capacity,
-                    &history_pos,
-                    &history_len,
-                    &total_output,
+                    history_pos,
+                    history_len,
+                    self.match_distance,
                 );
                 output_written.* += n;
+                total_output += n;
                 self.match_remaining -= n;
                 if (self.match_remaining != 0) {
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
@@ -652,101 +665,93 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
             return self.fail(.symbols, error.InvalidHuffmanCode);
         }
-        /// Local-state variants used by the fused symbol loop. They keep the
-        /// ring position, retained length and output counter in registers;
-        /// the outlined `recordByte`/`recordSpan`/`copyMatchSpan` serve the
-        /// phase paths and stored blocks. The two forms must stay identical.
-        inline fn recordByteLocal(
-            self: *Self,
-            byte: u8,
-            history_pos: *usize,
-            history_len: *usize,
-            total_output: *usize,
-        ) void {
-            const capacity = self.history.len;
-            if (capacity != 0) {
-                self.history[history_pos.*] = byte;
-                const next = history_pos.* + 1;
-                history_pos.* = if (next == capacity) 0 else next;
-                history_len.* = @min(history_len.* + 1, capacity);
-            }
-            total_output.* += 1;
-        }
-
-        inline fn recordSpanLocal(
-            self: *Self,
-            bytes: []const u8,
-            history_capacity: usize,
-            history_pos: *usize,
-            history_len: *usize,
-            total_output: *usize,
-        ) void {
+        /// Append the bytes produced by one `step` call to the history ring.
+        /// Matches inside the step read earlier step output from the caller's
+        /// buffer, so the ring only needs one bulk update per call.
+        fn recordStepOutput(self: *Self, bytes: []const u8) void {
             std.debug.assert(bytes.len != 0);
-            if (history_capacity == 0) {
-                total_output.* += bytes.len;
-                return;
-            }
-            if (bytes.len <= history_capacity) {
-                const destination = history_pos.*;
-                const first_destination_len = @min(bytes.len, history_capacity - destination);
-                @memcpy(self.history[destination..][0..first_destination_len], bytes[0..first_destination_len]);
-                if (first_destination_len != bytes.len)
-                    @memcpy(self.history[0 .. bytes.len - first_destination_len], bytes[first_destination_len..]);
+            const capacity = self.history.len;
+            if (capacity == 0) return;
+            if (bytes.len <= capacity) {
+                const destination = self.history_pos;
+                const first = @min(bytes.len, capacity - destination);
+                @memcpy(self.history[destination..][0..first], bytes[0..first]);
+                if (first != bytes.len)
+                    @memcpy(self.history[0 .. bytes.len - first], bytes[first..]);
                 const next = destination + bytes.len;
-                history_pos.* = if (next >= history_capacity) next - history_capacity else next;
-                history_len.* = @min(history_len.* + bytes.len, history_capacity);
-                total_output.* += bytes.len;
+                self.history_pos = if (next >= capacity) next - capacity else next;
+                self.history_len = @min(self.history_len + bytes.len, capacity);
                 return;
             }
-            const retained_len = history_capacity;
-            const retained = bytes[bytes.len - retained_len ..];
-            const destination = (history_pos.* + bytes.len - retained_len) % history_capacity;
-            const first_destination_len = @min(retained.len, history_capacity - destination);
-            @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
-            if (first_destination_len != retained.len)
-                @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
-            history_pos.* = (history_pos.* + bytes.len) % history_capacity;
-            history_len.* = history_capacity;
-            total_output.* += bytes.len;
+            const retained = bytes[bytes.len - capacity ..];
+            const destination = (self.history_pos + bytes.len - capacity) % capacity;
+            const first = @min(retained.len, capacity - destination);
+            @memcpy(self.history[destination..][0..first], retained[0..first]);
+            if (first != retained.len)
+                @memcpy(self.history[0 .. retained.len - first], retained[first..]);
+            self.history_pos = (self.history_pos + bytes.len) % capacity;
+            self.history_len = capacity;
         }
 
-        inline fn copyMatchSpanLocal(
+        /// Copy one match span from the combined history: the pre-step ring
+        /// followed by the bytes this step has already written to `step_output`.
+        /// `span_start` is the step-local output offset of the span.
+        inline fn copyMatchSpanAt(
             self: *Self,
-            output: []u8,
+            step_output: []u8,
+            span_start: usize,
+            span_len: usize,
             history_capacity: usize,
-            history_pos: *usize,
-            history_len: *usize,
-            total_output: *usize,
+            history_pos: usize,
+            history_len: usize,
+            match_distance: usize,
         ) void {
-            std.debug.assert(output.len != 0);
-            std.debug.assert(self.match_distance != 0);
-            std.debug.assert(self.match_distance <= history_len.*);
-
-            const seed_len = @min(output.len, self.match_distance);
-            var source = history_pos.* + history_capacity - self.match_distance;
-            if (source >= history_capacity) source -= history_capacity;
-            if (self.match_distance == 1) {
-                @memset(output, self.history[source]);
-            } else {
-                const first_source_len = @min(seed_len, history_capacity - source);
-                @memcpy(output[0..first_source_len], self.history[source..][0..first_source_len]);
-                if (first_source_len != seed_len)
-                    @memcpy(output[first_source_len..seed_len], self.history[0 .. seed_len - first_source_len]);
-
-                var produced = seed_len;
-                while (produced < output.len) {
-                    const n = @min(produced, output.len - produced);
-                    std.mem.copyForwards(u8, output[produced..][0..n], output[0..n]);
-                    produced += n;
+            std.debug.assert(span_len != 0);
+            std.debug.assert(match_distance != 0);
+            std.debug.assert(match_distance <= history_len + span_start);
+            const dest = step_output[span_start..][0..span_len];
+            if (match_distance <= span_start) {
+                const source = span_start - match_distance;
+                if (match_distance >= span_len) {
+                    @memcpy(dest, step_output[source..][0..span_len]);
+                } else {
+                    std.mem.copyForwards(u8, dest, step_output[source..][0..span_len]);
                 }
+                return;
             }
-
-            self.recordSpanLocal(output, history_capacity, history_pos, history_len, total_output);
+            // The source starts in the pre-step ring.
+            const ring_bytes = @min(span_len, match_distance - span_start);
+            var source = history_pos + history_capacity - (match_distance - span_start);
+            if (source >= history_capacity) source -= history_capacity;
+            const first = @min(ring_bytes, history_capacity - source);
+            @memcpy(dest[0..first], self.history[source..][0..first]);
+            if (first != ring_bytes)
+                @memcpy(dest[first..ring_bytes], self.history[0 .. ring_bytes - first]);
+            var written = ring_bytes;
+            if (written == span_len) return;
+            const prefix_bytes = @min(span_len - written, span_start);
+            if (prefix_bytes != 0) {
+                std.mem.copyForwards(u8, dest[written..][0..prefix_bytes], step_output[0..prefix_bytes]);
+                written += prefix_bytes;
+            }
+            if (written == span_len) return;
+            // `written` is now `match_distance`; repeat the match pattern.
+            while (written < span_len) {
+                const n = @min(written, span_len - written);
+                std.mem.copyForwards(u8, dest[written..][0..n], dest[0..n]);
+                written += n;
+            }
         }
 
-        fn beginMatchWith(self: *Self, history_capacity: usize, history_len: usize, total_output: usize) Error!void {
+        fn beginMatchWith(
+            self: *Self,
+            history_capacity: usize,
+            history_len: usize,
+            produced: usize,
+            total_output: usize,
+        ) Error!void {
             if (history_capacity == 0) return self.fail(.match_copy, error.OutputTooSmall);
-            if (self.match_distance == 0 or self.match_distance > history_len) return self.fail(.match_copy, error.InvalidMatch);
+            if (self.match_distance == 0 or self.match_distance > history_len + produced) return self.fail(.match_copy, error.InvalidMatch);
             if (self.match_distance > self.options.max_distance) return self.fail(.match_copy, error.InvalidMatch);
             if (!self.options.stop_at_output_limit and (total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
             if (self.options.expected_output_len) |expected| {
@@ -755,8 +760,13 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             self.match_remaining = self.match_len;
         }
 
-        fn beginMatch(self: *Self) Error!void {
-            return self.beginMatchWith(self.history.len, self.history_len, self.total_output);
+        fn beginMatchAt(self: *Self, produced: usize) Error!void {
+            return self.beginMatchWith(
+                self.history.len,
+                self.history_len,
+                produced,
+                self.total_output,
+            );
         }
 
         fn alignStoredHeader(self: *Self) void {
@@ -848,81 +858,6 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 self.dynamic_distance_lengths[self.dynamic_length_pos - self.dynamic_hlit] = value;
             }
         }
-        fn recordByte(self: *Self, byte: u8) Error!void {
-            if (self.history.len != 0) {
-                self.history[self.history_pos] = byte;
-                // `history_pos` is always below `history.len`, so advancing by
-                // one needs at most a single wrap instead of a modulo.
-                const next = self.history_pos + 1;
-                self.history_pos = if (next == self.history.len) 0 else next;
-                self.history_len = @min(self.history_len + 1, self.history.len);
-            }
-            self.total_output += 1;
-        }
-
-        inline fn copyMatchSpan(self: *Self, output: []u8) void {
-            std.debug.assert(output.len != 0);
-            std.debug.assert(self.match_distance != 0);
-            std.debug.assert(self.match_distance <= self.history_len);
-
-            const seed_len = @min(output.len, self.match_distance);
-            // `match_distance <= history_len <= history.len` and
-            // `history_pos < history.len`, so the sum stays below two
-            // window lengths and needs at most one wrap correction.
-            var source = self.history_pos + self.history.len - self.match_distance;
-            if (source >= self.history.len) source -= self.history.len;
-            if (self.match_distance == 1) {
-                @memset(output, self.history[source]);
-            } else {
-                const first_source_len = @min(seed_len, self.history.len - source);
-                @memcpy(output[0..first_source_len], self.history[source..][0..first_source_len]);
-                if (first_source_len != seed_len)
-                    @memcpy(output[first_source_len..seed_len], self.history[0 .. seed_len - first_source_len]);
-
-                var produced = seed_len;
-                while (produced < output.len) {
-                    const n = @min(produced, output.len - produced);
-                    std.mem.copyForwards(u8, output[produced..][0..n], output[0..n]);
-                    produced += n;
-                }
-            }
-
-            self.recordSpan(output);
-        }
-
-        fn recordSpan(self: *Self, bytes: []const u8) void {
-            std.debug.assert(bytes.len != 0);
-            if (self.history.len == 0) {
-                self.total_output += bytes.len;
-                return;
-            }
-            if (bytes.len <= self.history.len) {
-                // Fast path for match spans and small stored chunks: everything
-                // fits in one ring revolution, so the destination is the
-                // current write position and the advance needs one wrap check.
-                const destination = self.history_pos;
-                const first_destination_len = @min(bytes.len, self.history.len - destination);
-                @memcpy(self.history[destination..][0..first_destination_len], bytes[0..first_destination_len]);
-                if (first_destination_len != bytes.len)
-                    @memcpy(self.history[0 .. bytes.len - first_destination_len], bytes[first_destination_len..]);
-                const next = destination + bytes.len;
-                self.history_pos = if (next >= self.history.len) next - self.history.len else next;
-                self.history_len = @min(self.history_len + bytes.len, self.history.len);
-                self.total_output += bytes.len;
-                return;
-            }
-            const retained_len = self.history.len;
-            const retained = bytes[bytes.len - retained_len ..];
-            const destination = (self.history_pos + bytes.len - retained_len) % self.history.len;
-            const first_destination_len = @min(retained.len, self.history.len - destination);
-            @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
-            if (first_destination_len != retained.len)
-                @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
-            self.history_pos = (self.history_pos + bytes.len) % self.history.len;
-            self.history_len = self.history.len;
-            self.total_output += bytes.len;
-        }
-
         fn readBits(self: *Self, input: []const u8, input_read: *usize, count: u6) ?usize {
             while (self.bit_count < count) {
                 if (input_read.* == input.len) return null;
