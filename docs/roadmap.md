@@ -26092,3 +26092,12 @@ reuse, so production keeps the simpler independently owned plans.
   one-shot/reusable latency 12.3%/11.9%; all 1,260 ReleaseSafe tests and 9,900
   upstream frames pass. [Evidence](performance/zstd/optional-huffman-state.md).
   The three-format industry-best objective remains active.
+
+- 2026-11-02: Added a cohesive Zstd raw-literal fixed-mode reader/executor for
+  predefined LL/ML and compressed OF tables. Field groups preserve exact
+  error progress, while larger groups/tails use checked reads. Five 96-row
+  public API sweeps verify 960 processes and improve Mozilla 1 MiB level-3
+  one-shot/reusable latency about 3.0%/3.2%; long controls confirm the target
+  and keep unrelated rows within 0.3%. All 1,261 Zstd tests and 9,900 upstream
+  frames pass. [Evidence](performance/zstd/raw-mixed-sequences.md).
+  The deflate/zstd/brotli industry-best objective remains active.

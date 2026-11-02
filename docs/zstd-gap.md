@@ -1936,3 +1936,17 @@ resolves the initial small-row dip. All 1,260 ReleaseSafe Zstd tests and 9,900
 upstream frames pass. The target still runs at about 1.79x native libzstd
 latency. Next work targets the sequence executor and raw fixed-mode loops.
 [Evidence](performance/zstd/optional-huffman-state.md).
+
+## 2026-11-02: fixed-mode raw sequence executor
+
+Raw-literal blocks with predefined LL/ML and compressed OF now dispatch once
+to a dedicated checked reader/executor, retaining generic cursor/error and
+history-copy rules. Mozilla 1 MiB level 3 has sixteen such blocks and 804
+sequences. Five 96-row public API sweeps verify 960 processes and improve its
+one-shot/reusable latency by about 3.0%/3.2%; fifteen longer target pairs
+confirm 3.1% with all 15 wins. Long MR/NCI controls stay within about 0.3% of
+baseline. Independent sequence, mutation, truncation and executor oracles
+cover 32,078 sequence pairs and 1,322 executor pairs in three modes; the full
+1,261 ReleaseSafe Zstd tests and 9,900 upstream frames pass.
+[Evidence](performance/zstd/raw-mixed-sequences.md). Dense split-Huffman work
+and the wider cross-format performance objective remain open.

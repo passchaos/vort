@@ -183,6 +183,7 @@ var test_split_huffman_short_rep0_fast_hits: usize = 0;
 var test_split_huffman_field_group_hits: usize = 0;
 var test_large_fse_no_low_builder_hits: usize = 0;
 var test_small_fse_no_low_builder_hits: usize = 0;
+var test_raw_mixed_sequence_blocks: usize = 0;
 var test_small_mixed_fse_fast_literal_hits: usize = 0;
 var test_small_mixed_fse_match_56_hits: usize = 0;
 var test_small_mixed_fse_match_6_7_hits: usize = 0;
@@ -13113,6 +13114,11 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman.*);
         return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman.*);
     }
+    if (section.kind == .raw and spec.ll_mode == .predefined and
+        spec.of_mode == .compressed and spec.ml_mode == .predefined)
+    {
+        return decodePredefinedOffsetFsePredefinedRaw(block, section, output, written, frame_output_start, dictionary_history, frame_state, continuation, &state);
+    }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
@@ -13364,6 +13370,11 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
         if (sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count))
             return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman.*);
         return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman.*);
+    }
+    if (section.kind == .raw and spec.ll_mode == .predefined and
+        spec.of_mode == .compressed and spec.ml_mode == .predefined)
+    {
+        return decodePredefinedOffsetFsePredefinedRaw(block, section, output, written, frame_output_start, dictionary_history, frame_state, continuation, &state);
     }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
@@ -15789,6 +15800,62 @@ fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     }
 
     return .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
+}
+
+noinline fn decodePredefinedOffsetFsePredefinedRaw(
+    block: []const u8,
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+) Error!void {
+    std.debug.assert(section.kind == .raw);
+    std.debug.assert(state.spec.ll_mode == .predefined and state.spec.of_mode == .compressed and state.spec.ml_mode == .predefined);
+    if (builtin.is_test) test_atomic_counter.add(&test_raw_mixed_sequence_blocks, 1);
+    return @import("zstd/sequence/raw_mixed.zig").execute(
+        block,
+        section,
+        output,
+        written,
+        frame_output_start,
+        dictionary_history,
+        frame_state,
+        continuation,
+        state,
+        resolveSequenceOffset,
+        copyLiteralsFromSection,
+        copyMatchFromHistory,
+        SequenceModeSpec.tables,
+    );
+}
+
+const RawMixedTestSupport = struct {
+    pub const Codec = ParallelCodecSupport;
+    pub const State = SequenceDecodeState;
+    pub const Section = LiteralOnlySection;
+    pub const FrameState = SequenceFrameState;
+    pub const Continuation = sequence_continuation.Context;
+    pub const Reader = ReverseBitReader;
+    pub const resolveOffset = resolveSequenceOffset;
+    pub const execute = decodePredefinedOffsetFsePredefinedRaw;
+    pub const copyLiterals = copyLiteralsFromSection;
+    pub const copyMatch = copyMatchFromHistory;
+    pub const tables = SequenceModeSpec.tables;
+    pub const firstBlock = inspectNativeFrameFirstBlock;
+    pub const readGeneric = readModeSequence;
+    pub const readSpecialized = @import("zstd/sequence/raw_mixed.zig").read;
+    pub const initState = initSequenceDecodeState;
+    pub const decodePublic = decodeFrameInto;
+    pub const Reusable = NativeFrameDecoder;
+    pub const blockHits = &test_raw_mixed_sequence_blocks;
+};
+
+test "Zstd raw mixed predefined compressed predefined sequence oracle" {
+    try @import("zstd/sequence/raw_mixed_tests.zig").check(RawMixedTestSupport);
 }
 
 fn currentLiteralSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
