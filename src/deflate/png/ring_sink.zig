@@ -13,6 +13,11 @@ pub const Error = core.Error;
 pub const Ring = ring_history.Ring;
 pub const ring_len = ring_history.ring_len;
 
+pub const Pending = union(enum) {
+    literal: u8,
+    match: struct { length: usize, distance: usize },
+};
+
 pub const RingSemanticSink = struct {
     ring: Ring,
     row_len: usize,
@@ -25,6 +30,7 @@ pub const RingSemanticSink = struct {
     row_index: usize = 0,
     check_adler: bool,
     adler: checksum.Adler32 = .{},
+    pending: ?Pending = null,
 
     pub fn init(
         scratch: []u8,
@@ -54,6 +60,45 @@ pub const RingSemanticSink = struct {
             .row_scratch = row_scratch[0..stride],
             .check_adler = check_adler,
         };
+    }
+
+    fn spaceFor(self: *const RingSemanticSink, length: usize) bool {
+        const limit = self.ring.writeLimit();
+        if (self.ring.write_pos <= limit) {
+            const space = limit - self.ring.write_pos;
+            if (length <= space) return true;
+            if (limit == self.ring.scratch.len and
+                self.ring.row_start >= length - space)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub inline fn canWriteLiteral(self: *const RingSemanticSink) bool {
+        return self.spaceFor(1);
+    }
+
+    pub inline fn canWriteMatch(self: *const RingSemanticSink, length: usize) bool {
+        return self.spaceFor(length);
+    }
+
+    pub inline fn canWritePending(self: *const RingSemanticSink) bool {
+        const pending = self.pending orelse return true;
+        return switch (pending) {
+            .literal => self.canWriteLiteral(),
+            .match => |match| self.canWriteMatch(match.length),
+        };
+    }
+
+    pub fn writePending(self: *RingSemanticSink) Error!void {
+        const pending = self.pending orelse return;
+        self.pending = null;
+        switch (pending) {
+            .literal => |literal| try self.emitByte(literal),
+            .match => |match| try self.copyMatch(match.length, match.distance),
+        }
     }
 
     pub inline fn hasHeadroom(self: *const RingSemanticSink, count: usize) bool {

@@ -39,7 +39,15 @@ pub const Ring = struct {
     /// is already past that row in the current lap, the rest of the lap is
     /// free and the ring end is the limit.
     pub fn writeLimit(self: *const Ring) usize {
-        if (self.write_pos < self.row_start) return self.row_start;
+        if (self.write_pos <= self.row_start) {
+            // At the very start there are no unreleased rows yet.
+            if (self.row_start == 0 and self.write_pos == 0 and
+                self.total_written == 0)
+            {
+                return self.scratch.len;
+            }
+            return self.row_start;
+        }
         return self.scratch.len;
     }
 

@@ -6593,6 +6593,11 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     var byte_index = reader.byte_index;
     var consumed_bits = reader.consumed_bits;
 
+    if (comptime resumable) {
+        if (sink.pending != null)
+            return decodeSemanticCompactBlockIntoSinkStep(reader, sink, decoder);
+    }
+
     if (sink.hasHeadroom(8) and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
@@ -6762,10 +6767,8 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     }
 
     if (comptime resumable) {
-        if (!sink.hasHeadroom(8)) {
-            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-            return .need_output;
-        }
+        storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+        return decodeSemanticCompactBlockIntoSinkStep(reader, sink, decoder);
     }
     storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
     // The semantic loop intentionally stops before boundary conditions.
@@ -6780,6 +6783,43 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             const length = try decodeLength(symbol, reader);
             const distance_symbol = try decoder.compact_distance.decodeValue(reader);
             const distance = try decodeDistance(distance_symbol, reader);
+            try sink.copyMatch(length, distance);
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn decodeSemanticCompactBlockIntoSinkStep(
+    reader: anytype,
+    sink: anytype,
+    decoder: anytype,
+) Error!SemanticSinkStatus {
+    while (true) {
+        if (sink.pending != null) {
+            if (!sink.canWritePending()) return .need_output;
+            try sink.writePending();
+        }
+        const symbol = try decoder.compact_literal.decodeValue(reader);
+        if (symbol < 256) {
+            const literal: u8 = @truncate(symbol);
+            if (!sink.canWriteLiteral()) {
+                sink.pending = .{ .literal = literal };
+                return .need_output;
+            }
+            try sink.emitByte(literal);
+        } else if (symbol == 256) {
+            return .complete;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try decoder.compact_distance.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            if (!sink.canWriteMatch(length)) {
+                sink.pending = .{
+                    .match = .{ .length = length, .distance = distance },
+                };
+                return .need_output;
+            }
             try sink.copyMatch(length, distance);
         } else {
             return error.InvalidHuffmanCode;
@@ -15570,14 +15610,14 @@ pub fn decodeZlibPngRingSink(
                 &decoder,
             );
             if (status == .complete) break;
+            const before = sink.ring.total_consumed;
             try sink.drainRows(false);
-            if (sink.hasHeadroom(8)) continue;
-            if (sink.ring.row_start != 0 and
-                sink.ring.write_pos >= sink.ring.row_start)
-            {
-                sink.ring.wrap();
-                continue;
+            if (sink.ring.total_consumed != before) continue;
+            if (sink.pending != null) {
+                if (sink.canWritePending()) continue;
+                return error.OutputTooSmall;
             }
+            if (sink.hasHeadroom(1)) continue;
             return error.OutputTooSmall;
         }
         if (block.final) break;
@@ -23793,6 +23833,32 @@ test "resumable semantic sink pauses and resumes at the same bit position" {
         output: []u8,
         pos: usize,
         limit: usize,
+        pending: ?png_ring_sink.Pending = null,
+
+        inline fn canWriteLiteral(self: *const @This()) bool {
+            return self.pos < self.limit;
+        }
+
+        inline fn canWriteMatch(self: *const @This(), length: usize) bool {
+            return self.pos <= self.limit and self.limit - self.pos >= length;
+        }
+
+        inline fn canWritePending(self: *const @This()) bool {
+            const pending = self.pending orelse return true;
+            return switch (pending) {
+                .literal => self.canWriteLiteral(),
+                .match => |match| self.canWriteMatch(match.length),
+            };
+        }
+
+        inline fn writePending(self: *@This()) Error!void {
+            const pending = self.pending orelse return;
+            self.pending = null;
+            switch (pending) {
+                .literal => |literal| try self.emitByte(literal),
+                .match => |match| try self.copyMatch(match.length, match.distance),
+            }
+        }
 
         inline fn hasHeadroom(self: *const @This(), count: usize) bool {
             const needed = @max(count, 258);
