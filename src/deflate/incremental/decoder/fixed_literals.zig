@@ -474,6 +474,32 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     output[output_written.*] = @intCast(symbol);
                     output_written.* += 1;
                     total_output += 1;
+                    // Try one adjacent literal without re-entering the loop.
+                    // This pays off on literal runs and costs only a table
+                    // load plus a predictable miss on match-heavy streams.
+                    if (output_written.* < output.len) {
+                        const next_entry: u16 = if (self.dynamic_block) blk: {
+                            if (bit_count < 11) break :blk 0;
+                            break :blk self.dynamic_literal_lookup[@intCast(bit_buffer & 0x7ff)];
+                        } else blk: {
+                            if (bit_count < 9) break :blk 0;
+                            break :blk fixed_lookup[@intCast(bit_buffer & 0x1ff)];
+                        };
+                        if (next_entry != 0) {
+                            const next_bits: u6 = @intCast(next_entry & 0x0f);
+                            const next_symbol = (next_entry >> 4) - 1;
+                            if (next_symbol < 256 and bit_count >= next_bits and
+                                total_output < self.options.max_output_len and
+                                (self.options.expected_output_len == null or total_output < self.options.expected_output_len.?))
+                            {
+                                bit_buffer >>= next_bits;
+                                bit_count -= next_bits;
+                                output[output_written.*] = @intCast(next_symbol);
+                                output_written.* += 1;
+                                total_output += 1;
+                            }
+                        }
+                    }
                     continue;
                 }
                 if (symbol == 256) {

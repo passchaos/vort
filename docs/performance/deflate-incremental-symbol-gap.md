@@ -168,6 +168,31 @@ even on ooffice (1.02x), and still behind mozilla (1.51x), sao (1.22x), x-ray
 (1.12x), mr (1.11x) and samba (1.10x). Those remaining rows are dominated by
 literal/short-match work rather than history copying.
 
+## Fourth increment: adjacent-literal peek
+
+After writing a literal the run loop now peeks the next 11-bit (dynamic) or
+9-bit (fixed) lookup entry and, when it is another literal that fits the
+staged bits, writes it in the same iteration. This avoids the loop back-edge,
+bulk-refill guard, dynamic/fixed branch, staged-literal check and limit
+checks for the second literal.
+
+| Step | `dickens.64k.l9` ns | `dickens.1m.l9` ns |
+| --- | ---: | ---: |
+| Deferred step-end history | 209,230 | 2,917,280 |
+| Adjacent-literal peek | 204,330 | 2,903,120 |
+
+The Dickens rows gain 2.0% and 0.7%, but the win is much larger on
+literal-heavy sources at 1 MiB level 9: mozilla 16.2%, osdb 12.5%, sao 8.9%,
+samba 7.3%, ooffice 4.8%, nci 2.4%, XML 2.2%; mr and x-ray stay inside noise.
+Against the start of this session the streaming decoder is now 6.27x faster at
+64 KiB (1,282,030 → 204,330 ns) and 4.76x at 1 MiB
+(13,805,130 → 2,903,120 ns). The one-shot gap is 2.24x and 2.33x.
+
+Against classic zlib 1.2.11 the decoder is now faster on Dickens (0.93x), nci
+(0.86x), ooffice (0.97x), osdb (0.84x), reymont (0.93x) and XML (0.88x), about
+even on samba (1.02x), and still behind mozilla (1.27x), sao (1.12x), x-ray
+(1.12x) and mr (1.12x).
+
 A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
 12%, and a 16-byte scalar copy loop regressed 25%; all were reverted. Packing
 the length/distance metadata into the lookup entry as a 64-bit semantic table

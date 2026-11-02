@@ -26021,7 +26021,10 @@ reuse, so production keeps the simpler independently owned plans.
   by writing only to the caller's output during a step and updating the ring
   once at step end (6.13x/4.73x versus the session start, 2.29x/2.35x
   one-shot gap; the streaming decoder now beats classic zlib 1.2.11 on five
-  of eleven Silesia sources). `noinline` step, `noalias` slice parameters, a scalar 16-byte
+  of eleven Silesia sources), and an adjacent-literal peek cut another
+  0.7-16.2% depending on literal density (6.27x/4.76x versus the session
+  start, 2.24x/2.33x one-shot gap, now faster than classic zlib on six of
+  eleven sources). `noinline` step, `noalias` slice parameters, a scalar 16-byte
   copy loop, 64-bit packed semantic lookup entries and a comptime
   limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.
