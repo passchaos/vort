@@ -85,14 +85,42 @@ Rejected or neutral experiments:
   already has a vectorized small-size path, and the extra length branch costs
   more than the call it avoids.
 
-Incremental decoding now executes about 61M instructions per 1 MiB versus
-14.4M for one-shot, and `memcpy` is 16% of that profile. The remaining cost is
+Incremental decoding then executed about 61M instructions per 1 MiB versus
+14.4M for one-shot, and `memcpy` was 16% of that profile. The remaining cost is
 the resumable phase machine plus the ring history copy, not a single hot
 instruction.
 
+## Second increment: fused local-reservoir symbol loop
+
+The `.symbols` phase now calls `decodeSymbolRun`, which decodes literals,
+length/distance headers, extra bits and the match copy in one loop with the
+reservoir, partial-code state, input cursor and output cursor held in locals.
+The phase cases remain only as the resumption owners for input exhaustion,
+output-full pauses and partial match copies; `decodeSymbolRun` writes all shared
+state back before returning. `copyMatchSpan` is `inline`, so its source
+computation and ring recording fold into the loop.
+
+| Step | `dickens.64k.l9` ns | `dickens.1m.l9` ns |
+| --- | ---: | ---: |
+| After first increment | 301,950 | 4,334,700 |
+| Fused local-reservoir run loop | 286,940 | 4,125,970 |
+| Inline `copyMatchSpan` | 270,700 | 3,842,200 |
+
+The fused loop cuts 4.9% at both sizes; inlining `copyMatchSpan` cuts another
+5.9% at 64 KiB and 6.4% at 1 MiB. Instruction count drops from 61.4M to 52.1M
+per 1 MiB. Against the untouched start of this session the streaming decoder is
+now 4.74x faster at 64 KiB (1,282,030 → 270,700 ns) and 3.59x at 1 MiB
+(13,805,130 → 3,842,200 ns). One-shot `decodeRawAuto` on the same rows is
+91,480 and 1,255,070 ns, so the remaining gap is 2.96x and 3.06x instead of
+14.0x and 11.2x. `memcpy` is 19.4% of the remaining instructions, and `step`
+itself is 79.5%.
+
+A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
+12%, and a 16-byte scalar copy loop regressed 25%; all were reverted.
+
 ## Status
 
-The first symbol-path increment is committed. The larger windowed semantic
+The fused symbol-path increments are committed. The larger windowed semantic
 fast path is still not implemented; it remains the direction below and the
 symbol path stays as its fallback. The one-shot corpus screens are unaffected
 by this gap.

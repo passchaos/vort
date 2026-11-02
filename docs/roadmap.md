@@ -26003,3 +26003,15 @@ reuse, so production keeps the simpler independently owned plans.
   25%, so `memcpyFast` stays. The resumable windowed semantic fast path is
   still the next larger step. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.
+
+- 2026-11-02: The incremental Deflate `.symbols` phase now runs a fused
+  local-reservoir loop (`decodeSymbolRun`): literals, length/distance headers,
+  extra bits and the match copy execute with the bit reservoir and cursors in
+  locals, and the phase cases only own input/output pauses. Inlining
+  `copyMatchSpan` folds the ring recording into the loop. Paired runs on
+  `dickens.64k.l9`/`dickens.1m.l9` moved the decoder from
+  301,950/4,334,700 ns per decode to 270,700/3,842,200 ns (4.74x/3.59x versus
+  the start of the session), leaving a 2.96x/3.06x one-shot gap. `noinline` step,
+  `noalias` slice parameters and a scalar 16-byte copy loop regressed and were
+  reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
+  three-codec industry-best goal stays active.

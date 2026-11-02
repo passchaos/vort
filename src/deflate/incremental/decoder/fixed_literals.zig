@@ -330,44 +330,10 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     self.phase = .dynamic_lengths;
                 },
                 .symbols => {
-                    // Stay inside this case for consecutive literals so the
-                    // resumable phase dispatch is paid once per length symbol
-                    // instead of once per decoded byte.
-                    while (true) {
-                        if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
-                        const symbol = (try self.readLiteralSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
-                        if (symbol < 256) {
-                            if (output_written == output.len) {
-                                // A decoded literal cannot be committed without caller
-                                // space. Preserve it as a one-symbol continuation rather
-                                // than losing input progress or spinning.
-                                self.code = @intCast(symbol);
-                                self.code_bits = 15;
-                                return result(input_read, output_written, .need_output);
-                            }
-                            if (self.total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
-                            if (self.options.expected_output_len) |expected| {
-                                if (self.total_output >= expected) return self.fail(.symbols, error.SizeMismatch);
-                            }
-                            output[output_written] = @intCast(symbol);
-                            output_written += 1;
-                            try self.recordByte(@intCast(symbol));
-                            continue;
-                        }
-                        if (symbol == 256) {
-                            self.phase = if (self.final_block) .done else .block_header;
-                            if (self.phase == .done) {
-                                if (self.options.expected_output_len) |expected| {
-                                    if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
-                                }
-                            }
-                            break;
-                        }
-                        const length = lengthBaseAndBitsForFormat(format, symbol) orelse return self.fail(.symbols, error.InvalidHuffmanCode);
-                        self.length_base = length.base;
-                        self.length_extra_bits = length.bits;
-                        self.phase = if (length.bits == 0) .distance_symbol else .length_extra;
-                        break;
+                    switch (try self.decodeSymbolRun(input, output, &input_read, &output_written)) {
+                        .need_input => return result(input_read, output_written, .need_input),
+                        .need_output => return result(input_read, output_written, .need_output),
+                        .block_end, .done => continue,
                     }
                 },
                 .length_extra => {
@@ -419,6 +385,201 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 },
             };
             return result(input_read, output_written, .need_output);
+        }
+
+        const RunStatus = enum { need_input, need_output, block_end, done };
+
+        /// Decode a run of dynamic/fixed-block symbols with the bit reservoir,
+        /// partial-code state and cursors held in locals. The resumable phase
+        /// cases above still own every pause (input exhaustion, output full,
+        /// partial match copy); this loop only runs while both input and output
+        /// can make progress, and writes all shared state back on return.
+        fn decodeSymbolRun(
+            self: *Self,
+            input: []const u8,
+            output: []u8,
+            input_read: *usize,
+            output_written: *usize,
+        ) Error!RunStatus {
+            var bit_buffer = self.bit_buffer;
+            var bit_count = self.bit_count;
+            var code = self.code;
+            var code_bits = self.code_bits;
+            var dynamic_code = self.dynamic_code;
+            var dynamic_code_bits = self.dynamic_code_bits;
+            var distance_code = self.distance_code;
+            var distance_code_bits = self.distance_code_bits;
+            const start_input = input_read.*;
+            defer {
+                self.bit_buffer = bit_buffer;
+                self.bit_count = bit_count;
+                self.code = code;
+                self.code_bits = code_bits;
+                self.dynamic_code = dynamic_code;
+                self.dynamic_code_bits = dynamic_code_bits;
+                self.distance_code = distance_code;
+                self.distance_code_bits = distance_code_bits;
+                self.total_input += input_read.* - start_input;
+            }
+
+            while (true) {
+                if (output_written.* == output.len and output.len != 0) return .need_output;
+                const symbol = (try self.readLiteralSymbolRun(
+                    input,
+                    input_read,
+                    &bit_buffer,
+                    &bit_count,
+                    &code,
+                    &code_bits,
+                )) orelse return .need_input;
+                if (symbol < 256) {
+                    if (output_written.* == output.len) {
+                        // A decoded literal cannot be committed without caller
+                        // space. Preserve it as a one-symbol continuation.
+                        code = @intCast(symbol);
+                        code_bits = 15;
+                        return .need_output;
+                    }
+                    if (self.total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
+                    if (self.options.expected_output_len) |expected| {
+                        if (self.total_output >= expected) return self.fail(.symbols, error.SizeMismatch);
+                    }
+                    output[output_written.*] = @intCast(symbol);
+                    output_written.* += 1;
+                    try self.recordByte(@intCast(symbol));
+                    continue;
+                }
+                if (symbol == 256) {
+                    self.phase = if (self.final_block) .done else .block_header;
+                    if (self.phase == .done) {
+                        if (self.options.expected_output_len) |expected| {
+                            if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
+                        }
+                        return .done;
+                    }
+                    return .block_end;
+                }
+                const length = lengthBaseAndBitsForFormat(format, symbol) orelse return self.fail(.symbols, error.InvalidHuffmanCode);
+                self.length_base = length.base;
+                self.length_extra_bits = length.bits;
+                self.match_len = length.base;
+                if (length.bits != 0) {
+                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, length.bits) orelse {
+                        self.phase = .length_extra;
+                        return .need_input;
+                    };
+                    self.match_len = length.base + extra;
+                }
+                const distance_symbol = (try self.readDistanceSymbolRun(
+                    input,
+                    input_read,
+                    &bit_buffer,
+                    &bit_count,
+                    &dynamic_code,
+                    &dynamic_code_bits,
+                    &distance_code,
+                    &distance_code_bits,
+                )) orelse {
+                    self.phase = .distance_symbol;
+                    return .need_input;
+                };
+                const distance = distanceBaseAndBitsForFormat(format, distance_symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
+                self.match_distance = distance.base;
+                self.length_extra_bits = distance.bits;
+                if (distance.bits != 0) {
+                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, distance.bits) orelse {
+                        self.phase = .distance_extra;
+                        return .need_input;
+                    };
+                    self.match_distance += extra;
+                }
+                try self.beginMatch();
+                self.phase = .match_copy;
+                if (output_written.* == output.len) return .need_output;
+                const n = @min(self.match_remaining, output.len - output_written.*);
+                self.copyMatchSpan(output[output_written.*..][0..n]);
+                output_written.* += n;
+                self.match_remaining -= n;
+                if (self.match_remaining != 0) return .need_output;
+                self.match_len = 0;
+                self.phase = .symbols;
+            }
+        }
+
+        fn readLiteralSymbolRun(
+            self: *Self,
+            input: []const u8,
+            input_read: *usize,
+            bit_buffer: *u64,
+            bit_count: *u6,
+            code: *u16,
+            code_bits: *u4,
+        ) Error!?u16 {
+            if (code_bits.* == 15) {
+                const symbol = code.*;
+                code.* = 0;
+                code_bits.* = 0;
+                return symbol;
+            }
+            if (!self.dynamic_block) {
+                return lookupSymbolLocal(input, input_read, 9, &fixed_lookup, bit_buffer, bit_count);
+            }
+            if (code_bits.* == 0) {
+                if (lookupSymbolLocal(input, input_read, 11, &self.dynamic_literal_lookup, bit_buffer, bit_count)) |symbol|
+                    return symbol;
+                if (bit_count.* < 11 and input_read.* == input.len) return null;
+            }
+            while (code_bits.* < 15) {
+                const bit = readBitsLocal(input, input_read, bit_buffer, bit_count, 1) orelse return null;
+                code.* |= @as(u16, @intCast(bit)) << code_bits.*;
+                code_bits.* += 1;
+                if (tableSymbol(286, &self.dynamic_literal_table, code.*, code_bits.*)) |symbol| {
+                    code.* = 0;
+                    code_bits.* = 0;
+                    return symbol;
+                }
+            }
+            return self.fail(.symbols, error.InvalidHuffmanCode);
+        }
+
+        fn readDistanceSymbolRun(
+            self: *Self,
+            input: []const u8,
+            input_read: *usize,
+            bit_buffer: *u64,
+            bit_count: *u6,
+            dynamic_code: *u16,
+            dynamic_code_bits: *u4,
+            distance_code: *u16,
+            distance_code_bits: *u3,
+        ) Error!?usize {
+            if (!self.dynamic_block) {
+                while (distance_code_bits.* < 5) {
+                    const bit = readBitsLocal(input, input_read, bit_buffer, bit_count, 1) orelse return null;
+                    distance_code.* |= @as(u16, @intCast(bit)) << distance_code_bits.*;
+                    distance_code_bits.* += 1;
+                }
+                const symbol: usize = @bitReverse(@as(u5, @truncate(distance_code.*)));
+                distance_code.* = 0;
+                distance_code_bits.* = 0;
+                return symbol;
+            }
+            if (dynamic_code_bits.* == 0) {
+                if (lookupSymbolLocal(input, input_read, 10, &self.dynamic_distance_lookup, bit_buffer, bit_count)) |symbol|
+                    return symbol;
+                if (bit_count.* < 10 and input_read.* == input.len) return null;
+            }
+            while (dynamic_code_bits.* < 15) {
+                const bit = readBitsLocal(input, input_read, bit_buffer, bit_count, 1) orelse return null;
+                dynamic_code.* |= @as(u16, @intCast(bit)) << dynamic_code_bits.*;
+                dynamic_code_bits.* += 1;
+                if (tableSymbol(format.distance_symbol_count, &self.dynamic_distance_table, dynamic_code.*, dynamic_code_bits.*)) |symbol| {
+                    dynamic_code.* = 0;
+                    dynamic_code_bits.* = 0;
+                    return symbol;
+                }
+            }
+            return self.fail(.distance_symbol, error.InvalidHuffmanCode);
         }
 
         fn readFixedSymbol(self: *Self, input: []const u8, input_read: *usize) Error!?u16 {
@@ -566,7 +727,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             self.total_output += 1;
         }
 
-        fn copyMatchSpan(self: *Self, output: []u8) void {
+        inline fn copyMatchSpan(self: *Self, output: []u8) void {
             std.debug.assert(output.len != 0);
             std.debug.assert(self.match_distance != 0);
             std.debug.assert(self.match_distance <= self.history_len);
@@ -809,6 +970,55 @@ inline fn tableSymbol(
         if (entry.code == wanted_code) return entry.symbol;
     }
     return null;
+}
+
+/// Local-reservoir bit read used by the fused symbol loop. The caller keeps
+/// the reservoir in registers and only writes it back at pause boundaries.
+inline fn readBitsLocal(
+    input: []const u8,
+    input_read: *usize,
+    bit_buffer: *u64,
+    bit_count: *u6,
+    count: u6,
+) ?usize {
+    while (bit_count.* < count) {
+        if (input_read.* == input.len) return null;
+        bit_buffer.* |= @as(u64, input[input_read.*]) << bit_count.*;
+        bit_count.* += 8;
+        input_read.* += 1;
+    }
+    const mask = (@as(u64, 1) << count) - 1;
+    const value = bit_buffer.* & mask;
+    bit_buffer.* >>= count;
+    bit_count.* -= count;
+    return @intCast(value);
+}
+
+/// Local-reservoir variant of `readLookupSymbol`.
+inline fn lookupSymbolLocal(
+    input: []const u8,
+    input_read: *usize,
+    comptime lookup_bits: u6,
+    lookup: *const [@as(usize, 1) << lookup_bits]u16,
+    bit_buffer: *u64,
+    bit_count: *u6,
+) ?u16 {
+    const mask = (@as(u64, 1) << lookup_bits) - 1;
+    while (true) {
+        const lookup_entry = lookup[@intCast(bit_buffer.* & mask)];
+        if (lookup_entry != 0) {
+            const bits: u6 = @intCast(lookup_entry & 0x0f);
+            if (bit_count.* >= bits) {
+                bit_buffer.* >>= bits;
+                bit_count.* -= bits;
+                return (lookup_entry >> 4) - 1;
+            }
+        }
+        if (bit_count.* >= lookup_bits or input_read.* == input.len) return null;
+        bit_buffer.* |= @as(u64, input[input_read.*]) << bit_count.*;
+        bit_count.* += 8;
+        input_read.* += 1;
+    }
 }
 
 fn canonicalSymbol(lengths: []const u4, wanted_code: u16, wanted_bits: u4) ?u16 {
