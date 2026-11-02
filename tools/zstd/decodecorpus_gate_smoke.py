@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -86,6 +87,20 @@ def write_executable(path: Path, source: str) -> None:
 
 
 class DecodeCorpusGateTests(unittest.TestCase):
+    def test_generator_revision_uses_explicit_zstd_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vort-zstd-revision-") as temp:
+            root = Path(temp)
+            executable = root / "other-repo" / "bin" / "decodecorpus"
+            source = root / "zstd-source"
+            (source / "lib").mkdir(parents=True)
+            (source / "lib" / "zstd.h").write_text("/* source fixture */\n")
+            with mock.patch.object(gate.subprocess, "run") as run:
+                self.assertEqual(gate.generator_version(executable), "unknown")
+                run.assert_not_called()
+                run.return_value = subprocess.CompletedProcess([], 0, "v1.6.0-test\n", "")
+                self.assertEqual(gate.generator_version(executable, source), "v1.6.0-test")
+                self.assertEqual(run.call_args.args[0][2], str(source.resolve()))
+
     def test_parse_summary_rejects_unstructured_output(self) -> None:
         with self.assertRaisesRegex(ValueError, "did not emit"):
             gate.parse_summary("noise only")

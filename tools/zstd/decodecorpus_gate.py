@@ -124,8 +124,12 @@ def run_command(command: list[str], label: str) -> str:
     return result.stdout
 
 
-def generator_version(executable: Path) -> str:
-    root = executable.parent.parent
+def generator_version(executable: Path, source: Path | None = None) -> str:
+    root = source.resolve() if source is not None else executable.parent.parent
+    # Out-of-tree binaries can live inside another Git checkout. Only label
+    # this as a Zstd revision when the selected root contains its public header.
+    if not (root / "lib" / "zstd.h").is_file():
+        return "unknown"
     result = subprocess.run(
         ["git", "-C", str(root), "describe", "--tags", "--always", "--dirty"],
         stdout=subprocess.PIPE,
@@ -337,6 +341,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("probe", type=Path, help="built Vort zstd compatibility probe")
     parser.add_argument("--decodecorpus", help="upstream tests/decodecorpus executable")
     parser.add_argument(
+        "--decodecorpus-source", type=Path,
+        help="Zstd source checkout used to build an out-of-tree decodecorpus",
+    )
+    parser.add_argument(
         "--libzstd",
         type=Path,
         help="explicit libzstd shared library used by the compatibility probe",
@@ -357,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"Vort compatibility probe is not executable: {probe}")
     try:
         decodecorpus = resolve_decodecorpus(args.decodecorpus)
+        if args.decodecorpus_source is not None and not (args.decodecorpus_source / "lib" / "zstd.h").is_file():
+            raise FileNotFoundError(f"Zstd source header is missing: {args.decodecorpus_source}")
         reference_library = args.libzstd.expanduser().resolve() if args.libzstd else None
         if reference_library is not None and not reference_library.is_file():
             raise FileNotFoundError(f"libzstd shared library is not a file: {reference_library}")
@@ -402,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
         f"max_block_stream_decoded_capacity=0 "
         f"sequence_mode_combinations={combined_mask.bit_count()} "
         f"sequence_mode_mask={combined_mask:#018x} generator={decodecorpus} "
-        f"generator_version={generator_version(decodecorpus)} "
+        f"generator_version={generator_version(decodecorpus, args.decodecorpus_source)} "
         f"reference_library={reference_library or 'system'} "
         f"reference_version={reference_version}"
     )
