@@ -462,6 +462,7 @@ pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) 
 
 test {
     _ = incremental_tests;
+    _ = @import("deflate/png/ring_sink.zig");
 }
 
 pub const RawDeflateProbeResult = struct {
