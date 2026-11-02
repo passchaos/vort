@@ -25976,3 +25976,17 @@ reuse, so production keeps the simpler independently owned plans.
   loads plus a well-predicted branch; the run loop's `@min`, hoisted map
   lookups and extra nesting cost more on mixed literal shapes. The per-literal
   loop stays. The three-codec industry-best goal stays active.
+
+- 2026-11-02: A new incremental Deflate harness shows the streaming decoder is
+  11–14x slower than the one-shot path: `dickens.64k.l9` 1,281,448 vs 91,307
+  ns/decode (14.0x) and `dickens.1m.l9` 14,014,103 vs 1,254,372 ns (11.2x),
+  with output SHA and guard checks passing. Feeding 4 KiB input chunks
+  instead of the whole wire changes nothing, so the cost is one phase dispatch
+  and compact-table decode per symbol. This is the largest remaining decode
+  gap in the library and is outside the one-shot industry screens. The planned
+  fix is a resumable fast path that decodes dynamic blocks into a
+  caller-provided window buffer with the semantic loop, slides the window
+  when it fills, and copies completed bytes into the caller's output; the
+  symbol path stays as the fallback.
+  [Evidence](performance/deflate-incremental-symbol-gap.md). The three-codec
+  industry-best goal stays active.
