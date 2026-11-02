@@ -26042,3 +26042,17 @@ reuse, so production keeps the simpler independently owned plans.
   for streaming Deflate.
   [Evidence](performance/decode-reference-gaps-20261102.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: Incremental standard Deflate dynamic blocks can now reuse the
+  one-shot semantic decoder through a bounded two-window caller history. The
+  existing 32 KiB compact symbol path remains fully compatible; a 64 KiB
+  history, explicit semantic-table workspace and at least 4 KiB contiguous
+  compressed payload select the fast path, while fragmented input
+  transactionally falls back with exact wrapper
+  footer progress. Three alternating Dickens level-9 sweeps reduce 64 KiB
+  decode from 211,674 to 136,406 ns (0.644) and 1 MiB from 2,886,063 to
+  1,893,960 ns (0.656), leaving 1.47x/1.49x against the same-source one-shot
+  path instead of about 2.2x. The build-integrated same-binary benchmark now
+  proves selection and requires a whole-input structured-text win.
+  [Evidence](performance/deflate-incremental-symbol-gap.md). The three-codec
+  industry-best goal stays active.

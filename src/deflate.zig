@@ -20931,6 +20931,88 @@ test "dynamic Huffman decoder rejects matches without distance codes" {
     try std.testing.expectError(error.InvalidHuffmanCode, decodeRawDynamicAllocStrict(std.testing.allocator, encoded));
     try std.testing.expectError(error.InvalidHuffmanCode, decodeRawAutoAlloc(std.testing.allocator, encoded));
 
+    // Build a complete semantic-compatible tree whose first token is a match
+    // before any output. A long caller slice selects the fast path; InvalidMatch
+    // must transactionally fall back so error progress and diagnostics exactly
+    // match the compact decoder.
+    var invalid_lit_lengths: [259]u4 = @splat(0);
+    invalid_lit_lengths['a'] = 2;
+    invalid_lit_lengths[256] = 2;
+    invalid_lit_lengths[257] = 2;
+    invalid_lit_lengths[258] = 2;
+    const invalid_distance_lengths = [_]u4{1};
+    var invalid_code_len_lengths: [19]u4 = @splat(0);
+    invalid_code_len_lengths[0] = 1;
+    invalid_code_len_lengths[1] = 2;
+    invalid_code_len_lengths[2] = 2;
+    const invalid_code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&invalid_code_len_lengths);
+    const invalid_lit_encoder = try huffman.HuffmanTable(259).Encoder.init(&invalid_lit_lengths);
+    const invalid_distance_encoder = try huffman.HuffmanTable(1).Encoder.init(&invalid_distance_lengths);
+    var invalid_writer = bitstream.BitWriter{};
+    defer invalid_writer.deinit(std.testing.allocator);
+    try invalid_writer.writeBits(std.testing.allocator, 1, 1);
+    try invalid_writer.writeBits(std.testing.allocator, 0b10, 2);
+    try invalid_writer.writeBits(std.testing.allocator, 2, 5);
+    try invalid_writer.writeBits(std.testing.allocator, 0, 5);
+    try invalid_writer.writeBits(std.testing.allocator, 14, 4);
+    for (huffman.code_length_order[0..18]) |symbol| {
+        try invalid_writer.writeBits(std.testing.allocator, invalid_code_len_lengths[symbol], 3);
+    }
+    for (&invalid_lit_lengths) |len| {
+        try invalid_code_len_encoder.writeSymbol(&invalid_writer, std.testing.allocator, len);
+    }
+    try invalid_code_len_encoder.writeSymbol(&invalid_writer, std.testing.allocator, 1);
+    try invalid_lit_encoder.writeSymbol(&invalid_writer, std.testing.allocator, 257);
+    try invalid_distance_encoder.writeSymbol(&invalid_writer, std.testing.allocator, 0);
+    try invalid_writer.writeBits(std.testing.allocator, 0, 15);
+    const invalid_match = try invalid_writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(invalid_match);
+
+    const padded = try std.testing.allocator.alloc(u8, invalid_match.len + 4096);
+    defer std.testing.allocator.free(padded);
+    @memcpy(padded[0..invalid_match.len], invalid_match);
+    @memset(padded[invalid_match.len..], 0);
+    var compact_history: [RawDeflateIncrementalFixedLiteralDecoder.required_history_len]u8 = undefined;
+    var compact = try RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .allow_trailing_data = true },
+        &compact_history,
+    );
+    var compact_output: [16]u8 = undefined;
+    try std.testing.expectError(
+        error.InvalidMatch,
+        compact.step(padded, &compact_output),
+    );
+
+    var semantic_history: [RawDeflateIncrementalFixedLiteralDecoder.recommended_history_len]u8 = undefined;
+    var semantic_incremental = try RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .allow_trailing_data = true },
+        &semantic_history,
+    );
+    var semantic_workspace: RawDeflateIncrementalFixedLiteralDecoder.SemanticWorkspace = undefined;
+    try semantic_incremental.attachSemanticWorkspace(&semantic_workspace);
+    var semantic_output: [16]u8 = undefined;
+    const semantic_attempt = try semantic_incremental.step(padded, &semantic_output);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, semantic_attempt.status);
+    try std.testing.expectError(
+        error.InvalidMatch,
+        semantic_incremental.step(
+            padded[semantic_attempt.progress.input_read..],
+            semantic_output[semantic_attempt.progress.output_written..],
+        ),
+    );
+    try std.testing.expectEqual(
+        compact.diagnostics().frame_input_read,
+        semantic_incremental.diagnostics().frame_input_read,
+    );
+    try std.testing.expectEqual(
+        compact.diagnostics().output_written,
+        semantic_incremental.diagnostics().output_written,
+    );
+    try std.testing.expectEqualStrings(
+        compact.diagnostics().last_error_phase_name,
+        semantic_incremental.diagnostics().last_error_phase_name,
+    );
+
     var zlib_frame: std.ArrayList(u8) = .empty;
     defer zlib_frame.deinit(std.testing.allocator);
     try zlib_frame.appendSlice(std.testing.allocator, &.{ 0x78, 0x01 });

@@ -28,6 +28,7 @@ const Row = struct {
     iterations: usize,
     elapsed_ns: i96,
     mix: u64,
+    semantic_blocks_started: usize,
 
     fn nsPerDecode(self: Row) i96 {
         return @divTrunc(self.elapsed_ns, @as(i96, @intCast(self.iterations)));
@@ -61,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
     try stdout.writeAll(
         "case,implementation,chunking,input_bytes,output_bytes,input_chunk," ++
             "output_chunk,iterations,elapsed_ns,ns_per_decode," ++
-            "throughput_mib_s,mix\n",
+            "throughput_mib_s,mix,semantic_blocks_started\n",
     );
     for (cases) |case| {
         const modes = [_]struct {
@@ -81,13 +82,23 @@ pub fn main(init: std.process.Init) !void {
             },
         };
         for (modes) |mode| {
-            const vort_row = try measureVort(
+            const symbol_row = try measureVort(
                 init,
                 case,
                 mode.name,
                 mode.input_chunk,
                 mode.output_chunk,
                 iterations,
+                false,
+            );
+            const semantic_row = try measureVort(
+                init,
+                case,
+                mode.name,
+                mode.input_chunk,
+                mode.output_chunk,
+                iterations,
+                true,
             );
             const zlib_row = try measureZlib(
                 init,
@@ -97,8 +108,10 @@ pub fn main(init: std.process.Init) !void {
                 mode.output_chunk,
                 iterations,
             );
-            if (vort_row.mix != zlib_row.mix) return error.DecodeMismatch;
-            try writeRow(stdout, vort_row);
+            if (symbol_row.mix != zlib_row.mix or semantic_row.mix != zlib_row.mix)
+                return error.DecodeMismatch;
+            try writeRow(stdout, symbol_row);
+            try writeRow(stdout, semantic_row);
             try writeRow(stdout, zlib_row);
         }
     }
@@ -112,50 +125,58 @@ fn measureVort(
     input_chunk: usize,
     output_chunk: usize,
     iterations: usize,
+    use_semantic: bool,
 ) !Row {
-    var history: [32 * 1024]u8 = undefined;
+    var history: [vort.RawDeflateIncrementalFixedLiteralDecoder.recommended_history_len]u8 = undefined;
     var decoder = try vort.GzipIncrementalDecoder.init(.{
         .max_output_len = case.plain.len,
         .allow_concatenated = true,
-    }, &history);
+    }, if (use_semantic) &history else history[0..vort.RawDeflateIncrementalFixedLiteralDecoder.required_history_len]);
+    var semantic_workspace: vort.RawDeflateIncrementalFixedLiteralDecoder.SemanticWorkspace = undefined;
+    if (use_semantic) try decoder.raw.attachSemanticWorkspace(&semantic_workspace);
     const output = try init.gpa.alloc(u8, case.plain.len + 1);
     defer init.gpa.free(output);
 
-    const warmup_len = try decodeVort(
+    const warmup = try decodeVort(
         &decoder,
         case.gzip,
         output,
         input_chunk,
         output_chunk,
     );
-    try verifyDecoded(case, output[0..warmup_len]);
+    try verifyDecoded(case, output[0..warmup.output_len]);
 
     var mix: u64 = 0;
     const started = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |iteration| {
-        const decoded_len = try decodeVort(
+        const decoded = try decodeVort(
             &decoder,
             case.gzip,
             output,
             input_chunk,
             output_chunk,
         );
-        if (decoded_len != case.plain.len) return error.DecodeMismatch;
-        mix +%= output[iteration % decoded_len];
+        if (decoded.output_len != case.plain.len) return error.DecodeMismatch;
+        mix +%= output[iteration % decoded.output_len];
     }
     const elapsed = started.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
     try verifyDecoded(case, output[0..case.plain.len]);
     return makeRow(
         case,
-        "vort",
+        if (use_semantic) "vort-semantic" else "vort-symbol",
         chunking,
         input_chunk,
         output_chunk,
         iterations,
         elapsed,
         mix,
+        decoder.raw.semanticBlocksStarted(),
     );
 }
+
+const VortDecodeResult = struct {
+    output_len: usize,
+};
 
 fn decodeVort(
     decoder: *vort.GzipIncrementalDecoder,
@@ -163,7 +184,7 @@ fn decodeVort(
     output: []u8,
     input_chunk: usize,
     output_chunk: usize,
-) !usize {
+) !VortDecodeResult {
     decoder.reset();
     var input_offset: usize = 0;
     var output_offset: usize = 0;
@@ -188,7 +209,7 @@ fn decodeVort(
         }
     }
     if (input_offset != input.len) return error.DecodeMismatch;
-    return output_offset;
+    return .{ .output_len = output_offset };
 }
 
 fn measureZlib(
@@ -243,6 +264,7 @@ fn measureZlib(
         iterations,
         elapsed,
         mix,
+        0,
     );
 }
 
@@ -287,7 +309,7 @@ fn decodeZlib(
 
 fn writeRow(writer: *std.Io.Writer, row: Row) !void {
     try writer.print(
-        "{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d}\n",
+        "{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d},{d}\n",
         .{
             row.case_name,
             row.implementation,
@@ -301,6 +323,7 @@ fn writeRow(writer: *std.Io.Writer, row: Row) !void {
             row.nsPerDecode(),
             row.throughput(),
             row.mix,
+            row.semantic_blocks_started,
         },
     );
 }
@@ -314,6 +337,7 @@ fn makeRow(
     iterations: usize,
     elapsed_ns: i96,
     mix: u64,
+    semantic_blocks_started: usize,
 ) Row {
     return .{
         .case_name = case.name,
@@ -326,6 +350,7 @@ fn makeRow(
         .iterations = iterations,
         .elapsed_ns = elapsed_ns,
         .mix = mix,
+        .semantic_blocks_started = semantic_blocks_started,
     };
 }
 
@@ -333,8 +358,8 @@ fn verifyDecoded(case: Case, decoded: []const u8) !void {
     if (!std.mem.eql(u8, decoded, case.plain)) return error.DecodeMismatch;
 }
 
-fn buildCases(allocator: std.mem.Allocator) ![3]Case {
-    var cases: [3]Case = undefined;
+fn buildCases(allocator: std.mem.Allocator) ![4]Case {
+    var cases: [4]Case = undefined;
     var built: usize = 0;
     errdefer for (cases[0..built]) |case| case.deinit(allocator);
     cases[0] = try repeatedCase(
@@ -351,7 +376,9 @@ fn buildCases(allocator: std.mem.Allocator) ![3]Case {
         "{\"time\":123456,\"level\":\"info\",\"message\":\"incremental decode\"}\n",
     );
     built += 1;
-    cases[2] = try binaryCase(allocator, "binary-64k", 64 * 1024);
+    cases[2] = try textCase(allocator, "text-64k", 64 * 1024);
+    built += 1;
+    cases[3] = try binaryCase(allocator, "binary-64k", 64 * 1024);
     return cases;
 }
 
@@ -381,6 +408,28 @@ fn binaryCase(allocator: std.mem.Allocator, name: []const u8, len: usize) !Case 
     var random = std.Random.DefaultPrng.init(0x4f0d_9a72_b813_c6e5);
     random.random().bytes(plain);
     @memcpy(plain[len / 2 ..][0 .. len / 4], plain[0 .. len / 4]);
+    return .{
+        .name = name,
+        .plain = plain,
+        .gzip = try vort.encodeGzipBestAlloc(
+            allocator,
+            plain,
+            vort.optionsForCompressionLevel(.default),
+        ),
+    };
+}
+
+fn textCase(allocator: std.mem.Allocator, name: []const u8, len: usize) !Case {
+    const plain = try allocator.alloc(u8, len);
+    errdefer allocator.free(plain);
+    var random = std.Random.DefaultPrng.init(0x51a7_7e57_f00d_cafe);
+    for (plain, 0..) |*byte, index| {
+        const roll = random.random().int(u8);
+        byte.* = if (index >= 32 * 1024 and roll & 3 == 0)
+            plain[index - 32 * 1024]
+        else
+            ' ' + roll % 95;
+    }
     return .{
         .name = name,
         .plain = plain,

@@ -227,9 +227,60 @@ limited/unlimited instantiations to skip the per-literal limit checks regressed
 26% (1,532 → 1,933 ms per 400 decodes, 15.45B → 19.72B instructions), so the
 runtime checks stay.
 
+## Sixth increment: caller-owned semantic window
+
+The RFC 1951 dynamic-block path can now reuse the one-shot semantic table and
+linear decode loop when the caller supplies two Deflate windows (64 KiB),
+attaches a caller-owned semantic-table workspace, and at least 4 KiB of
+contiguous compressed input remains after the dynamic header. The first window
+is still the ordinary 32 KiB fallback ring; the
+second lets the decoder generate one bounded window ahead, deliver it through
+arbitrarily small caller output slices, and retain the newest 32 KiB before
+continuing. The existing compact symbol machine remains the path for 32 KiB
+history, fixed/stored blocks, Deflate64, small streams, incomplete semantic
+trees and fragmented input.
+
+`BufferedBitReader` accounting is now delta-based, so the semantic loop can
+start with the incremental decoder's preloaded reservoir. Complete staged
+bytes are rewound before reporting progress, preserving zlib/gzip footer
+ownership. A semantic attempt that reaches the end of the current input slice
+is transactional: generated scratch is discarded and the same block continues
+through the compact symbol path from the original reservoir.
+
+The semantic tables are also caller-owned instead of embedded unconditionally.
+The standard incremental decoder grows from 9,008 to 9,072 bytes (+64), while
+the opt-in `SemanticWorkspace` is 19,496 bytes and can be reused across reset
+and concatenated wrapper members.
+
+Three alternating CPU2 sweeps (ReleaseFast, Zig 0.16.0, whole input, 4 KiB
+caller output) compare 32 KiB symbol-only history with 64 KiB semantic history
+in the same binary:
+
+| Row | Symbol ns/decode | Semantic ns/decode | Semantic / symbol |
+| --- | ---: | ---: | ---: |
+| `dickens.64k.rawdeflate.9` | 211,674 | 136,406 | 0.644 |
+| `dickens.1m.rawdeflate.9` | 2,886,063 | 1,893,960 | 0.656 |
+
+The matching current one-shot measurements are 92,857 and 1,272,231
+ns/decode, leaving streaming at 1.47x and 1.49x rather than 2.16x and 2.24x.
+The build-integrated benchmark now measures `vort-symbol` and
+`vort-semantic` in the same process, records semantic-block selection, adds a
+64 KiB structured-text case, and requires at least a 5% whole-input win. Its
+initial 200-iteration screen measured 0.747 semantic/symbol on that case
+(210,602 to 157,423 ns/decode). A 4 KiB minimum contiguous-input policy avoids
+the measured table/scratch overhead on the existing 4 KiB and 32 KiB tiny
+highly repetitive cases.
+
+Correctness coverage includes a block spanning multiple retained windows,
+4 KiB output backpressure, an 8 KiB first-input attempt that transactionally
+falls back to one-byte input chunks, exact zlib footer ownership, nonzero
+initial reservoir accounting, and the pre-existing raw/zlib/gzip incremental
+matrices.
+
 ## Status
 
-The fused symbol-path increments are committed. The larger windowed semantic
-fast path is still not implemented; it remains the direction below and the
-symbol path stays as its fallback. The one-shot corpus screens are unaffected
-by this gap.
+The first bounded semantic fast path is implemented for standard dynamic
+Deflate blocks with opt-in 64 KiB caller history and table workspace. It closes most of the
+streaming/one-shot gap on the measured Dickens rows while preserving the
+32 KiB ABI and compact fallback. Broader block-shape admission and direct
+caller-output decoding remain follow-up opportunities.

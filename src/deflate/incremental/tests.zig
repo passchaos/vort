@@ -997,6 +997,217 @@ test "raw deflate incremental decoder expands dynamic repeat codes" {
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
+fn fillSemanticWindowTestPayload(payload: []u8, seed: u64) void {
+    var random = std.Random.DefaultPrng.init(seed);
+    for (payload, 0..) |*byte, index| {
+        const roll = random.random().int(u8);
+        byte.* = if (index >= 32 * 1024 and roll & 3 == 0)
+            payload[index - 32 * 1024]
+        else
+            ' ' + roll % 95;
+    }
+}
+
+test "raw deflate incremental semantic window drains bounded output and records hits" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 96 * 1024);
+    defer allocator.free(payload);
+    fillSemanticWindowTestPayload(payload, 0x51a7_7e57_f00d_cafe);
+    const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(
+        allocator,
+        payload,
+        deflate.optionsForLevel(.default),
+    );
+    defer allocator.free(encoded);
+
+    var history: [deflate.RawDeflateIncrementalFixedLiteralDecoder.recommended_history_len]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .expected_output_len = payload.len },
+        &history,
+    );
+    var semantic_workspace: deflate.RawDeflateIncrementalFixedLiteralDecoder.SemanticWorkspace = undefined;
+    try decoder.attachSemanticWorkspace(&semantic_workspace);
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var step_index: usize = 0;
+    while (true) {
+        const output_end = @min(output.len, output_offset + 4096);
+        const step = try decoder.step(
+            encoded[input_offset..],
+            output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step_index == 0) {
+            try std.testing.expectEqual(
+                @as(core.StreamCount, output_offset),
+                decoder.diagnostics().output_written,
+            );
+            try std.testing.expectError(
+                error.InvalidStreamState,
+                decoder.detachSemanticWorkspace(),
+            );
+        }
+        step_index += 1;
+        if (step.status == .done) break;
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(payload.len, output_offset);
+    try std.testing.expectEqualSlices(u8, payload, output);
+    try std.testing.expect(decoder.semanticBlocksStarted() != 0);
+    try std.testing.expectEqual(
+        decoder.semanticBlocksStarted(),
+        decoder.semanticBlocksCompleted(),
+    );
+    try decoder.detachSemanticWorkspace();
+
+    var short = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .expected_output_len = payload.len - 1 },
+        &history,
+    );
+    try short.attachSemanticWorkspace(&semantic_workspace);
+    try std.testing.expectError(error.SizeMismatch, short.step(encoded, output));
+    var capped = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{
+            .max_output_len = payload.len - 1,
+            .expected_output_len = payload.len - 1,
+        },
+        &history,
+    );
+    try capped.attachSemanticWorkspace(&semantic_workspace);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        capped.step(encoded, output),
+    );
+    var distance_limited = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{
+            .expected_output_len = payload.len,
+            .max_distance = 0,
+        },
+        &history,
+    );
+    try distance_limited.attachSemanticWorkspace(&semantic_workspace);
+    try std.testing.expectError(
+        error.InvalidMatch,
+        distance_limited.step(encoded, output),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        distance_limited.semanticBlocksStarted(),
+    );
+    const stopped_len = payload.len / 2 + 1;
+    var stopped = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{
+            .max_output_len = stopped_len,
+            .stop_at_output_limit = true,
+        },
+        &history,
+    );
+    try stopped.attachSemanticWorkspace(&semantic_workspace);
+    const stopped_step = try stopped.step(encoded, output[0..stopped_len]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, stopped_step.status);
+    try std.testing.expectEqual(stopped_len, stopped_step.progress.output_written);
+    try std.testing.expectEqual(@as(usize, 0), stopped.semanticBlocksStarted());
+    var long = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .expected_output_len = payload.len + 1 },
+        &history,
+    );
+    try long.attachSemanticWorkspace(&semantic_workspace);
+    try std.testing.expectError(error.SizeMismatch, long.step(encoded, output));
+}
+
+test "raw deflate incremental semantic window falls back on fragmented input" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 96 * 1024);
+    defer allocator.free(payload);
+    fillSemanticWindowTestPayload(payload, 0xdec0_de42_1357_2468);
+    const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(
+        allocator,
+        payload,
+        deflate.optionsForLevel(.default),
+    );
+    defer allocator.free(encoded);
+    var history: [deflate.RawDeflateIncrementalFixedLiteralDecoder.recommended_history_len]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(
+        .{ .expected_output_len = payload.len },
+        &history,
+    );
+    var semantic_workspace: deflate.RawDeflateIncrementalFixedLiteralDecoder.SemanticWorkspace = undefined;
+    try decoder.attachSemanticWorkspace(&semantic_workspace);
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const input_end = @min(
+            encoded.len,
+            input_offset + @as(usize, if (input_offset == 0) 8 * 1024 else 1),
+        );
+        const output_end = @min(output.len, output_offset + 3);
+        const step = try decoder.step(
+            encoded[input_offset..input_end],
+            output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .done) break;
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, payload, output);
+    try std.testing.expect(decoder.semanticBlocksStarted() != 0);
+    try std.testing.expectEqual(@as(usize, 0), decoder.semanticBlocksCompleted());
+}
+
+test "zlib incremental semantic window preserves footer ownership" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 80 * 1024);
+    defer allocator.free(payload);
+    fillSemanticWindowTestPayload(payload, 0xa11c_e5e5_1357_2468);
+    const encoded = try deflate.encodeZlibBestAlloc(
+        allocator,
+        payload,
+        deflate.optionsForLevel(.default),
+    );
+    defer allocator.free(encoded);
+
+    var history: [deflate.RawDeflateIncrementalFixedLiteralDecoder.recommended_history_len]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.init(
+        .{ .expected_output_len = payload.len },
+        &history,
+    );
+    var semantic_workspace: deflate.RawDeflateIncrementalFixedLiteralDecoder.SemanticWorkspace = undefined;
+    try decoder.raw.attachSemanticWorkspace(&semantic_workspace);
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const output_end = @min(output.len, output_offset + 4096);
+        const step = try decoder.step(
+            encoded[input_offset..],
+            output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .done) break;
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(payload.len, output_offset);
+    try std.testing.expectEqualSlices(u8, payload, output);
+    // The wrapper may force the final token tail through the exact-progress
+    // fallback before the Adler footer, but the semantic path must have been
+    // selected and the footer must still remain wrapper-owned.
+    try std.testing.expect(decoder.raw.semanticBlocksStarted() != 0);
+}
+
 test "zlib incremental decoder streams dynamic input and validates adler" {
     const payload = "byte progressive zlib dynamic payload alpha beta gamma" ** 40;
     const encoded = try deflate.encodeZlibBestAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));

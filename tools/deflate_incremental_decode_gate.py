@@ -12,7 +12,7 @@ import sys
 sys.dont_write_bytecode = True
 
 
-CASES = {"http-4k", "json-32k", "binary-64k"}
+CASES = {"http-4k", "json-32k", "text-64k", "binary-64k"}
 CHUNKING = {"full", "fragmented-7x31"}
 EXPECTED_HEADER = {
     "case",
@@ -27,6 +27,7 @@ EXPECTED_HEADER = {
     "ns_per_decode",
     "throughput_mib_s",
     "mix",
+    "semantic_blocks_started",
 }
 
 
@@ -61,7 +62,7 @@ def main() -> int:
         (case, chunking, implementation)
         for case in CASES
         for chunking in CHUNKING
-        for implementation in ("vort", competitor)
+        for implementation in ("vort-symbol", "vort-semantic", competitor)
     }
     missing = expected - set(by_key)
     extra = set(by_key) - expected
@@ -71,9 +72,11 @@ def main() -> int:
         )
 
     ratios: dict[str, list[float]] = {chunking: [] for chunking in CHUNKING}
+    semantic_text_full_ratio: float | None = None
     for case in CASES:
         for chunking in CHUNKING:
-            ours = by_key[(case, chunking, "vort")]
+            symbol = by_key[(case, chunking, "vort-symbol")]
+            ours = by_key[(case, chunking, "vort-semantic")]
             rival = by_key[(case, chunking, competitor)]
             for field in ("input_bytes", "output_bytes", "iterations", "mix"):
                 if ours[field] != rival[field]:
@@ -88,6 +91,13 @@ def main() -> int:
             if chunking == "fragmented-7x31":
                 if int(ours["input_chunk"]) != 7 or int(ours["output_chunk"]) != 31:
                     raise SystemExit(f"{case}: fragmented Vort shape changed")
+            if int(symbol["semantic_blocks_started"]) != 0:
+                raise SystemExit(f"{case}/{chunking}: symbol baseline entered semantic path")
+            semantic_started = int(ours["semantic_blocks_started"])
+            if case == "text-64k" and chunking == "full" and semantic_started <= 0:
+                raise SystemExit(f"{case}/{chunking}: semantic path was not selected")
+            if ours["mix"] != symbol["mix"]:
+                raise SystemExit(f"{case}/{chunking}: semantic/symbol output mismatch")
             ours_ns = float(ours["ns_per_decode"])
             rival_ns = float(rival["ns_per_decode"])
             ratio = ours_ns / rival_ns
@@ -97,10 +107,25 @@ def main() -> int:
                 )
             ratios[chunking].append(ratio)
 
+            # Whole-input rows are the intended fast-path workload. Require the
+            # semantic window to improve the same binary's compact fallback,
+            # while fragmented input remains a correctness/fallback exercise.
+            if chunking == "full" and case == "text-64k":
+                semantic_ratio = ours_ns / float(symbol["ns_per_decode"])
+                semantic_text_full_ratio = semantic_ratio
+                if semantic_ratio > 0.95:
+                    raise SystemExit(
+                        f"{case}/{chunking}: semantic path did not beat symbol "
+                        f"baseline by 5%: {semantic_ratio:.3f}x"
+                    )
+
+    if semantic_text_full_ratio is None:
+        raise SystemExit("missing text-64k/full semantic comparison")
     print(
         "incremental gzip decode gate: "
         f"cases={len(CASES)} competitor={competitor} "
         f"full_geomean_latency_ratio={math.prod(ratios['full']) ** (1 / len(CASES)):.3f} "
+        f"semantic_text_full_latency_ratio={semantic_text_full_ratio:.3f} "
         "fragmented_geomean_latency_ratio="
         f"{math.prod(ratios['fragmented-7x31']) ** (1 / len(CASES)):.3f}"
     )

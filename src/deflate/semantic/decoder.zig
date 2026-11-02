@@ -798,6 +798,20 @@ fn decodeTailWindow(
             },
             .double_literal => |pair| {
                 if (output.len - out_pos < 2) {
+                    if (out_pos != output.len) {
+                        // The packed entry represents two independent literal
+                        // codes. When exactly one caller byte remains, commit
+                        // the first through the compact table so limit/error
+                        // progress matches the scalar decoder instead of
+                        // rolling the otherwise valid literal back with its
+                        // successor.
+                        reader.* = saved_reader;
+                        const first = try decoder.compact_literal.decodeValue(reader);
+                        if (first >= 256) return error.InvalidHuffmanCode;
+                        output[out_pos] = @truncate(first);
+                        out_pos += 1;
+                        continue;
+                    }
                     reader.* = saved_reader;
                     return .{ .output_written = out_pos, .status = .need_output };
                 }

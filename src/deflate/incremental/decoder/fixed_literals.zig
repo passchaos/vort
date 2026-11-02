@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const huffman = @import("../../../huffman.zig");
+const bitstream = @import("../../../bitstream.zig");
+const semantic = @import("../../semantic/decoder.zig");
 
 pub const Format = struct {
     window_len: usize = 32 * 1024,
@@ -17,6 +19,17 @@ pub const Decoder = DecoderWithFormat(.{});
 pub fn DecoderWithFormat(comptime format: Format) type {
     return struct {
         const Self = @This();
+        const supports_semantic_window = format.window_len == 32 * 1024 and
+            format.distance_symbol_count == 30 and
+            !format.extended_length_285;
+        /// Building the large semantic tables and linearizing the history ring
+        /// is profitable for substantial contiguous payloads. Tiny streams and
+        /// highly fragmented callers stay on the compact resumable tables.
+        const semantic_min_contiguous_input: usize = 4 * 1024;
+        const SemanticDecoder = if (supports_semantic_window)
+            semantic.SemanticDynamicDecoder
+        else
+            struct {};
         options: Options,
         phase: Phase = .block_header,
         bit_buffer: u64 = 0,
@@ -25,6 +38,10 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         code_bits: u4 = 0,
         final_block: bool = false,
         history: []u8 = &.{},
+        /// Optional two-window caller storage. The first window remains the
+        /// compact fallback ring; the complete slice lets a dynamic block run
+        /// through the linear semantic decoder without hidden allocation.
+        semantic_scratch: []u8 = &.{},
         history_pos: usize = 0,
         history_len: usize = 0,
         length_base: usize = 0,
@@ -53,6 +70,13 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         /// codes per miss.
         dynamic_literal_table: huffman.HuffmanTable(286) = .{},
         dynamic_distance_table: huffman.HuffmanTable(format.distance_symbol_count) = .{},
+        semantic_decoder: ?*SemanticDecoder = null,
+        semantic_prefix_len: usize = 0,
+        semantic_generated_end: usize = 0,
+        semantic_delivered: usize = 0,
+        semantic_end_of_block: bool = false,
+        semantic_blocks_started: usize = 0,
+        semantic_blocks_completed: usize = 0,
         dynamic_length_pos: usize = 0,
         dynamic_previous_length: u4 = 0,
         dynamic_repeat_symbol: u5 = 0,
@@ -67,6 +91,14 @@ pub fn DecoderWithFormat(comptime format: Format) type {
 
         pub const Error = core.Error;
         pub const required_history_len: usize = format.window_len;
+        pub const SemanticWorkspace = SemanticDecoder;
+        /// Supplying this much history provides the two-window scratch used by
+        /// the semantic path. Attach `SemanticWorkspace` as the second opt-in;
+        /// smaller histories or no workspace retain the compact fallback.
+        pub const recommended_history_len: usize = if (supports_semantic_window)
+            2 * format.window_len
+        else
+            format.window_len;
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
@@ -79,14 +111,35 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             /// Optional surrounding-format distance cap within the history ring.
             max_distance: usize = format.window_len,
         };
-        pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
+        pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, fast_dynamic_block, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
         pub fn init() Self {
             return initWithOptions(.{});
         }
         pub fn initWithHistory(options: Options, history: []u8) Error!Self {
             if (history.len < format.window_len) return error.OutputTooSmall;
-            return .{ .options = options, .history = history[0..format.window_len] };
+            return .{
+                .options = options,
+                .history = history[0..format.window_len],
+                .semantic_scratch = if (supports_semantic_window and history.len >= recommended_history_len)
+                    history[0..recommended_history_len]
+                else
+                    &.{},
+            };
+        }
+        /// Attach caller-owned semantic table storage. A 64 KiB history and
+        /// this workspace are both required before the dynamic fast path is
+        /// selected; otherwise decoding keeps the compact fallback footprint.
+        /// The workspace must remain alive until detached or until the decoder
+        /// itself is discarded. Reset deliberately preserves the attachment.
+        pub fn attachSemanticWorkspace(self: *Self, workspace: *SemanticWorkspace) Error!void {
+            if (self.phase == .fast_dynamic_block) return error.InvalidStreamState;
+            if (comptime !supports_semantic_window) return error.UnsupportedDeflateFeature;
+            self.semantic_decoder = workspace;
+        }
+        pub fn detachSemanticWorkspace(self: *Self) Error!void {
+            if (self.phase == .fast_dynamic_block) return error.InvalidStreamState;
+            self.semantic_decoder = null;
         }
         pub fn initWithDictionary(options: Options, history: []u8, dictionary: []const u8) Error!Self {
             var decoder = try initWithHistory(options, history);
@@ -108,6 +161,12 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             self.final_block = false;
             self.history_pos = 0;
             self.history_len = 0;
+            self.semantic_prefix_len = 0;
+            self.semantic_generated_end = 0;
+            self.semantic_delivered = 0;
+            self.semantic_end_of_block = false;
+            self.semantic_blocks_started = 0;
+            self.semantic_blocks_completed = 0;
             self.length_base = 0;
             self.length_extra_bits = 0;
             self.distance_code = 0;
@@ -163,6 +222,12 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.UnsupportedDeflateFeature))) "unsupported_feature" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
         }
+        pub fn semanticBlocksStarted(self: *const Self) usize {
+            return self.semantic_blocks_started;
+        }
+        pub fn semanticBlocksCompleted(self: *const Self) usize {
+            return self.semantic_blocks_completed;
+        }
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
@@ -180,10 +245,14 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
             var input_read: usize = 0;
             var output_written: usize = 0;
+            var history_record_start: usize = 0;
             defer {
-                if (output_written != 0) self.recordStepOutput(output[0..output_written]);
+                if (history_record_start != output_written)
+                    self.recordStepOutput(output[history_record_start..output_written]);
             }
-            while (!self.options.stop_at_output_limit or self.total_output < self.options.max_output_len) switch (self.phase) {
+            while (!self.options.stop_at_output_limit or
+                self.total_output < self.options.max_output_len or
+                self.phase == .fast_dynamic_block) switch (self.phase) {
                 .block_header => {
                     const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
                     self.final_block = (header & 1) != 0;
@@ -290,6 +359,29 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                         buildCanonicalLookup(10, &self.dynamic_distance_lookup, self.dynamic_distance_lengths[0..self.dynamic_hdist]);
                         self.dynamic_literal_table = huffman.HuffmanTable(286).init(self.dynamic_literal_lengths[0..self.dynamic_hlit]) catch |err| return self.fail(.dynamic_lengths, err);
                         self.dynamic_distance_table = huffman.HuffmanTable(format.distance_symbol_count).init(self.dynamic_distance_lengths[0..self.dynamic_hdist]) catch |err| return self.fail(.dynamic_lengths, err);
+                        if (comptime supports_semantic_window) {
+                            if (self.semantic_decoder != null and
+                                !self.options.stop_at_output_limit and
+                                self.options.max_distance == format.window_len and
+                                input.len - input_read >= semantic_min_contiguous_input and
+                                self.semantic_scratch.len >= recommended_history_len and
+                                self.semantic_decoder.?.init(
+                                    &self.dynamic_literal_table,
+                                    &self.dynamic_distance_table,
+                                ))
+                            {
+                                // Output produced earlier in this call belongs
+                                // to the fallback ring before it becomes the
+                                // semantic window prefix.
+                                if (history_record_start != output_written) {
+                                    self.recordStepOutput(output[history_record_start..output_written]);
+                                    history_record_start = output_written;
+                                }
+                                self.beginSemanticBlock();
+                                self.phase = .fast_dynamic_block;
+                                continue;
+                            }
+                        }
                         self.phase = .symbols;
                         continue;
                     }
@@ -331,6 +423,34 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     }
                     self.dynamic_previous_length = value;
                     self.phase = .dynamic_lengths;
+                },
+                .fast_dynamic_block => {
+                    if (comptime !supports_semantic_window) unreachable;
+                    switch (try self.stepSemanticBlock(
+                        input,
+                        output,
+                        &input_read,
+                        &output_written,
+                        &history_record_start,
+                    )) {
+                        .need_output => return result(input_read, output_written, .need_output),
+                        .need_input => return result(input_read, output_written, .need_input),
+                        // `beginSemanticBlock` may already have committed a
+                        // step-local prefix into the ring. Cut the step before
+                        // compact fallback so it cannot count that prefix both
+                        // as retained history and as fresh step output.
+                        .fallback => return result(input_read, output_written, .need_output),
+                        // End the raw step at the semantic block boundary. Its
+                        // delivered bytes are already the retained history;
+                        // starting a compact block with the same step-local
+                        // output would count that prefix twice as match history.
+                        .block_end => return result(input_read, output_written, .need_output),
+                        .done => {
+                            if (input_read != input.len and !self.options.allow_trailing_data)
+                                return self.fail(.done, error.TrailingData);
+                            return result(input_read, output_written, .done);
+                        },
+                    }
                 },
                 .symbols => {
                     switch (try self.decodeSymbolRun(input, output, &input_read, &output_written)) {
@@ -397,6 +517,159 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 },
             };
             return result(input_read, output_written, .need_output);
+        }
+
+        const SemanticRunStatus = enum { need_input, need_output, fallback, block_end, done };
+
+        /// Convert the compact history ring into the chronological prefix used
+        /// by the linear semantic decoder. The second caller window is a
+        /// temporary here and becomes the generated-output region afterwards.
+        fn beginSemanticBlock(self: *Self) void {
+            std.debug.assert(supports_semantic_window);
+            std.debug.assert(self.semantic_scratch.len >= recommended_history_len);
+            const history_len = self.history_len;
+            if (history_len != 0) {
+                const temporary = self.semantic_scratch[format.window_len..][0..history_len];
+                if (history_len == format.window_len) {
+                    const first = format.window_len - self.history_pos;
+                    @memcpy(temporary[0..first], self.history[self.history_pos..][0..first]);
+                    if (first != history_len)
+                        @memcpy(temporary[first..], self.history[0 .. history_len - first]);
+                } else {
+                    std.debug.assert(self.history_pos == history_len);
+                    @memcpy(temporary, self.history[0..history_len]);
+                }
+                @memcpy(self.semantic_scratch[0..history_len], temporary);
+            }
+            self.history_pos = if (history_len == format.window_len) 0 else history_len;
+            self.semantic_prefix_len = history_len;
+            self.semantic_generated_end = history_len;
+            self.semantic_delivered = history_len;
+            self.semantic_end_of_block = false;
+            self.semantic_blocks_started += 1;
+        }
+
+        fn stepSemanticBlock(
+            self: *Self,
+            input: []const u8,
+            output: []u8,
+            input_read: *usize,
+            output_written: *usize,
+            history_record_start: *usize,
+        ) Error!SemanticRunStatus {
+            std.debug.assert(supports_semantic_window);
+            while (true) {
+                if (self.semantic_delivered != self.semantic_generated_end) {
+                    const pending = self.semantic_generated_end - self.semantic_delivered;
+                    const n = @min(pending, output.len - output_written.*);
+                    if (n != 0) {
+                        std.mem.copyForwards(
+                            u8,
+                            output[output_written.*..][0..n],
+                            self.semantic_scratch[self.semantic_delivered..][0..n],
+                        );
+                        self.semantic_delivered += n;
+                        output_written.* += n;
+                        self.total_output += n;
+                        // These bytes already live in the semantic history
+                        // window; the ordinary step-end ring recorder must not
+                        // append them a second time.
+                        history_record_start.* = output_written.*;
+                    }
+                    if (self.semantic_delivered != self.semantic_generated_end)
+                        return .need_output;
+                }
+
+                if (self.semantic_end_of_block) {
+                    if (self.options.expected_output_len) |expected| {
+                        if (self.final_block and self.total_output != expected)
+                            return self.fail(.fast_dynamic_block, error.SizeMismatch);
+                    }
+                    self.retainSemanticTail();
+                    self.semantic_end_of_block = false;
+                    self.semantic_blocks_completed += 1;
+                    self.phase = if (self.final_block) .done else .block_header;
+                    return if (self.phase == .done) .done else .block_end;
+                }
+
+                // A full generated window has been delivered. Retain only the
+                // last RFC window before producing the next one.
+                if (self.semantic_generated_end != self.semantic_prefix_len)
+                    self.retainSemanticTail();
+
+                const remaining = self.semanticRemainingOutput();
+                const output_end = self.semantic_prefix_len + @min(format.window_len, remaining);
+                var reader = bitstream.BufferedBitReader.init(input[input_read.*..]);
+                reader.bit_buffer = self.bit_buffer;
+                reader.bit_count = self.bit_count;
+
+                const decoded = semantic.decodeDynamicBlockIntoWindow(
+                    &reader,
+                    self.semantic_scratch[0..output_end],
+                    self.semantic_prefix_len,
+                    self.semantic_decoder.?,
+                ) catch |err| switch (err) {
+                    // The semantic loop is output-resumable. If this call does
+                    // not contain enough compressed bytes, discard its private
+                    // speculative window and finish the block through the
+                    // established byte-progressive symbol state machine.
+                    error.TruncatedFrame,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    => {
+                        self.phase = .symbols;
+                        return .fallback;
+                    },
+                    else => return self.fail(.fast_dynamic_block, err),
+                };
+
+                rewindSemanticLookahead(&reader);
+                self.bit_buffer = reader.bit_buffer;
+                self.bit_count = @intCast(reader.bit_count);
+                input_read.* += reader.byte_index;
+                self.total_input += reader.byte_index;
+
+                std.debug.assert(decoded.output_written >= self.semantic_prefix_len);
+                const generated = decoded.output_written - self.semantic_prefix_len;
+                if (generated == 0 and decoded.status == .need_output) {
+                    if (self.options.stop_at_output_limit) return .need_output;
+                    if (self.total_output >= self.options.max_output_len)
+                        return self.fail(.fast_dynamic_block, error.OutputLimitExceeded);
+                    if (self.options.expected_output_len) |expected| {
+                        if (self.total_output >= expected)
+                            return self.fail(.fast_dynamic_block, error.SizeMismatch);
+                    }
+                    return self.fail(.fast_dynamic_block, error.OutputLimitExceeded);
+                }
+                self.semantic_generated_end = decoded.output_written;
+                self.semantic_delivered = self.semantic_prefix_len;
+                self.semantic_end_of_block = decoded.status == .end_of_block;
+            }
+        }
+
+        fn semanticRemainingOutput(self: *const Self) usize {
+            var remaining = self.options.max_output_len -| self.total_output;
+            if (self.options.expected_output_len) |expected|
+                remaining = @min(remaining, expected -| self.total_output);
+            return remaining;
+        }
+
+        /// Normalize the generated window back into the ordinary fallback ring.
+        /// Source and destination may overlap, with destination always lower.
+        fn retainSemanticTail(self: *Self) void {
+            const keep = @min(format.window_len, self.semantic_generated_end);
+            const start = self.semantic_generated_end - keep;
+            if (keep != 0)
+                std.mem.copyForwards(
+                    u8,
+                    self.semantic_scratch[0..keep],
+                    self.semantic_scratch[start..][0..keep],
+                );
+            self.history_len = keep;
+            self.history_pos = if (keep == format.window_len) 0 else keep;
+            self.semantic_prefix_len = keep;
+            self.semantic_generated_end = keep;
+            self.semantic_delivered = keep;
         }
 
         const RunStatus = enum { need_input, need_output, block_end, done };
@@ -1116,6 +1389,17 @@ inline fn rewindStagedLookahead(bit_buffer: *u64, bit_count: *u6, input_read: *u
     bit_count.* -= @intCast(rewind * 8);
     bit_buffer.* &= (@as(u64, 1) << bit_count.*) - 1;
     input_read.* -= rewind;
+}
+
+/// BufferedBitReader variant used by the semantic bridge. Only bytes staged
+/// from the current caller slice may be returned; older reservoir bytes were
+/// already reported by an earlier incremental step.
+inline fn rewindSemanticLookahead(reader: *bitstream.BufferedBitReader) void {
+    const rewind = @min(reader.bit_count / 8, reader.byte_index);
+    if (rewind == 0) return;
+    reader.bit_count -= rewind * 8;
+    reader.bit_buffer &= (@as(u64, 1) << @intCast(reader.bit_count)) - 1;
+    reader.byte_index -= rewind;
 }
 
 /// Local-reservoir bit read used by the fused symbol loop. The caller keeps

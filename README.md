@@ -1586,6 +1586,10 @@ defer zstd_incremental_encoder.deinit();
 // aligned payload spans copy directly into caller output and the history ring.
 // RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
 // decoding plus caller-owned 32 KiB history for split length/distance matches.
+// required_history_len preserves that minimum; recommended_history_len (64 KiB)
+// plus attachSemanticWorkspace() enables the bounded semantic fast path for
+// substantial contiguous standard Deflate dynamic blocks without allocating
+// or increasing the decoder's default state footprint.
 // The same decoder switches between stored, fixed, and dynamic blocks without
 // losing bit-reservoir or history state. Fixed/dynamic Huffman symbols use
 // bounded prefix lookups, and matches copy in resumable spans rather than one

@@ -132,9 +132,10 @@ prefix/suffix transforms.
 
 ## Next steps
 
-1. Streaming Deflate: the windowed semantic path is the remaining 2.2x lever
-   against one-shot; it needs a shared semantic decoder and a caller scratch
-   of at least two 32 KiB windows.
+1. Streaming Deflate: the first two-window semantic path is now implemented
+   and brings the measured Dickens rows to 1.47-1.49x of one-shot. Follow-up
+   work should broaden profitable admission beyond contiguous large chunks or
+   remove the extra scratch-to-caller copy without weakening backpressure.
 2. Zstd: mozilla's 2.08x gap points at per-block FSE table construction and
    RLE fills; a faster table builder and avoiding redundant clears are the
    first candidates.
