@@ -105,18 +105,25 @@ computation and ring recording fold into the loop.
 | After first increment | 301,950 | 4,334,700 |
 | Fused local-reservoir run loop | 286,940 | 4,125,970 |
 | Inline `copyMatchSpan` | 270,700 | 3,842,200 |
+| Comptime length/distance metadata tables | 267,100 | 3,810,800 |
 
 The fused loop cuts 4.9% at both sizes; inlining `copyMatchSpan` cuts another
-5.9% at 64 KiB and 6.4% at 1 MiB. Instruction count drops from 61.4M to 52.1M
-per 1 MiB. Against the untouched start of this session the streaming decoder is
-now 4.74x faster at 64 KiB (1,282,030 → 270,700 ns) and 3.59x at 1 MiB
-(13,805,130 → 3,842,200 ns). One-shot `decodeRawAuto` on the same rows is
-91,480 and 1,255,070 ns, so the remaining gap is 2.96x and 3.06x instead of
+5.9% at 64 KiB and 6.4% at 1 MiB. Replacing the per-match length/distance
+metadata arithmetic with comptime `base | extra << 16` tables cuts another
+1.2% at both sizes and 1.2% of instructions (52.1M → 51.5M per 1 MiB). Against
+the untouched start of this session the streaming decoder is now 4.80x faster
+at 64 KiB (1,282,030 → 267,100 ns) and 3.62x at 1 MiB
+(13,805,130 → 3,810,800 ns). One-shot `decodeRawAuto` on the same rows is
+91,480 and 1,255,070 ns, so the remaining gap is 2.92x and 3.04x instead of
 14.0x and 11.2x. `memcpy` is 19.4% of the remaining instructions, and `step`
 itself is 79.5%.
 
 A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
-12%, and a 16-byte scalar copy loop regressed 25%; all were reverted.
+12%, and a 16-byte scalar copy loop regressed 25%; all were reverted. Packing
+the length/distance metadata into the lookup entry as a 64-bit semantic table
+regressed 7% (1,162 → 1,243 ms per 300 decodes): the wider entry doubles the
+table footprint and adds extraction shifts, so the 16-bit lookup plus the
+small metadata tables stay.
 
 ## Status
 

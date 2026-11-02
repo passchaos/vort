@@ -388,6 +388,11 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         }
 
         const RunStatus = enum { need_input, need_output, block_end, done };
+        /// Packed `base | extra_bits << 16` metadata indexed by length symbol
+        /// (257..285) and distance symbol. Small comptime tables replace the
+        /// per-match variable-shift arithmetic in the symbol loop.
+        const length_meta = lengthMetaTable(format);
+        const distance_meta = distanceMetaTable(format);
 
         /// Decode a run of dynamic/fixed-block symbols with the bit reservoir,
         /// partial-code state and cursors held in locals. The resumable phase
@@ -459,16 +464,19 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     }
                     return .block_end;
                 }
-                const length = lengthBaseAndBitsForFormat(format, symbol) orelse return self.fail(.symbols, error.InvalidHuffmanCode);
-                self.length_base = length.base;
-                self.length_extra_bits = length.bits;
-                self.match_len = length.base;
-                if (length.bits != 0) {
-                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, length.bits) orelse {
+                if (symbol > 285) return self.fail(.symbols, error.InvalidHuffmanCode);
+                const length_meta_entry = length_meta[symbol - 257];
+                const length_base: usize = @intCast(length_meta_entry & 0xffff);
+                const length_extra_bits: u6 = @intCast(length_meta_entry >> 16);
+                self.length_base = length_base;
+                self.length_extra_bits = length_extra_bits;
+                self.match_len = length_base;
+                if (length_extra_bits != 0) {
+                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, length_extra_bits) orelse {
                         self.phase = .length_extra;
                         return .need_input;
                     };
-                    self.match_len = length.base + extra;
+                    self.match_len = length_base + extra;
                 }
                 const distance_symbol = (try self.readDistanceSymbolRun(
                     input,
@@ -483,11 +491,14 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     self.phase = .distance_symbol;
                     return .need_input;
                 };
-                const distance = distanceBaseAndBitsForFormat(format, distance_symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
-                self.match_distance = distance.base;
-                self.length_extra_bits = distance.bits;
-                if (distance.bits != 0) {
-                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, distance.bits) orelse {
+                if (distance_symbol >= format.distance_symbol_count) return self.fail(.distance_symbol, error.InvalidHuffmanCode);
+                const distance_meta_entry = distance_meta[distance_symbol];
+                const distance_base: usize = @intCast(distance_meta_entry & 0xffff);
+                const distance_extra_bits: u6 = @intCast(distance_meta_entry >> 16);
+                self.match_distance = distance_base;
+                self.length_extra_bits = distance_extra_bits;
+                if (distance_extra_bits != 0) {
+                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, distance_extra_bits) orelse {
                         self.phase = .distance_extra;
                         return .need_input;
                     };
@@ -911,6 +922,24 @@ fn distanceBaseAndBitsForFormat(comptime format: Format, symbol: usize) ?BaseBit
     const extra_bits: u6 = @intCast(symbol / 2 - 1);
     const base = ((@as(usize, 2) + (symbol & 1)) << @intCast(extra_bits)) + 1;
     return .{ .base = base, .bits = extra_bits };
+}
+
+fn lengthMetaTable(comptime format: Format) [29]u32 {
+    var out: [29]u32 = undefined;
+    for (0..29) |index| {
+        const meta = lengthBaseAndBitsForFormat(format, @intCast(257 + index)).?;
+        out[index] = @as(u32, @intCast(meta.base)) | (@as(u32, @intCast(meta.bits)) << 16);
+    }
+    return out;
+}
+
+fn distanceMetaTable(comptime format: Format) [format.distance_symbol_count]u32 {
+    var out: [format.distance_symbol_count]u32 = undefined;
+    for (0..format.distance_symbol_count) |symbol| {
+        const meta = distanceBaseAndBitsForFormat(format, symbol).?;
+        out[symbol] = @as(u32, @intCast(meta.base)) | (@as(u32, @intCast(meta.bits)) << 16);
+    }
+    return out;
 }
 
 const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
