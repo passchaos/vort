@@ -89,6 +89,28 @@ and x-ray. Against the one-shot decoder it is 2.15x slower at 64 KiB and
 industry bar; this table only establishes that the classic baseline is now
 matched or beaten on most text-like sources.
 
+## Brotli 64 KiB profile
+
+A 2026-11-02 profile of `dickens.64k.brotli.11` shows the 64 KiB gap is not
+dominated by per-call setup:
+
+| Symbol | Share |
+| --- | ---: |
+| `br.processExternalLiteralLookupCompressedPayload` | 70.9% |
+| `br.minimalStaticDictionaryWordAtAddress` | 7.4% |
+| `br.decodeLargeStreamInto` | 4.0% |
+| `huffman.HuffmanTable(704).decodeValueLongAfterLookup` | 3.7% |
+| `br.readPrefixCodeRuntimeInto` | 2.9% |
+| `compiler_rt.memcpy.memcpyFast` | 2.9% |
+| `compiler_rt.memset` | 2.2% |
+| `br.fast_bit_reader.Reader.readBits` | 1.5% |
+
+Per-call prefix-code setup is about 7%, so the earlier "64 KiB is setup
+dominated" hypothesis is only partly true. The payload loop and static
+dictionary transforms account for most of the gap; the dictionary path is
+already borrowing embedded words for transform zero and only materializes
+prefix/suffix transforms.
+
 ## Rejected or neutral follow-ups
 
 - A 32-byte vectorized RLE fill replacing `compiler_rt.memset` for Zstd
