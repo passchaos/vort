@@ -1,16 +1,14 @@
 # Vort roadmap
 
-The current priority is best practical decompression functionality and
-performance for Deflate, Zstd and Brotli. The
-[decoder study](performance/decoder-priority.md) records current-source
-reference gaps over all twelve Silesia files, including actual full files.
-Deflate now masks 64-bit secondary lookup suffixes before narrowing on 32-bit
-targets and uses exact short non-overlapping copies in its main semantic loop.
-Zstd and Brotli candidates without stable whole-call gains remain experimental.
-Encoder entropy-plan work is preserved as an unmerged experiment. Continue
-with the measured specialized Zstd sequence/table work and Brotli external
-literal payload dependencies, while retaining malformed-input, dictionary,
-incremental progress and resource contracts.
+The current priority is closing practical compression and decompression gaps
+for Deflate, Zstd and Brotli. The
+[2026-11-03 gap assessment](performance/industry-gap-current-20261103.md)
+routes to the latest relevant comparisons while retaining each source and
+workload epoch. Brotli q8 context scoring and candidate emission, Brotli/Zstd
+high-quality speed/size tradeoffs, and decoder payload/per-block work remain
+priorities. Full-file, dictionary, streaming, memory and platform comparisons
+must accompany narrower wins. Preserve malformed-input safety, candidate
+ordering, incremental progress and allocator ownership throughout this work.
 
 The [dense Zstd sequence increment](performance/zstd-dense-transitions.md)
 reduces three grouped state-field extractions to one in the measured main

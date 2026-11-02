@@ -1,0 +1,92 @@
+# Deflate, Zstd and Brotli gap assessment, 2026-11-03
+
+The industry-best objective remains active. Standard formats, dictionaries and
+streaming are broadly implemented, but compression speed, high-quality parsing
+and decoder throughput still leave measurable gaps. This assessment preserves
+the source and workload scope of each archived comparison. It is not a fresh
+measurement of every encoder and decoder at the current Git revision.
+
+## Compression
+
+Time and compressed-size ratios are Vort/reference; lower is better. Geometric
+size summaries do not guarantee an improvement on every input.
+
+| Policy and input scope | Time ratio | Size ratio | Evidence |
+| --- | ---: | ---: | --- |
+| Deflate level 9 versus libdeflate 1.26 level 12; twelve 4/16/64 KiB prefixes | 1.85–1.92 | 1.0007–1.0124 | [BT optimal encoder](deflate-bt-optimal.md), 2026-10-31 epoch |
+| Native Zstd btultra2 versus libzstd 1.6.0; twelve 64/128 KiB prefixes | 3.13–3.18 | 1.0048–1.0051 | [Adaptive matcher](zstd-adaptive-matcher.md), 2026-10-31 epoch |
+| Same Zstd policy; three actual 1 MiB multi-block inputs | 4.57 | 0.9928 | Same separate multi-block epoch |
+| Brotli q8 generic, actual window 16; twelve 4/16/64 KiB prefixes | 31.35 | 0.99556 | [Adaptive literal count](br/adaptive-literal-count.md), separate final-production 2026-11-03 epoch |
+| Brotli q10; twelve 32/64 KiB prefixes | 6.62 / 4.88 | 1.0724 / 1.0758 | [Command/model study](brotli-command-start-model.md), earlier epoch |
+| Brotli q11; twelve 32/64 KiB prefixes | 5.20 / 2.32 | 1.0986 / 1.1031 | Same earlier epoch |
+
+The Deflate levels have different algorithms and budgets. Zstd's native HQ
+parser also differs from upstream despite equivalent requested strategy
+controls. These are useful points on the speed/size tradeoff, rather than a
+complete matched-quality frontier. Zstd periodic 4 KiB controls retain about
+8.17/13.30 times reference time for btopt/btultra2.
+
+Brotli q8 buys about 0.44% smaller average output with roughly thirty times
+reference time. Its immediate opportunities are exact context-tree scoring,
+remaining full candidate emission and parser/model work. Higher qualities
+also need better compressed size. Native Zstd needs persistent matcher/index
+lifetime across blocks, larger-input search policies and better entropy
+pricing. Deflate needs entropy-aware parsing and split planning across
+streaming, dictionaries and larger multi-block inputs.
+
+## Decompression
+
+The newer [preload-before-refill epoch](industry-decode-current-20261101.md)
+supersedes the earlier loop-alignment table for broad one-shot Deflate and
+Zstd comparisons. Whole-file Deflate level-6/9 time is 1.4523/1.4417 times
+libdeflate; the later eleven-source 1 MiB refresh remains about 1.44 times
+reference, with individual ratios 1.29–1.53. This corresponds to roughly
+69–70% of reference throughput on the whole-file aggregate.
+
+The latest [Zstd raw mixed-sequence matrix](zstd/raw-mixed-sequences.md)
+contains five alternating sweeps over twelve sources, levels 3/9,
+64 KiB/1 MiB and one-shot/reusable APIs. Recomputing the median of five
+per-source candidate/reference ratios and then the twelve-source geometric
+mean from the existing records gives:
+
+| Scope | One-shot level 3 / 9 | Reusable level 3 / 9 |
+| --- | ---: | ---: |
+| 64 KiB | 1.47955 / 1.47572 | 1.39293 / 1.38780 |
+| 1 MiB | 1.44170 / 1.44234 | 1.44988 / 1.44665 |
+
+These ratios correspond to about 68–72% of reference throughput. Mozilla
+1 MiB level 3 remains around 1.72 times reference time; XML 64 KiB level 3
+is about 2.19 times for one-shot and 2.00 times for reusable. The recomputation
+uses the archived `zig-out/zstd-raw-mixed-20261102/matrix-report.json` with
+the SHA-256 recorded in the linked report; it does not add a timing epoch.
+Earlier internal speedups are not multiplied into these reference ratios.
+
+Brotli's [broad one-shot epoch](industry-decode-current-20261101.md) retains
+full-file q6/q11 time ratios 1.2170/1.2251 versus Brotli 1.2.0, with broader
+64 KiB/1 MiB/full-file scope ranging about 1.12–1.49. Incremental Deflate's
+[compact-table increment](deflate/compact-tables.md) improves its own previous
+source; a current zlib-ng streaming comparison is still needed. Performance
+above classic zlib on selected rows does not establish the modern streaming
+bar.
+
+## Functionality and evidence
+
+The [functional audit](industry-gap-audit.md#current-functionality) records
+flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,
+and Brotli shared dictionaries/Large Window. Remaining controls include
+resumable Brotli entropy-header substates, prepared standard Zstd decode
+dictionaries and optional Deflate block-boundary pause/checkpoint APIs.
+Finite matcher candidates, parsing states and entropy priors remain quality
+limits even where all lengths of an admitted match are considered.
+
+No complete current-source matrix covers compressed size, encoding, decoding,
+requested heap and RSS across all levels, full files, cold/warm calls,
+dictionary/reusable/streaming APIs and CPUs. Allocator budgets and smaller
+scratch tables establish resource contracts; they do not establish a memory
+lead over competitors. Native x86-64 timing and Wasm/32-bit correctness checks
+also do not establish ARM64 throughput leadership.
+
+The next priorities are Brotli q8 context-tree scoring and candidate output,
+Brotli/Zstd HQ speed/size tradeoffs, profitable decoder structural changes,
+and symmetric full-file/dictionary/streaming/memory/platform comparisons.
+Each completed increment must keep the larger three-codec objective active.
