@@ -26125,3 +26125,17 @@ reuse, so production keeps the simpler independently owned plans.
   skip, and all 212 default check/check-wasm steps pass.
   [Evidence](performance/br/score-order.md). Larger parser and model costs
   remain work; the Deflate/Zstd/Brotli industry-best goal stays active.
+
+- 2026-11-03: Fixed-price LZ77 prefix rejection now uses the established
+  longest-frontier and nearest-first nondecreasing-distance-price invariant
+  to remove a redundant cost load/add/compare. Modeled parsing and unsafe
+  32-bit cost ranges retain their prior behavior. A 36-row matched public q8
+  comparison verifies 216 processes, identical wires and 0.77% lower geometric
+  latency; 64 KiB improves 1.48%. Eleven longer MR pairs all improve at a
+  1.52% median gain, with a small OSDB control regression retained. Independent
+  110-case DP/profile/allocator oracles, checked arithmetic, distance-price
+  ties and a losing-frontier witness pass across native modes and x86.
+  Deflate 591, Brotli 1,507 plus one skip, Zstd 1,262 tests, public Wasm q8
+  and all 212 default compile steps pass. [Evidence](performance/br/fixed-prefix-bound.md).
+  The current q8 reference epoch remains 31.69x native Brotli 1.2.0 latency;
+  the full Deflate/Zstd/Brotli industry-best goal stays active.

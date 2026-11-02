@@ -7,6 +7,12 @@ tradeoffs and decoder latencies still leave substantial gaps. This assessment
 routes to the latest relevant evidence; its rows retain their own source,
 parameter and timing epochs.
 
+The subsequent 2026-11-03 [tree-score order](br/score-order.md) and
+[fixed-price prefix bound](br/fixed-prefix-bound.md) increments retain the
+same q8 wires. The latter's separate current-source epoch measures 31.69
+times reference latency at size 0.99556 times reference. The 32.28 row below
+retains its original interval-cost epoch; no A/B gains are multiplied into it.
+
 ## Encoding speed and compressed size
 
 Ratios below are Vort/reference; lower is better for both columns. These are

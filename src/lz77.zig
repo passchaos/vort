@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core.zig");
+const optimal_prefix_bounds = @import("lz77/optimal_prefix_bound.zig");
 
 pub const Error = core.Error;
 
@@ -475,6 +476,7 @@ pub const PreparedOptimal = struct {
             true,
             false,
             false,
+            true,
             undefined,
             undefined,
             undefined,
@@ -498,6 +500,7 @@ pub const PreparedOptimal = struct {
             optimal_compact_index_empty,
             false,
             false,
+            true,
             true,
             undefined,
             undefined,
@@ -1567,7 +1570,7 @@ inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: us
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, undefined, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, true, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanReuseWithCostModel(
@@ -1578,7 +1581,7 @@ pub fn optimalPlanReuseWithCostModel(
     model: OptimalCostModel,
 ) !PlanStats {
     try model.validate(options.window_len, input.len);
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, false, false, true, undefined, undefined, model);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, false, false, true, true, undefined, undefined, model);
 }
 
 fn optimalPlanReuseInternal(
@@ -1588,7 +1591,7 @@ fn optimalPlanReuseInternal(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, false, undefined, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, false, true, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !GreedyPlan {
@@ -1596,7 +1599,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const total_start = std.Io.Clock.awake.now(io);
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, false, io, profile, undefined);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, false, true, io, profile, undefined);
     const tokens = try allocator.dupe(Token, scratch.tokens.items);
     profile.total_ns = elapsedNs(total_start, io);
     return .{ .tokens = tokens, .stats = stats };
@@ -1605,7 +1608,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
 pub fn optimalPlanReuseProfiled(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !PlanStats {
     profile.* = .{ .input_bytes = input.len };
     const total_start = std.Io.Clock.awake.now(io);
-    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, io, profile, undefined);
+    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, true, io, profile, undefined);
     profile.total_ns = elapsedNs(total_start, io);
     return stats;
 }
@@ -1618,6 +1621,7 @@ fn optimalPlanReuseInternalProfiled(
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
     comptime modeled: bool,
+    comptime simplify_prefix_bound: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
@@ -1645,7 +1649,7 @@ fn optimalPlanReuseInternalProfiled(
             profile.index_ns = elapsedNs(index_start, io);
             profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
         }
-        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, io, profile, model);
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     try scratch.index.build(allocator, input);
@@ -1653,7 +1657,7 @@ fn optimalPlanReuseInternalProfiled(
         profile.index_ns = elapsedNs(index_start, io);
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
     }
-    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, io, profile, model);
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, simplify_prefix_bound, io, profile, model);
 }
 
 inline fn optimalPlanReuseWithIndex(
@@ -1666,6 +1670,7 @@ inline fn optimalPlanReuseWithIndex(
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
     comptime modeled: bool,
+    comptime simplify_prefix_bound: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
     model: if (modeled) OptimalCostModel else void,
@@ -1679,6 +1684,13 @@ inline fn optimalPlanReuseWithIndex(
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
     const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
+    // A previously examined longest frontier k bounds the current cost by
+    // B[k] + D_old. Nearest-first predecessors have D_new >= D_old for the
+    // fixed price table, so a mismatch at k already proves non-improvement.
+    // The packed path validated its stronger size limit before entering here;
+    // wider 32-bit inputs retain the original cost comparison.
+    const monotonic_prefix_costs = simplify_prefix_bound and !modeled and
+        (if (packed_optimal_length_choices) true else optimal_prefix_bounds.costsFitInputLength(usize, n));
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
@@ -1715,15 +1727,16 @@ inline fn optimalPlanReuseWithIndex(
                 continue;
             }
 
-            const distance_cost = distance_costs[distance];
             if (enable_prefix_bound and
                 minimum == 4 and
                 choices_built_through >= minimum and
                 choices_built_through < max_len and
                 input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
-                optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_cost >= costs[rev_i])
+                (monotonic_prefix_costs or
+                    optimalLengthChoiceCost(scratch.index.best_length_choices[choices_built_through]) + distance_costs[distance] >= costs[rev_i]))
             {
                 if (comptime collect_profile) {
+                    const distance_cost = distance_costs[distance];
                     profile.bound_rejections += 1;
                     profile.bound_length_histogram[optimalBoundLengthBucket(choices_built_through)] += 1;
                     profile.bound_distance_cost_histogram[distance_cost - 5] += 1;
@@ -1739,6 +1752,7 @@ inline fn optimalPlanReuseWithIndex(
                 continue;
             }
 
+            const distance_cost = distance_costs[distance];
             if (comptime collect_profile) profile.match_length_calls += 1;
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
@@ -4780,4 +4794,39 @@ test {
     _ = @import("lz77/zero_window_cost_model_tests.zig");
     _ = @import("lz77/optimal_cost_model_window_tests.zig");
     _ = @import("lz77/fixed_optimal_window_tests.zig");
+}
+
+const PrefixBoundRoot = @This();
+test "optimal prefix bound fixed distance prices are nondecreasing" {
+    var prior: usize = 0;
+    for (1..default_window_len + 1) |distance| {
+        const cost = fixedDistanceCost(distance);
+        try std.testing.expect(cost >= prior and cost >= 5 and cost <= 18);
+        prior = cost;
+    }
+}
+
+test "optimal prefix bound fixed-cost comparison oracle" {
+    const TestCodec = struct {
+        pub const Token = PrefixBoundRoot.Token;
+        pub const GreedyOptions = PrefixBoundRoot.GreedyOptions;
+        pub const OptimalScratch = PrefixBoundRoot.OptimalScratch;
+        pub const PlanStats = PrefixBoundRoot.PlanStats;
+        pub const OptimalSearchProfile = PrefixBoundRoot.OptimalSearchProfile;
+        pub const optimized = PrefixBoundRoot.optimalPlanReuse;
+        pub const optimizedProfiled = PrefixBoundRoot.optimalPlanReuseProfiled;
+        pub const costsFitInputLength = optimal_prefix_bounds.costsFitInputLength;
+
+        pub fn original(scratch: *PrefixBoundRoot.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: PrefixBoundRoot.GreedyOptions) !PrefixBoundRoot.PlanStats {
+            return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, false, undefined, undefined, undefined);
+        }
+        pub fn originalProfiled(scratch: *PrefixBoundRoot.OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: PrefixBoundRoot.GreedyOptions, io: std.Io, profile: *PrefixBoundRoot.OptimalSearchProfile) !PrefixBoundRoot.PlanStats {
+            profile.* = .{ .input_bytes = input.len };
+            const start = std.Io.Clock.awake.now(io);
+            const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, false, io, profile, undefined);
+            profile.total_ns = elapsedNs(start, io);
+            return stats;
+        }
+    };
+    try @import("lz77/optimal_prefix_bound_tests.zig").check(TestCodec);
 }
