@@ -1,5 +1,11 @@
 # Mainstream codec and industry gap audit
 
+For the active Deflate/Zstd/Brotli goal, the compact
+[2026-11-02 gap assessment](industry-gap-current-20261102.md) identifies the
+latest relevant encoding, decoding, resource and platform evidence. The
+decompression-only priority and encoder freeze recorded below describe their
+earlier task boundary; the current workflow also optimizes Brotli encoding.
+
 Date: 2026-10-26. The window/resource increment starts at `fa35a843`; the
 subsequent [stream-count increment](stream-counts-functional-baseline.md) starts
 at `dacd500a`. Their functional evidence is separate from the dated performance
