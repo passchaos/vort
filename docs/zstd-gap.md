@@ -1921,3 +1921,18 @@ contracts pass. PowerPC64 BigEndian compilation passes. This narrows one table
 setup cost; Mozilla still has approximately a twofold gap to native libzstd
 1.6.0. Next work should address the sequence executor and actual memset
 callsite. [Evidence](performance/zstd/small-no-low-tables.md).
+
+## 2026-11-02: avoid absent Huffman-state materialization
+
+The pure Mozilla decoder profile identifies a 5,256-byte memset when a raw/RLE
+literal section returns an absent owned Huffman state. Sequence consumers now
+hold an optional pointer to caller-owned state and use the new cohesive
+literal-state initializer only for Huffman sections. Independent old lookup
+construction tests preserve cursor, error and reuse behavior. Five 96-row
+Silesia/API sweeps verify 960 processes and reduce Mozilla 1 MiB level-3
+one-shot/reusable latency by 12.3%/11.9%; the 1 MiB level-3 group improves
+1.30%/1.38%, while other groups stay close to neutral. A long Samba control
+resolves the initial small-row dip. All 1,260 ReleaseSafe Zstd tests and 9,900
+upstream frames pass. The target still runs at about 1.79x native libzstd
+latency. Next work targets the sequence executor and raw fixed-mode loops.
+[Evidence](performance/zstd/optional-huffman-state.md).

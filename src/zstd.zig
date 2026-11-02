@@ -11019,16 +11019,43 @@ const HuffmanLiteralDecodeState = struct {
 };
 
 fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection) Error!?HuffmanLiteralDecodeState {
-    if (section.kind != .compressed and section.kind != .treeless) return null;
-    const tree = section.huffman_tree orelse return error.CorruptFrame;
-    var lookup: HuffmanLiteralLookup = undefined;
-    if (!lookup.buildComplete(&tree))
-        lookup = HuffmanLiteralLookup.build(&tree);
-    return .{
-        .cursor = try initHuffmanLiteralCursor(block, section),
-        .tree = tree,
-        .lookup = lookup,
-    };
+    var state: HuffmanLiteralDecodeState = undefined;
+    const initialized = (try initHuffmanLiteralDecodeStateInto(&state, block, section)) orelse return null;
+    return initialized.*;
+}
+
+/// Raw/RLE sections need no Huffman workspace. Returning an optional pointer
+/// leaves its unused payload untouched rather than constructing a large null
+/// optional value for every sequence-bearing raw section.
+fn initHuffmanLiteralDecodeStateInto(
+    state: *HuffmanLiteralDecodeState,
+    block: []const u8,
+    section: LiteralOnlySection,
+) Error!?*HuffmanLiteralDecodeState {
+    return @import("zstd/literals/state_init.zig").init(state, block, section, initHuffmanLiteralCursor);
+}
+
+const LiteralOptionalStateTestSupport = struct {
+    pub const State = HuffmanLiteralDecodeState;
+    pub const Section = LiteralOnlySection;
+    pub const Codec = ParallelCodecSupport;
+    pub const initInto = initHuffmanLiteralDecodeStateInto;
+    pub const initCursor = initHuffmanLiteralCursor;
+    pub const copyLiterals = copyLiteralsFromHuffmanState;
+    pub const firstBlock = inspectNativeFrameFirstBlock;
+    pub const blockAt = inspectNativeFrameBlockAt;
+};
+
+test "Zstd optional Huffman state raw and RLE workspace remains untouched" {
+    try @import("zstd/literals/optional_state_tests.zig").checkRawRle(LiteralOptionalStateTestSupport);
+}
+
+test "Zstd optional Huffman state caller storage matches legacy decode and reuse" {
+    try @import("zstd/literals/optional_state_tests.zig").checkHuffmanReuse(LiteralOptionalStateTestSupport);
+}
+
+test "Zstd optional Huffman state preserves malformed errors" {
+    try @import("zstd/literals/optional_state_tests.zig").checkMalformed(LiteralOptionalStateTestSupport);
 }
 
 fn copyLiteralsFromHuffmanState(
@@ -12997,7 +13024,8 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             &state,
         )) return;
     }
-    var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
+    var huffman_storage: HuffmanLiteralDecodeState = undefined;
+    const huffman_literals = try initHuffmanLiteralDecodeStateInto(&huffman_storage, block, section);
     var literal_offset: usize = 0;
     if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
         spec.ll_mode == .compressed and
@@ -13082,13 +13110,13 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     {
         const initial_huffman = huffman_literals orelse return error.CorruptFrame;
         if (sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count))
-            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman);
-        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman);
+            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman.*);
+        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman.*);
     }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
-        if (huffman_literals) |*huffman_state| {
+        if (huffman_literals) |huffman_state| {
             if (output.len - written.* < literal_len) return error.OutputTooSmall;
             try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
             written.* += literal_len;
@@ -13100,7 +13128,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    if (huffman_literals) |*huffman_state| {
+    if (huffman_literals) |huffman_state| {
         if (output.len - written.* < last_literals) return error.OutputTooSmall;
         try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
         written.* += last_literals;
@@ -13249,7 +13277,8 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
             &state,
         )) return;
     }
-    var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
+    var huffman_storage: HuffmanLiteralDecodeState = undefined;
+    const huffman_literals = try initHuffmanLiteralDecodeStateInto(&huffman_storage, block, section);
     var literal_offset: usize = 0;
     if ((!builtin.is_test or !test_disable_all_fse_raw_decode) and
         spec.ll_mode == .compressed and
@@ -13333,13 +13362,13 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     {
         const initial_huffman = huffman_literals orelse return error.CorruptFrame;
         if (sequence_decode_policy.preferHuffmanMatchWildcopy(block.len, section.sequence_count))
-            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman);
-        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman);
+            return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, true, initial_huffman.*);
+        return try decodeAllFseHuffmanSequences(section, &spec, output, written, frame_output_start, frame_state, continuation, &state, allow_wildcopy, false, initial_huffman.*);
     }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
-        if (huffman_literals) |*huffman_state| {
+        if (huffman_literals) |huffman_state| {
             if (output.len - written.* < literal_len) return error.OutputTooSmall;
             try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
             written.* += literal_len;
@@ -13369,7 +13398,7 @@ noinline fn decodeRleSequencesCompressedBlockIntoBufferWithSequenceWorkspace(
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    if (huffman_literals) |*huffman_state| {
+    if (huffman_literals) |huffman_state| {
         if (output.len - written.* < last_literals) return error.OutputTooSmall;
         try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
         written.* += last_literals;

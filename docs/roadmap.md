@@ -26083,3 +26083,12 @@ reuse, so production keeps the simpler independently owned plans.
   header/offset/truncation oracles; BigEndian compilation passes. Existing
   32-state and 256-state paths remain distinct. [Evidence](performance/zstd/small-no-low-tables.md).
   The deflate/zstd/brotli industry-best objective remains active.
+
+- 2026-11-02: Zstd one-shot/reusable sequence consumers now use optional pointers
+  to caller-owned Huffman state. Raw/RLE sections leave the workspace untouched,
+  avoiding a confirmed 5,256-byte absent-payload clear. Initialization and
+  ownership/oracle tests are cohesive literal submodules. Five 96-row public
+  API sweeps verify 960 processes and reduce Mozilla 1 MiB level-3
+  one-shot/reusable latency 12.3%/11.9%; all 1,260 ReleaseSafe tests and 9,900
+  upstream frames pass. [Evidence](performance/zstd/optional-huffman-state.md).
+  The three-format industry-best objective remains active.
