@@ -788,12 +788,25 @@ fn clusterContexts(
             cache: *TreeScoreCache,
             mode: u2,
             profiler: if (profiled) *ProfileTimer else void,
+            order: if (prune) [max_trees]u8 else void,
 
             pub fn score(self: *@This(), tree: usize) !u64 {
-                return treeBitCostCached(profiled, self.allocator, &self.histograms[tree], self.active, self.cache, self.mode, self.profiler);
+                const actual_tree: usize = if (prune) self.order[tree] else tree;
+                return treeBitCostCached(profiled, self.allocator, &self.histograms[actual_tree], self.active, self.cache, self.mode, self.profiler);
             }
         };
-        var scorer: Scorer = .{ .allocator = allocator, .histograms = tree_histograms[0..tree_count], .active = active_symbols, .cache = tree_score_cache, .mode = mode, .profiler = profiler };
+        var scorer: Scorer = .{
+            .allocator = allocator,
+            .histograms = tree_histograms[0..tree_count],
+            .active = active_symbols,
+            .cache = tree_score_cache,
+            .mode = mode,
+            .profiler = profiler,
+            // Tree IDs and histograms retain their original wire order. Only
+            // exact score requests change order, so the existing strict
+            // partial-sum threshold can reject a losing map earlier.
+            .order = if (prune) cluster_partial_score.descendingTotalOrder(tree_totals[0..tree_count]) else {},
+        };
         const bits = try cluster_partial_score.evaluate(prune, @intCast(map_plan.bit_cost), threshold_bits, tree_count, &scorer) orelse {
             if (profiled) profiler.profile.cluster_tree_scores_pruned += 1;
             return null;

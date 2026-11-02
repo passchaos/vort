@@ -5,6 +5,8 @@
 //! count, maximum code width, and fixed maximum of sixty-four tree headers.
 const std = @import("std");
 
+pub const descendingTotalOrder = @import("cluster_partial_score/order.zig").byTotal;
+
 pub fn evaluate(comptime prune: bool, initial_bits: u64, threshold: u64, tree_count: usize, scorer: anytype) !?u64 {
     var bits = initial_bits;
     for (0..tree_count) |tree| {
@@ -15,6 +17,10 @@ pub fn evaluate(comptime prune: bool, initial_bits: u64, threshold: u64, tree_co
         bits += try scorer.score(tree);
     }
     return bits;
+}
+
+test "cluster partial score independent order oracle" {
+    try @import("cluster_partial_score/order_tests.zig").check(@This());
 }
 
 const Fixture = struct {

@@ -26113,3 +26113,15 @@ reuse, so production keeps the simpler independently owned plans.
   modes. [Evidence](performance/br/interval-cost.md). The three-format
   industry-best objective remains active; matched q8 encoding is still over
   32x native Brotli 1.2.0 latency on this corpus.
+
+- 2026-11-03: Brotli clustered literal maps now request exact tree scores in
+  stable descending-total order without changing tree IDs, maps or wire order.
+  The actual six-search q8 sample reduces requests 17.39% and cache misses
+  13.46%, with all candidate events and final wires unchanged. A 36-row public
+  matched-q8 matrix verifies 216 processes and improves geometric latency
+  0.74%; 4/16 KiB improve 1.3%/0.9%, while 64 KiB is neutral. Longer controls
+  retain small individual regressions rather than claiming universal gains.
+  Independent order/sum/error oracles, 1,506 ReleaseSafe Brotli tests plus one
+  skip, and all 212 default check/check-wasm steps pass.
+  [Evidence](performance/br/score-order.md). Larger parser and model costs
+  remain work; the Deflate/Zstd/Brotli industry-best goal stays active.
