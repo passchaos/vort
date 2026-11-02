@@ -25931,3 +25931,19 @@ reuse, so production keeps the simpler independently owned plans.
   were already cheap and their chain was hidden; one saved shift changes
   nothing measurable. The separate reads stay.
   The three-codec industry-best goal stays active.
+
+- 2026-11-02: Batching the incremental Brotli literal-block boundary check
+  (one check per run, `readLiteralChecked`, runs bounded by the block's
+  remaining length) was reverted. The unguarded form is about 1% faster
+  (`0.9901/0.9883/0.9876/0.9883` and `0.9917/0.9848/0.9885/0.9923` for q6/q11
+  at 64 KiB/1 MiB), but it breaks truncation recovery: a truncated block-switch
+  read inside the run was not rewound, and the "thirty-third literal block
+  type" test (one input byte per step) failed. Three correct variants were
+  measured and all are slower than the per-literal loop: guarded due-switch
+  checkpoint in the loop `1.0358/1.0391/1.0367/1.0348`, the same with an
+  out-of-line switch call `1.0277/1.0276/1.0225/1.0257`, and a phase-entry
+  switch with run break/re-entry `1.0129/1.0093/1.0083/1.0079`. A non-inlinable
+  restore call inside the loop, or the phase re-entry per switch, costs more
+  than the per-literal check saves. The per-literal loop stays.
+  [Evidence](performance/brotli-incremental-literal-run.md). The three-codec
+  industry-best goal stays active.
