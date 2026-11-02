@@ -23398,6 +23398,14 @@ reuse, so production keeps the simpler independently owned plans.
   compression-ratio, throughput and memory tradeoffs before the broad goal can
   be considered achieved.
 
+- The PNG ring entrypoint now retains the specialized semantic window kernels
+  and processes all block types without a full-stream restart. Exact wrapping
+  and internal writable-end RLE guards are verified. Native core and no-NEON
+  decoder-only gates pass 41/41 and 11/11; two broad no-NEON failures match
+  the original encoder-dependent baseline. imx records selected AArch64 gains in
+  [the ring window report](png-ring-window.md). Broad codec performance and
+  conformance leadership remains open.
+
 - PNG semantic-window fast loops now reserve four paired-literal bytes in
   addition to the maximum 258-byte match. Valid streams pause and resume at
   a short history-window end instead of returning OutputTooSmall. Direct,

@@ -5662,10 +5662,13 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
         false,
         false,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5681,10 +5684,13 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
         true,
         false,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5699,10 +5705,13 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
         false,
         false,
         false,
+        false,
         reader,
         output,
         0,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5717,10 +5726,13 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
         false,
         false,
         false,
+        false,
         reader,
         output,
         0,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5740,10 +5752,13 @@ noinline fn decodeSemanticDynamicBlockIntoRle258BufferedReader(
         false,
         true,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5871,10 +5886,13 @@ noinline fn decodeSemanticDynamicBlockIntoRle258Window(
         false,
         true,
         true,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5890,10 +5908,13 @@ noinline fn decodeSemanticDynamicBlockIntoWindow(
         false,
         false,
         true,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5909,10 +5930,13 @@ noinline fn decodeSemanticDynamicBlockIntoNonOverlapWindow(
         true,
         false,
         true,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5928,10 +5952,13 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceWindow(
         false,
         false,
         true,
+        false,
         reader,
         output,
         initial_out_offset,
         decoder,
+        0,
+        0,
     );
 }
 
@@ -5941,13 +5968,18 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime inline_non_overlap: bool,
     comptime rle258_pair: bool,
     comptime pause_at_output_boundary: bool,
+    comptime ring_mode: bool,
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: anytype,
+    window_limit: usize,
+    window_origin: usize,
 ) Error!SemanticLinearResult(pause_at_output_boundary) {
     comptime std.debug.assert(!rle1_distance or single_distance);
     const Decoder = @TypeOf(decoder.*);
+    const limit = if (comptime ring_mode) window_limit else output.len;
+    std.debug.assert(limit <= output.len);
     // Machine-word counts avoid repeated narrow-integer masks and spills in
     // the measured complete-output, PNG window, and distance-one loops.
     // Preserve each packed field's mask when widening.
@@ -5977,16 +6009,16 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         262
     else
         16;
-    if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
+    if (out_pos + output_headroom <= limit and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
     var entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
-    while (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
+    while (out_pos + output_headroom <= limit and byte_index + 8 <= input.len) {
         if (comptime rle258_pair) {
             if ((bit_buffer & 0b11) == 0 and
-                out_pos != 0 and
-                output.len - out_pos >= 258)
+                (out_pos != 0 or (ring_mode and window_origin != 0)) and
+                limit - out_pos >= 258)
             {
                 bit_buffer >>= 2;
                 bit_count -= 2;
@@ -5996,8 +6028,8 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                     @intCast(bit_buffer & Decoder.literal_lookup_mask)
                 ];
 
-                const byte = output[out_pos - 1];
-                fillLinearRle(output, out_pos, 258, byte);
+                const byte = if (ring_mode and out_pos == 0) output[output.len - 1] else output[out_pos - 1];
+                fillLinearRle(if (comptime ring_mode) output[0..limit] else output, out_pos, 258, byte);
                 out_pos += 258;
                 continue;
             }
@@ -6196,10 +6228,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
             entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
-            if (out_pos == 0) return error.InvalidMatch;
-            if (length > output.len - out_pos) return error.OutputTooSmall;
-            const byte = output[out_pos - 1];
-            fillLinearRle(output, out_pos, length, byte);
+            if (out_pos == 0 and (!ring_mode or window_origin == 0)) return error.InvalidMatch;
+            if (length > limit - out_pos) return error.OutputTooSmall;
+            const byte = if (ring_mode and out_pos == 0) output[output.len - 1] else output[out_pos - 1];
+            fillLinearRle(if (comptime ring_mode) output[0..limit] else output, out_pos, length, byte);
             out_pos += length;
             continue;
         }
@@ -6245,6 +6277,14 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         if (comptime track_consumed) consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
+        if (comptime ring_mode) {
+            if (distance > out_pos) {
+                if (distance > window_origin + out_pos) return error.InvalidMatch;
+                try @import("deflate/png/ring_copy.zig").copyWrapped(output, out_pos, length, distance);
+                out_pos += length;
+                continue;
+            }
+        }
         if (comptime inline_non_overlap) {
             // This specialization is selected only for match-heavy blocks whose
             // distance alphabet is deep enough to justify a separate loop. Keep
@@ -6256,7 +6296,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 @branchHint(.likely);
                 if (distance > out_pos) return error.InvalidMatch;
                 if (comptime pause_at_output_boundary) {
-                    if (length > output.len - out_pos) return error.OutputTooSmall;
+                    if (length > limit - out_pos) return error.OutputTooSmall;
                     if (!png_non_overlap.copyShortWindowMatch(
                         output,
                         out_pos,
@@ -6269,17 +6309,17 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                     // The full-output specialization enters this loop with
                     // room for two paired literals plus a maximum-length
                     // match, so destination capacity is already proven.
-                    std.debug.assert(length <= output.len - out_pos);
+                    std.debug.assert(length <= limit - out_pos);
                     @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
                 }
             } else {
                 try copyMatchAt(output, out_pos, length, distance);
             }
         } else if (distance == 1) {
-            if (out_pos == 0) return error.InvalidMatch;
-            if (length > output.len - out_pos) return error.OutputTooSmall;
-            const byte = output[out_pos - 1];
-            fillLinearRle(output, out_pos, length, byte);
+            if (out_pos == 0 and (!ring_mode or window_origin == 0)) return error.InvalidMatch;
+            if (length > limit - out_pos) return error.OutputTooSmall;
+            const byte = if (ring_mode and out_pos == 0) output[output.len - 1] else output[out_pos - 1];
+            fillLinearRle(if (comptime ring_mode) output[0..limit] else output, out_pos, length, byte);
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }
@@ -6298,6 +6338,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             bit_count,
         ),
     );
+    if (comptime ring_mode) return .{ .output_written = out_pos, .status = .need_output };
     if (comptime pause_at_output_boundary) {
         return decodeSemanticTailWindow(
             reader,
@@ -6312,12 +6353,12 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     while (true) {
         switch (try decodeSemanticTailSymbol(reader, decoder)) {
             .literal => |literal| {
-                if (out_pos == output.len) return error.OutputTooSmall;
+                if (out_pos == limit) return error.OutputTooSmall;
                 output[out_pos] = literal;
                 out_pos += 1;
             },
             .double_literal => |literal_pair| {
-                if (output.len - out_pos < 2) return error.OutputTooSmall;
+                if (limit - out_pos < 2) return error.OutputTooSmall;
                 output[out_pos] = literal_pair[0];
                 output[out_pos + 1] = literal_pair[1];
                 out_pos += 2;
@@ -14872,6 +14913,26 @@ test "PNG windowed valid long match at history end resumes before copying" {
     try @import("deflate/semantic/window_boundary_tests.zig").verifyPng(decodePngWindowedZlibImageWithOptions);
 }
 
+test "ring aware PNG window handles stored and dynamic blocks across exact laps" {
+    const Adapter = struct {
+        fn decode(input: []const u8, scratch: []u8, info: png.PngImageInfo, options: ZlibDecodeOptions, output: []u8) !PngImageDecodeResult {
+            const row = std.testing.allocator.alloc(u8, info.row_len + 1) catch return error.OutOfMemory;
+            defer std.testing.allocator.free(row);
+            try decodePngRingZlibImageWithOptions(input, scratch[0..png_ring_scratch_len], row, info, options, output);
+            return .{ .rows = info.height, .output_written = output.len, .zlib_input_read = input.len };
+        }
+    };
+    try @import("deflate/semantic/window_boundary_tests.zig").verifyPng(Adapter.decode);
+}
+
+test "ring window RLE preserves live history past an internal writable end" {
+    try @import("deflate/png/ring_window_guard_tests.zig").verify(
+        SemanticDynamicDecoder,
+        initRingSemanticDecoder,
+        decodeSemanticDynamicBlockIntoRingWindow,
+    );
+}
+
 test "semantic long match after two literal pairs preserves checked decode" {
     const vectors = @import("deflate/semantic/long_match_vectors.zig");
     const expected = try vectors.expectedAlloc(std.testing.allocator);
@@ -15596,7 +15657,119 @@ pub fn decodePngRingZlibImageWithOptions(
         info.zlib_payload_len,
         !options.ignore_adler,
     );
-    try decodeZlibPngRingSink(input, &sink, options);
+    if (ring_scratch.len == png_ring_scratch_len) {
+        try @import("deflate/png/ring_window.zig").decode(RingWindowAPI, input, &sink, options);
+    } else {
+        // Preserve the existing prototype's caller-selected ring capacities.
+        // The fast window owner currently proves its bounds for this size.
+        try decodeZlibPngRingSink(input, &sink, options);
+    }
+}
+
+const RingWindowAPI = struct {
+    pub const Decoder = SemanticDynamicDecoder;
+    pub const header = parseZlibHeader;
+    pub const block = readBlockHeader;
+    pub const init = initRingSemanticDecoder;
+    pub const fast = decodeSemanticDynamicBlockIntoRingWindow;
+    pub const tail = decodeSemanticRingTailToken;
+    pub const compact = decodeCompactRingTailToken;
+    pub const footer = validateZlibFooterWithOptions;
+};
+
+fn initRingSemanticDecoder(decoder: *SemanticDynamicDecoder, literals: *const huffman.HuffmanTable(286), distances: *const huffman.HuffmanTable(30)) bool {
+    if (!decoder.init(literals, distances)) return false;
+    if (distances.len == 1 and distances.entries[0].code == 0) {
+        const entry = distances.entries[0];
+        decoder.single_distance = SemanticDynamicDecoder.semanticDistanceEntry(entry.symbol, entry.bits);
+    }
+    return true;
+}
+
+noinline fn decodeSemanticDynamicBlockIntoRingWindow(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    position: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+    limit: usize,
+    origin: usize,
+) Error!SemanticLinearStep {
+    if (semantic_rle258.shouldUse(decoder.compact_literal, decoder.compact_distance))
+        return decodeSemanticDynamicBlockIntoLinearMode(false, false, false, true, true, true, reader, output, position, decoder, limit, origin);
+    if (decoder.single_distance != 0)
+        return decodeSemanticDynamicBlockIntoLinearMode(true, false, false, false, true, true, reader, output, position, decoder, limit, origin);
+    if (png_non_overlap.shouldUse(decoder.compact_literal.max_bits, decoder.compact_distance.max_bits) != 0)
+        return decodeSemanticDynamicBlockIntoLinearMode(false, false, true, false, true, true, reader, output, position, decoder, limit, origin);
+    return decodeSemanticDynamicBlockIntoLinearMode(false, false, false, false, true, true, reader, output, position, decoder, limit, origin);
+}
+
+const RingTailStatus = enum { progress, need_output, end_of_block };
+
+fn decodeCompactRingTailToken(reader: *bitstream.BufferedBitReader, sink: *png_ring_sink.RingSemanticSink, literals: anytype, distances: anytype) Error!RingTailStatus {
+    const saved = reader.*;
+    const symbol = try literals.decodeValue(reader);
+    if (symbol == 256) return .end_of_block;
+    if (symbol < 256) {
+        if (sink.ring.total_written == sink.expected_virtual_len) return error.SizeMismatch;
+        if (!sink.canWriteLiteral()) {
+            reader.* = saved;
+            return .need_output;
+        }
+        try sink.emitByte(@intCast(symbol));
+    } else {
+        const length = try decodeLength(symbol, reader);
+        const distance = try decodeDistance(try distances.decodeValue(reader), reader);
+        if (distance == 0 or distance > sink.ring.total_written) return error.InvalidMatch;
+        if (length > sink.expected_virtual_len - sink.ring.total_written) return error.SizeMismatch;
+        if (!sink.canWriteMatch(length)) {
+            reader.* = saved;
+            return .need_output;
+        }
+        try sink.copyMatch(length, distance);
+    }
+    return .progress;
+}
+
+/// One complete token crosses an exact ring end, then the fast window resumes.
+/// No pending decoder state or early physical cursor reset is required.
+fn decodeSemanticRingTailToken(
+    reader: *bitstream.BufferedBitReader,
+    sink: *png_ring_sink.RingSemanticSink,
+    decoder: *const SemanticDynamicDecoder,
+) Error!RingTailStatus {
+    const saved = reader.*;
+    switch (try decodeSemanticTailSymbol(reader, decoder)) {
+        .literal => |literal| {
+            if (sink.ring.total_written == sink.expected_virtual_len) return error.SizeMismatch;
+            if (!sink.canWriteLiteral()) {
+                reader.* = saved;
+                return .need_output;
+            }
+            try sink.emitByte(literal);
+        },
+        .double_literal => |pair| {
+            if (sink.expected_virtual_len - sink.ring.total_written < 2) return error.SizeMismatch;
+            if (!sink.canWriteMatch(2)) {
+                reader.* = saved;
+                return .need_output;
+            }
+            try sink.emitByte(pair[0]);
+            try sink.emitByte(pair[1]);
+        },
+        .length => |info| {
+            const length = info.base + try readDeflateExtraBits(reader, info.extra_bits);
+            const distance = try decodeDistance(try decoder.compact_distance.decodeValue(reader), reader);
+            if (distance == 0 or distance > sink.ring.total_written) return error.InvalidMatch;
+            if (length > sink.expected_virtual_len - sink.ring.total_written) return error.SizeMismatch;
+            if (!sink.canWriteMatch(length)) {
+                reader.* = saved;
+                return .need_output;
+            }
+            try sink.copyMatch(length, distance);
+        },
+        .eob => return .end_of_block,
+    }
+    return .progress;
 }
 
 pub fn decodeZlibPngRingSink(

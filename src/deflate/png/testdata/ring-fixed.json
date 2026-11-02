@@ -1,0 +1,8 @@
+{
+  "generator": "Python zlib 1.3 strategy Z_FIXED level6, filtered[i]=(i*37+i//7) mod256 except filter0 every512",
+  "width": 511,
+  "height": 640,
+  "filtered_sha256": "4b21ff0f2f2bb7aa1379d125afb56595351a374df46e4daa777186f1eaf1e4a0",
+  "encoded_sha256": "57ee4576b617324e9ca150090d19918fd9b48e6b579711fd22a44185db91b576",
+  "encoded_bytes": 4202
+}
