@@ -25967,3 +25967,12 @@ reuse, so production keeps the simpler independently owned plans.
   while the by-value form adds a move and keeps the cursor live across the
   call. The pointer form stays. The three-codec industry-best goal stays
   active.
+
+- 2026-11-02: Batching the tail-lookup Brotli payload's literal block boundary
+  check (one check per run plus a batched remaining-length update, mirroring
+  the external-lookup payload) was mixed and reverted:
+  `0.9972/1.0100/1.0015/1.0002` for q6/q11 at 64 KiB/1 MiB, with `xml.1m`
+  losing 3–4.5% and other rows gaining 1–2%. The per-literal check is two
+  loads plus a well-predicted branch; the run loop's `@min`, hoisted map
+  lookups and extra nesting cost more on mixed literal shapes. The per-literal
+  loop stays. The three-codec industry-best goal stays active.
