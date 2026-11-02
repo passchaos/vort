@@ -140,7 +140,8 @@ zig build -j4 check check-wasm --summary all
 | Final benchmark | `5f078f9022e9706225e246e6f207f4e9644c54ffa8703a07a23dcc6a4a586a6f` |
 | Final matrix | `91ee64f226ed28e270136fa90bbf4d2860805f81baa02a4f9fa98295e2580b47` |
 
-Adaptive literal split candidates still serialize their complete streams;
-exact preparation/counting for that family is the next larger output target.
-Context tree scoring and high-quality parser/model work also remain. The
-Deflate/Zstd/Brotli industry-best goal stays active.
+The subsequent [adaptive literal count](adaptive-literal-count.md) increment
+prepares that candidate family, avoids losing output emission and repairs
+valid two-to-four-symbol adaptive literal alphabets. Its performance results
+retain a separate source epoch. Context tree scoring and high-quality
+parser/model work remain. The Deflate/Zstd/Brotli industry-best goal stays active.

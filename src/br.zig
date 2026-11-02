@@ -1,4 +1,5 @@
 const std = @import("std");
+const prepared_adaptive_literal = @import("br/encoder/prepared_adaptive_literal.zig");
 const allocator_dispatch = @import("br/allocator_dispatch.zig");
 const builtin = @import("builtin");
 const core = @import("core.zig");
@@ -10610,10 +10611,10 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     const baseline_stats = stats.*;
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
-    const candidate = if (has_legacy_split)
+    const candidate: ?[]u8 = if (has_legacy_split)
         try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split)
     else if (adaptive_literal) |*split|
-        try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(
+        try encodeCountedAdaptiveLiteralCandidateRecorded(
             trace_enabled,
             trace,
             allocator,
@@ -10623,6 +10624,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             options,
             baseline,
             split,
+            baseline.encoded,
         )
     else if (symbol_splits.adaptive_command) |*adaptive_command|
         try encodeEntropyAdaptiveCommandSplitWireCandidateAllocRecorded(
@@ -10648,66 +10650,42 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             baseline,
             &symbol_splits.adaptive_distance.?,
         );
-    var best = candidate;
-    var best_stats = candidate_stats;
-    errdefer freeQualityRecorded(trace_enabled, trace, allocator, best);
+    var selection = @import("br/encoder/entropy_wire_selection.zig").Owner(encoder_stats.PlannedEncodeStats).init(baseline.encoded, baseline_stats);
+    errdefer selection.deinit(trace_enabled, trace, allocator, freeQualityRecorded);
+    if (candidate) |wire| selection.consider(trace_enabled, trace, allocator, wire, candidate_stats, freeQualityRecorded);
     if (literal_splits.three != null) if (literal_splits.two) |two_literal| {
         var two_literal_stats = baseline_stats;
         const two_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &two_literal_stats, options, baseline, two_literal, command_split, distance_split);
-        if (trace.prefer(two_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = two_literal_candidate;
-            best_stats = two_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, two_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, two_literal_candidate, two_literal_stats, freeQualityRecorded);
     };
     if (literal_splits.clustered) |clustered_literal| {
         var clustered_literal_stats = baseline_stats;
         const clustered_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_literal_stats, options, baseline, clustered_literal, command_split, distance_split);
-        if (trace.prefer(clustered_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = clustered_literal_candidate;
-            best_stats = clustered_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, clustered_literal_candidate, clustered_literal_stats, freeQualityRecorded);
     }
     if (literal_splits.alternating_four) |alternating_literal| {
         var alternating_literal_stats = baseline_stats;
         const alternating_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_literal_stats, options, baseline, alternating_literal, command_split, distance_split);
-        if (trace.prefer(alternating_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = alternating_literal_candidate;
-            best_stats = alternating_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, alternating_literal_candidate, alternating_literal_stats, freeQualityRecorded);
     }
     if (literal_splits.reuse_first_four) |reused_literal| {
         var reused_literal_stats = baseline_stats;
         const reused_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_literal_stats, options, baseline, reused_literal, command_split, distance_split);
-        if (trace.prefer(reused_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = reused_literal_candidate;
-            best_stats = reused_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, reused_literal_candidate, reused_literal_stats, freeQualityRecorded);
     }
     if (literal_splits.four) |four_literal| {
         var four_literal_stats = baseline_stats;
         const four_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_literal_stats, options, baseline, four_literal, command_split, distance_split);
-        if (trace.prefer(four_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = four_literal_candidate;
-            best_stats = four_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, four_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, four_literal_candidate, four_literal_stats, freeQualityRecorded);
     }
     if (literal_splits.dynamic) |dynamic_literal| {
         var dynamic_literal_stats = baseline_stats;
         const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_literal_stats, options, baseline, dynamic_literal, command_split, distance_split);
-        if (trace.prefer(dynamic_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = dynamic_literal_candidate;
-            best_stats = dynamic_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_literal_candidate);
+        selection.consider(trace_enabled, trace, allocator, dynamic_literal_candidate, dynamic_literal_stats, freeQualityRecorded);
     }
     if (has_legacy_split) if (adaptive_literal) |*split| {
         var adaptive_literal_stats = baseline_stats;
-        const adaptive_literal_candidate = try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(
+        const adaptive_literal_candidate = try encodeCountedAdaptiveLiteralCandidateRecorded(
             trace_enabled,
             trace,
             allocator,
@@ -10717,12 +10695,11 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             options,
             baseline,
             split,
+            selection.current(),
         );
-        if (trace.prefer(adaptive_literal_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = adaptive_literal_candidate;
-            best_stats = adaptive_literal_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_literal_candidate);
+        if (adaptive_literal_candidate) |wire| {
+            selection.consider(trace_enabled, trace, allocator, wire, adaptive_literal_stats, freeQualityRecorded);
+        }
     };
     if (joint_literal) |*joint| {
         var joint_stats = baseline_stats;
@@ -10737,110 +10714,62 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             baseline,
             joint,
         );
-        if (trace.prefer(joint_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = joint_candidate;
-            best_stats = joint_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, joint_candidate);
+        selection.consider(trace_enabled, trace, allocator, joint_candidate, joint_stats, freeQualityRecorded);
     }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
         const clustered_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_stats, options, baseline, literal_split, clustered, distance_split);
-        if (trace.prefer(clustered_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = clustered_candidate;
-            best_stats = clustered_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_candidate);
+        selection.consider(trace_enabled, trace, allocator, clustered_candidate, clustered_stats, freeQualityRecorded);
     }
     if (symbol_splits.command.alternating_four) |alternating| {
         var alternating_stats = baseline_stats;
         const alternating_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_stats, options, baseline, literal_split, alternating, distance_split);
-        if (trace.prefer(alternating_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = alternating_candidate;
-            best_stats = alternating_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_candidate);
+        selection.consider(trace_enabled, trace, allocator, alternating_candidate, alternating_stats, freeQualityRecorded);
     }
     if (symbol_splits.command.reuse_first_four) |reused| {
         var reused_stats = baseline_stats;
         const reused_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_stats, options, baseline, literal_split, reused, distance_split);
-        if (trace.prefer(reused_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = reused_candidate;
-            best_stats = reused_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_candidate);
+        selection.consider(trace_enabled, trace, allocator, reused_candidate, reused_stats, freeQualityRecorded);
     }
     if (symbol_splits.command.four) |four| {
         var four_stats = baseline_stats;
         const four_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_stats, options, baseline, literal_split, four, distance_split);
-        if (trace.prefer(four_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = four_candidate;
-            best_stats = four_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, four_candidate);
+        selection.consider(trace_enabled, trace, allocator, four_candidate, four_stats, freeQualityRecorded);
     }
     if (symbol_splits.command.dynamic) |dynamic| {
         var dynamic_stats = baseline_stats;
         const dynamic_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_stats, options, baseline, literal_split, dynamic, distance_split);
-        if (trace.prefer(dynamic_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = dynamic_candidate;
-            best_stats = dynamic_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_candidate);
+        selection.consider(trace_enabled, trace, allocator, dynamic_candidate, dynamic_stats, freeQualityRecorded);
     }
     if (distance_splits.three != null) if (distance_splits.two) |two_distance| {
         var two_distance_stats = baseline_stats;
         const two_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &two_distance_stats, options, baseline, literal_split, command_split, two_distance);
-        if (trace.prefer(two_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = two_distance_candidate;
-            best_stats = two_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, two_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, two_distance_candidate, two_distance_stats, freeQualityRecorded);
     };
     if (distance_splits.clustered) |clustered_distance| {
         var clustered_distance_stats = baseline_stats;
         const clustered_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &clustered_distance_stats, options, baseline, literal_split, command_split, clustered_distance);
-        if (trace.prefer(clustered_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = clustered_distance_candidate;
-            best_stats = clustered_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, clustered_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, clustered_distance_candidate, clustered_distance_stats, freeQualityRecorded);
     }
     if (distance_splits.alternating_four) |alternating_distance| {
         var alternating_distance_stats = baseline_stats;
         const alternating_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &alternating_distance_stats, options, baseline, literal_split, command_split, alternating_distance);
-        if (trace.prefer(alternating_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = alternating_distance_candidate;
-            best_stats = alternating_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, alternating_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, alternating_distance_candidate, alternating_distance_stats, freeQualityRecorded);
     }
     if (distance_splits.reuse_first_four) |reused_distance| {
         var reused_distance_stats = baseline_stats;
         const reused_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &reused_distance_stats, options, baseline, literal_split, command_split, reused_distance);
-        if (trace.prefer(reused_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = reused_distance_candidate;
-            best_stats = reused_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, reused_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, reused_distance_candidate, reused_distance_stats, freeQualityRecorded);
     }
     if (distance_splits.four) |four_distance| {
         var four_distance_stats = baseline_stats;
         const four_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &four_distance_stats, options, baseline, literal_split, command_split, four_distance);
-        if (trace.prefer(four_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = four_distance_candidate;
-            best_stats = four_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, four_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, four_distance_candidate, four_distance_stats, freeQualityRecorded);
     }
     if (distance_splits.dynamic) |dynamic_distance| {
         var dynamic_distance_stats = baseline_stats;
         const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAllocRecorded(trace_enabled, trace, allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
-        if (trace.prefer(dynamic_distance_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = dynamic_distance_candidate;
-            best_stats = dynamic_distance_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, dynamic_distance_candidate);
+        selection.consider(trace_enabled, trace, allocator, dynamic_distance_candidate, dynamic_distance_stats, freeQualityRecorded);
     }
     if (has_legacy_split or adaptive_literal != null) if (symbol_splits.adaptive_command) |*adaptive_command| {
         var adaptive_stats = baseline_stats;
@@ -10855,11 +10784,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             baseline,
             adaptive_command,
         );
-        if (trace.prefer(adaptive_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = adaptive_candidate;
-            best_stats = adaptive_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_candidate);
+        selection.consider(trace_enabled, trace, allocator, adaptive_candidate, adaptive_stats, freeQualityRecorded);
     };
     if (has_legacy_split or adaptive_literal != null or symbol_splits.adaptive_command != null) if (symbol_splits.adaptive_distance) |*adaptive_distance| {
         var adaptive_stats = baseline_stats;
@@ -10874,11 +10799,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             baseline,
             adaptive_distance,
         );
-        if (trace.prefer(adaptive_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = adaptive_candidate;
-            best_stats = adaptive_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, adaptive_candidate);
+        selection.consider(trace_enabled, trace, allocator, adaptive_candidate, adaptive_stats, freeQualityRecorded);
     };
     if (symbol_splits.adaptive_command) |*adaptive_command| if (symbol_splits.adaptive_distance) |*adaptive_distance| {
         var combined_stats = baseline_stats;
@@ -10894,18 +10815,11 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             adaptive_command,
             adaptive_distance,
         );
-        if (trace.prefer(combined_candidate, best)) {
-            freeQualityRecorded(trace_enabled, trace, allocator, best);
-            best = combined_candidate;
-            best_stats = combined_stats;
-        } else freeQualityRecorded(trace_enabled, trace, allocator, combined_candidate);
+        selection.consider(trace_enabled, trace, allocator, combined_candidate, combined_stats, freeQualityRecorded);
     };
-    if (trace.prefer(best, baseline.encoded)) {
-        stats.* = best_stats;
-        return best;
-    }
-    freeQualityRecorded(trace_enabled, trace, allocator, best);
-    return null;
+    const selected = selection.take() orelse return null;
+    stats.* = selected.stats;
+    return selected.wire;
 }
 
 fn chooseAdaptiveLiteralSplitAlloc(
@@ -11097,6 +11011,98 @@ fn encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(comptime trace_en
         null,
         null,
     );
+}
+
+var test_materialize_adaptive_literal = false;
+var test_prepared_adaptive_literal_count_calls: usize = 0;
+
+fn countedAdaptiveLiteralSupported(input: []const u8, commands: []const command_plan.Command, options: CommandPlanEncodeOptions) bool {
+    const split = options.adaptive_literal_split orelse return false;
+    if (split.lengths.len == 0 or split.lengths.len != split.types.len) return false;
+    var literals: usize = 0;
+    for (split.lengths) |length| {
+        literals = std.math.add(usize, literals, length) catch return false;
+        if (literals > prepared_adaptive_literal.max_literals) return false;
+    }
+    return input.len != 0 and commands.len != 0 and commands.len <= 64 * 1024 and
+        !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and
+        options.distance_parameters.alphabetSize() <= prepared_command_distance.distance_capacity and
+        options.use_recent_distances and options.write_stream_prefix and options.final_meta_block and options.metadata.len == 0 and
+        split.type_count >= 2 and split.type_count <= prepared_adaptive_literal.max_types and
+        options.literal_split == null and options.literal_entropy_plan == null and options.literal_context_candidate == null and
+        !options.use_utf8_text_contexts and options.command_split == null and options.adaptive_command_split == null and
+        options.distance_split == null and options.adaptive_distance_split == null and
+        options.hq_model_output == null and options.final_wire_state == null and !commandsHaveExactEncoding(commands);
+}
+
+const PreparedAdaptiveLiteralStrategy = struct {
+    pub const Error = br.Error;
+    pub const Options = CommandPlanEncodeOptions;
+    pub const supported = countedAdaptiveLiteralSupported;
+    pub const wireDistance = commandWireDistance;
+    pub const recentDistance = recentDistanceSymbol;
+    pub const pushDistance = pushLastDistance;
+    pub const literalEncoder = initPlannedLiteralEncoder;
+    pub const writeExtras = writeCommandLengthExtras;
+    pub const commandEncoding = PreparedLiteralEmissionStrategy.commandEncoding;
+
+    pub fn header(allocator: std.mem.Allocator, writer: anytype, input: []const u8, options: Options, state: *const prepared_adaptive_literal.Prepared) br.Error!void {
+        const split = state.key.split_ptr;
+        try writePlannedWindowBits(allocator, writer, options.window_bits, false);
+        try writeCompressedMetaBlockHeader(allocator, writer, input.len, true);
+        try writeBlockTypeCount(allocator, writer, @intCast(split.type_count));
+        try writePrefixSymbolsWithLengths(allocator, writer, @as(usize, split.type_count) + 2, &state.split_code.type_alphabet, &state.split_code.type_lengths);
+        try writePrefixSymbolsWithLengths(allocator, writer, 26, &state.split_code.length_alphabet, &state.split_code.length_lengths);
+        try state.split_code.writeInitialLength(allocator, writer);
+        try writeBlockTypeCount(allocator, writer, 1);
+        try writeBlockTypeCount(allocator, writer, 1);
+        try writer.writeBits(allocator, options.distance_parameters.npostfix, 2);
+        try writer.writeBits(allocator, options.distance_parameters.ndirect_high, 4);
+        for (0..split.type_count) |_| try writer.writeBits(allocator, 0, 2);
+        try writeBlockTypeCount(allocator, writer, @intCast(split.type_count));
+        try state.context_map.write(allocator, writer);
+        try writeBlockTypeCount(allocator, writer, 1);
+        for (state.alphabets[0..split.type_count], state.lengths[0..split.type_count]) |*alphabet, *lengths|
+            try writePrefixSymbolsWithLengths(allocator, writer, 256, alphabet, lengths);
+        try writePrefixSymbolsWithLengths(allocator, writer, 704, &state.common.command_alphabet, &state.common.command_lengths);
+        try writePrefixSymbolsWithAlphabetSizes(allocator, writer, options.distance_parameters.activeAlphabetSize(.standard), options.distance_parameters.wireAlphabetSize(.standard), &state.common.distance_alphabet, &state.common.distance_lengths);
+    }
+};
+
+fn encodeCountedAdaptiveLiteralCandidateRecorded(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, split: *const block_split_plan.Plan, incumbent: []const u8) Error!?[]u8 {
+    const wire_options: CommandPlanEncodeOptions = .{ .use_recent_distances = baseline.use_recent_distances, .adaptive_literal_split = split, .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances };
+    const materialized = if (comptime builtin.is_test) test_materialize_adaptive_literal else false;
+    if (materialized or !countedAdaptiveLiteralSupported(input, commands, wire_options))
+        return try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(traced, trace, allocator, input, commands, stats, options, baseline, split);
+    var scope = trace.begin(.evaluate, input.len, commands.len);
+    scope.config(wire_options);
+    var state = prepared_adaptive_literal.Prepared.init(PreparedAdaptiveLiteralStrategy, allocator, input, commands, wire_options) catch |err| {
+        scope.failure(err);
+        scope.finish();
+        return err;
+    };
+    if (comptime builtin.is_test) test_prepared_adaptive_literal_count_calls += 1;
+    defer state.deinit(allocator);
+    stats.literal_symbol_count = 0;
+    for (state.alphabets[0..split.type_count]) |alphabet| stats.literal_symbol_count += alphabet.len;
+    stats.command_symbol_count = state.common.command_alphabet.len;
+    stats.distance_symbol_count = state.common.distance_alphabet.len;
+    const reference = scope.evaluated(state.wire_len);
+    scope.finish();
+    if (!trace.preferReferences(reference, trace.reference(incumbent))) return null;
+    var emit_scope = trace.begin(.wire, input.len, commands.len);
+    defer emit_scope.finish();
+    errdefer |err| emit_scope.failure(err);
+    emit_scope.config(wire_options);
+    emit_scope.emissionOf(reference);
+    var out = try std.ArrayList(u8).initCapacity(allocator, state.wire_len);
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try prepared_adaptive_literal.write(PreparedAdaptiveLiteralStrategy, allocator, &writer, input, commands, wire_options, &state);
+    if (out.items.len != state.wire_len) return error.InvalidBlockPlan;
+    const wire = try out.toOwnedSlice(allocator);
+    emit_scope.wire(wire);
+    return wire;
 }
 
 fn encodeEntropyAdaptiveLiteralContextWireCandidateAlloc(
@@ -12641,7 +12647,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     defer if (adaptive_literal_block_lengths) |lengths| allocator.free(lengths);
     if (adaptive_literal_block_lengths) |lengths| {
         for (lengths, adaptive_literal_block_alphabets.?, adaptive_literal_block_frequencies.?) |*tree_lengths, *alphabet, *frequencies|
-            tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
+            tree_lengths.* = try alphabet.codeLengths(frequencies);
     }
     const joint_literal_tree_lengths = if (joint_literal_tree_count != 0)
         try allocator.alloc([256]u4, joint_literal_tree_count)
@@ -41751,6 +41757,65 @@ const ContextPrimaryPrepareTestCodec = struct {
 
 test "Brotli context primary cold count preparation contracts" {
     try @import("br/encoder/context_primary_prepare_tests.zig").check(ContextPrimaryPrepareTestCodec);
+}
+
+const AdaptiveLiteralPreparedTestCodec = struct {
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const Command = command_plan.Command;
+    pub const Plan = block_split_plan.Plan;
+    pub const Prepared = prepared_adaptive_literal.Prepared;
+    pub const supported = countedAdaptiveLiteralSupported;
+    pub const decode = decodeStreamAllocExactSize;
+    pub const summarize = summarizeStreamAlloc;
+    pub const encode = PreparedLiteralTestAdapters.encode;
+
+    pub fn prepare(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: Options) br.Error!Prepared {
+        return Prepared.init(PreparedAdaptiveLiteralStrategy, allocator, input, commands, options);
+    }
+    pub fn emit(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, stats: *Stats, options: Options, state: *const Prepared) br.Error![]u8 {
+        var out = try std.ArrayList(u8).initCapacity(allocator, state.wire_len);
+        errdefer out.deinit(allocator);
+        var writer = BitWriter{ .out = &out };
+        try prepared_adaptive_literal.write(PreparedAdaptiveLiteralStrategy, allocator, &writer, input, commands, options, state);
+        if (out.items.len != state.wire_len) return error.InvalidBlockPlan;
+        stats.literal_symbol_count = 0;
+        for (state.alphabets[0..state.key.type_count]) |alphabet| stats.literal_symbol_count += alphabet.len;
+        stats.command_symbol_count = state.common.command_alphabet.len;
+        stats.distance_symbol_count = state.common.distance_alphabet.len;
+        return out.toOwnedSlice(allocator);
+    }
+    pub fn headerBits(allocator: std.mem.Allocator, input: []const u8, options: Options, state: *const Prepared) br.Error!BitCount {
+        var writer = counting_writer.Writer.init(0);
+        try PreparedAdaptiveLiteralStrategy.header(allocator, &writer, input, options, state);
+        return writer.checkedBitPosition();
+    }
+    pub const HeaderResult = struct { wire: []u8, bits: BitCount };
+    pub fn headerWire(allocator: std.mem.Allocator, input: []const u8, options: Options, state: *const Prepared) br.Error!HeaderResult {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(allocator);
+        var writer = BitWriter{ .out = &out };
+        try PreparedAdaptiveLiteralStrategy.header(allocator, &writer, input, options, state);
+        const bits = writer.bitPosition();
+        return .{ .wire = try out.toOwnedSlice(allocator), .bits = bits };
+    }
+    pub fn publicOriginalQ8(allocator: std.mem.Allocator, input: []const u8) br.Error![]u8 {
+        test_materialize_adaptive_literal = true;
+        test_prepared_adaptive_literal_count_calls = 0;
+        defer test_materialize_adaptive_literal = false;
+        return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .window_bits = 16 });
+    }
+    pub fn publicCurrentQ8(allocator: std.mem.Allocator, input: []const u8) br.Error![]u8 {
+        test_prepared_adaptive_literal_count_calls = 0;
+        return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .window_bits = 16 });
+    }
+    pub fn preparedCountCalls() usize {
+        return test_prepared_adaptive_literal_count_calls;
+    }
+};
+
+test "Brotli prepared adaptive literal exact count and ownership contracts" {
+    try @import("br/encoder/prepared_adaptive_literal_tests.zig").check(AdaptiveLiteralPreparedTestCodec);
 }
 
 const exact_wire_test_support = @import("br/encoder/exact_wire_tests/support.zig").Support(struct {
