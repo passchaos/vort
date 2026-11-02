@@ -23419,3 +23419,11 @@ reuse, so production keeps the simpler independently owned plans.
   owning PNG, split-IDAT and independent decoder coverage is recorded in
   [the boundary report](png-window-match-boundary.md); corpus timing remains
   approximately unchanged and the broader performance goal remains open.
+
+- Byte-stride PNG Paeth uses exact Sub prefixes for checked flat upper
+  intervals, with a flat-prefix row guard retaining the original dense loop.
+  Kernel/windowed gates pass 20/20 and 99/99; imx's oxipng text fixture gains
+  5--6% while its full fifteen-case matrix remains approximately flat, with
+  original pixels and requested peaks preserved. Dense-noise controls stay
+  flat, and existing imx encoding-gate failures remain separately reproduced.
+  See [Paeth evidence](png-paeth-bpp1-flat.md). Broad leadership remains open.

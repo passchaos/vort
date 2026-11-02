@@ -480,6 +480,8 @@ fn reconstructPngAverageFixedBppScanline(comptime bytes_per_pixel: usize, filter
 
 fn reconstructPngPaethBpp1Scanline(filtered: []const u8, previous: ?[]const u8, output: []u8) void {
     if (previous) |prev| {
+        if (@import("png/paeth_bpp1.zig").hasFlatPrefix(prev))
+            return @import("png/paeth_bpp1.zig").reconstruct(filtered, prev, output);
         if (filtered.len == 0) return;
         output[0] = filtered[0] +% prev[0];
         var i: usize = 1;
@@ -998,4 +1000,8 @@ test "png adam7 placement scatters sub-byte packed pixels" {
 
     const tiny = try pngAdam7Info(1, 1, 1, .indexed);
     try std.testing.expectError(error.RangeOutOfBounds, placePngAdam7Row(tiny, tiny.passes[1], 0, "", image[0..1]));
+}
+
+test {
+    _ = @import("png/paeth_bpp1.zig");
 }
