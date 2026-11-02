@@ -2,6 +2,7 @@
 //! are borrowed and immutable until the group ends. Pointer/length identity is
 //! not a content cache: initialize a new Prepared for each command group.
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("../../core.zig");
 const command_plan = @import("command_plan.zig");
 const distance = @import("distance.zig");
@@ -15,6 +16,18 @@ comptime {
     std.debug.assert(distance_capacity == 79);
     std.debug.assert(symbol_capacity == 128);
     std.debug.assert(distance.Parameters.init(0, 15).alphabetSize() == distance_capacity);
+}
+
+pub const TestCounters = struct { counted_captures: usize = 0 };
+var test_counters: TestCounters = .{};
+
+pub fn resetTestCounters() void {
+    if (comptime builtin.is_test) test_counters = .{};
+}
+
+pub fn testCounters() TestCounters {
+    if (comptime builtin.is_test) return test_counters;
+    return .{};
 }
 
 pub const Key = struct {
@@ -144,6 +157,7 @@ pub const Prepared = struct {
         self.distance_encoder = distance_encoder;
         if (symbols) |cached_symbols| self.command_symbols = cached_symbols.*;
         self.ready = true;
+        if (comptime builtin.is_test) test_counters.counted_captures += 1;
     }
 };
 

@@ -1,0 +1,193 @@
+# Reuse command models across candidate families, 2026-11-03
+
+An immutable ordinary Brotli command plan now keeps its common preparation
+alive from preferred context selection through its entropy split candidates.
+Previously the preferred group released that stack scope, then adaptive
+literal and adaptive distance each rebuilt the same unsplit command model.
+The new cohesive group owns the existing fixed descriptor for the synchronous
+call and exposes borrowed views to the later preparations. It allocates no
+new retained command stream or cache.
+
+Adaptive literal borrows the command/distance alphabets, lengths, encoders,
+frequencies and extra-bit total. It still validates input geometry and the
+complete split, builds its own per-type literal trees and owned split code,
+counts the real header and payload, and emits only a strictly smaller wire.
+Adaptive distance borrows only command-model fields. Its command projection,
+recent-distance simulation, extras, per-type distance histograms, trees,
+symbol streams and split artifacts remain independently prepared and owned.
+The unsplit distance tree is not substituted for any split tree.
+
+The first supported lifetime is standard windows 10–24, 8–64 KiB inputs,
+bounded ordinary commands, recent distances and clustered context search with
+an adaptive split family enabled. Short-match alternatives and exact commands
+retain the original controller. A borrowed helper requires a published
+matching key and standard distance parameters `(0,15)`; all other legal cases
+retain the owned route. The key includes command identity, window, distance
+parameters, compound dictionary size, starting output position, distance ring
+and the requested same-last flag. Recent distances disable effective same-last
+recoding, preserving the original model decisions.
+
+The owner must remain alive and immutable throughout the borrowed preparation.
+Each helper owns only its original allocations, and deinit never releases the
+borrowed model. Readiness and keys are checked again before output. Inline
+model storage is not read when the pointer-backed view is selected. The public
+controller does not return a preparation or pointer beyond the group scope.
+
+## Actual work and independent validation
+
+Public q8 fixtures at 8/16/64 KiB execute two separate lazy/optimal groups.
+They borrow adaptive literal models 1/2/2 times. Successful common captures
+fall 2→1, 4→2 and 4→2 respectively. The 64 KiB fixture also borrows the adaptive
+distance command model twice, reducing its independent command-model builds
+2→0 while retaining complete command scans and distance-tree construction.
+Every complete wire, summary and decoded input agrees with the original
+independent-preparation controller.
+
+Seventeen real adaptive-literal configurations compare complete models,
+header/payload costs, wire, stats and decoding against owned preparation and
+the original full writer. They cover small/complex alphabets, types 2–8 and
+more than 128 commands. Poisoning unused inline common storage proves the
+real serializer and stats use the borrowed model. Four alternating plans reuse
+one unchanged owner. Twenty initialization refusals and three stale-owner
+output refusals cover readiness, keys, options, plan geometry and overflow.
+Both actual initialization allocation sites and the output allocation fail
+cleanly in independent OOM sweeps. Debug/ReleaseSafe/ReleaseFast each pass the
+22-test production filter.
+
+The adaptive-distance module compares 18 model configurations, complete
+projected symbols and lengths, all owned distance data, split/map fields,
+active encoders, actual writer output and counted size. Thirteen key refusals,
+18 owner-revocation cases and all reached allocation failures preserve
+borrowed data and ownership. Debug/ReleaseSafe/ReleaseFast each pass three
+tests, including the old owned options without a same-last field. Sparse
+encoder inactive slots are deliberately excluded: production initializes and
+reads only its active support, while complete length arrays and emitted wires
+remain fully compared.
+The module writer tests use a deterministic model-probe header; the public
+group tests separately compare complete Brotli frames and native decoding.
+
+The public group filter passes 31 tests in ReleaseSafe, including twelve
+fallback/resource cases. Metadata, Large Window, small/oversized input,
+low-quality/no-context and no-copy random cases preserve original wires and
+decode. Requested-heap peaks are unchanged on the tested 8 KiB structured
+fixture (490,516 bytes) and Mozilla 64 KiB (2,658,114 bytes). Their exact peak
+limits pass; one byte below is rejected with zero final live bytes. These
+results establish the tested allocator contracts, not stack/RSS or competitor
+memory leadership.
+
+Actual 32-bit x86 ReleaseSafe public execution also passes 31 tests with the
+same model-work reductions. Its structured 8 KiB requested peak stays
+458,292 bytes, with the same exact-limit and one-below behavior. The public
+prepared-command Wasm gate passes all five steps, frozen full output and
+Zig/Node decoding. These platform results establish the exercised functionality;
+ordinary performance is measured separately on x86-64.
+
+The final complete ReleaseSafe Brotli suite passes 1,526 tests with one
+existing platform skip out of 1,527, with exit zero. Narrow and complete
+results bind the same fixed source; a focused pass is not used to infer the
+status of any still-running broader build.
+The final default native/Wasm `check check-wasm` gate completes 212/212
+steps with exit zero. Its original process is observed to completion.
+
+## Evidence scope
+
+Baseline source is `0e0d1541`. The first selected-input screen verifies 66
+processes with unchanged full wires. It is retained separately from the final
+39-input matrix. The initial profile build fails its all-source stability
+check when new independent tests change; it is not accepted as a final build.
+After every test file is fixed, final benchmark/profile builds bind the same
+1,807 source/build/tool identities and a complete source archive.
+
+## Final ordinary q8 matrix
+
+The public quality API runs q8/generic/actual window16 with matching reference
+quality, mode and window. Twelve Silesia sources at 4/16/64 KiB and random
+16/64 KiB plus repetitive 64 KiB controls give 39 inputs. Three alternating
+outer sweeps verify 234 processes; each retains five timing rounds at three
+encodes per round. All input and complete Vort/reference wire identities agree.
+
+Host: Intel Core i7-10700K, CPU2, one codec thread. Vort uses Zig 0.16.0
+LLVM ReleaseFast, GNU x86-64, `skylake+pku+sgx`. Reference Brotli 1.2.0
+is clean source `558fc647cdaf391228d614ca85f711e02e4e583b`, CMake Release,
+`-O3 -march=skylake`, with the pinned closure from the interval-cost epoch.
+A separate encoder-first loader probe confirms all three libraries; ordinary
+sample metadata hashes requested paths without inspecting loaded objects.
+Vort has a primary warmup and reference lifecycle is recorded by the harness.
+Allocation/free is timed; file reading, metadata and output checks are outside.
+
+| Real-input scope | Geometric paired time ratio | Faster row medians |
+| --- | ---: | ---: |
+| 4 KiB | 1.00074 | 4/12 |
+| 16 KiB | 1.00003 | 8/12 |
+| 64 KiB | 0.97767 | 11/12 |
+| All 36 real inputs | 0.99276 | 23/36 |
+
+Real-input geometric latency improves about 0.72%, including about 2.23%
+at 64 KiB. The 4/16 KiB groups remain near neutral. Weaker real rows are
+Webster 16 KiB 1.02830, SAO 4 KiB 1.00599 and SAO 64 KiB 1.00460. Random
+16/64 KiB ratios are 0.99801/1.03085 and the repetitive control is 1.00421.
+The [complete row CSV](command-model-lifetime-20261103.csv) retains independent
+medians and paired statistics, whose quotient need not equal the paired ratio.
+This increment does not claim a win on every input.
+
+The independent reference epoch records 30.09 times Brotli encoding latency
+geometrically at size 0.99556 times reference. Earlier gains/epochs are not
+multiplied into that comparison. Nine final diagnostic rounds preserve all
+558 non-time event records, including candidate configs, exact sizes, decisions
+and existing work counts. The new model-build counters are separate actual
+public tests; profile clocks are not ordinary throughput evidence.
+
+Eleven longer alternating pairs at seven encodes per round verify another
+132 processes with all complete wire identities unchanged:
+
+| Input | Median paired ratio | Geometric paired ratio | Wins |
+| --- | ---: | ---: | ---: |
+| Mozilla 64 KiB | 0.98474 | 0.98425 | 11/11 |
+| MR 64 KiB | 0.97970 | 0.98513 | 9/11 |
+| Dickens 64 KiB | 0.96606 | 0.96093 | 11/11 |
+| Dickens 4 KiB | 0.99457 | 0.99754 | 8/11 |
+| NCI 64 KiB | 0.99403 | 0.99660 | 7/11 |
+| Repetitive 64 KiB | 1.00444 | 1.00024 | 5/11 |
+
+The three larger targets improve about 1.5–3.4% in the longer median
+comparison. The repetitive control keeps about a 0.44% median regression
+with a near-neutral geometric ratio. Broader row results and negative
+controls remain visible; no whole-corpus universal benefit is asserted.
+
+Seven further alternating pairs verify 56 processes on the weaker/control
+rows. Median ratios are Webster 16 KiB 1.00026, SAO 4 KiB 0.99978, SAO 64 KiB
+1.00143 and random 64 KiB 1.00121. The larger first-matrix regressions do not
+persist in this longer comparison, but near-neutral negative points remain.
+No candidate discovery, quality or parser branch is disabled to improve them.
+
+Artifacts live under `zig-out/br-command-model-lifetime-20261103`, including
+raw timing rounds, source/build/binary hashes, public model-work counters,
+independent ownership tests, exact-limit checks and terminal gate logs.
+Instrumentation clocks identify work only. Ordinary performance uses matched
+public quality/mode/window, complete wire identities and serial CPU2 campaigns.
+
+```sh
+python3 zig-out/br-command-model-lifetime-20261103/matrix-final.py
+python3 zig-out/br-command-model-lifetime-20261103/run-profile-final.py
+python3 zig-out/br-command-model-lifetime-20261103/long-final.py
+python3 zig-out/br-command-model-lifetime-20261103/long-weak-final.py
+zig build -j2 test-br -Doptimize=ReleaseSafe --summary all -- --test-timeout 900s
+zig build -j4 check check-wasm --summary all
+zig build test-br-prepared-command-wasm --summary all
+```
+
+Execute CPU2 measurements sequentially. `build-final.py` records the complete
+compiler commands, reused `record.o` hash and source identities; replay against
+the saved source for this epoch. `archive.py` creates `SHA256SUMS` over source,
+binaries, inputs, raw comparisons and terminal validation logs.
+
+| Binding | SHA-256 |
+| --- | --- |
+| Baseline benchmark | `de5e23b4e6a2586bb618811e8e165f787dd01473b9be2d379ec2d631b09838c3` |
+| Final benchmark | `a376f64d12ddde145336893459946b485736eeab21a28cea59a368b39b4a0018` |
+| Final matrix | `08bb4cfffe8833a5868c12b463365d6636d1aa9a44ac475ea1622269e423b53b` |
+
+The full Deflate/Zstd/Brotli industry-best objective stays active. Further
+opportunities include reusing split-planner symbol projections, parser/model
+quality and broader full-file/dictionary/streaming/resource/platform matrices;
+none is implied by this command-model lifetime increment.

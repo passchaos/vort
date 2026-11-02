@@ -46,6 +46,7 @@ pub const Key = struct {
 pub const Prepared = struct {
     key: Key,
     common: common_plan.Prepared,
+    borrowed_common: ?*const common_plan.Prepared = null,
     alphabets: [max_types]Alphabet = undefined,
     lengths: [max_types][256]u4 = undefined,
     split_code: block_code.Code,
@@ -54,6 +55,73 @@ pub const Prepared = struct {
     header_bits: bit_count.BitCount,
     payload_bits: bit_count.BitCount,
     wire_len: usize,
+
+    /// Select the shared immutable model without copying its fixed storage.
+    /// The caller keeps a borrowed model alive until this preparation is gone.
+    pub fn commonPlan(self: *const Prepared) *const common_plan.Prepared {
+        return self.borrowed_common orelse &self.common;
+    }
+
+    fn borrowable(common: *const common_plan.Prepared, options: anytype, commands: []const command_plan.Command) bool {
+        return common.ready and !common.has_exact_commands and common.key.matches(options, commands) and
+            !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and options.use_recent_distances and
+            std.meta.eql(options.distance_parameters, distance.Parameters.init(0, 15));
+    }
+
+    /// Count a new literal split while borrowing the completed ordinary
+    /// command/distance preparation for this exact immutable command group.
+    pub fn initBorrowed(comptime S: type, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, options: S.Options, common: *const common_plan.Prepared) S.Error!Prepared {
+        if (!S.supported(input, commands, options) or !borrowable(common, options, commands)) return error.InvalidBlockPlan;
+        _ = try stream_count.addLocal(options.initial_output_pos, input.len);
+        const split = options.adaptive_literal_split.?;
+        var literal_count: usize = 0;
+        for (commands) |command| {
+            if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start) return error.InvalidBlockPlan;
+            literal_count = std.math.add(usize, literal_count, command.insert_len) catch return error.IntegerOverflow;
+        }
+        if (literal_count > max_literals) return error.InvalidBlockPlan;
+        try split.validate(literal_count);
+        var frequencies: [max_types][256]u32 = undefined;
+        @memset(frequencies[0..split.type_count], @splat(0));
+        var index: usize = 0;
+        var block_index: usize = 0;
+        var block_end: usize = split.lengths[0];
+        for (commands) |command| {
+            for (input[command.insert_start..][0..command.insert_len]) |literal| {
+                if (index == block_end) {
+                    block_index += 1;
+                    if (block_index >= split.blockCount()) return error.InvalidBlockPlan;
+                    block_end = std.math.add(usize, block_end, split.lengths[block_index]) catch return error.IntegerOverflow;
+                }
+                frequencies[split.types[block_index]][literal] += 1;
+                index += 1;
+            }
+        }
+        if (index != literal_count or block_index + 1 != split.blockCount() or block_end != literal_count) return error.InvalidBlockPlan;
+        var alphabets: [max_types]Alphabet = undefined;
+        var lengths: [max_types][256]u4 = undefined;
+        for (frequencies[0..split.type_count], alphabets[0..split.type_count], lengths[0..split.type_count]) |*frequency, *alphabet, *tree_lengths| {
+            try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequency);
+            tree_lengths.* = try alphabet.codeLengths(frequency);
+        }
+        var code = try block_code.Code.init(allocator, split, literal_count);
+        errdefer code.deinit(allocator);
+        const map = try context_map.Plan.init(allocator, split.type_count, 64);
+        var result: Prepared = .{ .key = Key.init(input, commands, options), .common = undefined, .borrowed_common = common, .alphabets = alphabets, .lengths = lengths, .split_code = code, .context_map = map, .literal_count = literal_count, .header_bits = 0, .payload_bits = 0, .wire_len = 0 };
+        var header = counting.Writer.init(0);
+        try S.header(allocator, &header, input, options, &result);
+        result.header_bits = try header.checkedBitPosition();
+        var payload = try weighted.histogram(common_plan.command_capacity, &common.command_frequencies, &common.command_alphabet, &common.command_lengths, true);
+        payload = try weighted.add(payload, try weighted.histogram(common_plan.distance_capacity, &common.distance_frequencies, &common.distance_alphabet, &common.distance_lengths, true));
+        payload = try weighted.add(payload, common.payload_extra_bits);
+        for (frequencies[0..split.type_count], alphabets[0..split.type_count], lengths[0..split.type_count]) |*frequency, *alphabet, *tree_lengths|
+            payload = try weighted.add(payload, try weighted.histogram(256, frequency, alphabet, tree_lengths, false));
+        var switches = counting.Writer.init(0);
+        for (1..split.blockCount()) |block| try code.writeSwitch(allocator, &switches, block);
+        result.payload_bits = try weighted.add(payload, try switches.checkedBitPosition());
+        result.wire_len = try weighted.ceilBytes(try weighted.add(result.header_bits, result.payload_bits));
+        return result;
+    }
 
     pub fn init(comptime S: type, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, options: S.Options) S.Error!Prepared {
         if (!S.supported(input, commands, options)) return error.InvalidBlockPlan;
@@ -147,7 +215,9 @@ pub const Prepared = struct {
 };
 
 pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, input: []const u8, commands: []const command_plan.Command, options: S.Options, prepared: *const Prepared) S.Error!void {
-    if (!S.supported(input, commands, options) or !prepared.key.matches(input, commands, options) or !prepared.common.ready) return error.InvalidBlockPlan;
+    const common = prepared.commonPlan();
+    if (!S.supported(input, commands, options) or !prepared.key.matches(input, commands, options) or !common.ready) return error.InvalidBlockPlan;
+    if (prepared.borrowed_common != null and !Prepared.borrowable(common, options, commands)) return error.InvalidBlockPlan;
     const split = options.adaptive_literal_split.?;
     try S.header(allocator, writer, input, options, prepared);
     var encoders: [max_types]huffman.HuffmanTable(256).Encoder = undefined;
@@ -159,12 +229,12 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
     for (commands, 0..) |command, command_index| {
         const physical = if (command.has_copy) try S.wireDistance(command, options.window_bits, options.compound_dictionary_size, options.initial_output_pos) else 0;
         const recent = if (command.has_copy and compound_wire.canUseRecentDistance(command.source)) S.recentDistance(physical, &repeats) else null;
-        const encoded = try S.commandEncoding(&prepared.common, command_index, commands.len, command, recent);
-        if (prepared.common.command_alphabet.len > 1) {
-            if (prepared.common.command_alphabet.len <= 4) {
-                const code = prepared.common.command_alphabet.simpleCode(encoded.symbol).?;
+        const encoded = try S.commandEncoding(common, command_index, commands.len, command, recent);
+        if (common.command_alphabet.len > 1) {
+            if (common.command_alphabet.len <= 4) {
+                const code = common.command_alphabet.simpleCode(encoded.symbol).?;
                 try writer.writeHuffmanBits(allocator, code.code, code.bits);
-            } else try writer.writeHuffmanBits(allocator, prepared.common.command_encoder.codes[encoded.symbol], prepared.common.command_encoder.bits[encoded.symbol]);
+            } else try writer.writeHuffmanBits(allocator, common.command_encoder.codes[encoded.symbol], common.command_encoder.bits[encoded.symbol]);
         }
         try S.writeExtras(allocator, writer, encoded, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len]) |literal| {
@@ -180,11 +250,11 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
         }
         if (command.has_copy and encoded.command.distance_code == -1) {
             const encoding = if (recent) |symbol| distance.Encoding{ .symbol = symbol } else distance.encodeWithFormat(physical, options.distance_parameters, .standard) orelse return error.InvalidBlockPlan;
-            if (prepared.common.distance_alphabet.len > 1) {
-                if (prepared.common.distance_alphabet.len <= 4) {
-                    const code = prepared.common.distance_alphabet.simpleCode(encoding.symbol).?;
+            if (common.distance_alphabet.len > 1) {
+                if (common.distance_alphabet.len <= 4) {
+                    const code = common.distance_alphabet.simpleCode(encoding.symbol).?;
                     try writer.writeHuffmanBits(allocator, code.code, code.bits);
-                } else try writer.writeHuffmanBits(allocator, prepared.common.distance_encoder.codes[encoding.symbol], prepared.common.distance_encoder.bits[encoding.symbol]);
+                } else try writer.writeHuffmanBits(allocator, common.distance_encoder.codes[encoding.symbol], common.distance_encoder.bits[encoding.symbol]);
             }
             if (encoding.extra_bits != 0) try writer.writeBits(allocator, encoding.extra, encoding.extra_bits);
         }

@@ -9242,6 +9242,8 @@ const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
 const command_state_full_wire_slack_bytes: usize = 128;
 const LazyWireOptions = struct {
+    /// Borrowed only within command_candidate_group for immutable commands.
+    shared_common: ?*prepared_command_distance.Prepared = null,
     large_window: bool = false,
     try_recent_distances: bool = false,
     /// Null preserves the legacy coupling where recent-distance search also
@@ -9398,6 +9400,39 @@ fn encodeLazyCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quali
             return split_candidate;
         }
         return baseline.encoded;
+    }
+    if (sharedCommandCandidateGroupSupported(input, commands, wire_options))
+        return @import("br/encoder/command_candidate_group.zig").encode(SharedCommandCandidateGroupStrategy, trace_enabled, trace, allocator, input, commands, stats, wire_options);
+    return encodeFinalCommandCandidateGroupRecorded(trace_enabled, trace, allocator, input, commands, stats, wire_options);
+}
+
+var test_disable_shared_command_candidate_group = false;
+var test_shared_command_candidate_groups: usize = 0;
+var test_shared_adaptive_literal_models: usize = 0;
+var test_shared_adaptive_distance_models: usize = 0;
+
+fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {
+    if (comptime builtin.is_test) if (test_disable_shared_command_candidate_group) return false;
+    return input.len >= 8 * 1024 and input.len <= 64 * 1024 and commands.len <= 64 * 1024 and
+        !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and
+        options.metadata.len == 0 and options.try_recent_distances and options.try_clustered_literal_contexts and
+        (options.try_literal_contexts orelse options.try_recent_distances) and
+        (options.try_adaptive_literal_split or options.try_adaptive_distance_split) and !commandsHaveExactEncoding(commands);
+}
+
+const SharedCommandCandidateGroupStrategy = struct {
+    pub const Allocator = std.mem.Allocator;
+    pub const Error = br.Error;
+    pub const Command = command_plan.Command;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const Options = LazyWireOptions;
+    pub const Common = prepared_command_distance.Prepared;
+    pub const encodeFinal = encodeFinalCommandCandidateGroupRecorded;
+};
+
+fn encodeFinalCommandCandidateGroupRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
+    if (comptime builtin.is_test) {
+        if (wire_options.shared_common != null) test_shared_command_candidate_groups += 1;
     }
     const baseline = try encodePreferredCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands, null, stats, wire_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline.encoded);
@@ -10388,9 +10423,10 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
     };
     var prepared_common: prepared_command_distance.Prepared = undefined;
     if (input.len >= 8 * 1024 and try_literal_contexts and options.try_clustered_literal_contexts and use_recent_distances and !options.large_window) {
-        prepared_common = prepared_command_distance.Prepared.init(primary_options, commands);
-        primary_options.prepared_common = &prepared_common;
-        if (prepared_literal.supported(primary_options) and prepared_command_distance.supported(primary_options, prepared_common.has_exact_commands)) {
+        const common = options.shared_common orelse &prepared_common;
+        common.* = prepared_command_distance.Prepared.init(primary_options, commands);
+        primary_options.prepared_common = common;
+        if (prepared_literal.supported(primary_options) and prepared_command_distance.supported(primary_options, common.has_exact_commands)) {
             if (comptime builtin.is_test) if (test_materialize_context_primary)
                 return context_candidate_group.encode(PreparedContextGroupStrategy, trace_enabled, trace, allocator, input, commands, io, stats, options, primary_options);
             return context_candidate_group.encodePreparedPrimary(PreparedContextGroupStrategy, trace_enabled, trace, allocator, input, commands, io, stats, options, primary_options);
@@ -11064,10 +11100,17 @@ const PreparedAdaptiveLiteralStrategy = struct {
         try writeBlockTypeCount(allocator, writer, 1);
         for (state.alphabets[0..split.type_count], state.lengths[0..split.type_count]) |*alphabet, *lengths|
             try writePrefixSymbolsWithLengths(allocator, writer, 256, alphabet, lengths);
-        try writePrefixSymbolsWithLengths(allocator, writer, 704, &state.common.command_alphabet, &state.common.command_lengths);
-        try writePrefixSymbolsWithAlphabetSizes(allocator, writer, options.distance_parameters.activeAlphabetSize(.standard), options.distance_parameters.wireAlphabetSize(.standard), &state.common.distance_alphabet, &state.common.distance_lengths);
+        try writePrefixSymbolsWithLengths(allocator, writer, 704, &state.commonPlan().command_alphabet, &state.commonPlan().command_lengths);
+        try writePrefixSymbolsWithAlphabetSizes(allocator, writer, options.distance_parameters.activeAlphabetSize(.standard), options.distance_parameters.wireAlphabetSize(.standard), &state.commonPlan().distance_alphabet, &state.commonPlan().distance_lengths);
     }
 };
+
+fn sharedCommandModelMatches(common: *const prepared_command_distance.Prepared, commands: []const command_plan.Command, options: CommandPlanEncodeOptions) bool {
+    return common.ready and !common.has_exact_commands and
+        !options.large_window and options.use_recent_distances and
+        std.meta.eql(options.distance_parameters, encoder_distance.Parameters.init(0, 15)) and
+        common.key.matches(options, commands);
+}
 
 fn encodeCountedAdaptiveLiteralCandidateRecorded(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, split: *const block_split_plan.Plan, incumbent: []const u8) Error!?[]u8 {
     const wire_options: CommandPlanEncodeOptions = .{ .use_recent_distances = baseline.use_recent_distances, .adaptive_literal_split = split, .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances };
@@ -11076,17 +11119,27 @@ fn encodeCountedAdaptiveLiteralCandidateRecorded(comptime traced: bool, trace: q
         return try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(traced, trace, allocator, input, commands, stats, options, baseline, split);
     var scope = trace.begin(.evaluate, input.len, commands.len);
     scope.config(wire_options);
-    var state = prepared_adaptive_literal.Prepared.init(PreparedAdaptiveLiteralStrategy, allocator, input, commands, wire_options) catch |err| {
+    const shared = if (options.shared_common) |common|
+        if (sharedCommandModelMatches(common, commands, wire_options)) common else null
+    else
+        null;
+    var state = (if (shared) |common|
+        prepared_adaptive_literal.Prepared.initBorrowed(PreparedAdaptiveLiteralStrategy, allocator, input, commands, wire_options, common)
+    else
+        prepared_adaptive_literal.Prepared.init(PreparedAdaptiveLiteralStrategy, allocator, input, commands, wire_options)) catch |err| {
         scope.failure(err);
         scope.finish();
         return err;
     };
     if (comptime builtin.is_test) test_prepared_adaptive_literal_count_calls += 1;
+    if (comptime builtin.is_test) {
+        if (shared != null) test_shared_adaptive_literal_models += 1;
+    }
     defer state.deinit(allocator);
     stats.literal_symbol_count = 0;
     for (state.alphabets[0..split.type_count]) |alphabet| stats.literal_symbol_count += alphabet.len;
-    stats.command_symbol_count = state.common.command_alphabet.len;
-    stats.distance_symbol_count = state.common.distance_alphabet.len;
+    stats.command_symbol_count = state.commonPlan().command_alphabet.len;
+    stats.distance_symbol_count = state.commonPlan().distance_alphabet.len;
     const reference = scope.evaluated(state.wire_len);
     scope.finish();
     if (!trace.preferReferences(reference, trace.reference(incumbent))) return null;
@@ -11190,12 +11243,17 @@ fn encodeCountedAdaptiveDistanceContextsRecorded(
     const initial_stats = stats.*;
     errdefer stats.* = initial_stats;
     if (comptime builtin.is_test) test_adaptive_distance_shared_counters.prepares += 1;
-    var common = try prepared_adaptive_distance.Prepared.init(
-        PreparedAdaptiveDistanceStrategy,
-        allocator,
-        commands,
-        options,
-    );
+    const shared = if (options.prepared_common) |common|
+        if (sharedCommandModelMatches(common, commands, options)) common else null
+    else
+        null;
+    var common = if (shared) |prepared|
+        try prepared_adaptive_distance.Prepared.initBorrowedCommand(PreparedAdaptiveDistanceStrategy, allocator, commands, options, prepared)
+    else
+        try prepared_adaptive_distance.Prepared.init(PreparedAdaptiveDistanceStrategy, allocator, commands, options);
+    if (comptime builtin.is_test) {
+        if (shared != null) test_shared_adaptive_distance_models += 1;
+    }
     defer common.deinit(allocator);
     var selected_options = options;
     selected_options.literal_context_candidate = baseline.literal_context_candidate;
@@ -11300,17 +11358,13 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
     };
-    if (useCountedAdaptiveDistanceContexts(input, commands, baseline, primary_options))
-        return encodeCountedAdaptiveDistanceContextsRecorded(
-            trace_enabled,
-            trace,
-            allocator,
-            input,
-            commands,
-            stats,
-            primary_options,
-            baseline,
-        );
+    if (useCountedAdaptiveDistanceContexts(input, commands, baseline, primary_options)) {
+        var counted_options = primary_options;
+        if (options.shared_common) |common| {
+            if (sharedCommandModelMatches(common, commands, counted_options)) counted_options.prepared_common = common;
+        }
+        return encodeCountedAdaptiveDistanceContextsRecorded(trace_enabled, trace, allocator, input, commands, stats, counted_options, baseline);
+    }
     var selected_stats = initial_stats;
     var selected = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &selected_stats, primary_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, selected);
@@ -11679,8 +11733,8 @@ const PreparedAdaptiveDistanceStrategy = struct {
             options.literal_context_mode,
             state.alphabets[0..state.tree_count],
             state.lengths[0..state.tree_count],
-            &common.command_alphabet,
-            &common.command_lengths,
+            common.commandAlphabet(),
+            common.commandLengths(),
             common.key.split_ptr,
             common.distance_alphabets,
             common.distance_lengths,
@@ -11801,8 +11855,8 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
         options.literal_context_mode,
         alphabets,
         lengths,
-        &common.command_alphabet,
-        &common.command_lengths,
+        common.commandAlphabet(),
+        common.commandLengths(),
         common.key.split_ptr,
         common.distance_alphabets,
         common.distance_lengths,
@@ -41781,8 +41835,8 @@ const AdaptiveLiteralPreparedTestCodec = struct {
         if (out.items.len != state.wire_len) return error.InvalidBlockPlan;
         stats.literal_symbol_count = 0;
         for (state.alphabets[0..state.key.type_count]) |alphabet| stats.literal_symbol_count += alphabet.len;
-        stats.command_symbol_count = state.common.command_alphabet.len;
-        stats.distance_symbol_count = state.common.distance_alphabet.len;
+        stats.command_symbol_count = state.commonPlan().command_alphabet.len;
+        stats.distance_symbol_count = state.commonPlan().distance_alphabet.len;
         return out.toOwnedSlice(allocator);
     }
     pub fn headerBits(allocator: std.mem.Allocator, input: []const u8, options: Options, state: *const Prepared) br.Error!BitCount {
@@ -41813,6 +41867,84 @@ const AdaptiveLiteralPreparedTestCodec = struct {
         return test_prepared_adaptive_literal_count_calls;
     }
 };
+
+const SharedCommandCandidateGroupTestCodec = struct {
+    pub const Options = PlannedEncodeOptions;
+    pub const Profile = EncodeMemoryProfile;
+    pub fn decode(allocator: std.mem.Allocator, input: []const u8, size: usize) br.Error![]u8 {
+        return decodeStreamAllocExactSizeWithOptions(allocator, input, size, .{ .allow_large_window = true });
+    }
+    pub fn summarize(allocator: std.mem.Allocator, input: []const u8) br.Error!StreamSummary {
+        return summarizeStreamAllocWithOptions(allocator, input, .{ .allow_large_window = true });
+    }
+    pub const Counts = struct {
+        groups: usize,
+        captures: usize,
+        literal_models: usize,
+        distance_models: usize,
+        distance_builds: usize,
+    };
+    pub fn counts() Counts {
+        return .{ .groups = test_shared_command_candidate_groups, .captures = prepared_command_distance.testCounters().counted_captures, .literal_models = test_shared_adaptive_literal_models, .distance_models = test_shared_adaptive_distance_models, .distance_builds = prepared_adaptive_distance.testCounters().command_model_builds };
+    }
+    pub fn encode(allocator: std.mem.Allocator, input: []const u8, original: bool) br.Error![]u8 {
+        return encodeOptions(allocator, input, original, .{ .quality = 8, .window_bits = 16 });
+    }
+    pub fn encodeOptions(allocator: std.mem.Allocator, input: []const u8, original: bool, options: Options) br.Error![]u8 {
+        test_disable_shared_command_candidate_group = original;
+        defer test_disable_shared_command_candidate_group = false;
+        test_shared_command_candidate_groups = 0;
+        test_shared_adaptive_literal_models = 0;
+        test_shared_adaptive_distance_models = 0;
+        prepared_command_distance.resetTestCounters();
+        prepared_adaptive_distance.resetTestCounters();
+        return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+    }
+};
+
+test "Brotli shared command candidate group preserves public wire and model work" {
+    try @import("br/encoder/command_candidate_group_tests.zig").check(SharedCommandCandidateGroupTestCodec);
+}
+
+test "Brotli shared command candidate group guards and total budget contracts" {
+    try @import("br/encoder/command_candidate_group_tests/guards.zig").check(SharedCommandCandidateGroupTestCodec);
+}
+
+const BorrowedAdaptiveLiteralTestCodec = struct {
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const Command = command_plan.Command;
+    pub const Plan = block_split_plan.Plan;
+    pub const Prepared = prepared_adaptive_literal.Prepared;
+    pub const Common = prepared_command_distance.Prepared;
+    pub const prepare = AdaptiveLiteralPreparedTestCodec.prepare;
+    pub const emit = AdaptiveLiteralPreparedTestCodec.emit;
+    pub const encode = AdaptiveLiteralPreparedTestCodec.encode;
+    pub const decode = AdaptiveLiteralPreparedTestCodec.decode;
+    pub const summarize = AdaptiveLiteralPreparedTestCodec.summarize;
+    pub const headerBits = AdaptiveLiteralPreparedTestCodec.headerBits;
+    pub const headerWire = AdaptiveLiteralPreparedTestCodec.headerWire;
+    pub fn buildCommon(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: Options) br.Error!Common {
+        var base = options;
+        base.adaptive_literal_split = null;
+        base.literal_split = null;
+        base.literal_entropy_plan = null;
+        base.adaptive_distance_split = null;
+        var common = Common.init(base, commands);
+        base.prepared_common = &common;
+        var literal: prepared_literal.State = undefined;
+        var stats: Stats = .{};
+        _ = try prepareCommandPlanWithOptionsRecorded(false, .{}, allocator, input, commands, null, &stats, base, &literal);
+        return common;
+    }
+    pub fn prepareBorrowed(allocator: std.mem.Allocator, input: []const u8, commands: []const Command, options: Options, common: *const Common) br.Error!Prepared {
+        return Prepared.initBorrowed(PreparedAdaptiveLiteralStrategy, allocator, input, commands, options, common);
+    }
+};
+
+test "Brotli borrowed adaptive literal common model and resource contracts" {
+    try @import("br/encoder/prepared_adaptive_literal_borrowed_tests.zig").check(BorrowedAdaptiveLiteralTestCodec);
+}
 
 test "Brotli prepared adaptive literal exact count and ownership contracts" {
     try @import("br/encoder/prepared_adaptive_literal_tests.zig").check(AdaptiveLiteralPreparedTestCodec);

@@ -19,6 +19,7 @@ const weighted_payload = @import("weighted_payload.zig");
 const literal_context = @import("literal_context.zig");
 const literal_context_split = @import("literal_context_split.zig");
 const prepared_literal = @import("prepared_literal.zig");
+const prepared_command_distance = @import("prepared_command_distance.zig");
 
 pub const command_capacity: usize = 704;
 pub const distance_capacity: usize = 79;
@@ -27,6 +28,8 @@ pub const max_distance_count: usize = 32 * 1024;
 
 pub const TestCounters = struct {
     command_scans: usize = 0,
+    command_model_builds: usize = 0,
+    borrowed_command_models: usize = 0,
     distance_histogram_passes: usize = 0,
     distance_tree_build_passes: usize = 0,
     distance_trees_built: usize = 0,
@@ -116,6 +119,7 @@ pub const Prepared = struct {
     command_alphabet: command_plan.PrefixAlphabet,
     command_lengths: [command_capacity]u4,
     command_encoder: huffman.HuffmanTable(command_capacity).Encoder,
+    borrowed_command: ?*const prepared_command_distance.Prepared = null,
     distance_alphabets: []command_plan.PrefixAlphabetFor(distance_capacity),
     distance_lengths: [][distance_capacity]u4,
     distance_encoders: []huffman.HuffmanTable(distance_capacity).Encoder,
@@ -130,6 +134,30 @@ pub const Prepared = struct {
         allocator: std.mem.Allocator,
         commands: []const command_plan.Command,
         options: S.Options,
+    ) S.Error!Prepared {
+        return initInternal(S, allocator, commands, options, null);
+    }
+
+    /// Borrow only a published ordinary command model from this exact keyed
+    /// command group. Distance histograms, trees, switches and symbol streams
+    /// remain owned here. The owner must outlive this preparation and writing.
+    pub fn initBorrowedCommand(
+        comptime S: type,
+        allocator: std.mem.Allocator,
+        commands: []const command_plan.Command,
+        options: S.Options,
+        common: *const prepared_command_distance.Prepared,
+    ) S.Error!Prepared {
+        if (!borrowKeyMatches(common, options, commands)) return error.InvalidBlockPlan;
+        return initInternal(S, allocator, commands, options, common);
+    }
+
+    fn initInternal(
+        comptime S: type,
+        allocator: std.mem.Allocator,
+        commands: []const command_plan.Command,
+        options: S.Options,
+        borrowed: ?*const prepared_command_distance.Prepared,
     ) S.Error!Prepared {
         const split = options.adaptive_distance_split orelse return error.InvalidBlockPlan;
         if (!S.supported(options, commands) or !bounded(commands.len, split))
@@ -179,7 +207,8 @@ pub const Prepared = struct {
                 command_encoding.forLengths(command.insert_len, command.copy_len, false) orelse
                 return error.InvalidBlockPlan;
             command_symbol.* = encoding.symbol;
-            try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
+            if (borrowed == null)
+                try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
             payload_extra_bits = try weighted_payload.add(
                 payload_extra_bits,
                 @as(bit_count.BitCount, encoding.command.insert_extra_bits) + encoding.command.copy_extra_bits,
@@ -214,20 +243,25 @@ pub const Prepared = struct {
             block_end != distance_count)
             return error.InvalidBlockPlan;
 
-        try command_alphabet.sortByFrequencies(&command_frequencies);
-        const command_lengths = if (command_alphabet.len <= 4)
-            @as([command_capacity]u4, @splat(0))
-        else
-            try command_alphabet.codeLengths(&command_frequencies);
-        const command_encoder = if (command_alphabet.len <= 4)
-            huffman.HuffmanTable(command_capacity).Encoder{}
-        else if (command_alphabet.len <= 64)
-            try huffman.HuffmanTable(command_capacity).Encoder.initSparseTrusted(
-                &command_lengths,
-                command_alphabet.symbols[0..command_alphabet.len],
-            )
-        else
-            try huffman.HuffmanTable(command_capacity).Encoder.init(&command_lengths);
+        var command_lengths: [command_capacity]u4 = undefined;
+        var command_encoder: huffman.HuffmanTable(command_capacity).Encoder = undefined;
+        if (borrowed == null) {
+            if (comptime builtin.is_test) test_counters.command_model_builds += 1;
+            try command_alphabet.sortByFrequencies(&command_frequencies);
+            command_lengths = if (command_alphabet.len <= 4)
+                @as([command_capacity]u4, @splat(0))
+            else
+                try command_alphabet.codeLengths(&command_frequencies);
+            command_encoder = if (command_alphabet.len <= 4)
+                .{}
+            else if (command_alphabet.len <= 64)
+                try huffman.HuffmanTable(command_capacity).Encoder.initSparseTrusted(
+                    &command_lengths,
+                    command_alphabet.symbols[0..command_alphabet.len],
+                )
+            else
+                try huffman.HuffmanTable(command_capacity).Encoder.init(&command_lengths);
+        } else if (comptime builtin.is_test) test_counters.borrowed_command_models += 1;
 
         const distance_alphabets = try allocator.alloc(command_plan.PrefixAlphabetFor(distance_capacity), type_count);
         errdefer allocator.free(distance_alphabets);
@@ -261,9 +295,9 @@ pub const Prepared = struct {
         const context_map = try identity_context_map.Plan.init(allocator, type_count, 4);
         var payload_bits = try weighted_payload.histogram(
             command_capacity,
-            &command_frequencies,
-            &command_alphabet,
-            &command_lengths,
+            if (borrowed) |owner| &owner.command_frequencies else &command_frequencies,
+            if (borrowed) |owner| &owner.command_alphabet else &command_alphabet,
+            if (borrowed) |owner| &owner.command_lengths else &command_lengths,
             true,
         );
         for (distance_frequencies, distance_alphabets, distance_lengths) |*frequencies, *alphabet, *lengths|
@@ -285,13 +319,14 @@ pub const Prepared = struct {
             .command_alphabet = command_alphabet,
             .command_lengths = command_lengths,
             .command_encoder = command_encoder,
+            .borrowed_command = borrowed,
             .distance_alphabets = distance_alphabets,
             .distance_lengths = distance_lengths,
             .distance_encoders = distance_encoders,
             .split_code = split_code,
             .context_map = context_map,
             .payload_bits = payload_bits,
-            .command_symbol_count = command_alphabet.len,
+            .command_symbol_count = if (borrowed) |owner| owner.command_alphabet.len else command_alphabet.len,
             .distance_symbol_count = distance_symbol_count,
         };
     }
@@ -307,13 +342,38 @@ pub const Prepared = struct {
     }
 
     pub fn matches(self: *const Prepared, options: anytype, commands: []const command_plan.Command) bool {
+        if (self.borrowed_command) |owner|
+            if (!borrowKeyMatches(owner, options, commands)) return false;
         return self.key.matches(options, commands) and self.command_symbols.len == commands.len and
             self.distance_count == self.distance_encodings.len and
             self.distance_alphabets.len == self.key.split_type_count and
             self.distance_lengths.len == self.key.split_type_count and
             self.distance_encoders.len == self.key.split_type_count;
     }
+
+    pub fn commandAlphabet(self: *const Prepared) *const command_plan.PrefixAlphabet {
+        return if (self.borrowed_command) |owner| &owner.command_alphabet else &self.command_alphabet;
+    }
+
+    pub fn commandLengths(self: *const Prepared) *const [command_capacity]u4 {
+        return if (self.borrowed_command) |owner| &owner.command_lengths else &self.command_lengths;
+    }
+
+    pub fn commandEncoder(self: *const Prepared) *const huffman.HuffmanTable(command_capacity).Encoder {
+        return if (self.borrowed_command) |owner| &owner.command_encoder else &self.command_encoder;
+    }
 };
+
+fn borrowKeyMatches(common: *const prepared_command_distance.Prepared, options: anytype, commands: []const command_plan.Command) bool {
+    // The owned entry's established test options omit this ordinary-key field.
+    // Keep that generic instantiation valid without widening either API.
+    if (comptime @hasField(@TypeOf(options), "optimize_same_last_distance")) {
+        return common.ready and !common.has_exact_commands and
+            options.use_recent_distances and
+            std.meta.eql(options.distance_parameters, encoder_distance.Parameters.init(0, 15)) and
+            common.key.matches(options, commands);
+    } else return false;
+}
 
 /// Emit the selected literal preparation while borrowing every command,
 /// distance, and split artifact from `common`. No command classification or
@@ -331,6 +391,8 @@ pub fn write(
     if (!S.supported(options, commands) or !common.matches(options, commands) or
         !literals.matches(input, options)) return error.InvalidBlockPlan;
     const split = common.key.split_ptr;
+    const command_alphabet = common.commandAlphabet();
+    const command_encoder = common.commandEncoder();
     try S.header(allocator, writer, input, options, common, literals);
 
     var literal_encoders: [literal_context_split.max_trees]huffman.HuffmanTable(256).Encoder = undefined;
@@ -343,14 +405,14 @@ pub fn write(
     for (commands, common.command_symbols) |command, symbol| {
         if (symbol >= command_lut.entries.len) return error.InvalidBlockPlan;
         const entry = command_lut.entries[symbol];
-        if (common.command_alphabet.len > 1) {
-            if (common.command_alphabet.len <= 4) {
-                const code = common.command_alphabet.simpleCode(symbol) orelse return error.InvalidBlockPlan;
+        if (command_alphabet.len > 1) {
+            if (command_alphabet.len <= 4) {
+                const code = command_alphabet.simpleCode(symbol) orelse return error.InvalidBlockPlan;
                 try writer.writeHuffmanBits(allocator, code.code, code.bits);
             } else try writer.writeHuffmanBits(
                 allocator,
-                common.command_encoder.codes[symbol],
-                common.command_encoder.bits[symbol],
+                command_encoder.codes[symbol],
+                command_encoder.bits[symbol],
             );
         }
         if (entry.insert_extra_bits != 0)
@@ -524,4 +586,8 @@ test "prepared adaptive distance cleans every partial allocation failure" {
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Run.run, .{ &commands, &split });
+}
+
+test "prepared adaptive distance borrows the keyed command model" {
+    try @import("prepared_adaptive_distance_borrow_tests.zig").check(@This());
 }

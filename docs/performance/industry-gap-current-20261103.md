@@ -6,6 +6,15 @@ and decoder throughput still leave measurable gaps. This assessment preserves
 the source and workload scope of each archived comparison. It is not a fresh
 measurement of every encoder and decoder at the current Git revision.
 
+The subsequent [command-model lifetime](br/command-model-lifetime.md) epoch
+preserves every q8 wire while removing repeated model construction across
+preferred and adaptive split candidates. Its separate 39-input matrix records
+about 0.72% lower real-input latency, including 2.23% at 64 KiB; small-input
+groups remain near neutral and weaker controls remain visible. The direct
+current-source reference epoch is 30.09 times Brotli 1.2.0 latency at size
+0.99556 times reference. Earlier values below keep their own source epochs;
+the internal gains are not multiplied into a synthetic overall ranking.
+
 ## Compression
 
 Time and compressed-size ratios are Vort/reference; lower is better. Geometric

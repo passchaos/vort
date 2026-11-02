@@ -172,3 +172,6 @@ larger q8 opportunity is extending one immutable command plan's existing
 command-model preparation from its preferred group into adaptive literal and
 distance candidates. That work needs separate key, lifetime, resource and
 full-output validation; it is not implemented by this score-loop increment.
+The subsequent [command-model lifetime](command-model-lifetime.md) increment
+implements that reuse with separate source/performance evidence and keeps
+the broader parser/model and cross-codec gaps open.
