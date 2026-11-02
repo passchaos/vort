@@ -539,6 +539,11 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
             }
         }
 
+        // Up to two packed-literal entries can consume 22 staged bits before
+        // a 48-bit length/distance token. The loop still owns eight readable
+        // input bytes here, so restage before that token rather than using
+        // unstaged high bits or subtracting beyond the reservoir count.
+        if (bit_count < 48) refillBits(input, &byte_index, &bit_buffer, &bit_count);
         var match_bits: u6 = @truncate(entry);
         var length_entry: u32 = entry;
         if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0) {
@@ -630,6 +635,13 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         if (comptime rle1_distance) {
             if ((bits & 1) != 0) return error.InvalidHuffmanCode;
             const total_bits: u6 = match_bits + length_extra_bits + 1;
+            if (comptime pause_at_output_boundary) {
+                if (length > output.len - out_pos) {
+                    if (out_pos == 0) return error.InvalidMatch;
+                    storeReaderStateDelta(reader, bit_buffer, bit_count, byte_index, initial_bit_count, initial_byte_index, initial_consumed_bits);
+                    return .{ .output_written = out_pos, .status = .need_output };
+                }
+            }
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
             if (bit_count >= Decoder.literal_lookup_bits) {
@@ -678,6 +690,16 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
         const distance = @as(usize, @intCast(distance_entry >> 16)) + @as(usize, @intCast(bits & distance_mask));
         const total_bits: u6 = match_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
+        if (comptime pause_at_output_boundary) {
+            if (length > output.len - out_pos) {
+                // Packed literals may have consumed the loop's original 258
+                // bytes of headroom. Keep their progress, but leave this match
+                // at its token start. Invalid distance retains fast-loop priority.
+                if (distance == 0 or distance > out_pos) return error.InvalidMatch;
+                storeReaderStateDelta(reader, bit_buffer, bit_count, byte_index, initial_bit_count, initial_byte_index, initial_consumed_bits);
+                return .{ .output_written = out_pos, .status = .need_output };
+            }
+        }
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
@@ -889,6 +911,9 @@ fn decodeTailSymbol(reader: *bitstream.BufferedBitReader, decoder: anytype) Erro
 
 inline fn refillBits(input: []const u8, byte_index: *usize, bit_buffer: *u64, bit_count: *usize) void {
     if (bit_count.* >= 56) return;
+    // Restaging a long token can use the loop's last eight-byte read before
+    // its normal next-entry refill. Leave shorter input to the bounded tail.
+    if (input.len - byte_index.* < 8) return;
     const bytes_to_stage = (63 - bit_count.*) / 8;
     bit_buffer.* |= std.mem.readInt(u64, input[byte_index.*..][0..8], .little) << @intCast(bit_count.*);
     bit_count.* += bytes_to_stage * 8;
@@ -1062,4 +1087,12 @@ test "linear reader accounting supports a preloaded reservoir" {
     try std.testing.expectEqual(@as(BitCount, 28), reader.consumed_bits);
     try std.testing.expectEqual(@as(usize, 3), reader.byte_index);
     try std.testing.expectEqual(@as(usize, 20), reader.bit_count);
+}
+
+test "semantic window packed literals pause before a non-fitting match" {
+    try @import("window_capacity_tests.zig").packedCapacity();
+}
+
+test "semantic window restages before a maximum length distance token" {
+    try @import("window_capacity_tests.zig").longToken();
 }
