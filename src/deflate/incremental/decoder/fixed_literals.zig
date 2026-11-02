@@ -414,8 +414,15 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             var dynamic_code_bits = self.dynamic_code_bits;
             var distance_code = self.distance_code;
             var distance_code_bits = self.distance_code_bits;
+            var history_pos = self.history_pos;
+            var history_len = self.history_len;
+            var total_output = self.total_output;
+            const history_capacity = self.history.len;
             const start_input = input_read.*;
             defer {
+                self.history_pos = history_pos;
+                self.history_len = history_len;
+                self.total_output = total_output;
                 self.bit_buffer = bit_buffer;
                 self.bit_count = bit_count;
                 self.code = code;
@@ -450,13 +457,13 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                         rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                         return .need_output;
                     }
-                    if (self.total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
+                    if (total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
                     if (self.options.expected_output_len) |expected| {
-                        if (self.total_output >= expected) return self.fail(.symbols, error.SizeMismatch);
+                        if (total_output >= expected) return self.fail(.symbols, error.SizeMismatch);
                     }
                     output[output_written.*] = @intCast(symbol);
                     output_written.* += 1;
-                    try self.recordByte(@intCast(symbol));
+                    self.recordByteLocal(@intCast(symbol), &history_pos, &history_len, &total_output);
                     continue;
                 }
                 if (symbol == 256) {
@@ -464,7 +471,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     if (self.phase == .done) {
                         if (self.options.expected_output_len) |expected| {
-                            if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
+                            if (total_output != expected) return self.fail(.done, error.SizeMismatch);
                         }
                         return .done;
                     }
@@ -510,14 +517,20 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     };
                     self.match_distance += extra;
                 }
-                try self.beginMatch();
+                try self.beginMatchWith(history_capacity, history_len, total_output);
                 self.phase = .match_copy;
                 if (output_written.* == output.len) {
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     return .need_output;
                 }
                 const n = @min(self.match_remaining, output.len - output_written.*);
-                self.copyMatchSpan(output[output_written.*..][0..n]);
+                self.copyMatchSpanLocal(
+                    output[output_written.*..][0..n],
+                    history_capacity,
+                    &history_pos,
+                    &history_len,
+                    &total_output,
+                );
                 output_written.* += n;
                 self.match_remaining -= n;
                 if (self.match_remaining != 0) {
@@ -639,16 +652,113 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
             return self.fail(.symbols, error.InvalidHuffmanCode);
         }
-        fn beginMatch(self: *Self) Error!void {
-            if (self.history.len == 0) return self.fail(.match_copy, error.OutputTooSmall);
-            if (self.match_distance == 0 or self.match_distance > self.history_len) return self.fail(.match_copy, error.InvalidMatch);
+        /// Local-state variants used by the fused symbol loop. They keep the
+        /// ring position, retained length and output counter in registers;
+        /// the outlined `recordByte`/`recordSpan`/`copyMatchSpan` serve the
+        /// phase paths and stored blocks. The two forms must stay identical.
+        inline fn recordByteLocal(
+            self: *Self,
+            byte: u8,
+            history_pos: *usize,
+            history_len: *usize,
+            total_output: *usize,
+        ) void {
+            const capacity = self.history.len;
+            if (capacity != 0) {
+                self.history[history_pos.*] = byte;
+                const next = history_pos.* + 1;
+                history_pos.* = if (next == capacity) 0 else next;
+                history_len.* = @min(history_len.* + 1, capacity);
+            }
+            total_output.* += 1;
+        }
+
+        inline fn recordSpanLocal(
+            self: *Self,
+            bytes: []const u8,
+            history_capacity: usize,
+            history_pos: *usize,
+            history_len: *usize,
+            total_output: *usize,
+        ) void {
+            std.debug.assert(bytes.len != 0);
+            if (history_capacity == 0) {
+                total_output.* += bytes.len;
+                return;
+            }
+            if (bytes.len <= history_capacity) {
+                const destination = history_pos.*;
+                const first_destination_len = @min(bytes.len, history_capacity - destination);
+                @memcpy(self.history[destination..][0..first_destination_len], bytes[0..first_destination_len]);
+                if (first_destination_len != bytes.len)
+                    @memcpy(self.history[0 .. bytes.len - first_destination_len], bytes[first_destination_len..]);
+                const next = destination + bytes.len;
+                history_pos.* = if (next >= history_capacity) next - history_capacity else next;
+                history_len.* = @min(history_len.* + bytes.len, history_capacity);
+                total_output.* += bytes.len;
+                return;
+            }
+            const retained_len = history_capacity;
+            const retained = bytes[bytes.len - retained_len ..];
+            const destination = (history_pos.* + bytes.len - retained_len) % history_capacity;
+            const first_destination_len = @min(retained.len, history_capacity - destination);
+            @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
+            if (first_destination_len != retained.len)
+                @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
+            history_pos.* = (history_pos.* + bytes.len) % history_capacity;
+            history_len.* = history_capacity;
+            total_output.* += bytes.len;
+        }
+
+        inline fn copyMatchSpanLocal(
+            self: *Self,
+            output: []u8,
+            history_capacity: usize,
+            history_pos: *usize,
+            history_len: *usize,
+            total_output: *usize,
+        ) void {
+            std.debug.assert(output.len != 0);
+            std.debug.assert(self.match_distance != 0);
+            std.debug.assert(self.match_distance <= history_len.*);
+
+            const seed_len = @min(output.len, self.match_distance);
+            var source = history_pos.* + history_capacity - self.match_distance;
+            if (source >= history_capacity) source -= history_capacity;
+            if (self.match_distance == 1) {
+                @memset(output, self.history[source]);
+            } else {
+                const first_source_len = @min(seed_len, history_capacity - source);
+                @memcpy(output[0..first_source_len], self.history[source..][0..first_source_len]);
+                if (first_source_len != seed_len)
+                    @memcpy(output[first_source_len..seed_len], self.history[0 .. seed_len - first_source_len]);
+
+                var produced = seed_len;
+                while (produced < output.len) {
+                    const n = @min(produced, output.len - produced);
+                    std.mem.copyForwards(u8, output[produced..][0..n], output[0..n]);
+                    produced += n;
+                }
+            }
+
+            self.recordSpanLocal(output, history_capacity, history_pos, history_len, total_output);
+        }
+
+        fn beginMatchWith(self: *Self, history_capacity: usize, history_len: usize, total_output: usize) Error!void {
+            if (history_capacity == 0) return self.fail(.match_copy, error.OutputTooSmall);
+            if (self.match_distance == 0 or self.match_distance > history_len) return self.fail(.match_copy, error.InvalidMatch);
             if (self.match_distance > self.options.max_distance) return self.fail(.match_copy, error.InvalidMatch);
-            if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - self.total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
+            if (!self.options.stop_at_output_limit and (total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
             if (self.options.expected_output_len) |expected| {
-                if (self.total_output > expected or self.match_len > expected - self.total_output) return self.fail(.match_copy, error.SizeMismatch);
+                if (total_output > expected or self.match_len > expected - total_output) return self.fail(.match_copy, error.SizeMismatch);
             }
             self.match_remaining = self.match_len;
         }
+
+        fn beginMatch(self: *Self) Error!void {
+            return self.beginMatchWith(self.history.len, self.history_len, self.total_output);
+        }
+
         fn alignStoredHeader(self: *Self) void {
             const drop: u6 = self.bit_count % 8;
             self.bit_buffer >>= drop;
