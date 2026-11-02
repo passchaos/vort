@@ -27,18 +27,13 @@ pub fn build(frequencies: *const [18]u32) ?[18]u4 {
     var active: usize = 0;
 
     // Insertion sort is bounded to eighteen entries. Scanning symbols in
-    // ascending order already makes equal-weight insertion stable; retaining
-    // the full comparator here documents and enforces the required order.
+    // ascending order makes a new symbol greater than every existing symbol,
+    // so strict weight comparison preserves the required equal-weight order.
     for (frequencies, 0..) |frequency, symbol_usize| {
         if (frequency == 0) continue;
         const symbol: Symbol = @intCast(symbol_usize);
         var index = active;
-        while (index != 0 and leafLess(
-            frequency,
-            symbol,
-            weights[index - 1],
-            leaf_symbols[index - 1],
-        )) : (index -= 1) {
+        while (index != 0 and frequency < weights[index - 1]) : (index -= 1) {
             weights[index] = weights[index - 1];
             leaf_symbols[index] = leaf_symbols[index - 1];
         }
@@ -86,11 +81,6 @@ pub fn build(frequencies: *const [18]u32) ?[18]u4 {
         lengths[symbol] = @intCast(depth);
     }
     return lengths;
-}
-
-inline fn leafLess(left_weight: u32, left_symbol: Symbol, right_weight: u64, right_symbol: Symbol) bool {
-    return left_weight < right_weight or
-        (left_weight == right_weight and left_symbol < right_symbol);
 }
 
 inline fn queuePop(
@@ -169,4 +159,8 @@ test "direct code-length Huffman rejects an over-depth tree" {
     frequencies[5] = 16;
     frequencies[6] = 32;
     try std.testing.expect(build(&frequencies) == null);
+}
+
+test "direct code-length Huffman matches independent minimum-node oracle" {
+    try @import("code_length_huffman_tests.zig").check(@This());
 }

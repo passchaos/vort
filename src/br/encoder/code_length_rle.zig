@@ -47,6 +47,45 @@ pub fn summarizeSparse(comptime collect_shape: bool, lengths: []const u4, symbol
     if (lengths.len > 256) return error.InvalidBlockPlan;
 
     var summary: Summary = .{};
+    if (symbols.len == 0) return summary;
+    const first_symbol: usize = symbols[0];
+    if (first_symbol >= lengths.len) return error.InvalidBlockPlan;
+    var run_length = lengths[first_symbol];
+    if (run_length == 0) return error.InvalidBlockPlan;
+    if (first_symbol != 0) addZeroRun(collect_shape, &summary, first_symbol);
+    var symbol_cursor = first_symbol + 1;
+    var run: usize = 1;
+    for (symbols[1..]) |symbol| {
+        const symbol_index: usize = symbol;
+        if (symbol_index >= lengths.len or symbol_index < symbol_cursor)
+            return error.InvalidBlockPlan;
+        // Validate this entry once, then carry its value into the pending run.
+        // A run break never peeks at a future entry that must be read again.
+        const length = lengths[symbol_index];
+        if (length == 0) return error.InvalidBlockPlan;
+        if (symbol_index == symbol_cursor and length == run_length) {
+            run += 1;
+        } else {
+            addNonzeroRun(collect_shape, &summary, run_length, run);
+            if (symbol_index > symbol_cursor)
+                addZeroRun(collect_shape, &summary, symbol_index - symbol_cursor);
+            run_length = length;
+            run = 1;
+        }
+        // Widen before advancing so the exclusive stop after symbol 255 is 256.
+        symbol_cursor = symbol_index + 1;
+    }
+    addNonzeroRun(collect_shape, &summary, run_length, run);
+    if (collect_shape) summary.input_lengths = symbol_cursor;
+    return summary;
+}
+
+/// Prior lookahead implementation retained as a differential reference. It
+/// shares the same caller-owned complete-support contract and error boundary.
+pub fn summarizeSparseReference(comptime collect_shape: bool, lengths: []const u4, symbols: []const u8) !Summary {
+    if (lengths.len > 256) return error.InvalidBlockPlan;
+
+    var summary: Summary = .{};
     var symbol_cursor: usize = 0;
     var sparse_index: usize = 0;
     while (sparse_index < symbols.len) {
@@ -78,6 +117,10 @@ pub fn summarizeSparse(comptime collect_shape: bool, lengths: []const u4, symbol
     }
     if (collect_shape) summary.input_lengths = symbol_cursor;
     return summary;
+}
+
+test {
+    _ = @import("code_length_rle_sparse_tests.zig");
 }
 
 fn addZeroRun(comptime collect_shape: bool, summary: *Summary, run: usize) void {

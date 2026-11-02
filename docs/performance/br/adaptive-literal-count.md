@@ -151,6 +151,11 @@ zig build test-br-prepared-command-wasm --summary all
 | Production matrix | `850ea645445cfb7551b9dcc2a2e145c3b4e77c51c173a0a3d3890da47874a94a` |
 | Production long comparison | `2092fde085db1e13fc98d97e6ccc2f90ca1f78ac2a0171521a49f588b78d9ff6` |
 
+The subsequent [sparse prefix statistics](sparse-prefix-statistics.md) increment
+targets exact tree-score RLE and stable code-length Huffman insertion. Its
+ordinary timing epoch and weaker controls are separate from this candidate
+output increment.
+
 The latest three-codec [gap assessment](../industry-gap-current-20261103.md)
 keeps high-quality ratio/speed, full-file, dictionary/streaming, memory and
 platform work open. The industry-best goal is not completed by this increment.
