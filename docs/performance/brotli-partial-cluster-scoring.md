@@ -72,6 +72,10 @@ then emit the final winner once. Preserve split planning, candidate order and
 complete wire equality; these diagnostic costs identify a target rather than
 prove its prospective ordinary-call benefit.
 
+The subsequent [interval-cost optimization](br/interval-cost.md) implements
+bounded memoization and confirms its workload-dependent ordinary benefit.
+The original target-selection evidence follows.
+
 A second probe is `literal_block_split.chooseProposals`: its pair/triple
 search rebuilds Huffman lengths for repeated contiguous intervals. For MR's
 recorded 4277/4308-literal plans, counting eligible source-code branches gives

@@ -26101,3 +26101,15 @@ reuse, so production keeps the simpler independently owned plans.
   and keep unrelated rows within 0.3%. All 1,261 Zstd tests and 9,900 upstream
   frames pass. [Evidence](performance/zstd/raw-mixed-sequences.md).
   The deflate/zstd/brotli industry-best objective remains active.
+
+- 2026-11-02: Brotli q8 fixed-grid literal splits now memoize exact contiguous
+  interval Huffman costs within one search. Refinement is a cohesive module;
+  large workspaces and endpoint-index lookup are deferred until the exact
+  two-region gate accepts the search. MR 64 KiB improves about 5.8% in the
+  36-row matched-q8/window16 matrix, confirmed at 5.5% with 11/11 longer pairs;
+  early-screen controls remain within 0.4%. All 216 reports retain identical
+  wires. The nine-endpoint cache requires 672 bytes and no heap allocation.
+  Independent proposal, savings and tie oracles cover 180 cases in three build
+  modes. [Evidence](performance/br/interval-cost.md). The three-format
+  industry-best objective remains active; matched q8 encoding is still over
+  32x native Brotli 1.2.0 latency on this corpus.
