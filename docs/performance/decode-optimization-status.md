@@ -51,6 +51,20 @@ with 49% more).
   extra-bit routing, literal-run history batching.
 - Zstd: cursor local promotion, short-match branch-first, X2 wide decoder.
 
+## Later 2026-11-02 findings
+
+- Adopted after the first consolidation: the Deflate semantic loop now
+  preloads the next literal entry before the reservoir refill (about 4–5%),
+  and the incremental Brotli literal-run batching was rejected (fast but
+  truncation-unsafe; every correct variant is slower).
+- The 24% stack reload in the full-file Brotli tail-lookup payload is a stall
+  sample, not extra work: converting the wide copy entry points to a by-value
+  cursor made the 48-row screen 1.5–2.2% slower.
+- Zstd grouped extra-bit reads, paired state reads, `ShiftingGroup` on the
+  main path, and an early sequence-container load are all neutral.
+- Any correct truncation guard that places a non-inlinable call inside the
+  incremental literal loop costs more than the check it removes.
+
 ## Remaining structural options
 
 1. Deflate fastloop rewrite with libdeflate entry semantics (low byte = total
