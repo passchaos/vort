@@ -21,6 +21,12 @@ reference. An admitted 64 KiB plan uses 256 KiB more logical index storage;
 caller allocator budgets and retained-capacity queries account for actual
 allocations. These remain scoped speed/resource tradeoffs, not broad parity.
 
+The [primary context count](br/primary-count.md) increment further preserves
+candidate configs, exact sizes and final wires. Its separate matched matrix
+improves real-input latency 1.22% overall and 3.05% at 64 KiB; the repetitive
+control retains about 1.8% regression in longer pairs. Its current reference
+epoch remains 31.02 times Brotli latency at size 0.99556 times reference.
+
 ## Encoding speed and compressed size
 
 Ratios below are Vort/reference; lower is better for both columns. These are

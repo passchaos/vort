@@ -103,6 +103,48 @@ pub const Prepared = struct {
     pub fn reset(self: *Prepared) void {
         self.ready = false;
     }
+
+    /// Publish an ordinary cold counting pass only after both canonical
+    /// encoders are built. No heap allocation or borrowed temporary survives.
+    pub noinline fn captureCounted(
+        self: *Prepared,
+        command_frequencies: *const [command_capacity]u32,
+        command_alphabet: *const command_plan.PrefixAlphabet,
+        command_lengths: *const [command_capacity]u4,
+        distance_frequencies: *const [distance_capacity]u32,
+        distance_alphabet: *const command_plan.PrefixAlphabetFor(distance_capacity),
+        distance_lengths: *const [distance_capacity]u4,
+        extra_bits: @import("../../io/bit_count.zig").BitCount,
+        symbols: ?*const [symbol_capacity]u16,
+    ) linksection(".vort_br_counted_context") !void {
+        self.ready = false;
+        const command_encoder = if (command_alphabet.len <= 4)
+            huffman.HuffmanTable(command_capacity).Encoder{}
+        else if (command_alphabet.len <= 64)
+            try huffman.HuffmanTable(command_capacity).Encoder.initSparseTrusted(command_lengths, command_alphabet.symbols[0..command_alphabet.len])
+        else
+            try huffman.HuffmanTable(command_capacity).Encoder.init(command_lengths);
+        const distance_encoder = if (distance_alphabet.len <= 4)
+            huffman.HuffmanTable(distance_capacity).Encoder{}
+        else if (distance_alphabet.len <= 64)
+            try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+        else
+            try huffman.HuffmanTable(distance_capacity).Encoder.init(distance_lengths);
+        self.payload_extra_bits = extra_bits;
+        @memset(&self.command_frequencies, 0);
+        for (command_alphabet.symbols[0..command_alphabet.len]) |symbol|
+            self.command_frequencies[symbol] = command_frequencies[symbol];
+        self.command_alphabet = command_alphabet.*;
+        self.distance_frequencies = distance_frequencies.*;
+        self.distance_alphabet.len = distance_alphabet.len;
+        @memcpy(self.distance_alphabet.symbols[0..distance_alphabet.len], distance_alphabet.symbols[0..distance_alphabet.len]);
+        self.command_lengths = command_lengths.*;
+        self.distance_lengths = distance_lengths.*;
+        self.command_encoder = command_encoder;
+        self.distance_encoder = distance_encoder;
+        if (symbols) |cached_symbols| self.command_symbols = cached_symbols.*;
+        self.ready = true;
+    }
 };
 
 // Nullness alone matters for unsupported payload options. Keep these fixture

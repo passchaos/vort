@@ -1,26 +1,49 @@
-//! Exact alternative evaluation within one immutable preferred-command group.
-//! The primary wire remains available until a strictly better preparation wins.
+//! Exact candidate evaluation within one immutable preferred-command group.
+//! The reference retains the primary wire; the prepared-primary route retains
+//! its counted state and emits only the selected group winner.
 const std = @import("std");
 const contexts = @import("literal_context_split.zig");
 const literal_context = @import("literal_context.zig");
 const profile = @import("quality_profile.zig");
 
 pub noinline fn encode(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) S.Error!S.Result {
+    return encodeCore(S, false, traced, trace, allocator, input, commands, io, stats, options, primary_options, null);
+}
+
+pub noinline fn encodePreparedPrimary(comptime S: type, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options) linksection(".vort_br_counted_context") S.Error!S.Result {
+    const proposals = try S.proposals(traced, trace, allocator, input, commands);
+    const count_primary = blk: {
+        for ([3]?contexts.Candidate{ proposals.suffix, proposals.up_to_16, proposals.full }) |optional| {
+            const candidate = optional orelse continue;
+            const same = if (primary_options.literal_context_candidate) |primary| contexts.Candidate.eql(candidate, primary) else false;
+            if (!same) break :blk true;
+        }
+        break :blk false;
+    };
+    if (!count_primary)
+        return encodeCore(S, false, traced, trace, allocator, input, commands, io, stats, options, primary_options, &proposals);
+    return encodeCore(S, true, traced, trace, allocator, input, commands, io, stats, options, primary_options, &proposals);
+}
+
+noinline fn encodeCore(comptime S: type, comptime prepare_primary: bool, comptime traced: bool, trace: profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: anytype, io: ?std.Io, stats: *S.Stats, options: S.UserOptions, primary_options: S.Options, precomputed: ?*const contexts.Proposals) linksection(".vort_br_counted_context") S.Error!S.Result {
     const initial_stats = stats.*;
     var primary_stats = initial_stats;
-    var selected_wire: ?[]u8 = try S.primary(traced, trace, allocator, input, commands, io, &primary_stats, primary_options);
+    var selected_state: S.State = undefined;
+    var selected_wire: ?[]u8 = if (prepare_primary) null else try S.primary(traced, trace, allocator, input, commands, io, &primary_stats, primary_options);
     errdefer if (selected_wire) |wire| S.free(traced, trace, allocator, wire);
-    var selected_ref = trace.reference(selected_wire.?);
+    var selected_ref = if (prepare_primary)
+        try S.prepare(traced, trace, allocator, input, commands, io, &primary_stats, primary_options, &selected_state)
+    else
+        trace.reference(selected_wire.?);
     var selected_stats = primary_stats;
     var selected_context = primary_options.literal_context_candidate;
     var selected_options = primary_options;
-    var selected_state: S.State = undefined;
     var scratch: S.State = undefined;
     var alternates: [3]contexts.Candidate = undefined;
     var alternate_count: usize = 0;
     var alternate_plain = false;
     var cutoff: ?u6 = if (selected_context) |candidate| candidate.suffixCutoff() else null;
-    const proposals = try S.proposals(traced, trace, allocator, input, commands);
+    const proposals = if (precomputed) |value| value.* else try S.proposals(traced, trace, allocator, input, commands);
     for ([3]?contexts.Candidate{ proposals.suffix, proposals.up_to_16, proposals.full }, 0..) |proposal, index| {
         if (proposal) |candidate| {
             var duplicate = if (selected_context) |current| contexts.Candidate.eql(candidate, current) else false;

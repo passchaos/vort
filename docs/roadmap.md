@@ -26156,3 +26156,19 @@ reuse, so production keeps the simpler independently owned plans.
   [Evidence](performance/br/ordinal-index.md). The reference
   epoch still takes 31.27x Brotli 1.2.0 time; the full three-format
   industry-best objective remains active.
+
+- 2026-11-03: Preferred Brotli context groups count the primary stream only
+  when current proposals include a different candidate, retaining its exact
+  state and emitting the group winner once. The original materialized path
+  remains for primary-only groups; explicit plain-baseline ties remain intact.
+  Cold command/distance preparation publishes only complete canonical data,
+  and short literal plans now apply their existing 128-literal gate before
+  allocating the 256 KiB mode histograms. All candidate configs/lengths and
+  wires remain identical. A 39-input matrix verifies 234 processes and improves
+  real-input latency 1.22% geometrically, or 3.05% at 64 KiB. Longer target
+  pairs improve 2.4–4.1%, with a 1.8% repetitive-control regression retained.
+  Independent policy/ownership and cold preparation tests, 1,513 ReleaseSafe
+  Brotli tests plus one skip, public Wasm q8 and all 212 default compile steps
+  pass. [Evidence](performance/br/primary-count.md). Adaptive literal counting,
+  tree scoring and parser/model tradeoffs remain work; the full three-codec
+  industry-best objective stays active.

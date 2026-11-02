@@ -350,6 +350,19 @@ fn setProfileShape(profile: *Profile, proposals: Proposals) void {
 }
 
 fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?*Analysis {
+    // The established minimum rejects short literal plans regardless of
+    // their histograms. Check that gate before allocating/clearing all four
+    // mode histograms. Stop at the threshold so accepted searches do not pay
+    // another complete command scan, and bounded subtraction avoids overflow.
+    var remaining = min_literal_count;
+    for (commands) |command| {
+        if (command.insert_len >= remaining) {
+            remaining = 0;
+            break;
+        }
+        remaining -= command.insert_len;
+    }
+    if (remaining != 0) return null;
     const analysis = try allocator.create(Analysis);
     errdefer allocator.destroy(analysis);
     @memset(std.mem.asBytes(analysis), 0);
@@ -378,6 +391,10 @@ fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []
         return null;
     }
     return analysis;
+}
+
+test "literal context short analysis preserves the literal threshold before allocation" {
+    try @import("literal_context_split/short_analysis_tests.zig").check(command_plan.Command, collectAnalysis);
 }
 
 fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) !?Candidate {

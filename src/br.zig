@@ -10342,6 +10342,11 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     return encodePreferredCommandPlanAllocRecorded(false, .{}, allocator, input, commands, io, stats, options);
 }
 
+var test_materialize_context_primary = false;
+var test_context_primary_count_calls: usize = 0;
+var test_context_primary_cold_success_calls: usize = 0;
+var test_context_primary_recent_max: usize = 0;
+
 fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
     var profile_scope = trace.begin(.preferred_context, input.len, commands.len);
     defer profile_scope.finish();
@@ -10360,6 +10365,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
             .initial_output_pos = options.initial_output_pos,
             .starting_last_distances = options.starting_last_distances,
         });
+        if (comptime builtin.is_test) test_context_primary_recent_max = @max(test_context_primary_recent_max, count);
         break :blk count >= min_recent_distance_candidate_count;
     } else false;
     const try_literal_contexts = options.try_literal_contexts orelse options.try_recent_distances;
@@ -10383,8 +10389,11 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
     if (input.len >= 8 * 1024 and try_literal_contexts and options.try_clustered_literal_contexts and use_recent_distances and !options.large_window) {
         prepared_common = prepared_command_distance.Prepared.init(primary_options, commands);
         primary_options.prepared_common = &prepared_common;
-        if (prepared_literal.supported(primary_options) and prepared_command_distance.supported(primary_options, prepared_common.has_exact_commands))
-            return context_candidate_group.encode(PreparedContextGroupStrategy, trace_enabled, trace, allocator, input, commands, io, stats, options, primary_options);
+        if (prepared_literal.supported(primary_options) and prepared_command_distance.supported(primary_options, prepared_common.has_exact_commands)) {
+            if (comptime builtin.is_test) if (test_materialize_context_primary)
+                return context_candidate_group.encode(PreparedContextGroupStrategy, trace_enabled, trace, allocator, input, commands, io, stats, options, primary_options);
+            return context_candidate_group.encodePreparedPrimary(PreparedContextGroupStrategy, trace_enabled, trace, allocator, input, commands, io, stats, options, primary_options);
+        }
     }
     const initial_stats = stats.*;
     var primary_stats = initial_stats;
@@ -11598,12 +11607,17 @@ fn prepareCommandPlanWithOptionsRecorded(
     scope.config(options);
     state.ready = false;
     const adaptive_distance = countedAdaptiveDistanceSupported(options, commands);
+    const cold_common = if (options.prepared_common) |common| !common.ready else false;
     if (!prepared_literal.supported(options)) return error.InvalidBlockPlan;
     if (!adaptive_distance) {
         const common = options.prepared_common orelse return error.InvalidBlockPlan;
-        if (!common.matches(options, commands)) return error.InvalidBlockPlan;
+        if (!common.key.matches(options, commands) or !prepared_command_distance.supported(options, common.has_exact_commands)) return error.InvalidBlockPlan;
     }
     _ = try stream_count.addLocal(options.initial_output_pos, input.len);
+    for (commands) |command| {
+        if (command.insert_start > input.len or command.insert_len > input.len - command.insert_start)
+            return error.InvalidBlockPlan;
+    }
     var measured = options;
     measured.prepared_literal = state;
     var counter = counting_writer.Writer.init(0);
@@ -11611,6 +11625,10 @@ fn prepareCommandPlanWithOptionsRecorded(
         try encodeCommandPlanWithOptionsWriteInternal(true, planned_distance_alphabet_size, allocator, &counter, input, commands, io, stats, measured)
     else
         try encodeCommandPlanWithOptionsWriteInternal(false, planned_distance_alphabet_size, allocator, &counter, input, commands, io, stats, measured);
+    if (comptime builtin.is_test) {
+        if (!adaptive_distance and cold_common and state.ready)
+            test_context_primary_cold_success_calls += 1;
+    }
     return scope.evaluated(state.wire_len);
 }
 
@@ -12798,7 +12816,19 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             payload_bits = try weighted_payload.add(payload_bits, payload_extra_bits);
         } else {
             const cached = common orelse return error.InvalidBlockPlan;
-            if (!common_ready) return error.InvalidBlockPlan;
+            if (!cached.ready) {
+                if (comptime builtin.is_test) test_context_primary_count_calls += 1;
+                try cached.captureCounted(
+                    &command_frequencies,
+                    &command_alphabet,
+                    &command_lengths,
+                    @as(*const [prepared_command_distance.distance_capacity]u32, @ptrCast(&distance_frequencies)),
+                    &distance_alphabet,
+                    @as(*const [prepared_command_distance.distance_capacity]u4, @ptrCast(&distance_lengths)),
+                    payload_extra_bits,
+                    if (cache_command_symbols) &command_symbols else null,
+                );
+            }
             try writeUnsplitPreparedHeader(distance_capacity, allocator, writer, context_candidate, options.literal_context_mode, alphabets, tree_lengths, &command_alphabet, &command_lengths, &distance_alphabet, &distance_lengths, options.distance_parameters, distance_alphabet_size);
             payload_bits = try weighted_payload.histogram(704, &cached.command_frequencies, &cached.command_alphabet, &cached.command_lengths, true);
             payload_bits = try weighted_payload.add(payload_bits, try weighted_payload.histogram(prepared_command_distance.distance_capacity, &cached.distance_frequencies, &cached.distance_alphabet, &cached.distance_lengths, true));
@@ -41677,6 +41707,50 @@ test "Brotli prepared literal exact count emission and lifecycle contracts" {
 
 test "Brotli counted context candidate policy and output ownership contracts" {
     try @import("br/encoder/context_candidate_group_tests.zig").run();
+}
+
+test "Brotli context primary count decision and ownership contracts" {
+    try @import("br/encoder/context_primary_count_tests.zig").check(context_candidate_group);
+}
+
+const ContextPrimaryPrepareTestCodec = struct {
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const State = prepared_literal.State;
+    pub const Prepared = prepared_command_distance.Prepared;
+    pub const Command = command_plan.Command;
+    pub const decode = decodeStreamAllocExactSize;
+    pub const summarize = summarizeStreamAlloc;
+    pub const encode = PreparedLiteralTestAdapters.encode;
+    pub const prepare = PreparedLiteralTestAdapters.prepare;
+    pub const emit = PreparedLiteralTestAdapters.emit;
+    pub fn publicOriginalQ8(allocator: std.mem.Allocator, input: []const u8) br.Error![]u8 {
+        test_context_primary_count_calls = 0;
+        test_context_primary_cold_success_calls = 0;
+        test_context_primary_recent_max = 0;
+        test_materialize_context_primary = true;
+        defer test_materialize_context_primary = false;
+        return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .window_bits = 16 });
+    }
+    pub fn publicCurrentQ8(allocator: std.mem.Allocator, input: []const u8) br.Error![]u8 {
+        test_context_primary_count_calls = 0;
+        test_context_primary_cold_success_calls = 0;
+        test_context_primary_recent_max = 0;
+        return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .quality = 8, .window_bits = 16 });
+    }
+    pub fn primaryCountCalls() usize {
+        return test_context_primary_count_calls;
+    }
+    pub fn primaryColdCountCalls() usize {
+        return test_context_primary_cold_success_calls;
+    }
+    pub fn primaryRecentMax() usize {
+        return test_context_primary_recent_max;
+    }
+};
+
+test "Brotli context primary cold count preparation contracts" {
+    try @import("br/encoder/context_primary_prepare_tests.zig").check(ContextPrimaryPrepareTestCodec);
 }
 
 const exact_wire_test_support = @import("br/encoder/exact_wire_tests/support.zig").Support(struct {
