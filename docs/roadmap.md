@@ -25990,3 +25990,15 @@ reuse, so production keeps the simpler independently owned plans.
   symbol path stays as the fallback.
   [Evidence](performance/deflate-incremental-symbol-gap.md). The three-codec
   industry-best goal stays active.
+
+- 2026-11-02: The incremental Deflate symbol path gained a precomputed
+  per-width canonical fallback table, single-wrap ring position updates,
+  a literal-run inner loop in the `.symbols` phase, an 11-bit literal lookup
+  and a 10-bit distance lookup. Paired runs on `dickens.64k.l9`/`dickens.1m.l9`
+  moved the streaming decoder from 1,279,500/13,837,400 ns per decode to
+  301,950/4,334,700 ns (4.24x/3.19x), cutting the one-shot gap from 14.0x/11.2x
+  to 3.33x/3.48x. A fused match phase, deferred literal-run recording, a 12-bit
+  literal lookup and an 11-bit distance lookup were neutral or slower and were
+  reverted. The resumable windowed semantic fast path is still the next larger
+  step. [Evidence](performance/deflate-incremental-symbol-gap.md). The
+  three-codec industry-best goal stays active.

@@ -42,7 +42,53 @@ The integration needs a bridge between the incremental bit state
 multi-step change and must keep the existing symbol path as the fallback for
 stored blocks, fixed blocks, small histories, and truncation.
 
+## First increment: canonical fallback tables and wider lookups
+
+The symbol path now precomputes `huffman.HuffmanTable` instances when a dynamic
+block header completes and resolves long codes by scanning the per-width entry
+group instead of rebuilding canonical codes per miss. Five changes were
+measured as paired runs on logical CPU2 (Zig 0.16.0 ReleaseFast,
+`skylake+pku+sgx`), 2,000 iterations at 64 KiB and 300 at 1 MiB, with 64 KiB
+history, whole input and 4 KiB output chunks:
+
+| Step | `dickens.64k.l9` ns | `dickens.1m.l9` ns |
+| --- | ---: | ---: |
+| Before | 1,278,500 | 13,870,000 |
+| Precomputed per-width fallback table | 373,045 | 5,283,500 |
+| Remove ring `% history.len` divisions | 340,950 | 4,835,500 |
+| Literal-run inner loop in `.symbols` | 330,450 | 4,686,500 |
+| Literal primary lookup 9 → 11 bits | 320,150 | 4,607,700 |
+| Distance primary lookup 8 → 10 bits | 305,400 | 4,334,700 |
+
+The final paired runs against the untouched binary give 4.24x at 64 KiB
+(1,279,500 → 301,950 ns) and 3.19x at 1 MiB (13,837,400 → 4,334,700 ns).
+One-shot `decodeRawAuto` on the same rows is 90,730 and 1,244,900 ns, so the
+remaining gap is 3.33x and 3.48x instead of 14.0x and 11.2x.
+
+The `% history.len` terms in `recordByte`, `recordSpan` and `copyMatchSpan`
+became single-wrap comparisons because every ring position stays below the
+ring length. The literal path keeps its one-store history update; a run is
+decoded inside the `.symbols` case so the phase switch is paid once per run.
+
+Rejected or neutral experiments:
+
+- Fusing length extra, distance symbol, distance extra and match copy into the
+  `.symbols` case removed the indirect dispatches but measured
+  0.4–0.9% (inside noise), so the phase form stays.
+- Recording literal runs as one `recordSpan` copy instead of a per-byte ring
+  store regressed 1.2% at 64 KiB and 1.5% at 1 MiB; runs are too short.
+- A 12-bit literal primary lookup was neutral (0.13%) and is not kept.
+- An 11-bit distance primary lookup regressed 3.2% against the 10-bit form,
+  most likely from the larger per-block table build and zeroing.
+
+Incremental decoding now executes about 61M instructions per 1 MiB versus
+14.4M for one-shot, and `memcpy` is 16% of that profile. The remaining cost is
+the resumable phase machine plus the ring history copy, not a single hot
+instruction.
+
 ## Status
 
-Measured only; the fast path is not implemented yet. The one-shot corpus
-screens are unaffected by this gap.
+The first symbol-path increment is committed. The larger windowed semantic
+fast path is still not implemented; it remains the direction below and the
+symbol path stays as its fallback. The one-shot corpus screens are unaffected
+by this gap.
