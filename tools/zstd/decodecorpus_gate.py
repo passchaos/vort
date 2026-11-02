@@ -220,16 +220,18 @@ def validate_campaign_summary(
         raise RuntimeError(f"{campaign.name} did not exercise reusable cache hits")
     if campaign.require_block_stream and block_stream_cases == 0:
         raise RuntimeError(f"{campaign.name} did not exercise bounded block streaming")
-    if not 0 < max_compressed_buffered <= BLOCK_STREAM_COMPRESSED_LIMIT:
+    if not 0 <= max_compressed_buffered <= BLOCK_STREAM_COMPRESSED_LIMIT:
         raise RuntimeError(
             f"{campaign.name} retained {max_compressed_buffered} compressed bytes; "
             f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
         )
-    if not 0 < max_compressed_capacity <= BLOCK_STREAM_COMPRESSED_LIMIT:
+    if not 0 <= max_compressed_capacity <= BLOCK_STREAM_COMPRESSED_LIMIT:
         raise RuntimeError(
             f"{campaign.name} allocated {max_compressed_capacity} compressed-buffer bytes; "
             f"limit is {BLOCK_STREAM_COMPRESSED_LIMIT}"
         )
+    if max_compressed_buffered > max_compressed_capacity:
+        raise RuntimeError(f"{campaign.name} retained bytes beyond compressed-buffer capacity")
     if unsupported != 0:
         raise RuntimeError(f"{campaign.name} reported {unsupported} unsupported frames")
     if mode_combinations != mode_mask.bit_count():

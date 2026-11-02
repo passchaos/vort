@@ -283,6 +283,32 @@ class DecodeCorpusGateTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "invalid reusable cache hits"):
             gate.validate_campaign_summary(raw_fields | {"decodecorpus_reusable_hits": "1"}, raw_campaign, 0)
 
+    def test_raw_and_rle_campaigns_allow_zero_compressed_storage(self) -> None:
+        fields = {
+            "decodecorpus_cases": "2000", "decodecorpus_incremental_cases": "2000",
+            "decodecorpus_reusable_cases": "2000", "decodecorpus_reusable_hits": "0",
+            "decodecorpus_block_stream_cases": "0", "decodecorpus_max_compressed_buffered": "0",
+            "decodecorpus_max_compressed_capacity": "0", "decodecorpus_streamed_literal_blocks": "0",
+            "decodecorpus_streamed_sequence_blocks": "0", "decodecorpus_max_block_stream_decoded_buffered": "0",
+            "decodecorpus_max_block_stream_decoded_capacity": "0", "decodecorpus_max_sequence_count": "0",
+            "decodecorpus_max_block_count": "2", "decodecorpus_sequence_count_tiers": "0",
+            "decodecorpus_sequence_mode_combinations": "0", "decodecorpus_sequence_mode_mask": "0",
+            "decodecorpus_combined_mode_combinations": "0", "decodecorpus_combined_mode_mask": "0",
+            "unsupported": "0",
+        }
+        for name in ("rle-content-32452843", "raw-8b-49979693"):
+            campaign = gate.CAMPAIGNS_BY_NAME[name]
+            with self.subTest(campaign=name):
+                self.assertEqual(gate.validate_campaign_summary(fields, campaign, 0), (0, 0, 0, 0, 0))
+                for delta in (
+                    {"decodecorpus_max_compressed_buffered": "-1"},
+                    {"decodecorpus_max_compressed_capacity": "-1"},
+                    {"decodecorpus_max_compressed_buffered": "1"},
+                    {"decodecorpus_max_compressed_capacity": str(gate.BLOCK_STREAM_COMPRESSED_LIMIT + 1)},
+                ):
+                    with self.subTest(invalid=delta), self.assertRaises(RuntimeError):
+                        gate.validate_campaign_summary(fields | delta, campaign, 0)
+
     def test_driver_runs_and_cleans_success_and_failure_corpora(self) -> None:
         with tempfile.TemporaryDirectory(prefix="vort-zstd-gate-smoke-") as temp:
             root = Path(temp)
