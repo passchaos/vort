@@ -51,6 +51,12 @@ pub fn main(init: std.process.Init) !void {
         default_iterations;
     if (iterations == 0 or args.next() != null) return error.InvalidArgument;
 
+    const competitor_name = try std.fmt.allocPrint(init.gpa, "{s}-{s}-level6", .{
+        if (std.mem.startsWith(u8, zlib.VORT_ZLIB_BENCH_NAME, "zlib-ng-")) "zlib-ng" else "zlib",
+        std.mem.span(zlib.zlibVersion()),
+    });
+    defer init.gpa.free(competitor_name);
+
     var cases = try buildCases(init.gpa);
     defer {
         for (&cases) |case| case.deinit(init.gpa);
@@ -103,6 +109,7 @@ pub fn main(init: std.process.Init) !void {
             const zlib_row = try measureZlib(
                 init,
                 case,
+                competitor_name,
                 mode.name,
                 mode.input_chunk,
                 mode.output_chunk,
@@ -215,6 +222,7 @@ fn decodeVort(
 fn measureZlib(
     init: std.process.Init,
     case: Case,
+    implementation: []const u8,
     chunking: []const u8,
     input_chunk: usize,
     output_chunk: usize,
@@ -257,7 +265,7 @@ fn measureZlib(
     try verifyDecoded(case, output[0..case.plain.len]);
     return makeRow(
         case,
-        zlib.VORT_ZLIB_BENCH_NAME,
+        implementation,
         chunking,
         input_chunk,
         output_chunk,

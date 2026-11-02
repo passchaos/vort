@@ -2040,6 +2040,9 @@ pub fn build(b: *std.Build) void {
         "tools/deflate_incremental_decode_gate.py",
     });
     const run_deflate_incremental_decode_gate_bench = b.addRunArtifact(deflate_incremental_decode_bench_exe);
+    // Captured timing output must reflect this run, including CPU affinity;
+    // a cached sample can otherwise keep a transient regression permanently.
+    run_deflate_incremental_decode_gate_bench.has_side_effects = true;
     run_deflate_incremental_decode_gate_bench.addArg("200");
     deflate_incremental_decode_gate.addArg("--csv");
     deflate_incremental_decode_gate.addFileArg(run_deflate_incremental_decode_gate_bench.captureStdOut(.{}));
