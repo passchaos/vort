@@ -15,6 +15,16 @@ current-source reference epoch is 30.09 times Brotli 1.2.0 latency at size
 0.99556 times reference. Earlier values below keep their own source epochs;
 the internal gains are not multiplied into a synthetic overall ranking.
 
+The further [Zstd local-frontier choice-price](zstd/frontier-choice-price.md)
+epoch preserves complete native and reference wires, requested settings and
+previous work counts across 82 configurations. Twelve-source 4 KiB group
+latencies improve about 4.3–4.4%, and 64/128 KiB groups about 2.3–3.1%, while
+individual Dickens/MR/SAO/X-ray rows still regress. Its direct current-source
+btultra2 reference time ratios are 3.02637/3.06785 at 64/128 KiB and 4.50305
+on three actual 1 MiB inputs, with size ratios 1.00480/1.00514/0.99280. Those
+parameters and source epochs stay distinct from the earlier comparisons below;
+the complete three-codec objective remains open.
+
 ## Compression
 
 Time and compressed-size ratios are Vort/reference; lower is better. Geometric

@@ -47,6 +47,12 @@ pub const Profile = struct {
     depth_stops: u64 = 0,
     nice_stops: u64 = 0,
     price_evaluations: u64 = 0,
+    /// Successful first edges that prepared immutable local-frontier choices.
+    frontier_choice_preparations: u64 = 0,
+    /// Admitted later ML edges priced from those prepared choices.
+    frontier_choice_replays: u64 = 0,
+    /// Local-frontier tails and short intervals that keep full edge pricing.
+    frontier_unprepared_edges: u64 = 0,
     hq_passes: u64 = 0,
     refinement_passes: u64 = 0,
     bounded_passes: u64 = 0,
@@ -176,7 +182,7 @@ pub const Profile = struct {
             inline for (.{ "hq_used", "effective_hq_search_depth", "effective_hq_nice_len", "effective_hq_min_match", "effective_hq_max_working_memory", "effective_hq_parser_engine", "effective_hq_parse_mode", "effective_hq_match_lengths", "effective_hq_max_price_evaluations" }) |field|
                 @field(self, field) = @field(other, field);
         }
-        inline for (.{ "positions_tested", "short_hash_probes", "long_hash_probes", "rep_probes", "rep_length_cache_hits", "skipped_positions", "dictionary_seed_positions", "history_seed_positions", "parser_matches", "parser_matched_bytes", "candidate_checks", "lazy_deferrals", "optimal_transitions", "tree_nodes", "byte_comparisons", "depth_stops", "nice_stops", "price_evaluations", "hq_passes", "refinement_passes", "bounded_passes", "whole_block_passes", "sampled_length_passes", "complete_length_passes", "baseline_searches", "guarded_frames", "price_limit_refusals", "shared_seed_reuses", "match_frontier_cache_entries", "match_frontier_replay_positions", "match_frontier_cache_fallbacks", "raw_blocks", "rle_blocks", "compressed_blocks", "baseline_selected_blocks", "baseline_selected_frames", "dictionary_sequences", "history_sequences" }) |field|
+        inline for (.{ "positions_tested", "short_hash_probes", "long_hash_probes", "rep_probes", "rep_length_cache_hits", "skipped_positions", "dictionary_seed_positions", "history_seed_positions", "parser_matches", "parser_matched_bytes", "candidate_checks", "lazy_deferrals", "optimal_transitions", "tree_nodes", "byte_comparisons", "depth_stops", "nice_stops", "price_evaluations", "frontier_choice_preparations", "frontier_choice_replays", "frontier_unprepared_edges", "hq_passes", "refinement_passes", "bounded_passes", "whole_block_passes", "sampled_length_passes", "complete_length_passes", "baseline_searches", "guarded_frames", "price_limit_refusals", "shared_seed_reuses", "match_frontier_cache_entries", "match_frontier_replay_positions", "match_frontier_cache_fallbacks", "raw_blocks", "rle_blocks", "compressed_blocks", "baseline_selected_blocks", "baseline_selected_frames", "dictionary_sequences", "history_sequences" }) |field|
             @field(self, field) = std.math.add(u64, @field(self, field), @field(other, field)) catch std.math.maxInt(u64);
         self.max_distance = @max(self.max_distance, other.max_distance);
         self.peak_working_memory = @max(self.peak_working_memory, other.peak_working_memory);

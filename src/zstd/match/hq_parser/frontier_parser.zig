@@ -5,10 +5,13 @@ const state = @import("state.zig");
 const rep = @import("rep.zig");
 const prices = @import("prices.zig");
 const resources = @import("resources.zig");
+const frontier_price = @import("frontier_price.zig");
 const PriceBudget = @import("price_budget.zig").PriceBudget;
 
 pub const use_frontier = true;
 pub const adaptive_stop = true;
+/// Amortize first-edge preparation only over a wider immutable ML interval.
+pub const preparation_min_interval: usize = 4;
 const Node = state.Node;
 const Match = struct { length: usize, distance: usize };
 const RepeatMatches = struct {
@@ -56,6 +59,7 @@ fn pricedNode(parameters: state.Parameters, budget: *PriceBudget, node: Node, po
         profile.add("optimal_transitions", 1);
         profile.recordMatchLengthConsidered(length);
     }
+    if (parameters.profile) |profile| profile.add("frontier_unprepared_edges", 1);
     // sequencePrice gets the real LL without the virtual trailing-literal clamp.
     const sequence = try parameters.entropy.sequencePrice(node.literal_len, length, choice.offset_value);
     const old_ll = try literalLengthPrice(parameters.entropy, node.literal_len);
@@ -116,67 +120,96 @@ fn tailChoice(parameters: state.Parameters, node: Node, distance: usize) !rep.Ch
     return best;
 }
 
-const Context = struct {
-    nodes: []Node,
-    goal: usize,
-    last: usize,
-    initialized_end: usize = 0,
-    parameters: state.Parameters,
-    price_budget: *PriceBudget,
+pub const TestContext = ContextMode(true);
+pub const ReferenceContext = ContextMode(false);
+const Context = TestContext;
 
-    fn initUntil(self: *Context, target: usize) void {
-        if (target <= self.initialized_end) return;
-        @memset(self.nodes[self.initialized_end + 1 .. target + 1], .{});
-        self.initialized_end = target;
-    }
+fn ContextMode(comptime prepared_enabled: bool) type {
+    return struct {
+        const Self = @This();
+        nodes: []Node,
+        goal: usize,
+        last: usize,
+        initialized_end: usize = 0,
+        parameters: state.Parameters,
+        price_budget: *PriceBudget,
 
-    fn literal(self: *Context, position: usize, node: Node, byte: u8) !void {
-        const next = try literalNode(self.parameters.entropy, node, position, byte);
-        self.initUntil(position + 1);
-        if (next.cost <= self.nodes[position + 1].cost) self.nodes[position + 1] = next;
-    }
+        pub fn initUntil(self: *Self, target: usize) void {
+            if (target <= self.initialized_end) return;
+            @memset(self.nodes[self.initialized_end + 1 .. target + 1], .{});
+            self.initialized_end = target;
+        }
 
-    fn edge(self: *Context, position: usize, node: Node, length: usize, choice: rep.Choice) !void {
-        const next = try pricedNode(self.parameters, self.price_budget, node, position, length, choice);
-        const target = position + length;
-        std.debug.assert(target <= self.goal);
-        self.initUntil(target);
-        if (next.cost < self.nodes[target].cost) self.nodes[target] = next;
-        self.last = @max(self.last, target);
-    }
+        pub fn literal(self: *Self, position: usize, node: Node, byte: u8) !void {
+            const next = try literalNode(self.parameters.entropy, node, position, byte);
+            self.initUntil(position + 1);
+            if (next.cost <= self.nodes[position + 1].cost) self.nodes[position + 1] = next;
+        }
 
-    fn interval(self: *Context, position: usize, node: Node, distance: usize, first: usize, last: usize) !void {
-        if (last < first) return;
-        const choices = try rep.choices(node.literal_len, distance, node.repeats);
-        for (choices.slice()) |choice| {
-            // Retain sampled length selection inside this match's new interval.
-            try self.edge(position, node, last, choice);
+        inline fn insertEdge(self: *Self, position: usize, length: usize, next: Node) void {
+            const target = position + length;
+            std.debug.assert(target <= self.goal);
+            self.initUntil(target);
+            if (next.cost < self.nodes[target].cost) self.nodes[target] = next;
+            self.last = @max(self.last, target);
+        }
+
+        pub fn edge(self: *Self, position: usize, node: Node, length: usize, choice: rep.Choice) !void {
+            self.insertEdge(position, length, try pricedNode(self.parameters, self.price_budget, node, position, length, choice));
+        }
+
+        inline fn preparedEdge(self: *Self, position: usize, node: Node, length: usize, choice: rep.Choice, prepared: frontier_price.Prepared) !void {
+            self.insertEdge(position, length, try frontier_price.replay(self.parameters, self.price_budget, node, position, length, choice, prepared));
+        }
+
+        inline fn remaining(self: *Self, comptime prepared: bool, position: usize, node: Node, first: usize, last: usize, choice: rep.Choice, memo: if (prepared) frontier_price.Prepared else void) !void {
             const exhaustive: usize = if (self.parameters.strategy == .btopt) 16 else 64;
-            for (first..@max(first, @min(last, exhaustive + 1))) |length|
-                try self.edge(position, node, length, choice);
+            for (first..@max(first, @min(last, exhaustive + 1))) |length| {
+                if (prepared) try self.preparedEdge(position, node, length, choice, memo) else try self.edge(position, node, length, choice);
+            }
             for (prices.ml_bases, prices.ml_bits) |base, bits| {
                 if (base >= last) break;
                 const upper = @as(usize, base) + (@as(usize, 1) << @intCast(bits)) - 1;
-                if (base > exhaustive and base >= first) try self.edge(position, node, base, choice);
-                if (self.parameters.strategy != .btopt and upper > exhaustive and upper >= first and upper < last)
-                    try self.edge(position, node, upper, choice);
+                if (base > exhaustive and base >= first) {
+                    if (prepared) try self.preparedEdge(position, node, base, choice, memo) else try self.edge(position, node, base, choice);
+                }
+                if (self.parameters.strategy != .btopt and upper > exhaustive and upper >= first and upper < last) {
+                    if (prepared) try self.preparedEdge(position, node, upper, choice, memo) else try self.edge(position, node, upper, choice);
+                }
             }
         }
-    }
 
-    fn matches(self: *Context, position: usize, node: Node, repeated: *const RepeatMatches, ordinary: anytype) !void {
-        const minimum: usize = self.parameters.hq_options.min_match;
-        // Rep histories compete independently for their shorter lengths.
-        for (repeated.slice()) |match| try self.interval(position, node, match.distance, minimum, @min(match.length, self.goal - position));
-        var previous = minimum - 1;
-        for (ordinary) |match| {
-            const last = @min(match.length, self.goal - position);
-            const first = if (use_frontier) @max(minimum, previous + 1) else minimum;
-            try self.interval(position, node, match.distance, first, last);
-            previous = @max(previous, last);
+        pub fn interval(self: *Self, position: usize, node: Node, distance: usize, first: usize, last: usize) !void {
+            if (last < first) return;
+            const choices = try rep.choices(node.literal_len, distance, node.repeats);
+            for (choices.slice()) |choice| {
+                // The first maximum edge keeps full error/admission order. All
+                // sampled lengths, duplicates and tie insertion remain unchanged.
+                if (prepared_enabled and last - first >= preparation_min_interval) {
+                    const initial = try frontier_price.first(self.parameters, self.price_budget, node, position, last, choice);
+                    self.insertEdge(position, last, initial.node);
+                    try self.remaining(true, position, node, first, last, choice, initial.prepared);
+                } else {
+                    try self.edge(position, node, last, choice);
+                    try self.remaining(false, position, node, first, last, choice, {});
+                }
+            }
         }
-    }
-};
+
+        pub fn matches(self: *Self, position: usize, node: Node, repeated: *const RepeatMatches, ordinary: anytype) !void {
+            const minimum: usize = self.parameters.hq_options.min_match;
+            // Rep histories compete independently for their shorter lengths.
+            for (repeated.slice()) |match| try self.interval(position, node, match.distance, minimum, @min(match.length, self.goal - position));
+            var previous = minimum - 1;
+            for (ordinary) |match| {
+                const last = @min(match.length, self.goal - position);
+                const first = if (use_frontier) @max(minimum, previous + 1) else minimum;
+                try self.interval(position, node, match.distance, first, last);
+                previous = @max(previous, last);
+            }
+        }
+    };
+}
 
 fn appendMatch(result: *state.Plan, base: usize, end: usize, node: Node, literal_len: usize) !void {
     try resources.append(result, .{ .literal_len = literal_len, .match_len = node.match_len, .distance = node.distance, .match_end = base + end }, node.offset_value);
@@ -197,6 +230,14 @@ fn appendPrefix(result: *state.Plan, nodes: []const Node, base: usize, end: usiz
 }
 
 pub fn plan(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: source_mod.Source, parameters: state.Parameters, comptime Matcher: type) !state.Plan {
+    return planMode(true, allocator, budget, source, parameters, Matcher);
+}
+
+pub fn planReference(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: source_mod.Source, parameters: state.Parameters, comptime Matcher: type) !state.Plan {
+    return planMode(false, allocator, budget, source, parameters, Matcher);
+}
+
+fn planMode(comptime prepared_enabled: bool, allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, source: source_mod.Source, parameters: state.Parameters, comptime Matcher: type) !state.Plan {
     try validate(source, parameters);
     var price_budget = PriceBudget.init(parameters.hq_options.max_price_evaluations, parameters.profile);
     defer price_budget.finish();
@@ -256,7 +297,7 @@ pub fn plan(allocator: std.mem.Allocator, budget: *resources.WorkingAllocator, s
         }
         if (!adaptive_stop) @memset(nodes[0 .. goal + 1], .{});
         nodes[0] = root;
-        var context: Context = .{ .nodes = nodes, .goal = goal, .last = if (adaptive_stop) 0 else goal, .initialized_end = if (adaptive_stop) 0 else goal, .parameters = parameters, .price_budget = &price_budget };
+        var context: ContextMode(prepared_enabled) = .{ .nodes = nodes, .goal = goal, .last = if (adaptive_stop) 0 else goal, .initialized_end = if (adaptive_stop) 0 else goal, .parameters = parameters, .price_budget = &price_budget };
         try context.literal(0, root, source.block[base]);
         try context.matches(0, root, &initial_reps, first_matches.slice());
         var tail: ?Tail = null;
@@ -347,4 +388,8 @@ test "Zstd HQ frontier local reused poisoned rows initialize only reachable targ
 
 test {
     _ = @import("frontier_parser_tests.zig");
+}
+
+test "Zstd HQ frontier prepared choices preserve every edge prefix and plan" {
+    try @import("frontier_choice_tests.zig").check(@This());
 }

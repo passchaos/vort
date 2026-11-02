@@ -18,6 +18,8 @@ test {
     _ = @import("prepared_price_tests.zig");
     _ = @import("choice_dominance_tests.zig");
     _ = @import("enumeration_count_tests.zig");
+    _ = @import("frontier_parser.zig");
+    _ = @import("frontier_price.zig");
 }
 
 fn oracle(source: source_mod.Source, model: *const hq.EntropyModel, position: usize, literals: usize, repeats: hq.rep.Repeats) !u64 {
