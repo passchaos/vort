@@ -89,6 +89,16 @@ and x-ray. Against the one-shot decoder it is 2.15x slower at 64 KiB and
 industry bar; this table only establishes that the classic baseline is now
 matched or beaten on most text-like sources.
 
+## Rejected or neutral follow-ups
+
+- A 32-byte vectorized RLE fill replacing `compiler_rt.memset` for Zstd
+  literal and block fills was neutral on mozilla (156.8 vs 156.3 ms per 300
+  decodes), so the memset samples are memory-bound stores rather than a
+  slow loop shape.
+- `zig build test-zstd` failed under the build runner while the generated
+  `vort-zstd-tests` binary passed 1251/1251 when run directly; treat the
+  direct binary as the authoritative Zstd test result for now.
+
 ## Next steps
 
 1. Streaming Deflate: the windowed semantic path is the remaining 2.2x lever
