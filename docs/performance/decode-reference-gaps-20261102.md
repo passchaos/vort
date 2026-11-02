@@ -62,7 +62,9 @@ algorithm.
 The Zstd gap is 1.30-2.08x (mean about 1.50x). Mozilla is the outlier at
 2.08x. Its profile is dominated by the FSE sequence loop (about 45%), the
 per-block sequence-mode parse and FSE table build (about 11-19%), and a large
-`memset` (about 8-14%) that comes from RLE literal/block fills. libzstd
+`memset` (about 8-14%). A subsequent structural inspection of the exact
+Mozilla frame found no RLE blocks or RLE literals, so the earlier attribution
+to RLE fills is unsupported; its callsite still needs profiling. libzstd
 executes 1.77x fewer instructions on this row, so the gap is both algorithmic
 constants and per-block setup.
 
@@ -136,10 +138,13 @@ prefix/suffix transforms.
    and brings the measured Dickens rows to 1.47-1.49x of one-shot. Follow-up
    work should broaden profitable admission beyond contiguous large chunks or
    remove the extra scratch-to-caller copy without weakening backpressure.
-2. Zstd: mozilla's 2.08x gap points at per-block FSE table construction and
-   RLE fills; a faster table builder and avoiding redundant clears are the
-   first candidates.
+2. Zstd: Mozilla's 2.08x gap points at per-block FSE table construction.
+   [Structural inspection](zstd-mozilla-fse-profile.md) finds 76 of 91 tables
+   are 64/128-state no-low tables, and 90 of 91 take the generic builder.
+   Prioritize their construction cost and locate the actual `memset` callsite;
+   redundant full-table clears and intermediate conversion are already removed.
 3. One-shot Deflate: the remaining 1.44x needs constant-factor work in the
    reservoir refill and 16-byte overcopy rather than new algorithms.
-4. Brotli: 1 MiB is already within 1.12-1.14x; the 64 KiB fixed setup cost is
-   the main remaining Brotli item.
+4. Brotli: 1 MiB is already within 1.12-1.14x. At 64 KiB the payload loop
+   accounts for 70.9% of the profile, dictionary transforms 7.4%, and setup
+   about 7%; prioritize payload work and measure repeated dictionary references.
