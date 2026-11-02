@@ -1,4 +1,8 @@
 const std = @import("std");
+
+test "zstd ordinal retained capacity adoption" {
+    try @import("zstd/encode/total_budget/ordinal_retained_tests.zig").check(@This());
+}
 const builtin = @import("builtin");
 const test_atomic_counter = if (builtin.is_test) @import("testing/atomic_counter.zig") else struct {};
 const core = @import("core.zig");

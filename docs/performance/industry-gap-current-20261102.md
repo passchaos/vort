@@ -13,6 +13,14 @@ same q8 wires. The latter's separate current-source epoch measures 31.69
 times reference latency at size 0.99556 times reference. The 32.28 row below
 retains its original interval-cost epoch; no A/B gains are multiplied into it.
 
+The further [exact ordinal index](br/ordinal-index.md) preserves old matching
+candidate quotas and all q8 wires while improving the matched real-input
+matrix by 1.95% geometrically, or 4.30% at 64 KiB. Its separate reference
+epoch measures 31.27 times native Brotli latency, at size 0.99556 times
+reference. An admitted 64 KiB plan uses 256 KiB more logical index storage;
+caller allocator budgets and retained-capacity queries account for actual
+allocations. These remain scoped speed/resource tradeoffs, not broad parity.
+
 ## Encoding speed and compressed size
 
 Ratios below are Vort/reference; lower is better for both columns. These are

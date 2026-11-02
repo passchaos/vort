@@ -26139,3 +26139,20 @@ reuse, so production keeps the simpler independently owned plans.
   and all 212 default compile steps pass. [Evidence](performance/br/fixed-prefix-bound.md).
   The current q8 reference epoch remains 31.69x native Brotli 1.2.0 latency;
   the full Deflate/Zstd/Brotli industry-best goal stays active.
+
+- 2026-11-03: Fixed-price LZ77 can skip false prefixes through an ordinal
+  four-byte cursor that preserves old three-byte matching-candidate quotas.
+  Foreign collisions fall back to the old chain within a 2Q physical-node
+  bound. Rotating nearby-predecessor sampling admits the new representation
+  only where its preparation is expected to amortize; 8–64 KiB input uses
+  two u16 arrays with 256 KiB extra logical storage at the largest size.
+  The public matched q8 matrix verifies 234 processes and identical wires,
+  improving real-input geometric latency 1.95% and 64 KiB 4.30%. Clean longer
+  MR/Dickens pairs improve 7.2%/11.3%, each 11/11 wins; small/random controls
+  remain near neutral. Independent candidate, DP, allocation/reuse and Zstd
+  retained-capacity adoption tests pass, including x86 and public Wasm q8.
+  Final ReleaseSafe suites pass Deflate 594, Brotli 1,510 plus one skip and
+  Zstd 1,266 tests, and all 212 default check/check-wasm steps.
+  [Evidence](performance/br/ordinal-index.md). The reference
+  epoch still takes 31.27x Brotli 1.2.0 time; the full three-format
+  industry-best objective remains active.

@@ -117,6 +117,8 @@ pub const RatioEncodeProfile = struct {
     record_optimal_selected: bool = false,
     stored_bytes: usize = 0,
     selected_bytes: usize = 0,
+    /// Active logical optimal-index bytes; whole-operation allocator tracking
+    /// separately accounts for retained capacity and peak requested heap.
     optimal_index_bytes: usize = 0,
     optimal_positions: usize = 0,
     optimal_chain_nodes: usize = 0,
