@@ -104,8 +104,9 @@ The 33-test context regression passes in ReleaseSafe, including full-field
 ordinary/profiled/exhaustive proposals and allocation-failure cleanup.
 The complete build-integrated ReleaseSafe Brotli suite passes 1,506 tests
 with one skip and exit zero. The default `check check-wasm` build completes
-212/212 steps. The older extra ReleaseSafe whole-library compilation remains
-live and is not counted as complete for this increment.
+212/212 steps. The older extra ReleaseSafe whole-library build later completed
+with exit zero on 2026-11-03. It is a separate build epoch, rather than a
+current-source verification of later increments.
 
 Artifacts live in `zig-out/br-q8-score-order-20261102`: `order-evidence.json`,
 original/full-cost diagnostics, frozen source/binaries, `score-screen.py`,

@@ -153,9 +153,9 @@ Final ReleaseSafe suites pass 594 Deflate, 1,510 Brotli plus one skip, and
 oracles. The public prepared-command Wasm gate preserves the frozen complete
 wire and passes Zig/Node decoding. The default `check check-wasm` command
 completes 212/212 build steps with exit zero. The older extra ReleaseSafe
-whole-library compile remains pending and is not counted as a completed
-current gate. Earlier full-suite runs belong to earlier admission variants
-and are not substituted for final-source verification.
+whole-library build later completed with exit zero on 2026-11-03; it remains
+a separate verification epoch. Earlier full-suite runs belong to earlier
+admission variants and are not substituted for final-source verification.
 
 ## Reproduction and artifact bindings
 

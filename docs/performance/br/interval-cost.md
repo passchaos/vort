@@ -104,8 +104,10 @@ running its identical test executable directly passes the entire suite, and
 the normal build runner also passes with `--test-timeout 900s`. This retry sets
 an explicit test/response limit and preserves all assertions and cases.
 The default-mode `check check-wasm` compile gate also passes all 212 steps.
-An additional ReleaseSafe whole-library test compilation was still running
-when this increment was saved; it is not counted as a completed gate here.
+An additional ReleaseSafe whole-library compilation was still running when
+this increment was saved. Its retained combined build later completed with
+exit zero on 2026-11-03. This separate build epoch is not a substitute for
+current-source checks after subsequent changes.
 
 Public q8 complete-wire equality and round trips are checked in every ordinary
 benchmark report. The prepared-command Wasm comparison passes with identical

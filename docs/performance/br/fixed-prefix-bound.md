@@ -123,8 +123,9 @@ combined exit zero. The default `check check-wasm` build completes 212/212
 steps with exit zero. The public prepared-command Wasm gate preserves the
 complete frozen wire and passes Zig/Node decoding, including adaptive-distance
 coverage. All ten executable ELF sections in the final production benchmark
-match the measured candidate. The older extra ReleaseSafe whole-library
-compilation remains live and is not counted as a completed current gate.
+match the measured candidate. The older extra ReleaseSafe whole-library build
+later completed with exit zero on 2026-11-03. This separate build epoch does
+not replace the current-source gates recorded above.
 
 ## Reproduction and bindings
 
