@@ -26030,3 +26030,15 @@ reuse, so production keeps the simpler independently owned plans.
   copy loop, 64-bit packed semantic lookup entries and a comptime
   limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.
+
+- 2026-11-02: A fresh decode-reference epoch pins libdeflate 1.26, libzstd
+  1.6.0 and classic zlib 1.2.11 against the current source. One-shot Deflate
+  is 1.29-1.53x slower than libdeflate (mean about 1.44x), one-shot Zstd is
+  1.30-2.08x slower than libzstd (mozilla is the 2.08x outlier), and the
+  incremental Deflate decoder is now faster than classic zlib on seven of
+  eleven Silesia sources while remaining 2.15x/2.24x behind the one-shot
+  path. The remaining work is constant-factor tuning for one-shot Deflate,
+  per-block FSE setup and RLE fills for Zstd, and the windowed semantic path
+  for streaming Deflate.
+  [Evidence](performance/decode-reference-gaps-20261102.md). The three-codec
+  industry-best goal stays active.
