@@ -26024,7 +26024,9 @@ reuse, so production keeps the simpler independently owned plans.
   of eleven Silesia sources), and an adjacent-literal peek cut another
   0.7-16.2% depending on literal density (6.27x/4.76x versus the session
   start, 2.24x/2.33x one-shot gap, now faster than classic zlib on six of
-  eleven sources). `noinline` step, `noalias` slice parameters, a scalar 16-byte
+  eleven sources), and lowering the bulk-refill threshold from 56 to 32 bits
+  cut another 0.8-9.0% (6.52x/4.95x versus the session start, 2.16x/2.24x
+  one-shot gap, now faster than classic zlib on seven of eleven sources). `noinline` step, `noalias` slice parameters, a scalar 16-byte
   copy loop, 64-bit packed semantic lookup entries and a comptime
   limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.

@@ -1093,7 +1093,7 @@ inline fn refillBitsBulk(
     bit_buffer: *u64,
     bit_count: *u6,
 ) void {
-    if (bit_count.* >= 56 or input_read.* + 8 > input.len) return;
+    if (bit_count.* >= 32 or input_read.* + 8 > input.len) return;
     const stage = (63 - bit_count.*) / 8;
     const staged_bits = stage * 8;
     const staged = std.mem.readInt(u64, input[input_read.*..][0..8], .little) << bit_count.*;

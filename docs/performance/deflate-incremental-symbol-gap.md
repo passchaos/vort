@@ -193,6 +193,30 @@ Against classic zlib 1.2.11 the decoder is now faster on Dickens (0.93x), nci
 even on samba (1.02x), and still behind mozilla (1.27x), sao (1.12x), x-ray
 (1.12x) and mr (1.12x).
 
+## Fifth increment: lower bulk-refill threshold
+
+The bulk refill now runs only when the reservoir holds fewer than 32 bits
+instead of 56, staging three or four whole bytes at a time and letting the
+byte-at-a-time helpers cover long match tokens. This roughly halves the
+per-token refill body work.
+
+| Step | `dickens.64k.l9` ns | `dickens.1m.l9` ns |
+| --- | ---: | ---: |
+| Adjacent-literal peek | 204,330 | 2,903,120 |
+| Refill threshold 56 → 32 bits | 196,570 | 2,789,260 |
+
+The win is 0.8-9.0% across the corpus (mozilla 9.0%, samba 5.9%, nci/mr 4.0%,
+Dickens 3.9%, x-ray 3.7%, reymont 3.5%, sao 3.2%, XML 2.1%, ooffice 1.3%,
+osdb 1.2%), and 3.6% on both Dickens rows. Against the session start the
+streaming decoder is now 6.52x faster at 64 KiB (1,282,030 → 196,570 ns) and
+4.95x at 1 MiB (13,805,130 → 2,789,260 ns). The one-shot gap is 2.16x and
+2.24x.
+
+Against classic zlib 1.2.11 the decoder is now faster on Dickens (0.90x), nci
+(0.84x), ooffice (0.96x), osdb (0.83x), reymont (0.89x), samba (0.98x) and
+XML (0.86x), and behind only mozilla (1.16x), mr (1.08x), sao (1.07x) and
+x-ray (1.07x).
+
 A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
 12%, and a 16-byte scalar copy loop regressed 25%; all were reverted. Packing
 the length/distance metadata into the lookup entry as a 64-bit semantic table
