@@ -80,6 +80,10 @@ Rejected or neutral experiments:
 - A 12-bit literal primary lookup was neutral (0.13%) and is not kept.
 - An 11-bit distance primary lookup regressed 3.2% against the 10-bit form,
   most likely from the larger per-block table build and zeroing.
+- Replacing `@memcpy` with an inlined byte loop for spans up to 16 bytes
+  regressed 25% (1,300 → 1,635 ms per 300 decodes). `compiler_rt.memcpyFast`
+  already has a vectorized small-size path, and the extra length branch costs
+  more than the call it avoids.
 
 Incremental decoding now executes about 61M instructions per 1 MiB versus
 14.4M for one-shot, and `memcpy` is 16% of that profile. The remaining cost is

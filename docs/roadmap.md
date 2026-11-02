@@ -25999,6 +25999,7 @@ reuse, so production keeps the simpler independently owned plans.
   301,950/4,334,700 ns (4.24x/3.19x), cutting the one-shot gap from 14.0x/11.2x
   to 3.33x/3.48x. A fused match phase, deferred literal-run recording, a 12-bit
   literal lookup and an 11-bit distance lookup were neutral or slower and were
-  reverted. The resumable windowed semantic fast path is still the next larger
-  step. [Evidence](performance/deflate-incremental-symbol-gap.md). The
+  reverted; replacing the span `@memcpy` with an inlined 16-byte loop regressed
+  25%, so `memcpyFast` stays. The resumable windowed semantic fast path is
+  still the next larger step. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.
