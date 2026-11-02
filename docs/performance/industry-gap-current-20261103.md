@@ -25,6 +25,14 @@ on three actual 1 MiB inputs, with size ratios 1.00480/1.00514/0.99280. Those
 parameters and source epochs stay distinct from the earlier comparisons below;
 the complete three-codec objective remains open.
 
+The further [first-price component](zstd/first-price-components.md) epoch
+retains all wires and counters while avoiding repeated first-edge LL/ML
+decoding. Twelve-source 4 KiB groups improve about 0.65–0.87% and 64 KiB
+groups 0.45–0.50%; larger groups are near neutral. Long MR64KiB and random
+controls still regress. Its current-source btultra2 reference time ratios are
+3.01224/3.06648/4.49712 at 64/128 KiB/1 MiB, with the same respective size
+ratios. These are independent timing epochs, not chained prior speedups.
+
 ## Compression
 
 Time and compressed-size ratios are Vort/reference; lower is better. Geometric

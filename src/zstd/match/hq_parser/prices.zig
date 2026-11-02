@@ -16,6 +16,7 @@ const ml_predefined = [_]u32{ 1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1,
 const of_predefined = [_]u32{ 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0 };
 
 pub const Symbol = struct { code: u8, extra_bits: u8, extra_value: u32 };
+pub const SequenceCosts = struct { total: u32, literal: u32, match: u32 };
 pub fn literalSymbol(length: usize) Error!Symbol {
     const code: usize = if (length < 16) length else if (length < 24) 16 + (length - 16) / 2 else if (length < 32) 20 + (length - 24) / 4 else if (length < 48) 22 + (length - 32) / 8 else if (length < 64) 24 else @as(usize, 19) + std.math.log2_int(usize, length);
     return symbolAt(length, code, &ll_bases, &ll_bits);
@@ -100,6 +101,22 @@ pub const EntropyModel = struct {
         return self.ll_prices[ll.code] + self.ml_prices[ml.code] + self.of_prices[of.code] +
             (@as(u32, ll.extra_bits) + ml.extra_bits + of.extra_bits) * scale + offset_penalty;
     }
+    /// Preserve full LL -> ML -> OF validation and the original total-price
+    /// arithmetic, while exposing components from those same decoded symbols.
+    /// The immutable model must obey validate()'s symbol-price bounds.
+    pub inline fn sequenceCosts(self: *const EntropyModel, literal_len: usize, match_len: usize, offset_value: u32) Error!SequenceCosts {
+        const ll = try literalSymbol(literal_len);
+        const ml = try matchSymbol(match_len);
+        const of = try offsetSymbol(offset_value);
+        const offset_penalty = if (self.penalize_long_offsets and of.code >= 20) (@as(u32, of.code) - 19) * 2 * scale else 0;
+        const total = self.ll_prices[ll.code] + self.ml_prices[ml.code] + self.of_prices[of.code] +
+            (@as(u32, ll.extra_bits) + ml.extra_bits + of.extra_bits) * scale + offset_penalty;
+        return .{
+            .total = total,
+            .literal = self.ll_prices[ll.code] + @as(u32, ll.extra_bits) * scale,
+            .match = self.ml_prices[ml.code] + @as(u32, ml.extra_bits) * scale,
+        };
+    }
     /// First-pass selected sequences and actual literal bytes update all four
     /// distributions. A small smoothed prior keeps unseen second-pass choices
     /// finite; this changes prices, rather than merely increasing search depth.
@@ -146,4 +163,8 @@ fn log2Q8(value: u64) u32 {
         }
     }
     return result;
+}
+
+test "Zstd HQ frontier sequence costs preserve complete price components" {
+    try @import("sequence_costs_tests.zig").check(@This());
 }

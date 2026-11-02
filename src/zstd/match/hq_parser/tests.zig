@@ -20,6 +20,7 @@ test {
     _ = @import("enumeration_count_tests.zig");
     _ = @import("frontier_parser.zig");
     _ = @import("frontier_price.zig");
+    _ = @import("prices.zig");
 }
 
 fn oracle(source: source_mod.Source, model: *const hq.EntropyModel, position: usize, literals: usize, repeats: hq.rep.Repeats) !u64 {

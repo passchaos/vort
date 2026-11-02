@@ -112,10 +112,57 @@ fn budgetsAndArithmetic(comptime Helper: type, metrics: *compare.Metrics) !void 
     try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{ 2, 3, 4, 5 }, .limit = 3, .profile_seed = saturated }, metrics);
 }
 
+fn shortFirstCosts(comptime Helper: type, metrics: *compare.Metrics) !void {
+    const all_models = models.fixtures();
+    // These short ML symbols have no extra bits. A single request and one
+    // replay expose first-edge setup independently of a long replay interval.
+    for (all_models, 0..) |model, seed| {
+        for (prices.ll_bases, 0..) |literal_len, code| {
+            const origin = try node(model, literal_len);
+            const selected = try choice(literal_len, if (seed & 1 == 0) 1 else 7, origin.repeats);
+            for (3..11) |last| {
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{last} }, metrics);
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{ last, 3 } }, metrics);
+                // Invalid ML first must publish nothing. A subsequent valid
+                // call remains a fresh first, never a replay of failed state.
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{ 2, last } }, metrics);
+            }
+            const last = 3 + (code + seed) % 8;
+            for (0..3) |quota| {
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{last}, .limit = quota }, metrics);
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{ last, 3 }, .limit = quota }, metrics);
+                try compare.run(Helper, .{ .model = model, .node = origin, .choice = selected, .lengths = &.{ 2, last }, .limit = quota }, metrics);
+            }
+        }
+    }
+
+    const valid: prices.EntropyModel = .{};
+    var zero: prices.EntropyModel = .{};
+    zero.ll_prices = @splat(0);
+    zero.ml_prices = @splat(0);
+    zero.of_prices = @splat(0);
+    for (prices.ll_bases) |literal_len| {
+        var underflow = try node(valid, literal_len);
+        underflow.cost = 0;
+        var overflow = underflow;
+        overflow.cost = std.math.maxInt(u64);
+        const selected = try choice(literal_len, 1, underflow.repeats);
+        for (3..11) |last| {
+            // A failed complete-node construction cannot seed the next first.
+            try compare.run(Helper, .{ .model = valid, .node = underflow, .choice = selected, .lengths = &.{ last, 3 } }, metrics);
+            try compare.run(Helper, .{ .model = valid, .node = overflow, .choice = selected, .lengths = &.{ last, 3 } }, metrics);
+            // Even at u64.max, zero symbol prices and exact cancellation of
+            // LL extra bits permit a valid first followed by one valid replay.
+            try compare.run(Helper, .{ .model = zero, .node = overflow, .choice = selected, .lengths = &.{ last, 3 } }, metrics);
+        }
+    }
+}
+
 pub fn check(comptime Helper: type) !compare.Metrics {
     var metrics: compare.Metrics = .{};
     try boundaries(Helper, &metrics);
     try aliases(Helper, &metrics);
     try budgetsAndArithmetic(Helper, &metrics);
+    try shortFirstCosts(Helper, &metrics);
     return metrics;
 }

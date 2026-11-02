@@ -65,6 +65,12 @@ out-of-line functions shrinks the interval to 2,733 bytes, with 1,255/576-byte
 first/replay helpers. That selected-input epoch improves real time about 2.1%,
 while some Dickens/MR rows still regress and remain recorded.
 
+The subsequent [first-price components](first-price-components.md) increment
+shares decoded LL/ML terms with the first edge's closure and preparation.
+Its separate source/ordinary epoch reduces that helper's code size while
+retaining every logical counter and complete wire; small gains and negative
+controls remain part of its scoped report.
+
 A uniform wider interval threshold of sixteen preserves every edge but has a
 near-neutral 0.99937 real-input time ratio. It is rejected in favor of the
 original four-length threshold. No branch is disabled based on previous wire

@@ -17,15 +17,15 @@ pub const First = struct { node: state.Node, prepared: Prepared };
 /// Publication follows the original full price and node construction.
 pub noinline fn first(parameters: state.Parameters, budget: *PriceBudget, node: state.Node, position: usize, length: usize, choice: rep.Choice) !First {
     try admit(parameters, budget, length);
-    const sequence = try parameters.entropy.sequencePrice(node.literal_len, length, choice.offset_value);
-    const old_ll = try literalLengthPrice(parameters.entropy, node.literal_len);
-    const closed = std.math.sub(u64, node.cost, old_ll) catch return error.IntegerOverflow;
-    const with_sequence = std.math.add(u64, closed, sequence) catch return error.IntegerOverflow;
+    const costs = try parameters.entropy.sequenceCosts(node.literal_len, length, choice.offset_value);
+    // Full sequence validation proves this is a real LL (<=131071). Its
+    // component is exactly the old virtual-capable LL price at this length.
+    const closed = std.math.sub(u64, node.cost, costs.literal) catch return error.IntegerOverflow;
+    const with_sequence = std.math.add(u64, closed, costs.total) catch return error.IntegerOverflow;
     const zero = try literalLengthPrice(parameters.entropy, 0);
     const cost = std.math.add(u64, with_sequence, zero) catch return error.IntegerOverflow;
     const next = makeNode(node, position, length, choice, cost);
-    const ml = try matchPrice(parameters.entropy, length);
-    const prepared: Prepared = .{ .closed_cost = closed, .sequence_base = sequence - ml, .literal_zero = zero };
+    const prepared: Prepared = .{ .closed_cost = closed, .sequence_base = costs.total - costs.match, .literal_zero = zero };
     if (parameters.profile) |profile| profile.add("frontier_choice_preparations", 1);
     return .{ .node = next, .prepared = prepared };
 }
