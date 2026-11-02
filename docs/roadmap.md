@@ -23397,3 +23397,10 @@ reuse, so production keeps the simpler independently owned plans.
   Continue auditing practical API parity and comprehensive real-corpus
   compression-ratio, throughput and memory tradeoffs before the broad goal can
   be considered achieved.
+
+- PNG semantic-window fast loops now reserve four paired-literal bytes in
+  addition to the maximum 258-byte match. Valid streams pause and resume at
+  a short history-window end instead of returning OutputTooSmall. Direct,
+  owning PNG, split-IDAT and independent decoder coverage is recorded in
+  [the boundary report](png-window-match-boundary.md); corpus timing remains
+  approximately unchanged and the broader performance goal remains open.

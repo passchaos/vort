@@ -46,7 +46,7 @@ pub noinline fn shouldUse(
 
 /// Copy a short non-overlapping match inside the resumable window fast loop.
 ///
-/// That loop retains 258 bytes of destination headroom. Requiring an 8-byte
+/// That loop retains 262 bytes of destination headroom. Requiring an 8-byte
 /// distance makes the fixed source/destination words disjoint and initialized;
 /// bytes after the logical match remain speculative until later tokens replace
 /// them or the committed write position advances only by `length`.

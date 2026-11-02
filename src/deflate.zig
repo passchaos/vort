@@ -5968,10 +5968,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     // speculative two-byte literal stores and bounded match writes. A smaller
     // headroom keeps short PNG rows and dynamic-block tails out of the compact
     // fallback decoder without changing the public OutputTooSmall boundary.
-    // A non-overlap iteration can retire two paired-literal entries before a
-    // maximum-length match, so its unchecked copy needs 4 + 258 bytes.
+    // A window or non-overlap iteration can retire two paired-literal entries
+    // before a maximum-length match, so the hot loop needs 4 + 258 bytes. A
+    // short window must let the transactional tail pause before that match.
     const output_headroom: usize = if (pause_at_output_boundary)
-        258
+        262
     else if (inline_non_overlap)
         262
     else
@@ -14855,6 +14856,20 @@ test "semantic non-overlap window preserves headroom boundaries and guarded resu
             try std.testing.expectEqualSlices(u8, expected, active);
         }
     }
+}
+
+test "semantic window pauses before a long match following literal pairs" {
+    try @import("deflate/semantic/window_boundary_tests.zig").verify(
+        SemanticDynamicDecoder,
+        SemanticDynamicDecoder.init,
+        decodeSemanticTailWindow,
+        decodeSemanticDynamicBlockIntoWindow,
+        decodeSemanticDynamicBlockIntoNonOverlapWindow,
+    );
+}
+
+test "PNG windowed valid long match at history end resumes before copying" {
+    try @import("deflate/semantic/window_boundary_tests.zig").verifyPng(decodePngWindowedZlibImageWithOptions);
 }
 
 test "semantic long match after two literal pairs preserves checked decode" {
