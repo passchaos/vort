@@ -463,6 +463,8 @@ pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) 
 
 test {
     _ = incremental_tests;
+    _ = incremental_fixed_encoder;
+    _ = incremental_rolling_hash;
     _ = @import("deflate/png/ring_sink.zig");
 }
 

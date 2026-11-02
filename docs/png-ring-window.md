@@ -36,3 +36,7 @@ about 3-4%, while Kodak17 stays flat. Complete-corpus ten-round aggregate gains
 are about 0.3% strict and 0.5% ignored-Adler. Other targets remain pending
 performance evidence. Detailed source, controls and samples are in imx's
 `docs/evidence/png-ring-window/` and `/nav_env/Temp/imx-png-ring-window-20261102/`.
+
+The later [portable match comparison fix](png-portable-match.md) resolves
+both no-NEON baseline failures by correcting encoder comparisons. The
+numbers above describe this ring delivery's original gates.

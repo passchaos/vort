@@ -552,11 +552,13 @@ fn allBytesEqual(input: []const u8, byte: u8) bool {
     // Long byte runs dominate low-entropy admission. Compare a cache-line half
     // at a time before the word/scalar tails instead of clearing and updating
     // the general 256-entry distinct-byte set for the common uniform case.
-    const repeated: @Vector(32, u8) = @splat(byte);
     var cursor: usize = 0;
-    while (cursor + 32 <= input.len) : (cursor += 32) {
-        const values: @Vector(32, u8) = input[cursor..][0..32].*;
-        if (@as(u32, @bitCast(values == repeated)) != std.math.maxInt(u32)) return false;
+    if (comptime @import("../../../lz77/match/length.zig").hasVectorMask()) {
+        const repeated: @Vector(32, u8) = @splat(byte);
+        while (cursor + 32 <= input.len) : (cursor += 32) {
+            const values: @Vector(32, u8) = input[cursor..][0..32].*;
+            if (@as(u32, @bitCast(values == repeated)) != std.math.maxInt(u32)) return false;
+        }
     }
     while (cursor + 8 <= input.len) : (cursor += 8) {
         const value = std.mem.readInt(u64, input[cursor..][0..8], .little);

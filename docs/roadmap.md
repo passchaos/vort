@@ -23406,6 +23406,13 @@ reuse, so production keeps the simpler independently owned plans.
   [the ring window report](png-ring-window.md). Broad codec performance and
   conformance leadership remains open.
 
+- Shared and incremental match comparisons plus uniform-byte admission now
+  retain exact word semantics when boolean SIMD masks are not supported.
+  No-NEON false matches are resolved, with 43 Deflate and 12 incremental tests
+  passing, plus 120 independent PNG decodes through imx. Native match code
+  stays identical. [Portable comparison evidence](png-portable-match.md)
+  records source, failure reproduction and cross-target limits.
+
 - PNG semantic-window fast loops now reserve four paired-literal bytes in
   addition to the maximum 258-byte match. Valid streams pause and resume at
   a short history-window end instead of returning OutputTooSmall. Direct,

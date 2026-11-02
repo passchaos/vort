@@ -4,6 +4,7 @@ const hash = @import("hash.zig");
 const profitability = @import("profitability.zig");
 const dynamic_stats = @import("dynamic_stats.zig");
 const forward_lazy = @import("../../../../lz77/forward_lazy.zig");
+const match_length = @import("../../../../lz77/match/length.zig");
 
 const invalid_position = std.math.maxInt(usize);
 
@@ -317,11 +318,13 @@ fn crossSliceMatchLength(left: []const u8, left_pos: usize, right: []const u8, r
     // Long source/history matches dominate the persistent parser. Compare four
     // words at once, then use the lane mask to retain the exact first-mismatch
     // result before falling through to the existing word and byte tails.
-    while (length + 32 <= maximum) : (length += 32) {
-        const a: @Vector(32, u8) = left[left_pos + length ..][0..32].*;
-        const b: @Vector(32, u8) = right[right_pos + length ..][0..32].*;
-        const differing: u32 = ~@as(u32, @bitCast(a == b));
-        if (differing != 0) return length + @ctz(differing);
+    if (comptime match_length.hasVectorMask()) {
+        while (length + 32 <= maximum) : (length += 32) {
+            const a: @Vector(32, u8) = left[left_pos + length ..][0..32].*;
+            const b: @Vector(32, u8) = right[right_pos + length ..][0..32].*;
+            const differing: u32 = ~@as(u32, @bitCast(a == b));
+            if (differing != 0) return length + @ctz(differing);
+        }
     }
     while (length + 8 <= maximum) : (length += 8) {
         const a = std.mem.readInt(u64, left[left_pos + length ..][0..8], .little);
