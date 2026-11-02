@@ -26014,6 +26014,6 @@ reuse, so production keeps the simpler independently owned plans.
   the start of the session), leaving a 2.92x/3.04x one-shot gap; comptime
   length/distance metadata tables removed the per-match variable-shift
   arithmetic. `noinline` step, `noalias` slice parameters, a scalar 16-byte
-  copy loop and 64-bit packed semantic lookup entries regressed and were
-  reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
+  copy loop, 64-bit packed semantic lookup entries and a comptime
+  limited/unlimited run-loop split regressed and were reverted. [Evidence](performance/deflate-incremental-symbol-gap.md). The
   three-codec industry-best goal stays active.

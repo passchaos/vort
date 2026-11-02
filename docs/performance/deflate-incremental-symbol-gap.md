@@ -123,7 +123,10 @@ A `noinline` `step` regressed 3.4%, `noalias` input/output parameters regressed
 the length/distance metadata into the lookup entry as a 64-bit semantic table
 regressed 7% (1,162 → 1,243 ms per 300 decodes): the wider entry doubles the
 table footprint and adds extraction shifts, so the 16-bit lookup plus the
-small metadata tables stay.
+small metadata tables stay. Splitting the run loop into comptime
+limited/unlimited instantiations to skip the per-literal limit checks regressed
+26% (1,532 → 1,933 ms per 400 decodes, 15.45B → 19.72B instructions), so the
+runtime checks stay.
 
 ## Status
 
