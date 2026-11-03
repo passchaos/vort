@@ -248,3 +248,7 @@ Packing the three sequence extra-bit fields into one accumulator update was
 measured at 45.98/44.99M ns versus 45.53/45.95M on XML, with NCI neutral. The
 variance outweighed the saved writer calls, so the separate checked fields were
 restored.
+
+Inlining the code-0/1 repeat-selector updates directly in the chooser was also
+neutral (XML 45.37/46.13M ns versus 45.53/45.95M, NCI 33.83/34.01M versus
+33.92/33.78M) with unchanged wire, so the shared state-machine helper remains.
