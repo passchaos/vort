@@ -3002,7 +3002,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\    zstd_options: --level=N | --level N (-131072..22)
         \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
-        \\                  --fast-long-matches (opt-in fast ratio table)
+        \\                  --fast-long-matches (force the fast long-match table)
         \\                  HQ strategies: --hq-depth=1..65536 --hq-nice-len=3..131072
         \\                  --hq-min-match=3..7 --hq-memory=bytes
         \\                  --hq-parser-engine=local_optimal|beam (default local_optimal; btopt/btultra/btultra2)

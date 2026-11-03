@@ -60,10 +60,11 @@ into commit, reuses encoder records during re-emission, emits large candidates
 directly against the current frame state, scans intra-block matches without
 segment dispatch, skips the repeat DP above 2,048 sequences, marks the
 dictionary hash segment unlikely, hashes contiguous history seeds directly and
-reads block hash lookups from the block with a 15-bit fast table, making the 1 MiB XML level-1 fast
-encode 6.81 times faster with 393 additional
-wire bytes
-(0.21%). The dedicated upstream Zstd decodecorpus gate passes 9 campaigns,
+reads block hash lookups from the block with a 15-bit fast table and adaptively
+uses the long-match table for text-like blocks, making the 1 MiB XML level-1
+fast encode 6.22 times faster at 170,251 bytes, 9.2% below the original
+baseline and 1.2% smaller than libzstd. The dedicated upstream Zstd decodecorpus
+gate passes 9 campaigns,
 9,900 cases and 5,376 block-stream cases with all 64 sequence-mode
 combinations. A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage

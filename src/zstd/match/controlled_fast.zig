@@ -38,8 +38,31 @@ pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, 
     }
     if (source.block.len < minimum_match) return;
     if (parameters.strategy == .double_fast) return planDouble(records, allocator, source, parameters);
-    if (parameters.fast_long_matches) return planSingle(true, records, allocator, source, parameters);
+    if (parameters.fast_long_matches or repetitiveFastSample(source.block))
+        return planSingle(true, records, allocator, source, parameters);
     return planSingle(false, records, allocator, source, parameters);
+}
+
+/// Text-like blocks have a low unique 4-gram ratio in their first 16 KiB.
+/// Use the second long-match table for them by default; binary blocks keep the
+/// cheaper single-table fast path. An explicit `fast_long_matches` overrides
+/// the sample.
+fn repetitiveFastSample(block: []const u8) bool {
+    const sample_len = @min(block.len, 16 * 1024);
+    if (sample_len < 4 * 1024) return false;
+    var seen: [256]u64 = @splat(0);
+    var unique: usize = 0;
+    for (0..sample_len - 3) |index| {
+        const value = std.mem.readInt(u32, block[index..][0..4], .little);
+        const hash = (value *% @as(u32, 0x9e3779b1)) >> 18;
+        const word_index = hash >> 6;
+        const mask = @as(u64, 1) << @intCast(hash & 63);
+        if (seen[word_index] & mask == 0) {
+            seen[word_index] |= mask;
+            unique += 1;
+        }
+    }
+    return unique * 2 <= sample_len - 3;
 }
 
 fn planSingle(comptime long_matches: bool, records: *std.ArrayList(Record), allocator: std.mem.Allocator, source: Source, parameters: Parameters) !void {

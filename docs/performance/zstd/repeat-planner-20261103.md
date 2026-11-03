@@ -65,22 +65,23 @@ positions that can span slices.
 
 ## Opt-in fast long-match table
 
-`NativeFrameOptions.fast_long_matches` keeps the single-table fast wire by
-default and opts into a second 8-byte hash table for ratio-sensitive callers.
-On the same 1 MiB XML screen:
+The default fast path now adapts: a block whose first 16 KiB has a low unique
+4-gram ratio uses the second 8-byte hash table, while binary-like blocks keep
+the single-table path. `NativeFrameOptions.fast_long_matches = true` forces the
+long table on every input. On the same 1 MiB XML screen:
 
 | Fast policy | Wire bytes | Encode ns | Size vs libzstd |
 | --- | ---: | ---: | ---: |
-| Single-table default | 187,854 | 44.2M | 1.0906 |
-| Long-match opt-in | 170,251 | 48.0M | 0.9884 |
+| Adaptive default (text) | 170,251 | 48.3M | 0.9884 |
+| Adaptive default (x-ray) | 733,362 | 112.1M | 0.9125 |
 | Double-fast | 165,730 | 52.0M | 0.9622 |
 
-The opt-in is about 9% slower than the default fast path but removes 9.4% of
-the wire and is 1.2% smaller than libzstd on this input. The default remains
-false so the 6.81x fast result is unchanged. The option
-also resolves through the public level API, for example level -1 with
-`fast_long_matches = true`; the resulting native frame round-trips and is no
-larger than the corresponding fast frame.
+The adaptive text path is about 9% slower than the previous single-table XML
+result but removes 9.4% of the wire and is 1.2% smaller than libzstd. Binary
+inputs keep the single-table time. The explicit option also resolves through
+the public level API, for example level -1 with `fast_long_matches = true`;
+the resulting native frame round-trips and is no larger than the
+corresponding fast frame.
 
 ## Measurement
 
@@ -112,10 +113,11 @@ benchmark reports the best round.
 | Direct history seed hashing | 187,495 | 46,758,314 | 0.1555 |
 | Direct block hash paths | 187,495 | 45,207,876 | 0.1504 |
 | 15-bit fast hash table | 187,854 | 44,175,804 | 0.1469 |
+| Adaptive long-match default | 170,251 | 48,294,256 | 0.1606 |
 
-The combined change is **6.81 times faster**; the repeat-skip and 15-bit-hash
-stages add 393 bytes (0.21%) to the baseline.
-The complete ReleaseFast Zstd suite passes 1,275/1,275 tests with exit zero.
+The combined change is **6.22 times faster**; the adaptive long-match default
+produces 170,251 bytes, 9.2% below the original 187,461-byte fast baseline.
+The complete ReleaseFast Zstd suite passes 1,276/1,276 tests with exit zero.
 
 This remains a single-strategy screen and is not a full Zstd matrix; libzstd
 still encodes these inputs substantially faster. The repeat planner remains
@@ -129,10 +131,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,854 | 172,242 | 1.0906 | 44,175,804 | 67.9 |
-| dickens | 448,093 | 430,405 | 1.0411 | 90,267,109 | 33.2 |
-| reymont | 376,055 | 338,665 | 1.1104 | 83,345,278 | 36.0 |
-| x-ray | 733,362 | 803,674 | 0.9125 | 112,463,589 | 26.7 |
+| xml | 170,251 | 172,242 | 0.9884 | 48,294,256 | 62.1 |
+| dickens | 419,879 | 430,405 | 0.9755 | 93,252,524 | 32.2 |
+| reymont | 337,555 | 338,665 | 0.9967 | 79,145,229 | 37.9 |
+| x-ray | 733,362 | 803,674 | 0.9125 | 112,114,026 | 26.8 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller
@@ -141,21 +143,21 @@ than the reference here.
 ## Full-file matrix
 
 Actual full files, level 1 with explicit fast strategy and acceleration 1,
-three iterations per round and three rounds. The opt-in long-match table is
-shown separately because it trades about 6-27% encode time for smaller text
-wires:
+three iterations per round and three rounds. Text rows already use the
+adaptive long-match default; the forced column shows the same text wires and
+the slower binary result:
 
-| File | Bytes | libzstd | Size ratio | MiB/s | Opt-in bytes | Opt-in ratio | Opt-in MiB/s |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| xml | 828,331 | 696,678 | 1.1890 | 77.2 | 733,084 | 1.0523 | 72.2 |
-| dickens | 4,429,675 | 4,268,871 | 1.0377 | 32.7 | 4,194,809 | 0.9827 | 31.0 |
-| reymont | 2,400,529 | 2,152,776 | 1.1151 | 38.1 | 2,154,518 | 1.0008 | 38.9 |
-| x-ray | 6,245,104 | 6,772,680 | 0.9221 | 26.9 | 6,244,872 | 0.9221 | 21.1 |
+| File | Adaptive bytes | libzstd | Size ratio | MiB/s | Forced-long bytes | Forced MiB/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| xml | 733,084 | 696,678 | 1.0523 | 72.2 | 733,084 | 72.2 |
+| dickens | 4,194,809 | 4,268,871 | 0.9827 | 31.0 | 4,194,809 | 31.0 |
+| reymont | 2,154,518 | 2,152,776 | 1.0008 | 38.9 | 2,154,518 | 38.9 |
+| x-ray | 6,245,104 | 6,772,680 | 0.9221 | 26.9 | 6,244,872 | 21.1 |
 
-The opt-in reduces the full-file XML gap from 18.9% to 5.2%, moves dickens
-1.7% below libzstd and leaves reymont essentially level; x-ray remains 7.8%
-smaller. The default fast path keeps its lower time and is unchanged by the
-opt-in.
+The adaptive default reduces the full-file XML gap from 18.9% to 5.2%, moves
+dickens 1.7% below libzstd and leaves reymont essentially level; x-ray remains
+7.8% smaller. Forcing the long table on x-ray is slightly smaller but 21%
+slower, which is why the sample gate leaves binary blocks on the single table.
 
 Follow-ups were measured over five iterations and five rounds and rejected as
 noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus

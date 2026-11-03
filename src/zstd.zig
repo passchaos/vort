@@ -557,9 +557,9 @@ pub const FrameOptions = struct {
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
-    /// Opt the fast strategy into the second long-match hash table. False
-    /// preserves the single-table fast wire; true trades about 10% encode time
-    /// for a smaller stream.
+    /// Force the fast strategy to use the second long-match hash table. False
+    /// uses the default adaptive gate: repetitive text-like blocks opt in
+    /// automatically, while binary blocks keep the single-table path.
     fast_long_matches: bool = false,
     /// Optional caller-owned counters, accumulated across operations.
     control_profile: ?*EncoderControlProfile = null,
@@ -606,9 +606,9 @@ pub const NativeFrameOptions = struct {
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
-    /// Opt the fast strategy into the second long-match hash table. False
-    /// preserves the single-table fast wire; true trades about 10% encode time
-    /// for a smaller stream.
+    /// Force the fast strategy to use the second long-match hash table. False
+    /// uses the default adaptive gate: repetitive text-like blocks opt in
+    /// automatically, while binary blocks keep the single-table path.
     fast_long_matches: bool = false,
     control_profile: ?*EncoderControlProfile = null,
     hq: ?HqOptions = null,
@@ -44351,9 +44351,9 @@ test "zstd fast long-match option lowers wire and round-trips" {
     const payload = try std.testing.allocator.alloc(u8, 64 * 1024);
     defer std.testing.allocator.free(payload);
     var random_state: u32 = 0x1234_5678;
-    for (payload, 0..) |*byte, index| {
+    for (payload) |*byte| {
         random_state = random_state *% 1_664_525 +% 1_013_904_223;
-        byte.* = if (index % 512 < 384) @truncate(index * 7) else @truncate(random_state >> 16);
+        byte.* = @truncate(random_state >> 16);
     }
     var plain_profile: EncoderControlProfile = .{};
     const base = NativeFrameOptions{ .strategy = .fast, .fast_acceleration = 1, .control_profile = &plain_profile };
@@ -47239,4 +47239,28 @@ test "Zstd dense short match copy writes only its proven sixteen byte window" {
 
 test "Zstd dense short match copy preserves chained initialized history" {
     try @import("zstd/sequence/dense_copy16_tests.zig").chained();
+}
+
+test "zstd fast adaptive long-match gate selects repetitive text" {
+    const payload = try std.testing.allocator.alloc(u8, 16 * 1024);
+    defer std.testing.allocator.free(payload);
+    const words = [_][]const u8{ "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "theta", "lambda" };
+    var buffer: [256]u8 = undefined;
+    var payload_len: usize = 0;
+    var index: usize = 0;
+    while (payload_len < payload.len) : (index += 1) {
+        const word = words[index % words.len];
+        const line = try std.fmt.bufPrint(&buffer, "<item id=\"{d}\" name=\"{s}\"><value>{s}-{d}</value><text>{s} {s} {s}</text></item>\n", .{ index, word, word, index % 97, word, word, word });
+        const take = @min(line.len, payload.len - payload_len);
+        @memcpy(payload[payload_len..][0..take], line[0..take]);
+        payload_len += take;
+    }
+    var profile: EncoderControlProfile = .{};
+    const options = NativeFrameOptions{ .strategy = .fast, .fast_acceleration = 1, .control_profile = &profile };
+    const result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(result.frame);
+    try std.testing.expect(profile.long_hash_probes != 0);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, result.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
