@@ -22,6 +22,8 @@ const command_encoding = @import("br/encoder/command_encoding.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const prepared_command_distance = @import("br/encoder/prepared_command_distance.zig");
+const prepared_parameter_distance = @import("br/encoder/prepared_parameter_distance.zig");
+const parameter_pair = @import("br/encoder/parameter_pair.zig");
 const prepared_adaptive_distance = @import("br/encoder/prepared_adaptive_distance.zig");
 const prepared_literal = @import("br/encoder/prepared_literal.zig");
 const counting_writer = @import("br/encoder/counting_writer.zig");
@@ -5315,23 +5317,36 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     const search_distance_parameters = options.distance_parameter_search orelse schedule.search_distance_parameters;
     if (search_distance_parameters and schedule.use_recent_distances and lz_plan.stats.matches != 0) {
         var distance_stats: encoder_stats.PlannedEncodeStats = .{};
-        const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAllocRecorded(
-            trace_enabled,
-            trace.withOrigin(.lazy),
-            allocator,
-            input,
-            command_stream.commands,
-            true,
-            &distance_stats,
-            .{
-                .use_recent_distances = true,
-                .distance_parameters = encoder_distance.Parameters.init(0, 0),
-                .large_window = options.large_window,
-                .window_bits = window_bits,
-                .metadata = options.metadata,
-            },
-        );
-        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        const distance_options: CommandPlanEncodeOptions = .{
+            .use_recent_distances = true,
+            .distance_parameters = encoder_distance.Parameters.init(0, 0),
+            .large_window = options.large_window,
+            .window_bits = window_bits,
+            .metadata = options.metadata,
+        };
+        // The frozen original-controller oracle must keep its materialized
+        // primary path; the prepared pair is a later, independent increment.
+        const original_controller = if (comptime builtin.is_test) test_materialize_context_primary else false;
+        const prepared_pair_supported = schedule.quality.int() == 8 and input.len >= 8 * 1024 and input.len <= 64 * 1024 and
+            !options.large_window and options.metadata.len == 0 and !original_controller;
+        if (prepared_pair_supported) {
+            if (try parameter_pair.against(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best)) |candidate| {
+                freeQualityRecorded(trace_enabled, trace, allocator, best);
+                best = candidate;
+            }
+        } else {
+            const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAllocRecorded(
+                trace_enabled,
+                trace.withOrigin(.lazy),
+                allocator,
+                input,
+                command_stream.commands,
+                true,
+                &distance_stats,
+                distance_options,
+            );
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+        }
     }
 
     if (schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
@@ -6418,6 +6433,138 @@ fn encodeCommandPlanWithDistanceParameterSearchAllocRecorded(comptime trace_enab
     freeQualityRecorded(trace_enabled, trace, allocator, alternative);
     stats.* = baseline_stats;
     return baseline;
+}
+
+const ParameterPairStrategy = struct {
+    pub const Error = br.Error;
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const choose = chooseDistanceParameterAlternativeAlloc;
+    pub const physicalPair = encodeCommandPlanWithDistanceParameterSearchAllocRecorded;
+    pub const free = freeQualityRecorded;
+
+    pub fn prepareBase(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *prepared_command_distance.Prepared, literal: *prepared_literal.State) @This().Error!quality_profile.CandidateRef {
+        var base = options;
+        base.prepared_common = common;
+        var staged_stats = stats.*;
+        errdefer {
+            common.reset();
+            literal.ready = false;
+        }
+        const reference = try prepareCommandPlanWithOptionsRecorded(traced, trace, allocator, input, commands, null, &staged_stats, base, literal);
+        stats.* = staged_stats;
+        return reference;
+    }
+    pub fn prepareAlt(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *const prepared_command_distance.Prepared, literal: *const prepared_literal.State, state: *prepared_parameter_distance.State) @This().Error!quality_profile.CandidateRef {
+        var scope = trace.begin(.evaluate, input.len, commands.len);
+        defer scope.finish();
+        errdefer |err| scope.failure(err);
+        scope.config(options);
+        try prepared_parameter_distance.prepare(ParameterDistanceStrategy, allocator, input, commands, options, common, literal, stats, state);
+        return scope.evaluated(state.wire_len);
+    }
+    pub fn emitBase(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *prepared_command_distance.Prepared, literal: *const prepared_literal.State, reference: quality_profile.CandidateRef) @This().Error![]u8 {
+        var base = options;
+        base.prepared_common = common;
+        var staged_stats = stats.*;
+        const wire = try emitPreparedCommandPlanWithOptionsRecorded(traced, trace, allocator, input, commands, null, &staged_stats, base, literal, reference);
+        stats.* = staged_stats;
+        return wire;
+    }
+    pub fn emitAlt(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *const prepared_command_distance.Prepared, literal: *const prepared_literal.State, state: *const prepared_parameter_distance.State, reference: quality_profile.CandidateRef) @This().Error![]u8 {
+        var scope = trace.begin(.wire, input.len, commands.len);
+        defer scope.finish();
+        errdefer |err| scope.failure(err);
+        scope.config(options);
+        scope.emissionOf(reference);
+        if (!state.matches(input, commands, options) or state.commandPlan() != common or state.literal != literal)
+            return error.InvalidBlockPlan;
+        var out = try std.ArrayList(u8).initCapacity(allocator, state.wire_len);
+        errdefer out.deinit(allocator);
+        var writer: BitWriter = .{ .out = &out };
+        var staged_stats = stats.*;
+        try prepared_literal_emission.write(ParameterDistanceStrategy, allocator, &writer, input, commands, null, &staged_stats, options, state, literal);
+        if (out.items.len != state.wire_len) return error.InvalidBlockPlan;
+        const wire = try out.toOwnedSlice(allocator);
+        scope.wire(wire);
+        stats.* = staged_stats;
+        return wire;
+    }
+};
+
+const ParameterDistanceStrategy = struct {
+    pub const Error = br.Error;
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const wireDistance = commandWireDistance;
+    pub const recentDistance = recentDistanceSymbol;
+    pub const pushDistance = pushLastDistance;
+    pub const commandEncoding = PreparedLiteralEmissionStrategy.commandEncoding;
+    pub const literalEncoder = initPlannedLiteralEncoder;
+    pub const resolveExact = resolveHqCommand;
+    pub const writeExtras = writeCommandLengthExtras;
+    pub const history = literalContextHistory;
+    pub const elapsed = elapsedNs;
+
+    pub fn header(allocator: std.mem.Allocator, writer: anytype, input: []const u8, options: Options, state: *const prepared_parameter_distance.State, literal: *const prepared_literal.State) @This().Error!void {
+        const common = state.commandPlan();
+        try writePlannedWindowBits(allocator, writer, options.window_bits, false);
+        try writeCompressedMetaBlockHeader(allocator, writer, input.len, true);
+        try writeUnsplitPreparedHeader(prepared_parameter_distance.distance_capacity, allocator, writer, literal.normalized_context, options.literal_context_mode, literal.alphabets[0..literal.tree_count], literal.lengths[0..literal.tree_count], &common.command_alphabet, &common.command_lengths, &state.distance_alphabet, &state.distance_lengths, options.distance_parameters, options.distance_parameters.wireAlphabetSize(.standard));
+    }
+};
+
+pub const ParameterPairTestAdapters = struct {
+    pub const Error = br.Error;
+    pub const Options = CommandPlanEncodeOptions;
+    pub const Stats = encoder_stats.PlannedEncodeStats;
+    pub const State = prepared_parameter_distance.State;
+    pub const Common = prepared_command_distance.Prepared;
+    pub const Literal = prepared_literal.State;
+    pub const PlannedOptions = PlannedEncodeOptions;
+    pub const encodePublic = encodePlannedStreamWithOptionsAlloc;
+    pub const choose = chooseDistanceParameterAlternativeAlloc;
+    pub const Profile = quality_profile.Profile;
+    pub fn against(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, incumbent: []const u8) @This().Error!?[]u8 {
+        return parameter_pair.against(ParameterPairStrategy, false, quality_profile.Disabled{}, allocator, input, commands, stats, options, incumbent);
+    }
+    pub fn againstProfile(io: std.Io, allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, incumbent: []const u8, profile: *Profile) @This().Error!?[]u8 {
+        return parameter_pair.against(ParameterPairStrategy, true, quality_profile.Active{ .profile = profile, .io = io }, allocator, input, commands, stats, options, incumbent);
+    }
+    pub fn encode(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options) @This().Error![]u8 {
+        return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, options);
+    }
+    pub fn prepareBase(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *Common, literal: *Literal) @This().Error!usize {
+        common.* = Common.init(options, commands);
+        const reference = try ParameterPairStrategy.prepareBase(false, .{}, allocator, input, commands, stats, options, common, literal);
+        return reference.bytes;
+    }
+    pub fn prepareAlt(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *const Common, literal: *const Literal, state: *State) @This().Error!usize {
+        const reference = try ParameterPairStrategy.prepareAlt(false, .{}, allocator, input, commands, stats, options, common, literal, state);
+        return reference.bytes;
+    }
+    pub fn emitBase(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *Common, literal: *const Literal) @This().Error![]u8 {
+        return ParameterPairStrategy.emitBase(false, .{}, allocator, input, commands, stats, options, common, literal, .{ .bytes = literal.wire_len });
+    }
+    pub fn emitAlt(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *Stats, options: Options, common: *const Common, literal: *const Literal, state: *const State) @This().Error![]u8 {
+        return ParameterPairStrategy.emitAlt(false, .{}, allocator, input, commands, stats, options, common, literal, state, .{ .bytes = state.wire_len });
+    }
+};
+
+test "Brotli parameter pair prepared candidates match physical wire and stats" {
+    try @import("br/encoder/parameter_pair_tests.zig").wire(ParameterPairTestAdapters);
+}
+
+test "Brotli parameter pair rejects stale owners and invalid publication" {
+    try @import("br/encoder/parameter_pair_tests.zig").keys(ParameterPairTestAdapters);
+}
+
+test "Brotli parameter pair preserves allocator and output transactions" {
+    try @import("br/encoder/parameter_pair_tests.zig").resources(ParameterPairTestAdapters);
+}
+
+test "Brotli parameter pair against preserves chooser ties and profile publication" {
+    try @import("br/encoder/parameter_pair_tests.zig").controller(ParameterPairTestAdapters);
 }
 
 fn chooseDistanceParameterAlternativeAlloc(

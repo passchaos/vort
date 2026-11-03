@@ -135,6 +135,10 @@ pub const Profile = struct {
     events_truncated: bool = false,
     wire_attempts: usize = 0,
     evaluation_attempts: usize = 0,
+    parameter_pairs: usize = 0,
+    parameter_counted_candidates: usize = 0,
+    parameter_physical_emits: usize = 0,
+    parameter_skipped_pair_emits: usize = 0,
     /// The first slice fully traces the lazy/optimal/context/split candidates.
     /// Native dictionary auxiliaries on inputs <=4096 remain coarse `other`
     /// work and explicitly mark their detailed wire coverage incomplete.
@@ -176,6 +180,10 @@ pub const Profile = struct {
             .events_truncated = self.events_truncated,
             .wire_attempts = self.wire_attempts,
             .evaluation_attempts = self.evaluation_attempts,
+            .parameter_pairs = self.parameter_pairs,
+            .parameter_counted_candidates = self.parameter_counted_candidates,
+            .parameter_physical_emits = self.parameter_physical_emits,
+            .parameter_skipped_pair_emits = self.parameter_skipped_pair_emits,
             .wire_attempt_coverage_complete = self.wire_attempt_coverage_complete,
             .timing_complete = self.timing_complete,
             .outer_elapsed_ns = self.outer_elapsed_ns,
@@ -212,6 +220,10 @@ pub const Disabled = struct {
     pub fn prefer(self: Disabled, candidate: []const u8, incumbent: []const u8) bool {
         return self.preferReferences(self.reference(candidate), self.reference(incumbent));
     }
+    pub fn parameterPair(_: Disabled) void {}
+    pub fn parameterCounted(_: Disabled) void {}
+    pub fn parameterEmitted(_: Disabled) void {}
+    pub fn parameterSkipped(_: Disabled) void {}
     pub fn incompleteWires(_: Disabled) void {}
     pub fn returned(_: Disabled, _: []const u8) void {}
     pub fn forgetWire(_: Disabled, _: []const u8) void {}
@@ -316,6 +328,18 @@ pub const Active = struct {
             .incumbent_event_id = incumbent.id,
         });
         return accepted;
+    }
+    pub fn parameterPair(self: Active) void {
+        self.profile.parameter_pairs +|= 1;
+    }
+    pub fn parameterCounted(self: Active) void {
+        self.profile.parameter_counted_candidates +|= 1;
+    }
+    pub fn parameterEmitted(self: Active) void {
+        self.profile.parameter_physical_emits +|= 1;
+    }
+    pub fn parameterSkipped(self: Active) void {
+        self.profile.parameter_skipped_pair_emits +|= 1;
     }
     pub fn incompleteWires(self: Active) void {
         self.profile.wire_attempt_coverage_complete = false;

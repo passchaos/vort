@@ -106,9 +106,14 @@ falls 33–34% at 64 KiB and 13.8–14.4% at 1 MiB over twelve Silesia sources;
 passes 208 runs with all reader fields and history compared. Dickens, selected
 fragmented rows and one-shot MR controls retain measured regressions. These
 internal increments do not supply a new libdeflate or zlib-ng ranking; the
-one-shot reference epochs above keep their own source identities. The next
-Brotli q8 target is the remaining distance-parameter pair's exact preparation
-and winner emission, preserving the original parameter chooser and strict ties.
+one-shot reference epochs above keep their own source identities. The
+[prepared distance-parameter pair](br/distance-parameter-pair-20261103.md) now
+counts both q8 alternatives from retained command and literal models, emits
+only the local winner and skips pairs that lose to the incumbent; twelve
+64 KiB Silesia wires stay byte-identical while full candidate emissions fall
+24→4. The next Brotli q8 targets are counted preparation for the remaining
+split and HQ candidate families, preserving the original parameter chooser and
+strict ties.
 
 The [functional audit](industry-gap-audit.md#current-functionality) records
 flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,

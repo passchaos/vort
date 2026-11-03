@@ -16,10 +16,14 @@ history movement. Its direct final/pristine matrix lowers whole-input
 incremental latency 33–34% on twelve 64 KiB sources and about 14% at 1 MiB;
 fragmented, one-shot and longer weak controls retain their separate limits and
 regressions. Capacity, long-token refill and empty-reservoir corrections have
-independent fixtures and a strict frozen-controller comparison. Next prioritize
-Brotli q8 distance-parameter pair preparation with exact lengths and retained
-models, then the existing strict local and outer winner emission decisions.
-Keep modern streaming references and full-file/memory/platform coverage active.
+independent fixtures and a strict frozen-controller comparison. The
+[prepared distance-parameter pair](performance/br/distance-parameter-pair-20261103.md)
+now counts both q8 alternatives from retained command and literal models,
+emits only the local winner and skips pairs that lose to the incumbent; twelve
+64 KiB Silesia wires stay byte-identical while full candidate emissions fall
+24→4. Next extend counted preparation to the remaining split and HQ candidate
+families, then keep modern streaming references and full-file/memory/platform
+coverage active.
 
 The [dense Zstd sequence increment](performance/zstd-dense-transitions.md)
 reduces three grouped state-field extractions to one in the measured main
