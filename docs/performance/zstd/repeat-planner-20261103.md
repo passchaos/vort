@@ -232,6 +232,32 @@ gate that excluded the most repetitive sample (unique ratio below 1/12) was
 rejected: XML regressed from 170,251 to 181,164 bytes because some blocks fell
 below the bound, and NCI regressed from 110,759 to 114,419.
 
+## All-twelve 64 KiB adaptive screen
+
+One iteration per file, 64 KiB prefix, level 1 fast with the adaptive long-match
+default:
+
+| File | Vort bytes | libzstd | Size ratio |
+| --- | ---: | ---: | ---: |
+| dickens | 28,410 | 28,775 | 0.9873 |
+| mozilla | 15,827 | 16,401 | 0.9650 |
+| mr | 18,728 | 17,780 | 1.0533 |
+| nci | 5,222 | 5,249 | 0.9949 |
+| ooffice | 33,552 | 36,209 | 0.9266 |
+| osdb | 27,794 | 28,487 | 0.9757 |
+| reymont | 21,829 | 21,635 | 1.0090 |
+| samba | 23,940 | 24,677 | 0.9701 |
+| sao | 50,764 | 57,039 | 0.8900 |
+| webster | 25,330 | 25,657 | 0.9873 |
+| xml | 6,415 | 6,223 | 1.0309 |
+| x-ray | 51,326 | 53,542 | 0.9586 |
+
+Nine of twelve files are at or below libzstd on this short prefix. The three
+regressions are `mr` (1.0533), `xml` (1.0309), and `reymont` (1.0090); all three
+recover at 1 MiB, where the long-match table has enough history to help. The
+64 KiB screen is therefore a short-input boundary rather than a different
+classification failure, and it keeps `nci` below libzstd (0.9949).
+
 ## Matcher quality follow-ups
 
 The remaining NCI gap is match-quality, not entropy: the explicit `.lazy`
