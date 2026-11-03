@@ -50,7 +50,9 @@ repeats the whole table-planning and emission pass. Small blocks with an
 established frame state take the same state-aware path; the initial block keeps
 its frozen state-free wire. On the 64 KiB XML prefix this moves encode time
 from 2.958/2.996M ns to 2.872/2.933M ns (about 2.5%) with unchanged wire, while
-1 MiB runs stay within run-to-run noise.
+1 MiB runs stay within run-to-run noise. Intra-block matches in multi-block
+frames now read both forward and backward comparison bytes directly from the
+block instead of dispatching through the three-segment accessor.
 
 ## Measurement
 
@@ -76,8 +78,9 @@ benchmark reports the best round.
 | Prepared commit repcodes | 187,489 | 81,752,170 | 0.2729 |
 | Records-based preparation | 187,489 | 76,730,873 | 0.2552 |
 | State-aware candidate emission | 187,489 | 60,112,090 | 0.2000 |
+| Intra-block match scan | 187,489 | 58,610,198 | 0.1950 |
 
-The combined change is **5.00 times faster**; the repeat-skip stage adds 28
+The combined change is **5.13 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -93,10 +96,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,489 | 172,242 | 1.0885 | 60,183,177 | 49.8 |
-| dickens | 446,706 | 430,405 | 1.0379 | 104,891,654 | 28.6 |
-| reymont | 375,454 | 338,665 | 1.1086 | 95,335,272 | 31.5 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 140,788,702 | 21.3 |
+| xml | 187,489 | 172,242 | 1.0885 | 58,610,198 | 51.2 |
+| dickens | 446,706 | 430,405 | 1.0379 | 104,076,149 | 28.8 |
+| reymont | 375,454 | 338,665 | 1.1086 | 93,989,520 | 31.9 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 131,187,767 | 22.9 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller

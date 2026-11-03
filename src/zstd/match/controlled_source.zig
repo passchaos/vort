@@ -97,14 +97,16 @@ pub const Source = struct {
     /// start must equal their earlier recurrence in the caller's immutable block.
     pub fn match(self: Source, block_position: usize, candidate: usize, minimum: usize) Match {
         if (block_position > self.block.len or minimum > self.block.len - block_position) return .{};
-        const position = self.prefixLen() + block_position;
+        const prefix = self.prefixLen();
+        const position = prefix + block_position;
         if (candidate >= position or position - candidate > self.window_len) return .{};
         var length: usize = 0;
-        if (self.dictionary.len == 0 and self.history.len == 0) {
-            // A block-only source keeps both match sides in `block`, so the
-            // three-way `byteAt` dispatch is redundant for every compared byte.
+        if (candidate >= prefix) {
+            // Both sides live in the current block, so the three-way `byteAt`
+            // dispatch is redundant for every compared byte.
+            const candidate_block = candidate - prefix;
             while (length < self.block.len - block_position and
-                self.block[candidate + length] == self.block[block_position + length]) : (length += 1)
+                self.block[candidate_block + length] == self.block[block_position + length]) : (length += 1)
             {}
         } else {
             while (length < self.block.len - block_position and

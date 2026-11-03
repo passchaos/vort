@@ -294,6 +294,17 @@ fn updateReps(reps: *[3]usize, distance: usize, literal_len: usize) void {
     }
 }
 fn extendBackwards(source: Source, anchor: usize, found: *Match) void {
+    if (found.position > found.distance) {
+        // The candidate lies inside the current block with at least one byte
+        // before it, so both compared bytes can be read directly.
+        while (found.position > anchor and found.position > found.distance and
+            source.block[found.position - 1] == source.block[found.position - found.distance - 1])
+        {
+            found.position -= 1;
+            found.length += 1;
+        }
+        return;
+    }
     while (found.position > anchor and source.prefixLen() + found.position > found.distance and
         source.block[found.position - 1] == source.byteAt(source.prefixLen() + found.position - found.distance - 1))
     {
