@@ -54,8 +54,10 @@ and context clustering across all. A table-driven context lookup lowers q8
 planned encode time 7.4% geometrically on the same screen with unchanged
 wires. A perf profile attributes the next q8 gap to the LZ77 match finder,
 distance chooser and context physical encode; a window-sized predecessor ring
-was rejected at 2.2% slower, and a counted plain baseline at 1.0% slower.
-Ordinary streaming and standard dictionaries are already supported.
+was rejected at 2.2% slower, and a counted plain baseline at 1.0% slower. An
+LSD radix sort for distance frequencies lowers q8 planned time a further
+0.26% with unchanged wires. Ordinary streaming and standard dictionaries are
+already supported.
 
 The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
 bounded sampled 8/16-state graph with one pending-LL-aware path, incremental

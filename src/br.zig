@@ -6602,6 +6602,51 @@ test "Brotli q8 prepared distance pair extends beyond 64 KiB" {
     }
 }
 
+/// LSD radix sort for semantic distances. The comparison sort is faster for
+/// tiny inputs; large command streams avoid O(n log n) comparisons and the
+/// result is the same ascending order used by the dedup pass.
+fn sortDistanceFrequencies(allocator: std.mem.Allocator, entries: []distance_parameter_search.DistanceFrequency) Error!void {
+    if (entries.len < 128) {
+        std.mem.sort(
+            distance_parameter_search.DistanceFrequency,
+            entries,
+            {},
+            struct {
+                fn lessThan(_: void, lhs: distance_parameter_search.DistanceFrequency, rhs: distance_parameter_search.DistanceFrequency) bool {
+                    return lhs.semantic_distance < rhs.semantic_distance;
+                }
+            }.lessThan,
+        );
+        return;
+    }
+    const buffer = try allocator.alloc(distance_parameter_search.DistanceFrequency, entries.len);
+    defer allocator.free(buffer);
+    var src = entries;
+    var dst = buffer;
+    var max: usize = 0;
+    for (entries) |entry| max = @max(max, entry.semantic_distance);
+    var shift: u6 = 0;
+    while (true) {
+        var counts = [_]usize{0} ** 256;
+        for (src) |entry| counts[(entry.semantic_distance >> shift) & 0xff] += 1;
+        var offsets: [256]usize = undefined;
+        var sum: usize = 0;
+        for (counts, 0..) |count, index| {
+            offsets[index] = sum;
+            sum += count;
+        }
+        for (src) |entry| {
+            const digit = (entry.semantic_distance >> shift) & 0xff;
+            dst[offsets[digit]] = entry;
+            offsets[digit] += 1;
+        }
+        std.mem.swap(@TypeOf(src), &src, &dst);
+        if ((max >> shift) <= 0xff) break;
+        shift += 8;
+    }
+    if (src.ptr != entries.ptr) @memcpy(entries, src);
+}
+
 fn chooseDistanceParameterAlternativeAlloc(
     allocator: std.mem.Allocator,
     commands: []const command_plan.Command,
