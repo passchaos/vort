@@ -249,3 +249,11 @@ neither the wire (4,556 bytes) nor the measured time (84.8 ms), so the existing
 search is already saturated on this input. The remaining 15.9% gap is therefore
 in entropy/context modeling and cost estimation, not match-search breadth;
 larger blocks and deeper chains are not the next lever.
+
+A second entropy-feedback pass was also neutral. Rebuilding the cost model from
+the first modeled commands and parsing again left the 32 KiB wire at 2,617
+bytes (59.5 ms) and the 64 KiB wire at 4,556 bytes (85.9 ms), matching the
+single-pass result. The refined model is a fixed point on this input, so
+repeating the current feedback loop does not recover the reference's q10-to-q11
+gain. The next q11 work must change the cost model or entropy/context
+decisions rather than add search or iteration depth.
