@@ -44378,6 +44378,25 @@ test "zstd fast long-match option lowers wire and round-trips" {
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, bad));
 }
 
+test "zstd fast long-match option resolves through the level API" {
+    const resolved = try resolveFrameOptionsForLevel(-1, .{ .fast_long_matches = true });
+    try std.testing.expect(resolved.fast_long_matches);
+    try std.testing.expectEqual(Strategy.fast, resolved.strategy);
+    try std.testing.expectEqual(@as(u32, 1), resolved.fast_acceleration.?);
+
+    const payload = try std.testing.allocator.alloc(u8, 32 * 1024);
+    defer std.testing.allocator.free(payload);
+    for (payload, 0..) |*byte, index| byte.* = @truncate(index * 13 + index / 7);
+    const plain = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, -1, .{});
+    defer std.testing.allocator.free(plain);
+    const richer = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, -1, .{ .fast_long_matches = true });
+    defer std.testing.allocator.free(richer);
+    try std.testing.expect(richer.len <= plain.len);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, richer);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "zstd fast large known offsets commit matches decoded state" {
     test_disable_fast_large_known_offsets_commit = false;
     test_fast_large_known_offsets_commit_hits = 0;

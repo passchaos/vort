@@ -77,7 +77,10 @@ On the same 1 MiB XML screen:
 
 The opt-in is about 10% slower than the default fast path but removes 9.8% of
 the wire and is 1.8% smaller than libzstd on this input. The default remains
-false so the 6.65x fast result and frozen fast wires are unchanged.
+false so the 6.65x fast result and frozen fast wires are unchanged. The option
+also resolves through the public level API, for example level -1 with
+`fast_long_matches = true`; the resulting native frame round-trips and is no
+larger than the corresponding fast frame.
 
 ## Measurement
 
