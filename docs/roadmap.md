@@ -50,7 +50,9 @@ reads block hash lookups from the block. The 1 MiB XML level-1 fast encode is
 6.65 times faster with 34 additional wire
 bytes
 (0.018%); the repeat DP remains the largest encoder
-symbol below the skip threshold.
+symbol below the skip threshold. The opt-in `fast_long_matches` table keeps the
+default fast wire unchanged and lowers the same input to 169,189 bytes (1.8%
+smaller than libzstd) for about 10% more encode time.
 
 The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)
 uses one proven 16-byte move for short dense Zstd matches and parses Brotli

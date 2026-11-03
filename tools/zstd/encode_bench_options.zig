@@ -13,6 +13,7 @@ pub const Options = struct {
     native_selection: ?zstd.NativeFrameSelection = null,
     strategy: ?zstd.Strategy = null,
     fast_acceleration: ?u32 = null,
+    fast_long_matches: bool = false,
     show_help: bool = false,
     reference_library_path: ?[]const u8 = null,
     match_hq: bool = false,
@@ -39,6 +40,7 @@ pub fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameO
     var resolved = try zstd.resolveFrameOptionsForLevel(preset_level, .{
         .strategy = options.strategy orelse .auto,
         .fast_acceleration = options.fast_acceleration,
+        .fast_long_matches = options.fast_long_matches,
     });
     if (options.match_hq) {
         if (options.strategy != .btopt and options.strategy != .btultra and options.strategy != .btultra2)
@@ -128,6 +130,9 @@ pub fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterat
         } else if (try optionValue("--fast-acceleration", arg, args)) |value| {
             if (options.fast_acceleration != null) return error.DuplicateZstdOption;
             options.fast_acceleration = try std.fmt.parseInt(u32, value, 10);
+        } else if (std.mem.eql(u8, arg, "--fast-long-matches")) {
+            if (options.fast_long_matches) return error.DuplicateZstdOption;
+            options.fast_long_matches = true;
         } else if (std.mem.eql(u8, arg, "--native-selection")) {
             const selection = args.next() orelse return error.MissingLimit;
             options.native_selection = if (std.mem.eql(u8, selection, "fast_compressed") or std.mem.eql(u8, selection, "fast-compressed"))

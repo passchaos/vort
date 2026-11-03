@@ -63,6 +63,22 @@ for every seeded position. Block hash lookups and match-seed anchors also read
 the current block directly; the segment-aware loader remains for boundary
 positions that can span slices.
 
+## Opt-in fast long-match table
+
+`NativeFrameOptions.fast_long_matches` keeps the single-table fast wire by
+default and opts into a second 8-byte hash table for ratio-sensitive callers.
+On the same 1 MiB XML screen:
+
+| Fast policy | Wire bytes | Encode ns | Size vs libzstd |
+| --- | ---: | ---: | ---: |
+| Single-table default | 187,495 | 45.2M | 1.0886 |
+| Long-match opt-in | 169,189 | 49.5M | 0.9823 |
+| Double-fast | 165,730 | 52.0M | 0.9622 |
+
+The opt-in is about 10% slower than the default fast path but removes 9.8% of
+the wire and is 1.8% smaller than libzstd on this input. The default remains
+false so the 6.65x fast result and frozen fast wires are unchanged.
+
 ## Measurement
 
 `run-zstd-encode-bench` on the 1 MiB XML prefix, level 1 with explicit fast

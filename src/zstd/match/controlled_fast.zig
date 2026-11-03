@@ -22,6 +22,7 @@ const Match = struct { position: usize = 0, length: usize = 0, distance: usize =
 /// Acceleration applies to prefix insertion and the growing miss stride.
 pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, source: Source, parameters: Parameters) !void {
     if ((parameters.strategy != .fast and parameters.strategy != .double_fast) or
+        (parameters.fast_long_matches and parameters.strategy != .fast) or
         parameters.acceleration == 0 or parameters.acceleration > controls.max_acceleration or
         parameters.search_budget != controls.legacy_search_budget or
         source.block.len > max_block_len or source.window_len == 0 or source.window_len > max_window_len or
@@ -37,11 +38,12 @@ pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, 
     }
     if (source.block.len < minimum_match) return;
     if (parameters.strategy == .double_fast) return planDouble(records, allocator, source, parameters);
-    return planSingle(records, allocator, source, parameters);
+    if (parameters.fast_long_matches) return planSingle(true, records, allocator, source, parameters);
+    return planSingle(false, records, allocator, source, parameters);
 }
 
-fn planSingle(records: *std.ArrayList(Record), allocator: std.mem.Allocator, source: Source, parameters: Parameters) !void {
-    var tables: Tables(false) = .{};
+fn planSingle(comptime long_matches: bool, records: *std.ArrayList(Record), allocator: std.mem.Allocator, source: Source, parameters: Parameters) !void {
+    var tables: Tables(long_matches) = .{};
     tables.seed(source, parameters);
     var reps = parameters.initial_repeated_offsets;
     var anchor: usize = 0;
@@ -54,6 +56,13 @@ fn planSingle(records: *std.ArrayList(Record), allocator: std.mem.Allocator, sou
         const candidate = tables.lookupShort(source, position, parameters.profile);
         const found = candidateMatch(source, position, candidate, minimum_match);
         if (prefer(found, best, reps, anchor)) best = found;
+        if (comptime long_matches) {
+            if (best.length < 8) {
+                const long_candidate = tables.lookupLong(source, position, parameters.profile);
+                const long_match = candidateMatch(source, position, long_candidate, 8);
+                if (prefer(long_match, best, reps, anchor)) best = long_match;
+            }
+        }
 
         // A one-byte-literal rep0 probe is a legal Zstd repcode even when the
         // current anchor has zero literals and its rep0 mapping is unavailable.

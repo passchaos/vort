@@ -35,6 +35,7 @@ pub fn main(init: std.process.Init) !void {
             \\  --level N                    Choose a level from -131072 through 22.
             \\  --strategy NAME              Choose one of the strategies listed below.
             \\  --fast-acceleration N        Choose acceleration from 1 through 131072.
+            \\  --fast-long-matches          Enable the opt-in fast long-match table.
             \\  --native-selection fast_compressed
             \\  --case NAME --path FILE --limit BYTES
             \\  --iterations N --rounds N --csv FILE --libzstd FILE

@@ -207,10 +207,13 @@ pub const EmissionTransaction = struct {
 };
 
 pub fn active(options: anytype) bool {
-    return options.strategy != .auto or options.fast_acceleration != null or hqField(options) != null;
+    return options.strategy != .auto or options.fast_acceleration != null or
+        (@hasField(@TypeOf(options), "fast_long_matches") and options.fast_long_matches) or
+        hqField(options) != null;
 }
 pub fn strategy(options: anytype) Strategy {
-    return if (options.strategy == .auto and options.fast_acceleration != null) .fast else options.strategy;
+    const fast_long_matches = @hasField(@TypeOf(options), "fast_long_matches") and options.fast_long_matches;
+    return if (options.strategy == .auto and (options.fast_acceleration != null or fast_long_matches)) .fast else options.strategy;
 }
 pub fn validateNative(options: anytype) Error!void {
     if (options.fast_acceleration) |acceleration|
@@ -220,6 +223,8 @@ pub fn validateNative(options: anytype) Error!void {
         if (!isHq(strategy(options))) return error.InvalidBlockPlan;
         if (hq.hasSearchControls() and !isOptimalHq(strategy(options))) return error.InvalidBlockPlan;
     }
+    if (@hasField(@TypeOf(options), "fast_long_matches") and options.fast_long_matches and strategy(options) != .fast)
+        return error.InvalidBlockPlan;
     if (!active(options)) return;
     if (options.selection != .auto and options.selection != .fast_compressed) return error.InvalidBlockPlan;
     if (options.rep_beam_search) return error.InvalidBlockPlan;
@@ -290,6 +295,8 @@ pub fn resolve(comptime NativeOptions: type, level: c_int, options: anytype) Err
         .fast_acceleration = options.fast_acceleration,
         .control_profile = options.control_profile,
     };
+    if (@hasField(NativeOptions, "fast_long_matches"))
+        native.fast_long_matches = if (@hasField(@TypeOf(options), "fast_long_matches")) options.fast_long_matches else false;
     if (@hasField(NativeOptions, "max_total_working_memory"))
         native.max_total_working_memory = if (@hasField(@TypeOf(options), "max_total_working_memory")) options.max_total_working_memory else null;
     if (@hasField(NativeOptions, "memory_profile"))

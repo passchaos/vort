@@ -77,7 +77,7 @@ pub fn Encoder(comptime Codec: type) type {
             // legacy callers retain their conservative per-block estimate.
             const window = window_limit orelse try Codec.matchWindow(options, frame_offset, block.len, last);
             const source = try source_mod.Source.initChecked(if (dictionary) |dict| dict.content else &.{}, history, block, window);
-            const parameters: source_mod.Parameters = .{ .strategy = selected, .acceleration = acceleration, .search_budget = options.match_search_budget, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .profile = profile };
+            const parameters: source_mod.Parameters = .{ .strategy = selected, .acceleration = acceleration, .fast_long_matches = options.fast_long_matches, .search_budget = options.match_search_budget, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .profile = profile };
             switch (selected) {
                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),
                 .greedy, .lazy, .optimal => try search.planReuse(records, allocator, source, parameters),

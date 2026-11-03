@@ -557,6 +557,10 @@ pub const FrameOptions = struct {
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
+    /// Opt the fast strategy into the second long-match hash table. False
+    /// preserves the single-table fast wire; true trades about 10% encode time
+    /// for a smaller stream.
+    fast_long_matches: bool = false,
     /// Optional caller-owned counters, accumulated across operations.
     control_profile: ?*EncoderControlProfile = null,
     hq: ?HqOptions = null,
@@ -602,6 +606,10 @@ pub const NativeFrameOptions = struct {
     /// Match sampling acceleration for fast/double_fast (1...131072). Auto
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
+    /// Opt the fast strategy into the second long-match hash table. False
+    /// preserves the single-table fast wire; true trades about 10% encode time
+    /// for a smaller stream.
+    fast_long_matches: bool = false,
     control_profile: ?*EncoderControlProfile = null,
     hq: ?HqOptions = null,
 
@@ -44337,6 +44345,37 @@ test "zstd fast compressed large transition path preserves frame wire" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, direct.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd fast long-match option lowers wire and round-trips" {
+    const payload = try std.testing.allocator.alloc(u8, 64 * 1024);
+    defer std.testing.allocator.free(payload);
+    var random_state: u32 = 0x1234_5678;
+    for (payload, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 512 < 384) @truncate(index * 7) else @truncate(random_state >> 16);
+    }
+    var plain_profile: EncoderControlProfile = .{};
+    const base = NativeFrameOptions{ .strategy = .fast, .fast_acceleration = 1, .control_profile = &plain_profile };
+    const plain = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, base);
+    defer std.testing.allocator.free(plain.frame);
+    var long_profile: EncoderControlProfile = .{};
+    var long = base;
+    long.fast_long_matches = true;
+    long.control_profile = &long_profile;
+    const richer = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, long);
+    defer std.testing.allocator.free(richer.frame);
+    try std.testing.expect(richer.frame.len <= plain.frame.len);
+    try std.testing.expectEqual(@as(u64, 0), plain_profile.long_hash_probes);
+    try std.testing.expect(long_profile.long_hash_probes != 0);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, richer.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var bad = base;
+    bad.strategy = .double_fast;
+    bad.fast_long_matches = true;
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, bad));
 }
 
 test "zstd fast large known offsets commit matches decoded state" {

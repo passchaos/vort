@@ -14,6 +14,7 @@ pub const Record = struct {
 pub const Parameters = struct {
     strategy: controls.Strategy,
     acceleration: u32 = 1,
+    fast_long_matches: bool = false,
     search_budget: usize = controls.legacy_search_budget,
     initial_repeated_offsets: [3]usize = .{ 1, 4, 8 },
     profile: ?*controls.Profile = null,
