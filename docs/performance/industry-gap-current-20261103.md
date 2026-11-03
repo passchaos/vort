@@ -98,6 +98,18 @@ bar.
 
 ## Functionality and evidence
 
+The subsequent [Deflate circular staging](deflate/rolling-window.md) epoch fixes
+legal capacity/refill failures and empty reservoir ownership while retaining
+64 KiB caller storage. Direct final/pristine whole-input incremental latency
+falls 33–34% at 64 KiB and 13.8–14.4% at 1 MiB over twelve Silesia sources;
+4 KiB input groups remain near neutral. The strict corrected-reference matrix
+passes 208 runs with all reader fields and history compared. Dickens, selected
+fragmented rows and one-shot MR controls retain measured regressions. These
+internal increments do not supply a new libdeflate or zlib-ng ranking; the
+one-shot reference epochs above keep their own source identities. The next
+Brotli q8 target is the remaining distance-parameter pair's exact preparation
+and winner emission, preserving the original parameter chooser and strict ties.
+
 The [functional audit](industry-gap-audit.md#current-functionality) records
 flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,
 and Brotli shared dictionaries/Large Window. Remaining controls include

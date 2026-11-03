@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare guarded raw incremental decoders on a pinned Silesia manifest."""
+"""Compare guarded public raw decoders on a pinned input/wire manifest."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ def sha(path: pathlib.Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api", choices=("incremental", "oneshot"), default="incremental")
     parser.add_argument("--manifest", type=pathlib.Path, required=True)
     parser.add_argument("--baseline", type=pathlib.Path, required=True)
     parser.add_argument("--candidate", type=pathlib.Path, required=True)
@@ -51,16 +52,19 @@ def main() -> None:
 
     binaries = {"baseline": args.baseline.resolve(), "candidate": args.candidate.resolve()}
     binary_hashes = {side: sha(path) for side, path in binaries.items()}
+    modes = [("oneshot", 0)] if args.api == "oneshot" else [("whole", None), ("input-4k", 4096)]
     samples: dict[tuple[str, str, str], list[float]] = {}
     raw = []
     for sweep in range(args.sweeps):
         sides = ("baseline", "candidate") if sweep % 2 == 0 else ("candidate", "baseline")
         for case in cases:
-            for mode, input_chunk in (("whole", case["wire_bytes"]), ("input-4k", 4096)):
+            for mode, requested_chunk in modes:
+                input_chunk = case["wire_bytes"] if requested_chunk is None else requested_chunk
                 for side in sides:
                     argv = ["taskset", "-c", str(args.cpu), str(binaries[side]),
-                            case["wire_path"], case["input_path"], str(input_chunk),
-                            "4096", str(args.iterations), "semantic"]
+                            case["wire_path"], case["input_path"]]
+                    argv += [str(args.iterations)] if args.api == "oneshot" else [
+                        str(input_chunk), "4096", str(args.iterations), "semantic"]
                     result = subprocess.run(argv, capture_output=True, text=True, check=True)
                     values = dict(re.findall(r"(\w+)=([a-z0-9]+)", result.stdout))
                     if (values.get("plain_sha") != case["input_sha256"] or values.get("guards") != "1"
@@ -79,7 +83,7 @@ def main() -> None:
 
     rows = []
     for case in cases:
-        for mode in ("whole", "input-4k"):
+        for mode, _ in modes:
             baseline = samples[case["id"], mode, "baseline"]
             candidate = samples[case["id"], mode, "candidate"]
             rows.append({"id": case["id"], "scope": case["scope"], "level": case["level"],
@@ -88,7 +92,7 @@ def main() -> None:
                          "paired_time_ratio": statistics.median([a / b for a, b in zip(candidate, baseline)]),
                          "wins": sum(a < b for a, b in zip(candidate, baseline))})
     summary = {}
-    for mode in ("whole", "input-4k"):
+    for mode, _ in modes:
         for scope in ("64k", "1m"):
             for level in (6, 9):
                 ratios = [row["paired_time_ratio"] for row in rows
@@ -99,7 +103,7 @@ def main() -> None:
                 }
     if binary_hashes != {side: sha(path) for side, path in binaries.items()}:
         raise SystemExit("benchmark binary changed during measurement")
-    report = {"status": "passed", "cpu": args.cpu, "sweeps": args.sweeps,
+    report = {"status": "passed", "api": args.api, "cpu": args.cpu, "sweeps": args.sweeps,
               "iterations": args.iterations, "manifest_sha256": sha(args.manifest),
               "binary_sha256": binary_hashes, "summary": summary, "rows": rows, "raw": raw}
     args.output.write_text(json.dumps(report, indent=2) + "\n")

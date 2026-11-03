@@ -10,6 +10,17 @@ priorities. Full-file, dictionary, streaming, memory and platform comparisons
 must accompany narrower wins. Preserve malformed-input safety, candidate
 ordering, incremental progress and allocator ownership throughout this work.
 
+The [Deflate circular staging increment](performance/deflate/rolling-window.md)
+keeps private generation and caller-owned storage while avoiding repeated
+history movement. Its direct final/pristine matrix lowers whole-input
+incremental latency 33–34% on twelve 64 KiB sources and about 14% at 1 MiB;
+fragmented, one-shot and longer weak controls retain their separate limits and
+regressions. Capacity, long-token refill and empty-reservoir corrections have
+independent fixtures and a strict frozen-controller comparison. Next prioritize
+Brotli q8 distance-parameter pair preparation with exact lengths and retained
+models, then the existing strict local and outer winner emission decisions.
+Keep modern streaming references and full-file/memory/platform coverage active.
+
 The [dense Zstd sequence increment](performance/zstd-dense-transitions.md)
 reduces three grouped state-field extractions to one in the measured main
 path. The existing small-output streaming contract is now explicitly tested:

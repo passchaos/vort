@@ -539,11 +539,9 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
             }
         }
 
-        // Up to two packed-literal entries can consume 22 staged bits before
-        // a 48-bit length/distance token. The loop still owns eight readable
-        // input bytes here, so restage before that token rather than using
-        // unstaged high bits or subtracting beyond the reservoir count.
-        if (bit_count < 48) refillBits(input, &byte_index, &bit_buffer, &bit_count);
+        // Packed literals leave at least 34 staged bits. That covers the
+        // longest LL/extra prefix (20) and the distance primary lookup (8).
+        // Restage only when a secondary code or its extras need more bits.
         var match_bits: u6 = @truncate(entry);
         var length_entry: u32 = entry;
         if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0) {
@@ -659,6 +657,7 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
             continue;
         }
 
+        const distance_start_bits: u6 = match_bits + length_extra_bits;
         var distance_entry: u32 = if (single_distance)
             decoder.single_distance
         else
@@ -666,6 +665,10 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         if ((distance_entry & SemanticDynamicDecoder.literal_flag) == 0) {
             if ((distance_entry & SemanticDynamicDecoder.secondary_flag) == 0)
                 return error.InvalidHuffmanCode;
+            if (bit_count < distance_start_bits + @as(u6, 15)) {
+                refillBits(input, &byte_index, &bit_buffer, &bit_count);
+                bits = bit_buffer >> distance_start_bits;
+            }
             const start: usize = @intCast(distance_entry >> 16);
             const mask: usize = @intCast(distance_entry & 0xff);
             const secondary_index_ = start +
@@ -685,11 +688,12 @@ pub inline fn decodeDynamicBlockIntoLinearMode(
         {
             return error.InvalidHuffmanCode;
         }
-        bits >>= @intCast(distance_code_bits);
         const distance_extra_bits: u6 = @truncate(distance_entry >> 8);
+        const total_bits: u6 = distance_start_bits + distance_code_bits + distance_extra_bits;
+        if (bit_count < total_bits) refillBits(input, &byte_index, &bit_buffer, &bit_count);
+        bits = bit_buffer >> (distance_start_bits + distance_code_bits);
         const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
         const distance = @as(usize, @intCast(distance_entry >> 16)) + @as(usize, @intCast(bits & distance_mask));
-        const total_bits: u6 = match_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
         if (comptime pause_at_output_boundary) {
             if (length > output.len - out_pos) {
                 // Packed literals may have consumed the loop's original 258
@@ -857,7 +861,20 @@ fn decodeTailWindow(
     }
 }
 
-const TailSymbol = union(enum) {
+const RollingError = Error;
+const RollingStep = LinearStep;
+pub const RollingStrategy = struct {
+    pub const Error = RollingError;
+    pub const LinearStep = RollingStep;
+    pub const decodeTail = decodeTailSymbol;
+    pub const extraOf = readExtraBits;
+    pub const distanceOf = decodeDistance;
+    pub const publishReader = storeReaderStateDelta;
+    pub const refill = refillBits;
+    pub const oldWindow = decodeDynamicBlockIntoWindow;
+};
+
+pub const TailSymbol = union(enum) {
     literal: u8,
     double_literal: [2]u8,
     length: struct { base: usize, extra_bits: u6 },

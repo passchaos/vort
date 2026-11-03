@@ -5,6 +5,7 @@ const std = @import("std");
 const codec = @import("deflate");
 
 const Decoder = codec.RawDeflateIncrementalFixedLiteralDecoder;
+const observed = if (@hasDecl(codec, "observe_semantic_work")) codec.observe_semantic_work else false;
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -27,6 +28,7 @@ pub fn main(init: std.process.Init) !void {
     const output = storage[32..][0..plain.len];
     var history: [65536]u8 = undefined;
 
+    var work: if (observed) @TypeOf(@as(Decoder, undefined).semanticWork()) else void = if (observed) .{} else {};
     var ns: u64 = 0;
     var sum: u64 = 0;
     for (0..iterations + 1) |iteration| {
@@ -57,6 +59,7 @@ pub fn main(init: std.process.Init) !void {
         if (in_pos != wire.len) return error.BadInputLen;
         if (out_pos != plain.len) return error.BadOutputLen;
         if (!std.mem.eql(u8, output, plain)) return error.BadDecode;
+        if (observed) work = decoder.semanticWork();
         sum +%= out_pos;
     }
     for (storage[0..32]) |byte| if (byte != 0xa5) return error.Guard;
@@ -67,5 +70,10 @@ pub fn main(init: std.process.Init) !void {
     var buf: [4096]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(init.io, &buf);
     try writer.interface.print("codec=deflate-incremental input={d} output={d} iterations={d} ns={d} checksum={d} plain_sha={s} guards=1\n", .{ wire.len, plain.len, iterations, ns, sum, &hash });
+    if (observed) {
+        inline for (@typeInfo(@TypeOf(work)).@"struct".fields) |field|
+            try writer.interface.print("{s}={d} ", .{ field.name, @field(work, field.name) });
+        try writer.interface.writeAll("\n");
+    }
     try writer.interface.flush();
 }

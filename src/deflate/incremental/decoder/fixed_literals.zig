@@ -3,6 +3,11 @@ const core = @import("../../../core.zig");
 const huffman = @import("../../../huffman.zig");
 const bitstream = @import("../../../bitstream.zig");
 const semantic = @import("../../semantic/decoder.zig");
+const rolling_decoder = @import("../../semantic/rolling_decoder.zig");
+const semantic_state = @import("semantic_state.zig");
+const rewindSemanticLookahead = @import("semantic_bits.zig").rewindLookahead;
+pub const SemanticMode = semantic_state.Mode;
+pub const SemanticWork = semantic_state.Work;
 const compact_tables = @import("compact_tables.zig");
 const buildCanonicalLookup = compact_tables.buildCanonicalLookup;
 const validCodeLengthAlphabet = compact_tables.validCodeLengthAlphabet;
@@ -23,6 +28,12 @@ pub const Decoder = DecoderWithFormat(.{});
 /// to caller output. A caller-owned format-sized history ring backs length/distance
 /// copies, including overlapping matches across arbitrary output boundaries.
 pub fn DecoderWithFormat(comptime format: Format) type {
+    return DecoderWithMode(format, .rolling, false);
+}
+
+/// Compile-time reference and diagnostic routes for differential validation.
+/// Public default decoding omits counters and token-progress observations.
+pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, comptime observed: bool) type {
     return struct {
         const Self = @This();
         const supports_semantic_window = format.window_len == 32 * 1024 and
@@ -46,7 +57,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         history: []u8 = &.{},
         /// Optional two-window caller storage. The first window remains the
         /// compact fallback ring; the complete slice lets a dynamic block run
-        /// through the linear semantic decoder without hidden allocation.
+        /// through bounded semantic generations without hidden allocation.
         semantic_scratch: []u8 = &.{},
         history_pos: usize = 0,
         history_len: usize = 0,
@@ -77,7 +88,9 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         dynamic_literal_table: huffman.HuffmanTable(286) = .{},
         dynamic_distance_table: huffman.HuffmanTable(format.distance_symbol_count) = .{},
         semantic_decoder: ?*SemanticDecoder = null,
+        semantic_prefix_start: usize = 0,
         semantic_prefix_len: usize = 0,
+        semantic_work: if (observed) SemanticWork else void = if (observed) .{} else {},
         semantic_generated_end: usize = 0,
         semantic_delivered: usize = 0,
         semantic_end_of_block: bool = false,
@@ -167,7 +180,9 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             self.final_block = false;
             self.history_pos = 0;
             self.history_len = 0;
+            self.semantic_prefix_start = 0;
             self.semantic_prefix_len = 0;
+            if (observed) self.semantic_work = .{};
             self.semantic_generated_end = 0;
             self.semantic_delivered = 0;
             self.semantic_end_of_block = false;
@@ -209,7 +224,10 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             self.total_input = resumed_input;
             self.total_output = produced;
         }
+        /// Seed only while no semantic generation is active (normally after
+        /// initialization, reset or sync recovery). Caller storage is replaced.
         pub fn seedDictionary(self: *Self, dictionary: []const u8) void {
+            std.debug.assert(self.phase != .fast_dynamic_block);
             if (self.history.len == 0) return;
             const keep = @min(dictionary.len, self.history.len);
             const source = dictionary[dictionary.len - keep ..];
@@ -227,6 +245,9 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.UnsupportedDeflateFeature))) "unsupported_feature" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
+        }
+        pub fn semanticWork(self: *const Self) SemanticWork {
+            return if (observed) self.semantic_work else .{};
         }
         pub fn semanticBlocksStarted(self: *const Self) usize {
             return self.semantic_blocks_started;
@@ -543,32 +564,12 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             compact_tables.buildLookupFromTable(10, format.distance_symbol_count, &self.dynamic_distance_lookup, &self.dynamic_distance_table);
         }
 
-        /// Convert the compact history ring into the chronological prefix used
-        /// by the linear semantic decoder. The second caller window is a
-        /// temporary here and becomes the generated-output region afterwards.
+        /// Begin one private generation from compact history. History geometry
+        /// is isolated from the controller's input/output transaction.
         fn beginSemanticBlock(self: *Self) void {
             std.debug.assert(supports_semantic_window);
             std.debug.assert(self.semantic_scratch.len >= recommended_history_len);
-            const history_len = self.history_len;
-            if (history_len != 0) {
-                const temporary = self.semantic_scratch[format.window_len..][0..history_len];
-                if (history_len == format.window_len) {
-                    const first = format.window_len - self.history_pos;
-                    @memcpy(temporary[0..first], self.history[self.history_pos..][0..first]);
-                    if (first != history_len)
-                        @memcpy(temporary[first..], self.history[0 .. history_len - first]);
-                } else {
-                    std.debug.assert(self.history_pos == history_len);
-                    @memcpy(temporary, self.history[0..history_len]);
-                }
-                @memcpy(self.semantic_scratch[0..history_len], temporary);
-            }
-            self.history_pos = if (history_len == format.window_len) 0 else history_len;
-            self.semantic_prefix_len = history_len;
-            self.semantic_generated_end = history_len;
-            self.semantic_delivered = history_len;
-            self.semantic_end_of_block = false;
-            self.semantic_blocks_started += 1;
+            semantic_state.begin(mode, observed, self);
         }
 
         fn stepSemanticBlock(
@@ -585,11 +586,13 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     const pending = self.semantic_generated_end - self.semantic_delivered;
                     const n = @min(pending, output.len - output_written.*);
                     if (n != 0) {
-                        std.mem.copyForwards(
-                            u8,
-                            output[output_written.*..][0..n],
-                            self.semantic_scratch[self.semantic_delivered..][0..n],
-                        );
+                        const window = semantic_state.window(self, self.semantic_generated_end);
+                        if (observed) {
+                            self.semantic_work.delivered_bytes +|= @intCast(n);
+                            if (window.physical(self.semantic_delivered) + n > 65536)
+                                self.semantic_work.drain_wraps +|= 1;
+                        }
+                        window.drain(self.semantic_delivered, output[output_written.*..][0..n]);
                         self.semantic_delivered += n;
                         output_written.* += n;
                         self.total_output += n;
@@ -608,6 +611,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                             return self.fail(.fast_dynamic_block, error.SizeMismatch);
                     }
                     self.retainSemanticTail();
+                    semantic_state.normalize(mode, observed, self);
                     self.semantic_end_of_block = false;
                     self.semantic_blocks_completed += 1;
                     self.phase = if (self.final_block) .done else .block_header;
@@ -625,12 +629,14 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                 reader.bit_buffer = self.bit_buffer;
                 reader.bit_count = self.bit_count;
 
-                const decoded = semantic.decodeDynamicBlockIntoWindow(
-                    &reader,
-                    self.semantic_scratch[0..output_end],
-                    self.semantic_prefix_len,
-                    self.semantic_decoder.?,
-                ) catch |err| switch (err) {
+                const window = semantic_state.window(self, output_end);
+                var attempted_end: usize = self.semantic_prefix_len;
+                const decoded = (if (observed)
+                    rolling_decoder.decodeObserved(semantic.RollingStrategy, &reader, window, self.semantic_decoder.?, &attempted_end)
+                else if (mode == .rolling)
+                    rolling_decoder.decode(semantic.RollingStrategy, &reader, window, self.semantic_decoder.?)
+                else
+                    semantic.decodeDynamicBlockIntoWindow(&reader, self.semantic_scratch[0..output_end], self.semantic_prefix_len, self.semantic_decoder.?)) catch |err| switch (err) {
                     // The semantic loop is output-resumable. If this call does
                     // not contain enough compressed bytes, discard its private
                     // speculative window and finish the block through the
@@ -639,6 +645,8 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     error.InvalidHuffmanCode,
                     error.InvalidMatch,
                     => {
+                        if (observed) self.semantic_work.discarded_bytes +|= @intCast(attempted_end - self.semantic_prefix_len);
+                        semantic_state.normalize(mode, observed, self);
                         self.buildDynamicLookups();
                         self.phase = .symbols;
                         return .fallback;
@@ -654,6 +662,11 @@ pub fn DecoderWithFormat(comptime format: Format) type {
 
                 std.debug.assert(decoded.output_written >= self.semantic_prefix_len);
                 const generated = decoded.output_written - self.semantic_prefix_len;
+                if (observed) {
+                    self.semantic_work.generated_bytes +|= @intCast(generated);
+                    if (window.physical(self.semantic_prefix_len) + generated > 65536)
+                        self.semantic_work.generation_wraps +|= 1;
+                }
                 if (generated == 0 and decoded.status == .need_output) {
                     if (self.options.stop_at_output_limit) return .need_output;
                     if (self.total_output >= self.options.max_output_len)
@@ -677,22 +690,8 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             return remaining;
         }
 
-        /// Normalize the generated window back into the ordinary fallback ring.
-        /// Source and destination may overlap, with destination always lower.
         fn retainSemanticTail(self: *Self) void {
-            const keep = @min(format.window_len, self.semantic_generated_end);
-            const start = self.semantic_generated_end - keep;
-            if (keep != 0)
-                std.mem.copyForwards(
-                    u8,
-                    self.semantic_scratch[0..keep],
-                    self.semantic_scratch[start..][0..keep],
-                );
-            self.history_len = keep;
-            self.history_pos = if (keep == format.window_len) 0 else keep;
-            self.semantic_prefix_len = keep;
-            self.semantic_generated_end = keep;
-            self.semantic_delivered = keep;
+            semantic_state.retain(mode, observed, self);
         }
 
         const RunStatus = enum { need_input, need_output, block_end, done };
@@ -1330,14 +1329,6 @@ inline fn rewindStagedLookahead(bit_buffer: *u64, bit_count: *u6, input_read: *u
 /// BufferedBitReader variant used by the semantic bridge. Only bytes staged
 /// from the current caller slice may be returned; older reservoir bytes were
 /// already reported by an earlier incremental step.
-inline fn rewindSemanticLookahead(reader: *bitstream.BufferedBitReader) void {
-    const rewind = @min(reader.bit_count / 8, reader.byte_index);
-    if (rewind == 0) return;
-    reader.bit_count -= rewind * 8;
-    reader.bit_buffer &= (@as(u64, 1) << @intCast(reader.bit_count)) - 1;
-    reader.byte_index -= rewind;
-}
-
 /// Local-reservoir bit read used by the fused symbol loop. The caller keeps
 /// the reservoir in registers and only writes it back at pause boundaries.
 inline fn readBitsLocal(

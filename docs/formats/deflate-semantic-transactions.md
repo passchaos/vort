@@ -13,7 +13,9 @@ The old 32 KiB decoder returned `OutputTooSmall`; the corrected decoder pauses
 at 32,513 bytes and resumes to all 32,835 bytes.
 
 A length/distance token can occupy 48 bits. Packed literals can leave fewer
-than that staged, so the fast loop restages before decoding that token. An
+than that staged, so the fast loop restages before a secondary distance lookup or whenever
+its actual code and extras exceed the staged count. The LL/extra prefix and
+eight-bit distance primary fit in the minimum 34-bit reservoir. An
 additional refill may exhaust the current eight-byte load opportunity; shorter
 input is left to the bounded tail. A complete 15-bit literal/distance-tree
 fixture verifies the maximum token with every zero-to-sixteen-byte padding
@@ -31,3 +33,9 @@ These changes preserve the controller's private-generation transaction:
 successful generations publish input progress and drain output; truncated or
 malformed attempts still leave the original reader available for compact
 fallback. They do not change compressed encoding or enlarge caller history.
+
+The incremental input checkpoint now clears an empty reservoir, including
+wide-read shadow bits which were never declared consumed. An independent
+bitstream test verifies resume after replacement of an unconsumed byte; the
+frozen-controller probe retains the original empty-state differences and
+compares both paths strictly after the same independent correction.
