@@ -46,7 +46,11 @@ large-block path no longer decodes the same bitstream a second time. State-depen
 re-emission also consumes the encoder's records directly instead of decoding the
 candidate back into sequence values first. Large candidates are now emitted
 against the current frame state in the first place, so preparation no longer
-repeats the whole table-planning and emission pass.
+repeats the whole table-planning and emission pass. Small blocks with an
+established frame state take the same state-aware path; the initial block keeps
+its frozen state-free wire. On the 64 KiB XML prefix this moves encode time
+from 2.958/2.996M ns to 2.872/2.933M ns (about 2.5%) with unchanged wire, while
+1 MiB runs stay within run-to-run noise.
 
 ## Measurement
 

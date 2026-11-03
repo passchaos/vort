@@ -782,7 +782,20 @@ const ControlledEncoderCodec = struct {
                 if (state.sequence_state.previous_tables) |*tables| tables else null,
                 state.sequence_state.repeated_offsets,
             );
-        return emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &block_scratch.single_sequence_emit);
+        if (state.sequence_state.previous_tables == null and std.meta.eql(state.sequence_state.repeated_offsets, initial_repeated_offsets))
+            return emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &block_scratch.single_sequence_emit);
+        return replaceSequenceCandidateWithFrameState(
+            allocator,
+            out,
+            block,
+            last,
+            literal_lens,
+            offsets,
+            match_lens,
+            literal_ends,
+            tail_start,
+            &state.sequence_state,
+        );
     }
     pub fn prepareSequences(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch) zstd.Error!SequencePrepareResult {
         var final_offsets: ?[3]usize = null;
@@ -790,6 +803,10 @@ const ControlledEncoderCodec = struct {
         return .{ .ready = ready, .final_offsets = final_offsets };
     }
     pub fn prepareSequencesFromRecords(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch, records: []const controlled_source.Record) zstd.Error!SequencePrepareResult {
+        _ = allocator;
+        _ = candidate;
+        _ = block;
+        _ = last;
         if (records.len == 0) return .{ .ready = true };
         if (state.sequence_state.previous_tables == null and std.meta.eql(state.sequence_state.repeated_offsets, initial_repeated_offsets))
             return .{ .ready = true };
@@ -799,31 +816,10 @@ const ControlledEncoderCodec = struct {
             // current frame state, so only its proven repcodes need to cross.
             return .{ .ready = true, .final_offsets = scratch.offset_extras.items[0..3].* };
         }
-        try scratch.values.resize(allocator, std.math.mul(usize, count, 4) catch return error.IntegerOverflow);
-        const literal_lens = scratch.values.items[0..count];
-        const offsets = scratch.values.items[count .. count * 2];
-        const match_lens = scratch.values.items[count * 2 .. count * 3];
-        const literal_ends = scratch.values.items[count * 3 .. count * 4];
-        for (records, 0..) |record, index| {
-            literal_lens[index] = record.literal_len;
-            offsets[index] = record.distance;
-            match_lens[index] = record.match_len;
-            literal_ends[index] = record.match_end;
-        }
-        const tail_start = records[records.len - 1].match_end;
-        if (!try replaceSequenceCandidateWithFrameState(
-            allocator,
-            candidate,
-            block,
-            last,
-            literal_lens,
-            offsets,
-            match_lens,
-            literal_ends,
-            tail_start,
-            &state.sequence_state,
-        )) return .{ .ready = false };
-        return .{ .ready = true };
+        var final_offsets = state.sequence_state.repeated_offsets;
+        for (records) |record|
+            _ = try chooseOffsetSequenceCodeWithExtra(record.literal_len, record.distance, &final_offsets);
+        return .{ .ready = true, .final_offsets = final_offsets };
     }
     pub fn commitSequencesPrepared(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State, final_offsets: ?[3]usize) zstd.Error!void {
         try appendSequenceCandidateAndCommitWithReps(allocator, out, candidate, last, &state.sequence_state, final_offsets);
