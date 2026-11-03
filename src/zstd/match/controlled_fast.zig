@@ -38,18 +38,25 @@ pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, 
     }
     if (source.block.len < minimum_match) return;
     if (parameters.strategy == .double_fast) return planDouble(records, allocator, source, parameters);
-    if (parameters.fast_long_matches or repetitiveFastSample(source.block))
+    if (parameters.fast_long_matches)
         return planSingle(true, records, allocator, source, parameters);
-    return planSingle(false, records, allocator, source, parameters);
+    return switch (fastSample(source.block)) {
+        .extreme => planDouble(records, allocator, source, parameters),
+        .text => planSingle(true, records, allocator, source, parameters),
+        .binary => planSingle(false, records, allocator, source, parameters),
+    };
 }
 
-/// Text-like blocks have a low unique 4-gram ratio in their first 16 KiB.
-/// Use the second long-match table for them by default; binary blocks keep the
-/// cheaper single-table fast path. An explicit `fast_long_matches` overrides
+const FastSample = enum { binary, text, extreme };
+
+/// Classify the first 16 KiB by unique 4-gram ratio. Text-like blocks use the
+/// second long-match table; extremely repetitive blocks use the double-fast
+/// engine, which measured both smaller and faster on NCI; binary blocks keep
+/// the cheaper single-table path. An explicit `fast_long_matches` overrides
 /// the sample.
-fn repetitiveFastSample(block: []const u8) bool {
+fn fastSample(block: []const u8) FastSample {
     const sample_len = @min(block.len, 16 * 1024);
-    if (sample_len < 4 * 1024) return false;
+    if (sample_len < 4 * 1024) return .binary;
     var seen: [256]u64 = @splat(0);
     var unique: usize = 0;
     for (0..sample_len - 3) |index| {
@@ -62,7 +69,10 @@ fn repetitiveFastSample(block: []const u8) bool {
             unique += 1;
         }
     }
-    return unique * 2 <= sample_len - 3;
+    const grams = sample_len - 3;
+    if (unique * 12 < grams) return .extreme;
+    if (unique * 2 <= grams) return .text;
+    return .binary;
 }
 
 fn planSingle(comptime long_matches: bool, records: *std.ArrayList(Record), allocator: std.mem.Allocator, source: Source, parameters: Parameters) !void {

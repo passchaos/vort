@@ -47,8 +47,8 @@ directly against the current frame state, scans intra-block matches without
 segment dispatch, skips the repeat DP above 2,048 sequences, marks the
 dictionary hash segment unlikely, hashes contiguous history seeds directly and
 reads block hash lookups from the block with a 15-bit fast table. The 1 MiB
-XML level-1 fast encode is 6.22 times faster; the adaptive long-match default
-produces 170,251 bytes, 9.2% below the original baseline and 1.2% smaller than
+XML level-1 fast encode is 6.28 times faster; the adaptive long-match default
+produces 169,704 bytes, 9.5% below the original baseline and 1.2% smaller than
 libzstd. Repetitive text-like blocks opt into the second hash table
 automatically; binary blocks keep the single-table path. The repeat DP remains
 the largest encoder symbol below the skip threshold.
