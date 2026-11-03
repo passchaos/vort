@@ -140,9 +140,9 @@ unchanged wires. The
 [q8 perf profile](br/q8-perf-profile-20261103.md) attributes the next gap to
 the LZ77 match finder (46% process self time), the distance chooser (5.7%) and
 the context group's physical encode (4.0%); a window-sized predecessor ring
-was rejected at 2.2% slower. Finite matcher candidates, parsing states and
-entropy priors remain quality limits even where all lengths of an admitted
-match are considered.
+was rejected at 2.2% slower, and a counted plain baseline was rejected at 1.0%
+slower. Finite matcher candidates, parsing states and entropy priors remain
+quality limits even where all lengths of an admitted match are considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

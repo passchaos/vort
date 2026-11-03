@@ -34,3 +34,15 @@ was reverted and is not part of the production source.
 
 [Raw ring rows](q8-ring-rejected-20261103.csv) retain the paired timings and
 wire equality.
+
+## Rejected counted plain baseline
+
+The context group's plain baseline was prepared with the counted path and
+emitted only when it won, instead of always materializing it. Wire bytes stayed
+identical, but the six-file screen measured geometric time ratio **1.0102**
+(about 1.0% slower); only XML improved (0.9955). Plain counting costs roughly
+the same as its physical emission, and when plain wins the counted path adds a
+second emission pass. The experiment was reverted.
+
+[Raw counted-plain rows](q8-counted-plain-rejected-20261103.csv) retain the
+paired timings and wire equality.
