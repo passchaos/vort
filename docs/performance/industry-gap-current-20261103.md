@@ -124,9 +124,12 @@ now validates and reconstructs one entropy snapshot that frames reuse, while
 mismatched owners are rejected before entropy work. The
 [Deflate block-boundary checkpoint](deflate/block-boundary-checkpoint.md)
 exposes a one-shot boundary step and query for raw, zlib and gzip incremental
-decoders. The remaining control gap is resumable Brotli entropy-header
-substates. Finite matcher candidates, parsing states and entropy priors remain
-quality limits even where all lengths of an admitted match are considered.
+decoders. The
+[resumable Brotli compressed header](br/resumable-compressed-header.md)
+retains completed sub-parsers and Huffman trees across small input chunks;
+mid-tree continuation remains open. Finite matcher candidates, parsing states
+and entropy priors remain quality limits even where all lengths of an admitted
+match are considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

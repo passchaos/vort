@@ -22,6 +22,10 @@ pub fn Decoder(comptime Codec: type) type {
         /// Retained byte count at the last failed header parse. Multi-step
         /// headers would otherwise re-parse the same prefix before appending.
         header_parse_len: usize = 0,
+        /// Completed compressed-header sub-parsers and trees. A retry resumes
+        /// at the next unit instead of re-reading the complete prefix.
+        header_progress: if (@hasDecl(Codec, "HeaderParseProgress")) Codec.HeaderParseProgress else void =
+            if (@hasDecl(Codec, "HeaderParseProgress")) .{} else {},
         header: Codec.Header = undefined,
         staged_bits: u128 = 0,
         staged_bit_count: u8 = 0,
@@ -357,7 +361,17 @@ pub fn Decoder(comptime Codec: type) type {
                         // the ordinary parser can inspect the final retained
                         // byte without treating synthetic high padding as input.
                         if (self.header_len != 0 and self.header_len != self.header_parse_len) {
-                            const parsed_bits = (if (comptime @hasDecl(Codec, "parseMetaBlockHeaderInto"))
+                            const parsed_bits = (if (comptime @hasDecl(Codec, "parseMetaBlockHeaderIntoWithProgress"))
+                                Codec.parseMetaBlockHeaderIntoWithProgress(
+                                    self.headerStorage()[0..self.header_len],
+                                    self.header_bit_count,
+                                    self.decoded_len,
+                                    self.final_meta_block,
+                                    self.large_window,
+                                    &self.header,
+                                    &self.header_progress,
+                                )
+                            else if (comptime @hasDecl(Codec, "parseMetaBlockHeaderInto"))
                                 Codec.parseMetaBlockHeaderInto(
                                     self.headerStorage()[0..self.header_len],
                                     self.header_bit_count,
@@ -899,6 +913,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_bit_count = self.staged_bit_count;
             self.header_len = (@as(usize, self.staged_bit_count) + 7) / 8;
             self.header_parse_len = 0;
+            if (comptime @hasDecl(Codec, "HeaderParseProgress")) self.header_progress = .{};
             var bits = self.staged_bits;
             for (self.headerStorage()[0..self.header_len]) |*byte| {
                 byte.* = @truncate(bits);

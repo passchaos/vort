@@ -46,8 +46,10 @@ now validates a standard dictionary's Huffman/FSE/repeat state once and reuses
 that immutable snapshot across frames. The
 [Deflate block-boundary checkpoint](performance/deflate/block-boundary-checkpoint.md)
 adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib
-and gzip incremental decoders. The next concrete decoder capability is
-resumable Brotli entropy-header parsing. Full streaming/dictionary, memory and
+and gzip incremental decoders. The
+[resumable Brotli compressed header](performance/br/resumable-compressed-header.md)
+retains completed sub-parsers and Huffman trees across small input chunks, with
+mid-tree continuation still open. Full streaming/dictionary, memory and
 multi-platform comparisons remain required for the industry-best objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and

@@ -1439,6 +1439,19 @@ const IncrementalCopyCodec = struct {
         return bit_count_math.toLocal(reader.bitPosition());
     }
 
+    pub const HeaderParseProgress = CompressedHeaderParseProgress;
+    pub fn parseMetaBlockHeaderIntoWithProgress(
+        prefix: []const u8,
+        bit_len: usize,
+        decoded_len: Counter,
+        final: bool,
+        large_window: bool,
+        out: *Header,
+        progress: *HeaderParseProgress,
+    ) IncrementalCopyCodec.Error!usize {
+        return parseCompressedHeaderWithProgress(prefix, bit_len, decoded_len, final, large_window, out, progress);
+    }
+
     pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: Counter, final: bool, large_window: bool) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
         const compressed = try readMinimalCompressedHeaderWithOptions(&reader, large_window);
@@ -10551,6 +10564,8 @@ var test_materialize_context_primary = false;
 var test_context_primary_count_calls: usize = 0;
 var test_context_primary_cold_success_calls: usize = 0;
 var test_context_primary_recent_max: usize = 0;
+var test_compressed_header_tree_reads: usize = 0;
+var test_compressed_header_resumes: usize = 0;
 
 fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
     var profile_scope = trace.begin(.preferred_context, input.len, commands.len);
@@ -15575,7 +15590,7 @@ const CompressedHeaderShape = struct {
     ndirect: u16,
 };
 
-const CompressedHeaderTreeCounts = struct {
+pub const CompressedHeaderTreeCounts = struct {
     literal: u16,
     distance: u16,
 };
@@ -15718,6 +15733,21 @@ const LargeCompressedHeaderShape = struct {
     ndirect: u16,
 };
 
+/// Persistent compressed-header parser position. Completed block switches,
+/// context maps and Huffman trees stay in the destination header; a retry
+/// resumes at the next uncompleted unit instead of re-reading the prefix.
+pub const CompressedHeaderParseProgress = struct {
+    stage: Stage = .switches,
+    shape: LargeCompressedHeaderShape = undefined,
+    tree_counts: CompressedHeaderTreeCounts = undefined,
+    literal_tree_index: u16 = 0,
+    command_tree_index: u16 = 0,
+    distance_tree_index: u16 = 0,
+    bit_offset: usize = 0,
+
+    pub const Stage = enum { switches, context_maps, literal_trees, command_trees, distance_trees, done };
+};
+
 inline fn readLargeCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, large_window: bool) Error!LargeCompressedHeaderShape {
     const nbltypes_l = try readBlockTypeCount(reader);
     if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
@@ -15817,6 +15847,123 @@ inline fn readLargeCompressedHeaderDistanceTrees(comptime distance_capacity: usi
         }
     }
     header.active_packed_distance_tree_index = std.math.maxInt(u16);
+}
+
+inline fn readLargeCompressedHeaderLiteralTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16) Error!void {
+    const tree = try readLargePrefixCodeRuntime(large_literal_alphabet_capacity, 256, reader);
+    if (index < inline_literal_tree_count) {
+        header.literal_trees[index] = tree;
+    } else {
+        header.packed_literal_trees[index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&tree);
+    }
+    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
+}
+
+inline fn readLargeCompressedHeaderCommandTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16) Error!void {
+    const tree = try readLargePrefixCodeRuntime(large_command_alphabet_capacity, 704, reader);
+    if (index < inline_command_tree_count) {
+        header.insert_copy_trees[index] = tree;
+    } else {
+        header.packed_insert_copy_trees[index - inline_command_tree_count] = PackedPrefixCode(large_command_alphabet_capacity).init(&tree);
+    }
+    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
+}
+
+inline fn readLargeCompressedHeaderDistanceTreeAt(
+    comptime distance_capacity: usize,
+    reader: *bitstream.BitReader,
+    header: *LargeWindowCompressedHeader,
+    index: u16,
+    alphabet_size_max: usize,
+    alphabet_size: usize,
+) Error!void {
+    const tree = try readPrefixCodeRuntimeLimited(distance_capacity, alphabet_size_max, alphabet_size, reader);
+    if (index < inline_distance_tree_count) {
+        header.distance_trees[index] = tree;
+    } else {
+        header.packed_distance_trees[index - inline_distance_tree_count] = PackedPrefixCode(distance_capacity).init(&tree);
+    }
+    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
+}
+
+/// Resume-capable compressed-header parser. Completed sub-parsers and trees
+/// remain in `out`; `progress` stores the next unit's bit offset. A
+/// `TruncatedFrame` return keeps the progress at the failed unit so appending
+/// bytes retries only that unit instead of the whole prefix.
+pub fn parseCompressedHeaderWithProgress(
+    prefix: []const u8,
+    bit_len: usize,
+    decoded_len: Counter,
+    final: bool,
+    large_window: bool,
+    out: *IncrementalCopyCodec.Header,
+    progress: *CompressedHeaderParseProgress,
+) IncrementalCopyCodec.Error!usize {
+    var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
+    if (progress.bit_offset > bit_len) return error.TruncatedFrame;
+    reader.byte_index = progress.bit_offset / 8;
+    reader.bit_index = @intCast(progress.bit_offset % 8);
+    if (comptime builtin.is_test) {
+        if (progress.stage != .switches) test_compressed_header_resumes += 1;
+    }
+    while (true) switch (progress.stage) {
+        .switches => {
+            progress.shape = try readLargeCompressedHeaderBlockSwitches(&reader, &out.compressed, large_window);
+            progress.bit_offset = reader.bitPosition();
+            progress.stage = .context_maps;
+        },
+        .context_maps => {
+            progress.tree_counts = try readLargeCompressedHeaderContextMaps(&reader, &out.compressed, progress.shape);
+            progress.bit_offset = reader.bitPosition();
+            progress.stage = .literal_trees;
+        },
+        .literal_trees => {
+            while (progress.literal_tree_index < progress.tree_counts.literal) {
+                progress.bit_offset = reader.bitPosition();
+                try readLargeCompressedHeaderLiteralTreeAt(&reader, &out.compressed, progress.literal_tree_index);
+                progress.literal_tree_index += 1;
+            }
+            @memset(&out.compressed.packed_literal_cache_indices, std.math.maxInt(u16));
+            out.compressed.packed_literal_cache_next = 0;
+            progress.bit_offset = reader.bitPosition();
+            progress.stage = .command_trees;
+        },
+        .command_trees => {
+            while (progress.command_tree_index < progress.shape.command_block_types) {
+                progress.bit_offset = reader.bitPosition();
+                try readLargeCompressedHeaderCommandTreeAt(&reader, &out.compressed, progress.command_tree_index);
+                progress.command_tree_index += 1;
+            }
+            out.compressed.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
+            progress.bit_offset = reader.bitPosition();
+            progress.stage = .distance_trees;
+        },
+        .distance_trees => {
+            while (progress.distance_tree_index < progress.tree_counts.distance) {
+                progress.bit_offset = reader.bitPosition();
+                try readLargeCompressedHeaderDistanceTreeAt(
+                    large_max_distance_alphabet_size,
+                    &reader,
+                    &out.compressed,
+                    progress.distance_tree_index,
+                    progress.shape.distance_alphabet_size_max,
+                    progress.shape.distance_alphabet_size,
+                );
+                progress.distance_tree_index += 1;
+            }
+            out.compressed.active_packed_distance_tree_index = std.math.maxInt(u16);
+            progress.bit_offset = reader.bitPosition();
+            progress.stage = .done;
+        },
+        .done => break,
+    };
+    progress.bit_offset = reader.bitPosition();
+    out.decoded_len = decoded_len;
+    out.final = final;
+    out.large_window = large_window;
+    finishLargeCompressedHeader(&out.compressed, progress.shape, progress.tree_counts);
+    resetCompressedHeaderLookupStates(&out.compressed);
+    return bit_count_math.toLocal(reader.bitPosition());
 }
 
 inline fn finishLargeCompressedHeader(header: *LargeWindowCompressedHeader, shape: LargeCompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
@@ -42184,4 +42331,45 @@ test "Brotli incremental header Into parsing preserves active fields and truncat
 test "Brotli prepared prefix lookup and reader peek contracts" {
     _ = @import("br/incremental/bit_reader.zig");
     _ = @import("br/incremental/prepared_lookup_tests.zig");
+}
+
+test "Brotli incremental header progress retains completed trees" {
+    const Result = struct { tree_reads: usize, resumes: usize };
+    const run = struct {
+        fn decode(encoded: []const u8, expected: []const u8, chunk: usize) !Result {
+            var history: [64 * 1024]u8 = undefined;
+            var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+                .max_output_len = expected.len,
+                .expected_output_len = expected.len,
+            });
+            const output = try std.testing.allocator.alloc(u8, expected.len);
+            defer std.testing.allocator.free(output);
+            test_compressed_header_tree_reads = 0;
+            test_compressed_header_resumes = 0;
+            var input_offset: usize = 0;
+            var output_offset: usize = 0;
+            while (decoder.snapshot().phase != .done) {
+                const input_end = @min(encoded.len, input_offset + chunk);
+                const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..]);
+                input_offset += step.progress.input_read;
+                output_offset += step.progress.output_written;
+                if (step.progress.input_read == 0 and step.progress.output_written == 0) {
+                    if (step.status == .need_input and input_offset == encoded.len) return error.TruncatedFrame;
+                    if (step.status == .need_output and output_offset == output.len) return error.OutputTooSmall;
+                }
+            }
+            try std.testing.expectEqual(expected.len, output_offset);
+            try std.testing.expectEqualSlices(u8, expected, output);
+            return .{ .tree_reads = test_compressed_header_tree_reads, .resumes = test_compressed_header_resumes };
+        }
+    }.decode;
+    const source = @embedFile("br/dictionary.bin");
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, source);
+    defer std.testing.allocator.free(encoded);
+    const whole = try run(encoded, source, encoded.len);
+    const split = try run(encoded, source, 1);
+    try std.testing.expect(whole.resumes == 0);
+    try std.testing.expect(split.resumes != 0);
+    try std.testing.expectEqual(whole.tree_reads, split.tree_reads);
+    try std.testing.expect(split.tree_reads != 0);
 }
