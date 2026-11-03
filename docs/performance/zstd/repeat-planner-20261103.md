@@ -283,3 +283,12 @@ neutral (XML 45.37/46.13M ns versus 45.53/45.95M, NCI 33.83/34.01M versus
 Dropping the cached-plan `valueField` bounds checks in the emission loop was
 neutral on XML (45.45/46.27M ns versus 45.53/45.95M) and only about 0.5% faster
 on NCI, so the checked accessor remains for malformed-plan safety.
+
+A two-way short hash bucket, which probes the previous occupant before falling
+back to a literal, moved 1 MiB NCI 107,813 -> 107,511 and XML 167,595 ->
+167,127 (0.28% each) but cost 13.7% and 5.2% of encode time. Other 1 MiB rows
+were unchanged because only extreme blocks use the double-fast path. A gate
+that probed the second candidate only when the first match was shorter than
+eight bytes recovered the timing but gave back the XML gain (167,610 bytes) and
+did not lower the NCI cost. Rejected: sub-percent size for a double-digit
+extreme-block slowdown, consistent with the earlier 16-bit-table rejection.
