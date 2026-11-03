@@ -41,6 +41,8 @@ value and final repcodes, so emission no longer replays the state machine over
 every sequence. Match seeding inserts each distinct anchor once; acceleration
 1 previously wrote the match end twice. Both table DPs handle the final
 sequence position separately, removing a per-state last-position branch.
+The prepared candidate now carries its proven final repcodes to commit, so the
+large-block path no longer decodes the same bitstream a second time.
 
 ## Measurement
 
@@ -63,8 +65,9 @@ benchmark reports the best round.
 | Cached offset extras | 187,489 | 87,070,589 | 0.2896 |
 | Deduplicated seed anchors | 187,489 | 84,303,965 | 0.2804 |
 | Split last-position DP | 187,489 | 84,138,159 | 0.2799 |
+| Prepared commit repcodes | 187,489 | 81,752,170 | 0.2729 |
 
-The combined change is **3.57 times faster**; the repeat-skip stage adds 28
+The combined change is **3.68 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -73,7 +76,12 @@ matrix; libzstd still encodes this input substantially faster. The repeat
 planner remains the largest encoder symbol below the skip threshold.
 [Raw rows](repeat-planner-20261103.csv) retain the stage timings and wire sizes.
 
-Two follow-ups were measured over five iterations and five rounds and rejected
-as noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus
-147.85-147.91M ns) and a direct block-only hash path (147.38-148.02M ns). Both
-kept identical wire, so neither justified the extra code.
+Follow-ups were measured over five iterations and five rounds and rejected as
+noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus
+147.85-147.91M ns), a direct block-only hash path (147.38-148.02M ns) and a
+four-byte block-only match precheck (142.20-141.82M ns versus
+143.55-141.16M ns). All kept identical wire, so none justified the extra code.
+A conditional long-match probe in double-fast was slower (97.4M ns versus
+89.0M ns) with a 49-byte wire change. A commit cache stored in
+`SequenceEncoderState` measured 87.1-87.4M ns versus 85.9M ns; the out-parameter
+form above avoids that per-block state copy and is adopted.

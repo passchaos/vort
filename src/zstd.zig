@@ -723,6 +723,11 @@ const ControlledEncoderCodec = struct {
     pub const State = LiteralOnlyEncoderState;
     pub const SequenceScratch = LargeSequenceScratch;
     pub const BlockScratch = NativeBlockEncodeScratch;
+    pub const SequencePrepareResult = struct {
+        ready: bool,
+        /// Final repcodes already computed while preparing the candidate.
+        final_offsets: ?[3]usize = null,
+    };
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, options: Options) zstd.Error!void {
         try emitFrameHeader(allocator, out, try checkedUsizeToU64(input_len), options);
     }
@@ -767,8 +772,13 @@ const ControlledEncoderCodec = struct {
             return emitLargeSequenceCompressedBlockWithState(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, null, initial_repeated_offsets);
         return emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &block_scratch.single_sequence_emit);
     }
-    pub fn prepareSequences(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch) zstd.Error!bool {
-        return prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, scratch);
+    pub fn prepareSequences(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch) zstd.Error!SequencePrepareResult {
+        var final_offsets: ?[3]usize = null;
+        const ready = try prepareSequenceCandidateForFrameWithScratchFinal(allocator, candidate, block, last, &state.sequence_state, scratch, &final_offsets);
+        return .{ .ready = ready, .final_offsets = final_offsets };
+    }
+    pub fn commitSequencesPrepared(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State, final_offsets: ?[3]usize) zstd.Error!void {
+        try appendSequenceCandidateAndCommitWithReps(allocator, out, candidate, last, &state.sequence_state, final_offsets);
     }
     pub fn commitSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State) zstd.Error!void {
         try appendSequenceCandidateAndCommit(allocator, out, candidate, last, &state.sequence_state);
@@ -25515,6 +25525,18 @@ fn prepareSequenceCandidateForFrameWithScratch(
     current: *const SequenceEncoderState,
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
+    return prepareSequenceCandidateForFrameWithScratchFinal(allocator, candidate, block, last, current, large_sequence_scratch, null);
+}
+
+fn prepareSequenceCandidateForFrameWithScratchFinal(
+    allocator: std.mem.Allocator,
+    candidate: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    current: *const SequenceEncoderState,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+    final_offsets: ?*?[3]usize,
+) Error!bool {
     if (candidate.items.len < 3) return error.CorruptFrame;
     const header = std.mem.readInt(u24, candidate.items[0..3], .little);
     if (((header >> 1) & 0x3) != 2) return error.CorruptFrame;
@@ -25580,6 +25602,7 @@ fn prepareSequenceCandidateForFrameWithScratch(
         try candidate.ensureTotalCapacity(allocator, replacement.items.len);
         candidate.clearRetainingCapacity();
         candidate.appendSliceAssumeCapacity(replacement.items);
+        if (final_offsets) |out| out.* = scratch.offset_extras.items[0..3].*;
         return true;
     }
     if (section.sequence_count == 1 and
@@ -25662,6 +25685,17 @@ fn appendSequenceCandidateAndCommit(
     last: bool,
     state: *SequenceEncoderState,
 ) Error!void {
+    return appendSequenceCandidateAndCommitWithReps(allocator, out, candidate, last, state, null);
+}
+
+fn appendSequenceCandidateAndCommitWithReps(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    candidate: []const u8,
+    last: bool,
+    state: *SequenceEncoderState,
+    final_offsets: ?[3]usize,
+) Error!void {
     if (last) return out.appendSlice(allocator, candidate);
 
     // Decode only the compact sequence description to derive the committed
@@ -25682,15 +25716,29 @@ fn appendSequenceCandidateAndCommit(
             try parseSequenceModeSpec(payload, &sequence_offset, section.sequence_count),
             next.previous_tables,
         );
-        var decode_state = try initSequenceDecodeState(
-            &spec,
-            section.sequence_count,
-            try ReverseBitReader.init(payload[spec.bitstream_offset..]),
-            next.repeated_offsets,
-        );
-        while (decode_state.remaining != 0) _ = try readModeSequence(&decode_state);
+        if (final_offsets) |reps| {
+            if (comptime builtin.is_test) {
+                var check_state = try initSequenceDecodeState(
+                    &spec,
+                    section.sequence_count,
+                    try ReverseBitReader.init(payload[spec.bitstream_offset..]),
+                    next.repeated_offsets,
+                );
+                while (check_state.remaining != 0) _ = try readModeSequence(&check_state);
+                std.debug.assert(std.meta.eql(check_state.repeated_offsets, reps));
+            }
+            next.repeated_offsets = reps;
+        } else {
+            var decode_state = try initSequenceDecodeState(
+                &spec,
+                section.sequence_count,
+                try ReverseBitReader.init(payload[spec.bitstream_offset..]),
+                next.repeated_offsets,
+            );
+            while (decode_state.remaining != 0) _ = try readModeSequence(&decode_state);
+            next.repeated_offsets = decode_state.repeated_offsets;
+        }
         next.previous_tables = spec.tables();
-        next.repeated_offsets = decode_state.repeated_offsets;
     }
     try out.appendSlice(allocator, candidate);
     state.* = next;

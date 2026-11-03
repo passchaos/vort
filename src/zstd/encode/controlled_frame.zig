@@ -91,13 +91,14 @@ pub fn Encoder(comptime Codec: type) type {
             const candidate = &block_scratch.candidate;
             const fallback = &block_scratch.best;
             try validateRecords(source, records.items);
-            const ready = records.items.len != 0 and try Codec.writeSequences(allocator, candidate, block, last, records.items, scratch, block_scratch, state) and
-                try Codec.prepareSequences(allocator, candidate, block, last, state, scratch);
+            var prepared: Codec.SequencePrepareResult = .{ .ready = false };
+            if (records.items.len != 0 and try Codec.writeSequences(allocator, candidate, block, last, records.items, scratch, block_scratch, state))
+                prepared = try Codec.prepareSequences(allocator, candidate, block, last, state, scratch);
             var next_huffman = state.previous_huffman_plan;
             if (!try Codec.writeHuffman(allocator, fallback, block, last, &next_huffman))
                 try Codec.writeRaw(allocator, fallback, block, last);
-            if (ready and candidate.items.len <= fallback.items.len) {
-                try Codec.commitSequences(allocator, out, candidate.items, last, state);
+            if (prepared.ready and candidate.items.len <= fallback.items.len) {
+                try Codec.commitSequencesPrepared(allocator, out, candidate.items, last, state, prepared.final_offsets);
                 state.previous_huffman_plan = null;
                 countReferences(profile, source, records.items);
             } else {
