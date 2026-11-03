@@ -128,8 +128,10 @@ far-only incremental candidate admission. The final Brotli family passes
 A fresh all-twelve-file32/64KiB q10/q11 epoch directly records current-source
 Brotli1.2.0 time ratios `6.616182/4.882923` for q10 and
 `5.195849/2.318273` for q11, at size `1.072352/1.075770` and
-`1.098585/1.103076`. The smaller-corpus histogram epoch above retains its
-scope. Native command-start queues, actual-tree priors, price caches,
+`1.098585/1.103076`. The explicit q10/q11 64 KiB command-state opt-in lowers
+the 64 KiB XML wire from 4,556 to 4,093 bytes (q10 ratio 0.9832, q11 1.0412
+versus reference) at about 2.5x encode time; default policies are unchanged.
+The smaller-corpus histogram epoch above retains its scope. Native command-start queues, actual-tree priors, price caches,
 minimum-cost bounds and new-length frontiers improve isolated parse work or
 size but still fail default end-to-end throughput/control criteria. They
 remain isolated experiments. Repeated entropy fitting/full-wire candidate

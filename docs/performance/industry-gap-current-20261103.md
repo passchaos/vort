@@ -47,7 +47,10 @@ size summaries do not guarantee an improvement on every input.
 | Brotli q10; twelve 32/64 KiB prefixes | 6.62 / 4.88 | 1.0724 / 1.0758 | [Command/model study](brotli-command-start-model.md), earlier epoch |
 | Brotli q11; twelve 32/64 KiB prefixes | 5.20 / 2.32 | 1.0986 / 1.1031 | Same earlier epoch |
 
-The Deflate levels have different algorithms and budgets. Zstd's native HQ
+The explicit q10/q11 `command_state_max_input_kib=64` opt-in reduces the 64 KiB
+XML prefix from 4,556 to 4,093 bytes (q10 size ratio 0.9832, q11 1.0412 versus
+the reference) at about 2.5x encode time; the default 8 KiB policy and wires
+are unchanged. The Deflate levels have different algorithms and budgets. Zstd's native HQ
 parser also differs from upstream despite equivalent requested strategy
 controls. These are useful points on the speed/size tradeoff, rather than a
 complete matched-quality frontier. Zstd periodic 4 KiB controls retain about
