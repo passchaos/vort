@@ -142,7 +142,9 @@ dispatch, skips the repeat DP above 2,048 sequences, marks the dictionary hash
 segment unlikely, hashes contiguous history seeds directly and reads block
 hash lookups from the block; the 1 MiB XML level-1 fast encode is 6.65 times
 faster with 34 additional wire bytes
-(0.018%). A
+(0.018%). The dedicated upstream Zstd decodecorpus gate passes 9 campaigns,
+9,900 cases and 5,376 block-stream cases with all 64 sequence-mode
+combinations, including raw, RLE and 64 KiB-1 MiB dictionary variants. A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
 encode speed as the next concrete Brotli gap. The

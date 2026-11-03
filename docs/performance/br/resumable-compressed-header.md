@@ -33,7 +33,9 @@ passes 1,533 tests with one existing platform skip out of 1,534 and exit zero.
 `run-br-upstream-multiblock-diff` also passes 98 cases, 7,056 broad
 generated/progressive cases and 1,401 progress-matrix runs, including complex
 trees with `hskip = 3`; an earlier resume version incorrectly rejected that
-legal kind and was fixed before this commit.
+legal kind and was fixed before this commit. A focused unit test constructs a
+`kind = 3` complex tree, truncates it after six of sixteen symbol lengths and
+completes it from the saved mid-tree state.
 
 ## Fragmented measurement
 

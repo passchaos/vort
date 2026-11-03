@@ -63,7 +63,9 @@ dictionary hash segment unlikely, hashes contiguous history seeds directly and
 reads block hash lookups from the block, making the 1 MiB XML level-1 fast
 encode 6.65 times faster with 34 additional
 wire bytes
-(0.018%). A bounded six-file Silesia q8 screen finds
+(0.018%). The dedicated upstream Zstd decodecorpus gate passes 9 campaigns,
+9,900 cases and 5,376 block-stream cases with all 64 sequence-mode
+combinations. A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage
 profile routes speed work to optimal parsing for XML, wire emission for x-ray
 and context clustering across all. A table-driven context lookup lowers q8

@@ -22960,6 +22960,29 @@ fn readPrefixCodeRuntimeResumable(
     return result;
 }
 
+test "resumable prefix code accepts hskip 3 and resumes symbol lengths" {
+    // kind=3 (hskip=3), code-length symbols 4 and 0 both length 1, then sixteen
+    // length-4 target symbols. This is a complete 16-symbol code with no
+    // single-symbol shortcut.
+    const bytes = [_]u8{ 0xdf, 0xfd, 0xff, 0x03 };
+    var tree: HuffmanTreeProgress = .{};
+    var reader = bitstream.BitReader.initBitLength(&bytes, 26);
+    const code = try readPrefixCodeRuntimeResumable(16, 16, 16, &reader, &tree);
+    try std.testing.expect(code.single_symbol == null);
+    try std.testing.expectEqual(@as(usize, 16), code.table.len);
+
+    var resumed: HuffmanTreeProgress = .{};
+    var split = bitstream.BitReader.initBitLength(&bytes, 16);
+    try std.testing.expectError(error.TruncatedFrame, readPrefixCodeRuntimeResumable(16, 16, 16, &split, &resumed));
+    try std.testing.expect(resumed.active);
+    try std.testing.expectEqual(HuffmanTreeProgress.Stage.symbols, resumed.stage);
+    try std.testing.expectEqual(@as(usize, 16), resumed.bit_offset);
+    var extended = bitstream.BitReader.initBitLength(&bytes, 26);
+    const complete = try readPrefixCodeRuntimeResumable(16, 16, 16, &extended, &resumed);
+    try std.testing.expect(complete.single_symbol == null);
+    try std.testing.expectEqual(@as(usize, 16), complete.table.len);
+}
+
 fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
     if (hskip == 1) return error.CorruptFrame;
 
