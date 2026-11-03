@@ -42712,3 +42712,29 @@ test "Brotli q11 command-state override accepts a 64 KiB input ceiling" {
     try validatePlannedEncodeOptions(64 * 1024, .{ .quality = 11, .command_state_max_input_kib = 64 });
     try std.testing.expectError(error.InvalidBlockPlan, validatePlannedEncodeOptions(64 * 1024, .{ .quality = 11, .command_state_max_input_kib = 65 }));
 }
+
+test "Brotli q11 64 KiB command-state opt-in lowers synthetic XML wire" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    const words = [_][]const u8{ "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "theta", "lambda" };
+    var buffer: [256]u8 = undefined;
+    var index: usize = 0;
+    while (payload.items.len < 16 * 1024) : (index += 1) {
+        const word = words[index % words.len];
+        const line = try std.fmt.bufPrint(&buffer, "<item id=\"{d}\" name=\"{s}\"><value>{s}-{d}</value><text>{s} {s} {s}</text></item>\n", .{ index, word, word, index % 97, word, word, word });
+        try payload.appendSlice(std.testing.allocator, line);
+    }
+    try payload.resize(std.testing.allocator, 16 * 1024);
+
+    const base: PlannedEncodeOptions = .{ .quality = 11, .mode = .generic, .window_bits = 16 };
+    const plain = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload.items, base);
+    defer std.testing.allocator.free(plain);
+    var extended = base;
+    extended.command_state_max_input_kib = 16;
+    const smaller = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload.items, extended);
+    defer std.testing.allocator.free(smaller);
+    try std.testing.expect(smaller.len < plain.len);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, smaller);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
