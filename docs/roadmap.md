@@ -55,9 +55,11 @@ finds Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; q8
 encode speed is the next concrete Brotli gap. The
 [q8 stage profile](performance/br/q8-stage-profile-20261103.md) routes that
 work by content: XML is dominated by optimal parsing (63.8%), x-ray by wire
-emission (40.7%), and context proposals remain 17–22% across all. Full
-streaming/dictionary, memory and multi-platform comparisons remain required
-for the industry-best objective.
+emission (40.7%), and context proposals remain 17–22% across all. The
+[table-driven context lookup](performance/br/context-lookup-20261103.md)
+lowers q8 planned encode time 7.4% geometrically on the same six-file screen
+with unchanged wires. Full streaming/dictionary, memory and multi-platform
+comparisons remain required for the industry-best objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

@@ -217,7 +217,7 @@ fn collectHistograms(
             const mode = fixed_mode orelse context_modes.?[block_type];
             const previous = if (position == 0) 0 else input[position - 1];
             const second_previous = if (position < 2) 0 else input[position - 2];
-            const context = literal_context.value(mode, previous, second_previous);
+            const context = literal_context.valueClustered(mode, previous, second_previous);
             const histogram = &histograms[block_type * contexts_per_type + context];
             if (histogram.total == 0) histogram.* = Histogram.init();
             try histogram.add(literal);

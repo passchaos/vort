@@ -44,7 +44,7 @@ pub fn write(comptime S: type, allocator: std.mem.Allocator, writer: anytype, in
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             const tree = if (state.normalized_context) |candidate| blk: {
                 const history = S.history(input, position, options.initial_previous);
-                break :blk candidate.treeFor(literal_context.value(candidate.mode, history[0], history[1]));
+                break :blk candidate.treeFor(literal_context.valueClustered(candidate.mode, history[0], history[1]));
             } else 0;
             const encoder = &literal_encoders[tree];
             if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);

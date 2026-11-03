@@ -50,8 +50,9 @@ now retains completed sub-parsers and Huffman trees across small input chunks;
 mid-tree continuation remains open. A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage
 profile routes speed work to optimal parsing for XML, wire emission for x-ray
-and context clustering across all. Ordinary streaming and standard
-dictionaries are already supported.
+and context clustering across all. A table-driven context lookup lowers q8
+planned encode time 7.4% geometrically on the same screen with unchanged
+wires. Ordinary streaming and standard dictionaries are already supported.
 
 The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
 bounded sampled 8/16-state graph with one pending-LL-aware path, incremental

@@ -133,9 +133,12 @@ mid-tree continuation remains open. A
 encode speed as the next concrete Brotli gap. The
 [q8 stage profile](br/q8-stage-profile-20261103.md) routes that work by
 content: XML is dominated by optimal parsing (63.8%), x-ray by wire emission
-(40.7%), and context proposals remain 17–22% across all. Finite matcher
-candidates, parsing states and entropy priors remain quality limits even where
-all lengths of an admitted match are considered.
+(40.7%), and context proposals remain 17–22% across all. The
+[table-driven context lookup](br/context-lookup-20261103.md) lowers q8
+planned encode time 7.4% geometrically on the same six-file screen with
+unchanged wires. Finite matcher candidates, parsing states and entropy priors
+remain quality limits even where all lengths of an admitted match are
+considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

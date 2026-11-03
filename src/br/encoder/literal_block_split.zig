@@ -180,7 +180,7 @@ fn chooseProposalsMode(comptime memoize: bool, input: []const u8, commands: []co
             if (utf8_context_cutoff) |cutoff| {
                 const previous = if (position == 0) 0 else input[position - 1];
                 const second_previous = if (position < 2) 0 else input[position - 2];
-                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
+                const context = literal_context.valueClustered(literal_context.mode_utf8, previous, second_previous);
                 context_frequencies[literal_context.utf8SuffixTree(context, cutoff)][literal] += 1;
             }
             literal_index += 1;

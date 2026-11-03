@@ -721,7 +721,7 @@ pub fn mixSerializedDictionaryWithMatcherAlloc(
                 initial_previous[1]
             else
                 initial_previous[0];
-            const context = literal_context.value(
+            const context = literal_context.valueClustered(
                 context_mode,
                 previous,
                 second_previous,

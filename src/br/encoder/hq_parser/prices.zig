@@ -120,7 +120,7 @@ pub const Model = struct {
     }
     pub fn context(self: *const Model, source: types.Source, position: usize, previous: [2]u8) u6 {
         const decoded = previousAt(source, position, previous);
-        return @intCast(literal_context.value(self.literal_mode, decoded[0], decoded[1]));
+        return @intCast(literal_context.valueClustered(self.literal_mode, decoded[0], decoded[1]));
     }
     pub fn literalPrice(self: *const Model, source: types.Source, position: usize, previous: [2]u8) u32 {
         if (self.literal_position_prices) |prices| return prices[position];

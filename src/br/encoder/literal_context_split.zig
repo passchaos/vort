@@ -380,7 +380,7 @@ fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []
             const second_previous = if (position < 2) 0 else input[position - 2];
             analysis.total[literal] += 1;
             inline for (0..mode_count) |mode_value| {
-                const context = literal_context.value(@intCast(mode_value), previous, second_previous);
+                const context = literal_context.valueClustered(@intCast(mode_value), previous, second_previous);
                 analysis.by_mode[mode_value][context][literal] += 1;
             }
             analysis.literal_count += 1;
@@ -434,7 +434,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
                 initial_previous[1]
             else
                 input[position - 2];
-            const context = literal_context.value(mode, previous, second_previous);
+            const context = literal_context.valueClustered(mode, previous, second_previous);
             by_context[context][literal] += 1;
             total[literal] += 1;
             literal_count += 1;
@@ -1256,7 +1256,7 @@ test "literal context split reports exact tree and map savings" {
     for (input, 0..) |literal, position| {
         const previous = if (position == 0) 0 else input[position - 1];
         const second_previous = if (position < 2) 0 else input[position - 2];
-        const context = literal_context.value(candidate.mode, previous, second_previous);
+        const context = literal_context.valueClustered(candidate.mode, previous, second_previous);
         total[literal] += 1;
         trees[candidate.treeFor(context)][literal] += 1;
     }
