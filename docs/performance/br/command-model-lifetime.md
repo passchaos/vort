@@ -209,3 +209,10 @@ q11's 32 KiB optimal-input limit. With `--command-state-max-input-kib 64`, the
 versus the 3,931-byte reference) at 207.7 ms versus 83.9 ms; the default q11
 wire stays 4,556 bytes. Dickens and x-ray again keep identical wires, so both
 qualities retain the 8 KiB default and expose 64 KiB only as an opt-in.
+
+An adaptive auto-gate was explored but not adopted. Over 16 KiB prefixes the
+unique 4-gram ratios are about 0.105/0.43/0.95 for XML/dickens/x-ray, and a
+16 KiB q10 encode shows the extended command-state candidate winning only on
+XML (1,644 -> 1,560 bytes); 8 KiB prefixes show no difference. Two prefix
+encodes cost more than the direct opt-in for XML and add roughly 60% time for
+non-XML inputs, so the explicit 64 KiB opt-in remains the interface.
