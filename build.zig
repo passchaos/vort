@@ -713,9 +713,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     zstd_tests_mod.addObject(zstd_huffman_x2_obj);
+    const zstd_test_filter = b.option(
+        []const u8,
+        "zstd-test-filter",
+        "Compile and run only Zstandard tests whose names contain this text",
+    );
     const zstd_tests = b.addTest(.{
         .name = "vort-zstd-tests",
         .root_module = zstd_tests_mod,
+        .filters = if (zstd_test_filter) |filter| &.{filter} else &.{},
     });
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");

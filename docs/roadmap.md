@@ -41,10 +41,12 @@ uses one proven 16-byte move for short dense Zstd matches and parses Brotli
 incremental headers into their owned state. It also repairs oversized decoder
 test fixtures while preserving their original assertions under explicit 8 MiB
 stack limits. Final-source timing and gate evidence remain separate from the
-earlier screens. The next concrete decoder capabilities are resumable Brotli
-entropy-header parsing, prepared Zstd decode dictionaries, and optional Deflate
-block-boundary pause/checkpoint controls. Full streaming/dictionary, memory and
-multi-platform comparisons remain required for the industry-best objective.
+earlier screens. The [prepared Zstd decode dictionary](performance/zstd/prepared-decode-dictionary.md)
+now validates a standard dictionary's Huffman/FSE/repeat state once and reuses
+that immutable snapshot across frames. The next concrete decoder capabilities
+are resumable Brotli entropy-header parsing and optional Deflate block-boundary
+pause/checkpoint controls. Full streaming/dictionary, memory and multi-platform
+comparisons remain required for the industry-best objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

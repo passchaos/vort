@@ -42,10 +42,11 @@ The [short-match and header ownership study](brotli-header-ownership.md) follows
 the decompression priority with a narrower dense Zstd copy and an in-place
 Brotli incremental header parser. It retains the rejected Reader experiment,
 explicit 8 MiB stack failures and isolated fixture repairs. The live-source
-performance epoch is kept separately. Remaining concrete control/reuse gaps
-include Brotli entropy-header substate continuation, a prepared standard Zstd
-decode-dictionary handle, and Deflate block-boundary pause/checkpoint APIs;
-ordinary streaming and standard dictionaries are already supported.
+performance epoch is kept separately. The prepared standard Zstd
+decode-dictionary handle now reuses one validated entropy snapshot across
+frames; remaining concrete control/reuse gaps include Brotli entropy-header
+substate continuation and Deflate block-boundary pause/checkpoint APIs.
+Ordinary streaming and standard dictionaries are already supported.
 
 The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
 bounded sampled 8/16-state graph with one pending-LL-aware path, incremental

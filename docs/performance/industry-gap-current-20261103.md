@@ -118,11 +118,14 @@ candidate families, preserving the original parameter chooser and strict ties.
 
 The [functional audit](industry-gap-audit.md#current-functionality) records
 flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,
-and Brotli shared dictionaries/Large Window. Remaining controls include
-resumable Brotli entropy-header substates, prepared standard Zstd decode
-dictionaries and optional Deflate block-boundary pause/checkpoint APIs.
-Finite matcher candidates, parsing states and entropy priors remain quality
-limits even where all lengths of an admitted match are considered.
+and Brotli shared dictionaries/Large Window. The
+[prepared standard Zstd decode dictionary](zstd/prepared-decode-dictionary.md)
+now validates and reconstructs one entropy snapshot that frames reuse, while
+mismatched owners are rejected before entropy work. Remaining controls include
+resumable Brotli entropy-header substates and optional Deflate block-boundary
+pause/checkpoint APIs. Finite matcher candidates, parsing states and entropy
+priors remain quality limits even where all lengths of an admitted match are
+considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

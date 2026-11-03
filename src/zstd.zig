@@ -157,6 +157,7 @@ var test_multi_sequence_winner_only_hits: usize = 0;
 var test_multi_sequence_winner_hits: [3]usize = @splat(0);
 var test_disable_hash_token_lower_bound = false;
 var test_hash_token_lower_bound_hits: usize = 0;
+var test_standard_dictionary_parse_calls: usize = 0;
 var test_disable_precomputed_beam_greedy_prune = false;
 var test_precomputed_beam_greedy_prune_hits: usize = 0;
 var test_disable_precomputed_beam_single_index_prune = false;
@@ -3168,6 +3169,10 @@ pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
     standard_bytes: ?[]const u8 = null,
+    /// Optional caller-owned prepared entropy snapshot. Only
+    /// `PreparedDecodeDictionary.handle()` publishes this; the pointer must
+    /// outlive every decode that borrows it.
+    prepared: ?*const PreparedDecodeState = null,
 
     pub fn kind(self: NativeDictionary) DictionaryKind {
         return if (self.standard_bytes == null) .raw_content else .standard_full;
@@ -3224,6 +3229,51 @@ pub const NativeDictionary = struct {
     pub fn initFromMetadata(metadata: dictionary_mod.Metadata, content: []const u8) Error!NativeDictionary {
         try metadata.validateBytes(content, native_dictionary_window_len);
         return init(derivedId(content), content);
+    }
+};
+
+/// Caller-owned snapshot of a standard dictionary's initial entropy state.
+/// Frame decoding copies this snapshot into its mutable per-frame state, so a
+/// prepared owner can be reused without re-parsing the dictionary bytes.
+pub const PreparedDecodeState = struct {
+    id: u32,
+    content_ptr: [*]const u8,
+    content_len: usize,
+    state: SequenceFrameState,
+};
+
+/// Reusable DDict-style standard Zstd decode dictionary. `init` validates the
+/// full dictionary and reconstructs its Huffman tree, sequence FSE tables and
+/// repeat offsets once. `handle` returns a borrowed `NativeDictionary` whose
+/// frames reuse that snapshot.
+///
+/// The owner must stay alive and unmodified while any handle is decoding, and
+/// it must not be moved after publishing a handle because the handle points
+/// into `state`.
+pub const PreparedDecodeDictionary = struct {
+    dictionary: NativeDictionary,
+    state: PreparedDecodeState,
+
+    pub fn init(dictionary: NativeDictionary) Error!PreparedDecodeDictionary {
+        const state = if (dictionary.standard_bytes) |bytes|
+            try parseStandardDictionaryState(dictionary, bytes)
+        else
+            SequenceFrameState{};
+        return .{
+            .dictionary = dictionary,
+            .state = .{
+                .id = dictionary.id,
+                .content_ptr = dictionary.content.ptr,
+                .content_len = dictionary.content.len,
+                .state = state,
+            },
+        };
+    }
+
+    pub fn handle(self: *const PreparedDecodeDictionary) NativeDictionary {
+        var dictionary = self.dictionary;
+        dictionary.prepared = &self.state;
+        return dictionary;
     }
 };
 
@@ -10178,11 +10228,17 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictio
 
 fn initialSequenceFrameState(dictionary: ?NativeDictionary) Error!SequenceFrameState {
     const dict = dictionary orelse return .{};
+    if (dict.prepared) |prepared| {
+        if (prepared.id != dict.id or prepared.content_ptr != dict.content.ptr or prepared.content_len != dict.content.len)
+            return error.InvalidDictionaryMetadata;
+        return prepared.state;
+    }
     const bytes = dict.standard_bytes orelse return .{};
     return try parseStandardDictionaryState(dict, bytes);
 }
 
 fn parseStandardDictionaryState(dict: NativeDictionary, bytes: []const u8) Error!SequenceFrameState {
+    if (comptime builtin.is_test) test_standard_dictionary_parse_calls += 1;
     const view = try inspectStandardDictionary(bytes);
     if (view.id != dict.id or view.content.ptr != dict.content.ptr or view.content.len != dict.content.len)
         return error.InvalidDictionaryMetadata;
@@ -17179,6 +17235,47 @@ test "zstd dictionary-aware sequence inspector seeds trained repeat tables" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqual(@as(usize, 2304), decoded.len);
     try std.testing.expectEqual(@as(u32, 1_658_167_111), checksum_mod.crc32(decoded));
+}
+
+test "zstd prepared standard decode dictionary reuses entropy state" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(frame);
+    _ = try std.fmt.hexToBytes(frame, frame_hex);
+
+    const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    var prepared = try PreparedDecodeDictionary.init(standard.dictionary);
+    test_standard_dictionary_parse_calls = 0;
+    defer test_standard_dictionary_parse_calls = 0;
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, prepared.handle());
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 0), test_standard_dictionary_parse_calls);
+    try std.testing.expectEqual(@as(usize, 2304), decoded.len);
+    try std.testing.expectEqual(@as(u32, 1_658_167_111), checksum_mod.crc32(decoded));
+
+    const ordinary = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, standard.dictionary);
+    defer std.testing.allocator.free(ordinary);
+    try std.testing.expectEqualSlices(u8, ordinary, decoded);
+    try std.testing.expect(test_standard_dictionary_parse_calls > 0);
+
+    var inconsistent = prepared.handle();
+    inconsistent.content = inconsistent.content[1..];
+    test_standard_dictionary_parse_calls = 0;
+    try std.testing.expectError(error.InvalidDictionaryMetadata, decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, inconsistent));
+    try std.testing.expectEqual(@as(usize, 0), test_standard_dictionary_parse_calls);
+
+    var wrong_id = prepared.handle();
+    wrong_id.id +%= 1;
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, wrong_id));
+
+    const raw = NativeDictionary.initRawContent("raw-history");
+    var raw_prepared = try PreparedDecodeDictionary.init(raw);
+    try std.testing.expectEqual(@as(?*const PreparedDecodeState, null), raw_prepared.dictionary.prepared);
+    _ = raw_prepared.handle();
 }
 
 test "zstd native writer can reuse standard dictionary sequence tables" {
