@@ -49,8 +49,12 @@ adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib
 and gzip incremental decoders. The
 [resumable Brotli compressed header](performance/br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks, with
-mid-tree continuation still open. Full streaming/dictionary, memory and
-multi-platform comparisons remain required for the industry-best objective.
+mid-tree continuation still open. A
+[bounded six-file Silesia q8 screen](performance/br/full-file-q8-20261103.md)
+finds Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; q8
+encode speed is the next concrete Brotli gap. Full streaming/dictionary, memory
+and multi-platform comparisons remain required for the industry-best
+objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

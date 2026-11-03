@@ -127,9 +127,12 @@ exposes a one-shot boundary step and query for raw, zlib and gzip incremental
 decoders. The
 [resumable Brotli compressed header](br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks;
-mid-tree continuation remains open. Finite matcher candidates, parsing states
-and entropy priors remain quality limits even where all lengths of an admitted
-match are considered.
+mid-tree continuation remains open. A
+[bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
+1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
+encode speed as the next concrete Brotli gap. Finite matcher candidates,
+parsing states and entropy priors remain quality limits even where all lengths
+of an admitted match are considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

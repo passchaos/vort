@@ -47,8 +47,9 @@ decode-dictionary handle now reuses one validated entropy snapshot across
 frames, and raw/zlib/gzip incremental Deflate decoders expose a one-shot
 block-boundary step and query. Incremental Brotli compressed-header parsing
 now retains completed sub-parsers and Huffman trees across small input chunks;
-mid-tree continuation remains open. Ordinary streaming and standard
-dictionaries are already supported.
+mid-tree continuation remains open. A bounded six-file Silesia q8 screen finds
+Vort 1.7% smaller but 3.6 times slower than system libbrotli q8. Ordinary
+streaming and standard dictionaries are already supported.
 
 The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
 bounded sampled 8/16-state graph with one pending-LL-aware path, incremental
