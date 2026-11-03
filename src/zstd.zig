@@ -29840,11 +29840,14 @@ const ReverseBitstreamWriter = struct {
     }
 
     fn flushBytes(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {
-        while (self.bit_count >= 8) {
-            try out.append(allocator, @truncate(self.accumulator));
+        const byte_count = self.bit_count / 8;
+        if (byte_count == 0) return;
+        try out.ensureUnusedCapacity(allocator, byte_count);
+        for (0..byte_count) |_| {
+            out.appendAssumeCapacity(@truncate(self.accumulator));
             self.accumulator >>= 8;
-            self.bit_count -= 8;
         }
+        self.bit_count -= @intCast(byte_count * 8);
     }
 
     fn finish(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {

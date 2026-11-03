@@ -30,6 +30,10 @@ planner now use the cached planner. The scalar plan re-validated every value
 against its selected symbol, duplicating work the alternative builders already
 did; the cached plan consumes their code arrays and precomputed value bits.
 
+The reverse bitstream writer now reserves capacity once per flush and appends
+each completed byte with `appendAssumeCapacity`, instead of checking capacity
+on every byte.
+
 ## Measurement
 
 `run-zstd-encode-bench` on the 1 MiB XML prefix, level 1 with explicit fast
@@ -45,10 +49,10 @@ benchmark reports the best round.
 | Repeat skip above 4,096 sequences | 187,489 | 114,806,784 | 0.3819 |
 | Closed-form offset code | 187,489 | 107,072,102 | 0.3562 |
 | Cached re-emission planner | 187,489 | 92,902,760 | 0.3090 |
+| Batched bit flush | 187,489 | 91,256,348 | 0.3035 |
 
-The combined change is **3.24 times faster**; the repeat-skip stage adds 28
-bytes (0.015%) to this row, and the offset and planner changes leave the wire
-unchanged.
+The combined change is **3.29 times faster**; the repeat-skip stage adds 28
+bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
 This remains a single-input, single-strategy screen and is not a full Zstd
