@@ -47,11 +47,13 @@ directly against the current frame state, scans intra-block matches without
 segment dispatch, skips the repeat DP above 2,048 sequences, marks the
 dictionary hash segment unlikely, hashes contiguous history seeds directly and
 reads block hash lookups from the block with a 15-bit fast table. The 1 MiB
-XML level-1 fast encode is 6.23 times faster; the adaptive long-match default
+XML level-1 fast encode is 6.57 times faster; the adaptive long-match default
 produces 167,595 bytes, 10.6% below the original baseline and 1.2% smaller than
 libzstd. Repetitive text-like blocks opt into the second hash table
-automatically; binary blocks keep the single-table path. The repeat DP remains
-the largest encoder symbol below the skip threshold.
+automatically, extremely repetitive blocks use the double-fast lazy engine, and
+binary blocks keep the single-table path; repeat-offset eligibility is checked
+before trying both selectors. The repeat DP remains the largest encoder symbol
+below the skip threshold.
 
 The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)
 uses one proven 16-byte move for short dense Zstd matches and parses Brotli

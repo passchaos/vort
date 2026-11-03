@@ -114,8 +114,9 @@ benchmark reports the best round.
 | Direct block hash paths | 187,495 | 45,207,876 | 0.1504 |
 | 15-bit fast hash table | 187,854 | 44,175,804 | 0.1469 |
 | Adaptive long-match default | 167,595 | 48,251,676 | 0.1605 |
+| Repeat-offset precheck | 167,595 | 45,782,277 | 0.1523 |
 
-The combined change is **6.23 times faster**; the adaptive default produces
+The combined change is **6.57 times faster**; the adaptive default produces
 167,595 bytes, 10.6% below the original 187,461-byte fast baseline.
 The complete ReleaseFast Zstd suite passes 1,276/1,276 tests with exit zero.
 
@@ -131,7 +132,7 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 167,595 | 172,242 | 0.9730 | 48,251,676 | 62.2 |
+| xml | 167,595 | 172,242 | 0.9730 | 45,782,277 | 65.5 |
 | dickens | 419,879 | 430,405 | 0.9755 | 93,252,524 | 32.2 |
 | reymont | 337,555 | 338,665 | 0.9967 | 79,145,229 | 37.9 |
 | x-ray | 733,362 | 803,674 | 0.9125 | 112,114,026 | 26.8 |
@@ -149,10 +150,10 @@ the slower binary result:
 
 | File | Adaptive bytes | libzstd | Size ratio | MiB/s | Forced-long bytes | Forced MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| xml | 723,661 | 696,678 | 1.0387 | 71.1 | 723,661 | 71.1 |
-| dickens | 4,194,809 | 4,268,871 | 0.9827 | 31.0 | 4,194,809 | 31.0 |
-| reymont | 2,154,518 | 2,152,776 | 1.0008 | 38.9 | 2,154,518 | 38.9 |
-| x-ray | 6,245,104 | 6,772,680 | 0.9221 | 26.9 | 6,244,872 | 21.1 |
+| xml | 723,661 | 696,678 | 1.0387 | 71.8 | 723,661 | 71.8 |
+| dickens | 4,194,809 | 4,268,871 | 0.9827 | 31.6 | 4,194,809 | 31.6 |
+| reymont | 2,154,518 | 2,152,776 | 1.0008 | 39.4 | 2,154,518 | 39.4 |
+| x-ray | 6,245,104 | 6,772,680 | 0.9221 | 27.2 | 6,244,872 | 21.1 |
 
 The adaptive default reduces the full-file XML gap from 18.9% to 5.2%, moves
 dickens 1.7% below libzstd and leaves reymont essentially level; x-ray remains

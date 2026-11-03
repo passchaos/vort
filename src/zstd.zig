@@ -28056,7 +28056,17 @@ fn chooseOffsetSequenceCodeWithExtra(literal_len: usize, offset: usize, repeated
     // requested match distance. Besides using fewer extra bits, this preserves
     // the same repeated-offset history that a normal zstd encoder would expose
     // to later sequences.
-    for ([_]u8{ 0, 1 }) |code| {
+    const literal_zero = literal_len == 0;
+    const eligible = [2]bool{
+        offset != 0 and offset == repeated_offsets[if (literal_zero) 1 else 0],
+        offset != 0 and if (literal_zero)
+            (offset == repeated_offsets[2] or (repeated_offsets[0] > 1 and repeated_offsets[0] - 1 == offset))
+        else
+            (offset == repeated_offsets[1] or offset == repeated_offsets[2]),
+    };
+    for (eligible, 0..) |possible, code_index| {
+        if (!possible) continue;
+        const code: u8 = @intCast(code_index);
         const symbol = try sequenceRleSymbol(.offset, code);
         var trial_offsets = repeated_offsets.*;
         const extra = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, &trial_offsets) catch |err| switch (err) {
