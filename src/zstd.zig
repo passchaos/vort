@@ -22935,6 +22935,8 @@ fn emitLargeSequenceCompressedBlockWithState(
     return try emitLargeSequenceCompressedBlockWithStatePolicy(false, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets, null);
 }
 
+const fast_repeat_plan_sequence_limit: usize = 4 * 1024;
+
 fn emitLargeSequenceCompressedBlockWithStatePolicy(
     comptime use_fast_cached_planner: bool,
     allocator: std.mem.Allocator,
@@ -22957,6 +22959,13 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         offsets.len != sequence_count or
         match_lens.len != sequence_count or
         literal_ends.len != sequence_count) return false;
+    // The fast planner skips the repeat viability DP for large blocks. The
+    // repeat table only saves its FSE header, which is negligible beside a
+    // large sequence payload, while the DP dominates low-level encode time.
+    const repeat_tables = if (sequence_count > fast_repeat_plan_sequence_limit)
+        null
+    else
+        previous_tables;
 
     scratch.literals_prefix.clearRetainingCapacity();
     _ = try emitSequenceLiteralsSection(
@@ -22976,7 +22985,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     try scratch.state_bits.resize(allocator, state_len);
     try scratch.transition_values.resize(allocator, state_len);
     try scratch.transition_bits.resize(allocator, state_len);
-    const repeat_mask_words = if (previous_tables) |tables| @max(
+    const repeat_mask_words = if (repeat_tables) |tables| @max(
         try repeatSequenceMaskWordCount(previousSequenceTable(tables, .literal)),
         @max(
             try repeatSequenceMaskWordCount(previousSequenceTable(tables, .offset)),
@@ -22984,7 +22993,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         ),
     ) else 0;
     const repeat_mask_len = std.math.mul(usize, sequence_count, repeat_mask_words) catch return error.IntegerOverflow;
-    if (previous_tables != null) {
+    if (repeat_tables != null) {
         try scratch.repeat_states.resize(allocator, state_len);
         try scratch.repeat_viable_masks.resize(allocator, repeat_mask_len);
     }
@@ -22992,11 +23001,11 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     const literal_states = scratch.states.items[0..sequence_count];
     const offset_states = scratch.states.items[sequence_count .. sequence_count * 2];
     const match_states = scratch.states.items[sequence_count * 2 .. sequence_count * 3];
-    const repeat_states = if (previous_tables != null) scratch.repeat_states.items[0..state_len] else scratch.repeat_states.items[0..0];
-    const repeat_viable_masks = if (previous_tables != null) scratch.repeat_viable_masks.items[0..repeat_mask_len] else scratch.repeat_viable_masks.items[0..0];
-    const literal_repeat_states = if (previous_tables != null) repeat_states[0..sequence_count] else repeat_states;
-    const offset_repeat_states = if (previous_tables != null) repeat_states[sequence_count .. sequence_count * 2] else repeat_states;
-    const match_repeat_states = if (previous_tables != null) repeat_states[sequence_count * 2 .. sequence_count * 3] else repeat_states;
+    const repeat_states = if (repeat_tables != null) scratch.repeat_states.items[0..state_len] else scratch.repeat_states.items[0..0];
+    const repeat_viable_masks = if (repeat_tables != null) scratch.repeat_viable_masks.items[0..repeat_mask_len] else scratch.repeat_viable_masks.items[0..0];
+    const literal_repeat_states = if (repeat_tables != null) repeat_states[0..sequence_count] else repeat_states;
+    const offset_repeat_states = if (repeat_tables != null) repeat_states[sequence_count .. sequence_count * 2] else repeat_states;
+    const match_repeat_states = if (repeat_tables != null) repeat_states[sequence_count * 2 .. sequence_count * 3] else repeat_states;
     const literal_compressed = LargeCompressedSequenceBuffers{
         .direct_transitions = scratch.direct_transitions,
         .codes = scratch.codes.items[0..sequence_count],
@@ -23029,7 +23038,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         literal_compressed,
         literal_repeat_states,
         repeat_viable_masks,
-        if (previous_tables) |tables| previousSequenceTable(tables, .literal) else null,
+        if (repeat_tables) |tables| previousSequenceTable(tables, .literal) else null,
     );
     const offset_alternatives = try largeOffsetSequenceTablePlanAlternatives(
         literal_lens,
@@ -23039,7 +23048,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         offset_compressed,
         offset_repeat_states,
         repeat_viable_masks,
-        if (previous_tables) |tables| previousSequenceTable(tables, .offset) else null,
+        if (repeat_tables) |tables| previousSequenceTable(tables, .offset) else null,
         initial_offsets,
         exact_offset_values,
     );
@@ -23051,7 +23060,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         match_compressed,
         match_repeat_states,
         repeat_viable_masks,
-        if (previous_tables) |tables| previousSequenceTable(tables, .match) else null,
+        if (repeat_tables) |tables| previousSequenceTable(tables, .match) else null,
     );
     const plan = (if (comptime use_fast_cached_planner)
         try bestLargeSequenceTablePlanFast(
@@ -29026,7 +29035,7 @@ fn validateLargeSequenceTablePlanLen(plan: *const LargeSequenceTableEmitPlan, le
     }
 }
 
-fn largeSequenceTableSymbol(plan: *const LargeSequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
+inline fn largeSequenceTableSymbol(plan: *const LargeSequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
     return switch (plan.*) {
         .rle => |code| sequenceRleSymbol(kind, code),
         .predefined => |states| blk: {

@@ -10,8 +10,13 @@ The repeat planner now groups FSE states by the sequence code their symbol
 represents once per table, then visits only matching states per position. The
 compressed-transition planner fills a per-symbol next-state map: each state
 range is disjoint and partitions the table, so filling costs O(table length)
-and every transition lookup is O(1). Both changes preserve the exact
-ascending-state tie rule and the emitted wire.
+and every transition lookup is O(1). `largeSequenceTableSymbol` is now inline
+so per-sequence plan dispatch specializes in its emit loops.
+
+For blocks above 4,096 sequences, the repeat-table viability DP is skipped:
+the repeat table only saves its FSE header, which is negligible beside a large
+sequence payload, while the DP dominates low-level encode time. The block falls
+back to predefined or compressed tables.
 
 ## Measurement
 
@@ -24,13 +29,14 @@ benchmark reports the best round.
 | Baseline | 187,461 | 300,637,508 | 1.0000 |
 | Grouped repeat DP | 187,461 | 197,132,699 | 0.6557 |
 | Mapped transitions | 187,461 | 163,920,975 | 0.5452 |
+| Inlined symbol dispatch | 187,461 | 153,313,208 | 0.5100 |
+| Repeat skip above 4,096 sequences | 187,489 | 114,806,784 | 0.3819 |
 
-The combined change is **1.83 times faster** with byte-identical output. The
-perf profile's repeat planner share fell from about 38.6% to 16.9%, and the
-compressed-transition walk is replaced by the O(1) map. The complete ReleaseFast
-Zstd suite passes 1,272/1,272 tests with exit zero.
+The combined change is **2.62 times faster**; the repeat-skip stage adds 28
+bytes (0.015%) to this row. The complete ReleaseFast Zstd suite passes
+1,272/1,272 tests with exit zero.
 
 This remains a single-input, single-strategy screen and is not a full Zstd
 matrix; libzstd still encodes this input substantially faster. The repeat
-planner remains the largest encoder symbol after the change. [Raw rows](repeat-planner-20261103.csv)
-retain the stage timings and wire equality.
+planner remains the largest encoder symbol below the skip threshold.
+[Raw rows](repeat-planner-20261103.csv) retain the stage timings and wire sizes.

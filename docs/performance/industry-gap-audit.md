@@ -49,9 +49,10 @@ one-shot block-boundary step and query. Incremental Brotli compressed-header par
 now retains completed sub-parsers and Huffman trees across small input chunks;
 mid-tree continuation remains open, and a consumed-bits retry lower bound was
 rejected because one-byte chunks always clear it. The grouped Zstd sequence
-planner visits only code-matching FSE states in the repeat DP and uses an O(1)
-next-state map for compressed transitions, making the 1 MiB XML level-1 fast
-encode 1.83 times faster with identical wire. A bounded six-file Silesia q8 screen finds
+planner visits only code-matching FSE states in the repeat DP, uses an O(1)
+next-state map for compressed transitions, inlines per-sequence symbol dispatch
+and skips the repeat DP above 4,096 sequences, making the 1 MiB XML level-1
+fast encode 2.62 times faster with 28 additional wire bytes (0.015%). A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage
 profile routes speed work to optimal parsing for XML, wire emission for x-ray
 and context clustering across all. A table-driven context lookup lowers q8
