@@ -7,7 +7,7 @@ pub const Record = source_mod.Record;
 pub const Source = source_mod.Source;
 pub const Parameters = source_mod.Parameters;
 
-const hash_bits = 16;
+const hash_bits = 15;
 const hash_size = 1 << hash_bits;
 const invalid = std.math.maxInt(u32);
 const minimum_match = 4;

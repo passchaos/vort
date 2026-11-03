@@ -71,13 +71,13 @@ On the same 1 MiB XML screen:
 
 | Fast policy | Wire bytes | Encode ns | Size vs libzstd |
 | --- | ---: | ---: | ---: |
-| Single-table default | 187,495 | 45.2M | 1.0886 |
-| Long-match opt-in | 169,189 | 49.5M | 0.9823 |
+| Single-table default | 187,854 | 44.2M | 1.0906 |
+| Long-match opt-in | 170,251 | 48.0M | 0.9884 |
 | Double-fast | 165,730 | 52.0M | 0.9622 |
 
-The opt-in is about 10% slower than the default fast path but removes 9.8% of
-the wire and is 1.8% smaller than libzstd on this input. The default remains
-false so the 6.65x fast result and frozen fast wires are unchanged. The option
+The opt-in is about 9% slower than the default fast path but removes 9.4% of
+the wire and is 1.2% smaller than libzstd on this input. The default remains
+false so the 6.81x fast result is unchanged. The option
 also resolves through the public level API, for example level -1 with
 `fast_long_matches = true`; the resulting native frame round-trips and is no
 larger than the corresponding fast frame.
@@ -111,10 +111,11 @@ benchmark reports the best round.
 | Dictionary-unlikely hash hint | 187,495 | 53,535,559 | 0.1781 |
 | Direct history seed hashing | 187,495 | 46,758,314 | 0.1555 |
 | Direct block hash paths | 187,495 | 45,207,876 | 0.1504 |
+| 15-bit fast hash table | 187,854 | 44,175,804 | 0.1469 |
 
-The combined change is **6.65 times faster**; the repeat-skip stages add 34
-bytes (0.018%) to the baseline, and the later changes leave the wire unchanged.
-The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
+The combined change is **6.81 times faster**; the repeat-skip and 15-bit-hash
+stages add 393 bytes (0.21%) to the baseline.
+The complete ReleaseFast Zstd suite passes 1,275/1,275 tests with exit zero.
 
 This remains a single-strategy screen and is not a full Zstd matrix; libzstd
 still encodes these inputs substantially faster. The repeat planner remains
@@ -128,10 +129,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,495 | 172,242 | 1.0886 | 45,207,876 | 66.4 |
-| dickens | 446,706 | 430,405 | 1.0379 | 91,479,542 | 32.8 |
-| reymont | 375,454 | 338,665 | 1.1086 | 81,463,617 | 36.8 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 121,005,790 | 24.8 |
+| xml | 187,854 | 172,242 | 1.0906 | 44,175,804 | 67.9 |
+| dickens | 448,093 | 430,405 | 1.0411 | 90,267,109 | 33.2 |
+| reymont | 376,055 | 338,665 | 1.1104 | 83,345,278 | 36.0 |
+| x-ray | 733,362 | 803,674 | 0.9125 | 112,463,589 | 26.7 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller
