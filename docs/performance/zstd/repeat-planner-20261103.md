@@ -243,3 +243,8 @@ equal or one-byte-longer next matches moved NCI 107,813 -> 107,566 and XML
 167,595 -> 167,544, but XML slowed from 62.2 to 57.4 MiB/s. A 16-bit hash with
 the lazy double-fast engine moved NCI to 107,372 and XML to 166,492 (0.9666),
 but cost 6-7% throughput; the 15-bit table remains the fast default.
+
+Packing the three sequence extra-bit fields into one accumulator update was
+measured at 45.98/44.99M ns versus 45.53/45.95M on XML, with NCI neutral. The
+variance outweighed the saved writer calls, so the separate checked fields were
+restored.
