@@ -57,7 +57,9 @@ repeat-plan skip threshold drops from 4,096 to 2,048 sequences: the repeat
 table saves only its FSE header, so removing the DP from the 2,048-4,096 band
 costs 6 bytes on XML while cutting low-level encode time substantially. The
 hash word loader marks the dictionary segment unlikely, keeping history and
-block hashing on the predicted path.
+block hashing on the predicted path. History seeding hashes contiguous history
+bytes directly instead of dispatching through the segment-aware word loader
+for every seeded position.
 
 ## Measurement
 
@@ -86,8 +88,9 @@ benchmark reports the best round.
 | Intra-block match scan | 187,489 | 58,610,198 | 0.1950 |
 | Repeat skip above 2,048 sequences | 187,495 | 53,957,173 | 0.1795 |
 | Dictionary-unlikely hash hint | 187,495 | 53,535,559 | 0.1781 |
+| Direct history seed hashing | 187,495 | 46,758,314 | 0.1555 |
 
-The combined change is **5.62 times faster**; the repeat-skip stages add 34
+The combined change is **6.43 times faster**; the repeat-skip stages add 34
 bytes (0.018%) to the baseline, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -103,10 +106,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,495 | 172,242 | 1.0886 | 55,708,144 | 53.9 |
-| dickens | 446,706 | 430,405 | 1.0379 | 101,379,293 | 29.6 |
-| reymont | 375,454 | 338,665 | 1.1086 | 91,594,044 | 32.8 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 129,017,924 | 23.3 |
+| xml | 187,495 | 172,242 | 1.0886 | 46,758,314 | 64.2 |
+| dickens | 446,706 | 430,405 | 1.0379 | 94,825,280 | 31.6 |
+| reymont | 375,454 | 338,665 | 1.1086 | 84,259,545 | 35.6 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 122,784,723 | 24.4 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller

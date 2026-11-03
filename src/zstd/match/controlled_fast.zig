@@ -144,6 +144,16 @@ fn Tables(comptime dual: bool) type {
             if (dual and source.totalLen() - absolute >= 8)
                 self.long[hash8(source, absolute)] = @intCast(absolute);
         }
+        fn insertHistory(self: *Self, source: Source, absolute: usize) void {
+            const offset = absolute - source.dictionary.len;
+            const needed: usize = if (dual) 8 else 4;
+            if (source.history.len - offset >= needed) {
+                self.short[hash4History(source.history, offset)] = @intCast(absolute);
+                if (dual) self.long[hash8History(source.history, offset)] = @intCast(absolute);
+                return;
+            }
+            self.insert(source, absolute);
+        }
         fn seedRange(self: *Self, source: Source, start: usize, end: usize, step: usize, profile: ?*controls.Profile) void {
             var position = start;
             while (position < end) {
@@ -154,18 +164,33 @@ fn Tables(comptime dual: bool) type {
                 position += @min(step, end - position);
             }
         }
+        fn seedRangeHistory(self: *Self, source: Source, start: usize, end: usize, step: usize, profile: ?*controls.Profile) void {
+            var position = start;
+            while (position < end) {
+                self.insertHistory(source, position);
+                noteSeed(profile, .history);
+                position += @min(step, end - position);
+            }
+        }
+        fn seedSegment(self: *Self, source: Source, start: usize, end: usize, step: usize, profile: ?*controls.Profile) void {
+            if (start >= end) return;
+            const dictionary_end = @min(end, source.dictionary.len);
+            if (start < dictionary_end) self.seedRange(source, start, dictionary_end, step, profile);
+            const history_start = @max(start, source.dictionary.len);
+            if (history_start < end) self.seedRangeHistory(source, history_start, end, step, profile);
+        }
         fn seed(self: *Self, source: Source, parameters: Parameters) void {
             const prefix = source.prefixLen();
             const stride: usize = parameters.acceleration;
             if (prefix <= recent_seed_span) {
-                self.seedRange(source, 0, prefix, stride, parameters.profile);
+                self.seedSegment(source, 0, prefix, stride, parameters.profile);
             } else {
                 const recent = prefix - recent_seed_span;
                 // A bounded scan across the older window, followed by a denser
                 // recent scan. The full retained dictionary still needs no heap.
                 const sparse_step = std.math.mul(usize, ceilDiv(recent, seed_slots), stride) catch recent;
-                self.seedRange(source, 0, recent, @min(recent, sparse_step), parameters.profile);
-                self.seedRange(source, recent, prefix, 2 * stride, parameters.profile);
+                self.seedSegment(source, 0, recent, @min(recent, sparse_step), parameters.profile);
+                self.seedSegment(source, recent, prefix, 2 * stride, parameters.profile);
             }
             // Preserve slice boundaries and the last short/long anchors. These
             // hashes may span dictionary/history or history/current-block bytes.
@@ -346,6 +371,12 @@ fn hash4(source: Source, position: usize) usize {
 }
 fn hash8(source: Source, position: usize) usize {
     return @intCast((word(8, source, position) *% @as(u64, 0x9e3779b185ebca87)) >> (64 - hash_bits));
+}
+fn hash4History(history: []const u8, offset: usize) usize {
+    return (std.mem.readInt(u32, history[offset..][0..4], .little) *% @as(u32, 0x9e3779b1)) >> (32 - hash_bits);
+}
+fn hash8History(history: []const u8, offset: usize) usize {
+    return @intCast((std.mem.readInt(u64, history[offset..][0..8], .little) *% @as(u64, 0x9e3779b185ebca87)) >> (64 - hash_bits));
 }
 
 test "Zstd controlled fast word loads match scalar across all virtual boundaries" {
