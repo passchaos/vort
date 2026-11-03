@@ -239,3 +239,13 @@ The planned encode bench now exposes `--hq`, `--hq-beam-width`,
 `--hq-iterations`, `--hq-block-len`, `--hq-search-depth` and `--hq-nice-len`
 so this comparison stays reproducible. The preset default and its wires are
 unchanged; the full parser remains explicit.
+
+Two q11 search-policy experiments were rejected on the 64 KiB XML prefix.
+Raising the block and optimal-input ceiling from 32 to 64 KiB (so the whole
+prefix is one optimal block) produced 4,528 bytes, only 28 bytes (0.6%) below
+4,556, while encode time rose from 84.6 to 176.9 ms. Raising the optimal
+`max_chain` from 512 to 1,024 and `max_candidates` from 256 to 512 changed
+neither the wire (4,556 bytes) nor the measured time (84.8 ms), so the existing
+search is already saturated on this input. The remaining 15.9% gap is therefore
+in entropy/context modeling and cost estimation, not match-search breadth;
+larger blocks and deeper chains are not the next lever.
