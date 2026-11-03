@@ -201,3 +201,29 @@ doubling the sparse older step measured 56.70/58.65/57.30M ns at 187,454 bytes.
 The current density is speed-optimal for this input. A second dictionary
 branch hint in `byteAt` measured 54.56/53.89/53.77M ns versus
 53.54/53.19/52.74M with only the hash-loader hint, so only the latter was kept.
+
+## All-twelve 1 MiB adaptive screen
+
+One iteration per file, 1 MiB prefix, level 1 fast with the adaptive long-match
+default:
+
+| File | Vort bytes | libzstd | Size ratio |
+| --- | ---: | ---: | ---: |
+| dickens | 419,879 | 430,405 | 0.9755 |
+| mozilla | 657,199 | 665,404 | 0.9877 |
+| mr | 364,766 | 364,997 | 0.9994 |
+| nci | 110,759 | 98,767 | 1.1214 |
+| ooffice | 600,667 | 676,847 | 0.8874 |
+| osdb | 376,042 | 392,809 | 0.9573 |
+| reymont | 337,555 | 338,665 | 0.9967 |
+| samba | 341,309 | 350,772 | 0.9730 |
+| sao | 800,249 | 908,727 | 0.8806 |
+| webster | 339,947 | 344,588 | 0.9865 |
+| xml | 170,251 | 172,242 | 0.9884 |
+| x-ray | 733,362 | 803,674 | 0.9125 |
+
+Eleven of twelve files are at or below libzstd. NCI remains 12.1% larger, but
+the long table already reduced its single-table gap from 15.8%. A lower-bound
+gate that excluded the most repetitive sample (unique ratio below 1/12) was
+rejected: XML regressed from 170,251 to 181,164 bytes because some blocks fell
+below the bound, and NCI regressed from 110,759 to 114,419.
