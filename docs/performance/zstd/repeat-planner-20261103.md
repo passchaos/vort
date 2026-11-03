@@ -39,7 +39,8 @@ packed into one accumulator update before the reverse writer sees them. The
 offset alternative builder also retains each sequence's resolved offset extra
 value and final repcodes, so emission no longer replays the state machine over
 every sequence. Match seeding inserts each distinct anchor once; acceleration
-1 previously wrote the match end twice.
+1 previously wrote the match end twice. Both table DPs handle the final
+sequence position separately, removing a per-state last-position branch.
 
 ## Measurement
 
@@ -61,6 +62,7 @@ benchmark reports the best round.
 | Packed transition fields | 187,489 | 90,135,365 | 0.2998 |
 | Cached offset extras | 187,489 | 87,070,589 | 0.2896 |
 | Deduplicated seed anchors | 187,489 | 84,303,965 | 0.2804 |
+| Split last-position DP | 187,489 | 84,138,159 | 0.2799 |
 
 The combined change is **3.57 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.

@@ -48,8 +48,19 @@ fn planWithMask(
         std.math.maxInt(u64)
     else
         (@as(u64, 1) << @bitSizeOf(Mask)) - 1;
+    std.debug.assert(successor_masks.len <= @bitSizeOf(Mask));
     var viable_next: Mask = 0;
-    var pos = codes.len;
+    const last = codes.len - 1;
+    const last_code = codes[last];
+    if (last_code >= code_state_masks.len) {
+        viable_masks[last] = 0;
+    } else {
+        if (@bitSizeOf(Mask) < 64)
+            std.debug.assert(code_state_masks[last_code] & ~valid_state_mask == 0);
+        viable_next = @intCast(code_state_masks[last_code] & valid_state_mask);
+        viable_masks[last] = viable_next;
+    }
+    var pos = last;
     while (pos > 0) {
         pos -= 1;
         const code = codes[pos];
@@ -62,12 +73,11 @@ fn planWithMask(
         if (@bitSizeOf(Mask) < 64)
             std.debug.assert(code_state_masks[code] & ~valid_state_mask == 0);
         var encodable_states: Mask = @intCast(code_state_masks[code] & valid_state_mask);
-        std.debug.assert(successor_masks.len <= @bitSizeOf(Mask));
         while (encodable_states != 0) {
             const state: usize = @ctz(encodable_states);
             encodable_states &= encodable_states - 1;
             const successor_mask: Mask = @intCast(successor_masks[state] & valid_state_mask);
-            if (pos == codes.len - 1 or viable_next & successor_mask != 0)
+            if (viable_next & successor_mask != 0)
                 viable_current |= @as(Mask, 1) << @intCast(state);
         }
         viable_next = viable_current;

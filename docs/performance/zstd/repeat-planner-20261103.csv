@@ -11,3 +11,4 @@ block_only_match_scan,187489,90946374,0.302539
 packed_transition_fields,187489,90135365,0.299813
 cached_offset_extras,187489,87070589,0.289621
 deduped_seed_anchors,187489,84303965,0.280419
+split_last_dp,187489,84138159,0.279868

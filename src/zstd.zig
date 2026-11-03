@@ -26834,22 +26834,23 @@ fn planLargeRepeatSequenceCodes(
             cursor[code] += 1;
         }
     }
-    var pos = codes.len;
+    const last = codes.len - 1;
+    const last_code: usize = codes[last];
+    const last_row = masks[last * mask_words ..][0..mask_words];
+    for (state_indices[code_offsets[last_code]..code_offsets[last_code + 1]]) |state_value|
+        setSequenceStateBit(last_row, state_value);
+    var pos = last;
     while (pos > 0) {
         pos -= 1;
         const current_row = masks[pos * mask_words ..][0..mask_words];
         const code: usize = codes[pos];
+        const next_row = masks[(pos + 1) * mask_words ..][0..mask_words];
         for (state_indices[code_offsets[code]..code_offsets[code + 1]]) |state_value| {
             const state: usize = state_value;
             const symbol = symbols[state];
-            if (pos == codes.len - 1) {
-                setSequenceStateBit(current_row, state);
-                continue;
-            }
             const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
             const first_next: usize = symbol.next_state;
             const end_next = @min(symbols.len, first_next + transition_count);
-            const next_row = masks[(pos + 1) * mask_words ..][0..mask_words];
             if (first_next < end_next and firstSequenceStateInRange(next_row, first_next, end_next) != null)
                 setSequenceStateBit(current_row, state);
         }
