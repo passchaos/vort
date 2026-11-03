@@ -30,7 +30,10 @@ handle decodes the same bytes and CRC-32 as the ordinary dictionary, and the
 test-only entropy-parse counter stays at zero across the prepared decode while
 the ordinary path increments it. A shortened content slice fails with
 `InvalidDictionaryMetadata` and performs no parse; a changed ID fails with
-`NeedDictionary`; a raw dictionary handle carries no entropy pointer.
+`NeedDictionary`; a raw dictionary handle carries no entropy pointer. Focused
+prepared-dictionary and decoder-layout tests pass in Debug, ReleaseSafe and
+ReleaseFast. The complete ReleaseSafe and ReleaseFast Zstd suites each pass
+1,270/1,270 tests with exit zero.
 
 This establishes the reuse and ownership contract. It does not yet provide a
 whole-file/dictionary streaming comparison, avoid the per-frame table copy, or
