@@ -23144,9 +23144,17 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         };
 
         if (i + 1 < sequence_count) {
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.offset, .offset, i);
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.match, .match, i);
-            try appendLargeSequenceTransitionBits(&writer, allocator, &scratch.sequence_bits, &plan.plan.literal, .literal, i);
+            const offset_transition = try largeSequenceTransitionField(&plan.plan.offset, .offset, i);
+            const match_transition = try largeSequenceTransitionField(&plan.plan.match, .match, i);
+            const literal_transition = try largeSequenceTransitionField(&plan.plan.literal, .literal, i);
+            // Three narrow transition fields share one accumulator update. Pack
+            // them in emit order so the reverse reader sees the same bit layout.
+            var transition_value: usize = 0;
+            var transition_bits: u8 = 0;
+            try packLargeSequenceTransition(&transition_value, &transition_bits, offset_transition);
+            try packLargeSequenceTransition(&transition_value, &transition_bits, match_transition);
+            try packLargeSequenceTransition(&transition_value, &transition_bits, literal_transition);
+            try writer.addBits(allocator, &scratch.sequence_bits, transition_value, transition_bits);
         }
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, literal_lens[i] - literal_value.base, literal_value.additional_bits);
         try addCheckedReverseBits(&writer, allocator, &scratch.sequence_bits, match_lens[i] - match_value.base, match_value.additional_bits);
@@ -29082,34 +29090,49 @@ fn appendLargeInitialSequenceStateBits(
     }
 }
 
-fn appendLargeSequenceTransitionBits(
-    writer: *ReverseBitstreamWriter,
-    allocator: std.mem.Allocator,
-    out: *std.ArrayList(u8),
+const LargeSequenceTransitionField = struct {
+    value: usize,
+    bits: u8,
+};
+
+fn largeSequenceTransitionField(
     plan: *const LargeSequenceTableEmitPlan,
     kind: SequenceTableKind,
     index: usize,
-) Error!void {
-    switch (plan.*) {
-        .rle => {},
+) Error!LargeSequenceTransitionField {
+    return switch (plan.*) {
+        .rle => .{ .value = 0, .bits = 0 },
         .predefined => |states| {
             if (index + 1 >= states.len) return error.CorruptFrame;
             const symbol = try largeSequenceTableSymbol(plan, kind, index);
             if (states[index + 1] < symbol.next_state) return error.CorruptFrame;
-            try addCheckedReverseBits(writer, allocator, out, states[index + 1] - symbol.next_state, symbol.state_bits);
+            return .{ .value = states[index + 1] - symbol.next_state, .bits = symbol.state_bits };
         },
         .compressed => |compressed| {
             if (index + 1 >= compressed.codes.len) return error.CorruptFrame;
-            try addCheckedReverseBits(writer, allocator, out, compressed.transition_values[index], compressed.transition_bits[index]);
+            return .{ .value = compressed.transition_values[index], .bits = compressed.transition_bits[index] };
         },
         .repeat => |repeat| {
             if (index + 1 >= repeat.len) return error.CorruptFrame;
-            if (repeat.source.mode == .rle) return;
+            if (repeat.source.mode == .rle) return .{ .value = 0, .bits = 0 };
             const symbol = try largeSequenceTableSymbol(plan, kind, index);
             if (repeat.states[index + 1] < symbol.next_state) return error.CorruptFrame;
-            try addCheckedReverseBits(writer, allocator, out, repeat.states[index + 1] - symbol.next_state, symbol.state_bits);
+            return .{ .value = repeat.states[index + 1] - symbol.next_state, .bits = symbol.state_bits };
         },
+    };
+}
+
+fn packLargeSequenceTransition(value: *usize, bits: *u8, field: LargeSequenceTransitionField) Error!void {
+    if (field.bits > @bitSizeOf(usize)) return error.CorruptFrame;
+    if (field.bits == 0) {
+        if (field.value != 0) return error.CorruptFrame;
+        return;
     }
+    if (field.bits < @bitSizeOf(usize) and field.value >= (@as(usize, 1) << @intCast(field.bits))) return error.CorruptFrame;
+    const total_bits = @as(u16, bits.*) + field.bits;
+    if (total_bits > @bitSizeOf(usize)) return error.CorruptFrame;
+    value.* |= field.value << @intCast(bits.*);
+    bits.* = @intCast(total_bits);
 }
 
 fn sequenceTableBases(kind: SequenceTableKind) []const usize {

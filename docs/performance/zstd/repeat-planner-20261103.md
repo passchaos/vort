@@ -34,6 +34,8 @@ The reverse bitstream writer now reserves capacity once per flush and appends
 each completed byte with `appendAssumeCapacity`, instead of checking capacity
 on every byte. Block-only match scans read both sides directly from the block
 instead of dispatching through the three-segment `byteAt` accessor per byte.
+The three narrow FSE transition fields for each sequence are validated and
+packed into one accumulator update before the reverse writer sees them.
 
 ## Measurement
 
@@ -52,8 +54,9 @@ benchmark reports the best round.
 | Cached re-emission planner | 187,489 | 92,902,760 | 0.3090 |
 | Batched bit flush | 187,489 | 91,256,348 | 0.3035 |
 | Block-only match scan | 187,489 | 90,946,374 | 0.3025 |
+| Packed transition fields | 187,489 | 90,135,365 | 0.2998 |
 
-The combined change is **3.31 times faster**; the repeat-skip stage adds 28
+The combined change is **3.34 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
