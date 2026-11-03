@@ -134,7 +134,7 @@ code-matching FSE states in the repeat DP, uses an O(1) next-state map for
 compressed transitions, inlines per-sequence symbol dispatch, skips the repeat
 DP above 4,096 sequences, computes the absolute offset code in closed form and
 reuses the cached planner for state-dependent large-block re-emission; the
-1 MiB XML level-1 fast encode is 3.29 times faster with 28 additional wire
+1 MiB XML level-1 fast encode is 3.31 times faster with 28 additional wire
 bytes (0.015%). A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8

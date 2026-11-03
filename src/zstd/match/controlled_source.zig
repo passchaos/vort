@@ -100,9 +100,17 @@ pub const Source = struct {
         const position = self.prefixLen() + block_position;
         if (candidate >= position or position - candidate > self.window_len) return .{};
         var length: usize = 0;
-        while (length < self.block.len - block_position and
-            self.byteAt(candidate + length) == self.block[block_position + length]) : (length += 1)
-        {}
+        if (self.dictionary.len == 0 and self.history.len == 0) {
+            // A block-only source keeps both match sides in `block`, so the
+            // three-way `byteAt` dispatch is redundant for every compared byte.
+            while (length < self.block.len - block_position and
+                self.block[candidate + length] == self.block[block_position + length]) : (length += 1)
+            {}
+        } else {
+            while (length < self.block.len - block_position and
+                self.byteAt(candidate + length) == self.block[block_position + length]) : (length += 1)
+            {}
+        }
         if (length < minimum) return .{};
         return .{ .length = length, .distance = position - candidate };
     }
