@@ -17278,6 +17278,56 @@ test "zstd prepared standard decode dictionary reuses entropy state" {
     _ = raw_prepared.handle();
 }
 
+test "zstd prepared dictionary serves incremental decode" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(frame);
+    _ = try std.fmt.hexToBytes(frame, frame_hex);
+
+    const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    var prepared = try PreparedDecodeDictionary.init(standard.dictionary);
+    const expected = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, standard.dictionary);
+    defer std.testing.allocator.free(expected);
+    const output = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(output);
+
+    test_standard_dictionary_parse_calls = 0;
+    defer test_standard_dictionary_parse_calls = 0;
+    var decoder = NativeIncrementalFrameDecoder.initWithDictionary(std.testing.allocator, prepared.handle());
+    defer decoder.deinit();
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(frame[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input and input_offset == frame.len) return error.TruncatedFrame;
+        if (step.status == .need_output and output_offset == output.len) return error.OutputTooSmall;
+    }
+    try std.testing.expectEqual(@as(usize, 0), test_standard_dictionary_parse_calls);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, output);
+
+    var ordinary = NativeIncrementalFrameDecoder.initWithDictionary(std.testing.allocator, standard.dictionary);
+    defer ordinary.deinit();
+    input_offset = 0;
+    output_offset = 0;
+    while (ordinary.snapshot().phase != .done) {
+        const step = try ordinary.step(frame[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input and input_offset == frame.len) return error.TruncatedFrame;
+        if (step.status == .need_output and output_offset == output.len) return error.OutputTooSmall;
+    }
+    try std.testing.expect(test_standard_dictionary_parse_calls > 0);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, output);
+}
+
 test "zstd native writer can reuse standard dictionary sequence tables" {
     const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
     const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");

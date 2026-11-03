@@ -45,6 +45,14 @@ performs zero dictionary entropy parses, and the ordinary encode increments
 the parse counter. The owner must outlive both operations and must not move
 after any handle is published.
 
+## Incremental decode
+
+`NativeIncrementalFrameDecoder.initWithDictionary(prepared.handle())` also
+reuses the snapshot. A test feeds the trained frame through the incremental
+decoder, produces the same 2,304-byte output as the ordinary one-shot decode,
+and performs zero dictionary entropy parses; the ordinary incremental path
+increments the parse counter.
+
 ## Reuse measurement
 
 `tools/zstd/prepared_dictionary_probe.zig` decodes the 702-byte trained frame
