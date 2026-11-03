@@ -58,8 +58,13 @@ work by content: XML is dominated by optimal parsing (63.8%), x-ray by wire
 emission (40.7%), and context proposals remain 17–22% across all. The
 [table-driven context lookup](performance/br/context-lookup-20261103.md)
 lowers q8 planned encode time 7.4% geometrically on the same six-file screen
-with unchanged wires. Full streaming/dictionary, memory and multi-platform
-comparisons remain required for the industry-best objective.
+with unchanged wires. The
+[q8 perf profile](performance/br/q8-perf-profile-20261103.md) attributes the
+next gap to the LZ77 match finder (46% process self time), the distance
+chooser (5.7%) and the context group's physical encode (4.0%); a window-sized
+predecessor ring was rejected at 2.2% slower. Full streaming/dictionary,
+memory and multi-platform comparisons remain required for the industry-best
+objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

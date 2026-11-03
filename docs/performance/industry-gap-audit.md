@@ -52,7 +52,10 @@ Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage
 profile routes speed work to optimal parsing for XML, wire emission for x-ray
 and context clustering across all. A table-driven context lookup lowers q8
 planned encode time 7.4% geometrically on the same screen with unchanged
-wires. Ordinary streaming and standard dictionaries are already supported.
+wires. A perf profile attributes the next q8 gap to the LZ77 match finder,
+distance chooser and context physical encode; a window-sized predecessor ring
+was rejected at 2.2% slower. Ordinary streaming and standard dictionaries are
+already supported.
 
 The [2026-10-31 local optimal parser](zstd-local-optimal.md) replaces the default
 bounded sampled 8/16-state graph with one pending-LL-aware path, incremental

@@ -136,9 +136,13 @@ content: XML is dominated by optimal parsing (63.8%), x-ray by wire emission
 (40.7%), and context proposals remain 17–22% across all. The
 [table-driven context lookup](br/context-lookup-20261103.md) lowers q8
 planned encode time 7.4% geometrically on the same six-file screen with
-unchanged wires. Finite matcher candidates, parsing states and entropy priors
-remain quality limits even where all lengths of an admitted match are
-considered.
+unchanged wires. The
+[q8 perf profile](br/q8-perf-profile-20261103.md) attributes the next gap to
+the LZ77 match finder (46% process self time), the distance chooser (5.7%) and
+the context group's physical encode (4.0%); a window-sized predecessor ring
+was rejected at 2.2% slower. Finite matcher candidates, parsing states and
+entropy priors remain quality limits even where all lengths of an admitted
+match are considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,
