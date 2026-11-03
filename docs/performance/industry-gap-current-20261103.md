@@ -111,10 +111,10 @@ one-shot reference epochs above keep their own source identities. The
 counts both q8 alternatives from retained command and literal models, emits
 only the local winner and skips pairs that lose to the incumbent; twelve
 64 KiB Silesia wires stay byte-identical while full candidate emissions fall
-24→4, and 256 KiB/1 MiB rows within the 65,536-command bound extend the same
-reduction with about 6.5% and 6.1% geometric encode-time gains. The next Brotli
-q8 targets are counted preparation for the remaining split and HQ candidate
-families, preserving the original parameter chooser and strict ties.
+24→4, and 256 KiB/1 MiB rows within the 1,048,576-command bound extend the
+same reduction with about 6.5% and 8.9% geometric encode-time gains. The next
+Brotli q8 targets are counted preparation for the remaining split and HQ
+candidate families, preserving the original parameter chooser and strict ties.
 
 The [functional audit](industry-gap-audit.md#current-functionality) records
 flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,

@@ -21,10 +21,10 @@ independent fixtures and a strict frozen-controller comparison. The
 now counts both q8 alternatives from retained command and literal models,
 emits only the local winner and skips pairs that lose to the incumbent; twelve
 64 KiB Silesia wires stay byte-identical while full candidate emissions fall
-24→4, and 256 KiB/1 MiB rows within the 65,536-command bound extend the same
-reduction with about 6.5% and 6.1% geometric encode-time gains. Next extend
-counted preparation to the remaining split and HQ candidate families, then
-keep modern streaming references and full-file/memory/platform coverage
+24→4, and 256 KiB/1 MiB rows within the 1,048,576-command bound extend the
+same reduction with about 6.5% and 8.9% geometric encode-time gains. Next
+extend counted preparation to the remaining split and HQ candidate families,
+then keep modern streaming references and full-file/memory/platform coverage
 active.
 
 The [dense Zstd sequence increment](performance/zstd-dense-transitions.md)

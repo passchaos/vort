@@ -6572,19 +6572,21 @@ test "Brotli parameter pair against preserves chooser ties and profile publicati
 var test_parameter_pair_path_calls: usize = 0;
 
 test "Brotli q8 prepared distance pair extends beyond 64 KiB" {
-    const source = @embedFile("br.zig")[0 .. 256 * 1024];
-    test_parameter_pair_path_calls = 0;
-    defer test_parameter_pair_path_calls = 0;
-    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, source, .{
-        .quality = 8,
-        .mode = .generic,
-        .window_bits = 16,
-    });
-    defer std.testing.allocator.free(encoded);
-    try std.testing.expect(test_parameter_pair_path_calls != 0);
-    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, source.len);
-    defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, source, decoded);
+    for ([_]usize{ 256 * 1024, 1 << 20 }) |len| {
+        const source = @embedFile("br.zig")[0..len];
+        test_parameter_pair_path_calls = 0;
+        defer test_parameter_pair_path_calls = 0;
+        const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, source, .{
+            .quality = 8,
+            .mode = .generic,
+            .window_bits = 16,
+        });
+        defer std.testing.allocator.free(encoded);
+        try std.testing.expect(test_parameter_pair_path_calls != 0);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, source.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, source, decoded);
+    }
 }
 
 fn chooseDistanceParameterAlternativeAlloc(

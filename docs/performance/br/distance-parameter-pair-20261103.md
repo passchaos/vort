@@ -16,14 +16,14 @@ alternative is checked against its borrowed owners and option key again before
 physical emission.
 
 The supported scope is standard windows 10–24, q8 inputs of at least 8 KiB
-whose ordinary command count fits the fixed prepared model (65,536 commands),
-recent distances, default distance parameters, no compound dictionary split,
-no metadata and no active split family. Unsupported shapes retain the original
-physical search. The production public path applies the prepared pair at q8,
-ordinary window and empty metadata; inputs beyond 64 KiB extend the same
-candidate-work reduction whenever the command bound is satisfied. The public
-profile API remains limited to 64 KiB, so larger rows are measured through the
-ordinary and timed public encode routes.
+whose ordinary command count fits the fixed prepared model (1,048,576
+commands), recent distances, default distance parameters, no compound
+dictionary split, no metadata and no active split family. Unsupported shapes
+retain the original physical search. The production public path applies the
+prepared pair at q8, ordinary window and empty metadata; inputs beyond 64 KiB
+extend the same candidate-work reduction whenever the command bound is
+satisfied. The public profile API remains limited to 64 KiB, so larger rows
+are measured through the ordinary and timed public encode routes.
 
 ## Correctness and work
 
@@ -72,18 +72,17 @@ prepared-pair tree.
 | Scope | Pair rows | Geometric paired time ratio | Wins |
 | --- | ---: | ---: | ---: |
 | Twelve Silesia 64 KiB slices | 12/12 | 0.98659 | 9/12 |
-| Twelve Silesia 256 KiB slices | 12/12 | 0.93504 | 12/12 |
-| Four Silesia 1 MiB slices within the command bound | 4/4 | 0.93870 | 4/4 |
-| Eight Silesia 1 MiB slices above the command bound | 0/8 | 1.00028 | fallback |
+| Twelve Silesia 256 KiB slices | 12/12 | 0.93488 | 12/12 |
+| Twelve Silesia 1 MiB slices | 12/12 | 0.91149 | 12/12 |
 
 Every 64 KiB wire is byte-identical to baseline; all 24 large-input wires are
 also byte-identical. The 64 KiB profile counters fall from 24 old physical
 candidate emissions to 4. The 64 KiB per-row ratios span 0.955–1.042, with two
 small-input rows regressing while the aggregate improves. All twelve 256 KiB
-rows win, improving about 6.5% geometrically. At 1 MiB, the four rows whose
-ordinary command count fits the 65,536 bound (21,786–64,311 commands) all win
-about 6.1%; the eight rows above the bound retain the original physical search
-and measure neutral. [64 KiB rows](distance-parameter-pair-20261103.csv) and
+rows win, improving about 6.5% geometrically. All twelve 1 MiB rows fit the
+raised 1,048,576-command bound (21,786–206,734 commands) and win about 8.9%
+geometrically; inputs above the bound retain the original physical search.
+[64 KiB rows](distance-parameter-pair-20261103.csv) and
 [large rows](distance-parameter-pair-large-20261103.csv) retain wire hashes,
 command counts, pair-path flags and independent medians.
 

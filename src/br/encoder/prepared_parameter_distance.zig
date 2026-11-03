@@ -13,7 +13,10 @@ const weighted = @import("weighted_payload.zig");
 const counting = @import("counting_writer.zig");
 
 pub const distance_capacity = 520;
-pub const max_command_count = 64 * 1024;
+/// The prepared pair owns fixed-size distance storage and scans commands once,
+/// so the bound only excludes pathological command streams; ordinary q8 inputs
+/// up to 1 MiB (and beyond) fit comfortably.
+pub const max_command_count = 1 << 20;
 
 pub fn supported(options: anytype) bool {
     return !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and
