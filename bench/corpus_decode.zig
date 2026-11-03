@@ -7,9 +7,9 @@ const Case = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    const readme = try std.Io.Dir.cwd().readFileAlloc(init.io, "README.md", init.gpa, .limited(1 << 20));
+    const readme = try std.Io.Dir.cwd().readFileAlloc(init.io, "README.md", init.gpa, .limited(4 << 20));
     defer init.gpa.free(readme);
-    const roadmap = try std.Io.Dir.cwd().readFileAlloc(init.io, "docs/roadmap.md", init.gpa, .limited(1 << 20));
+    const roadmap = try std.Io.Dir.cwd().readFileAlloc(init.io, "docs/roadmap.md", init.gpa, .limited(4 << 20));
     defer init.gpa.free(roadmap);
 
     const cases = [_]Case{
