@@ -65,3 +65,19 @@ enough. The experiment was reverted.
 
 [Raw maximum-distance rows](q8-max-distance-rejected-20261103.csv) retain the
 paired timings and wire equality.
+
+## Rejected q8 budget reduction
+
+Reducing the q8 lazy/optimal budgets to the q7 shape (chain 128→96, nice
+192→160, optimal candidates 64→32, optimal input 64→32 KiB) on 1 MiB prefixes
+traded size for a modest time gain:
+
+| Input | Bytes (current → reduced) | Encode ns (current → reduced) | Size ratio to reference (reduced) |
+| --- | --- | --- | ---: |
+| xml | 144,321 → 145,192 (+0.60%) | 88.83M → 85.22M (−4.1%) | 1.0516 |
+| dickens | 372,624 → 374,134 (+0.41%) | 202.13M → 190.38M (−5.8%) | 1.0208 |
+| x-ray | 631,713 → 632,247 (+0.08%) | 185.86M → 183.53M (−1.3%) | 0.9181 |
+
+The trade is real but changes every q8 wire and only buys 1–6% against a
+3.6–3.9x reference gap. The experiment was reverted; q8 budget policy is
+retained until matcher-level work can produce a larger gain.
