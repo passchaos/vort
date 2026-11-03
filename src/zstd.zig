@@ -27952,15 +27952,12 @@ fn chooseOffsetSequenceCode(literal_len: usize, offset: usize, repeated_offsets:
 }
 
 fn absoluteOffsetSequenceCode(offset: usize) Error!u8 {
-    var best: ?usize = null;
-    for (of_base, 0..) |base, code| {
-        if (of_bits[code] <= 1) continue;
-        if (offset < base) continue;
-        const span = @as(usize, 1) << @intCast(of_bits[code]);
-        if (offset - base >= span) continue;
-        if (best == null or base >= of_base[best.?]) best = code;
-    }
-    return @intCast(best orelse return error.CorruptFrame);
+    // Absolute offsets use codes 2..31: code 2 covers 1..4, and code c covers
+    // [2^c - 3, 2^(c+1) - 4]. Reuse the closed-form value coder and reject the
+    // repeat-offset selectors 0 and 1.
+    const code = try offsetCode(offset);
+    if (code < 2) return error.CorruptFrame;
+    return code;
 }
 
 noinline fn planCompressedSequenceCodes(codes: []const u8, kind: SequenceTableKind) linksection(fse_encode_helper_text_section) Error!?CompressedSequencePlan {
@@ -33229,6 +33226,14 @@ test "zstd offset code rejects arithmetic overflow before adding bias" {
             try std.testing.expectEqual(code, try offsetCode(value));
         } else |err| try std.testing.expectError(err, offsetCode(value));
     }
+}
+
+test "zstd absolute offset sequence code matches table scan" {
+    for (1..(1 << 20) + 1) |value| {
+        const expected = try sequenceCodeForValueReference(value, &of_base, &of_bits);
+        try std.testing.expectEqual(expected, try absoluteOffsetSequenceCode(value));
+    }
+    try std.testing.expectError(error.CorruptFrame, absoluteOffsetSequenceCode(0));
 }
 
 test "zstd fast sequence codes match table scan" {

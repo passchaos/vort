@@ -18,6 +18,13 @@ the repeat table only saves its FSE header, which is negligible beside a large
 sequence payload, while the DP dominates low-level encode time. The block falls
 back to predefined or compressed tables.
 
+`absoluteOffsetSequenceCode` replaces its 32-entry base scan with the closed
+form already used by `offsetCode`. Codes 3..31 cover `[2^c - 3, 2^(c+1) - 4]`,
+so the selected code is `floor(log2(offset + 3))`; offsets 1..4 keep the 2-bit
+code 2. The wrapper rejects the repeat-offset selectors 0 and 1, and
+`offsetCode` still rejects overflow and out-of-range codes with
+`error.CorruptFrame`.
+
 ## Measurement
 
 `run-zstd-encode-bench` on the 1 MiB XML prefix, level 1 with explicit fast
@@ -31,10 +38,11 @@ benchmark reports the best round.
 | Mapped transitions | 187,461 | 163,920,975 | 0.5452 |
 | Inlined symbol dispatch | 187,461 | 153,313,208 | 0.5100 |
 | Repeat skip above 4,096 sequences | 187,489 | 114,806,784 | 0.3819 |
+| Closed-form offset code | 187,489 | 108,052,866 | 0.3594 |
 
-The combined change is **2.62 times faster**; the repeat-skip stage adds 28
-bytes (0.015%) to this row. The complete ReleaseFast Zstd suite passes
-1,272/1,272 tests with exit zero.
+The combined change is **2.81 times faster**; the repeat-skip stage adds 28
+bytes (0.015%) to this row and the offset formula leaves the wire unchanged.
+The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
 This remains a single-input, single-strategy screen and is not a full Zstd
 matrix; libzstd still encodes this input substantially faster. The repeat

@@ -38,10 +38,11 @@ comparisons, rather than treating this increment as overall leadership.
 
 The [grouped Zstd sequence planner](performance/zstd/repeat-planner-20261103.md)
 visits only code-matching FSE states in the repeat DP, uses an O(1) next-state
-map for compressed transitions, inlines per-sequence symbol dispatch and skips
-the repeat DP above 4,096 sequences. The 1 MiB XML level-1 fast encode is
-2.62 times faster with 28 additional wire bytes (0.015%); the repeat DP
-remains the largest encoder symbol below the skip threshold.
+map for compressed transitions, inlines per-sequence symbol dispatch, skips
+the repeat DP above 4,096 sequences and computes the absolute offset code in
+closed form. The 1 MiB XML level-1 fast encode is 2.81 times faster with 28
+additional wire bytes (0.015%); the repeat DP remains the largest encoder
+symbol below the skip threshold.
 
 The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)
 uses one proven 16-byte move for short dense Zstd matches and parses Brotli

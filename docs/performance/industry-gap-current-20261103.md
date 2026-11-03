@@ -131,9 +131,10 @@ mid-tree continuation remains open, and a consumed-bits retry lower bound was
 rejected because one-byte chunks always clear it. The
 [grouped Zstd sequence planner](zstd/repeat-planner-20261103.md) visits only
 code-matching FSE states in the repeat DP, uses an O(1) next-state map for
-compressed transitions, inlines per-sequence symbol dispatch and skips the
-repeat DP above 4,096 sequences; the 1 MiB XML level-1 fast encode is 2.62
-times faster with 28 additional wire bytes (0.015%). A
+compressed transitions, inlines per-sequence symbol dispatch, skips the repeat
+DP above 4,096 sequences and computes the absolute offset code in closed form;
+the 1 MiB XML level-1 fast encode is 2.81 times faster with 28 additional wire
+bytes (0.015%). A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
 encode speed as the next concrete Brotli gap. The
