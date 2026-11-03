@@ -5327,9 +5327,11 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         // The frozen original-controller oracle must keep its materialized
         // primary path; the prepared pair is a later, independent increment.
         const original_controller = if (comptime builtin.is_test) test_materialize_context_primary else false;
-        const prepared_pair_supported = schedule.quality.int() == 8 and input.len >= 8 * 1024 and input.len <= 64 * 1024 and
+        const prepared_pair_supported = schedule.quality.int() == 8 and input.len >= 8 * 1024 and
+            command_stream.commands.len <= prepared_parameter_distance.max_command_count and
             !options.large_window and options.metadata.len == 0 and !original_controller;
         if (prepared_pair_supported) {
+            if (comptime builtin.is_test) test_parameter_pair_path_calls += 1;
             if (try parameter_pair.against(ParameterPairStrategy, trace_enabled, trace.withOrigin(.lazy), allocator, input, command_stream.commands, &distance_stats, distance_options, best)) |candidate| {
                 freeQualityRecorded(trace_enabled, trace, allocator, best);
                 best = candidate;
@@ -6565,6 +6567,24 @@ test "Brotli parameter pair preserves allocator and output transactions" {
 
 test "Brotli parameter pair against preserves chooser ties and profile publication" {
     try @import("br/encoder/parameter_pair_tests.zig").controller(ParameterPairTestAdapters);
+}
+
+var test_parameter_pair_path_calls: usize = 0;
+
+test "Brotli q8 prepared distance pair extends beyond 64 KiB" {
+    const source = @embedFile("br.zig")[0 .. 256 * 1024];
+    test_parameter_pair_path_calls = 0;
+    defer test_parameter_pair_path_calls = 0;
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, source, .{
+        .quality = 8,
+        .mode = .generic,
+        .window_bits = 16,
+    });
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(test_parameter_pair_path_calls != 0);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, source.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, source, decoded);
 }
 
 fn chooseDistanceParameterAlternativeAlloc(

@@ -15,11 +15,15 @@ tie behavior and the outer incumbent comparison are unchanged. The prepared
 alternative is checked against its borrowed owners and option key again before
 physical emission.
 
-The first supported scope is standard windows 10–24, 8–64 KiB q8 inputs,
+The supported scope is standard windows 10–24, q8 inputs of at least 8 KiB
+whose ordinary command count fits the fixed prepared model (65,536 commands),
 recent distances, default distance parameters, no compound dictionary split,
 no metadata and no active split family. Unsupported shapes retain the original
-physical search. The production public path applies the prepared pair only at
-q8, 8–64 KiB, ordinary window and empty metadata.
+physical search. The production public path applies the prepared pair at q8,
+ordinary window and empty metadata; inputs beyond 64 KiB extend the same
+candidate-work reduction whenever the command bound is satisfied. The public
+profile API remains limited to 64 KiB, so larger rows are measured through the
+ordinary and timed public encode routes.
 
 ## Correctness and work
 
@@ -42,7 +46,7 @@ incumbent acceptance and event truncation. The frozen original-controller test
 mode bypasses the prepared pair so its materialized-primary oracle remains
 independent. Native Debug/ReleaseSafe/ReleaseFast runs pass the
 prepared-distance and public parameter-pair tests. The complete ReleaseFast
-Brotli suite passes 1,531 tests with one existing platform skip out of 1,532
+Brotli suite passes 1,532 tests with one existing platform skip out of 1,533
 and exit zero.
 
 Across twelve 64 KiB Silesia slices, every returned wire is byte-identical to
@@ -56,32 +60,44 @@ incumbent. Two candidates are counted for every pair.
 
 Both binaries call the public quality API through
 `tools/br/parameter_pair_probe.zig`: q8/generic/actual window16, followed by
-native decode and guard checks. Five alternating profile rounds per row are
-reduced to per-row medians. Profile timing includes the recorder overhead on
-both sides; it identifies candidate-work reduction rather than a standalone
-ordinary encode benchmark.
+native decode and guard checks. The `timed` mode measures encode-only time at
+three encodes per round; five alternating rounds cover 64 KiB and three cover
+256 KiB/1 MiB. Per-row medians produce the paired ratio. The profile mode is
+used separately for candidate counters.
 
 Host: Intel Core i7-10700K, one codec thread. Vort uses Zig 0.16.0 ReleaseFast,
 GNU x86-64. Baseline is clean commit `36fa5838`; the final source is the
 prepared-pair tree.
 
-| Scope | Geometric paired time ratio | Physical emits old → new | Wire identity |
+| Scope | Pair rows | Geometric paired time ratio | Wins |
 | --- | ---: | ---: | ---: |
-| Twelve Silesia 64 KiB slices | 0.97083 | 24 → 4 | 12/12 |
+| Twelve Silesia 64 KiB slices | 12/12 | 0.98659 | 9/12 |
+| Twelve Silesia 256 KiB slices | 12/12 | 0.93504 | 12/12 |
+| Four Silesia 1 MiB slices within the command bound | 4/4 | 0.93870 | 4/4 |
+| Eight Silesia 1 MiB slices above the command bound | 0/8 | 1.00028 | fallback |
 
-Per-row paired ratios span 0.951–0.991. The aggregate geometric ratio is
-0.97083, about 3.0% less profiled outer encode time, with eight rows skipping
-pair emission entirely. [All row results](distance-parameter-pair-20261103.csv)
-retain wire hashes, counters and independent medians.
+Every 64 KiB wire is byte-identical to baseline; all 24 large-input wires are
+also byte-identical. The 64 KiB profile counters fall from 24 old physical
+candidate emissions to 4. The 64 KiB per-row ratios span 0.955–1.042, with two
+small-input rows regressing while the aggregate improves. All twelve 256 KiB
+rows win, improving about 6.5% geometrically. At 1 MiB, the four rows whose
+ordinary command count fits the 65,536 bound (21,786–64,311 commands) all win
+about 6.1%; the eight rows above the bound retain the original physical search
+and measure neutral. [64 KiB rows](distance-parameter-pair-20261103.csv) and
+[large rows](distance-parameter-pair-large-20261103.csv) retain wire hashes,
+command counts, pair-path flags and independent medians.
 
 ## Reproduction
 
 ```sh
 zig build build-br-parameter-pair-probe
+zig-out/bin/vort-br-parameter-pair-probe input.bin timed 3
 zig build test-br -Dbr-test-filter="Brotli parameter pair" --summary all
 zig build test-br -Dbr-test-filter="prepared distance parameters" --summary all
+zig build test-br -Dbr-test-filter="extends beyond 64 KiB" --summary all
 ```
 
-The probe accepts an ordinary or `profile` mode and an input file up to
-65,536 bytes. It prints input/wire length, both SHA-256 identities, guard
-status and the optional profile JSON.
+The probe accepts `ordinary`, `profile` or `timed` mode and an input file up
+to 2 MiB. `profile` remains limited to the public 64 KiB q8 profile API. The
+probe prints input/wire length, both SHA-256 identities, guard status, optional
+timed averages and the optional profile JSON.
