@@ -767,9 +767,21 @@ const ControlledEncoderCodec = struct {
             literal_ends[index] = record.match_end;
         }
         const tail_start = records[records.len - 1].match_end;
-        _ = state; // Frame state is applied once by prepareSequences.
         if (count > max_native_sequence_count)
-            return emitLargeSequenceCompressedBlockWithState(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, null, initial_repeated_offsets);
+            return emitLargeSequenceCompressedBlockWithState(
+                allocator,
+                out,
+                block,
+                last,
+                literal_lens,
+                offsets,
+                match_lens,
+                literal_ends,
+                tail_start,
+                scratch,
+                if (state.sequence_state.previous_tables) |*tables| tables else null,
+                state.sequence_state.repeated_offsets,
+            );
         return emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &block_scratch.single_sequence_emit);
     }
     pub fn prepareSequences(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch) zstd.Error!SequencePrepareResult {
@@ -782,6 +794,11 @@ const ControlledEncoderCodec = struct {
         if (state.sequence_state.previous_tables == null and std.meta.eql(state.sequence_state.repeated_offsets, initial_repeated_offsets))
             return .{ .ready = true };
         const count = records.len;
+        if (count > max_native_sequence_count) {
+            // writeSequences already emitted this large candidate against the
+            // current frame state, so only its proven repcodes need to cross.
+            return .{ .ready = true, .final_offsets = scratch.offset_extras.items[0..3].* };
+        }
         try scratch.values.resize(allocator, std.math.mul(usize, count, 4) catch return error.IntegerOverflow);
         const literal_lens = scratch.values.items[0..count];
         const offsets = scratch.values.items[count .. count * 2];
@@ -794,28 +811,6 @@ const ControlledEncoderCodec = struct {
             literal_ends[index] = record.match_end;
         }
         const tail_start = records[records.len - 1].match_end;
-        if (count > max_native_sequence_count) {
-            var replacement: std.ArrayList(u8) = .empty;
-            defer replacement.deinit(allocator);
-            if (!try emitLargeSequenceCompressedBlockWithState(
-                allocator,
-                &replacement,
-                block,
-                last,
-                literal_lens,
-                offsets,
-                match_lens,
-                literal_ends,
-                tail_start,
-                scratch,
-                if (state.sequence_state.previous_tables) |*tables| tables else null,
-                state.sequence_state.repeated_offsets,
-            )) return .{ .ready = false };
-            try candidate.ensureTotalCapacity(allocator, replacement.items.len);
-            candidate.clearRetainingCapacity();
-            candidate.appendSliceAssumeCapacity(replacement.items);
-            return .{ .ready = true, .final_offsets = scratch.offset_extras.items[0..3].* };
-        }
         if (!try replaceSequenceCandidateWithFrameState(
             allocator,
             candidate,

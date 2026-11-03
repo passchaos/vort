@@ -44,7 +44,9 @@ sequence position separately, removing a per-state last-position branch.
 The prepared candidate now carries its proven final repcodes to commit, so the
 large-block path no longer decodes the same bitstream a second time. State-dependent
 re-emission also consumes the encoder's records directly instead of decoding the
-candidate back into sequence values first.
+candidate back into sequence values first. Large candidates are now emitted
+against the current frame state in the first place, so preparation no longer
+repeats the whole table-planning and emission pass.
 
 ## Measurement
 
@@ -69,8 +71,9 @@ benchmark reports the best round.
 | Split last-position DP | 187,489 | 84,138,159 | 0.2799 |
 | Prepared commit repcodes | 187,489 | 81,752,170 | 0.2729 |
 | Records-based preparation | 187,489 | 76,730,873 | 0.2552 |
+| State-aware candidate emission | 187,489 | 60,112,090 | 0.2000 |
 
-The combined change is **3.92 times faster**; the repeat-skip stage adds 28
+The combined change is **5.00 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -86,10 +89,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,489 | 172,242 | 1.0885 | 79,328,543 | 37.8 |
-| dickens | 446,706 | 430,405 | 1.0379 | 144,822,833 | 20.7 |
-| reymont | 375,454 | 338,665 | 1.1086 | 131,529,319 | 22.8 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 172,358,797 | 17.4 |
+| xml | 187,489 | 172,242 | 1.0885 | 60,183,177 | 49.8 |
+| dickens | 446,706 | 430,405 | 1.0379 | 104,891,654 | 28.6 |
+| reymont | 375,454 | 338,665 | 1.1086 | 95,335,272 | 31.5 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 140,788,702 | 21.3 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller

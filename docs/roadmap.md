@@ -42,8 +42,9 @@ map for compressed transitions, inlines per-sequence symbol dispatch, skips
 the repeat DP above 4,096 sequences, computes the absolute offset code in
 closed form, reuses the cached planner for state-dependent large-block
 re-emission, deduplicates match-seed anchors, carries prepared final repcodes
-into commit and reuses encoder records during re-emission. The 1 MiB XML
-level-1 fast encode is 3.92 times faster with 28
+into commit, reuses encoder records during re-emission and emits large
+candidates directly against the current frame state. The 1 MiB XML level-1
+fast encode is 5.00 times faster with 28
 additional wire bytes (0.015%); the repeat DP remains the largest encoder
 symbol below the skip threshold.
 
