@@ -1474,9 +1474,9 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("bench/checksum.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
@@ -1552,9 +1552,9 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/deflate_decode_stage_report.zig"),
             .target = target,
-            .optimize = optimize,
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });

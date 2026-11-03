@@ -1017,6 +1017,7 @@ reuse, so production keeps the simpler independently owned plans.
 - [x] Deflate decode stage report isolates raw/zlib/gzip alloc and caller-buffer decode overhead, including wrapper/checksum costs.
 - [x] Deflate decode stage report includes exact-size alloc decode rows for raw/zlib/gzip APIs.
 - [x] Deflate decode stage report separates literal-only dynamic streams from dynamic streams with LZ77 matches.
+- [x] Checksum benchmark and Deflate decode stage report default to ReleaseFast library and executable builds so throughput rows are not unoptimized Debug samples.
 - [x] Deflate decode stage dashboard records raw/zlib/gzip malformed, truncated, checksum, and concatenated-gzip error-path smoke results.
 - [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] Deflate fuzz smoke and hex corpus cover dynamic matches without distance codes.
