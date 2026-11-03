@@ -72,7 +72,7 @@ long table on every input. On the same 1 MiB XML screen:
 
 | Fast policy | Wire bytes | Encode ns | Size vs libzstd |
 | --- | ---: | ---: | ---: |
-| Adaptive default (text) | 169,704 | 47.9M | 0.9853 |
+| Adaptive default (text) | 167,595 | 48.3M | 0.9730 |
 | Adaptive default (x-ray) | 733,362 | 112.1M | 0.9125 |
 | Double-fast | 165,730 | 52.0M | 0.9622 |
 
@@ -113,10 +113,10 @@ benchmark reports the best round.
 | Direct history seed hashing | 187,495 | 46,758,314 | 0.1555 |
 | Direct block hash paths | 187,495 | 45,207,876 | 0.1504 |
 | 15-bit fast hash table | 187,854 | 44,175,804 | 0.1469 |
-| Adaptive long-match default | 169,704 | 47,873,455 | 0.1596 |
+| Adaptive long-match default | 167,595 | 48,251,676 | 0.1605 |
 
-The combined change is **6.28 times faster**; the adaptive long-match default
-produces 169,704 bytes, 9.5% below the original 187,461-byte fast baseline.
+The combined change is **6.23 times faster**; the adaptive default produces
+167,595 bytes, 10.6% below the original 187,461-byte fast baseline.
 The complete ReleaseFast Zstd suite passes 1,276/1,276 tests with exit zero.
 
 This remains a single-strategy screen and is not a full Zstd matrix; libzstd
@@ -131,7 +131,7 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 169,704 | 172,242 | 0.9853 | 47,873,455 | 62.7 |
+| xml | 167,595 | 172,242 | 0.9730 | 48,251,676 | 62.2 |
 | dickens | 419,879 | 430,405 | 0.9755 | 93,252,524 | 32.2 |
 | reymont | 337,555 | 338,665 | 0.9967 | 79,145,229 | 37.9 |
 | x-ray | 733,362 | 803,674 | 0.9125 | 112,114,026 | 26.8 |
@@ -149,7 +149,7 @@ the slower binary result:
 
 | File | Adaptive bytes | libzstd | Size ratio | MiB/s | Forced-long bytes | Forced MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| xml | 731,094 | 696,678 | 1.0494 | 71.4 | 731,094 | 71.4 |
+| xml | 723,661 | 696,678 | 1.0387 | 71.1 | 723,661 | 71.1 |
 | dickens | 4,194,809 | 4,268,871 | 0.9827 | 31.0 | 4,194,809 | 31.0 |
 | reymont | 2,154,518 | 2,152,776 | 1.0008 | 38.9 | 2,154,518 | 38.9 |
 | x-ray | 6,245,104 | 6,772,680 | 0.9221 | 26.9 | 6,244,872 | 21.1 |
@@ -212,7 +212,7 @@ default:
 | dickens | 419,879 | 430,405 | 0.9755 |
 | mozilla | 657,199 | 665,404 | 0.9877 |
 | mr | 364,766 | 364,997 | 0.9994 |
-| nci | 109,186 | 98,767 | 1.1055 |
+| nci | 107,813 | 98,767 | 1.0916 |
 | ooffice | 600,667 | 676,847 | 0.8874 |
 | osdb | 376,042 | 392,809 | 0.9573 |
 | reymont | 337,555 | 338,665 | 0.9967 |
@@ -222,7 +222,7 @@ default:
 | xml | 170,251 | 172,242 | 0.9884 |
 | x-ray | 733,362 | 803,674 | 0.9125 |
 
-Eleven of twelve files are at or below libzstd. NCI remains 10.5% larger, but
+Eleven of twelve files are at or below libzstd. NCI remains 9.2% larger, but
 the adaptive long-match and extreme double-fast dispatch reduced its
 single-table gap from 15.8%. A lower-bound
 gate that excluded the most repetitive sample (unique ratio below 1/12) was

@@ -61,9 +61,10 @@ directly against the current frame state, scans intra-block matches without
 segment dispatch, skips the repeat DP above 2,048 sequences, marks the
 dictionary hash segment unlikely, hashes contiguous history seeds directly and
 reads block hash lookups from the block with a 15-bit fast table, uses long
-matches for text and the double-fast engine for extremely repetitive blocks,
-making the 1 MiB XML level-1 fast encode 6.28 times faster at 169,704 bytes,
-9.5% below the original baseline and 1.2% smaller than libzstd. The dedicated upstream Zstd decodecorpus
+matches for text and a lazy lookahead in the double-fast engine for extremely
+repetitive blocks,
+making the 1 MiB XML level-1 fast encode 6.23 times faster at 167,595 bytes,
+10.6% below the original baseline and 1.2% smaller than libzstd. The dedicated upstream Zstd decodecorpus
 gate passes 9 campaigns,
 9,900 cases and 5,376 block-stream cases with all 64 sequence-mode
 combinations. A bounded six-file Silesia q8 screen finds

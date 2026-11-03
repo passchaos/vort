@@ -142,7 +142,7 @@ fn planDouble(records: *std.ArrayList(Record), allocator: std.mem.Allocator, sou
         // The long table has a distinct collision domain. When the current
         // short prefix is weak, pay one literal only for a longer next match.
         var ahead_tested = false;
-        if (best.length < 8 and position + 1 < end) {
+        if (position + 1 < end) {
             const next_position = position + 1;
             const repeated = probeRepAhead(source, next_position, reps[0], parameters.profile);
             ahead_tested = repeated.tested;
