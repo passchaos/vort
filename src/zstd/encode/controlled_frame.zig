@@ -93,7 +93,7 @@ pub fn Encoder(comptime Codec: type) type {
             try validateRecords(source, records.items);
             var prepared: Codec.SequencePrepareResult = .{ .ready = false };
             if (records.items.len != 0 and try Codec.writeSequences(allocator, candidate, block, last, records.items, scratch, block_scratch, state))
-                prepared = try Codec.prepareSequences(allocator, candidate, block, last, state, scratch);
+                prepared = try Codec.prepareSequencesFromRecords(allocator, candidate, block, last, state, scratch, records.items);
             var next_huffman = state.previous_huffman_plan;
             if (!try Codec.writeHuffman(allocator, fallback, block, last, &next_huffman))
                 try Codec.writeRaw(allocator, fallback, block, last);

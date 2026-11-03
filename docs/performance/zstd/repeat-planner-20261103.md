@@ -42,7 +42,9 @@ every sequence. Match seeding inserts each distinct anchor once; acceleration
 1 previously wrote the match end twice. Both table DPs handle the final
 sequence position separately, removing a per-state last-position branch.
 The prepared candidate now carries its proven final repcodes to commit, so the
-large-block path no longer decodes the same bitstream a second time.
+large-block path no longer decodes the same bitstream a second time. State-dependent
+re-emission also consumes the encoder's records directly instead of decoding the
+candidate back into sequence values first.
 
 ## Measurement
 
@@ -66,8 +68,9 @@ benchmark reports the best round.
 | Deduplicated seed anchors | 187,489 | 84,303,965 | 0.2804 |
 | Split last-position DP | 187,489 | 84,138,159 | 0.2799 |
 | Prepared commit repcodes | 187,489 | 81,752,170 | 0.2729 |
+| Records-based preparation | 187,489 | 76,730,873 | 0.2552 |
 
-The combined change is **3.68 times faster**; the repeat-skip stage adds 28
+The combined change is **3.92 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
