@@ -25,6 +25,11 @@ code 2. The wrapper rejects the repeat-offset selectors 0 and 1, and
 `offsetCode` still rejects overflow and out-of-range codes with
 `error.CorruptFrame`.
 
+Large blocks whose state-dependent re-emission previously took the scalar
+planner now use the cached planner. The scalar plan re-validated every value
+against its selected symbol, duplicating work the alternative builders already
+did; the cached plan consumes their code arrays and precomputed value bits.
+
 ## Measurement
 
 `run-zstd-encode-bench` on the 1 MiB XML prefix, level 1 with explicit fast
@@ -38,10 +43,12 @@ benchmark reports the best round.
 | Mapped transitions | 187,461 | 163,920,975 | 0.5452 |
 | Inlined symbol dispatch | 187,461 | 153,313,208 | 0.5100 |
 | Repeat skip above 4,096 sequences | 187,489 | 114,806,784 | 0.3819 |
-| Closed-form offset code | 187,489 | 108,052,866 | 0.3594 |
+| Closed-form offset code | 187,489 | 107,072,102 | 0.3562 |
+| Cached re-emission planner | 187,489 | 92,902,760 | 0.3090 |
 
-The combined change is **2.81 times faster**; the repeat-skip stage adds 28
-bytes (0.015%) to this row and the offset formula leaves the wire unchanged.
+The combined change is **3.24 times faster**; the repeat-skip stage adds 28
+bytes (0.015%) to this row, and the offset and planner changes leave the wire
+unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
 This remains a single-input, single-strategy screen and is not a full Zstd

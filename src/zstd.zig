@@ -22932,7 +22932,7 @@ fn emitLargeSequenceCompressedBlockWithState(
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
 ) Error!bool {
-    return try emitLargeSequenceCompressedBlockWithStatePolicy(false, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets, null);
+    return try emitLargeSequenceCompressedBlockWithStatePolicy(true, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets, null);
 }
 
 const fast_repeat_plan_sequence_limit: usize = 4 * 1024;
