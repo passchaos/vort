@@ -35,6 +35,24 @@ prepared-dictionary and decoder-layout tests pass in Debug, ReleaseSafe and
 ReleaseFast. The complete ReleaseSafe and ReleaseFast Zstd suites each pass
 1,270/1,270 tests with exit zero.
 
+## Reuse measurement
+
+`tools/zstd/prepared_dictionary_probe.zig` decodes the 702-byte trained frame
+into a preallocated 2,304-byte output with either the ordinary dictionary or
+one prepared handle. Five 20,000-decode rounds on the host give median totals
+371.5 ms versus 58.9 ms (ratio 0.157, about 6.3 times less time). Both paths
+return the same CRC-32 `1658167111` and the same output. The frame is
+intentionally tiny, so dictionary entropy reconstruction dominates; larger
+frames dilute this ratio. This is a per-frame reuse microbenchmark, not a
+whole-file or memory comparison.
+
+```sh
+zig build build-zstd-prepared-dictionary-probe
+zig-out/bin/vort-zstd-prepared-dictionary-probe \
+  src/zstd/testdata/libzstd-trained-repeat.dict.hex \
+  src/zstd/testdata/libzstd-trained-repeat.frame.hex 20000
+```
+
 This establishes the reuse and ownership contract. It does not yet provide a
 whole-file/dictionary streaming comparison, avoid the per-frame table copy, or
 establish a memory/RSS lead over libzstd's DDict.

@@ -784,6 +784,16 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_incremental_parallel_probe_step = b.step("build-zstd-incremental-parallel-probe", "Build the public owned incremental Zstd interoperability probe");
     zstd_incremental_parallel_probe_step.dependOn(&b.addInstallArtifact(zstd_incremental_parallel_probe, .{}).step);
+    const zstd_prepared_dictionary_probe = b.addExecutable(.{
+        .name = "vort-zstd-prepared-dictionary-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/prepared_dictionary_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort_zstd", .module = zstd_encode_bench_mod }},
+        }),
+    });
+    b.step("build-zstd-prepared-dictionary-probe", "Build the ordinary versus prepared Zstd decode-dictionary probe").dependOn(&b.addInstallArtifact(zstd_prepared_dictionary_probe, .{}).step);
     const zstd_incremental_parallel_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/incremental_parallel_diff.py", "--probe" });
     zstd_incremental_parallel_diff.addArtifactArg(zstd_incremental_parallel_probe);
     if (b.args) |args| zstd_incremental_parallel_diff.addArgs(args);
