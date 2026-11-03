@@ -74,10 +74,26 @@ The combined change is **3.92 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
-This remains a single-input, single-strategy screen and is not a full Zstd
-matrix; libzstd still encodes this input substantially faster. The repeat
-planner remains the largest encoder symbol below the skip threshold.
+This remains a single-strategy screen and is not a full Zstd matrix; libzstd
+still encodes these inputs substantially faster. The repeat planner remains
+the largest encoder symbol below the skip threshold.
 [Raw rows](repeat-planner-20261103.csv) retain the stage timings and wire sizes.
+
+## Corpus screen
+
+Current source, 1 MiB prefix, level 1 with explicit fast strategy and
+acceleration 1, three iterations per round and three rounds, one run per file:
+
+| File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| xml | 187,489 | 172,242 | 1.0885 | 79,328,543 | 37.8 |
+| dickens | 446,706 | 430,405 | 1.0379 | 144,822,833 | 20.7 |
+| reymont | 375,454 | 338,665 | 1.1086 | 131,529,319 | 22.8 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 172,358,797 | 17.4 |
+
+These rows confirm the timing direction outside XML, but they are not a
+whole-file or all-twelve-source matrix; x-ray remains the only row smaller
+than the reference here.
 
 Follow-ups were measured over five iterations and five rounds and rejected as
 noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus
@@ -88,3 +104,10 @@ A conditional long-match probe in double-fast was slower (97.4M ns versus
 89.0M ns) with a 49-byte wire change. A commit cache stored in
 `SequenceEncoderState` measured 87.1-87.4M ns versus 85.9M ns; the out-parameter
 form above avoids that per-block state copy and is adopted.
+
+Further rejected experiments, all at unchanged wire unless noted: prepared
+repcodes for the small-block path (77.62-77.68M ns versus 76.73-77.07M at
+1 MiB; 64 KiB neutral), a block-only backward match extension
+(79.15-77.86M ns), direct offset symbols in the chooser (77.52-78.16M ns), a
+four-bit transition lookup DP (95.8-95.3M ns) and cached symbol codes in the
+repeat planner (78.66-77.21M ns). None justified the extra code or state.
