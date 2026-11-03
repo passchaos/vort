@@ -17307,6 +17307,38 @@ test "zstd native writer can reuse standard dictionary sequence tables" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "zstd prepared standard dictionary reuses entropy state for encoding" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const frame_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.frame.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const source_frame = try std.testing.allocator.alloc(u8, frame_hex.len / 2);
+    defer std.testing.allocator.free(source_frame);
+    _ = try std.fmt.hexToBytes(source_frame, frame_hex);
+
+    const standard = try NativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    var prepared = try PreparedDecodeDictionary.init(standard.dictionary);
+    const payload = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, source_frame, standard.dictionary);
+    defer std.testing.allocator.free(payload);
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    test_standard_dictionary_parse_calls = 0;
+    defer test_standard_dictionary_parse_calls = 0;
+    const prepared_encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, prepared.handle());
+    defer std.testing.allocator.free(prepared_encoded.frame);
+    try std.testing.expectEqual(@as(usize, 0), test_standard_dictionary_parse_calls);
+    const ordinary_encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, standard.dictionary);
+    defer std.testing.allocator.free(ordinary_encoded.frame);
+    try std.testing.expect(test_standard_dictionary_parse_calls > 0);
+    try std.testing.expectEqualSlices(u8, ordinary_encoded.frame, prepared_encoded.frame);
+    const decoded = try decodeFrameAllocWithDictionary(std.testing.allocator, prepared_encoded.frame, prepared.handle());
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 fn dictionaryForInspectedFrame(frame: []const u8, dictionary: NativeDictionary) Error!?NativeDictionary {
     const header = try inspectNativeFrameHeader(frame);
     if (header.dictionary_id == 0) return dictionary;

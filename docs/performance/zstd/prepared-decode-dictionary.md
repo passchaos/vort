@@ -35,6 +35,15 @@ prepared-dictionary and decoder-layout tests pass in Debug, ReleaseSafe and
 ReleaseFast. The complete ReleaseSafe and ReleaseFast Zstd suites each pass
 1,270/1,270 tests with exit zero.
 
+## Encoder reuse
+
+The same prepared handle is accepted by native encode entry points. A test
+encodes the decoded 2,304-byte payload with the ordinary dictionary and with
+`prepared.handle()`. The frames are byte-identical, the prepared encode
+performs zero dictionary entropy parses, and the ordinary encode increments
+the parse counter. The owner must outlive both operations and must not move
+after any handle is published.
+
 ## Reuse measurement
 
 `tools/zstd/prepared_dictionary_probe.zig` decodes the 702-byte trained frame
