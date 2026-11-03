@@ -49,6 +49,14 @@ finished trees instead of re-reading the prefix. The one-byte row also pays
 per-step overhead for 54,887 calls, so its 2.15x total decode time is not a
 header-only ratio.
 
+## Rejected retry lower-bound
+
+A lower-bound retry gate recorded the bits consumed by the failed tree and
+skipped retries with fewer available bits. With one-byte chunks the prefix
+grows by eight bits per call, so the `consumed + 1` bound almost never skipped
+a retry: tree attempts stayed at 738 and decode time remained within noise.
+The gate was reverted.
+
 ```sh
 zig build build-br-header-progress-probe
 zig-out/bin/vort-br-header-progress-probe src/br/dictionary.bin 1 3

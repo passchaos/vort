@@ -47,7 +47,8 @@ decode-dictionary handle now reuses one validated entropy snapshot across
 frames, and raw/zlib/gzip/stored-only incremental Deflate decoders expose a
 one-shot block-boundary step and query. Incremental Brotli compressed-header parsing
 now retains completed sub-parsers and Huffman trees across small input chunks;
-mid-tree continuation remains open. A bounded six-file Silesia q8 screen finds
+mid-tree continuation remains open, and a consumed-bits retry lower bound was
+rejected because one-byte chunks always clear it. A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage
 profile routes speed work to optimal parsing for XML, wire emission for x-ray
 and context clustering across all. A table-driven context lookup lowers q8

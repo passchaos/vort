@@ -49,7 +49,8 @@ adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib,
 gzip and stored-only incremental decoders. The
 [resumable Brotli compressed header](performance/br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks, with
-mid-tree continuation still open. A
+mid-tree continuation still open; a consumed-bits retry lower bound was
+rejected because one-byte chunks always clear it. A
 [bounded six-file Silesia q8 screen](performance/br/full-file-q8-20261103.md)
 finds Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; q8
 encode speed is the next concrete Brotli gap. The
