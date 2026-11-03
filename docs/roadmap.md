@@ -52,9 +52,12 @@ retains completed sub-parsers and Huffman trees across small input chunks, with
 mid-tree continuation still open. A
 [bounded six-file Silesia q8 screen](performance/br/full-file-q8-20261103.md)
 finds Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; q8
-encode speed is the next concrete Brotli gap. Full streaming/dictionary, memory
-and multi-platform comparisons remain required for the industry-best
-objective.
+encode speed is the next concrete Brotli gap. The
+[q8 stage profile](performance/br/q8-stage-profile-20261103.md) routes that
+work by content: XML is dominated by optimal parsing (63.8%), x-ray by wire
+emission (40.7%), and context proposals remain 17–22% across all. Full
+streaming/dictionary, memory and multi-platform comparisons remain required
+for the industry-best objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
