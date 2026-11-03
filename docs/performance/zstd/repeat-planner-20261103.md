@@ -55,7 +55,9 @@ frames now read both forward and backward comparison bytes directly from the
 block instead of dispatching through the three-segment accessor. The fast
 repeat-plan skip threshold drops from 4,096 to 2,048 sequences: the repeat
 table saves only its FSE header, so removing the DP from the 2,048-4,096 band
-costs 6 bytes on XML while cutting low-level encode time substantially.
+costs 6 bytes on XML while cutting low-level encode time substantially. The
+hash word loader marks the dictionary segment unlikely, keeping history and
+block hashing on the predicted path.
 
 ## Measurement
 
@@ -83,8 +85,9 @@ benchmark reports the best round.
 | State-aware candidate emission | 187,489 | 60,112,090 | 0.2000 |
 | Intra-block match scan | 187,489 | 58,610,198 | 0.1950 |
 | Repeat skip above 2,048 sequences | 187,495 | 53,957,173 | 0.1795 |
+| Dictionary-unlikely hash hint | 187,495 | 53,535,559 | 0.1781 |
 
-The combined change is **5.57 times faster**; the repeat-skip stages add 34
+The combined change is **5.62 times faster**; the repeat-skip stages add 34
 bytes (0.018%) to the baseline, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -100,10 +103,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,495 | 172,242 | 1.0886 | 53,957,173 | 55.6 |
-| dickens | 446,706 | 430,405 | 1.0379 | 103,080,471 | 29.1 |
-| reymont | 375,454 | 338,665 | 1.1086 | 94,449,162 | 31.8 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 129,773,567 | 23.1 |
+| xml | 187,495 | 172,242 | 1.0886 | 55,708,144 | 53.9 |
+| dickens | 446,706 | 430,405 | 1.0379 | 101,379,293 | 29.6 |
+| reymont | 375,454 | 338,665 | 1.1086 | 91,594,044 | 32.8 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 129,017,924 | 23.3 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller
@@ -138,3 +141,11 @@ all three measured 51.9/50.9/51.5M ns but grew the wire from 187,495 to
 52.7/52.5/52.3M ns at 197,725 bytes (+5.5%), and skipping only the match table
 measured 52.3-53.1M ns at 197,922 bytes (+5.6%). The compressed planners stay
 in the fast policy.
+
+Seed-density changes also lost on speed despite smaller wires: capping the
+dense history seed measured 55.05/54.23/54.42M ns at 187,446 bytes, a
+single-byte recent stride measured 58.62/57.61/56.76M ns at 187,238 bytes, and
+doubling the sparse older step measured 56.70/58.65/57.30M ns at 187,454 bytes.
+The current density is speed-optimal for this input. A second dictionary
+branch hint in `byteAt` measured 54.56/53.89/53.77M ns versus
+53.54/53.19/52.74M with only the hash-loader hint, so only the latter was kept.

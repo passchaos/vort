@@ -331,6 +331,7 @@ fn wordScalar(comptime width: usize, source: Source, position: usize) std.meta.I
 fn word(comptime width: usize, source: Source, position: usize) std.meta.Int(.unsigned, width * 8) {
     const Word = std.meta.Int(.unsigned, width * 8);
     if (position < source.dictionary.len) {
+        @branchHint(.unlikely);
         if (source.dictionary.len - position >= width) return std.mem.readInt(Word, source.dictionary[position..][0..width], .little);
     } else if (position < source.prefixLen()) {
         const offset = position - source.dictionary.len;

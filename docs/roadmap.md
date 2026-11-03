@@ -44,8 +44,9 @@ closed form, reuses the cached planner for state-dependent large-block
 re-emission, deduplicates match-seed anchors, carries prepared final repcodes
 into commit, reuses encoder records during re-emission, emits large candidates
 directly against the current frame state, scans intra-block matches without
-segment dispatch and skips the repeat DP above 2,048 sequences. The 1 MiB XML
-level-1 fast encode is 5.57 times faster with 34 additional wire bytes
+segment dispatch, skips the repeat DP above 2,048 sequences and marks the
+dictionary hash segment unlikely. The 1 MiB XML level-1 fast encode is 5.62
+times faster with 34 additional wire bytes
 (0.018%); the repeat DP remains the largest encoder
 symbol below the skip threshold.
 
