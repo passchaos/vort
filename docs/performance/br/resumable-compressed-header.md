@@ -28,8 +28,12 @@ input and once with one-byte input chunks. Both paths produce identical output.
 The split path reports 752 progress resumes, 46 mid-tree symbol resumes and
 both paths complete the same 19 header Huffman trees; re-parsing the prefix per
 byte would repeat those completed trees thousands of times. Focused Debug,
-ReleaseSafe and ReleaseFast runs pass. The complete ReleaseFast Brotli suite passes 1,533 tests with one
-existing platform skip out of 1,534 and exit zero.
+ReleaseSafe and ReleaseFast runs pass. The complete ReleaseFast Brotli suite
+passes 1,533 tests with one existing platform skip out of 1,534 and exit zero.
+`run-br-upstream-multiblock-diff` also passes 98 cases, 7,056 broad
+generated/progressive cases and 1,401 progress-matrix runs, including complex
+trees with `hskip = 3`; an earlier resume version incorrectly rejected that
+legal kind and was fixed before this commit.
 
 ## Fragmented measurement
 

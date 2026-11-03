@@ -22813,7 +22813,6 @@ fn readPrefixCodeRuntimeResumable(
         tree.lengths = @splat(0);
         const kind = try reader.readBits(u2, 2);
         if (kind == 1) return readSimplePrefixCodeRuntime(max_alphabet_size, alphabet_size_max, alphabet_size_limit, reader);
-        if (kind == 3) return error.CorruptFrame;
 
         tree.active = true;
         tree.hskip = kind;
