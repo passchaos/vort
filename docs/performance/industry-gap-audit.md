@@ -62,8 +62,8 @@ segment dispatch, skips the repeat DP above 2,048 sequences, marks the
 dictionary hash segment unlikely, hashes contiguous history seeds directly and
 reads block hash lookups from the block with a 15-bit fast table, uses long
 matches for text, a lazy lookahead in the double-fast engine for extremely
-repetitive blocks and a repeat-offset eligibility precheck,
-making the 1 MiB XML level-1 fast encode 6.57 times faster at 167,595 bytes,
+repetitive blocks and repeat-offset eligibility/direct-extra fast paths,
+making the 1 MiB XML level-1 fast encode 6.60 times faster at 167,595 bytes,
 10.6% below the original baseline and 1.2% smaller than libzstd. The dedicated upstream Zstd decodecorpus
 gate passes 9 campaigns,
 9,900 cases and 5,376 block-stream cases with all 64 sequence-mode

@@ -28078,9 +28078,8 @@ fn chooseOffsetSequenceCodeWithExtra(literal_len: usize, offset: usize, repeated
     }
 
     const code = try absoluteOffsetSequenceCode(offset);
-    var trial_offsets = repeated_offsets.*;
-    const extra = try sequenceOffsetExtraForEncodedOffset(try sequenceRleSymbol(.offset, code), literal_len, offset, &trial_offsets);
-    repeated_offsets.* = trial_offsets;
+    const extra = offset - of_base[code];
+    updateRepeatedOffsets(repeated_offsets, offset);
     return .{ .code = code, .extra = extra };
 }
 
