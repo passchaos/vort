@@ -22,7 +22,7 @@ The library is under active development. Its current capabilities include:
   sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
-  native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, zero-allocation native stream/block
+  native frame/block/skippable headers plus plain, standard-dictionary-aware, and dictionary-set-aware Zstd sequence-mode summaries, prepared standard decode-dictionary reuse across frames, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append, incremental fast/HC frame encode with
   optional pledged content size, resumable flush, linked history, preset

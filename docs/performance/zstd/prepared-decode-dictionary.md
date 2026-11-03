@@ -6,7 +6,8 @@ used to validate and reconstruct that entropy state on every frame through
 `initialSequenceFrameState` and `parseStandardDictionaryState`, even when the
 same dictionary decoded many frames.
 
-The new `PreparedDecodeDictionary` validates the dictionary once and stores an
+The new `PreparedDecodeDictionary` (exported from the root module as
+`ZstdPreparedDecodeDictionary`) validates the dictionary once and stores an
 immutable `PreparedDecodeState` snapshot: dictionary ID, borrowed content
 identity and the complete initial `SequenceFrameState`. `handle()` returns a
 borrowed `NativeDictionary` carrying a pointer to that snapshot. Existing
