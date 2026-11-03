@@ -23051,6 +23051,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         if (repeat_tables) |tables| previousSequenceTable(tables, .offset) else null,
         initial_offsets,
         exact_offset_values,
+        scratch.offset_extras.items[0..sequence_count],
     );
     const match_alternatives = try largeSequenceTablePlanAlternatives(
         match_lens,
@@ -23101,9 +23102,9 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     // Offset selectors update in forward sequence order. Resolve and retain
     // their extra-bit values before writing the bitstream in reverse order.
     const offset_extras = scratch.offset_extras.items;
-    for (0..sequence_count) |sequence_index| {
-        const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, sequence_index);
-        if (exact_offset_values) |values| {
+    if (exact_offset_values) |values| {
+        for (0..sequence_count) |sequence_index| {
+            const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, sequence_index);
             const value = std.math.cast(u32, values[sequence_index]) orelse return error.InvalidBlockPlan;
             const symbol = try hq_parser.prices.offsetSymbol(value);
             if (!sequenceSymbolMatchesCode(offset_symbol, .offset, symbol.code)) return error.CorruptFrame;
@@ -23111,12 +23112,11 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
             if (resolved.distance != offsets[sequence_index]) return error.InvalidBlockPlan;
             repeated_offsets = resolved.repeats;
             offset_extras[sequence_index] = symbol.extra_value;
-        } else offset_extras[sequence_index] = try sequenceOffsetExtraForEncodedOffset(
-            offset_symbol,
-            literal_lens[sequence_index],
-            offsets[sequence_index],
-            &repeated_offsets,
-        );
+        }
+    } else {
+        // The offset alternative builder already resolved extras in forward
+        // order while selecting codes, so reuse them here.
+        repeated_offsets = offset_alternatives.final_offsets;
     }
     var i = sequence_count;
     while (i > 0) {
@@ -26720,6 +26720,7 @@ const LargeSequenceTablePlanAlternatives = struct {
     items: [4]LargeSequenceTableEmitPlan = undefined,
     len: usize = 0,
     value_bit_count: usize = 0,
+    final_offsets: [3]usize = undefined,
 
     fn add(self: *LargeSequenceTablePlanAlternatives, plan: LargeSequenceTableEmitPlan) Error!void {
         if (self.len >= self.items.len) return error.CorruptFrame;
@@ -26885,21 +26886,24 @@ fn largeOffsetSequenceTablePlanAlternatives(
     previous: ?RepeatSequenceSource,
     initial_offsets: [3]usize,
     exact_offset_values: ?[]const usize,
+    offset_extras: []usize,
 ) linksection(wide_sequence_emit_text_section) Error!LargeSequenceTablePlanAlternatives {
-    if (literal_lens.len != offsets.len) return error.CorruptFrame;
+    if (literal_lens.len != offsets.len or offset_extras.len != offsets.len) return error.CorruptFrame;
     var alternatives: LargeSequenceTablePlanAlternatives = .{};
     var repeated_offsets = initial_offsets;
     for (offsets, 0..) |offset, i| {
-        const code = if (exact_offset_values) |values| exact: {
+        const selection = if (exact_offset_values) |values| exact: {
             if (values.len != offsets.len) return error.InvalidBlockPlan;
             const value = std.math.cast(u32, values[i]) orelse return error.InvalidBlockPlan;
             const resolved = try hq_parser.rep.resolve(literal_lens[i], value, repeated_offsets);
             if (resolved.distance != offset) return error.InvalidBlockPlan;
             repeated_offsets = resolved.repeats;
-            break :exact (try hq_parser.prices.offsetSymbol(value)).code;
-        } else try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
-        compressed_buffers.codes[i] = code;
-        alternatives.value_bit_count += of_bits[code];
+            const symbol = try hq_parser.prices.offsetSymbol(value);
+            break :exact OffsetSequenceCodeSelection{ .code = symbol.code, .extra = symbol.extra_value };
+        } else try chooseOffsetSequenceCodeWithExtra(literal_lens[i], offset, &repeated_offsets);
+        compressed_buffers.codes[i] = selection.code;
+        offset_extras[i] = selection.extra;
+        alternatives.value_bit_count += of_bits[selection.code];
     }
     if (rleSequenceCode(compressed_buffers.codes)) |code|
         try alternatives.add(.{ .rle = code });
@@ -26918,6 +26922,7 @@ fn largeOffsetSequenceTablePlanAlternatives(
         try alternatives.add(.{ .repeat = plan });
     if (comptime builtin.is_test)
         std.debug.assert(alternatives.value_bit_count == (large_fast_plan.valueBits(compressed_buffers.codes, &of_bits) catch unreachable));
+    alternatives.final_offsets = repeated_offsets;
     return alternatives;
 }
 
@@ -27936,7 +27941,16 @@ fn planCompressedOffsetSequenceValuesWithOffsets(
     return try planCompressedSequenceCodes(codes[0..offsets.len], .offset);
 }
 
+const OffsetSequenceCodeSelection = struct {
+    code: u8,
+    extra: usize,
+};
+
 fn chooseOffsetSequenceCode(literal_len: usize, offset: usize, repeated_offsets: *[3]usize) Error!u8 {
+    return (try chooseOffsetSequenceCodeWithExtra(literal_len, offset, repeated_offsets)).code;
+}
+
+fn chooseOffsetSequenceCodeWithExtra(literal_len: usize, offset: usize, repeated_offsets: *[3]usize) Error!OffsetSequenceCodeSelection {
     // Prefer the dedicated repeat-offset selectors when they describe the
     // requested match distance. Besides using fewer extra bits, this preserves
     // the same repeated-offset history that a normal zstd encoder would expose
@@ -27944,19 +27958,19 @@ fn chooseOffsetSequenceCode(literal_len: usize, offset: usize, repeated_offsets:
     for ([_]u8{ 0, 1 }) |code| {
         const symbol = try sequenceRleSymbol(.offset, code);
         var trial_offsets = repeated_offsets.*;
-        _ = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, &trial_offsets) catch |err| switch (err) {
+        const extra = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, &trial_offsets) catch |err| switch (err) {
             error.CorruptFrame => continue,
             else => return err,
         };
         repeated_offsets.* = trial_offsets;
-        return code;
+        return .{ .code = code, .extra = extra };
     }
 
     const code = try absoluteOffsetSequenceCode(offset);
     var trial_offsets = repeated_offsets.*;
-    _ = try sequenceOffsetExtraForEncodedOffset(try sequenceRleSymbol(.offset, code), literal_len, offset, &trial_offsets);
+    const extra = try sequenceOffsetExtraForEncodedOffset(try sequenceRleSymbol(.offset, code), literal_len, offset, &trial_offsets);
     repeated_offsets.* = trial_offsets;
-    return code;
+    return .{ .code = code, .extra = extra };
 }
 
 fn absoluteOffsetSequenceCode(offset: usize) Error!u8 {

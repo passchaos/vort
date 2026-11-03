@@ -9,3 +9,4 @@ cached_reemit_planner,187489,92902760,0.309019
 batched_bit_flush,187489,91256348,0.303543
 block_only_match_scan,187489,90946374,0.302539
 packed_transition_fields,187489,90135365,0.299813
+cached_offset_extras,187489,87070589,0.289621
