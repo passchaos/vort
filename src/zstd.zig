@@ -22989,7 +22989,7 @@ fn emitLargeSequenceCompressedBlockWithState(
     return try emitLargeSequenceCompressedBlockWithStatePolicy(true, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets, null);
 }
 
-const fast_repeat_plan_sequence_limit: usize = 4 * 1024;
+const fast_repeat_plan_sequence_limit: usize = 2 * 1024;
 
 fn emitLargeSequenceCompressedBlockWithStatePolicy(
     comptime use_fast_cached_planner: bool,

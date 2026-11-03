@@ -52,7 +52,10 @@ its frozen state-free wire. On the 64 KiB XML prefix this moves encode time
 from 2.958/2.996M ns to 2.872/2.933M ns (about 2.5%) with unchanged wire, while
 1 MiB runs stay within run-to-run noise. Intra-block matches in multi-block
 frames now read both forward and backward comparison bytes directly from the
-block instead of dispatching through the three-segment accessor.
+block instead of dispatching through the three-segment accessor. The fast
+repeat-plan skip threshold drops from 4,096 to 2,048 sequences: the repeat
+table saves only its FSE header, so removing the DP from the 2,048-4,096 band
+costs 6 bytes on XML while cutting low-level encode time substantially.
 
 ## Measurement
 
@@ -79,9 +82,10 @@ benchmark reports the best round.
 | Records-based preparation | 187,489 | 76,730,873 | 0.2552 |
 | State-aware candidate emission | 187,489 | 60,112,090 | 0.2000 |
 | Intra-block match scan | 187,489 | 58,610,198 | 0.1950 |
+| Repeat skip above 2,048 sequences | 187,495 | 53,957,173 | 0.1795 |
 
-The combined change is **5.13 times faster**; the repeat-skip stage adds 28
-bytes (0.015%) to this row, and the later changes leave the wire unchanged.
+The combined change is **5.57 times faster**; the repeat-skip stages add 34
+bytes (0.018%) to the baseline, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
 This remains a single-strategy screen and is not a full Zstd matrix; libzstd
@@ -96,10 +100,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,489 | 172,242 | 1.0885 | 58,610,198 | 51.2 |
-| dickens | 446,706 | 430,405 | 1.0379 | 104,076,149 | 28.8 |
-| reymont | 375,454 | 338,665 | 1.1086 | 93,989,520 | 31.9 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 131,187,767 | 22.9 |
+| xml | 187,495 | 172,242 | 1.0886 | 53,957,173 | 55.6 |
+| dickens | 446,706 | 430,405 | 1.0379 | 103,080,471 | 29.1 |
+| reymont | 375,454 | 338,665 | 1.1086 | 94,449,162 | 31.8 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 129,773,567 | 23.1 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller
@@ -121,3 +125,9 @@ repcodes for the small-block path (77.62-77.68M ns versus 76.73-77.07M at
 (79.15-77.86M ns), direct offset symbols in the chooser (77.52-78.16M ns), a
 four-bit transition lookup DP (95.8-95.3M ns) and cached symbol codes in the
 repeat planner (78.66-77.21M ns). None justified the extra code or state.
+
+A segment-walking match scan with vectorized run comparison measured
+59.61/59.57/59.19M ns versus 58.61/57.88/58.26M, and a scalar history fast
+path measured 61.50/60.49/60.43M ns; both were reverted. The first history
+variant also changed the wire by 178 bytes until the history-to-block crossing
+index was corrected, after which the wire matched but the path was slower.

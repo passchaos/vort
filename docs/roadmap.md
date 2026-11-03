@@ -43,10 +43,10 @@ the repeat DP above 4,096 sequences, computes the absolute offset code in
 closed form, reuses the cached planner for state-dependent large-block
 re-emission, deduplicates match-seed anchors, carries prepared final repcodes
 into commit, reuses encoder records during re-emission, emits large candidates
-directly against the current frame state and scans intra-block matches without
-segment dispatch. The 1 MiB XML level-1 fast encode is 5.13 times faster with
-28
-additional wire bytes (0.015%); the repeat DP remains the largest encoder
+directly against the current frame state, scans intra-block matches without
+segment dispatch and skips the repeat DP above 2,048 sequences. The 1 MiB XML
+level-1 fast encode is 5.57 times faster with 34 additional wire bytes
+(0.018%); the repeat DP remains the largest encoder
 symbol below the skip threshold.
 
 The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)

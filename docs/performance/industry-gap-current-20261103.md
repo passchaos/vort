@@ -136,10 +136,9 @@ DP above 4,096 sequences, computes the absolute offset code in closed form and
 reuses the cached planner for state-dependent large-block re-emission,
 deduplicates match-seed anchors, carries prepared final repcodes into commit,
 reuses encoder records during re-emission, emits large candidates directly
-against the current frame state and scans intra-block matches without segment
-dispatch; the 1 MiB XML level-1 fast encode is 5.13 times faster with 28
-additional wire
-bytes (0.015%). A
+against the current frame state, scans intra-block matches without segment
+dispatch and skips the repeat DP above 2,048 sequences; the 1 MiB XML level-1
+fast encode is 5.57 times faster with 34 additional wire bytes (0.018%). A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
 encode speed as the next concrete Brotli gap. The
