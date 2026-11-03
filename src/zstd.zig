@@ -47250,7 +47250,7 @@ test "Zstd dense short match copy preserves chained initialized history" {
     try @import("zstd/sequence/dense_copy16_tests.zig").chained();
 }
 
-test "zstd fast adaptive long-match gate selects repetitive text" {
+test "zstd fast adaptive gate classifies repetitive text" {
     const payload = try std.testing.allocator.alloc(u8, 16 * 1024);
     defer std.testing.allocator.free(payload);
     const words = [_][]const u8{ "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "theta", "lambda" };
@@ -47269,6 +47269,7 @@ test "zstd fast adaptive long-match gate selects repetitive text" {
     const result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
     defer std.testing.allocator.free(result.frame);
     try std.testing.expect(profile.long_hash_probes != 0);
+    try std.testing.expect(profile.fast_extreme_blocks != 0);
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, result.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);

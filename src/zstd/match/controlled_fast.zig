@@ -40,7 +40,13 @@ pub fn planReuse(records: *std.ArrayList(Record), allocator: std.mem.Allocator, 
     if (parameters.strategy == .double_fast) return planDouble(records, allocator, source, parameters);
     if (parameters.fast_long_matches)
         return planSingle(true, records, allocator, source, parameters);
-    return switch (fastSample(source.block)) {
+    const sample = fastSample(source.block);
+    if (parameters.profile) |profile| switch (sample) {
+        .text => profile.fast_text_blocks +|= 1,
+        .extreme => profile.fast_extreme_blocks +|= 1,
+        .binary => profile.fast_binary_blocks +|= 1,
+    };
+    return switch (sample) {
         .extreme => planDouble(records, allocator, source, parameters),
         .text => planSingle(true, records, allocator, source, parameters),
         .binary => planSingle(false, records, allocator, source, parameters),

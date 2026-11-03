@@ -78,8 +78,9 @@ long table on every input. On the same 1 MiB XML screen:
 
 The adaptive text path is about 9% slower than the previous single-table XML
 result but removes 9.4% of the wire and is 1.2% smaller than libzstd. Binary
-inputs keep the single-table time. The explicit option also resolves through
-the public level API, for example level -1 with `fast_long_matches = true`;
+inputs keep the single-table time. The encoder control profile exposes `fast_text_blocks`, `fast_extreme_blocks`
+and `fast_binary_blocks` classification counts. The explicit option also
+resolves through the public level API, for example level -1 with `fast_long_matches = true`;
 the resulting native frame round-trips and is no larger than the
 corresponding fast frame.
 

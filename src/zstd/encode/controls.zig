@@ -31,6 +31,11 @@ pub const Profile = struct {
     positions_tested: u64 = 0,
     short_hash_probes: u64 = 0,
     long_hash_probes: u64 = 0,
+    /// Adaptive fast-block classifications: text uses the long table,
+    /// extremely repetitive blocks use double-fast, binary keeps one table.
+    fast_text_blocks: u64 = 0,
+    fast_extreme_blocks: u64 = 0,
+    fast_binary_blocks: u64 = 0,
     rep_probes: u64 = 0,
     rep_length_cache_hits: u64 = 0,
     skipped_positions: u64 = 0,
