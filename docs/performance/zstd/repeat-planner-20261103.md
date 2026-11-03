@@ -64,3 +64,8 @@ This remains a single-input, single-strategy screen and is not a full Zstd
 matrix; libzstd still encodes this input substantially faster. The repeat
 planner remains the largest encoder symbol below the skip threshold.
 [Raw rows](repeat-planner-20261103.csv) retain the stage timings and wire sizes.
+
+Two follow-ups were measured over five iterations and five rounds and rejected
+as noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus
+147.85-147.91M ns) and a direct block-only hash path (147.38-148.02M ns). Both
+kept identical wire, so neither justified the extra code.
