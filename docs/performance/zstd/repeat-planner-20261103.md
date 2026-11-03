@@ -228,3 +228,16 @@ single-table gap from 15.8%. A lower-bound
 gate that excluded the most repetitive sample (unique ratio below 1/12) was
 rejected: XML regressed from 170,251 to 181,164 bytes because some blocks fell
 below the bound, and NCI regressed from 110,759 to 114,419.
+
+## Matcher quality follow-ups
+
+The remaining NCI gap is match-quality, not entropy: the explicit `.lazy`
+strategy reaches 98,610 bytes (0.9984 versus libzstd) at 31.9 MiB/s, and XML
+reaches 154,906 bytes (0.8994) at 24.7 MiB/s. Those are 2.5-3x slower than the
+adaptive fast path and remain available as explicit strategies.
+
+Two smaller experiments were rejected on speed. Deferring the lazy lookahead on
+equal or one-byte-longer next matches moved NCI 107,813 -> 107,566 and XML
+167,595 -> 167,544, but XML slowed from 62.2 to 57.4 MiB/s. A 16-bit hash with
+the lazy double-fast engine moved NCI to 107,372 and XML to 166,492 (0.9666),
+but cost 6-7% throughput; the 15-bit table remains the fast default.
