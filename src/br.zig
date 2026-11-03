@@ -360,8 +360,9 @@ pub const PlannedEncodeOptions = struct {
     distance_parameter_search: ?bool = null,
     /// Override q10/q11's bounded command-state work ceiling. The default
     /// sentinel uses the evidence-backed 8 KiB policy limit, zero disables
-    /// the candidate, and a non-zero KiB value may extend it through that
-    /// quality's optimal-input ceiling (64 for q10, 32 for q11).
+    /// the candidate, and a non-zero KiB value may extend it up to 64 KiB for
+    /// either quality. The command-state candidate uses its own bounded
+    /// parser, so this ceiling is independent of the optimal-input cap.
     command_state_max_input_kib: u8 = command_state_default_max_input_kib,
     /// Borrowed RAW shared-prefix attachments used by the Brotli compound
     /// dictionary. The descriptor and bytes must remain alive for the call.
@@ -5020,7 +5021,9 @@ fn applyCommandStateLimit(
 ) Error!void {
     if (requested_kib == command_state_default_max_input_kib) return;
     const limit = @as(u32, requested_kib) * 1024;
-    if (!schedule.optimal.entropy_feedback or limit > schedule.optimal.max_input_len)
+    // The command-state candidate uses its own bounded parser; its input
+    // ceiling is independent of the schedule's optimal-parser input cap.
+    if (!schedule.optimal.entropy_feedback or limit > 64 * 1024)
         return error.InvalidBlockPlan;
     schedule.optimal.command_state_max_input_len = limit;
 }
@@ -27649,9 +27652,13 @@ test "br planned quality options validate selector mode level and window contrac
         payload.len,
         .{ .quality = 10, .command_state_max_input_kib = 65 },
     ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 11, .command_state_max_input_kib = 64 },
+    )) >= payload.len);
     try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
         payload.len,
-        .{ .quality = 11, .command_state_max_input_kib = 33 },
+        .{ .quality = 11, .command_state_max_input_kib = 65 },
     ));
     const oversized_len = max_uncompressed_meta_block_len + 1;
     const oversized_quality_bound = try encodedPlannedStreamBoundWithOptions(oversized_len, .{ .quality = 8 });
@@ -42699,4 +42706,9 @@ test "Brotli incremental header progress retains completed trees" {
     try std.testing.expect(split.trees != 0);
     try std.testing.expect(split.tree_attempts > split.trees);
     try std.testing.expect(split.symbol_resumes <= split.tree_attempts - split.trees);
+}
+
+test "Brotli q11 command-state override accepts a 64 KiB input ceiling" {
+    try validatePlannedEncodeOptions(64 * 1024, .{ .quality = 11, .command_state_max_input_kib = 64 });
+    try std.testing.expectError(error.InvalidBlockPlan, validatePlannedEncodeOptions(64 * 1024, .{ .quality = 11, .command_state_max_input_kib = 65 }));
 }

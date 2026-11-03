@@ -158,7 +158,7 @@ pub const Schedule = struct {
             }
             if ((self.optimal.command_state_max_input_len != 0 and
                 (!self.optimal.entropy_feedback or
-                    self.optimal.command_state_max_input_len > self.optimal.max_input_len)))
+                    self.optimal.command_state_max_input_len > 64 * 1024)))
             {
                 return error.InvalidSchedule;
             }

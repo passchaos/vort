@@ -192,7 +192,7 @@ opportunities include reusing split-planner symbol projections, parser/model
 quality and broader full-file/dictionary/streaming/resource/platform matrices;
 none is implied by this command-model lifetime increment.
 
-## q10 command-state input override
+## q10/q11 command-state input override
 
 The existing `command_state_max_input_kib` override can extend q10's
 command-state candidate from the 8 KiB default through the 64 KiB optimal
@@ -202,3 +202,10 @@ the wire from 4,556 to 4,093 bytes (10.2%, size ratio 0.9832 versus the
 Dickens and x-ray keep identical 64 KiB wires under the same override while
 paying the higher time, so the 8 KiB default remains the latency policy and the
 larger ceiling stays an explicit opt-in.
+
+The same 64 KiB ceiling is now accepted for q11 instead of being capped at
+q11's 32 KiB optimal-input limit. With `--command-state-max-input-kib 64`, the
+64 KiB XML prefix also falls from 4,556 to 4,093 bytes (size ratio 1.0412
+versus the 3,931-byte reference) at 207.7 ms versus 83.9 ms; the default q11
+wire stays 4,556 bytes. Dickens and x-ray again keep identical wires, so both
+qualities retain the 8 KiB default and expose 64 KiB only as an opt-in.
