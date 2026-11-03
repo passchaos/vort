@@ -9,6 +9,7 @@ pub const Controls = struct {
     level: ?c_int = null,
     strategy: ?vort.zstd.Strategy = null,
     fast_acceleration: ?u32 = null,
+    fast_long_matches: bool = false,
     hq_depth: ?u32 = null,
     hq_nice_len: ?u32 = null,
     hq_min_match: ?u8 = null,
@@ -43,7 +44,7 @@ pub const Controls = struct {
     }
 
     pub fn resolvedWithProfiles(self: Controls, profile: ?*vort.ZstdEncoderControlProfile, memory_profile: ?*vort.zstd.EncodeMemoryProfile) !vort.ZstdNativeFrameOptions {
-        if (self.level == null and self.strategy == null and self.fast_acceleration == null and !self.hasHqOverrides()) {
+        if (self.level == null and self.strategy == null and self.fast_acceleration == null and !self.fast_long_matches and !self.hasHqOverrides()) {
             var native: vort.ZstdNativeFrameOptions = .{
                 .selection = self.selection,
                 .content_checksum = self.checksum,
@@ -62,6 +63,7 @@ pub const Controls = struct {
         var options = try vort.zstd.resolveFrameOptionsForLevel(self.level orelse vort.zstdDefaultCompressionLevel, .{
             .strategy = self.strategy orelse .auto,
             .fast_acceleration = self.fast_acceleration,
+            .fast_long_matches = self.fast_long_matches,
             .content_checksum = self.checksum,
             .include_content_size = self.content_size,
             .control_profile = profile,
@@ -107,6 +109,7 @@ pub const Controls = struct {
         var frame: vort.zstd.FrameOptions = .{
             .strategy = self.strategy orelse .auto,
             .fast_acceleration = self.fast_acceleration,
+            .fast_long_matches = self.fast_long_matches,
             .content_checksum = self.checksum,
             .include_content_size = self.content_size,
             .control_profile = profile,
@@ -136,6 +139,9 @@ pub fn parse(args: anytype, first: ?[]const u8) !Controls {
         } else if (try optionValue("--fast-acceleration", arg, args)) |value| {
             if (result.fast_acceleration != null) return error.DuplicateZstdOption;
             result.fast_acceleration = try std.fmt.parseInt(u32, value, 10);
+        } else if (std.mem.eql(u8, arg, "--fast-long-matches")) {
+            if (result.fast_long_matches) return error.DuplicateZstdOption;
+            result.fast_long_matches = true;
         } else if (try optionValue("--hq-depth", arg, args)) |value| {
             if (result.hq_depth != null) return error.DuplicateZstdOption;
             result.hq_depth = try std.fmt.parseInt(u32, value, 10);
@@ -202,7 +208,7 @@ pub fn parseStrategy(value: []const u8) !vort.zstd.Strategy {
 }
 
 pub fn isControlArgument(arg: []const u8) bool {
-    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--hq-parser-engine", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
+    inline for (.{ "--level", "--strategy", "--fast-acceleration", "--fast-long-matches", "--hq-depth", "--hq-nice-len", "--hq-min-match", "--hq-memory", "--hq-parser-engine", "--hq-parse-mode", "--hq-match-lengths", "--hq-max-prices", "--profile", "--window-log", "--max-match-history-len", "--max-total-memory", "--memory-profile", "--max-input-len", "--max-output-len" }) |name| {
         if (std.mem.eql(u8, arg, name) or std.mem.startsWith(u8, arg, name ++ "=")) return true;
     }
     return false;
