@@ -53,6 +53,11 @@ pub const Progress = struct {
 pub const StepResult = struct {
     progress: Progress = .{},
     status: Status = .need_input,
+    /// Set by an explicit block-boundary step when the decoder stopped between
+    /// compressed blocks even though more input may remain. Callers that only
+    /// follow `progress` continue normally; checkpoint-aware callers can stop
+    /// after persisting their own state.
+    block_boundary: bool = false,
 
     pub const Status = enum {
         need_input,

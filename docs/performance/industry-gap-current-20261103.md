@@ -121,11 +121,12 @@ flush and recovery, dictionaries, incremental I/O, Zstd training/seekable/MT,
 and Brotli shared dictionaries/Large Window. The
 [prepared standard Zstd decode dictionary](zstd/prepared-decode-dictionary.md)
 now validates and reconstructs one entropy snapshot that frames reuse, while
-mismatched owners are rejected before entropy work. Remaining controls include
-resumable Brotli entropy-header substates and optional Deflate block-boundary
-pause/checkpoint APIs. Finite matcher candidates, parsing states and entropy
-priors remain quality limits even where all lengths of an admitted match are
-considered.
+mismatched owners are rejected before entropy work. The
+[Deflate block-boundary checkpoint](deflate/block-boundary-checkpoint.md)
+exposes a one-shot boundary step and query for raw, zlib and gzip incremental
+decoders. The remaining control gap is resumable Brotli entropy-header
+substates. Finite matcher candidates, parsing states and entropy priors remain
+quality limits even where all lengths of an admitted match are considered.
 
 No complete current-source matrix covers compressed size, encoding, decoding,
 requested heap and RSS across all levels, full files, cold/warm calls,

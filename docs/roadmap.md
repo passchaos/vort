@@ -43,10 +43,12 @@ test fixtures while preserving their original assertions under explicit 8 MiB
 stack limits. Final-source timing and gate evidence remain separate from the
 earlier screens. The [prepared Zstd decode dictionary](performance/zstd/prepared-decode-dictionary.md)
 now validates a standard dictionary's Huffman/FSE/repeat state once and reuses
-that immutable snapshot across frames. The next concrete decoder capabilities
-are resumable Brotli entropy-header parsing and optional Deflate block-boundary
-pause/checkpoint controls. Full streaming/dictionary, memory and multi-platform
-comparisons remain required for the industry-best objective.
+that immutable snapshot across frames. The
+[Deflate block-boundary checkpoint](performance/deflate/block-boundary-checkpoint.md)
+adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib
+and gzip incremental decoders. The next concrete decoder capability is
+resumable Brotli entropy-header parsing. Full streaming/dictionary, memory and
+multi-platform comparisons remain required for the industry-best objective.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

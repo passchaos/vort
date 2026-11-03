@@ -9,6 +9,9 @@ pub fn Decoder(comptime Codec: type) type {
         options: Options,
         raw: Codec.RawDecoder,
         phase: Phase = .header,
+        /// One-shot request set by `stepToBlockBoundary`; only the raw deflate
+        /// payload honors it, and it is cleared when the step returns.
+        pause_requested: bool = false,
         header: [2]u8 = undefined,
         header_received: usize = 0,
         footer: [4]u8 = undefined,
@@ -211,6 +214,18 @@ pub fn Decoder(comptime Codec: type) type {
             return stepped;
         }
 
+        /// Advance through wrapper header/dictionary phases until the next
+        /// compressed-block boundary, an input/output wait, or completion.
+        /// `block_boundary` reports a stop between blocks with remaining input.
+        pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            self.pause_requested = true;
+            defer self.pause_requested = false;
+            return self.step(input, output);
+        }
+        pub fn atBlockBoundary(self: *const Self) bool {
+            return self.phase == .done or (self.phase == .raw and self.raw.atBlockBoundary());
+        }
+
         fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.input_finished) {
                 if (input.len != 0) return self.fail(self.phase, error.TrailingData);
@@ -277,12 +292,22 @@ pub fn Decoder(comptime Codec: type) type {
                         if (self.remainingRawLimit() == 0) return self.fail(.raw, self.cumulativeLimitError());
                         return result(input_read, output_written, .need_output);
                     }
+                    if (drained.block_boundary) {
+                        var paused = result(input_read, output_written, .need_input);
+                        paused.block_boundary = true;
+                        return paused;
+                    }
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
 
                     const supplied = try self.stepRaw(input[input_read..], output, &input_read, &output_written);
                     if (supplied.status == .done) {
                         self.phase = .footer;
                         continue;
+                    }
+                    if (supplied.block_boundary) {
+                        var paused = result(input_read, output_written, .need_input);
+                        paused.block_boundary = true;
+                        return paused;
                     }
                     if (supplied.status == .need_output) continue;
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
@@ -358,7 +383,10 @@ pub fn Decoder(comptime Codec: type) type {
         }
         fn stepRaw(self: *Self, input: []const u8, output: []u8, input_read: *usize, output_written: *usize) Error!core.StepResult {
             const before = core.Progress{ .input_read = self.raw.total_input, .output_written = self.raw.total_output };
-            const stepped = self.raw.step(input, output[output_written.*..]) catch |err| {
+            const stepped = (if (self.pause_requested)
+                self.raw.stepToBlockBoundary(input, output[output_written.*..])
+            else
+                self.raw.step(input, output[output_written.*..])) catch |err| {
                 const partial: core.StepResult = .{ .progress = .{
                     .input_read = self.raw.total_input - before.input_read,
                     .output_written = self.raw.total_output - before.output_written,

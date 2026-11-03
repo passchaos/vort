@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const block_flush_tests = @import("tests/block_flush.zig");
+const block_boundary_tests = @import("tests/block_boundary.zig");
 const compact_tables_tests = @import("tests/compact_tables.zig");
 const gzip_concatenated_tests = @import("tests/gzip_concatenated.zig");
 const full_flush_tests = @import("tests/full_flush.zig");
@@ -16,6 +17,7 @@ const zlib_dictionary_tests = @import("decoder/zlib_dictionary_tests.zig");
 
 test {
     _ = block_flush_tests;
+    _ = block_boundary_tests;
     _ = compact_tables_tests;
     _ = gzip_concatenated_tests;
     _ = full_flush_tests;

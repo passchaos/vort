@@ -49,6 +49,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             struct {};
         options: Options,
         phase: Phase = .block_header,
+        /// One-shot request set by `stepToBlockBoundary`; cleared when the
+        /// step returns so ordinary `step` callers are unaffected.
+        pause_requested: bool = false,
         bit_buffer: u64 = 0,
         bit_count: u6 = 0,
         code: u16 = 0,
@@ -255,6 +258,20 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         pub fn semanticBlocksCompleted(self: *const Self) usize {
             return self.semantic_blocks_completed;
         }
+        /// Advance until the next compressed-block boundary, an input/output
+        /// wait, or completion. When the returned `block_boundary` flag is set,
+        /// the decoder is positioned at the next block header and `progress`
+        /// reports consumed input/output. The caller may persist its own state
+        /// and resume with another call.
+        pub fn stepToBlockBoundary(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            self.pause_requested = true;
+            defer self.pause_requested = false;
+            return self.step(input, output);
+        }
+        pub fn atBlockBoundary(self: *const Self) bool {
+            return self.phase == .block_header or self.phase == .done;
+        }
+
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
@@ -279,249 +296,259 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             }
             while (!self.options.stop_at_output_limit or
                 self.total_output < self.options.max_output_len or
-                self.phase == .fast_dynamic_block) switch (self.phase) {
-                .block_header => {
-                    const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
-                    self.final_block = (header & 1) != 0;
-                    const block_type = (header >> 1) & 0x3;
-                    switch (block_type) {
-                        0 => {
-                            self.alignStoredHeader();
-                            self.phase = .stored_lengths;
-                        },
-                        1 => {
-                            self.dynamic_block = false;
-                            self.phase = .symbols;
-                        },
-                        2 => {
-                            self.dynamic_block = true;
-                            self.phase = .dynamic_counts;
-                        },
-                        else => return self.fail(.block_header, error.InvalidDeflateBlockType),
-                    }
-                },
-                .stored_lengths => {
-                    while (self.stored_length_received < self.stored_lengths.len) {
-                        const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
-                        self.stored_lengths[self.stored_length_received] = @intCast(byte);
-                        self.stored_length_received += 1;
-                    }
-                    const len = std.mem.readInt(u16, self.stored_lengths[0..2], .little);
-                    const nlen = std.mem.readInt(u16, self.stored_lengths[2..4], .little);
-                    if (nlen != ~len) return self.fail(.stored_lengths, error.StoredLengthMismatch);
-                    if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output)) return self.fail(.stored_lengths, error.OutputLimitExceeded);
-                    if (self.options.expected_output_len) |expected| {
-                        if (self.total_output > expected or len > expected - self.total_output) return self.fail(.stored_lengths, error.SizeMismatch);
-                    }
-                    self.stored_remaining = len;
-                    self.stored_length_received = 0;
-                    self.phase = .stored_payload;
-                    if (self.stored_remaining == 0) self.completeBlock();
-                },
-                .stored_payload => {
-                    if (output_written == output.len) return result(input_read, output_written, .need_output);
-                    if (input_read == input.len and self.bit_count == 0) return result(input_read, output_written, .need_input);
-                    while (self.stored_remaining != 0 and
-                        output_written < output.len and
-                        self.bit_count >= 8)
-                    {
-                        const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
-                        output[output_written] = @intCast(byte);
-                        output_written += 1;
-                        self.total_output += 1;
-                        self.stored_remaining -= 1;
-                    }
-                    if (self.stored_remaining != 0 and
-                        output_written < output.len and
-                        self.bit_count == 0)
-                    {
-                        const n = @min(
-                            self.stored_remaining,
-                            @min(input.len - input_read, output.len - output_written),
-                        );
-                        if (n != 0) {
-                            const produced = output[output_written..][0..n];
-                            @memcpy(produced, input[input_read..][0..n]);
-                            self.total_output += n;
-                            input_read += n;
-                            self.total_input += n;
-                            output_written += n;
-                            self.stored_remaining -= n;
+                self.phase == .fast_dynamic_block)
+            {
+                if (self.pause_requested and self.phase == .block_header and
+                    (input_read != 0 or output_written != 0))
+                {
+                    var paused = result(input_read, output_written, .need_input);
+                    paused.block_boundary = true;
+                    return paused;
+                }
+                switch (self.phase) {
+                    .block_header => {
+                        const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
+                        self.final_block = (header & 1) != 0;
+                        const block_type = (header >> 1) & 0x3;
+                        switch (block_type) {
+                            0 => {
+                                self.alignStoredHeader();
+                                self.phase = .stored_lengths;
+                            },
+                            1 => {
+                                self.dynamic_block = false;
+                                self.phase = .symbols;
+                            },
+                            2 => {
+                                self.dynamic_block = true;
+                                self.phase = .dynamic_counts;
+                            },
+                            else => return self.fail(.block_header, error.InvalidDeflateBlockType),
                         }
-                    }
-                    if (self.stored_remaining == 0) self.completeBlock();
-                },
-                .dynamic_counts => {
-                    const counts = self.readBits(input, &input_read, 14) orelse return result(input_read, output_written, .need_input);
-                    self.dynamic_hlit = (counts & 0x1f) + 257;
-                    self.dynamic_hdist = ((counts >> 5) & 0x1f) + 1;
-                    self.dynamic_hclen = ((counts >> 10) & 0x0f) + 4;
-                    if (self.dynamic_hlit > 286 or self.dynamic_hdist > format.distance_symbol_count) return self.fail(.dynamic_counts, error.InvalidDynamicBlockHeader);
-                    self.dynamic_code_lengths = @splat(0);
-                    self.dynamic_code_length_index = 0;
-                    self.phase = .dynamic_code_lengths;
-                },
-                .dynamic_code_lengths => {
-                    while (self.dynamic_code_length_index < self.dynamic_hclen) {
-                        const length = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
-                        self.dynamic_code_lengths[code_length_order[self.dynamic_code_length_index]] = @intCast(length);
-                        self.dynamic_code_length_index += 1;
-                    }
-                    if (!validCodeLengthAlphabet(self.dynamic_code_lengths)) return self.fail(.dynamic_code_lengths, error.InvalidDynamicBlockHeader);
-                    buildCanonicalLookup(7, &self.dynamic_code_lookup, &self.dynamic_code_lengths);
-                    self.dynamic_literal_lengths = @splat(0);
-                    self.dynamic_distance_lengths = @splat(0);
-                    self.dynamic_length_pos = 0;
-                    self.dynamic_previous_length = 0;
-                    self.phase = .dynamic_lengths;
-                },
-                .dynamic_lengths => {
-                    const total = self.dynamic_hlit + self.dynamic_hdist;
-                    if (self.dynamic_length_pos == total) {
-                        if (try self.prepareDynamicTables(input.len - input_read)) {
-                            // Commit earlier output before linearizing its history.
-                            if (history_record_start != output_written) {
-                                self.recordStepOutput(output[history_record_start..output_written]);
-                                history_record_start = output_written;
+                    },
+                    .stored_lengths => {
+                        while (self.stored_length_received < self.stored_lengths.len) {
+                            const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                            self.stored_lengths[self.stored_length_received] = @intCast(byte);
+                            self.stored_length_received += 1;
+                        }
+                        const len = std.mem.readInt(u16, self.stored_lengths[0..2], .little);
+                        const nlen = std.mem.readInt(u16, self.stored_lengths[2..4], .little);
+                        if (nlen != ~len) return self.fail(.stored_lengths, error.StoredLengthMismatch);
+                        if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output)) return self.fail(.stored_lengths, error.OutputLimitExceeded);
+                        if (self.options.expected_output_len) |expected| {
+                            if (self.total_output > expected or len > expected - self.total_output) return self.fail(.stored_lengths, error.SizeMismatch);
+                        }
+                        self.stored_remaining = len;
+                        self.stored_length_received = 0;
+                        self.phase = .stored_payload;
+                        if (self.stored_remaining == 0) self.completeBlock();
+                    },
+                    .stored_payload => {
+                        if (output_written == output.len) return result(input_read, output_written, .need_output);
+                        if (input_read == input.len and self.bit_count == 0) return result(input_read, output_written, .need_input);
+                        while (self.stored_remaining != 0 and
+                            output_written < output.len and
+                            self.bit_count >= 8)
+                        {
+                            const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                            output[output_written] = @intCast(byte);
+                            output_written += 1;
+                            self.total_output += 1;
+                            self.stored_remaining -= 1;
+                        }
+                        if (self.stored_remaining != 0 and
+                            output_written < output.len and
+                            self.bit_count == 0)
+                        {
+                            const n = @min(
+                                self.stored_remaining,
+                                @min(input.len - input_read, output.len - output_written),
+                            );
+                            if (n != 0) {
+                                const produced = output[output_written..][0..n];
+                                @memcpy(produced, input[input_read..][0..n]);
+                                self.total_output += n;
+                                input_read += n;
+                                self.total_input += n;
+                                output_written += n;
+                                self.stored_remaining -= n;
                             }
-                            self.beginSemanticBlock();
-                            self.phase = .fast_dynamic_block;
+                        }
+                        if (self.stored_remaining == 0) self.completeBlock();
+                    },
+                    .dynamic_counts => {
+                        const counts = self.readBits(input, &input_read, 14) orelse return result(input_read, output_written, .need_input);
+                        self.dynamic_hlit = (counts & 0x1f) + 257;
+                        self.dynamic_hdist = ((counts >> 5) & 0x1f) + 1;
+                        self.dynamic_hclen = ((counts >> 10) & 0x0f) + 4;
+                        if (self.dynamic_hlit > 286 or self.dynamic_hdist > format.distance_symbol_count) return self.fail(.dynamic_counts, error.InvalidDynamicBlockHeader);
+                        self.dynamic_code_lengths = @splat(0);
+                        self.dynamic_code_length_index = 0;
+                        self.phase = .dynamic_code_lengths;
+                    },
+                    .dynamic_code_lengths => {
+                        while (self.dynamic_code_length_index < self.dynamic_hclen) {
+                            const length = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
+                            self.dynamic_code_lengths[code_length_order[self.dynamic_code_length_index]] = @intCast(length);
+                            self.dynamic_code_length_index += 1;
+                        }
+                        if (!validCodeLengthAlphabet(self.dynamic_code_lengths)) return self.fail(.dynamic_code_lengths, error.InvalidDynamicBlockHeader);
+                        buildCanonicalLookup(7, &self.dynamic_code_lookup, &self.dynamic_code_lengths);
+                        self.dynamic_literal_lengths = @splat(0);
+                        self.dynamic_distance_lengths = @splat(0);
+                        self.dynamic_length_pos = 0;
+                        self.dynamic_previous_length = 0;
+                        self.phase = .dynamic_lengths;
+                    },
+                    .dynamic_lengths => {
+                        const total = self.dynamic_hlit + self.dynamic_hdist;
+                        if (self.dynamic_length_pos == total) {
+                            if (try self.prepareDynamicTables(input.len - input_read)) {
+                                // Commit earlier output before linearizing its history.
+                                if (history_record_start != output_written) {
+                                    self.recordStepOutput(output[history_record_start..output_written]);
+                                    history_record_start = output_written;
+                                }
+                                self.beginSemanticBlock();
+                                self.phase = .fast_dynamic_block;
+                                continue;
+                            }
+                            self.phase = .symbols;
                             continue;
                         }
-                        self.phase = .symbols;
-                        continue;
-                    }
-                    const symbol = (try self.readCodeLengthSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
-                    switch (symbol) {
-                        0...15 => {
-                            self.setDynamicLength(@intCast(symbol));
-                            self.dynamic_previous_length = @intCast(symbol);
+                        const symbol = (try self.readCodeLengthSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
+                        switch (symbol) {
+                            0...15 => {
+                                self.setDynamicLength(@intCast(symbol));
+                                self.dynamic_previous_length = @intCast(symbol);
+                                self.dynamic_length_pos += 1;
+                            },
+                            16...18 => {
+                                if (symbol == 16 and self.dynamic_length_pos == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+                                self.dynamic_repeat_symbol = @intCast(symbol);
+                                self.phase = .dynamic_repeat;
+                            },
+                            else => return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader),
+                        }
+                    },
+                    .dynamic_repeat => {
+                        const extra_bits: u6 = switch (self.dynamic_repeat_symbol) {
+                            16 => 2,
+                            17 => 3,
+                            18 => 7,
+                            else => unreachable,
+                        };
+                        const extra = self.readBits(input, &input_read, extra_bits) orelse return result(input_read, output_written, .need_input);
+                        const repeat_base: usize = switch (self.dynamic_repeat_symbol) {
+                            16, 17 => 3,
+                            18 => 11,
+                            else => unreachable,
+                        };
+                        const count: usize = extra + repeat_base;
+                        const total = self.dynamic_hlit + self.dynamic_hdist;
+                        if (count > total - self.dynamic_length_pos) return self.fail(.dynamic_repeat, error.InvalidDynamicBlockHeader);
+                        const value: u4 = if (self.dynamic_repeat_symbol == 16) self.dynamic_previous_length else 0;
+                        for (0..count) |_| {
+                            self.setDynamicLength(value);
                             self.dynamic_length_pos += 1;
-                        },
-                        16...18 => {
-                            if (symbol == 16 and self.dynamic_length_pos == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
-                            self.dynamic_repeat_symbol = @intCast(symbol);
-                            self.phase = .dynamic_repeat;
-                        },
-                        else => return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader),
-                    }
-                },
-                .dynamic_repeat => {
-                    const extra_bits: u6 = switch (self.dynamic_repeat_symbol) {
-                        16 => 2,
-                        17 => 3,
-                        18 => 7,
-                        else => unreachable,
-                    };
-                    const extra = self.readBits(input, &input_read, extra_bits) orelse return result(input_read, output_written, .need_input);
-                    const repeat_base: usize = switch (self.dynamic_repeat_symbol) {
-                        16, 17 => 3,
-                        18 => 11,
-                        else => unreachable,
-                    };
-                    const count: usize = extra + repeat_base;
-                    const total = self.dynamic_hlit + self.dynamic_hdist;
-                    if (count > total - self.dynamic_length_pos) return self.fail(.dynamic_repeat, error.InvalidDynamicBlockHeader);
-                    const value: u4 = if (self.dynamic_repeat_symbol == 16) self.dynamic_previous_length else 0;
-                    for (0..count) |_| {
-                        self.setDynamicLength(value);
-                        self.dynamic_length_pos += 1;
-                    }
-                    self.dynamic_previous_length = value;
-                    self.phase = .dynamic_lengths;
-                },
-                .fast_dynamic_block => {
-                    if (comptime !supports_semantic_window) unreachable;
-                    switch (try self.stepSemanticBlock(
-                        input,
-                        output,
-                        &input_read,
-                        &output_written,
-                        &history_record_start,
-                    )) {
-                        .need_output => return result(input_read, output_written, .need_output),
-                        .need_input => return result(input_read, output_written, .need_input),
-                        // `beginSemanticBlock` may already have committed a
-                        // step-local prefix into the ring. Cut the step before
-                        // compact fallback so it cannot count that prefix both
-                        // as retained history and as fresh step output.
-                        .fallback => return result(input_read, output_written, .need_output),
-                        // End the raw step at the semantic block boundary. Its
-                        // delivered bytes are already the retained history;
-                        // starting a compact block with the same step-local
-                        // output would count that prefix twice as match history.
-                        .block_end => return result(input_read, output_written, .need_output),
-                        .done => {
-                            if (input_read != input.len and !self.options.allow_trailing_data)
-                                return self.fail(.done, error.TrailingData);
-                            return result(input_read, output_written, .done);
-                        },
-                    }
-                },
-                .symbols => {
-                    switch (try self.decodeSymbolRun(input, output, &input_read, &output_written)) {
-                        .need_input => return result(input_read, output_written, .need_input),
-                        .need_output => return result(input_read, output_written, .need_output),
-                        .block_end, .done => continue,
-                    }
-                },
-                .length_extra => {
-                    const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
-                    self.match_len = self.length_base + extra;
-                    self.phase = .distance_symbol;
-                },
-                .distance_symbol => {
-                    if (self.match_len == 0) self.match_len = self.length_base;
-                    const symbol = (try self.readDistanceSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
-                    const distance = distanceBaseAndBitsForFormat(format, symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
-                    self.match_distance = distance.base;
-                    self.length_extra_bits = distance.bits;
-                    self.phase = if (distance.bits == 0) .match_copy else .distance_extra;
-                    if (self.phase == .match_copy) try self.beginMatchAt(output_written);
-                },
-                .distance_extra => {
-                    const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
-                    self.match_distance += extra;
-                    try self.beginMatchAt(output_written);
-                    self.phase = .match_copy;
-                },
-                .match_copy => {
-                    // A previous call may have filled the caller's output exactly
-                    // while copying the final match byte. Advance to the symbol
-                    // phase before checking output space so a zero-length drain can
-                    // still consume an already-buffered EOB.
-                    if (self.match_remaining == 0) {
-                        self.match_len = 0;
-                        self.phase = .symbols;
-                        continue;
-                    }
-                    if (output_written == output.len) return result(input_read, output_written, .need_output);
-                    const n = @min(self.match_remaining, output.len - output_written);
-                    self.copyMatchSpanAt(
-                        output,
-                        output_written,
-                        n,
-                        self.history.len,
-                        self.history_pos,
-                        self.history_len,
-                        self.match_distance,
-                    );
-                    output_written += n;
-                    self.total_output += n;
-                    self.match_remaining -= n;
-                    if (self.match_remaining == 0) {
-                        self.match_len = 0;
-                        self.phase = .symbols;
-                    }
-                },
-                .done => {
-                    // A partial final byte belongs to the stream as padding; bytes
-                    // staged by the same input call have already been accounted for.
-                    if (input_read != input.len and !self.options.allow_trailing_data)
-                        return self.fail(.done, error.TrailingData);
-                    return result(input_read, output_written, .done);
-                },
-            };
+                        }
+                        self.dynamic_previous_length = value;
+                        self.phase = .dynamic_lengths;
+                    },
+                    .fast_dynamic_block => {
+                        if (comptime !supports_semantic_window) unreachable;
+                        switch (try self.stepSemanticBlock(
+                            input,
+                            output,
+                            &input_read,
+                            &output_written,
+                            &history_record_start,
+                        )) {
+                            .need_output => return result(input_read, output_written, .need_output),
+                            .need_input => return result(input_read, output_written, .need_input),
+                            // `beginSemanticBlock` may already have committed a
+                            // step-local prefix into the ring. Cut the step before
+                            // compact fallback so it cannot count that prefix both
+                            // as retained history and as fresh step output.
+                            .fallback => return result(input_read, output_written, .need_output),
+                            // End the raw step at the semantic block boundary. Its
+                            // delivered bytes are already the retained history;
+                            // starting a compact block with the same step-local
+                            // output would count that prefix twice as match history.
+                            .block_end => return result(input_read, output_written, .need_output),
+                            .done => {
+                                if (input_read != input.len and !self.options.allow_trailing_data)
+                                    return self.fail(.done, error.TrailingData);
+                                return result(input_read, output_written, .done);
+                            },
+                        }
+                    },
+                    .symbols => {
+                        switch (try self.decodeSymbolRun(input, output, &input_read, &output_written)) {
+                            .need_input => return result(input_read, output_written, .need_input),
+                            .need_output => return result(input_read, output_written, .need_output),
+                            .block_end, .done => continue,
+                        }
+                    },
+                    .length_extra => {
+                        const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                        self.match_len = self.length_base + extra;
+                        self.phase = .distance_symbol;
+                    },
+                    .distance_symbol => {
+                        if (self.match_len == 0) self.match_len = self.length_base;
+                        const symbol = (try self.readDistanceSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
+                        const distance = distanceBaseAndBitsForFormat(format, symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
+                        self.match_distance = distance.base;
+                        self.length_extra_bits = distance.bits;
+                        self.phase = if (distance.bits == 0) .match_copy else .distance_extra;
+                        if (self.phase == .match_copy) try self.beginMatchAt(output_written);
+                    },
+                    .distance_extra => {
+                        const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                        self.match_distance += extra;
+                        try self.beginMatchAt(output_written);
+                        self.phase = .match_copy;
+                    },
+                    .match_copy => {
+                        // A previous call may have filled the caller's output exactly
+                        // while copying the final match byte. Advance to the symbol
+                        // phase before checking output space so a zero-length drain can
+                        // still consume an already-buffered EOB.
+                        if (self.match_remaining == 0) {
+                            self.match_len = 0;
+                            self.phase = .symbols;
+                            continue;
+                        }
+                        if (output_written == output.len) return result(input_read, output_written, .need_output);
+                        const n = @min(self.match_remaining, output.len - output_written);
+                        self.copyMatchSpanAt(
+                            output,
+                            output_written,
+                            n,
+                            self.history.len,
+                            self.history_pos,
+                            self.history_len,
+                            self.match_distance,
+                        );
+                        output_written += n;
+                        self.total_output += n;
+                        self.match_remaining -= n;
+                        if (self.match_remaining == 0) {
+                            self.match_len = 0;
+                            self.phase = .symbols;
+                        }
+                    },
+                    .done => {
+                        // A partial final byte belongs to the stream as padding; bytes
+                        // staged by the same input call have already been accounted for.
+                        if (input_read != input.len and !self.options.allow_trailing_data)
+                            return self.fail(.done, error.TrailingData);
+                        return result(input_read, output_written, .done);
+                    },
+                }
+            }
             return result(input_read, output_written, .need_output);
         }
 
