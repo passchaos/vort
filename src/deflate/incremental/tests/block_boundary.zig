@@ -133,3 +133,22 @@ test "gzip incremental stepToBlockBoundary pauses at multiple blocks" {
     try std.testing.expectEqual(payload.len, ordinary_written);
     try std.testing.expectEqualSlices(u8, payload, output);
 }
+
+test "stored deflate stepToBlockBoundary pauses at multiple blocks" {
+    var encoder = deflate.RawDeflateIncrementalStoredEncoder.initWithOptions(std.testing.allocator, .{ .block_len = 64 });
+    defer encoder.deinit();
+    var encoded = try encodeAll(&encoder, std.testing.allocator, payload);
+    defer encoded.deinit(std.testing.allocator);
+
+    var decoder = deflate.RawDeflateIncrementalStoredDecoder.initWithOptions(.{ .expected_output_len = payload.len });
+    const output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(output);
+    const written = try drainBoundaries(&decoder, encoded.items, output);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, output);
+
+    var ordinary = deflate.RawDeflateIncrementalStoredDecoder.initWithOptions(.{ .expected_output_len = payload.len });
+    const ordinary_written = try drainOrdinary(&ordinary, encoded.items, output);
+    try std.testing.expectEqual(payload.len, ordinary_written);
+    try std.testing.expectEqualSlices(u8, payload, output);
+}

@@ -44,8 +44,8 @@ Brotli incremental header parser. It retains the rejected Reader experiment,
 explicit 8 MiB stack failures and isolated fixture repairs. The live-source
 performance epoch is kept separately. The prepared standard Zstd
 decode-dictionary handle now reuses one validated entropy snapshot across
-frames, and raw/zlib/gzip incremental Deflate decoders expose a one-shot
-block-boundary step and query. Incremental Brotli compressed-header parsing
+frames, and raw/zlib/gzip/stored-only incremental Deflate decoders expose a
+one-shot block-boundary step and query. Incremental Brotli compressed-header parsing
 now retains completed sub-parsers and Huffman trees across small input chunks;
 mid-tree continuation remains open. A bounded six-file Silesia q8 screen finds
 Vort 1.7% smaller but 3.6 times slower than system libbrotli q8; a q8 stage

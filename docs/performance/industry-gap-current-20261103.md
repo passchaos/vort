@@ -123,8 +123,8 @@ and Brotli shared dictionaries/Large Window. The
 now validates and reconstructs one entropy snapshot that frames reuse, while
 mismatched owners are rejected before entropy work. The
 [Deflate block-boundary checkpoint](deflate/block-boundary-checkpoint.md)
-exposes a one-shot boundary step and query for raw, zlib and gzip incremental
-decoders. The
+exposes a one-shot boundary step and query for raw, zlib, gzip and stored-only
+incremental decoders. The
 [resumable Brotli compressed header](br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks;
 mid-tree continuation remains open. A

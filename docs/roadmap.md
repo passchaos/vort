@@ -45,8 +45,8 @@ earlier screens. The [prepared Zstd decode dictionary](performance/zstd/prepared
 now validates a standard dictionary's Huffman/FSE/repeat state once and reuses
 that immutable snapshot across frames. The
 [Deflate block-boundary checkpoint](performance/deflate/block-boundary-checkpoint.md)
-adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib
-and gzip incremental decoders. The
+adds a one-shot `stepToBlockBoundary` result and boundary query for raw, zlib,
+gzip and stored-only incremental decoders. The
 [resumable Brotli compressed header](performance/br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks, with
 mid-tree continuation still open. A

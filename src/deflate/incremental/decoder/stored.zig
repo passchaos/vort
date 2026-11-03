@@ -7,6 +7,9 @@ const core = @import("../../../core.zig");
 pub const Decoder = struct {
     options: Options,
     phase: Phase = .header,
+    /// One-shot request set by `stepToBlockBoundary`; cleared when the step
+    /// returns so ordinary `step` callers are unaffected.
+    pause_requested: bool = false,
     header: [5]u8 = undefined,
     header_received: usize = 0,
     payload_remaining: usize = 0,
@@ -83,44 +86,64 @@ pub const Decoder = struct {
         }
         var input_read: usize = 0;
         var output_written: usize = 0;
-        while (true) switch (self.phase) {
-            .header => {
-                const needed = self.header.len - self.header_received;
-                const n = @min(needed, input.len - input_read);
-                if (n != 0) {
-                    @memcpy(self.header[self.header_received..][0..n], input[input_read..][0..n]);
-                    self.header_received += n;
+        while (true) {
+            if (self.pause_requested and self.phase == .header and
+                (input_read != 0 or output_written != 0))
+            {
+                var paused = result(input_read, output_written, .need_input);
+                paused.block_boundary = true;
+                return paused;
+            }
+            switch (self.phase) {
+                .header => {
+                    const needed = self.header.len - self.header_received;
+                    const n = @min(needed, input.len - input_read);
+                    if (n != 0) {
+                        @memcpy(self.header[self.header_received..][0..n], input[input_read..][0..n]);
+                        self.header_received += n;
+                        input_read += n;
+                        self.total_input += n;
+                    }
+                    if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
+                    try self.parseHeader();
+                    if (self.payload_remaining == 0) {
+                        self.completeBlock();
+                        continue;
+                    }
+                    self.phase = .payload;
+                },
+                .payload => {
+                    if (output_written == output.len) return result(input_read, output_written, .need_output);
+                    if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    const n = @min(self.payload_remaining, @min(input.len - input_read, output.len - output_written));
+                    @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
                     input_read += n;
+                    output_written += n;
                     self.total_input += n;
-                }
-                if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
-                try self.parseHeader();
-                if (self.payload_remaining == 0) {
-                    self.completeBlock();
-                    continue;
-                }
-                self.phase = .payload;
-            },
-            .payload => {
-                if (output_written == output.len) return result(input_read, output_written, .need_output);
-                if (input_read == input.len) return result(input_read, output_written, .need_input);
-                const n = @min(self.payload_remaining, @min(input.len - input_read, output.len - output_written));
-                @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
-                input_read += n;
-                output_written += n;
-                self.total_input += n;
-                self.total_output += n;
-                self.payload_remaining -= n;
-                if (self.payload_remaining == 0) self.completeBlock();
-            },
-            .done => {
-                if (input_read != input.len) return self.fail(.done, error.TrailingData);
-                if (self.options.expected_output_len) |expected| {
-                    if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
-                }
-                return result(input_read, output_written, .done);
-            },
-        };
+                    self.total_output += n;
+                    self.payload_remaining -= n;
+                    if (self.payload_remaining == 0) self.completeBlock();
+                },
+                .done => {
+                    if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                    if (self.options.expected_output_len) |expected| {
+                        if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
+                    }
+                    return result(input_read, output_written, .done);
+                },
+            }
+        }
+    }
+
+    /// Advance until the next stored-block boundary, an input/output wait, or
+    /// completion. `block_boundary` reports a stop between blocks.
+    pub fn stepToBlockBoundary(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
+        self.pause_requested = true;
+        defer self.pause_requested = false;
+        return self.step(input, output);
+    }
+    pub fn atBlockBoundary(self: *const Decoder) bool {
+        return self.phase == .header or self.phase == .done;
     }
 
     fn parseHeader(self: *Decoder) Error!void {
