@@ -59,7 +59,9 @@ costs 6 bytes on XML while cutting low-level encode time substantially. The
 hash word loader marks the dictionary segment unlikely, keeping history and
 block hashing on the predicted path. History seeding hashes contiguous history
 bytes directly instead of dispatching through the segment-aware word loader
-for every seeded position.
+for every seeded position. Block hash lookups and match-seed anchors also read
+the current block directly; the segment-aware loader remains for boundary
+positions that can span slices.
 
 ## Measurement
 
@@ -89,8 +91,9 @@ benchmark reports the best round.
 | Repeat skip above 2,048 sequences | 187,495 | 53,957,173 | 0.1795 |
 | Dictionary-unlikely hash hint | 187,495 | 53,535,559 | 0.1781 |
 | Direct history seed hashing | 187,495 | 46,758,314 | 0.1555 |
+| Direct block hash paths | 187,495 | 45,207,876 | 0.1504 |
 
-The combined change is **6.43 times faster**; the repeat-skip stages add 34
+The combined change is **6.65 times faster**; the repeat-skip stages add 34
 bytes (0.018%) to the baseline, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
@@ -106,10 +109,10 @@ acceleration 1, three iterations per round and three rounds, one run per file:
 
 | File | Vort bytes | libzstd bytes | Size ratio | Vort ns | Vort MiB/s |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| xml | 187,495 | 172,242 | 1.0886 | 46,758,314 | 64.2 |
-| dickens | 446,706 | 430,405 | 1.0379 | 94,825,280 | 31.6 |
-| reymont | 375,454 | 338,665 | 1.1086 | 84,259,545 | 35.6 |
-| x-ray | 720,706 | 803,674 | 0.8968 | 122,784,723 | 24.4 |
+| xml | 187,495 | 172,242 | 1.0886 | 45,207,876 | 66.4 |
+| dickens | 446,706 | 430,405 | 1.0379 | 91,479,542 | 32.8 |
+| reymont | 375,454 | 338,665 | 1.1086 | 81,463,617 | 36.8 |
+| x-ray | 720,706 | 803,674 | 0.8968 | 121,005,790 | 24.8 |
 
 These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller

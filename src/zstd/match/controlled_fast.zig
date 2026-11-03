@@ -208,7 +208,7 @@ fn Tables(comptime dual: bool) type {
         }
         fn lookupShort(self: *Self, source: Source, position: usize, profile: ?*controls.Profile) u32 {
             const absolute = source.prefixLen() + position;
-            const key = hash4(source, absolute);
+            const key = hash4Block(source.block, position);
             const previous = self.short[key];
             self.short[key] = @intCast(absolute);
             if (profile) |p| p.add("short_hash_probes", 1);
@@ -217,11 +217,19 @@ fn Tables(comptime dual: bool) type {
         fn lookupLong(self: *Self, source: Source, position: usize, profile: ?*controls.Profile) u32 {
             if (source.block.len - position < 8) return invalid;
             const absolute = source.prefixLen() + position;
-            const key = hash8(source, absolute);
+            const key = hash8Block(source.block, position);
             const previous = self.long[key];
             self.long[key] = @intCast(absolute);
             if (profile) |p| p.add("long_hash_probes", 1);
             return previous;
+        }
+        fn insertBlock(self: *Self, source: Source, absolute: usize) void {
+            const block_position = absolute - source.prefixLen();
+            const remaining = source.block.len - block_position;
+            if (remaining < 4) return;
+            self.short[hash4Block(source.block, block_position)] = @intCast(absolute);
+            if (dual and remaining >= 8)
+                self.long[hash8Block(source.block, block_position)] = @intCast(absolute);
         }
         fn seedMatch(self: *Self, source: Source, found: Match, acceleration: u32) void {
             const end = found.position + found.length;
@@ -230,15 +238,15 @@ fn Tables(comptime dual: bool) type {
             const first = prefix + found.position;
             const last = prefix + end - 1;
             const tail = prefix + end - stride;
-            self.insert(source, first);
+            self.insertBlock(source, first);
             if (stride < found.length) {
                 const second = first + stride;
-                self.insert(source, second);
-                if (tail != second and tail != first) self.insert(source, tail);
-                if (last != second and last != tail and last != first) self.insert(source, last);
+                self.insertBlock(source, second);
+                if (tail != second and tail != first) self.insertBlock(source, tail);
+                if (last != second and last != tail and last != first) self.insertBlock(source, last);
             } else if (last != first) {
                 // `stride == found.length` makes the tail anchor the match start.
-                self.insert(source, last);
+                self.insertBlock(source, last);
             }
         }
     };
@@ -377,6 +385,12 @@ fn hash4History(history: []const u8, offset: usize) usize {
 }
 fn hash8History(history: []const u8, offset: usize) usize {
     return @intCast((std.mem.readInt(u64, history[offset..][0..8], .little) *% @as(u64, 0x9e3779b185ebca87)) >> (64 - hash_bits));
+}
+fn hash4Block(block: []const u8, position: usize) usize {
+    return (std.mem.readInt(u32, block[position..][0..4], .little) *% @as(u32, 0x9e3779b1)) >> (32 - hash_bits);
+}
+fn hash8Block(block: []const u8, position: usize) usize {
+    return @intCast((std.mem.readInt(u64, block[position..][0..8], .little) *% @as(u64, 0x9e3779b185ebca87)) >> (64 - hash_bits));
 }
 
 test "Zstd controlled fast word loads match scalar across all virtual boundaries" {

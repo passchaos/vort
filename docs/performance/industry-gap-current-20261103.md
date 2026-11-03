@@ -138,8 +138,9 @@ deduplicates match-seed anchors, carries prepared final repcodes into commit,
 reuses encoder records during re-emission, emits large candidates directly
 against the current frame state, scans intra-block matches without segment
 dispatch, skips the repeat DP above 2,048 sequences, marks the dictionary hash
-segment unlikely and hashes contiguous history seeds directly; the 1 MiB XML
-level-1 fast encode is 6.43 times faster with 34 additional wire bytes
+segment unlikely, hashes contiguous history seeds directly and reads block
+hash lookups from the block; the 1 MiB XML level-1 fast encode is 6.65 times
+faster with 34 additional wire bytes
 (0.018%). A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
