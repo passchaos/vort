@@ -131,3 +131,10 @@ A segment-walking match scan with vectorized run comparison measured
 path measured 61.50/60.49/60.43M ns; both were reverted. The first history
 variant also changed the wire by 178 bytes until the history-to-block crossing
 index was corrected, after which the wire matched but the path was slower.
+
+Removing compressed table alternatives was rejected on ratio cost. Skipping
+all three measured 51.9/50.9/51.5M ns but grew the wire from 187,495 to
+238,000 bytes (+27%). Skipping only the offset table measured
+52.7/52.5/52.3M ns at 197,725 bytes (+5.5%), and skipping only the match table
+measured 52.3-53.1M ns at 197,922 bytes (+5.6%). The compressed planners stay
+in the fast policy.
