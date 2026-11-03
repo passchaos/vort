@@ -191,3 +191,14 @@ The full Deflate/Zstd/Brotli industry-best objective stays active. Further
 opportunities include reusing split-planner symbol projections, parser/model
 quality and broader full-file/dictionary/streaming/resource/platform matrices;
 none is implied by this command-model lifetime increment.
+
+## q10 command-state input override
+
+The existing `command_state_max_input_kib` override can extend q10's
+command-state candidate from the 8 KiB default through the 64 KiB optimal
+ceiling. On the 64 KiB XML prefix, `--command-state-max-input-kib 64` reduces
+the wire from 4,556 to 4,093 bytes (10.2%, size ratio 0.9832 versus the
+4,163-byte reference) at 202.6 ms versus 80.4 ms (about 2.5x encode time).
+Dickens and x-ray keep identical 64 KiB wires under the same override while
+paying the higher time, so the 8 KiB default remains the latency policy and the
+larger ceiling stays an explicit opt-in.
