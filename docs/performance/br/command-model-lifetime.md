@@ -216,3 +216,26 @@ unique 4-gram ratios are about 0.105/0.43/0.95 for XML/dickens/x-ray, and a
 XML (1,644 -> 1,560 bytes); 8 KiB prefixes show no difference. Two prefix
 encodes cost more than the direct opt-in for XML and add roughly 60% time for
 non-XML inputs, so the explicit 64 KiB opt-in remains the interface.
+
+## q11 preset versus the full HQ parser
+
+The default q11 preset does not run the full HQ parser. It uses the bounded
+command-state candidate (`hq_command_parser`, beam 2, at most eight
+candidates), while `PlannedEncodeOptions.hq` selects the separate whole-block
+DP parser (`hq_parser`). The 64 KiB XML prefix measures 4,556 bytes versus
+3,931 reference bytes (1.1590) at 84.2 ms versus 64.1 ms, so the preset is
+already close on time and 15.9% behind on size.
+
+The full parser route is not a drop-in replacement. With the quality
+schedule's search depth 512, nice length 258, beam 16 and two iterations it
+did not finish the benchmark's repeated encode calls within a 12-minute CPU
+window. A reduced depth-16, nice-64, beam-2, one-iteration configuration still
+did not complete the ten HQ encode calls within 300 seconds after a warm build,
+while the same 1 KiB input encodes successfully at 350 versus 337 reference
+bytes. The whole-block DP and candidate enumeration therefore need an
+algorithmic speed fix before the q11 preset can adopt them.
+
+The planned encode bench now exposes `--hq`, `--hq-beam-width`,
+`--hq-iterations`, `--hq-block-len`, `--hq-search-depth` and `--hq-nice-len`
+so this comparison stays reproducible. The preset default and its wires are
+unchanged; the full parser remains explicit.

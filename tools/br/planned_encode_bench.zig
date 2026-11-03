@@ -42,6 +42,7 @@ const Options = struct {
     adaptive_distance_split: ?bool = null,
     distance_parameter_search: ?bool = null,
     command_state_max_input_kib: ?u8 = null,
+    hq: ?br.HqOptions = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -51,6 +52,11 @@ const Options = struct {
     }
 };
 const Sample = encode_samples.Sample;
+
+fn hqOptions(options: *Options) *br.HqOptions {
+    if (options.hq == null) options.hq = .{};
+    return &options.hq.?;
+}
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -333,6 +339,7 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
         .quality = options.planned_quality,
         .mode = options.planned_mode,
         .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
+        .hq = options.hq,
     };
     const warmup = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
     allocator.free(warmup);
@@ -480,6 +487,30 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             );
             continue;
         }
+        if (std.mem.eql(u8, arg, "--hq")) {
+            options.hq = .{};
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--hq-beam-width")) {
+            hqOptions(&options).beam_width = try std.fmt.parseInt(u8, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--hq-iterations")) {
+            hqOptions(&options).iterations = try std.fmt.parseInt(u8, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--hq-block-len")) {
+            hqOptions(&options).block_len = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--hq-search-depth")) {
+            hqOptions(&options).search_depth = try std.fmt.parseInt(u32, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--hq-nice-len")) {
+            hqOptions(&options).nice_len = try std.fmt.parseInt(u32, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--case")) options.case_filter = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--adaptive-command-split")) options.adaptive_command_split = true else if (std.mem.eql(u8, arg, "--adaptive-literal-split")) options.adaptive_literal_split = true else if (std.mem.eql(u8, arg, "--adaptive-distance-split")) options.adaptive_distance_split = true else if (std.mem.eql(u8, arg, "--no-adaptive-distance-split")) options.adaptive_distance_split = false else if (std.mem.eql(u8, arg, "--distance-parameter-search")) options.distance_parameter_search = true else if (std.mem.eql(u8, arg, "--no-distance-parameter-search")) options.distance_parameter_search = false else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
@@ -490,6 +521,11 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     }
     if (options.quality_override) |quality| if (quality < 0 or quality > 11) return error.InvalidBlockPlan;
     if (options.planned_quality == null and options.planned_mode != .generic) return error.InvalidBlockPlan;
+    if (options.hq != null and
+        (options.planned_quality == null or options.planned_quality.? < 10))
+    {
+        return error.InvalidBlockPlan;
+    }
     if (options.command_state_max_input_kib != null and
         (options.planned_quality == null or options.planned_quality.? < 10))
     {
