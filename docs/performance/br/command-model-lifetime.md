@@ -235,6 +235,21 @@ while the same 1 KiB input encodes successfully at 350 versus 337 reference
 bytes. The whole-block DP and candidate enumeration therefore need an
 algorithmic speed fix before the q11 preset can adopt them.
 
+## Why the full HQ parser is slow
+
+`tools/br/hq_encode_probe.zig` times one explicit-HQ encode and prints the
+parser counters. On the 8 KiB XML prefix with the resolved q11 defaults
+(block 8 KiB, beam 16, two iterations, depth 64, nice 128) it produced 1,050
+bytes in 76.2 seconds with 306,018 tree nodes, 2,883,817 match probes and
+280,364,866 admitted price evaluations over six passes. The dominant cost is
+structural: every beam node at every position evaluates the sampled length set
+(2..64 plus code boundaries) for every match candidate and every rep choice.
+With a 16-wide beam that multiplies to roughly 34,000 price evaluations per
+input byte. The quality-only q11 path avoids this by using the bounded
+command-state parser and a single optimal parse, which is why it runs in
+milliseconds and why adopting the full parser needs the candidate/length work
+reduced first, not merely a smaller beam.
+
 The planned encode bench now exposes `--hq`, `--hq-beam-width`,
 `--hq-iterations`, `--hq-block-len`, `--hq-search-depth` and `--hq-nice-len`
 so this comparison stays reproducible. The preset default and its wires are

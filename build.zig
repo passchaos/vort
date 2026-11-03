@@ -3803,6 +3803,19 @@ pub fn build(b: *std.Build) void {
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
 
+    const br_hq_encode_probe = b.addExecutable(.{
+        .name = "vort-br-hq-encode-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/hq_encode_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort_br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_hq_encode_probe = b.addRunArtifact(br_hq_encode_probe);
+    if (b.args) |args| run_br_hq_encode_probe.addArgs(args);
+    b.step("run-br-hq-encode-probe", "Time one explicit-HQ Brotli encode and print parser counters").dependOn(&run_br_hq_encode_probe.step);
+
     const br_complete_dictionary_bench_exe = b.addExecutable(.{
         .name = "vort-br-complete-dictionary-bench",
         .root_module = b.createModule(.{
