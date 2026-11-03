@@ -138,6 +138,25 @@ These rows confirm the timing direction outside XML, but they are not a
 whole-file or all-twelve-source matrix; x-ray remains the only row smaller
 than the reference here.
 
+## Full-file matrix
+
+Actual full files, level 1 with explicit fast strategy and acceleration 1,
+three iterations per round and three rounds. The opt-in long-match table is
+shown separately because it trades about 6-27% encode time for smaller text
+wires:
+
+| File | Bytes | libzstd | Size ratio | MiB/s | Opt-in bytes | Opt-in ratio | Opt-in MiB/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| xml | 828,331 | 696,678 | 1.1890 | 77.2 | 733,084 | 1.0523 | 72.2 |
+| dickens | 4,429,675 | 4,268,871 | 1.0377 | 32.7 | 4,194,809 | 0.9827 | 31.0 |
+| reymont | 2,400,529 | 2,152,776 | 1.1151 | 38.1 | 2,154,518 | 1.0008 | 38.9 |
+| x-ray | 6,245,104 | 6,772,680 | 0.9221 | 26.9 | 6,244,872 | 0.9221 | 21.1 |
+
+The opt-in reduces the full-file XML gap from 18.9% to 5.2%, moves dickens
+1.7% below libzstd and leaves reymont essentially level; x-ray remains 7.8%
+smaller. The default fast path keeps its lower time and is unchanged by the
+opt-in.
+
 Follow-ups were measured over five iterations and five rounds and rejected as
 noise: a word-at-a-time block-only match extension (147.34-148.07M ns versus
 147.85-147.91M ns), a direct block-only hash path (147.38-148.02M ns) and a
