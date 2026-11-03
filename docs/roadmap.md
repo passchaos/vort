@@ -1019,6 +1019,7 @@ reuse, so production keeps the simpler independently owned plans.
 - [x] Deflate decode stage report includes exact-size alloc decode rows for raw/zlib/gzip APIs.
 - [x] Deflate decode stage report separates literal-only dynamic streams from dynamic streams with LZ77 matches.
 - [x] Checksum, deflate-decode, corpus-decode and Deflate decode stage report benches default to ReleaseFast library and executable builds so throughput rows are not unoptimized Debug samples; corpus inputs now allow 4 MiB so the growing roadmap stays readable.
+- [x] The root test suite accepts `-Droot-test-filter` for focused runs; the complete root suite exceeded a 30-minute local gate, so focused filters are used while broader gates are scheduled separately.
 - [x] Deflate decode stage dashboard records raw/zlib/gzip malformed, truncated, checksum, and concatenated-gzip error-path smoke results.
 - [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] Deflate fuzz smoke and hex corpus cover dynamic matches without distance codes.

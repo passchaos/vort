@@ -425,9 +425,15 @@ pub fn build(b: *std.Build) void {
     erofs_tests_mod.addObject(br_record_optimal_obj);
     erofs_tests_mod.addObject(zstd_huffman_x2_obj);
 
+    const root_test_filter = b.option(
+        []const u8,
+        "root-test-filter",
+        "Compile and run only root tests whose names contain this text",
+    );
     const tests = b.addTest(.{
         .name = "vort-tests",
         .root_module = tests_mod,
+        .filters = if (root_test_filter) |filter| &.{filter} else &.{},
     });
     const run_tests = b.addRunArtifact(tests);
     const seven_zip_aes_tests = b.addTest(.{
