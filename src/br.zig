@@ -10564,8 +10564,6 @@ var test_materialize_context_primary = false;
 var test_context_primary_count_calls: usize = 0;
 var test_context_primary_cold_success_calls: usize = 0;
 var test_context_primary_recent_max: usize = 0;
-var test_compressed_header_tree_reads: usize = 0;
-var test_compressed_header_resumes: usize = 0;
 
 fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error!PreferredCommandPlan {
     var profile_scope = trace.begin(.preferred_context, input.len, commands.len);
@@ -15744,6 +15742,9 @@ pub const CompressedHeaderParseProgress = struct {
     command_tree_index: u16 = 0,
     distance_tree_index: u16 = 0,
     bit_offset: usize = 0,
+    /// Cumulative completed and attempted tree reads for this meta-block.
+    completed_trees: usize = 0,
+    tree_attempts: usize = 0,
 
     pub const Stage = enum { switches, context_maps, literal_trees, command_trees, distance_trees, done };
 };
@@ -15856,7 +15857,6 @@ inline fn readLargeCompressedHeaderLiteralTreeAt(reader: *bitstream.BitReader, h
     } else {
         header.packed_literal_trees[index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&tree);
     }
-    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
 }
 
 inline fn readLargeCompressedHeaderCommandTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16) Error!void {
@@ -15866,7 +15866,6 @@ inline fn readLargeCompressedHeaderCommandTreeAt(reader: *bitstream.BitReader, h
     } else {
         header.packed_insert_copy_trees[index - inline_command_tree_count] = PackedPrefixCode(large_command_alphabet_capacity).init(&tree);
     }
-    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
 }
 
 inline fn readLargeCompressedHeaderDistanceTreeAt(
@@ -15883,7 +15882,6 @@ inline fn readLargeCompressedHeaderDistanceTreeAt(
     } else {
         header.packed_distance_trees[index - inline_distance_tree_count] = PackedPrefixCode(distance_capacity).init(&tree);
     }
-    if (comptime builtin.is_test) test_compressed_header_tree_reads += 1;
 }
 
 /// Resume-capable compressed-header parser. Completed sub-parsers and trees
@@ -15903,9 +15901,6 @@ pub fn parseCompressedHeaderWithProgress(
     if (progress.bit_offset > bit_len) return error.TruncatedFrame;
     reader.byte_index = progress.bit_offset / 8;
     reader.bit_index = @intCast(progress.bit_offset % 8);
-    if (comptime builtin.is_test) {
-        if (progress.stage != .switches) test_compressed_header_resumes += 1;
-    }
     while (true) switch (progress.stage) {
         .switches => {
             progress.shape = try readLargeCompressedHeaderBlockSwitches(&reader, &out.compressed, large_window);
@@ -15920,7 +15915,9 @@ pub fn parseCompressedHeaderWithProgress(
         .literal_trees => {
             while (progress.literal_tree_index < progress.tree_counts.literal) {
                 progress.bit_offset = reader.bitPosition();
+                progress.tree_attempts += 1;
                 try readLargeCompressedHeaderLiteralTreeAt(&reader, &out.compressed, progress.literal_tree_index);
+                progress.completed_trees += 1;
                 progress.literal_tree_index += 1;
             }
             @memset(&out.compressed.packed_literal_cache_indices, std.math.maxInt(u16));
@@ -15931,7 +15928,9 @@ pub fn parseCompressedHeaderWithProgress(
         .command_trees => {
             while (progress.command_tree_index < progress.shape.command_block_types) {
                 progress.bit_offset = reader.bitPosition();
+                progress.tree_attempts += 1;
                 try readLargeCompressedHeaderCommandTreeAt(&reader, &out.compressed, progress.command_tree_index);
+                progress.completed_trees += 1;
                 progress.command_tree_index += 1;
             }
             out.compressed.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
@@ -15941,6 +15940,7 @@ pub fn parseCompressedHeaderWithProgress(
         .distance_trees => {
             while (progress.distance_tree_index < progress.tree_counts.distance) {
                 progress.bit_offset = reader.bitPosition();
+                progress.tree_attempts += 1;
                 try readLargeCompressedHeaderDistanceTreeAt(
                     large_max_distance_alphabet_size,
                     &reader,
@@ -15949,6 +15949,7 @@ pub fn parseCompressedHeaderWithProgress(
                     progress.shape.distance_alphabet_size_max,
                     progress.shape.distance_alphabet_size,
                 );
+                progress.completed_trees += 1;
                 progress.distance_tree_index += 1;
             }
             out.compressed.active_packed_distance_tree_index = std.math.maxInt(u16);
@@ -42334,7 +42335,12 @@ test "Brotli prepared prefix lookup and reader peek contracts" {
 }
 
 test "Brotli incremental header progress retains completed trees" {
-    const Result = struct { tree_reads: usize, resumes: usize };
+    const Result = struct {
+        trees: usize,
+        tree_attempts: usize,
+        resumes: usize,
+        attempts: usize,
+    };
     const run = struct {
         fn decode(encoded: []const u8, expected: []const u8, chunk: usize) !Result {
             var history: [64 * 1024]u8 = undefined;
@@ -42344,8 +42350,6 @@ test "Brotli incremental header progress retains completed trees" {
             });
             const output = try std.testing.allocator.alloc(u8, expected.len);
             defer std.testing.allocator.free(output);
-            test_compressed_header_tree_reads = 0;
-            test_compressed_header_resumes = 0;
             var input_offset: usize = 0;
             var output_offset: usize = 0;
             while (decoder.snapshot().phase != .done) {
@@ -42360,7 +42364,13 @@ test "Brotli incremental header progress retains completed trees" {
             }
             try std.testing.expectEqual(expected.len, output_offset);
             try std.testing.expectEqualSlices(u8, expected, output);
-            return .{ .tree_reads = test_compressed_header_tree_reads, .resumes = test_compressed_header_resumes };
+            const snapshot = decoder.snapshot();
+            return .{
+                .trees = @intCast(snapshot.header_trees),
+                .tree_attempts = @intCast(snapshot.header_tree_attempts),
+                .resumes = @intCast(snapshot.header_resumes),
+                .attempts = @intCast(snapshot.header_parse_attempts),
+            };
         }
     }.decode;
     const source = @embedFile("br/dictionary.bin");
@@ -42368,8 +42378,11 @@ test "Brotli incremental header progress retains completed trees" {
     defer std.testing.allocator.free(encoded);
     const whole = try run(encoded, source, encoded.len);
     const split = try run(encoded, source, 1);
-    try std.testing.expect(whole.resumes == 0);
+    try std.testing.expectEqual(@as(usize, 0), whole.resumes);
+    try std.testing.expectEqual(whole.trees, whole.tree_attempts);
     try std.testing.expect(split.resumes != 0);
-    try std.testing.expectEqual(whole.tree_reads, split.tree_reads);
-    try std.testing.expect(split.tree_reads != 0);
+    try std.testing.expect(split.attempts > whole.attempts);
+    try std.testing.expectEqual(whole.trees, split.trees);
+    try std.testing.expect(split.trees != 0);
+    try std.testing.expect(split.tree_attempts > split.trees);
 }

@@ -30,6 +30,30 @@ completed trees thousands of times. Focused Debug, ReleaseSafe and ReleaseFast
 runs pass. The complete ReleaseFast Brotli suite passes 1,533 tests with one
 existing platform skip out of 1,534 and exit zero.
 
+## Fragmented measurement
+
+`tools/br/header_progress_probe.zig` encodes the 122,784-byte
+`br/dictionary.bin` ratio stream (54,887 wire bytes) and decodes it at several
+input chunk sizes. Three rounds per row give:
+
+| Input chunk | Decode average | Header attempts | Resumes | Completed trees | Tree attempts |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 byte | 2.886 ms | 762 | 752 | 19 | 738 |
+| 16 bytes | 1.482 ms | 49 | 47 | 19 | 64 |
+| 256 bytes | 1.344 ms | 4 | 2 | 19 | 21 |
+| 4096 bytes | 1.341 ms | 2 | 0 | 19 | 19 |
+| Complete | 1.340 ms | 2 | 0 | 19 | 19 |
+
+Completed trees stay at 19 for every split, proving that retries retain
+finished trees instead of re-reading the prefix. The one-byte row also pays
+per-step overhead for 54,887 calls, so its 2.15x total decode time is not a
+header-only ratio.
+
+```sh
+zig build build-br-header-progress-probe
+zig-out/bin/vort-br-header-progress-probe src/br/dictionary.bin 1 3
+```
+
 This establishes sub-parser and tree-boundary resumability. It does not yet
 resume in the middle of a Huffman-tree description, nor provide a whole-file
 streaming or memory comparison.

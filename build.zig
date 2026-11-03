@@ -2547,6 +2547,16 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.step("build-br-parameter-pair-probe", "Compile the public Brotli q8 parameter-pair wire and candidate-work probe").dependOn(&b.addInstallArtifact(br_parameter_pair_probe, .{}).step);
+    const br_header_progress_probe = b.addExecutable(.{
+        .name = "vort-br-header-progress-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/header_progress_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort_br", .module = br_encode_bench_mod }},
+        }),
+    });
+    b.step("build-br-header-progress-probe", "Compile the fragmented incremental Brotli header-work probe").dependOn(&b.addInstallArtifact(br_header_progress_probe, .{}).step);
     const br_general_large_probe = b.addExecutable(.{
         .name = "vort-br-general-large-window-probe",
         .root_module = b.createModule(.{

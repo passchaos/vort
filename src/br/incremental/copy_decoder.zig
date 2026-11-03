@@ -26,6 +26,10 @@ pub fn Decoder(comptime Codec: type) type {
         /// at the next unit instead of re-reading the complete prefix.
         header_progress: if (@hasDecl(Codec, "HeaderParseProgress")) Codec.HeaderParseProgress else void =
             if (@hasDecl(Codec, "HeaderParseProgress")) .{} else {},
+        header_parse_attempts: Counter = 0,
+        header_resumes: Counter = 0,
+        header_trees: Counter = 0,
+        header_tree_attempts: Counter = 0,
         header: Codec.Header = undefined,
         staged_bits: u128 = 0,
         staged_bit_count: u8 = 0,
@@ -128,6 +132,10 @@ pub fn Decoder(comptime Codec: type) type {
             error_input_offset: ?Counter,
             error_output_offset: ?Counter,
             last_step_progress: core.Progress,
+            header_parse_attempts: Counter = 0,
+            header_resumes: Counter = 0,
+            header_trees: Counter = 0,
+            header_tree_attempts: Counter = 0,
         };
 
         pub fn init(history: []u8) Self {
@@ -192,6 +200,10 @@ pub fn Decoder(comptime Codec: type) type {
                 .error_input_offset = self.error_input_offset,
                 .error_output_offset = self.error_output_offset,
                 .last_step_progress = self.last_step_progress,
+                .header_parse_attempts = self.header_parse_attempts,
+                .header_resumes = self.header_resumes,
+                .header_trees = self.header_trees,
+                .header_tree_attempts = self.header_tree_attempts,
             };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
@@ -361,6 +373,10 @@ pub fn Decoder(comptime Codec: type) type {
                         // the ordinary parser can inspect the final retained
                         // byte without treating synthetic high padding as input.
                         if (self.header_len != 0 and self.header_len != self.header_parse_len) {
+                            if (comptime @hasDecl(Codec, "HeaderParseProgress")) {
+                                self.header_parse_attempts +|= 1;
+                                if (self.header_progress.stage != .switches) self.header_resumes +|= 1;
+                            }
                             const parsed_bits = (if (comptime @hasDecl(Codec, "parseMetaBlockHeaderIntoWithProgress"))
                                 Codec.parseMetaBlockHeaderIntoWithProgress(
                                     self.headerStorage()[0..self.header_len],
@@ -391,6 +407,10 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.compressed_header, err),
                             };
                             if (parsed_bits) |bits_read| {
+                                if (comptime @hasDecl(Codec, "HeaderParseProgress")) {
+                                    self.header_trees +|= self.header_progress.completed_trees;
+                                    self.header_tree_attempts +|= self.header_progress.tree_attempts;
+                                }
                                 const unread_bytes = (self.header_bit_count - bits_read) / 8;
                                 std.debug.assert(unread_bytes <= input_read);
                                 input_read -= unread_bytes;
