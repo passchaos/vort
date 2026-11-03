@@ -235,6 +235,20 @@ while the same 1 KiB input encodes successfully at 350 versus 337 reference
 bytes. The whole-block DP and candidate enumeration therefore need an
 algorithmic speed fix before the q11 preset can adopt them.
 
+## q11 cross-content gap
+
+The q11 preset gap is not XML-specific. On 64 KiB prefixes it measures:
+
+| File | Vort bytes | libbrotli q11 | Size ratio | Vort ns |
+| --- | ---: | ---: | ---: | ---: |
+| dickens | 24,501 | 22,126 | 1.1073 | 172.4M |
+| x-ray | 42,574 | 36,561 | 1.1645 | 182.7M |
+| xml | 4,556 | 3,931 | 1.1590 | 84.8M |
+
+Text and binary both trail by 10.7-16.5%, and the preset is also 2.7-2.9x
+slower than the reference on dickens and x-ray. This is an algorithmic
+deficit in the quality path, not a content-specific tuning gap.
+
 ## Why the full HQ parser is slow
 
 `tools/br/hq_encode_probe.zig` times one explicit-HQ encode and prints the
