@@ -252,3 +252,7 @@ restored.
 Inlining the code-0/1 repeat-selector updates directly in the chooser was also
 neutral (XML 45.37/46.13M ns versus 45.53/45.95M, NCI 33.83/34.01M versus
 33.92/33.78M) with unchanged wire, so the shared state-machine helper remains.
+
+Dropping the cached-plan `valueField` bounds checks in the emission loop was
+neutral on XML (45.45/46.27M ns versus 45.53/45.95M) and only about 0.5% faster
+on NCI, so the checked accessor remains for malformed-plan safety.
