@@ -128,7 +128,11 @@ incremental decoders. The
 [resumable Brotli compressed header](br/resumable-compressed-header.md)
 retains completed sub-parsers and Huffman trees across small input chunks;
 mid-tree continuation remains open, and a consumed-bits retry lower bound was
-rejected because one-byte chunks always clear it. A
+rejected because one-byte chunks always clear it. The
+[grouped Zstd sequence planner](zstd/repeat-planner-20261103.md) visits only
+code-matching FSE states in the repeat DP and uses an O(1) next-state map for
+compressed transitions; the 1 MiB XML level-1 fast encode is 1.83 times faster
+with identical wire. A
 [bounded six-file Silesia q8 screen](br/full-file-q8-20261103.md) finds Vort
 1.7% smaller but 3.6 times slower than system libbrotli q8, identifying q8
 encode speed as the next concrete Brotli gap. The

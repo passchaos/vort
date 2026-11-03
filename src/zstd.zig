@@ -26790,12 +26790,40 @@ fn planLargeRepeatSequenceCodes(
     if (viable_masks.len < required_mask_len) return null;
     const masks = viable_masks[0..required_mask_len];
     @memset(masks, 0);
+    if (symbols.len > max_sequence_fse_table_size) return null;
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    // Group FSE states by the sequence code their symbol represents. The DP
+    // then visits only matching states instead of scanning the complete table
+    // for every sequence position.
+    var code_counts: [256]u16 = @splat(0);
+    for (symbols) |symbol| {
+        if (sequenceCodeForSymbol(bases, bits, symbol)) |code| code_counts[code] += 1;
+    }
+    var code_offsets: [257]usize = undefined;
+    var cursor: [256]usize = undefined;
+    var state_offset: usize = 0;
+    for (0..256) |code| {
+        code_offsets[code] = state_offset;
+        cursor[code] = state_offset;
+        state_offset += code_counts[code];
+    }
+    code_offsets[256] = state_offset;
+    var state_indices: [max_sequence_fse_table_size]u16 = undefined;
+    for (symbols, 0..) |symbol, state| {
+        if (sequenceCodeForSymbol(bases, bits, symbol)) |code| {
+            state_indices[cursor[code]] = @intCast(state);
+            cursor[code] += 1;
+        }
+    }
     var pos = codes.len;
     while (pos > 0) {
         pos -= 1;
         const current_row = masks[pos * mask_words ..][0..mask_words];
-        for (symbols, 0..) |symbol, state| {
-            if (!sequenceSymbolMatchesCode(symbol, kind, codes[pos])) continue;
+        const code: usize = codes[pos];
+        for (state_indices[code_offsets[code]..code_offsets[code + 1]]) |state_value| {
+            const state: usize = state_value;
+            const symbol = symbols[state];
             if (pos == codes.len - 1) {
                 setSequenceStateBit(current_row, state);
                 continue;
@@ -27805,6 +27833,13 @@ fn planPredefinedSequenceCodesReference(
     return plan;
 }
 
+fn sequenceCodeForSymbol(bases: []const usize, bits: []const u8, symbol: SequenceSymbol) ?u8 {
+    for (0..bases.len) |code| {
+        if (symbol.base == bases[code] and symbol.additional_bits == bits[code]) return @intCast(code);
+    }
+    return null;
+}
+
 fn sequenceSymbolMatchesCode(symbol: SequenceSymbol, kind: SequenceTableKind, code: u8) bool {
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
@@ -28116,14 +28151,28 @@ fn fillLargeCompressedSequenceTransitions(
     if (buffers.codes.len == 0) return error.CorruptFrame;
     const invalid_state = std.math.maxInt(u8);
     var symbol_heads: [max_fse_compression_symbol + 1]u8 = @splat(invalid_state);
-    var symbol_next: [max_sequence_fse_table_size]u8 = undefined;
     var state = entries.len;
     while (state > 0) {
         state -= 1;
         const symbol = entries[state].symbol;
         if (symbol > max_fse_compression_symbol) return error.CorruptFrame;
-        symbol_next[state] = symbol_heads[symbol];
         symbol_heads[symbol] = @intCast(state);
+    }
+    // Map each symbol's next-state values to the first ascending state whose
+    // range contains them. The per-state ranges partition the table, so filling
+    // the map costs O(table length) and each transition lookup is O(1) instead
+    // of walking every state of the symbol.
+    var transition_map: [max_fse_compression_symbol + 1][max_sequence_fse_table_size]u8 =
+        [_][max_sequence_fse_table_size]u8{[_]u8{invalid_state} ** max_sequence_fse_table_size} ** (max_fse_compression_symbol + 1);
+    for (entries, 0..) |entry, state_index| {
+        const first = entry.baseline;
+        const range = @as(usize, 1) << @intCast(entry.bits);
+        const end = @min(entries.len, first + range);
+        var value = first;
+        while (value < end) : (value += 1) {
+            if (transition_map[entry.symbol][value] == invalid_state)
+                transition_map[entry.symbol][value] = @intCast(state_index);
+        }
     }
 
     const last = buffers.codes.len - 1;
@@ -28135,12 +28184,7 @@ fn fillLargeCompressedSequenceTransitions(
     var i = last;
     while (i > 0) {
         i -= 1;
-        var candidate_state = symbol_heads[buffers.codes[i]];
-        while (candidate_state != invalid_state) : (candidate_state = symbol_next[candidate_state]) {
-            const candidate = entries[candidate_state];
-            if (next_state >= candidate.baseline and
-                next_state - candidate.baseline < (@as(usize, 1) << @intCast(candidate.bits))) break;
-        }
+        const candidate_state = transition_map[buffers.codes[i]][next_state];
         if (candidate_state == invalid_state) return error.CorruptFrame;
         const entry = entries[candidate_state];
         buffers.transition_values[i] = @intCast(next_state - entry.baseline);

@@ -36,6 +36,12 @@ final-source timing is recorded separately from prototype results. Continue
 raising the decoder bar with actual whole-file and dictionary/reusable
 comparisons, rather than treating this increment as overall leadership.
 
+The [grouped Zstd sequence planner](performance/zstd/repeat-planner-20261103.md)
+visits only code-matching FSE states in the repeat DP and uses an O(1)
+next-state map for compressed transitions. The 1 MiB XML level-1 fast encode is
+1.83 times faster with byte-identical output; the repeat DP remains the largest
+encoder symbol.
+
 The [short-match and Brotli header ownership increment](performance/brotli-header-ownership.md)
 uses one proven 16-byte move for short dense Zstd matches and parses Brotli
 incremental headers into their owned state. It also repairs oversized decoder

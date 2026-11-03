@@ -1,0 +1,4 @@
+stage,wire_bytes,encode_ns,ratio
+baseline,187461,300637508,1.0
+grouped_repeat_dp,187461,197132699,0.655716
+mapped_transitions,187461,163920975,0.545245
