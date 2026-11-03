@@ -162,6 +162,9 @@ variant also changed the wire by 178 bytes until the history-to-block crossing
 index was corrected, after which the wire matched but the path was slower.
 Restricting long-table seeding to the recent 128 KiB measured 169,237 bytes
 (+48) at 49.8-51.2M ns versus 49.5-50.3M, so the full long seed was retained.
+A 14-bit fast hash table measured 188,277 bytes at 43.6-44.0M ns versus the
+15-bit 187,854 bytes at 44.2M ns; the extra 0.23% wire was not worth the
+sub-percent time change, so 15 bits remains.
 
 Removing compressed table alternatives was rejected on ratio cost. Skipping
 all three measured 51.9/50.9/51.5M ns but grew the wire from 187,495 to
