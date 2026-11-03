@@ -2772,6 +2772,7 @@ test "root Zstd incremental encoder continues frames" {
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
+pub const ZstdPreparedDecodeDictionary = zstd.PreparedDecodeDictionary;
 pub const ZstdNativeDictionaryTrainOptions = zstd.NativeDictionaryTrainOptions;
 pub const ZstdOwnedNativeDictionary = zstd.OwnedNativeDictionary;
 pub const ZstdNativeDictionarySet = zstd.NativeDictionarySet;
@@ -12295,4 +12296,15 @@ test "root zlib and gzip concatenated chunked append decode helpers preserve pre
     try std.testing.expectEqual(expected.len, try decodeGzipConcatenatedChunksAppendLimited(std.testing.allocator, &gzip_appended, &gzip_chunks, gzip_join, expected.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, gzip_appended.items);
     try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedChunksAppendLimited(std.testing.allocator, &gzip_appended, &gzip_chunks, gzip_join, expected.len - 1));
+}
+
+test "root exports prepared Zstd decode dictionary" {
+    const dictionary_hex = std.mem.trim(u8, @embedFile("zstd/testdata/libzstd-trained-repeat.dict.hex"), " \r\n\t");
+    const dictionary_bytes = try std.testing.allocator.alloc(u8, dictionary_hex.len / 2);
+    defer std.testing.allocator.free(dictionary_bytes);
+    _ = try std.fmt.hexToBytes(dictionary_bytes, dictionary_hex);
+    const standard = try ZstdNativeDictionary.initFromStandardDictionary(dictionary_bytes);
+    var prepared = try ZstdPreparedDecodeDictionary.init(standard.dictionary);
+    _ = prepared.handle();
+    try std.testing.expectEqual(standard.dictionary.id, prepared.dictionary.id);
 }
