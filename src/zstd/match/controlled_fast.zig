@@ -201,10 +201,20 @@ fn Tables(comptime dual: bool) type {
         fn seedMatch(self: *Self, source: Source, found: Match, acceleration: u32) void {
             const end = found.position + found.length;
             const stride = @min(@as(usize, acceleration), found.length);
-            self.insert(source, source.prefixLen() + found.position);
-            if (stride < found.length) self.insert(source, source.prefixLen() + found.position + stride);
-            self.insert(source, source.prefixLen() + end - stride);
-            self.insert(source, source.prefixLen() + end - 1);
+            const prefix = source.prefixLen();
+            const first = prefix + found.position;
+            const last = prefix + end - 1;
+            const tail = prefix + end - stride;
+            self.insert(source, first);
+            if (stride < found.length) {
+                const second = first + stride;
+                self.insert(source, second);
+                if (tail != second and tail != first) self.insert(source, tail);
+                if (last != second and last != tail and last != first) self.insert(source, last);
+            } else if (last != first) {
+                // `stride == found.length` makes the tail anchor the match start.
+                self.insert(source, last);
+            }
         }
     };
 }

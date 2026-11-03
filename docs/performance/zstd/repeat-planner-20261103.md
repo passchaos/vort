@@ -38,7 +38,8 @@ The three narrow FSE transition fields for each sequence are validated and
 packed into one accumulator update before the reverse writer sees them. The
 offset alternative builder also retains each sequence's resolved offset extra
 value and final repcodes, so emission no longer replays the state machine over
-every sequence.
+every sequence. Match seeding inserts each distinct anchor once; acceleration
+1 previously wrote the match end twice.
 
 ## Measurement
 
@@ -59,8 +60,9 @@ benchmark reports the best round.
 | Block-only match scan | 187,489 | 90,946,374 | 0.3025 |
 | Packed transition fields | 187,489 | 90,135,365 | 0.2998 |
 | Cached offset extras | 187,489 | 87,070,589 | 0.2896 |
+| Deduplicated seed anchors | 187,489 | 84,303,965 | 0.2804 |
 
-The combined change is **3.45 times faster**; the repeat-skip stage adds 28
+The combined change is **3.57 times faster**; the repeat-skip stage adds 28
 bytes (0.015%) to this row, and the later changes leave the wire unchanged.
 The complete ReleaseFast Zstd suite passes 1,273/1,273 tests with exit zero.
 
