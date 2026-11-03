@@ -30,6 +30,7 @@ pub fn Decoder(comptime Codec: type) type {
         header_resumes: Counter = 0,
         header_trees: Counter = 0,
         header_tree_attempts: Counter = 0,
+        header_tree_symbol_resumes: Counter = 0,
         header: Codec.Header = undefined,
         staged_bits: u128 = 0,
         staged_bit_count: u8 = 0,
@@ -136,6 +137,7 @@ pub fn Decoder(comptime Codec: type) type {
             header_resumes: Counter = 0,
             header_trees: Counter = 0,
             header_tree_attempts: Counter = 0,
+            header_tree_symbol_resumes: Counter = 0,
         };
 
         pub fn init(history: []u8) Self {
@@ -204,6 +206,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .header_resumes = self.header_resumes,
                 .header_trees = self.header_trees,
                 .header_tree_attempts = self.header_tree_attempts,
+                .header_tree_symbol_resumes = self.header_tree_symbol_resumes,
             };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
@@ -410,6 +413,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 if (comptime @hasDecl(Codec, "HeaderParseProgress")) {
                                     self.header_trees +|= self.header_progress.completed_trees;
                                     self.header_tree_attempts +|= self.header_progress.tree_attempts;
+                                    self.header_tree_symbol_resumes +|= self.header_progress.tree_symbol_resumes;
                                 }
                                 const unread_bytes = (self.header_bit_count - bits_read) / 8;
                                 std.debug.assert(unread_bytes <= input_read);

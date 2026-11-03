@@ -53,7 +53,7 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [4096]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "input={d} encoded={d} chunk={d} iterations={d} decode_avg_ns={d} header_attempts={d} header_resumes={d} header_trees={d} header_tree_attempts={d} encoded_sha={s}\n",
+        "input={d} encoded={d} chunk={d} iterations={d} decode_avg_ns={d} header_attempts={d} header_resumes={d} header_trees={d} header_tree_attempts={d} header_tree_symbol_resumes={d} encoded_sha={s}\n",
         .{
             input.len,
             encoded.len,
@@ -64,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
             snapshot.header_resumes,
             snapshot.header_trees,
             snapshot.header_tree_attempts,
+            snapshot.header_tree_symbol_resumes,
             &encoded_sha,
         },
     );

@@ -46,9 +46,11 @@ performance epoch is kept separately. The prepared standard Zstd
 decode-dictionary handle now reuses one validated entropy snapshot across
 frames, and raw/zlib/gzip/stored-only incremental Deflate decoders expose a
 one-shot block-boundary step and query. Incremental Brotli compressed-header parsing
-now retains completed sub-parsers and Huffman trees across small input chunks;
-mid-tree continuation remains open, and a consumed-bits retry lower bound was
-rejected because one-byte chunks always clear it. The grouped Zstd sequence
+now retains completed sub-parsers and Huffman trees across small input chunks
+and resumes inside the Huffman symbol-length phase; the one-byte
+`br/dictionary.bin` probe falls from 2.886 ms to 2.277 ms. A consumed-bits
+retry lower bound was rejected because one-byte chunks always clear it. The
+grouped Zstd sequence
 planner visits only code-matching FSE states in the repeat DP, uses an O(1)
 next-state map for compressed transitions, inlines per-sequence symbol dispatch
 skips the repeat DP above 4,096 sequences, computes the absolute offset code

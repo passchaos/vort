@@ -15776,6 +15776,27 @@ const LargeCompressedHeaderShape = struct {
     ndirect: u16,
 };
 
+/// Resumable complex Huffman-tree description. The code-length-code phase is
+/// small and restarts from the tree start bit; the much longer symbol-length
+/// phase resumes at the next unread symbol.
+pub const HuffmanTreeProgress = struct {
+    active: bool = false,
+    stage: Stage = .code_lengths,
+    hskip: u2 = 0,
+    bit_offset: usize = 0,
+    code_length_lengths: [code_length_alphabet_size]u4 = @splat(0),
+    lengths: [large_command_alphabet_capacity]u4 = @splat(0),
+    index: u16 = 0,
+    space: i32 = 32768,
+    last_nonzero_length: u4 = 8,
+    previous_repeat_symbol: u8 = 0xff,
+    pending_repeat_count: u32 = 0,
+    pending_repeat_length: u4 = 0,
+    last_symbol: u16 = 0xffff,
+
+    pub const Stage = enum { code_lengths, symbols };
+};
+
 /// Persistent compressed-header parser position. Completed block switches,
 /// context maps and Huffman trees stay in the destination header; a retry
 /// resumes at the next uncompleted unit instead of re-reading the prefix.
@@ -15787,9 +15808,11 @@ pub const CompressedHeaderParseProgress = struct {
     command_tree_index: u16 = 0,
     distance_tree_index: u16 = 0,
     bit_offset: usize = 0,
+    tree: HuffmanTreeProgress = .{},
     /// Cumulative completed and attempted tree reads for this meta-block.
     completed_trees: usize = 0,
     tree_attempts: usize = 0,
+    tree_symbol_resumes: usize = 0,
 
     pub const Stage = enum { switches, context_maps, literal_trees, command_trees, distance_trees, done };
 };
@@ -15895,21 +15918,21 @@ inline fn readLargeCompressedHeaderDistanceTrees(comptime distance_capacity: usi
     header.active_packed_distance_tree_index = std.math.maxInt(u16);
 }
 
-inline fn readLargeCompressedHeaderLiteralTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16) Error!void {
-    const tree = try readLargePrefixCodeRuntime(large_literal_alphabet_capacity, 256, reader);
+inline fn readLargeCompressedHeaderLiteralTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16, progress: *HuffmanTreeProgress) Error!void {
+    const code = try readPrefixCodeRuntimeResumable(large_literal_alphabet_capacity, 256, 256, reader, progress);
     if (index < inline_literal_tree_count) {
-        header.literal_trees[index] = tree;
+        header.literal_trees[index] = code;
     } else {
-        header.packed_literal_trees[index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&tree);
+        header.packed_literal_trees[index - inline_literal_tree_count] = PackedPrefixCode(large_literal_alphabet_capacity).init(&code);
     }
 }
 
-inline fn readLargeCompressedHeaderCommandTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16) Error!void {
-    const tree = try readLargePrefixCodeRuntime(large_command_alphabet_capacity, 704, reader);
+inline fn readLargeCompressedHeaderCommandTreeAt(reader: *bitstream.BitReader, header: *LargeWindowCompressedHeader, index: u16, progress: *HuffmanTreeProgress) Error!void {
+    const code = try readPrefixCodeRuntimeResumable(large_command_alphabet_capacity, 704, 704, reader, progress);
     if (index < inline_command_tree_count) {
-        header.insert_copy_trees[index] = tree;
+        header.insert_copy_trees[index] = code;
     } else {
-        header.packed_insert_copy_trees[index - inline_command_tree_count] = PackedPrefixCode(large_command_alphabet_capacity).init(&tree);
+        header.packed_insert_copy_trees[index - inline_command_tree_count] = PackedPrefixCode(large_command_alphabet_capacity).init(&code);
     }
 }
 
@@ -15920,12 +15943,13 @@ inline fn readLargeCompressedHeaderDistanceTreeAt(
     index: u16,
     alphabet_size_max: usize,
     alphabet_size: usize,
+    progress: *HuffmanTreeProgress,
 ) Error!void {
-    const tree = try readPrefixCodeRuntimeLimited(distance_capacity, alphabet_size_max, alphabet_size, reader);
+    const code = try readPrefixCodeRuntimeResumable(distance_capacity, alphabet_size_max, alphabet_size, reader, progress);
     if (index < inline_distance_tree_count) {
-        header.distance_trees[index] = tree;
+        header.distance_trees[index] = code;
     } else {
-        header.packed_distance_trees[index - inline_distance_tree_count] = PackedPrefixCode(distance_capacity).init(&tree);
+        header.packed_distance_trees[index - inline_distance_tree_count] = PackedPrefixCode(distance_capacity).init(&code);
     }
 }
 
@@ -15961,7 +15985,7 @@ pub fn parseCompressedHeaderWithProgress(
             while (progress.literal_tree_index < progress.tree_counts.literal) {
                 progress.bit_offset = reader.bitPosition();
                 progress.tree_attempts += 1;
-                try readLargeCompressedHeaderLiteralTreeAt(&reader, &out.compressed, progress.literal_tree_index);
+                try readLargeCompressedHeaderLiteralTreeAt(&reader, &out.compressed, progress.literal_tree_index, &progress.tree);
                 progress.completed_trees += 1;
                 progress.literal_tree_index += 1;
             }
@@ -15974,7 +15998,7 @@ pub fn parseCompressedHeaderWithProgress(
             while (progress.command_tree_index < progress.shape.command_block_types) {
                 progress.bit_offset = reader.bitPosition();
                 progress.tree_attempts += 1;
-                try readLargeCompressedHeaderCommandTreeAt(&reader, &out.compressed, progress.command_tree_index);
+                try readLargeCompressedHeaderCommandTreeAt(&reader, &out.compressed, progress.command_tree_index, &progress.tree);
                 progress.completed_trees += 1;
                 progress.command_tree_index += 1;
             }
@@ -15986,6 +16010,7 @@ pub fn parseCompressedHeaderWithProgress(
             while (progress.distance_tree_index < progress.tree_counts.distance) {
                 progress.bit_offset = reader.bitPosition();
                 progress.tree_attempts += 1;
+                if (progress.tree.active and progress.tree.stage == .symbols) progress.tree_symbol_resumes += 1;
                 try readLargeCompressedHeaderDistanceTreeAt(
                     large_max_distance_alphabet_size,
                     &reader,
@@ -15993,6 +16018,7 @@ pub fn parseCompressedHeaderWithProgress(
                     progress.distance_tree_index,
                     progress.shape.distance_alphabet_size_max,
                     progress.shape.distance_alphabet_size,
+                    &progress.tree,
                 );
                 progress.completed_trees += 1;
                 progress.distance_tree_index += 1;
@@ -22717,6 +22743,222 @@ fn readComplexPrefixCodeRuntimeInto(comptime max_alphabet_size: usize, alphabet_
     if (active < 2) return error.InvalidHuffmanCode;
     result.single_symbol = null;
     try result.table.initSparseTrustedInto(&lengths, active_symbols[0..active]);
+}
+
+fn readSimplePrefixCodeRuntime(
+    comptime max_alphabet_size: usize,
+    alphabet_size_max: usize,
+    alphabet_size_limit: usize,
+    reader: *bitstream.BitReader,
+) Error!PrefixCode(max_alphabet_size) {
+    const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
+    const alphabet_bits = alphabetBitsRuntime(alphabet_size_max);
+    var symbols: [4]u16 = undefined;
+    for (0..nsym) |i| {
+        const symbol = try reader.readBits(u16, alphabet_bits);
+        if (symbol >= alphabet_size_limit) return error.InvalidHuffmanCode;
+        for (symbols[0..i]) |previous| {
+            if (previous == symbol) return error.InvalidHuffmanCode;
+        }
+        symbols[i] = symbol;
+    }
+
+    var lengths: [max_alphabet_size]u4 = undefined;
+    switch (nsym) {
+        1 => return .{ .single_symbol = symbols[0] },
+        2 => {
+            lengths[0] = 1;
+            lengths[1] = 1;
+        },
+        3 => {
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
+        },
+        4 => {
+            const tree_select = try reader.readBits(u1, 1);
+            if (tree_select == 0) {
+                @memset(lengths[0..4], 2);
+            } else {
+                lengths[0] = 1;
+                lengths[1] = 2;
+                lengths[2] = 3;
+                lengths[3] = 3;
+            }
+        },
+        else => unreachable,
+    }
+    return .{
+        .single_symbol = null,
+        .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]),
+    };
+}
+
+/// Resume a complex prefix-code description at the next unread symbol. The
+/// 18-symbol code-length-code phase restarts from the tree start bit; the
+/// longer symbol-length phase keeps its decoded prefix in `tree.lengths`.
+fn readPrefixCodeRuntimeResumable(
+    comptime max_alphabet_size: usize,
+    alphabet_size_max: usize,
+    alphabet_size_limit: usize,
+    reader: *bitstream.BitReader,
+    tree: *HuffmanTreeProgress,
+) Error!PrefixCode(max_alphabet_size) {
+    if (alphabet_size_max == 0 or alphabet_size_limit == 0 or
+        alphabet_size_limit > max_alphabet_size or alphabet_size_limit > alphabet_size_max) return error.CorruptFrame;
+
+    if (!tree.active) {
+        tree.stage = .code_lengths;
+        tree.code_length_lengths = @splat(0);
+        tree.lengths = @splat(0);
+        const kind = try reader.readBits(u2, 2);
+        if (kind == 1) return readSimplePrefixCodeRuntime(max_alphabet_size, alphabet_size_max, alphabet_size_limit, reader);
+        if (kind == 3) return error.CorruptFrame;
+
+        tree.active = true;
+        tree.hskip = kind;
+        tree.bit_offset = reader.bitPosition();
+        var code_length_space: i32 = 32;
+        var code_length_nonzero: usize = 0;
+        var code_length_index: usize = if (kind == 0) 0 else kind;
+        while (code_length_index < code_length_order.len) : (code_length_index += 1) {
+            const length = readCodeLengthCodeLength(reader) catch |err| switch (err) {
+                error.TruncatedFrame => {
+                    tree.active = false;
+                    return err;
+                },
+                else => return err,
+            };
+            const symbol = code_length_order[code_length_index];
+            tree.code_length_lengths[symbol] = length;
+            if (length != 0) {
+                code_length_nonzero += 1;
+                code_length_space -= @intCast(@as(u32, 32) >> length);
+                if (code_length_space < 0) return error.InvalidHuffmanCode;
+                if (code_length_space == 0) {
+                    if (code_length_nonzero < 2) return error.InvalidHuffmanCode;
+                    break;
+                }
+            }
+        }
+        if (code_length_nonzero == 0) return error.InvalidHuffmanCode;
+        if (code_length_space != 0 and code_length_index == code_length_order.len) {
+            if (code_length_nonzero != 1) return error.InvalidHuffmanCode;
+        } else if (code_length_space != 0) {
+            return error.InvalidHuffmanCode;
+        }
+        tree.stage = .symbols;
+        tree.bit_offset = reader.bitPosition();
+        tree.index = 0;
+        tree.space = 32768;
+        tree.last_nonzero_length = 8;
+        tree.previous_repeat_symbol = 0xff;
+        tree.pending_repeat_count = 0;
+        tree.pending_repeat_length = 0;
+        tree.last_symbol = 0xffff;
+    } else {
+        reader.byte_index = tree.bit_offset / 8;
+        reader.bit_index = @intCast(tree.bit_offset % 8);
+    }
+
+    var code_length_nonzero: usize = 0;
+    for (tree.code_length_lengths) |length| {
+        if (length != 0) code_length_nonzero += 1;
+    }
+    if (code_length_nonzero == 0) return error.InvalidHuffmanCode;
+    const code_length_single_symbol = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &tree.code_length_lengths).single_symbol
+    else
+        null;
+    const code_length_decoder = if (code_length_single_symbol == null)
+        try CodeLengthPrefixDecoder.init(&tree.code_length_lengths)
+    else
+        undefined;
+
+    const lengths = tree.lengths[0..alphabet_size_limit];
+    var index: usize = tree.index;
+    var space: i32 = tree.space;
+    var last_nonzero_length: u4 = tree.last_nonzero_length;
+    var previous_repeat_symbol: ?u16 = if (tree.previous_repeat_symbol == 0xff) null else tree.previous_repeat_symbol;
+    var pending_repeat_count: usize = tree.pending_repeat_count;
+    var pending_repeat_length: u4 = tree.pending_repeat_length;
+    var last_symbol: ?u16 = if (tree.last_symbol == 0xffff) null else tree.last_symbol;
+
+    while (index < alphabet_size_limit and space > 0) {
+        tree.bit_offset = reader.bitPosition();
+        const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
+        switch (symbol) {
+            0 => {
+                try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                tree.lengths[index] = 0;
+                index += 1;
+            },
+            1...15 => {
+                try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                const length: u4 = @intCast(symbol);
+                tree.lengths[index] = length;
+                index += 1;
+                last_nonzero_length = length;
+                space -= @intCast(@as(u32, 32768) >> length);
+                if (space < 0) return error.InvalidHuffmanCode;
+            },
+            16 => {
+                const repeat = @as(usize, try reader.readBits(u2, 2)) + 3;
+                if (previous_repeat_symbol == 16) {
+                    pending_repeat_count = 4 * (pending_repeat_count - 2) + repeat;
+                } else {
+                    try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = last_nonzero_length;
+                }
+                previous_repeat_symbol = 16;
+                try validatePendingRepeat(alphabet_size_limit, index, pending_repeat_length, pending_repeat_count, space);
+                if (pendingRepeatCompletesSpace(pending_repeat_length, pending_repeat_count, space)) {
+                    try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                }
+            },
+            17 => {
+                const repeat = @as(usize, try reader.readBits(u3, 3)) + 3;
+                if (previous_repeat_symbol == 17) {
+                    pending_repeat_count = 8 * (pending_repeat_count - 2) + repeat;
+                } else {
+                    try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = 0;
+                }
+                previous_repeat_symbol = 17;
+                try validatePendingRepeat(alphabet_size_limit, index, pending_repeat_length, pending_repeat_count, space);
+            },
+            else => return error.InvalidHuffmanCode,
+        }
+        last_symbol = symbol;
+        tree.index = @intCast(index);
+        tree.space = space;
+        tree.last_nonzero_length = last_nonzero_length;
+        tree.previous_repeat_symbol = if (previous_repeat_symbol) |value| @intCast(value) else 0xff;
+        tree.pending_repeat_count = @intCast(pending_repeat_count);
+        tree.pending_repeat_length = pending_repeat_length;
+        tree.last_symbol = if (last_symbol) |value| value else 0xffff;
+        tree.bit_offset = reader.bitPosition();
+    }
+    try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+    if (space != 0) return error.InvalidHuffmanCode;
+    if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
+
+    var active_symbols: [max_alphabet_size]u16 = undefined;
+    var active: usize = 0;
+    for (lengths, 0..) |length, symbol| {
+        if (length != 0) {
+            active_symbols[active] = @intCast(symbol);
+            active += 1;
+        }
+    }
+    if (active < 2) return error.InvalidHuffmanCode;
+    var result: PrefixCode(max_alphabet_size) = .{ .single_symbol = null };
+    try result.table.initSparseTrustedInto(lengths, active_symbols[0..active]);
+    tree.active = false;
+    tree.stage = .code_lengths;
+    return result;
 }
 
 fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
@@ -42383,6 +42625,7 @@ test "Brotli incremental header progress retains completed trees" {
     const Result = struct {
         trees: usize,
         tree_attempts: usize,
+        symbol_resumes: usize,
         resumes: usize,
         attempts: usize,
     };
@@ -42413,6 +42656,7 @@ test "Brotli incremental header progress retains completed trees" {
             return .{
                 .trees = @intCast(snapshot.header_trees),
                 .tree_attempts = @intCast(snapshot.header_tree_attempts),
+                .symbol_resumes = @intCast(snapshot.header_tree_symbol_resumes),
                 .resumes = @intCast(snapshot.header_resumes),
                 .attempts = @intCast(snapshot.header_parse_attempts),
             };
@@ -42424,10 +42668,13 @@ test "Brotli incremental header progress retains completed trees" {
     const whole = try run(encoded, source, encoded.len);
     const split = try run(encoded, source, 1);
     try std.testing.expectEqual(@as(usize, 0), whole.resumes);
+    try std.testing.expectEqual(@as(usize, 0), whole.symbol_resumes);
     try std.testing.expectEqual(whole.trees, whole.tree_attempts);
     try std.testing.expect(split.resumes != 0);
+    try std.testing.expect(split.symbol_resumes != 0);
     try std.testing.expect(split.attempts > whole.attempts);
     try std.testing.expectEqual(whole.trees, split.trees);
     try std.testing.expect(split.trees != 0);
     try std.testing.expect(split.tree_attempts > split.trees);
+    try std.testing.expect(split.symbol_resumes <= split.tree_attempts - split.trees);
 }
