@@ -46,3 +46,22 @@ second emission pass. The experiment was reverted.
 
 [Raw counted-plain rows](q8-counted-plain-rejected-20261103.csv) retain the
 paired timings and wire equality.
+
+## Rejected tree-score cache growth
+
+Doubling the literal tree-score cache from 128 to 256 entries reduced reported
+conflict misses but reclassified the same total misses as cold misses (for
+example, XML lazy stayed at 244 total misses). Cluster-score time moved only
+within noise, and the three-slice outer times were mixed (XML −1.8%, Dickens
+−0.4%, x-ray +0.6%). The capacity change was reverted.
+
+## Rejected maximum-distance precheck
+
+Supplying the largest semantic distance so parameter shapes could reject
+unrepresentable distances before scanning their frequencies preserved wire
+bytes but measured geometric time ratio **1.0007** (about 0.07% slower); x-ray
+was 0.38% slower. The existing per-distance failure path is already cheap
+enough. The experiment was reverted.
+
+[Raw maximum-distance rows](q8-max-distance-rejected-20261103.csv) retain the
+paired timings and wire equality.

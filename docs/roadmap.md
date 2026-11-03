@@ -63,7 +63,8 @@ with unchanged wires. The
 next gap to the LZ77 match finder (46% process self time), the distance
 chooser (5.7%) and the context group's physical encode (4.0%); a window-sized
 predecessor ring was rejected at 2.2% slower, and a counted plain baseline was
-rejected at 1.0% slower. An
+rejected at 1.0% slower; tree-score cache growth and a maximum-distance
+precheck were also rejected. An
 [LSD radix sort](performance/br/distance-radix-sort-20261103.md) for distance
 frequencies lowers q8 planned time a further 0.26% on the same screen with
 unchanged wires. Full streaming/dictionary, memory and multi-platform
