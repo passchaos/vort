@@ -417,26 +417,55 @@ pub const OptimalScratch = struct {
     }
 };
 
+pub const literal_context_class_count = 4;
+
+/// Classify the byte preceding a literal. Splitting the literal price this way
+/// approximates Brotli's context modelling and stops the modeled parser from
+/// over-selecting short matches on structured text.
+pub inline fn literalContextClass(previous: u8) u2 {
+    if (std.ascii.isAlphabetic(previous)) return 0;
+    if (std.ascii.isDigit(previous)) return 1;
+    if (previous == ' ' or previous == '\t' or previous == '\n' or previous == '\r')
+        return 2;
+    return 3;
+}
+
 /// Caller-supplied token costs for the bounded optimal parser. Costs use an
 /// arbitrary common fixed-point scale; only their relative values matter.
 /// The Brotli encoder uses Q8 entropy estimates while the established generic
 /// parser keeps its compile-time fixed-Huffman proxy.
 pub const OptimalCostModel = struct {
     literal: *const [256]u16,
+    /// Optional `[literal_context_class_count][256]` prices indexed by the
+    /// previous byte's class.
+    literal_context: ?[]const u16 = null,
     length: *const [max_match_len + 1]u16,
     /// Entry zero is unused. The slice must cover every distance permitted by
     /// the matching window supplied to the parser.
     /// A zero window needs only the unused entry and produces literal tokens.
     distance: []const u16,
 
+    inline fn literalCost(self: OptimalCostModel, position: usize, input: []const u8) usize {
+        const context = self.literal_context orelse return self.literal[input[position]];
+        const previous: u8 = if (position == 0) 0 else input[position - 1];
+        return context[@as(usize, literalContextClass(previous)) * 256 + input[position]];
+    }
+
     fn validate(self: OptimalCostModel, window_len: usize, input_len: usize) Error!void {
         if (window_len > max_window_len) return error.InvalidBlockPlan;
         if (self.distance.len <= window_len) return error.InvalidBlockPlan;
         for (self.literal) |cost| if (cost == 0) return error.InvalidBlockPlan;
+        if (self.literal_context) |context| {
+            if (context.len < literal_context_class_count * 256) return error.InvalidBlockPlan;
+            for (context[0 .. literal_context_class_count * 256]) |cost|
+                if (cost == 0) return error.InvalidBlockPlan;
+        }
         for (self.length[min_match_len..]) |cost| if (cost == 0) return error.InvalidBlockPlan;
         for (self.distance[1 .. window_len + 1]) |cost| if (cost == 0) return error.InvalidBlockPlan;
 
-        const max_literal = std.mem.max(u16, self.literal);
+        var max_literal = std.mem.max(u16, self.literal);
+        if (self.literal_context) |context|
+            max_literal = @max(max_literal, std.mem.max(u16, context[0 .. literal_context_class_count * 256]));
         const max_length = std.mem.max(u16, self.length[min_match_len..]);
         // A zero window has no priced match distances; entry zero is unused.
         const max_distance: u16 = if (window_len == 0) 0 else std.mem.max(u16, self.distance[1 .. window_len + 1]);
@@ -1774,7 +1803,7 @@ inline fn optimalPlanReuseWithIndex(
     while (rev_i > 0) {
         rev_i -= 1;
         if (comptime collect_profile) profile.positions += 1;
-        costs[rev_i] = (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
+        costs[rev_i] = (if (comptime modeled) model.literalCost(rev_i, input) else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
         if (rev_i + minimum > n) continue;

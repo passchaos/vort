@@ -20,6 +20,10 @@ const q8 = histogram_model.cost_scale;
 /// are not separable at this layer.
 pub const Model = struct {
     literal: [256]u16,
+    /// Literal prices split by the previous byte's class. Populated from the
+    /// same seed commands and blended with the flat table so sparse classes
+    /// cannot under-price.
+    literal_context: [lz77.literal_context_class_count * 256]u16,
     length: [lz77.max_match_len + 1]u16,
     distance: []u16,
     command: [704]u16,
@@ -33,6 +37,7 @@ pub const Model = struct {
     pub fn lz77Model(self: *const Model) lz77.OptimalCostModel {
         return .{
             .literal = &self.literal,
+            .literal_context = &self.literal_context,
             .length = &self.length,
             .distance = self.distance,
         };
@@ -67,6 +72,7 @@ pub fn buildWithStartingDistances(
         if (value == 0) return error.InvalidBlockPlan;
 
     var literals: LiteralHistogram = .{};
+    var context_literals: [lz77.literal_context_class_count]LiteralHistogram = @splat(.{});
     var copy_codes: CopyCodeHistogram = .{};
     var regular_distances: DistanceHistogram = .{};
     var wire_distances: DistanceHistogram = .{};
@@ -77,8 +83,13 @@ pub fn buildWithStartingDistances(
     for (commands) |command| {
         if (command.insert_start != cursor or command.insert_len > input.len - cursor)
             return error.InvalidBlockPlan;
-        for (input[cursor..][0..command.insert_len]) |byte|
+        for (input[cursor..][0..command.insert_len], 0..) |byte, offset| {
             literals.add(byte) catch return error.InvalidBlockPlan;
+            const position = cursor + offset;
+            const previous: u8 = if (position == 0) 0 else input[position - 1];
+            context_literals[lz77.literalContextClass(previous)].add(byte) catch
+                return error.InvalidBlockPlan;
+        }
         cursor += command.insert_len;
         if (!command.has_copy) {
             const encoding = command_encoding.forLengths(command.insert_len, 2, false) orelse
@@ -147,6 +158,7 @@ pub fn buildWithStartingDistances(
     const wire_distance_model = wire_distances.costModel();
     var result = Model{
         .literal = undefined,
+        .literal_context = undefined,
         .length = @splat(q8),
         .distance = try allocator.alloc(u16, window_len + 1),
         .command = undefined,
@@ -156,6 +168,23 @@ pub fn buildWithStartingDistances(
 
     for (&result.literal, literal_model.symbol_costs_q8) |*cost, learned|
         cost.* = @max(q8, learned);
+    for (context_literals, 0..) |histogram, class| {
+        const learned_costs = histogram.costModel().symbol_costs_q8;
+        for (result.literal_context[class * 256 ..][0..256], learned_costs) |*cost, learned|
+            cost.* = @max(q8, learned);
+    }
+    // Clamp sparse-context prices so unseen symbols cannot exceed the flat
+    // price by more than two bits; frequent symbols keep their learned saving.
+    for (0..lz77.literal_context_class_count) |class| {
+        for (0..256) |symbol| {
+            const flat = result.literal[symbol];
+            const index = class * 256 + symbol;
+            result.literal_context[index] = @max(
+                q8,
+                @min(result.literal_context[index], flat + 2 * q8),
+            );
+        }
+    }
     for (&result.command, command_model.symbol_costs_q8) |*cost, learned|
         cost.* = @max(q8, learned);
     for (&result.distance_symbol, wire_distance_model.symbol_costs_q8) |*cost, learned|

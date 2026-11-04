@@ -582,3 +582,31 @@ with four iterations, changed no binary wire at all while raising encode time
 which prices literals with a flat histogram and therefore over-selects short
 matches; the next functional step is context-aware literal pricing inside the
 parse.
+
+## Context-aware literal pricing, 2026-11-04
+
+The modeled optimal parser now prices literals by the previous byte's class
+(letter / digit / whitespace / other, four classes) instead of one flat
+histogram. `entropy_feedback` builds four class histograms from the seed
+commands, clamps each price to at most the flat price plus two bits so sparse
+classes cannot overprice, and `lz77.OptimalCostModel.literal_context` is
+optional so Deflate and fixed parses are unchanged.
+
+On 64 KiB q11 prefixes, versus the flat model:
+
+| File | Flat | Context | Size ratio |
+| --- | ---: | ---: | ---: |
+| webster | 19,603 | 19,548 | 1.0179 -> 1.0151 |
+| dickens | 22,416 | 22,381 | 1.0131 -> 1.0115 |
+| osdb | 25,473 | 25,433 | 1.0394 -> 1.0378 |
+| samba | 18,741 | 18,738 | 1.0140 -> 1.0139 |
+| reymont | 17,132 | 17,133 | 1.0251 -> 1.0252 |
+| xml / nci / sao | unchanged | unchanged | - |
+| x-ray / mozilla / mr / ooffice | unchanged | unchanged | - |
+
+Three iterations on webster and mozilla measure the same encode time as the
+flat model (898.3 vs 898.4 ms and 883.1 vs 884.0 ms), so the gain is free. The
+binary rows are unchanged because their literals are overwhelmingly class 3,
+where the class price converges to the flat price. Closing their 6-16% gap
+needs finer contexts (for example previous-byte identity or UTF-8 context
+modes) inside the parse, not just byte classes.
