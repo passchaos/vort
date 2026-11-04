@@ -219,15 +219,22 @@ const base_rows = [12]BaseRow{
     .{ .lazy = .{ .max_chain = 4, .nice_len = 32, .min_gain = 3 }, .dictionary_probes = 0 },
     .{ .lazy = .{ .max_chain = 8, .nice_len = 48, .min_gain = 2 }, .dictionary_probes = 0 },
     .{ .lazy = .{ .max_chain = 16, .nice_len = 64, .min_gain = 2 }, .dictionary_probes = 0 },
-    .{ .lazy = .{ .max_chain = 32, .nice_len = 96, .min_gain = 1 }, .dictionary_probes = 0 },
+    .{
+        .lazy = .{ .max_chain = 32, .nice_len = 96, .min_gain = 1 },
+        // q5 previously had no optimal parser, which left it unusually weak
+        // relative to q4 and q6 on text. A bounded optimal pass closes that
+        // step without reaching q6's budget.
+        .optimal = .{ .enabled = true, .max_chain = 48, .nice_len = 112, .max_candidates = 12, .max_input_len = 64 * 1024 },
+        .dictionary_probes = 0,
+    },
     .{
         .lazy = .{ .max_chain = 64, .nice_len = 128, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 64, .nice_len = 128, .max_candidates = 16, .max_input_len = 32 * 1024 },
+        .optimal = .{ .enabled = true, .max_chain = 64, .nice_len = 128, .max_candidates = 16, .max_input_len = 64 * 1024 },
         .dictionary_probes = 0,
     },
     .{
         .lazy = .{ .max_chain = 96, .nice_len = 160, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 96, .nice_len = 160, .max_candidates = 32, .max_input_len = 32 * 1024 },
+        .optimal = .{ .enabled = true, .max_chain = 96, .nice_len = 160, .max_candidates = 32, .max_input_len = 64 * 1024 },
         .dictionary_probes = 768,
     },
     .{

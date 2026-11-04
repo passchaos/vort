@@ -772,3 +772,43 @@ dickens regresses 31,255 -> 36,737 and webster 28,414 -> 32,988 because the
 one-pass entropy writer loses adaptivity on prose. A per-content block-size
 gate would need per-block content classification in the chunked encoder; the
 16 KiB policy remains for now.
+
+## q5 gains a bounded optimal parse, 2026-11-04
+
+q5 was the only mid preset without an optimal parser, which left it unusually
+weak: its 64 KiB XML ratio (1.0737) was worse than q4's (0.9605) relative to
+the reference. q5 now enables a bounded optimal pass (chain 48, nice 112, 12
+candidates, 64 KiB input ceiling). 64 KiB results versus libbrotli 1.0.9:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| XML | 5,247 | 5,105 | 1.0737 -> 1.0446 |
+| dickens | 26,306 | 25,380 | 1.0337 -> 0.9973 |
+| webster | 22,930 | 22,232 | 1.0296 -> 0.9983 |
+| nci | 4,794 | 4,564 | 1.1201 -> 1.0664 |
+| samba | 22,167 | 21,544 | 1.0318 -> 1.0028 |
+| reymont | 19,054 | 18,284 | 1.0088 -> 0.9680 |
+| osdb | 26,786 | 26,750 | 1.0225 -> 1.0211 |
+| mr | 16,105 | 15,972 | 1.0372 -> 1.0287 |
+| ooffice / x-ray / mozilla / sao | unchanged | unchanged | - |
+
+q5 now beats the reference on dickens, webster, reymont, sao and x-ray. Encode
+time rises about 4.6x on XML (2.2 -> 10.2 ms) and about 1.5x on dickens, which
+is the expected cost of the added parse.
+
+q6 and q7 had the same latent limit: their optimal parser stopped at 32 KiB, so
+a 64 KiB one-shot input never used it. Raising both to 64 KiB gives large
+gains:
+
+| File | q6 before | q6 after | q7 before | q7 after |
+| --- | ---: | ---: | ---: | ---: |
+| dickens | 26,144 | 25,260 | 25,765 | 22,816 |
+| webster | 22,810 | 22,157 | 22,576 | 19,906 |
+| XML | 4,996 | 4,996 | 4,856 | 4,795 |
+| nci | - | 4,545 | - | 4,434 |
+| ooffice | 31,057 | 31,057 | 30,651 | 30,651 |
+| x-ray | 43,290 | 43,290 | 42,488 | 42,488 |
+
+q6 now measures 0.9986 on dickens and 0.9928 on ooffice; q7 measures 0.9042
+(dickens), 0.9007 (webster) and 0.8949 (x-ray). The schedule monotonicity test
+also required q6/q7 to reach the same 64 KiB ceiling as q5.
