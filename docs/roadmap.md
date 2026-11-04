@@ -94,13 +94,17 @@ comparisons remain required for the industry-best objective.
 
 The 2026-11-04
 [dictionary-aware parsing epoch](performance/br/command-model-lifetime.md)
-closes most of the Brotli q10/q11 text-size gap: at 64 KiB it reaches 1.0179
-(webster), 1.0140 (samba), 1.0131 (dickens), 1.0251 (reymont) and 1.0384
-(XML) versus libbrotli 1.0.9, with static-dictionary coverage matching the
-reference. Binary mozilla stays at 1.1473 because the reference uses nine
-command and four distance block types while Vort keeps one; the next Brotli
-quality work is the adaptive block-split cost model and repcode state inside
-the optimal parser.
+closes most of the Brotli q10/q11 text-size gap. The latest 64 KiB q11 matrix
+versus libbrotli 1.0.9 is 1.0115 (dickens), 1.0139 (samba), 1.0151 (webster),
+1.0252 (reymont), 1.0378 (osdb), 1.0384 (XML), 1.0518 (sao), 1.0541 (nci),
+1.0555 (ooffice), 1.1201 (mr), 1.1381 (mozilla) and 1.1612 (x-ray); 1 MiB
+q11 is 1.0976/1.0832/1.1202 on webster/samba/dickens. Static-dictionary
+coverage matches the reference on webster, and recent-distance repacking
+converts regular distances into repcodes on binary blocks. The remaining
+binary gap is distance/context block typing and repcode share (sao's reference
+emits 3,048 short distances against Vort's 114), so the next Brotli quality
+work is the block-split cost model above 32K symbols and repcode-aware
+parsing.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

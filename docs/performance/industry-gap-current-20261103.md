@@ -65,15 +65,30 @@ pricing. Deflate needs entropy-aware parsing and split planning across
 streaming, dictionaries and larger multi-block inputs.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
-the measured 64 KiB text prefixes. Dictionary-aware optimal parsing plus a
-gated repcode-aware command-state extension brings webster to 1.0179, samba to
-1.0140, dickens to 1.0131, reymont to 1.0251 and XML to 1.0384 versus
-libbrotli 1.0.9, while static-dictionary coverage matches the reference
-(1,449 copies / 13,516 bytes versus 1,482 / 13,202 on webster). Binary
-mozilla remains at 1.1473 because the reference splits into nine command and
-four distance block types while Vort keeps one. Encode time rises roughly
-30-50% on the affected text blocks. These are separate source epochs and are
-not multiplied into the earlier ratios above.
+the measured prefixes. Dictionary-aware optimal parsing, a gated
+repcode-aware command-state extension, four-class literal pricing and
+recent-distance repacking produce this 64 KiB q11 matrix versus libbrotli
+1.0.9:
+
+| File | Size ratio | File | Size ratio |
+| --- | ---: | --- | ---: |
+| dickens | 1.0115 | samba | 1.0139 |
+| webster | 1.0151 | reymont | 1.0252 |
+| osdb | 1.0378 | XML | 1.0384 |
+| sao | 1.0518 | nci | 1.0541 |
+| ooffice | 1.0555 | mr | 1.1201 |
+| mozilla | 1.1381 | x-ray | 1.1612 |
+
+At 1 MiB q11 the same path measures 1.0976 (webster), 1.0832 (samba) and
+1.1202 (dickens). Static-dictionary coverage matches the reference on webster
+(1,449 copies / 13,516 bytes versus 1,482 / 13,202), and recent-distance
+repacking converts regular distances into repcodes on binary blocks
+(ooffice 1.0639 -> 1.0555, x-ray 1.1645 -> 1.1612, mozilla 1.1473 -> 1.1381).
+The remaining binary gap is distance/context block typing and repcode share:
+sao's reference emits 3,048 short distances against Vort's 114, and the
+reference uses up to nine command and four distance block types where Vort
+keeps one. Encode time rises roughly 30-50% on affected blocks. These are
+separate source epochs and are not multiplied into the earlier ratios above.
 
 ## Decompression
 
