@@ -5481,7 +5481,7 @@ fn qualityCommandStateGate(input: []const u8) bool {
         }
         grams += 1;
     }
-    return grams != 0 and unique * 3 <= grams;
+    return grams != 0 and unique * 5 <= grams;
 }
 
 fn encodeQualityOptimalCandidateAlloc(

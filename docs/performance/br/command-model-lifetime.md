@@ -293,7 +293,12 @@ The q10/q11 quality path now extends the repcode-aware command-state parser
 from the 8 KiB policy to the whole meta-block (up to 64 KiB) when a cheap
 content gate classifies the block as text-like. Binary and high-entropy blocks
 keep the 8 KiB policy. The gate samples the first 16 KiB, hashes 4-grams into a
-64 KiB bitset and accepts when `unique*3 <= grams`.
+64 KiB bitset and accepts when `unique*5 <= grams`. A wider `unique*3` gate
+also admitted reymont, samba, mozilla and mr, which paid the extended
+command-state time without changing their wires; the tighter threshold keeps
+XML (effective gate ratio 0.104) and nci (0.063) and excludes those four
+(0.237-0.319). nci runs the extended candidate cheaply but does not select it,
+so its wire and time stay unchanged.
 
 | Prefix | Before | After | Size ratio vs libbrotli | Time |
 | --- | ---: | ---: | ---: | ---: |
