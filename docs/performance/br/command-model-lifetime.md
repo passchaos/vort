@@ -908,3 +908,11 @@ the 64 KiB ladder is unchanged. On 1 MiB prefixes:
 
 The gain is 0.18-0.27%, paid for by a third parse on large inputs. The 1 MiB
 gap remains dominated by distance coding and block/context typing.
+
+Raising the joint literal/context splitter to 16 block types and four
+iterations (the call site previously used its 8-type, three-iteration default)
+also changes no wire: x-ray 42,455, mozilla 14,071, ooffice 30,644, XML 4,082
+and dickens 22,381 are identical, while encode time rises 20-40%. The splitter
+already finds no further profitable partition on these inputs, so the literal
+tree count follows from how many literals the parse leaves, not from the
+splitter budget. Reverted.
