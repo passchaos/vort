@@ -948,3 +948,28 @@ Raising the same ceiling to 1 MiB extends the win to large inputs:
 
 A 32-type splitter budget for literal volumes above 128 KiB was also tested and
 rejected: x-ray 1 MiB returns to 622,024, so the eight-type budget remains.
+
+
+## Full 1 MiB q11 matrix, 2026-11-05
+
+After the 1 MiB literal ceiling and the second modeled pass, the 1 MiB q11
+matrix versus libbrotli 1.0.9 is:
+
+| File | Vort bytes | Reference bytes | Size ratio |
+| --- | ---: | ---: | ---: |
+| x-ray | 590,922 | 576,209 | 1.0255 |
+| mozilla | 652,104 | 635,440 | 1.0262 |
+| samba | 301,653 | 282,533 | 1.0675 |
+| sao | 728,703 | 674,615 | 1.0802 |
+| mr | 295,511 | 271,989 | 1.0865 |
+| webster | 262,209 | 239,314 | 1.0956 |
+| osdb | 344,511 | 312,387 | 1.1028 |
+| ooffice | 542,886 | 488,479 | 1.1114 |
+| dickens | 341,020 | 305,265 | 1.1172 |
+| reymont | 260,088 | 228,207 | 1.1396 |
+| nci | 84,867 | 65,459 | 1.2965 |
+
+nci is the worst row: Vort emits 3,187 implicit + 4,241 short distances against
+the reference's 9,882 + 4,095, and 17,959 regular distances against 9,026. The
+1 MiB gap is therefore dominated by repcode share and distance/context block
+typing, the same structural items as the 64 KiB binary rows.
