@@ -77,7 +77,7 @@ recent-distance repacking produce this 64 KiB q11 matrix versus libbrotli
 | osdb | 1.0378 | XML | 1.0384 |
 | sao | 1.0518 | nci | 1.0541 |
 | ooffice | 1.0555 | mr | 1.1201 |
-| mozilla | 1.1381 | x-ray | 1.1612 |
+| mozilla | 1.1381 | x-ray | 1.0754 |
 
 At 1 MiB q11 the same path measures 1.0976 (webster), 1.0832 (samba) and
 1.1202 (dickens). Static-dictionary coverage matches the reference on webster
@@ -121,11 +121,11 @@ q8/q9. Vort bytes on 64 KiB prefixes, lower is better:
 | webster | 24,565 | 22,657 | 22,279 | 22,232 | 22,157 | 19,906 | 19,574 | 19,556 | 19,548 | 19,548 |
 | nci | 6,296 | 4,721 | 4,613 | 4,564 | 4,545 | 4,434 | 4,238 | 4,203 | 3,916 | 3,916 |
 | ooffice | 33,288 | 31,763 | 31,592 | 31,388 | 31,057 | 30,651 | 30,647 | 30,648 | 30,644 | 30,639 |
-| x-ray | 45,915 | 44,974 | 43,298 | 43,327 | 43,290 | 42,488 | 42,488 | 42,455 | 42,455 | 42,455 |
+| x-ray | 45,915 | 44,974 | 43,298 | 43,327 | 43,290 | 42,488 | 42,488 | 42,455 | 39,317 | 39,317 |
 
 Against libbrotli 1.0.9 the ladder beats the reference at q3-q9 on every row
 shown except q5/q6 XML (1.0446/1.0404). The reference's q10/q11 jump is much
-larger than Vort's: x-ray is 1.1735/1.1612 at q10/q11 while q9 is 0.9016, and
+larger than Vort's: x-ray is 1.0868/1.0754 at q10/q11 while q9 is 0.9016, and
 XML q10/q11 is 0.9803/1.0384 while q9 is 0.9705. Closing q10/q11 is therefore
 about matching the reference's high-quality parser, not the lower presets.
 
