@@ -247,12 +247,12 @@ const base_rows = [12]BaseRow{
     },
     .{
         .lazy = .{ .max_chain = 128, .nice_len = 192, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 128, .nice_len = 192, .max_candidates = 64, .max_input_len = 64 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 128, .nice_len = 192, .max_candidates = 64, .max_input_len = 64 * 1024 },
         .dictionary_probes = 1024,
     },
     .{
         .lazy = .{ .max_chain = 256, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 192, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 192, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
         .dictionary_probes = 1536,
     },
     .{

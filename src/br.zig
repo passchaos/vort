@@ -5022,9 +5022,10 @@ fn applyCommandStateLimit(
 ) Error!void {
     if (requested_kib == command_state_default_max_input_kib) return;
     const limit = @as(u32, requested_kib) * 1024;
-    // The command-state candidate uses its own bounded parser; its input
-    // ceiling is independent of the schedule's optimal-parser input cap.
-    if (!schedule.optimal.entropy_feedback or limit > 64 * 1024)
+    // The command-state candidate is a q10/q11 feature. Later presets also
+    // enable entropy feedback, so the quality tag is the precise gate.
+    const supports_command_state = schedule.quality == .q10 or schedule.quality == .q11;
+    if (!supports_command_state or !schedule.optimal.entropy_feedback or limit > 64 * 1024)
         return error.InvalidBlockPlan;
     schedule.optimal.command_state_max_input_len = limit;
 }

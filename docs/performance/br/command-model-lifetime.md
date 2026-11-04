@@ -837,3 +837,22 @@ q2 was also measured with an optimal parse (XML 0.6843, dickens 0.9737) but
 was reverted: the incremental q2 contract requires a warmed second encode to
 allocate nothing, and the optimal parser allocates per block. Keeping q2
 lazy-only preserves that streaming guarantee; q3-q7 carry the ratio gains.
+
+q8 and q9 previously ran the optimal parser without entropy feedback, leaving
+them about 1.6% above q10 in absolute bytes. Enabling feedback on both closes
+most of that:
+
+| File | q8 before | q8 after | q9 before | q9 after |
+| --- | ---: | ---: | ---: | ---: |
+| XML | 4,711 | 4,539 | 4,662 | 4,505 |
+| dickens | 22,766 | 22,412 | 22,742 | 22,387 |
+| webster | 19,858 | 19,574 | 19,838 | 19,556 |
+| nci | 4,388 | 4,238 | 4,347 | 4,203 |
+| x-ray | 42,488 | 42,488 | 42,488 | 42,455 |
+| ooffice | 30,647 | 30,647 | 30,648 | 30,648 |
+
+q8/q9 XML now measure 0.9697/0.9705 and dickens 0.8890/0.8881. Encode time
+rises to 65-253 ms on the affected text rows. Because q8/q9 now enable entropy
+feedback, `applyCommandStateLimit` gates the explicit command-state override on
+the quality tag (q10/q11) rather than on feedback alone, preserving the
+existing rejection contract for q8/q9.
