@@ -104,7 +104,11 @@ converts regular distances into repcodes on binary blocks. The remaining
 binary gap is distance/context block typing and repcode share (sao's reference
 emits 3,048 short distances against Vort's 114), so the next Brotli quality
 work is the block-split cost model above 32K symbols and repcode-aware
-parsing.
+parsing. A full q10 screen also shows Vort's q10 already beats libbrotli 1.0.9
+on dickens (0.9862), samba (0.9878), XML (0.9803) and webster (0.9991), and is
+within 0.5% on nci, sao and reymont. Vort q11 currently reuses the q10 wire up
+to 64 KiB, while libbrotli's q11 gains 2.1-5.3% over its q10, so the q11
+priority is a stronger parse/cost model rather than more search depth.
 
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their

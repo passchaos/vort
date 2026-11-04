@@ -671,3 +671,26 @@ copy that is up to two bytes longer (turning the surplus into literals) was
 also tested and rejected: it never beat the exact-coverage candidate on the
 64 KiB binary rows or on the 1 MiB text rows, and it regressed ooffice
 30,639 -> 30,883 when used alone. The exact-only repack remains.
+
+## q10 versus q11 at 64 KiB, 2026-11-04
+
+A full 64 KiB q10 screen against libbrotli 1.0.9 shows Vort's q10 is already
+competitive on text:
+
+| File | q10 ratio | q11 ratio | File | q10 ratio | q11 ratio |
+| --- | ---: | ---: | --- | ---: | ---: |
+| dickens | 0.9862 | 1.0115 | samba | 0.9878 | 1.0139 |
+| XML | 0.9803 | 1.0384 | webster | 0.9991 | 1.0151 |
+| nci | 1.0033 | 1.0541 | sao | 1.0049 | 1.0518 |
+| reymont | 1.0052 | 1.0252 | osdb | 1.0298 | 1.0378 |
+| ooffice | 1.0334 | 1.0555 | mozilla | 1.0777 | 1.1381 |
+| mr | 1.1329 | 1.1201 | x-ray | 1.1735 | 1.1612 |
+
+Vort's q11 produces the same wire as q10 for inputs up to 64 KiB: the q11
+candidate inherits the complete q10 winner and its own deeper parse loses
+(webster 19,583 versus 19,548 at +74% time). libbrotli's q11 instead gains
+2.1-5.3% over its own q10, which is exactly the remaining text gap. So the
+q11 target is a genuinely stronger parse or cost model, not more search: deeper
+chains, larger candidate sets, a bigger block, and a second feedback pass were
+all neutral. Binary q11 also exceeds its q10 ratio (mozilla 1.1381 versus
+1.0777) because the reference's q11 improves more there.
