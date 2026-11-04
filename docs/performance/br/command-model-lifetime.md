@@ -358,3 +358,25 @@ two-type plan (half of the commands per type) was rejected with
 invariants that a fabricated split does not satisfy. Distance context trees
 must be decoupled from block splitting (one block type with four contexts)
 before Vort can match the reference's 3-5 trees.
+
+## Optimal-stream static dictionary mixing, 2026-11-04
+
+The q10/q11 optimal candidate now also mixes bounded static-dictionary words
+into its literal runs and arbitrates the resulting complete wire. On 64 KiB
+prefixes:
+
+| File | Before | After | Size ratio | Static copies |
+| --- | ---: | ---: | ---: | ---: |
+| webster | 21,421 | 21,322 | 1.1123 -> 1.1072 | 397 (2,160 B) |
+| samba | 20,862 | 20,757 | 1.1288 -> 1.1231 | 378 (2,105 B) |
+| mozilla | 14,185 | 14,185 | 1.1473 | 0 |
+| xml | 4,093 | 4,093 | 1.0412 | 0 (command-state wire wins) |
+
+This is a functional step: Vort now exercises the static dictionary on large
+text (0 -> 397/378 copies), but the wire gain is only 0.46-0.50% because the
+post-hoc mixer replaces literals without re-pricing the parse; the reference's
+1,482-1,771 copies (13-16 KB) come from dictionary-aware parsing. Raising the
+probe budget from 4,096 to 32,768 changed nothing, so the matcher's transform
+coverage, not the scan budget, limits the copy count. Encode time rises about
+16% on webster/samba (168 -> 196/194 ms). The full Brotli suite still passes
+1539/1540 with one platform skip.

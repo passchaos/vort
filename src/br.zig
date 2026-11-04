@@ -5372,7 +5372,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     // latency policy.
     const extend_command_state = schedule.quality.int() >= 10 and input.len <= 64 * 1024 and qualityCommandStateGate(input);
     if (schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
-        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state)) |candidate|
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, schedule.dictionary)) |candidate|
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     }
 
@@ -5490,10 +5490,14 @@ fn encodeQualityOptimalCandidateAlloc(
     budget: quality_schedule.OptimalBudget,
     wire_options: LazyWireOptions,
 ) Error!?[]u8 {
-    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false);
+    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false, .{
+        .static_dictionary = false,
+        .extended_search = false,
+        .max_probes = 0,
+    });
 }
 
-fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool) Error!?[]u8 {
+fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
     var profile_scope = trace.begin(.other, input.len, 0);
     defer profile_scope.finish();
     errdefer |err| profile_scope.failure(err);
@@ -5528,6 +5532,21 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     var stats: encoder_stats.PlannedEncodeStats = .{};
     var best = try encodeLazyCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, commands.commands, &stats, wire_options);
     errdefer freeQualityRecorded(trace_enabled, trace, allocator, best);
+    if (dictionary.static_dictionary and dictionary.extended_search and dictionary.max_probes != 0) {
+        const with_static = try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(
+            allocator,
+            input,
+            commands.commands,
+            null,
+            dictionary.max_probes,
+        );
+        defer with_static.deinit(allocator);
+        if (with_static.match_count != 0) {
+            var static_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeLazyCommandPlanAllocRecorded(trace_enabled, trace, allocator, input, with_static.commands, &static_stats, wire_options);
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
+        }
+    }
     if (!budget.entropy_feedback) return best;
 
     var model = try entropy_feedback.build(allocator, input, commands.commands, search_window);
