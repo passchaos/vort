@@ -292,3 +292,11 @@ that probed the second candidate only when the first match was shorter than
 eight bytes recovered the timing but gave back the XML gain (167,610 bytes) and
 did not lower the NCI cost. Rejected: sub-percent size for a double-digit
 extreme-block slowdown, consistent with the earlier 16-bit-table rejection.
+
+For the 64 KiB short-input regressions, the double-fast and long-single engines
+produce identical records on mr, XML and reymont: forcing the long table for
+extreme blocks up to 64 KiB leaves mr at 18,728, XML at 6,415 and reymont at
+21,829, and only changes nci (5,222 -> 5,491, worse). The explicit `.lazy`
+strategy reaches mr 17,472 (0.9827) at about 2.6x the fast time, so the short
+input gap is lazy-matching quality, not table selection. The forced dispatch
+was reverted.
