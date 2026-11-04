@@ -64,6 +64,17 @@ lifetime across blocks, larger-input search policies and better entropy
 pricing. Deflate needs entropy-aware parsing and split planning across
 streaming, dictionaries and larger multi-block inputs.
 
+A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
+the measured 64 KiB text prefixes. Dictionary-aware optimal parsing plus a
+gated repcode-aware command-state extension brings webster to 1.0179, samba to
+1.0140, dickens to 1.0131, reymont to 1.0251 and XML to 1.0384 versus
+libbrotli 1.0.9, while static-dictionary coverage matches the reference
+(1,449 copies / 13,516 bytes versus 1,482 / 13,202 on webster). Binary
+mozilla remains at 1.1473 because the reference splits into nine command and
+four distance block types while Vort keeps one. Encode time rises roughly
+30-50% on the affected text blocks. These are separate source epochs and are
+not multiplied into the earlier ratios above.
+
 ## Decompression
 
 The newer [preload-before-refill epoch](industry-decode-current-20261101.md)

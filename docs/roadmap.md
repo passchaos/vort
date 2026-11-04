@@ -92,6 +92,16 @@ frequencies lowers q8 planned time a further 0.26% on the same screen with
 unchanged wires. Full streaming/dictionary, memory and multi-platform
 comparisons remain required for the industry-best objective.
 
+The 2026-11-04
+[dictionary-aware parsing epoch](performance/br/command-model-lifetime.md)
+closes most of the Brotli q10/q11 text-size gap: at 64 KiB it reaches 1.0179
+(webster), 1.0140 (samba), 1.0131 (dickens), 1.0251 (reymont) and 1.0384
+(XML) versus libbrotli 1.0.9, with static-dictionary coverage matching the
+reference. Binary mozilla stays at 1.1473 because the reference uses nine
+command and four distance block types while Vort keeps one; the next Brotli
+quality work is the adaptive block-split cost model and repcode state inside
+the optimal parser.
+
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
