@@ -5235,6 +5235,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         input.len,
         @min((@as(usize, 1) << window_bits) - 16, lz77.max_window_len),
     );
+    const wire_options = qualityWireOptions(schedule, options, window_bits);
     const lz_plan = blk: {
         var timer = trace.withOrigin(.lazy).begin(.lazy_parse, input.len, 0);
         defer timer.finish();
@@ -5257,6 +5258,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 .lazy_min_gain = schedule.lazy.min_gain,
                 .min_match = 3,
                 .max_match = lz77.max_match_len,
+                .recent_distances = wire_options.starting_last_distances,
             }),
         };
     };
@@ -5268,7 +5270,6 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         break :blk try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     };
     defer command_stream.deinit(allocator);
-    const wire_options = qualityWireOptions(schedule, options, window_bits);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     var best = if (lz_plan.stats.matches == 0 and !try literal_entropy_policy.shouldTry(allocator, input))
         try encodeStoredStreamRecorded(trace_enabled, trace, allocator, input, stream_options)

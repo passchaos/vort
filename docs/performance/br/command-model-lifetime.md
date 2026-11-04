@@ -983,3 +983,19 @@ the recent-distance repack up to three passes also changes nothing (nci stays
 84,867), so the remaining regular distances genuinely are not cache-resident.
 Repcode preference must be added inside the lazy parser, not as a separate
 greedy candidate.
+
+The lazy parser now also probes the four-entry recent-distance cache: when a
+cached distance matches at least as long as the hash candidate, it wins the
+tie and the cache is updated exactly like the wire writer. This is the first
+incremental step of repcode-aware parsing that stays inside the lazy path.
+
+| Input | Before | After |
+| --- | ---: | ---: |
+| sao 64 KiB | 47,125 | 47,096 |
+| sao 1 MiB | 728,703 | 728,376 |
+| nci / mr / x-ray / webster / XML / dickens | unchanged | unchanged |
+
+The probe costs no measurable time (XML 807 vs 841 ms, sao 1,365 vs 1,384 ms
+over three iterations) because cached distances usually fail on the first
+byte. nci does not improve because its 1 MiB winner is the optimal parse, and a
+backward DP cannot know the forward cache state.

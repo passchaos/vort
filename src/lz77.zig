@@ -163,6 +163,10 @@ pub const GreedyOptions = struct {
     /// Extra model cost for introducing a new recent distance in parsers that
     /// track repeat offsets. Generic LZ77 callers retain the historical zero.
     new_distance_penalty_bits: u8 = 0,
+    /// Optional initial recent-distance cache for the lazy parser. When set,
+    /// equal-length matches prefer a cached distance so the wire can use
+    /// short/implicit distance symbols.
+    recent_distances: ?[4]usize = null,
     /// Optional static-dictionary candidates for the optimal parser. Zero
     /// `dictionary_cost` disables them.
     dictionary: ?DictionaryProvider = null,
@@ -1368,12 +1372,37 @@ pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std
     return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
 }
 
+const RecentMatch = struct { length: usize, distance: usize };
+
+fn recentMatchAt(input: []const u8, position: usize, recent: [4]usize, minimum: usize, maximum: usize) RecentMatch {
+    var best = RecentMatch{ .length = 0, .distance = 0 };
+    for (recent) |distance| {
+        if (distance == 0 or distance > position) continue;
+        const length = matchLength(input, position - distance, position, maximum);
+        if (length < minimum) continue;
+        if (length > best.length) best = .{ .length = length, .distance = distance };
+    }
+    return best;
+}
+
 fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: anytype, prev: anytype) !PlanStats {
     var stats = PlanStats{};
-
+    var recent = options.recent_distances;
     var pos: usize = 0;
     while (pos < input.len) {
-        const best = findBestHashMatchWithLayout(input, pos, options, head, prev, false, false, {}, .three);
+        var best = findBestHashMatchWithLayout(input, pos, options, head, prev, false, false, {}, .three);
+        if (recent) |*cache| {
+            const candidate = recentMatchAt(
+                input,
+                pos,
+                cache.*,
+                minMatch(options),
+                @min(maxMatch(options), input.len - pos),
+            );
+            if (candidate.length >= best.length and candidate.length != 0) {
+                best = .{ .length = candidate.length, .distance = candidate.distance };
+            }
+        }
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
@@ -1401,6 +1430,14 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
         try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
         stats.matches += 1;
         stats.matched_bytes += best.length;
+        if (recent) |*cache| {
+            if (best.distance != cache[3]) {
+                cache[0] = cache[1];
+                cache[1] = cache[2];
+                cache[2] = cache[3];
+                cache[3] = best.distance;
+            }
+        }
         var insert_pos = if (current_inserted) pos + 1 else pos;
         const end = @min(input.len, pos + best.length);
         while (insert_pos < end) : (insert_pos += 1)
