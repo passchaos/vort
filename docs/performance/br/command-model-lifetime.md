@@ -449,7 +449,11 @@ distances, while the reference emits 155 implicit + 417 short + 0 direct +
 5,510 regular. A corrected two-type adaptive-distance split (halving the
 explicit-distance count, which passes the plan validator) did not change the
 webster wire, so an arbitrary block split is not the reference's four-context
-distance map. The next lever is repcode-aware dictionary parsing: the
+distance map. The candidate is eligible and runs on mozilla (about 3,600
+explicit distances) but also loses, leaving mozilla at 14,185 bytes versus the
+reference's 12,364. There the reference uses nine command block types and four
+distance block types while Vort keeps one, so the next lever for binary data is
+the block-split planner's cost model, not distance contexts. The next lever is repcode-aware dictionary parsing: the
 command-state parser tracks the four-distance cache but does not yet accept
 dictionary candidates, while the dictionary-aware optimal parser does not
 track repcodes.
