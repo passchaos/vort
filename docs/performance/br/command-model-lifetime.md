@@ -629,3 +629,13 @@ Two targeted sweeps confirm the winning path is the limiter:
 
 Both were reverted. Improving binary rows requires a better lazy parse or
 literal-context-aware wire selection, not further optimal-parser tuning.
+
+A second content-gated lazy candidate (gain floor +2, binary blocks only) was
+also rejected. On mozilla its own wire is 14,256-14,261 bytes and beats the
+primary lazy wire (14,302-14,306), but a later stage fed by the primary
+command stream still reaches 14,185 and wins. The whole-pipeline gain of the
+higher gain floor (14,132) comes from later stages using the shifted stream,
+so capturing it requires routing the alternative stream through the distance
+parameter search and static mixing as well. At 53 bytes (0.37%) that is not
+worth doubling the binary quality pipeline; the larger lever remains
+literal-context-aware wire selection.
