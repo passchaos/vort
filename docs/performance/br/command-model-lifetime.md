@@ -495,3 +495,13 @@ encode produces 292,787 bytes with zero static copies, worse than the
 288,310-byte one-shot. The reference covers 5,765 words / 57,495 bytes, so
 large-input quality needs dictionary-aware parsing inside the multi-block
 planner rather than more probes or post-hoc replacement.
+
+That incremental-planner integration was then measured and rejected. Adding
+dictionary-aware optimal parsing to `considerPlannedMetaBlock` (32 KiB blocks)
+raised the selected stream's static copies from 0 to 3,972 (36,381 bytes), but
+the 1 MiB webster stream is 292,366 bytes across 33 meta-blocks, still 22%
+behind the reference and slightly worse than the 288,310-byte one-shot path.
+Per-block headers and the near-absent repcode use (3 short distances versus
+the reference's 4,054) dominate. Large-input quality therefore needs a
+single-block large-window optimal parse with repcode state, not a chunked
+planner.
