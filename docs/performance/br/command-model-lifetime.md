@@ -346,3 +346,12 @@ changed none of these wires, confirming that the dictionary must be priced
 inside the parser. These two items are the concrete next targets for
 dictionary-rich text; XML's smaller 4.1% gap is dominated by the static
 dictionary alone.
+
+The distance-context family is also unreachable in the current structure.
+`useCountedAdaptiveDistanceContexts` requires an adaptive distance split with
+two to eight types, but the split planner produces one type for webster, samba
+and mozilla, so the candidate is never built. An extra arbitration attempt that
+constructed the no-split counted options produced identical wires and times,
+confirming the gate rather than the cost model is the blocker. Distance context
+trees must be decoupled from block splitting (one block type with four
+contexts) before Vort can match the reference's 3-5 trees.
