@@ -759,3 +759,9 @@ streams, not only the lazy one, changed no text wire (webster 19,548, dickens
 about 10% encode time. The optimal parse's distances rarely coincide with an
 exact cached distance, so post-hoc rewriting cannot close the text repcode
 gap; the parser itself must prefer cached distances. Reverted.
+
+Raising the command-state parser's beam from 2 to 4 or 8 (with up to 16
+candidates) also leaves webster at 19,548 bytes, at 468 ms and 561 ms
+respectively. Even a wider beam cannot beat the dictionary-aware optimal parse
+on this input, so the command-state parser is not the route to a stronger q11
+text parse. Beam and candidate caps were restored.
