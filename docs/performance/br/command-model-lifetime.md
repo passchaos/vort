@@ -663,3 +663,11 @@ The repack adds about 10-15% encode time on the blocks where it changes the
 wire. It also fixed a real trailing-insert bug found by the byte-level
 validation: the first version dropped a terminal literal run and produced a
 truncated stream, which the validation now prevents.
+
+The repack already applies at 1 MiB: webster falls 263,711 -> 262,671
+(1.1019 -> 1.0976), samba 306,387 -> 306,022 (1.0845 -> 1.0832) and dickens
+342,678 -> 341,942 (1.1226 -> 1.1202). Allowing a cached distance to replace a
+copy that is up to two bytes longer (turning the surplus into literals) was
+also tested and rejected: it never beat the exact-coverage candidate on the
+64 KiB binary rows or on the 1 MiB text rows, and it regressed ooffice
+30,639 -> 30,883 when used alone. The exact-only repack remains.
