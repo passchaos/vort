@@ -856,3 +856,24 @@ rises to 65-253 ms on the affected text rows. Because q8/q9 now enable entropy
 feedback, `applyCommandStateLimit` gates the explicit command-state override on
 the quality tag (q10/q11) rather than on feedback alone, preserving the
 existing rejection contract for q8/q9.
+
+## Why q10/q11 binary rows stay flat, 2026-11-05
+
+x-ray is the clearest case: q9, q10 and q11 all produce 42,455 bytes while
+libbrotli drops from 47,088 (q9) to 36,177 (q10). Two experiments show the
+optimal parser is not the winning candidate there:
+
+- Raising q10's optimal search from 256/128 to 1,024/512 chains/candidates
+  changes x-ray and mozilla not at all and gains only 13 bytes on XML and 34 on
+  dickens, at roughly 1.5-2x time.
+- Adding a per-match surcharge of 1, 3 or 6 bits leaves x-ray, mozilla and XML
+  byte-identical and only regresses dickens (22,381 -> 22,376 -> 22,484 ->
+  22,747).
+
+So the q10 binary winner is the lazy command stream plus entropy splitting, and
+the remaining gap is structural: the reference q10 x-ray emits 2,918 copies
+covering 12,029 bytes and compresses 53,503 literal bytes with 39 literal
+trees, while Vort emits 13,236 copies covering 45,122 bytes with 10 trees. Its
+parser deliberately prefers context-modelled literals, which needs
+context-aware literal pricing plus a much finer literal split, not deeper match
+search. Both experiments were reverted.
