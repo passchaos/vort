@@ -108,6 +108,27 @@ q0 beats the reference on ooffice, sao, mozilla, mr and x-ray; q1 beats it on
 XML, ooffice, sao and nci. Widening q0 to 64 KiB blocks was rejected because
 its one-pass entropy writer regressed text by up to 24%.
 
+### Preset ladder, 2026-11-05
+
+The 2026-11-05 preset work adds bounded optimal parses to q3-q7 (q2 stays
+lazy-only to preserve its zero-allocation warm reuse) and entropy feedback to
+q8/q9. Vort bytes on 64 KiB prefixes, lower is better:
+
+| File | q2 | q3 | q4 | q5 | q6 | q7 | q8 | q9 | q10 | q11 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| XML | 6,447 | 5,210 | 5,109 | 5,105 | 4,996 | 4,795 | 4,539 | 4,505 | 4,082 | 4,082 |
+| dickens | 28,349 | 25,920 | 25,447 | 25,380 | 25,260 | 22,816 | 22,412 | 22,387 | 22,381 | 22,381 |
+| webster | 24,565 | 22,657 | 22,279 | 22,232 | 22,157 | 19,906 | 19,574 | 19,556 | 19,548 | 19,548 |
+| nci | 6,296 | 4,721 | 4,613 | 4,564 | 4,545 | 4,434 | 4,238 | 4,203 | 3,916 | 3,916 |
+| ooffice | 33,288 | 31,763 | 31,592 | 31,388 | 31,057 | 30,651 | 30,647 | 30,648 | 30,644 | 30,639 |
+| x-ray | 45,915 | 44,974 | 43,298 | 43,327 | 43,290 | 42,488 | 42,488 | 42,455 | 42,455 | 42,455 |
+
+Against libbrotli 1.0.9 the ladder beats the reference at q3-q9 on every row
+shown except q5/q6 XML (1.0446/1.0404). The reference's q10/q11 jump is much
+larger than Vort's: x-ray is 1.1735/1.1612 at q10/q11 while q9 is 0.9016, and
+XML q10/q11 is 0.9803/1.0384 while q9 is 0.9705. Closing q10/q11 is therefore
+about matching the reference's high-quality parser, not the lower presets.
+
 ## Decompression
 
 The newer [preload-before-refill epoch](industry-decode-current-20261101.md)
