@@ -916,3 +916,23 @@ and dickens 22,381 are identical, while encode time rises 20-40%. The splitter
 already finds no further profitable partition on these inputs, so the literal
 tree count follows from how many literals the parse leaves, not from the
 splitter budget. Reverted.
+
+## Literal split ceiling, 2026-11-05
+
+The adaptive literal splitter refused blocks with more than 32 KiB of literal
+bytes, so a literal-heavy binary block could not be partitioned even when its
+candidate wire was built from ~20 KiB of literals. Raising the ceiling to
+128 KiB (and the splitter's `max_symbols` and scratch budget to match) is a
+large win exactly where the reference leads:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| x-ray q10 | 42,455 | 39,317 | 1.1735 -> 1.0868 |
+| x-ray q11 | 42,455 | 39,317 | 1.1612 -> 1.0754 |
+| mozilla / ooffice / XML / dickens / webster / sao / mr / osdb / nci | unchanged | unchanged | - |
+
+A literal-only probe explains why: x-ray's all-literal wire is 43,245 bytes,
+only 1.6% above the matched wire, so its size is dominated by literal coding;
+the extra split headroom recovers 3,138 bytes there. mozilla's literal-only
+wire is 26,366 versus a 14,302 matched wire, so matches remain essential and
+the change is neutral for it.
