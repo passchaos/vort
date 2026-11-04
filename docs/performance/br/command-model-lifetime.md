@@ -877,3 +877,18 @@ trees, while Vort emits 13,236 copies covering 45,122 bytes with 10 trees. Its
 parser deliberately prefers context-modelled literals, which needs
 context-aware literal pricing plus a much finer literal split, not deeper match
 search. Both experiments were reverted.
+
+Further bounded probes on the same plateau, all reverted:
+
+- Pricing literals from the complete input instead of only the seed plan's
+  literal positions regressed XML (4,082 -> 4,247), dickens (22,381 -> 22,458)
+  and webster (19,548 -> 19,621) with no binary change.
+- A 64-context (previous byte top six bits) literal price table left x-ray,
+  mozilla, XML, nci and ooffice unchanged and regressed dickens/webster.
+- Requiring lazy matches to save at least 4/8/16 bits moved x-ray by at most
+  four bytes, helped mozilla at 4 bits (14,071 -> 14,027) and hurt it at 8/16,
+  and left XML/dickens unchanged.
+
+The q10/q11 binary gap therefore needs an encoder that deliberately parses
+toward context-modelled literals and builds many literal trees, not parameter
+tuning of the current matcher or price tables.
