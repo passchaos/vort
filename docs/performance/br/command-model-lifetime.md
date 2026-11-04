@@ -464,3 +464,10 @@ candidate ran but the wire stayed at 19,603 bytes while encode time rose from
 299 to 439 ms (47%). The beam-2 search is too weak to beat the dictionary-aware
 optimal parse even with repcode tracking; closing the remaining 1.8% requires
 repcode state inside the optimal parser itself, not a second weaker parser.
+
+Lowering the adaptive command split's `min_symbols` from 2,048 to 512 did not
+change mozilla (14,185) or webster (19,603) wires, so the splitter's cost
+estimate, not its block-size floor, rejects the splits. A fabricated two-type
+command plan caused a segfault and was abandoned; the split plans must come
+from the validated splitter. The binary gap therefore needs a better
+splitter cost model rather than a different budget or a forced plan.
