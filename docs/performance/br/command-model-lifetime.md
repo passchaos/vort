@@ -389,3 +389,24 @@ The limit is the mixer's literal-run scope, not transform coverage: it can only
 replace bytes between existing LZ copies, while the reference chooses
 dictionary words inside the parse. Dictionary-aware parsing is the required
 next step.
+
+## Modeled-stream static dictionary mixing, 2026-11-04
+
+The optimal candidate now also mixes the static dictionary into the
+entropy-refined command stream, not only the seed plan. On 64 KiB q11 prefixes:
+
+| File | Seed only | Seed + modeled | Size ratio |
+| --- | ---: | ---: | ---: |
+| webster | 21,322 | 21,142 | 1.1123 -> 1.0978 |
+| samba | 20,757 | 20,586 | 1.1288 -> 1.1138 |
+| dickens | 24,501 | 24,238 | 1.1073 -> 1.0955 |
+| reymont | 17,150 | 17,140 | 1.0262 -> 1.0256 |
+| xml | 4,093 | 4,093 | 1.0412 (command-state wire wins) |
+| mozilla | 14,185 | 14,185 | 1.1473 (binary, no matches) |
+
+Text gains 1.07-1.32% over the seed-only mixer (1.30-1.32% over the pre-static
+baseline). Encode time rises about 35% on dickens (172 -> 239 ms) and about 15%
+on webster (196 -> 226 ms) because the mixer runs on both command streams. The
+remaining gap is still dictionary-aware parsing: the mixer can only replace
+bytes inside literal runs, while the reference chooses dictionary words inside
+the parse and covers 13-16 KB of webster/samba.
