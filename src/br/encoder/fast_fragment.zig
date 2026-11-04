@@ -21,7 +21,7 @@ pub const Variant = enum {
     /// blocks need the four-byte anchor to find enough matches.
     fn minMatch(self: Variant, text_like: bool) usize {
         return switch (self) {
-            .q0 => 5,
+            .q0 => if (text_like) 5 else 4,
             .q1 => if (text_like) 6 else 4,
         };
     }
@@ -329,30 +329,32 @@ test "fast fragment variants replay block-local commands" {
     }
 }
 
-test "q1 finds four-byte fragments that q0 leaves literal" {
-    // Binary content selects q1's four-byte anchor; the text path uses six.
+test "binary fragments use a four-byte anchor for q0 and q1" {
     const input = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0xaa, 0x00, 0x01, 0x02, 0x03, 0xbb };
     var scratch: Scratch = .{};
     defer scratch.deinit(std.testing.allocator);
     var commands: std.ArrayList(command_plan.Command) = .empty;
     defer commands.deinit(std.testing.allocator);
 
-    const q0 = try planReuse(&commands, &scratch, std.testing.allocator, &input, .q0, 65520);
-    try std.testing.expectEqual(@as(usize, 0), q0.matches);
-    try expectReplays(&input, commands.items);
-
-    const q1 = try planReuse(&commands, &scratch, std.testing.allocator, &input, .q1, 65520);
-    try std.testing.expectEqual(@as(usize, 1), q1.matches);
-    try std.testing.expectEqual(@as(usize, 4), q1.matched_bytes);
-    try expectReplays(&input, commands.items);
+    for ([_]Variant{ .q0, .q1 }) |variant| {
+        const stats = try planReuse(&commands, &scratch, std.testing.allocator, &input, variant, 65520);
+        try std.testing.expectEqual(@as(usize, 4), stats.anchor_len);
+        try std.testing.expectEqual(@as(usize, 1), stats.matches);
+        try std.testing.expectEqual(@as(usize, 4), stats.matched_bytes);
+        try expectReplays(&input, commands.items);
+    }
 }
 
-test "q1 uses a six-byte anchor on text-like fragments" {
+test "text-like fragments use a five-byte q0 anchor and six-byte q1 anchor" {
     const input = "the quick brown fox jumps over the lazy dog again";
     var scratch: Scratch = .{};
     defer scratch.deinit(std.testing.allocator);
     var commands: std.ArrayList(command_plan.Command) = .empty;
     defer commands.deinit(std.testing.allocator);
+
+    const q0 = try planReuse(&commands, &scratch, std.testing.allocator, input, .q0, 65520);
+    try std.testing.expectEqual(@as(usize, 5), q0.anchor_len);
+    try expectReplays(input, commands.items);
 
     const q1 = try planReuse(&commands, &scratch, std.testing.allocator, input, .q1, 65520);
     try std.testing.expectEqual(@as(usize, 6), q1.anchor_len);

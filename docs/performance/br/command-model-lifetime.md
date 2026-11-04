@@ -722,3 +722,23 @@ block boundary. Two changes close most of that gap:
 XML, ooffice, nci and sao now match or beat the reference at q1. The `mr`
 regression is 101 bytes (0.55%); every other row improves. The block-size
 contract test was updated from 32 KiB to 64 KiB for q1.
+
+q0 keeps its 16 KiB blocks. Widening q0 to 64 KiB regressed text badly
+(dickens 31,255 -> 38,915, webster 28,414 -> 34,047, samba 26,288 -> 32,092)
+because its one-pass entropy writer needs small blocks for adaptivity, even
+though binary rows improved. Instead, q0's anchor is now content-gated: five
+bytes for text-like fragments and four for binary ones. Binary rows improve
+with unchanged text output:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| ooffice | 41,916 | 34,463 | 1.1083 -> 0.9112 |
+| x-ray | 65,495 | 56,412 | 1.1955 -> 1.0297 |
+| osdb | 42,938 | 37,699 | 1.4103 -> 1.2382 |
+| sao | 58,665 | 52,308 | 1.0217 -> 0.9110 |
+| mozilla | 21,280 | 18,029 | 1.1389 -> 0.9649 |
+| mr | 18,905 | 17,470 | 0.9269 -> 0.8566 |
+
+Text rows (webster, dickens, XML, nci) are byte-identical. The frozen legacy
+q0 wires are text, so they are unchanged; the fragment anchor tests now assert
+four bytes for binary q0/q1 and five/six bytes for text q0/q1.
