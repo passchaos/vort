@@ -314,3 +314,11 @@ The gate rejects dickens and x-ray, so their wires and times are unchanged
 within measurement noise; only the cheap 16 KiB scan is added. This is a
 quality-first default; the command-state extension costs about 2.4-2.5x encode
 time on the blocks where it runs.
+
+Post-hoc static-dictionary mixing into the winning command-state stream was
+rejected. On the 64 KiB XML prefix it produced 42 static copies covering 218
+bytes, but the complete wire fell only 4,093 -> 4,089 bytes because the extra
+command and distance symbols offset the literal savings. The reference's 44
+copies save more because dictionary matches are priced inside the parse and
+entropy model rather than inserted afterwards. Closing the remaining 4.1%
+requires dictionary-aware parsing, not a second replacement pass.
