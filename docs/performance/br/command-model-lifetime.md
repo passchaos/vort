@@ -547,7 +547,15 @@ the allocation oracle's geometry predicate and 16 KiB pinned total (897,583 ->
 1,548,869 bytes). The full Zstd ReleaseFast suite passes 1276/1276. A separate
 pre-existing wasm32 compile failure (`bitPosition()` u64 to `usize` in the
 resumable compressed-header path) was fixed with explicit casts, and
-`zig build check` now passes 212/212. The larger token is a measurable Zstd
-memory/cache cost and should be revisited when the performance phase begins,
-for example by packing dictionary output length, copy length and address into
-a single u32 variant.
+`zig build check` now passes 212/212.
+
+The token was then repacked: dictionary output length (6 bits), copy length
+minus four (5 bits) and RFC address (18 bits) share one u32 field on
+`Token.Match`, with `initDictionary`/`dictionaryOutputLen`/`dictionaryCopyLen`/
+`dictionaryAddress` helpers. `Token` shrinks 16 -> 12 bytes and the Zstd beam
+state 28 -> 20 bytes, with unchanged Brotli wires (webster 64 KiB stays 19,603
+bytes) and Zstd 1276/1276. The allocation-oracle pinned total is unchanged
+because power-of-two growth lands in the same request buckets. A separate
+`.dictionary` union variant would reach 9-10 bytes, but it requires updating
+every generic token switch (LZMA consumes the same generic encoder), so the
+u32 field is the smaller-risk structure.

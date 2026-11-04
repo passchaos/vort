@@ -40,17 +40,37 @@ pub const Token = union(enum) {
     match: Match,
 
     pub const Match = struct {
-        /// Bytes consumed in the output. For a static-dictionary copy this is
-        /// the transformed word length; for an LZ match it is the copy length.
         length: u16,
         distance: u16,
-        /// Selects a static-dictionary reference instead of an LZ distance.
-        /// Address zero is a valid dictionary word, so this flag is separate.
-        is_dictionary: bool = false,
-        /// RFC 7932 word/transform address; valid when `is_dictionary`.
-        dictionary_address: u32 = 0,
-        /// Dictionary copy length before transforms; zero for LZ matches.
-        dictionary_copy_len: u16 = 0,
+        /// Zero for an ordinary LZ match. A Brotli static-dictionary copy packs
+        /// its output length (6 bits), copy length minus four (5 bits) and RFC
+        /// address (18 bits) here, so the ordinary payload stays compact.
+        dictionary: u32 = 0,
+
+        pub fn initDictionary(output_len: u16, copy_len: u16, dictionary_address: u32) Match {
+            std.debug.assert(output_len >= 4 and output_len <= 63);
+            std.debug.assert(copy_len >= 4 and copy_len <= 24);
+            std.debug.assert(dictionary_address < (1 << 18));
+            return .{
+                .length = output_len,
+                .distance = 0,
+                .dictionary = (dictionary_address << 12) |
+                    (@as(u32, copy_len - 4) << 6) |
+                    output_len,
+            };
+        }
+        pub fn isDictionary(self: Match) bool {
+            return self.dictionary != 0;
+        }
+        pub fn dictionaryOutputLen(self: Match) u16 {
+            return @truncate(self.dictionary & 0x3f);
+        }
+        pub fn dictionaryCopyLen(self: Match) u16 {
+            return @intCast(((self.dictionary >> 6) & 0x1f) + 4);
+        }
+        pub fn dictionaryAddress(self: Match) u32 {
+            return self.dictionary >> 12;
+        }
     };
 };
 
@@ -1884,13 +1904,11 @@ inline fn optimalPlanReuseWithIndex(
                         ) catch std.math.maxInt(usize);
                         if (cost < costs[rev_i]) {
                             costs[rev_i] = cost;
-                            steps[rev_i] = .{ .match = .{
-                                .length = match.output_len,
-                                .distance = 0,
-                                .is_dictionary = true,
-                                .dictionary_address = match.address,
-                                .dictionary_copy_len = match.copy_len,
-                            } };
+                            steps[rev_i] = .{ .match = .initDictionary(
+                                match.output_len,
+                                match.copy_len,
+                                match.address,
+                            ) };
                         }
                     }
                 }

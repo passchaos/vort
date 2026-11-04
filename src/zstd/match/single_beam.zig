@@ -90,7 +90,7 @@ const State = struct {
 comptime {
     // `lz77.Token.Match` carries optional static-dictionary fields, so the
     // shared token is larger than the historical four-byte LZ payload.
-    std.debug.assert(@sizeOf(State) == 24);
+    std.debug.assert(@sizeOf(State) == 20);
 }
 
 pub const Scratch = struct {

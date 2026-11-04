@@ -368,14 +368,15 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
             insert_len += 1;
         },
         .match => |match| {
-            if (match.is_dictionary) {
-                const output_len: usize = match.length;
-                const copy_len: usize = match.dictionary_copy_len;
+            if (match.isDictionary()) {
+                const output_len: usize = match.dictionaryOutputLen();
+                const copy_len: usize = match.dictionaryCopyLen();
+                const address: u32 = match.dictionaryAddress();
                 if (output_len == 0 or copy_len == 0 or output_len > input.len - position)
                     return error.InvalidBlockPlan;
                 const bits = static_dictionary.sizeBits(copy_len) orelse return error.InvalidBlockPlan;
-                const transform_index = match.dictionary_address >> @intCast(bits);
-                const word_index = match.dictionary_address & ((@as(u32, 1) << @intCast(bits)) - 1);
+                const transform_index = address >> @intCast(bits);
+                const word_index = address & ((@as(u32, 1) << @intCast(bits)) - 1);
                 const word = static_dictionary.baseWord(copy_len, word_index) orelse
                     return error.InvalidBlockPlan;
                 const matched = static_dictionary.transformedWordMatches(
@@ -391,7 +392,7 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
                     .has_copy = true,
                     .source = .static,
                     .dictionary_output_len = output_len,
-                    .dictionary_address = match.dictionary_address,
+                    .dictionary_address = address,
                 });
                 position += output_len;
                 insert_start = position;
