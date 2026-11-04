@@ -936,3 +936,15 @@ only 1.6% above the matched wire, so its size is dominated by literal coding;
 the extra split headroom recovers 3,138 bytes there. mozilla's literal-only
 wire is 26,366 versus a 14,302 matched wire, so matches remain essential and
 the change is neutral for it.
+
+Raising the same ceiling to 1 MiB extends the win to large inputs:
+
+| Input | 128 KiB ceiling | 1 MiB ceiling | Size ratio |
+| --- | ---: | ---: | ---: |
+| x-ray 1 MiB | 622,024 | 590,922 | 1.0798 -> 1.0255 |
+| samba 1 MiB | 305,801 | 301,653 | 1.0824 -> 1.0675 |
+| webster 1 MiB | 262,209 | 262,209 | unchanged |
+| dickens 1 MiB | 341,020 | 341,020 | unchanged |
+
+A 32-type splitter budget for literal volumes above 128 KiB was also tested and
+rejected: x-ray 1 MiB returns to 622,024, so the eight-type budget remains.

@@ -11261,7 +11261,7 @@ fn chooseAdaptiveLiteralSplitAlloc(
         literal_count = std.math.add(usize, literal_count, command.insert_len) catch
             return error.IntegerOverflow;
     }
-    if (literal_count < 2 * 1024 or literal_count > 128 * 1024) return null;
+    if (literal_count < 2 * 1024 or literal_count > 1024 * 1024) return null;
     const literals = try allocator.alloc(u8, literal_count);
     defer allocator.free(literals);
     var written: usize = 0;
@@ -11277,8 +11277,8 @@ fn chooseAdaptiveLiteralSplitAlloc(
             .type_count = 8,
             .iterations = 1,
             .min_symbols = 2 * 1024,
-            .max_symbols = 128 * 1024,
-            .scratch_budget_bytes = 8 * 1024 * 1024,
+            .max_symbols = 1024 * 1024,
+            .scratch_budget_bytes = 32 * 1024 * 1024,
         },
     ) catch |err| switch (err) {
         error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded, error.InvalidBlockPlan => return error.InvalidBlockPlan,
@@ -11906,8 +11906,8 @@ fn chooseCommandAndDistanceSplitsAlloc(
             .type_count = 8,
             .iterations = 1,
             .min_symbols = 2 * 1024,
-            .max_symbols = 128 * 1024,
-            .scratch_budget_bytes = 8 * 1024 * 1024,
+            .max_symbols = 32 * 1024,
+            .scratch_budget_bytes = 2 * 1024 * 1024,
         },
         encoder_window_format.format(wire_context.large_window),
     ) catch |err| switch (err) {
