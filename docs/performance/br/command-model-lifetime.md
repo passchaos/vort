@@ -352,6 +352,9 @@ The distance-context family is also unreachable in the current structure.
 two to eight types, but the split planner produces one type for webster, samba
 and mozilla, so the candidate is never built. An extra arbitration attempt that
 constructed the no-split counted options produced identical wires and times,
-confirming the gate rather than the cost model is the blocker. Distance context
-trees must be decoupled from block splitting (one block type with four
-contexts) before Vort can match the reference's 3-5 trees.
+confirming the gate rather than the cost model is the blocker. A synthetic
+two-type plan (half of the commands per type) was rejected with
+`error.InvalidBlockPlan`, so the counted path also validates block-boundary
+invariants that a fabricated split does not satisfy. Distance context trees
+must be decoupled from block splitting (one block type with four contexts)
+before Vort can match the reference's 3-5 trees.
