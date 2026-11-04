@@ -752,3 +752,10 @@ The 32 KiB streaming policy remains.
 Intermediate-quality screening found no structural outlier: at 64 KiB, q5/q6/q7
 XML are 1.0737/1.0404/1.0350, q8 is 1.0064 and q10 is 0.9803, while q8 already
 beats the reference on dickens (0.9031) and x-ray (0.8949).
+
+Applying the recent-distance repack to the optimal and entropy-refined command
+streams, not only the lazy one, changed no text wire (webster 19,548, dickens
+22,381, XML 4,082, samba 18,738, reymont 17,133, osdb 25,433) while adding
+about 10% encode time. The optimal parse's distances rarely coincide with an
+exact cached distance, so post-hoc rewriting cannot close the text repcode
+gap; the parser itself must prefer cached distances. Reverted.
