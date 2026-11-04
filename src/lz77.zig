@@ -40,9 +40,31 @@ pub const Token = union(enum) {
     match: Match,
 
     pub const Match = struct {
+        /// Bytes consumed in the output. For a static-dictionary copy this is
+        /// the transformed word length; for an LZ match it is the copy length.
         length: u16,
         distance: u16,
+        /// Selects a static-dictionary reference instead of an LZ distance.
+        /// Address zero is a valid dictionary word, so this flag is separate.
+        is_dictionary: bool = false,
+        /// RFC 7932 word/transform address; valid when `is_dictionary`.
+        dictionary_address: u32 = 0,
+        /// Dictionary copy length before transforms; zero for LZ matches.
+        dictionary_copy_len: u16 = 0,
     };
+};
+
+/// Optional external match source for the optimal parser. The callback returns
+/// a static-dictionary word starting at `position`, if any.
+pub const DictionaryMatch = struct {
+    output_len: u16,
+    copy_len: u16,
+    address: u32,
+};
+
+pub const DictionaryProvider = struct {
+    context: *anyopaque,
+    find: *const fn (context: *anyopaque, position: usize) ?DictionaryMatch,
 };
 
 pub const PlanStats = struct {
@@ -121,6 +143,10 @@ pub const GreedyOptions = struct {
     /// Extra model cost for introducing a new recent distance in parsers that
     /// track repeat offsets. Generic LZ77 callers retain the historical zero.
     new_distance_penalty_bits: u8 = 0,
+    /// Optional static-dictionary candidates for the optimal parser. Zero
+    /// `dictionary_cost` disables them.
+    dictionary: ?DictionaryProvider = null,
+    dictionary_cost: u16 = 0,
 };
 
 pub const GreedyPlan = struct {
@@ -1845,6 +1871,30 @@ inline fn optimalPlanReuseWithIndex(
                 }
             }
             if (!indexed) chain_i = prev[candidate];
+        }
+        if (options.dictionary) |provider| {
+            if (options.dictionary_cost != 0) {
+                if (provider.find(provider.context, rev_i)) |match| {
+                    const target = rev_i + match.output_len;
+                    if (match.output_len != 0 and match.copy_len != 0 and target <= n) {
+                        const cost = std.math.add(
+                            usize,
+                            costs[target],
+                            @as(usize, options.dictionary_cost),
+                        ) catch std.math.maxInt(usize);
+                        if (cost < costs[rev_i]) {
+                            costs[rev_i] = cost;
+                            steps[rev_i] = .{ .match = .{
+                                .length = match.output_len,
+                                .distance = 0,
+                                .is_dictionary = true,
+                                .dictionary_address = match.address,
+                                .dictionary_copy_len = match.copy_len,
+                            } };
+                        }
+                    }
+                }
+            }
         }
     }
 

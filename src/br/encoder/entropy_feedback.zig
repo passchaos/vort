@@ -86,6 +86,25 @@ pub fn buildWithStartingDistances(
             command_symbols.add(encoding.symbol) catch return error.InvalidBlockPlan;
             continue;
         }
+        if (command.isStatic()) {
+            // Static-dictionary commands still contribute literal, copy-code
+            // and command-symbol statistics; they do not touch LZ distances or
+            // recent-distance state.
+            if (command.copy_len == 0 or command.dictionary_output_len == 0 or
+                command.dictionary_output_len > input.len - cursor)
+            {
+                return error.InvalidBlockPlan;
+            }
+            const copy_code = length.codeForValue(command.copy_len, false) orelse
+                return error.InvalidBlockPlan;
+            copy_codes.add(copy_code) catch return error.InvalidBlockPlan;
+            const encoding = command_encoding.forLengths(command.insert_len, command.copy_len, false) orelse
+                return error.InvalidBlockPlan;
+            command_symbols.add(encoding.symbol) catch return error.InvalidBlockPlan;
+            cursor += command.dictionary_output_len;
+            match_count += 1;
+            continue;
+        }
         if (!command.isLz77() or command.copy_len < lz77.min_match_len or
             command.distance == 0 or
             command.distance > @min(window_len, cursor) or command.copy_len > input.len - cursor)

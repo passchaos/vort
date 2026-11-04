@@ -368,6 +368,37 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
             insert_len += 1;
         },
         .match => |match| {
+            if (match.is_dictionary) {
+                const output_len: usize = match.length;
+                const copy_len: usize = match.dictionary_copy_len;
+                if (output_len == 0 or copy_len == 0 or output_len > input.len - position)
+                    return error.InvalidBlockPlan;
+                const bits = static_dictionary.sizeBits(copy_len) orelse return error.InvalidBlockPlan;
+                const transform_index = match.dictionary_address >> @intCast(bits);
+                const word_index = match.dictionary_address & ((@as(u32, 1) << @intCast(bits)) - 1);
+                const word = static_dictionary.baseWord(copy_len, word_index) orelse
+                    return error.InvalidBlockPlan;
+                const matched = static_dictionary.transformedWordMatches(
+                    transform_index,
+                    word,
+                    input[position..],
+                ) orelse return error.InvalidBlockPlan;
+                if (matched != output_len) return error.InvalidBlockPlan;
+                try commands.append(allocator, .{
+                    .insert_start = insert_start,
+                    .insert_len = insert_len,
+                    .copy_len = copy_len,
+                    .has_copy = true,
+                    .source = .static,
+                    .dictionary_output_len = output_len,
+                    .dictionary_address = match.dictionary_address,
+                });
+                position += output_len;
+                insert_start = position;
+                insert_len = 0;
+                match_count += 1;
+                continue;
+            }
             const copy_len: usize = match.length;
             const distance: usize = match.distance;
             if (copy_len == 0 or distance == 0 or distance > position) return error.InvalidBlockPlan;

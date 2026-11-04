@@ -65,6 +65,7 @@ const quality_profile = @import("br/encoder/quality_profile.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const static_dictionary_stream = @import("br/encoder/static_dictionary_stream.zig");
+const scoped_static_dictionary = @import("br/encoder/scoped_static_dictionary.zig");
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
 const distance_block_split = @import("br/encoder/distance_block_split.zig");
@@ -5522,6 +5523,26 @@ fn considerStaticDictionaryCandidate(
     retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, best, candidate);
 }
 
+const QualityDictionaryProbe = struct {
+    index: *const static_dictionary_matcher.Index,
+    input: []const u8,
+
+    fn find(context: *anyopaque, position: usize) ?lz77.DictionaryMatch {
+        const self: *const QualityDictionaryProbe = @ptrCast(@alignCast(context));
+        const match = self.index.findLongest(self.input[position..]) orelse return null;
+        return .{
+            .output_len = @intCast(match.output_len),
+            .copy_len = @intCast(match.copy_len),
+            .address = @intCast(match.address),
+        };
+    }
+};
+
+/// Flat proxy cost for a static-dictionary copy: command/copy-length and
+/// distance symbols. Unmodeled parses price in bits, modeled parses in q8.
+const quality_dictionary_cost_bits: u16 = 22;
+const quality_dictionary_cost_q8: u16 = quality_dictionary_cost_bits * 256;
+
 fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
     var profile_scope = trace.begin(.other, input.len, 0);
     defer profile_scope.finish();
@@ -5532,6 +5553,17 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
         input.len,
         @min((@as(usize, 1) << wire_options.window_bits) - 16, lz77.default_window_len),
     );
+    var dictionary_indexes: ?scoped_static_dictionary.Indexes = null;
+    if (dictionary.static_dictionary and dictionary.extended_search and dictionary.max_probes != 0) {
+        dictionary_indexes = try scoped_static_dictionary.Indexes.init(allocator, false);
+    }
+    defer if (dictionary_indexes) |*indexes| indexes.deinit();
+    var dictionary_probe: QualityDictionaryProbe = undefined;
+    var dictionary_provider: ?lz77.DictionaryProvider = null;
+    if (dictionary_indexes) |*indexes| {
+        dictionary_probe = .{ .index = indexes.compact(), .input = input };
+        dictionary_provider = .{ .context = &dictionary_probe, .find = QualityDictionaryProbe.find };
+    }
     const optimal = blk: {
         var timer = trace.begin(.optimal_parse, input.len, 0);
         defer timer.finish();
@@ -5543,6 +5575,8 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
             .max_candidates = budget.max_candidates,
             .min_match = 4,
             .max_match = lz77.max_match_len,
+            .dictionary = dictionary_provider,
+            .dictionary_cost = if (dictionary_provider != null) quality_dictionary_cost_bits else 0,
         });
     };
     defer optimal.deinit(allocator);
@@ -5569,6 +5603,8 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
         .max_candidates = budget.max_candidates,
         .min_match = 4,
         .max_match = lz77.max_match_len,
+        .dictionary = dictionary_provider,
+        .dictionary_cost = quality_dictionary_cost_q8,
     }, model.lz77Model());
     defer modeled.deinit(allocator);
     if (modeled.stats.matches == 0) return best;

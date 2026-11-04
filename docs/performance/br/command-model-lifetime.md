@@ -410,3 +410,33 @@ on webster (196 -> 226 ms) because the mixer runs on both command streams. The
 remaining gap is still dictionary-aware parsing: the mixer can only replace
 bytes inside literal runs, while the reference chooses dictionary words inside
 the parse and covers 13-16 KB of webster/samba.
+
+## Dictionary-aware optimal parsing, 2026-11-04
+
+The optimal parser now accepts an external static-dictionary candidate
+provider. At every position it may emit a dictionary copy priced at a flat
+proxy cost; `command_plan.buildAlloc` revalidates the transform and emits a
+`.static` command, and `entropy_feedback` includes static commands in the
+literal, copy-code and command-symbol histograms. `Token.Match` carries an
+explicit `is_dictionary` flag because dictionary address zero is a valid word.
+
+On 64 KiB q11 prefixes, versus the committed pre-parse state:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| webster | 21,142 | 19,603 | 1.0978 -> 1.0179 |
+| samba | 20,586 | 18,741 | 1.1138 -> 1.0140 |
+| dickens | 24,238 | 22,416 | 1.0955 -> 1.0131 |
+| reymont | 17,140 | 17,132 | 1.0256 -> 1.0251 |
+| xml | 4,093 | 4,082 | 1.0412 -> 1.0384 |
+| mozilla | 14,185 | 14,185 | 1.1473 |
+
+Dictionary-rich English text gains 7.2-9.0% over the committed state and
+8.5-10.2% over the pre-static baseline; XML improves 11 bytes, reymont is
+neutral, and binary mozilla is unchanged. The proxy cost was tuned on the same
+matrix: 12 bits overused dictionary matches (webster 20,375, reymont 17,192,
+xml 4,096), 16 bits gave 19,817/17,158/4,093, and 20-24 bits converged near
+19,60x/18,74x/22,4xx with 22 selected as the best aggregate. The compact
+canonical index is used; the complete-transform index may add more but is
+expensive for tracked allocators. Encode time rises roughly 30-50%. The full
+Brotli suite passes 1539/1540 with one platform skip.
