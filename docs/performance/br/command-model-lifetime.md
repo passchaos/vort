@@ -559,3 +559,26 @@ because power-of-two growth lands in the same request buckets. A separate
 `.dictionary` union variant would reach 9-10 bytes, but it requires updating
 every generic token switch (LZMA consumes the same generic encoder), so the
 u32 field is the smaller-risk structure.
+
+## Binary quality gap is parse cost, 2026-11-04
+
+A 12-file 64 KiB q11 screen leaves x-ray (1.1645), mozilla (1.1473), mr
+(1.1201), ooffice (1.0639), nci (1.0541) and sao (1.0518) as the weakest rows;
+text rows are 1.0140-1.0394. Wire inspection shows the binary gap is not split
+capacity:
+
+| File | Vort commands | Vort copy bytes | Reference commands | Reference copy bytes |
+| --- | ---: | ---: | ---: | ---: |
+| x-ray | 13,237 | 45,122 | 6,306 | 23,336 |
+| mozilla | 4,277 | 59,512 | 4,188 | 56,987 |
+| mr | 5,850 | 61,066 | 4,658 | 54,234 |
+
+Vort emits roughly twice as many commands on x-ray and matches 22 KB more,
+while the reference leaves much more as literals compressed by 35 literal
+trees. Raising the adaptive literal splitter from 8 to 16 types with a 1,024
+symbol floor, and the joint literal context splitter from 8 to 16 block types
+with four iterations, changed no binary wire at all while raising encode time
+2-3x. Both were reverted. The limiter is the optimal parser's cost model,
+which prices literals with a flat histogram and therefore over-selects short
+matches; the next functional step is context-aware literal pricing inside the
+parse.
