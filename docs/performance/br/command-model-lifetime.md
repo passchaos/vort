@@ -765,3 +765,10 @@ candidates) also leaves webster at 19,548 bytes, at 468 ms and 561 ms
 respectively. Even a wider beam cannot beat the dictionary-aware optimal parse
 on this input, so the command-state parser is not the route to a stronger q11
 text parse. Beam and candidate caps were restored.
+
+q0 streaming blocks were also tried at 32 KiB: XML 10,033 -> 9,676, nci
+8,846 -> 8,613, x-ray 56,412 -> 52,955 and osdb 37,699 -> 32,405 improve, but
+dickens regresses 31,255 -> 36,737 and webster 28,414 -> 32,988 because the
+one-pass entropy writer loses adaptivity on prose. A per-content block-size
+gate would need per-block content classification in the chunked encoder; the
+16 KiB policy remains for now.
