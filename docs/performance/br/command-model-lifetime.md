@@ -380,3 +380,12 @@ probe budget from 4,096 to 32,768 changed nothing, so the matcher's transform
 coverage, not the scan budget, limits the copy count. Encode time rises about
 16% on webster/samba (168 -> 196/194 ms). The full Brotli suite still passes
 1539/1540 with one platform skip.
+
+Switching the mixer to the complete-transform index raised webster from 397 to
+467 copies (2,487 bytes), but the wires moved only 21,322 -> 21,305 for webster
+and 20,757 -> 20,725 for samba (17 and 32 bytes). The complete index is
+also expensive to build for tracked allocators, so the change was rejected.
+The limit is the mixer's literal-run scope, not transform coverage: it can only
+replace bytes between existing LZ copies, while the reference chooses
+dictionary words inside the parse. Dictionary-aware parsing is the required
+next step.
