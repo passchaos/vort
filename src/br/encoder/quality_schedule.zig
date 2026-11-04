@@ -331,7 +331,7 @@ fn makeSchedule(quality: Quality, mode: Mode) Schedule {
         .search_distance_parameters = q >= 4,
         .stream_block_len = if (q == 0)
             16 * 1024
-        else if (q == 1 or q == 6 or q == 7 or q == 11)
+        else if (q == 6 or q == 7 or q == 11)
             32 * 1024
         else
             64 * 1024,
@@ -358,7 +358,7 @@ test "quality stream block sizes follow latency and optimal-search policy" {
         const quality = try Quality.fromInt(@intCast(quality_index));
         const expected: u32 = if (quality == .q0)
             16 * 1024
-        else if (quality == .q1 or quality == .q6 or quality == .q7 or quality == .q11)
+        else if (quality == .q6 or quality == .q7 or quality == .q11)
             32 * 1024
         else
             64 * 1024;

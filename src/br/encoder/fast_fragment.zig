@@ -16,15 +16,19 @@ pub const Variant = enum {
         };
     }
 
-    fn minMatch(self: Variant, table_bits: u6) usize {
+    /// Text-like blocks keep a six-byte anchor, which avoids spending hash
+    /// slots on short matches that the literal model already covers; binary
+    /// blocks need the four-byte anchor to find enough matches.
+    fn minMatch(self: Variant, text_like: bool) usize {
         return switch (self) {
             .q0 => 5,
-            .q1 => if (table_bits <= 15) 4 else 6,
+            .q1 => if (text_like) 6 else 4,
         };
     }
 };
 
 pub const Stats = struct {
+    anchor_len: usize = 0,
     literal_bytes: usize = 0,
     matches: usize = 0,
     matched_bytes: usize = 0,
@@ -66,6 +70,19 @@ fn tableLen(variant: Variant, input_len: usize) usize {
     if (variant == .q0 and @ctz(len) % 2 == 0 and len < variant.maxTableLen())
         len <<= 1;
     return len;
+}
+
+/// Cheap content gate: printable ASCII over a bounded sample. XML, prose and
+/// source text are text-like; compressed/binary data is not.
+fn textLike(input: []const u8) bool {
+    const sample_len = @min(input.len, 16 * 1024);
+    if (sample_len == 0) return false;
+    var printable: usize = 0;
+    for (input[0..sample_len]) |byte| {
+        if (std.ascii.isPrint(byte) or byte == '\n' or byte == '\r' or byte == '\t')
+            printable += 1;
+    }
+    return printable >= (sample_len / 10) * 9;
 }
 
 fn hashAt(input: []const u8, position: usize, anchor_len: usize, table_bits: u6) usize {
@@ -173,7 +190,8 @@ pub fn planReuse(
 
     const table_len = tableLen(variant, input.len);
     const table_bits: u6 = @intCast(@ctz(table_len));
-    const anchor_len = variant.minMatch(table_bits);
+    const anchor_len = variant.minMatch(textLike(input));
+    stats.anchor_len = anchor_len;
     stats.table_bits = table_bits;
     if (input.len < anchor_len + 1) {
         try commands.append(allocator, .{ .insert_start = 0, .insert_len = input.len });
@@ -312,19 +330,32 @@ test "fast fragment variants replay block-local commands" {
 }
 
 test "q1 finds four-byte fragments that q0 leaves literal" {
-    const input = "abcdXabcdY";
+    // Binary content selects q1's four-byte anchor; the text path uses six.
+    const input = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0xaa, 0x00, 0x01, 0x02, 0x03, 0xbb };
     var scratch: Scratch = .{};
     defer scratch.deinit(std.testing.allocator);
     var commands: std.ArrayList(command_plan.Command) = .empty;
     defer commands.deinit(std.testing.allocator);
 
-    const q0 = try planReuse(&commands, &scratch, std.testing.allocator, input, .q0, 65520);
+    const q0 = try planReuse(&commands, &scratch, std.testing.allocator, &input, .q0, 65520);
     try std.testing.expectEqual(@as(usize, 0), q0.matches);
-    try expectReplays(input, commands.items);
+    try expectReplays(&input, commands.items);
 
-    const q1 = try planReuse(&commands, &scratch, std.testing.allocator, input, .q1, 65520);
+    const q1 = try planReuse(&commands, &scratch, std.testing.allocator, &input, .q1, 65520);
     try std.testing.expectEqual(@as(usize, 1), q1.matches);
     try std.testing.expectEqual(@as(usize, 4), q1.matched_bytes);
+    try expectReplays(&input, commands.items);
+}
+
+test "q1 uses a six-byte anchor on text-like fragments" {
+    const input = "the quick brown fox jumps over the lazy dog again";
+    var scratch: Scratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var commands: std.ArrayList(command_plan.Command) = .empty;
+    defer commands.deinit(std.testing.allocator);
+
+    const q1 = try planReuse(&commands, &scratch, std.testing.allocator, input, .q1, 65520);
+    try std.testing.expectEqual(@as(usize, 6), q1.anchor_len);
     try expectReplays(input, commands.items);
 }
 

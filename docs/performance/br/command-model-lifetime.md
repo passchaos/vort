@@ -694,3 +694,31 @@ q11 target is a genuinely stronger parse or cost model, not more search: deeper
 chains, larger candidate sets, a bigger block, and a second feedback pass were
 all neutral. Binary q11 also exceeds its q10 ratio (mozilla 1.1381 versus
 1.0777) because the reference's q11 improves more there.
+
+## q1 block and anchor policy, 2026-11-04
+
+q1 previously encoded 32 KiB blocks and used a four-byte anchor for its
+64 KiB-table fragment parser, so a 64 KiB input could not match across the
+block boundary. Two changes close most of that gap:
+
+- q1 now uses 64 KiB stream blocks (the same as q2-q5/q8-q10);
+- the fragment anchor is chosen by content: six bytes for text-like blocks
+  (printable ASCII at least 90% of a 16 KiB sample), four bytes otherwise.
+
+64 KiB q1 versus libbrotli 1.0.9, before -> after:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| XML | 9,075 | 7,129 | 1.2613 -> 0.9908 |
+| osdb | 36,460 | 31,460 | 1.2671 -> 1.0933 |
+| mozilla | 20,110 | 18,192 | 1.1398 -> 1.0311 |
+| webster | 27,565 | 26,381 | 1.0568 -> 1.0114 |
+| dickens | 30,566 | 29,431 | 1.0510 -> 1.0120 |
+| ooffice | 38,051 | 37,407 | 1.0170 -> 0.9998 |
+| x-ray | 64,269 | 61,697 | 1.2003 -> 1.1522 |
+| sao | 53,596 | 52,925 | 0.9258 -> 0.9142 |
+| mr | 18,340 | 18,441 | 1.0037 -> 1.0092 |
+
+XML, ooffice, nci and sao now match or beat the reference at q1. The `mr`
+regression is 101 bytes (0.55%); every other row improves. The block-size
+contract test was updated from 32 KiB to 64 KiB for q1.

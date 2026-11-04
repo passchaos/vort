@@ -482,7 +482,7 @@ test "q0 and q1 fragment surfaces share one deterministic block core" {
         try std.testing.expectEqualSlices(u8, one_shot, progressive);
 
         const summary = try br.summarizeStream(one_shot);
-        const block_len: usize = if (quality == 0) 16 * 1024 else 32 * 1024;
+        const block_len: usize = if (quality == 0) 16 * 1024 else 64 * 1024;
         try std.testing.expectEqual(
             std.math.divCeil(usize, payload.len, block_len) catch unreachable,
             summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
@@ -557,7 +557,7 @@ test "q0 and q1 one-shot bounds cover incompressible multi-fragment output" {
         const written = try br.encodePlannedStreamWithOptionsInto(&input, output, options);
         try std.testing.expect(written <= bound);
         const summary = try br.summarizeStream(output[0..written]);
-        const block_len: usize = if (quality == 0) 16 * 1024 else 32 * 1024;
+        const block_len: usize = if (quality == 0) 16 * 1024 else 64 * 1024;
         try std.testing.expectEqual(
             std.math.divCeil(usize, input.len, block_len) catch unreachable,
             summary.uncompressed_meta_block_count,
@@ -697,7 +697,7 @@ test "planned stream policies select quality-specific block sizes" {
         .{ .options = .{ .level = .balanced }, .expected_blocks = 2 },
         .{ .options = .{ .level = .ratio }, .expected_blocks = 2 },
         .{ .options = .{ .quality = 0 }, .expected_blocks = 6 },
-        .{ .options = .{ .quality = 1 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 1 }, .expected_blocks = 2 },
         .{ .options = .{ .quality = 2 }, .expected_blocks = 2 },
         .{ .options = .{ .quality = 6 }, .expected_blocks = 3 },
         .{ .options = .{ .quality = 10 }, .expected_blocks = 2 },
