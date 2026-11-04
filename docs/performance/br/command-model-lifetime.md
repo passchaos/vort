@@ -530,3 +530,10 @@ rejected. On 1 MiB webster it produced eight distance block/context trees
 (was one), but the wire moved only 263,711 -> 263,663 (48 bytes) while encode
 time rose from about 3.5 s to 53 s. Command block types stayed at one. The
 remaining large-input gap is repcode-aware parsing, not split availability.
+
+A seed-recent-distance discount in the modeled DP was also rejected. A 4-bit
+Bloom-mask hint over the seed plan's four-distance cache changed the 1 MiB
+webster wire from 263,711 to 268,414 bytes (worse) and raised encode time from
+3.5 s to 52 s, while static copies rose to 25,819. The approximation interacts
+poorly with the prefix bound and the dictionary candidate; repcode-aware
+parsing needs real cache state, not a seed hint.
