@@ -1017,3 +1017,35 @@ distances, so a four-entry local cache rarely covers the match a position
 needs; the reference reaches 9,882 implicit distances by choosing distances
 that repeat across long ranges, which needs a different parser rather than a
 local slack rule. Reverted.
+
+## Forward recent-distance beam, 2026-11-05
+
+A forward beam parser carried the exact four-entry recent-distance state in
+each search state, so a cached distance could be priced at its repcode cost
+before the path was fixed. It used a 32 KiB token window, beam width four,
+`max_chain = min(lazy.max_chain, 64)`, one matcher candidate per position and
+a four-byte minimum match, then emitted the winning path through the existing
+lazy command encoder. On q11 64 KiB it lost to the current best on every
+measured row:
+
+| File | Beam bytes | Current best | Difference |
+| --- | ---: | ---: | ---: |
+| nci | 3,951 | 3,916 | +35 |
+| sao | 47,604 | 47,096 | +508 |
+| x-ray | 40,128 | 39,317 | +811 |
+| mr | 15,428 | 15,314 | +114 |
+| webster | 21,619 | 19,548 | +2,071 |
+| XML | 4,358 | 4,082 | +276 |
+
+The same ordering holds below 64 KiB: nci 8/12/16 KiB is 846/1,119/1,410
+against 837/1,088/1,376. The beam keeps more repcodes but pays for them with
+shorter or worse-placed matches; its local fixed-cost model cannot value the
+future match opportunities that the lazy and optimal paths preserve. The
+experiment was reverted.
+
+The first 16 KiB run also exposed a Zig type-inference hazard in the
+implementation: `const window = @min(bro_beam_window, input.len - base)`
+inferred a narrow integer, so `window * bro_beam_width` wrapped to zero and the
+final state was read from slot zero. Any future windowed parser should annotate
+the window as `usize` explicitly rather than relying on `@min` peer
+resolution.
