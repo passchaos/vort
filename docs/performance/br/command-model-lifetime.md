@@ -440,3 +440,16 @@ xml 4,096), 16 bits gave 19,817/17,158/4,093, and 20-24 bits converged near
 canonical index is used; the complete-transform index may add more but is
 expensive for tracked allocators. Encode time rises roughly 30-50%. The full
 Brotli suite passes 1539/1540 with one platform skip.
+
+After this increment, the webster wire structure is close to the reference:
+1,449 static copies covering 13,516 bytes versus 1,482 covering 13,202, and
+45,555 LZ copy bytes versus 45,762. The remaining 345-byte gap is distance
+coding: Vort emits 28 implicit + 186 short + 74 direct + 5,826 regular
+distances, while the reference emits 155 implicit + 417 short + 0 direct +
+5,510 regular. A corrected two-type adaptive-distance split (halving the
+explicit-distance count, which passes the plan validator) did not change the
+webster wire, so an arbitrary block split is not the reference's four-context
+distance map. The next lever is repcode-aware dictionary parsing: the
+command-state parser tracks the four-distance cache but does not yet accept
+dictionary candidates, while the dictionary-aware optimal parser does not
+track repcodes.
