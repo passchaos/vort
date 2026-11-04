@@ -5372,7 +5372,10 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     // text-like blocks; gate it by content so binary blocks keep the 8 KiB
     // latency policy.
     const extend_command_state = schedule.quality.int() >= 10 and input.len <= 64 * 1024 and qualityCommandStateGate(input);
-    if (schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
+    // q11 inherits the complete q10 winner for inputs q10 can already parse.
+    // Skip the second deeper parse there; it only pays off above 64 KiB.
+    const q11_covered_by_q10 = schedule.quality == .q11 and input.len <= 64 * 1024;
+    if (!q11_covered_by_q10 and schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
         if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, schedule.dictionary)) |candidate|
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     }
@@ -28172,7 +28175,9 @@ test "br command-state override reaches q10 and q11 input ceilings" {
         .{ .quality = 11, .command_state_max_input_kib = 32 },
     );
     defer std.testing.allocator.free(q11);
-    try std.testing.expectEqual(@as(usize, 2), test_hq_command_candidate_attempts);
+    // q11 inherits the complete q10 winner for inputs up to 64 KiB, so the
+    // inherited q10 candidate performs the single command-state attempt.
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
     const q11_decoded = try decodeStreamAllocExactSize(
         std.testing.allocator,
         q11,

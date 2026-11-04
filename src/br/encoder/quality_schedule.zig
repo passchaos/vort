@@ -152,7 +152,7 @@ pub const Schedule = struct {
                 self.optimal.max_candidates == 0 or
                 self.optimal.max_candidates > 512 or
                 self.optimal.max_input_len == 0 or
-                self.optimal.max_input_len > 64 * 1024)
+                self.optimal.max_input_len > 1024 * 1024)
             {
                 return error.InvalidSchedule;
             }
@@ -247,7 +247,7 @@ const base_rows = [12]BaseRow{
     },
     .{
         .lazy = .{ .max_chain = 512, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .entropy_feedback = true, .command_state_max_input_len = 8 * 1024, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 32 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .command_state_max_input_len = 8 * 1024, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 1024 * 1024 },
         .dictionary_probes = 4096,
     },
 };
@@ -458,7 +458,7 @@ test "quality ten and eleven use distinct bounded optimal searches" {
         try std.testing.expectEqual(@as(u32, 8 * 1024), q10.optimal.command_state_max_input_len);
         try std.testing.expectEqual(@as(u16, 512), q11.optimal.max_chain);
         try std.testing.expectEqual(@as(u16, 256), q11.optimal.max_candidates);
-        try std.testing.expectEqual(@as(u32, 32 * 1024), q11.optimal.max_input_len);
+        try std.testing.expectEqual(@as(u32, 1024 * 1024), q11.optimal.max_input_len);
         try std.testing.expect(q11.optimal.entropy_feedback);
         try std.testing.expectEqual(@as(u32, 8 * 1024), q11.optimal.command_state_max_input_len);
     }

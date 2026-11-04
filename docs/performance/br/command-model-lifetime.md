@@ -505,3 +505,22 @@ Per-block headers and the near-absent repcode use (3 short distances versus
 the reference's 4,054) dominate. Large-input quality therefore needs a
 single-block large-window optimal parse with repcode state, not a chunked
 planner.
+
+## Large-input optimal ceiling, 2026-11-04
+
+Raising q11's `max_input_len` to 1 MiB (and the schedule validator cap) lets
+the dictionary-aware optimal parser cover the whole block. On 1 MiB prefixes:
+
+| File | Before | After | Size ratio | Vort time | Reference time |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| webster | 288,310 | 263,711 | 1.2047 -> 1.1019 | 2.53 s | 1.21 s |
+| samba | - | 306,387 | 1.0845 | - | - |
+| dickens | - | 342,678 | 1.1226 | - | - |
+
+Static coverage rises to 15,292 copies / 142,703 bytes on webster (the
+reference uses 5,765 / 57,495). q11 skips its second parse for inputs up to
+64 KiB, where the inherited q10 winner already covers them, so the 64 KiB
+wires and times stay unchanged. The remaining 1 MiB gap is distance coding
+(393 implicit + 2,284 short versus 1,432 + 4,054) and block/context types
+(1 versus 2 command / 7 distance / 11 context trees). The large-input
+quality ratio is now 1.08-1.12 rather than 1.20.
