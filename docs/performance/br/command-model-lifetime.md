@@ -973,3 +973,13 @@ nci is the worst row: Vort emits 3,187 implicit + 4,241 short distances against
 the reference's 9,882 + 4,095, and 17,959 regular distances against 9,026. The
 1 MiB gap is therefore dominated by repcode share and distance/context block
 typing, the same structural items as the 64 KiB binary rows.
+
+A repcode-first greedy parser was implemented and rejected. It probes the four
+cached distances before the hash chain, keeps the longest match and breaks ties
+toward the most recent slot. On 1 MiB nci it emits 111,108 bytes with 47,142
+matches against the current 84,867 bytes with 25,509 matches: greedy matching
+without lazy deferral loses far more than the repcode share gains. Iterating
+the recent-distance repack up to three passes also changes nothing (nci stays
+84,867), so the remaining regular distances genuinely are not cache-resident.
+Repcode preference must be added inside the lazy parser, not as a separate
+greedy candidate.
