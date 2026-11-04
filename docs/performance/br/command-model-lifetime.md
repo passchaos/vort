@@ -524,3 +524,9 @@ wires and times stay unchanged. The remaining 1 MiB gap is distance coding
 (393 implicit + 2,284 short versus 1,432 + 4,054) and block/context types
 (1 versus 2 command / 7 distance / 11 context trees). The large-input
 quality ratio is now 1.08-1.12 rather than 1.20.
+
+Raising the adaptive split ceilings to 128K symbols for q10/q11 was also
+rejected. On 1 MiB webster it produced eight distance block/context trees
+(was one), but the wire moved only 263,711 -> 263,663 (48 bytes) while encode
+time rose from about 3.5 s to 53 s. Command block types stayed at one. The
+remaining large-input gap is repcode-aware parsing, not split availability.
