@@ -1007,3 +1007,13 @@ two bits) was rejected. It leaves nci (3,916), sao (47,096), mr (15,314), XML
 dickens 22,381 -> 22,446. The backward DP's cache comes from the seed path, so
 the injected repcodes often do not match the path being built, and text pays
 for the distortion. Reverted; the lazy parser's tie-preference remains.
+
+Disabling q11's optimal parse leaves nci (3,916) and sao (47,096) unchanged, so
+both are won by the lazy path, not the optimal parse. That makes the lazy
+parser the right place to add repcode preference, but allowing a cached
+distance to win with a 2/4/8-byte length deficit does not help nci at all and
+regresses sao (47,096 -> 47,652/47,676). nci's repeats use many distinct
+distances, so a four-entry local cache rarely covers the match a position
+needs; the reference reaches 9,882 implicit distances by choosing distances
+that repeat across long ranges, which needs a different parser rather than a
+local slack rule. Reverted.
