@@ -16083,17 +16083,17 @@ pub fn parseCompressedHeaderWithProgress(
     while (true) switch (progress.stage) {
         .switches => {
             progress.shape = try readLargeCompressedHeaderBlockSwitches(&reader, &out.compressed, large_window);
-            progress.bit_offset = reader.bitPosition();
+            progress.bit_offset = @intCast(reader.bitPosition());
             progress.stage = .context_maps;
         },
         .context_maps => {
             progress.tree_counts = try readLargeCompressedHeaderContextMaps(&reader, &out.compressed, progress.shape);
-            progress.bit_offset = reader.bitPosition();
+            progress.bit_offset = @intCast(reader.bitPosition());
             progress.stage = .literal_trees;
         },
         .literal_trees => {
             while (progress.literal_tree_index < progress.tree_counts.literal) {
-                progress.bit_offset = reader.bitPosition();
+                progress.bit_offset = @intCast(reader.bitPosition());
                 progress.tree_attempts += 1;
                 try readLargeCompressedHeaderLiteralTreeAt(&reader, &out.compressed, progress.literal_tree_index, &progress.tree);
                 progress.completed_trees += 1;
@@ -16101,24 +16101,24 @@ pub fn parseCompressedHeaderWithProgress(
             }
             @memset(&out.compressed.packed_literal_cache_indices, std.math.maxInt(u16));
             out.compressed.packed_literal_cache_next = 0;
-            progress.bit_offset = reader.bitPosition();
+            progress.bit_offset = @intCast(reader.bitPosition());
             progress.stage = .command_trees;
         },
         .command_trees => {
             while (progress.command_tree_index < progress.shape.command_block_types) {
-                progress.bit_offset = reader.bitPosition();
+                progress.bit_offset = @intCast(reader.bitPosition());
                 progress.tree_attempts += 1;
                 try readLargeCompressedHeaderCommandTreeAt(&reader, &out.compressed, progress.command_tree_index, &progress.tree);
                 progress.completed_trees += 1;
                 progress.command_tree_index += 1;
             }
             out.compressed.active_packed_insert_copy_tree_index = std.math.maxInt(u16);
-            progress.bit_offset = reader.bitPosition();
+            progress.bit_offset = @intCast(reader.bitPosition());
             progress.stage = .distance_trees;
         },
         .distance_trees => {
             while (progress.distance_tree_index < progress.tree_counts.distance) {
-                progress.bit_offset = reader.bitPosition();
+                progress.bit_offset = @intCast(reader.bitPosition());
                 progress.tree_attempts += 1;
                 if (progress.tree.active and progress.tree.stage == .symbols) progress.tree_symbol_resumes += 1;
                 try readLargeCompressedHeaderDistanceTreeAt(
@@ -16134,12 +16134,12 @@ pub fn parseCompressedHeaderWithProgress(
                 progress.distance_tree_index += 1;
             }
             out.compressed.active_packed_distance_tree_index = std.math.maxInt(u16);
-            progress.bit_offset = reader.bitPosition();
+            progress.bit_offset = @intCast(reader.bitPosition());
             progress.stage = .done;
         },
         .done => break,
     };
-    progress.bit_offset = reader.bitPosition();
+    progress.bit_offset = @intCast(reader.bitPosition());
     out.decoded_len = decoded_len;
     out.final = final;
     out.large_window = large_window;
@@ -22926,7 +22926,7 @@ fn readPrefixCodeRuntimeResumable(
 
         tree.active = true;
         tree.hskip = kind;
-        tree.bit_offset = reader.bitPosition();
+        tree.bit_offset = @intCast(reader.bitPosition());
         var code_length_space: i32 = 32;
         var code_length_nonzero: usize = 0;
         var code_length_index: usize = if (kind == 0) 0 else kind;
@@ -22957,7 +22957,7 @@ fn readPrefixCodeRuntimeResumable(
             return error.InvalidHuffmanCode;
         }
         tree.stage = .symbols;
-        tree.bit_offset = reader.bitPosition();
+        tree.bit_offset = @intCast(reader.bitPosition());
         tree.index = 0;
         tree.space = 32768;
         tree.last_nonzero_length = 8;
@@ -22994,7 +22994,7 @@ fn readPrefixCodeRuntimeResumable(
     var last_symbol: ?u16 = if (tree.last_symbol == 0xffff) null else tree.last_symbol;
 
     while (index < alphabet_size_limit and space > 0) {
-        tree.bit_offset = reader.bitPosition();
+        tree.bit_offset = @intCast(reader.bitPosition());
         const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
         switch (symbol) {
             0 => {
@@ -23048,7 +23048,7 @@ fn readPrefixCodeRuntimeResumable(
         tree.pending_repeat_count = @intCast(pending_repeat_count);
         tree.pending_repeat_length = pending_repeat_length;
         tree.last_symbol = if (last_symbol) |value| value else 0xffff;
-        tree.bit_offset = reader.bitPosition();
+        tree.bit_offset = @intCast(reader.bitPosition());
     }
     try flushPendingRepeat(alphabet_size_limit, large_command_alphabet_capacity, &tree.lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
     if (space != 0) return error.InvalidHuffmanCode;

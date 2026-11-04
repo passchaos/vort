@@ -537,3 +537,17 @@ webster wire from 263,711 to 268,414 bytes (worse) and raised encode time from
 3.5 s to 52 s, while static copies rose to 25,819. The approximation interacts
 poorly with the prefix bound and the dictionary candidate; repcode-aware
 parsing needs real cache state, not a seed hint.
+
+## Token growth side effects, 2026-11-04
+
+Adding optional static-dictionary fields to `lz77.Token.Match` grew the shared
+token from 6 to 16 bytes and the Zstd rep-beam state from 16 to 28 bytes. Two
+Zstd-side pins had to be updated: `single_beam.zig`'s comptime size assert and
+the allocation oracle's geometry predicate and 16 KiB pinned total (897,583 ->
+1,548,869 bytes). The full Zstd ReleaseFast suite passes 1276/1276. A separate
+pre-existing wasm32 compile failure (`bitPosition()` u64 to `usize` in the
+resumable compressed-header path) was fixed with explicit casts, and
+`zig build check` now passes 212/212. The larger token is a measurable Zstd
+memory/cache cost and should be revisited when the performance phase begins,
+for example by packing dictionary output length, copy length and address into
+a single u32 variant.

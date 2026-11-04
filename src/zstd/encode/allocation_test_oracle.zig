@@ -12,14 +12,14 @@ const BeamState = @typeInfo(@TypeOf(@as(lz77.RepBeamScratch, .{}).states.items))
 pub fn sameNativeAuditGeometry() bool {
     return builtin.os.tag == .linux and builtin.cpu.arch == .x86_64 and
         @sizeOf(*const u8) == 8 and @sizeOf(usize) == 8 and std.atomic.cache_line == 128 and
-        @sizeOf(lz77.Token) == 6 and @sizeOf(BeamState) == 16;
+        @sizeOf(lz77.Token) == 16 and @sizeOf(BeamState) == 28;
 }
 
 /// Physical geometry used by the independently audited x86 32-bit pins.
 pub fn sameX86AuditGeometry() bool {
     return builtin.os.tag == .linux and builtin.cpu.arch == .x86 and
         @sizeOf(*const u8) == 4 and @sizeOf(usize) == 4 and std.atomic.cache_line == 64 and
-        @sizeOf(lz77.Token) == 6 and @sizeOf(BeamState) == 16;
+        @sizeOf(lz77.Token) == 16 and @sizeOf(BeamState) == 28;
 }
 
 /// Bytes requested when an ArrayList must grow to at least `minimum` items.
@@ -77,7 +77,10 @@ test "Zstd allocation oracle redundant beam formula matches independent requeste
     // Reproduce the independently pinned legacy fixture using source-derived
     // shapes. The formula above supplies each target's physical request sizes.
     if (sameNativeAuditGeometry())
-        try std.testing.expectEqual(@as(usize, 897_583), expected);
+        // The shared `lz77.Token` now carries optional static-dictionary
+        // fields, so the pinned requested-heap total grows with the larger
+        // token and beam-state records.
+        try std.testing.expectEqual(@as(usize, 1_548_869), expected);
 }
 
 test "Zstd allocation oracle checks requested byte and probe shape overflow" {
