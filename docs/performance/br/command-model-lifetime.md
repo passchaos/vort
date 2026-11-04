@@ -471,3 +471,14 @@ estimate, not its block-size floor, rejects the splits. A fabricated two-type
 command plan caused a segfault and was abandoned; the split plans must come
 from the validated splitter. The binary gap therefore needs a better
 splitter cost model rather than a different budget or a forced plan.
+
+## Large-input quality boundary, 2026-11-04
+
+The 64 KiB gains do not carry to larger inputs because the quality path's
+optimal parser is capped at 64 KiB (q10) and 32 KiB (q11); larger inputs fall
+back to the lazy parser plus post-hoc mixing. On the 1 MiB webster prefix,
+q11 measures 288,310 bytes versus the reference's 239,314 (1.2047) at 385 ms,
+while the same file is 1.0179 at 64 KiB. Raising q11's optimal input ceiling
+to 1 MiB made even 64 KiB inputs fail with `error.InvalidBlockPlan`, so the
+extension needs a separate correctness pass before it can be enabled. This
+20% large-input gap is now the largest remaining Brotli quality target.
