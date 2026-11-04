@@ -217,8 +217,16 @@ const base_rows = [12]BaseRow{
     .{ .lazy = .{ .max_chain = 1, .nice_len = 16, .min_gain = 4 }, .dictionary_probes = 0 },
     .{ .lazy = .{ .max_chain = 2, .nice_len = 24, .min_gain = 3 }, .dictionary_probes = 0 },
     .{ .lazy = .{ .max_chain = 4, .nice_len = 32, .min_gain = 3 }, .dictionary_probes = 0 },
-    .{ .lazy = .{ .max_chain = 8, .nice_len = 48, .min_gain = 2 }, .dictionary_probes = 0 },
-    .{ .lazy = .{ .max_chain = 16, .nice_len = 64, .min_gain = 2 }, .dictionary_probes = 0 },
+    .{
+        .lazy = .{ .max_chain = 8, .nice_len = 48, .min_gain = 2 },
+        .optimal = .{ .enabled = true, .max_chain = 24, .nice_len = 80, .max_candidates = 8, .max_input_len = 64 * 1024 },
+        .dictionary_probes = 0,
+    },
+    .{
+        .lazy = .{ .max_chain = 16, .nice_len = 64, .min_gain = 2 },
+        .optimal = .{ .enabled = true, .max_chain = 40, .nice_len = 104, .max_candidates = 10, .max_input_len = 64 * 1024 },
+        .dictionary_probes = 0,
+    },
     .{
         .lazy = .{ .max_chain = 32, .nice_len = 96, .min_gain = 1 },
         // q5 previously had no optimal parser, which left it unusually weak

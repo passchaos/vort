@@ -812,3 +812,28 @@ gains:
 q6 now measures 0.9986 on dickens and 0.9928 on ooffice; q7 measures 0.9042
 (dickens), 0.9007 (webster) and 0.8949 (x-ray). The schedule monotonicity test
 also required q6/q7 to reach the same 64 KiB ceiling as q5.
+
+q3 and q4 then received the same treatment with smaller budgets (24/40 chain,
+8/10 candidates, all 64 KiB). 64 KiB results:
+
+| File | q3 | q4 |
+| --- | ---: | ---: |
+| XML | 0.7986 | 0.8998 |
+| dickens | 0.9582 | 0.9569 |
+| webster | 0.9423 | 0.9545 |
+| nci | 0.9410 | 0.9461 |
+| samba | 0.9485 | 0.9571 |
+| reymont | 0.9125 | 0.9139 |
+| sao | 0.9304 | 0.9122 |
+| ooffice | 0.9374 | 0.9361 |
+| x-ray | 0.8616 | 0.9040 |
+| mr | 0.9411 | 0.9734 |
+| mozilla | 0.9353 | 0.9391 |
+
+Both beat libbrotli 1.0.9 on every measured row. q3 XML falls from 5,772 to
+5,210 bytes and q4 XML from 5,454 to 5,109.
+
+q2 was also measured with an optimal parse (XML 0.6843, dickens 0.9737) but
+was reverted: the incremental q2 contract requires a warmed second encode to
+allocate nothing, and the optimal parser allocates per block. Keeping q2
+lazy-only preserves that streaming guarantee; q3-q7 carry the ratio gains.
