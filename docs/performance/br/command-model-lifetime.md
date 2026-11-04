@@ -479,6 +479,10 @@ optimal parser is capped at 64 KiB (q10) and 32 KiB (q11); larger inputs fall
 back to the lazy parser plus post-hoc mixing. On the 1 MiB webster prefix,
 q11 measures 288,310 bytes versus the reference's 239,314 (1.2047) at 385 ms,
 while the same file is 1.0179 at 64 KiB. Raising q11's optimal input ceiling
-to 1 MiB made even 64 KiB inputs fail with `error.InvalidBlockPlan`, so the
-extension needs a separate correctness pass before it can be enabled. This
-20% large-input gap is now the largest remaining Brotli quality target.
+to 1 MiB made even 64 KiB inputs fail with `error.InvalidBlockPlan`; the
+schedule validator caps `max_input_len` at 64 KiB. Raising it to the allowed
+64 KiB lets q11 run its own deeper optimal parse on 64 KiB inputs, but the
+webster wire moves only 19,603 -> 19,583 (20 bytes) while encode time rises
+about 74% (300 -> 521 ms). Larger inputs therefore need multi-block quality
+planning with cross-block history, not a bigger single-block cap. This 20%
+large-input gap is now the largest remaining Brotli quality target.
