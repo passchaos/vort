@@ -610,3 +610,22 @@ binary rows are unchanged because their literals are overwhelmingly class 3,
 where the class price converges to the flat price. Closing their 6-16% gap
 needs finer contexts (for example previous-byte identity or UTF-8 context
 modes) inside the parse, not just byte classes.
+
+## Why binary rows ignore optimal-parser changes, 2026-11-04
+
+Candidate instrumentation on x-ray shows the optimal candidate is 42,695 bytes
+for both the seed and the entropy-feedback parse, while the selected wire is
+42,574 bytes from the lazy command stream plus entropy block splitting. Every
+optimal-parser improvement therefore leaves the binary rows unchanged: the
+optimal candidate never wins there.
+
+Two targeted sweeps confirm the winning path is the limiter:
+
+- A 16-class (previous-byte high nibble) literal model moved ooffice 30,883 ->
+  30,858 but regressed webster 19,548 -> 19,564 and dickens 22,381 -> 22,433,
+  so the four-class model remains.
+- Raising the q11 lazy `min_gain` from 1 to 3 moved mozilla 14,185 -> 14,132
+  but ooffice 30,883 -> 30,886; x-ray and mr were unchanged.
+
+Both were reverted. Improving binary rows requires a better lazy parse or
+literal-context-aware wire selection, not further optimal-parser tuning.
