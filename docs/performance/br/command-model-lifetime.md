@@ -999,3 +999,11 @@ The probe costs no measurable time (XML 807 vs 841 ms, sao 1,365 vs 1,384 ms
 over three iterations) because cached distances usually fail on the first
 byte. nci does not improve because its 1 MiB winner is the optimal parse, and a
 backward DP cannot know the forward cache state.
+
+Injecting the seed plan's exact per-position recent-distance cache into the
+modeled DP (each cached distance as an extra match candidate priced at a flat
+two bits) was rejected. It leaves nci (3,916), sao (47,096), mr (15,314), XML
+(4,082) and x-ray (39,317) unchanged and regresses webster 19,548 -> 19,588 and
+dickens 22,381 -> 22,446. The backward DP's cache comes from the seed path, so
+the injected repcodes often do not match the path being built, and text pays
+for the distortion. Reverted; the lazy parser's tie-preference remains.
