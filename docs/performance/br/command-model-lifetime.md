@@ -327,3 +327,22 @@ command and distance symbols offset the literal savings. The reference's 44
 copies save more because dictionary matches are priced inside the parse and
 entropy model rather than inserted afterwards. Closing the remaining 4.1%
 requires dictionary-aware parsing, not a second replacement pass.
+
+## Dictionary and distance-tree gap on text, 2026-11-04
+
+`run-br-quality-compare-probe` on the 64 KiB q11 prefix shows the remaining
+text gap is dominated by two structural differences:
+
+| File | Vort bytes | libbrotli bytes | Vort static copies | libbrotli static copies | Vort distance trees | libbrotli distance trees |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| webster | 21,421 | 19,258 | 0 | 1,482 (13,202 B) | 1 | 3 |
+| samba | 20,862 | 18,482 | 0 | 1,771 (16,496 B) | 1 | 4 |
+| mozilla | 14,185 | 12,364 | 0 | 186 (1,059 B) | 1 | 5 |
+
+The reference covers 20-25% of the webster/samba input with static-dictionary
+words while Vort covers none, and it splits distance coding into 3-5 context
+trees while Vort emits one. Raising the post-hoc static probe limit to 64 KiB
+changed none of these wires, confirming that the dictionary must be priced
+inside the parser. These two items are the concrete next targets for
+dictionary-rich text; XML's smaller 4.1% gap is dominated by the static
+dictionary alone.
