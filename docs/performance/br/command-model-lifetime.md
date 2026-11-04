@@ -892,3 +892,19 @@ Further bounded probes on the same plateau, all reverted:
 The q10/q11 binary gap therefore needs an encoder that deliberately parses
 toward context-modelled literals and builds many literal trees, not parameter
 tuning of the current matcher or price tables.
+
+## Second modeled pass for large inputs, 2026-11-05
+
+Large one-shot inputs now run the entropy-feedback parse a second time, with
+the model rebuilt from the first modeled plan. The extra candidate is kept only
+when the complete wire is smaller, and it is limited to inputs above 64 KiB, so
+the 64 KiB ladder is unchanged. On 1 MiB prefixes:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| webster | 262,671 | 262,209 | 1.0976 -> 1.0956 |
+| samba | 306,022 | 305,801 | 1.0832 -> 1.0824 |
+| dickens | 341,942 | 341,020 | 1.1202 -> 1.1172 |
+
+The gain is 0.18-0.27%, paid for by a third parse on large inputs. The 1 MiB
+gap remains dominated by distance coding and block/context typing.
