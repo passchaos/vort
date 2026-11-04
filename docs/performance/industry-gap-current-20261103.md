@@ -90,6 +90,24 @@ reference uses up to nine command and four distance block types where Vort
 keeps one. Encode time rises roughly 30-50% on affected blocks. These are
 separate source epochs and are not multiplied into the earlier ratios above.
 
+The same epoch also improves the low-latency presets at 64 KiB. q1 now uses
+64 KiB stream blocks and a content-gated fragment anchor (six bytes for text,
+four for binary), and q0 uses a five-byte text anchor and four-byte binary
+anchor with unchanged 16 KiB blocks. Size ratios versus libbrotli 1.0.9:
+
+| File | q0 | q1 | File | q0 | q1 |
+| --- | ---: | ---: | --- | ---: | ---: |
+| dickens | 1.0208 | 1.0120 | samba | 1.0153 | 1.0099 |
+| webster | 1.0382 | 1.0114 | reymont | 1.0376 | 1.0036 |
+| XML | 1.1295 | 0.9908 | osdb | 1.2382 | 1.0933 |
+| ooffice | 0.9112 | 0.9998 | sao | 0.9110 | 0.9142 |
+| mozilla | 0.9649 | 1.0311 | mr | 0.8566 | 1.0092 |
+| x-ray | 1.0297 | 1.1522 | nci | 1.2072 | 0.9959 |
+
+q0 beats the reference on ooffice, sao, mozilla, mr and x-ray; q1 beats it on
+XML, ooffice, sao and nci. Widening q0 to 64 KiB blocks was rejected because
+its one-pass entropy writer regressed text by up to 24%.
+
 ## Decompression
 
 The newer [preload-before-refill epoch](industry-decode-current-20261101.md)
