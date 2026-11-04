@@ -453,3 +453,10 @@ distance map. The next lever is repcode-aware dictionary parsing: the
 command-state parser tracks the four-distance cache but does not yet accept
 dictionary candidates, while the dictionary-aware optimal parser does not
 track repcodes.
+
+Adding dictionary transitions to the command-state parser was also rejected.
+With a wider `unique*2` content gate that admits webster, the command-state
+candidate ran but the wire stayed at 19,603 bytes while encode time rose from
+299 to 439 ms (47%). The beam-2 search is too weak to beat the dictionary-aware
+optimal parse even with repcode tracking; closing the remaining 1.8% requires
+repcode state inside the optimal parser itself, not a second weaker parser.
