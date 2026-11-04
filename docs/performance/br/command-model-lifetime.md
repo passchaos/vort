@@ -486,3 +486,12 @@ webster wire moves only 19,603 -> 19,583 (20 bytes) while encode time rises
 about 74% (300 -> 521 ms). Larger inputs therefore need multi-block quality
 planning with cross-block history, not a bigger single-block cap. This 20%
 large-input gap is now the largest remaining Brotli quality target.
+
+Post-hoc mixing is also insufficient at this size. With the quality dictionary
+gate opened to 16 MiB, the lazy-stream mixer finds only 334 dictionary words
+on the 1 MiB webster prefix even at a 65,535-probe budget (3,072 probes found
+the same 334), and the mixed wire loses to the baseline. A 64 KiB chunked
+encode produces 292,787 bytes with zero static copies, worse than the
+288,310-byte one-shot. The reference covers 5,765 words / 57,495 bytes, so
+large-input quality needs dictionary-aware parsing inside the multi-block
+planner rather than more probes or post-hoc replacement.

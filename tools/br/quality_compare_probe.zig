@@ -10,6 +10,7 @@ pub fn main(init: std.process.Init) !void {
     const path = args.next() orelse return error.MissingInput;
     const limit = try std.fmt.parseInt(usize, args.next() orelse "65536", 10);
     const quality: u4 = @intCast(try std.fmt.parseInt(u8, args.next() orelse "11", 10));
+    const block_len = try std.fmt.parseInt(usize, args.next() orelse "0", 10);
 
     const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
     defer file.close(init.io);
@@ -22,7 +23,10 @@ pub fn main(init: std.process.Init) !void {
     var reader = file.reader(init.io, &buffer);
     if (try reader.interface.readSliceShort(bytes) != read_len) return error.InputTooSmall;
 
-    const vort_stream = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, bytes, .{ .quality = quality });
+    const vort_stream = if (block_len != 0)
+        try br.encodePlannedStreamChunksWithOptionsAlloc(init.gpa, &.{bytes}, .{ .quality = quality, .block_len = block_len })
+    else
+        try br.encodePlannedStreamWithOptionsAlloc(init.gpa, bytes, .{ .quality = quality });
     defer init.gpa.free(vort_stream);
     const vort_summary = try br.summarizeStreamAlloc(init.gpa, vort_stream);
 
