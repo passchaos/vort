@@ -286,3 +286,31 @@ single-pass result. The refined model is a fixed point on this input, so
 repeating the current feedback loop does not recover the reference's q10-to-q11
 gain. The next q11 work must change the cost model or entropy/context
 decisions rather than add search or iteration depth.
+
+## Gated repcode-aware command-state extension, 2026-11-04
+
+The q10/q11 quality path now extends the repcode-aware command-state parser
+from the 8 KiB policy to the whole meta-block (up to 64 KiB) when a cheap
+content gate classifies the block as text-like. Binary and high-entropy blocks
+keep the 8 KiB policy. The gate samples the first 16 KiB, hashes 4-grams into a
+64 KiB bitset and accepts when `unique*3 <= grams`.
+
+| Prefix | Before | After | Size ratio vs libbrotli | Time |
+| --- | ---: | ---: | ---: | ---: |
+| XML 32 KiB | 2,617 | 2,414 | 1.1275 -> 1.0401 | 60.5 -> 150.6 ms |
+| XML 64 KiB | 4,556 | 4,093 | 1.1590 -> 1.0412 | 84.8 -> 203.5 ms |
+| dickens 64 KiB | 24,501 | 24,501 | 1.1073 | 172.4 -> 172.7 ms |
+| x-ray 64 KiB | 42,574 | 42,574 | 1.1645 | 182.7 -> 183.4 ms |
+
+The selected XML wire now uses 247 implicit and 498 short distances (was 54
+and 234) and 358 regular distances, matching the reference's 358. This
+identifies the earlier gap as repcode-unaware parsing, not entropy coding: the
+separable optimal parser never modeled the four-distance cache, while the
+command-state parser does. The remaining 4.1% XML gap is mostly the 44
+static-dictionary copies libbrotli uses, which the optimal parser still does not
+consider.
+
+The gate rejects dickens and x-ray, so their wires and times are unchanged
+within measurement noise; only the cheap 16 KiB scan is added. This is a
+quality-first default; the command-state extension costs about 2.4-2.5x encode
+time on the blocks where it runs.

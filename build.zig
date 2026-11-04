@@ -3803,6 +3803,20 @@ pub fn build(b: *std.Build) void {
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
 
+    const br_quality_compare_probe = b.addExecutable(.{
+        .name = "vort-br-quality-compare-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/quality_compare_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort_br", .module = br_encode_bench_mod }},
+        }),
+    });
+    const run_br_quality_compare_probe = b.addRunArtifact(br_quality_compare_probe);
+    if (b.args) |args| run_br_quality_compare_probe.addArgs(args);
+    b.step("run-br-quality-compare-probe", "Compare Vort and libbrotli wire structure on one prefix").dependOn(&run_br_quality_compare_probe.step);
+
     const br_hq_encode_probe = b.addExecutable(.{
         .name = "vort-br-hq-encode-probe",
         .root_module = b.createModule(.{
