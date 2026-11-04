@@ -5331,6 +5331,32 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         }
     }
 
+    // Repack far regular distances onto the recent-distance cache. Binary and
+    // repetitive blocks keep many copies whose distance is a cheap repcode
+    // candidate even though the lazy parse chose a regular distance.
+    if (schedule.family == .ratio and input.len >= 8 * 1024 and schedule.use_recent_distances) {
+        const repacked = command_plan.repackRecentDistancesAlloc(
+            allocator,
+            input,
+            command_stream.commands,
+            wire_options.starting_last_distances,
+        ) catch null;
+        if (repacked) |plan| {
+            defer plan.deinit(allocator);
+            var repack_stats: encoder_stats.PlannedEncodeStats = .{};
+            const repack_wire = try encodeLazyCommandPlanAllocRecorded(
+                trace_enabled,
+                trace.withOrigin(.lazy),
+                allocator,
+                input,
+                plan.commands,
+                &repack_stats,
+                wire_options,
+            );
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, repack_wire);
+        }
+    }
+
     const search_distance_parameters = options.distance_parameter_search orelse schedule.search_distance_parameters;
     if (search_distance_parameters and schedule.use_recent_distances and lz_plan.stats.matches != 0) {
         var distance_stats: encoder_stats.PlannedEncodeStats = .{};

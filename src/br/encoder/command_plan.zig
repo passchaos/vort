@@ -10,6 +10,7 @@ const serialized_dictionary = @import("../serialized_dictionary.zig");
 const serialized_dictionary_matcher = @import("serialized_dictionary_matcher.zig");
 const scoped_static_dictionary = @import("scoped_static_dictionary.zig");
 const hq_types = @import("hq_types.zig");
+const distance_history = @import("../decoder/distance_history.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -889,6 +890,86 @@ fn buildReuseInternal(commands: *std.ArrayList(Command), allocator: std.mem.Allo
     if (position != input.len) return error.InvalidBlockPlan;
     if (insert_len != 0) try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len });
     return match_count;
+}
+
+/// Rewrite LZ copies onto the four-entry recent-distance cache when a cached
+/// distance still covers the same bytes. This turns regular distance symbols
+/// into short/implicit repcodes without changing any decoded byte.
+pub fn repackRecentDistancesAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const Command,
+    starting: [4]usize,
+) !Plan {
+    var out: std.ArrayList(Command) = .empty;
+    errdefer out.deinit(allocator);
+    var recent = starting;
+    var cursor: usize = 0;
+    var match_count: usize = 0;
+    for (commands) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        const insert_start = cursor;
+        cursor += command.insert_len;
+        if (!command.has_copy) {
+            try out.append(allocator, .{ .insert_start = insert_start, .insert_len = command.insert_len });
+            break;
+        }
+        var result = command;
+        if (command.isLz77() and command.insert_len != 0 and command.distance != 0) {
+            const position = cursor;
+            var best_distance: usize = 0;
+            var symbol: u16 = 0;
+            while (symbol < 16) : (symbol += 1) {
+                var candidate: usize = undefined;
+                distance_history.resolveShortInto(symbol, &recent, &candidate) catch continue;
+                if (candidate == 0 or candidate > position) continue;
+                if (!coversCopy(input, position, candidate, command.copy_len)) continue;
+                best_distance = candidate;
+                break;
+            }
+            if (best_distance != 0 and best_distance != command.distance)
+                result.distance = best_distance;
+        }
+        try out.append(allocator, result);
+        cursor += command.outputLen();
+        match_count += 1;
+        if (result.isLz77() and result.distance != 0) {
+            const rep = distance_history.symbolForDistance(result.distance, &recent);
+            if (rep == null or rep.? != 0) distance_history.push(&recent, result.distance);
+        }
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    // Validate the rewritten stream against the input before publishing it.
+    {
+        const produced = try allocator.alloc(u8, input.len);
+        defer allocator.free(produced);
+        var pos: usize = 0;
+        for (out.items) |command| {
+            if (command.insert_start != pos or command.insert_len > input.len - pos) return error.InvalidBlockPlan;
+            @memcpy(produced[pos..][0..command.insert_len], input[command.insert_start..][0..command.insert_len]);
+            pos += command.insert_len;
+            if (!command.has_copy) continue;
+            if (command.isLz77()) {
+                const copy_len = command.copy_len;
+                if (copy_len > input.len - pos or command.distance == 0 or command.distance > pos) return error.InvalidBlockPlan;
+                for (0..copy_len) |i| produced[pos + i] = produced[pos + i - command.distance];
+            } else {
+                return error.InvalidBlockPlan;
+            }
+            pos += command.outputLen();
+        }
+        if (pos != input.len or !std.mem.eql(u8, produced, input))
+            return error.InvalidBlockPlan;
+    }
+    return .{ .commands = try out.toOwnedSlice(allocator), .match_count = match_count };
+}
+
+fn coversCopy(input: []const u8, position: usize, distance: usize, copy_len: usize) bool {
+    if (distance == 0 or distance > position or copy_len > input.len - position) return false;
+    for (0..copy_len) |index|
+        if (input[position + index] != input[position + index - distance]) return false;
+    return true;
 }
 
 pub fn withoutCopyInto(output: []Command, input_len: usize, commands: []const Command, drop: usize) ![]Command {

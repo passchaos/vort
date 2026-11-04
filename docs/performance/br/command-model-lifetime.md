@@ -639,3 +639,27 @@ so capturing it requires routing the alternative stream through the distance
 parameter search and static mixing as well. At 53 bytes (0.37%) that is not
 worth doubling the binary quality pipeline; the larger lever remains
 literal-context-aware wire selection.
+
+## Recent-distance repacking, 2026-11-04
+
+`command_plan.repackRecentDistancesAlloc` walks an LZ command stream while
+simulating the four-entry recent-distance cache. For each copy with a literal
+insert before it, it resolves symbols 0-15 against the cache and rewrites the
+copy onto the first cached distance that still reproduces every byte. The
+rewritten stream is re-simulated byte-for-byte against the input before use, so
+an incorrect rewrite is rejected rather than emitted.
+
+On 64 KiB q11 prefixes:
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| ooffice | 30,883 | 30,639 | 1.0639 -> 1.0555 |
+| x-ray | 42,574 | 42,455 | 1.1645 -> 1.1612 |
+| mozilla | 14,185 | 14,071 | 1.1473 -> 1.1381 |
+| mr / sao / nci | unchanged | unchanged | - |
+| webster / dickens / xml / osdb / reymont / samba | unchanged | unchanged | - |
+
+The repack adds about 10-15% encode time on the blocks where it changes the
+wire. It also fixed a real trailing-insert bug found by the byte-level
+validation: the first version dropped a terminal literal run and produced a
+truncated stream, which the validation now prevents.
