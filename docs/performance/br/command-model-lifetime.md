@@ -742,3 +742,13 @@ with unchanged text output:
 Text rows (webster, dickens, XML, nci) are byte-identical. The frozen legacy
 q0 wires are text, so they are unchanged; the fragment anchor tests now assert
 four bytes for binary q0/q1 and five/six bytes for text q0/q1.
+
+Widening q6/q7 streaming blocks from 32 to 64 KiB was rejected: the chunked
+probe measures XML 5,030 -> 5,012 and ooffice 31,193 -> 31,138, but dickens
+regresses 25,536 -> 26,142. One-shot q6/q7 output is unchanged because those
+qualities encode a single meta-block regardless of the streaming block size.
+The 32 KiB streaming policy remains.
+
+Intermediate-quality screening found no structural outlier: at 64 KiB, q5/q6/q7
+XML are 1.0737/1.0404/1.0350, q8 is 1.0064 and q10 is 0.9803, while q8 already
+beats the reference on dickens (0.9031) and x-ray (0.8949).
