@@ -1282,3 +1282,21 @@ sequentially, so peak memory is unchanged from the wide-only experiment.
 Encode time on the affected 64 KiB rows rises about 45% (XML 412 -> 615 ms,
 nci 380 -> 546 ms) because the command-state parse roughly doubles. The full
 Brotli suite and the exact requested-heap contracts pass unchanged.
+
+## Rejected 64 KiB optimal search window, 2026-11-06
+
+The q10/q11 optimal seed and modeled passes cap their search window at the
+shared 32 KiB deflate limit. Raising that cap to the Brotli 16-bit window was
+measured end to end: the fixed distance table was extended to 65,535 entries,
+the entropy-feedback window check, the command-state parser and the fixed
+optimal guard were all lifted, and both the seed and modeled passes searched
+the full 65,520-byte window.
+
+The result regressed the main binary row: x-ray 64 KiB q11 grew from 39,279 to
+40,177 bytes (+898), while sao stayed at 46,581. A hash-chain index with a
+3-byte anchor and a 512-node chain budget floods with collisions once the
+window doubles, so the candidates that matter fall outside the bounded chain
+and the parse prefers worse far matches over the nearer ones it used before.
+Widening the window therefore needs a better far-match index (a binary tree or
+a separate long-distance pass), not a larger chain bound. The experiment was
+reverted; the 32 KiB cap remains until such an index is available.
