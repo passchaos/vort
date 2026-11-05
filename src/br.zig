@@ -123,6 +123,7 @@ var test_q3_trivial_writer_hits: usize = 0;
 var test_hq_command_candidate_attempts: usize = 0;
 var test_hq_command_candidate_selections: usize = 0;
 var test_hq_wide_command_candidate_selections: usize = 0;
+var test_hq_wide_command_candidate_attempts: usize = 0;
 var test_hq_command_pre_bytes: usize = 0;
 var test_hq_command_bytes: usize = 0;
 var test_stream_hq_command_candidate_attempts: usize = 0;
@@ -366,6 +367,10 @@ pub const PlannedEncodeOptions = struct {
     /// either quality. The command-state candidate uses its own bounded
     /// parser, so this ceiling is independent of the optimal-input cap.
     command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+    /// Opt into the repcode-aware command-state wide beam on non-text blocks
+    /// up to 64 KiB. It wins on some binary rows but raises encode time
+    /// materially, so it stays off by default. Valid only for quality 10/11.
+    binary_command_state: bool = false,
     /// Borrowed RAW shared-prefix attachments used by the Brotli compound
     /// dictionary. The descriptor and bytes must remain alive for the call.
     shared_dictionary: SharedDictionary = .{},
@@ -5416,12 +5421,13 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     // The repcode-aware command-state candidate is the quality win on
     // text-like blocks; gate it by content so binary blocks keep the 8 KiB
     // latency policy.
-    const extend_command_state = schedule.quality.int() >= 10 and input.len <= 64 * 1024 and qualityCommandStateGate(input);
+    const extend_command_state = schedule.quality.int() >= 10 and input.len <= 64 * 1024 and
+        (qualityCommandStateGate(input) or options.binary_command_state);
     // q11 inherits the complete q10 winner for inputs q10 can already parse.
     // Skip the second deeper parse there; it only pays off above 64 KiB.
     const q11_covered_by_q10 = schedule.quality == .q11 and input.len <= 64 * 1024;
     if (!q11_covered_by_q10 and schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
-        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, schedule.dictionary)) |candidate| {
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, options.binary_command_state, schedule.dictionary)) |candidate| {
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
         }
     }
@@ -5511,9 +5517,16 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
 
 /// Cheap content gate for extending the repcode-aware command-state parser to
 /// a whole quality meta-block. Text-like inputs (low unique-4-gram density)
-/// are where the extended candidate wins; binary inputs keep the 8 KiB policy.
+/// are where the extended candidate wins; binary inputs keep the 8 KiB policy
+/// unless `PlannedEncodeOptions.binary_command_state` opts in.
 fn qualityCommandStateGate(input: []const u8) bool {
     if (comptime builtin.is_test) if (test_disable_quality_command_state_gate) return false;
+    return commandStateTextLike(input);
+}
+
+/// Content classification for the command-state beam policy. It ignores the
+/// test-only gate override so budget tests keep exercising the text path.
+fn commandStateTextLike(input: []const u8) bool {
     if (input.len <= 8 * 1024) return false;
     const sample_len = @min(input.len, 16 * 1024);
     var seen = [_]u8{0} ** (65536 / 8);
@@ -5540,7 +5553,7 @@ fn encodeQualityOptimalCandidateAlloc(
     budget: quality_schedule.OptimalBudget,
     wire_options: LazyWireOptions,
 ) Error!?[]u8 {
-    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false, .{
+    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false, false, .{
         .static_dictionary = false,
         .extended_search = false,
         .max_probes = 0,
@@ -5592,7 +5605,7 @@ const QualityDictionaryProbe = struct {
 const quality_dictionary_cost_bits: u16 = 22;
 const quality_dictionary_cost_q8: u16 = quality_dictionary_cost_bits * 256;
 
-fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
+fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool, allow_binary_command_state: bool, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
     var profile_scope = trace.begin(.other, input.len, 0);
     defer profile_scope.finish();
     errdefer |err| profile_scope.failure(err);
@@ -5770,6 +5783,7 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
             wire_options,
             &model,
             if (wide_model) |active| active else &model,
+            allow_binary_command_state,
             &best,
         );
     }
@@ -5784,8 +5798,27 @@ noinline fn selectQualityCommandStateCandidate(
     wire_options: LazyWireOptions,
     model: *const entropy_feedback.Model,
     wide_model: *const entropy_feedback.Model,
+    allow_binary: bool,
     best: *[]u8,
 ) linksection(command_state_text_section) Error!void {
+    const text_like = commandStateTextLike(input);
+    // Non-text blocks are only reached through the explicit opt-in. They use
+    // just the wide beam, which is the one that competes there, and always
+    // encode its complete wire because the compact form is a poor proxy.
+    if (!text_like) {
+        if (!allow_binary) return;
+        try selectWideCommandStateCandidate(
+            allocator,
+            input,
+            budget,
+            search_window,
+            wire_options,
+            wide_model,
+            best,
+            true,
+        );
+        return;
+    }
     const hq = try hq_command_parser.planAlloc(allocator, input, .{
         .window_len = search_window,
         .max_chain = @min(budget.max_chain, 64),
@@ -5837,6 +5870,29 @@ noinline fn selectQualityCommandStateCandidate(
 
     // A wider beam lowers the modeled cost but does not always lower the real
     // wire, so it is a separate complete candidate rather than a replacement.
+    try selectWideCommandStateCandidate(
+        allocator,
+        input,
+        budget,
+        search_window,
+        wire_options,
+        wide_model,
+        best,
+        false,
+    );
+}
+
+fn selectWideCommandStateCandidate(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    budget: quality_schedule.OptimalBudget,
+    search_window: usize,
+    wire_options: LazyWireOptions,
+    wide_model: *const entropy_feedback.Model,
+    best: *[]u8,
+    always_full_wire: bool,
+) linksection(command_state_text_section) Error!void {
+    if (builtin.is_test and always_full_wire) test_hq_wide_command_candidate_attempts += 1;
     const wide = try hq_command_parser.planAllocWide(allocator, input, .{
         .window_len = search_window,
         .max_chain = @min(budget.max_chain, 64),
@@ -5858,7 +5914,9 @@ noinline fn selectQualityCommandStateCandidate(
         &wide_compact_stats,
         commandStateCompactEncodeOptions(wire_options),
     );
+    const run_full_wire = always_full_wire or commandStateFullWireEligible(wide_compact.len, best.*.len);
     retainSmallerOwnedWire(allocator, best, wide_compact);
+    if (!run_full_wire) return;
     var wide_stats: encoder_stats.PlannedEncodeStats = .{};
     const wide_candidate = try encodeLazyCommandPlanAlloc(
         allocator,
@@ -7127,6 +7185,9 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
             (options.extended_dictionary_probes != 0 and
                 (!schedule.dictionary.extended_search or input_len > ratio_extended_static_dictionary_max_input_len)))
             return error.InvalidBlockPlan;
+        if (options.binary_command_state and
+            (options.quality.? < 10 or input_len > 64 * 1024))
+            return error.InvalidBlockPlan;
         if (options.distance_parameter_search == true and !schedule.use_recent_distances)
             return error.InvalidBlockPlan;
         if (input_len > max_uncompressed_meta_block_len and options.distance_parameter_search != null)
@@ -7135,6 +7196,7 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
     }
     if (options.command_state_max_input_kib != command_state_default_max_input_kib)
         return error.InvalidBlockPlan;
+    if (options.binary_command_state) return error.InvalidBlockPlan;
     if (options.mode != .generic) return error.InvalidBlockPlan;
     const window_bits = options.window_bits orelse default_window_bits;
     _ = try plannedWindowLen(options.level, window_bits, options.large_window);
@@ -28619,20 +28681,24 @@ test "br q10 command-state candidate improves complete wire" {
     }
     test_hq_command_candidate_attempts = 0;
     test_hq_command_candidate_selections = 0;
-    const encoded = (try encodeQualityOptimalCandidateAlloc(
+    test_hq_wide_command_candidate_selections = 0;
+    // This fixture is classified as binary, so the candidate runs only through
+    // the explicit opt-in and uses just the wide beam.
+    const encoded = (try encodeQualityOptimalCandidateAllocRecorded(
+        false,
+        .{},
         std.testing.allocator,
         &payload,
         schedule.optimal,
         wire_options,
+        false,
+        true,
+        .{ .static_dictionary = false, .extended_search = false, .max_probes = 0 },
     )).?;
     defer std.testing.allocator.free(encoded);
-    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
-    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_selections);
-    // Frozen with the 64-candidate command-state budget: the narrow beam
-    // supplies the selected candidate wire (231 bytes) and the wide beam's
-    // plan ties rather than wins on this synthetic fixture.
-    try std.testing.expectEqual(@as(usize, 233), test_hq_command_pre_bytes);
-    try std.testing.expectEqual(@as(usize, 231), test_hq_command_bytes);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_selections);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_wide_command_candidate_selections);
     try std.testing.expectEqual(@as(usize, 231), encoded.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
@@ -43542,6 +43608,45 @@ test "Brotli q11 text gate extends command-state without the opt-in" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, gated);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "Brotli q11 binary command-state opt-in runs the wide beam and never grows the wire" {
+    var payload: [64 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 64, 127, 257, 512 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 7 == 0) {
+            const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 13));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate(state >> 24);
+            position += 1;
+        }
+    }
+    const base: PlannedEncodeOptions = .{ .quality = 11, .window_bits = 16 };
+    const plain = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, base);
+    defer std.testing.allocator.free(plain);
+    var opted_options = base;
+    opted_options.binary_command_state = true;
+    test_hq_wide_command_candidate_attempts = 0;
+    const opted = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, opted_options);
+    defer std.testing.allocator.free(opted);
+    try std.testing.expect(test_hq_wide_command_candidate_attempts != 0);
+    try std.testing.expect(opted.len <= plain.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, opted, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    // The option is rejected outside quality 10/11.
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .level = .ratio, .binary_command_state = true },
+    ));
 }
 
 test "Brotli q11 chunks command-state opt-in lowers synthetic XML wire" {

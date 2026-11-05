@@ -26307,3 +26307,14 @@ reuse, so production keeps the simpler independently owned plans.
   [Evidence](performance/br/command-model-lifetime.md). The larger
   copy-coverage gap on binary blocks remains the main q11 ratio target. The larger copy-coverage
   gap on binary blocks remains the main q11 ratio target.
+
+- 2026-11-06: Brotli q10/q11 expose `PlannedEncodeOptions.binary_command_state`
+  as an opt-in for non-text inputs up to 64 KiB. When set, the repcode-aware
+  command-state candidate runs only its wide beam, always encodes the complete
+  wire and still arbitrates against every other candidate, so the stream can
+  never grow. It recovers x-ray 39,279 -> 39,217, ooffice 30,674 -> 30,568 and
+  mr 15,314 -> 15,274 at 64 KiB q11, but costs 13-47% encode time on binary
+  rows, including rows where it does not win; the default stays text-only.
+  The option is rejected outside quality 10/11 and above 64 KiB. A public-API
+  test covers the attempt, no-growth and rejection contracts.
+  [Evidence](performance/br/command-model-lifetime.md).

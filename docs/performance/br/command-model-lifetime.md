@@ -1336,5 +1336,13 @@ its complete wire wins), and the measured short-distance share does not
 separate winners from losers (ooffice wins at 26% short distances while sao
 loses at 0.08%). Reducing the binary candidate budget from 32 to 8 keeps
 ooffice's win but loses x-ray's and most of mr's, and does not lower the
-latency materially. The default therefore keeps the text-only gate; a binary
-opt-in needs a cheaper predictor or a faster rep-aware parse.
+latency materially.
+
+The default therefore keeps the text-only gate, and the binary behaviour is
+exposed as the explicit `PlannedEncodeOptions.binary_command_state` opt-in for
+quality 10/11 inputs up to 64 KiB. It runs only the wide beam, always encodes
+its complete wire, and still arbitrates against every other candidate, so the
+selected stream can never grow. A public-API test covers a 64 KiB binary
+payload, the wide-beam attempt, the no-growth contract and rejection outside
+quality 10/11. The option remains off by default because the latency cost is
+real on rows where it does not win.
