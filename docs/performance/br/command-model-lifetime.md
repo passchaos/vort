@@ -1182,8 +1182,11 @@ over the identity four-tree plan, and adds samba to the winning set. The win is
 small because the complete-wire arbitration already keeps the joint
 literal/context candidate on most inputs. Combining distance context trees with
 that joint literal plan was also measured and rejected: it grows x-ray from
-39,431 to 39,455 bytes and from 39,317 to 39,340 bytes. The remaining x-ray gap
-is literal modeling, not distance context typing.
+39,431 to 39,455 bytes and from 39,317 to 39,340 bytes. Combining the joint
+literal plan with the adaptive command and distance block plans was likewise
+measured and rejected: all eleven 64 KiB q11 wires stay byte-identical while
+encode time rises roughly 8-10%. The remaining x-ray gap is literal modeling,
+not distance context typing or symbol block typing.
 
 The candidate adds one full encode on unsplit q10/q11 plans. Observed encode
 times rose by roughly 2-4% on the eleven 64 KiB rows, within single-iteration
