@@ -960,19 +960,21 @@ matrix versus libbrotli 1.0.9 is:
 | x-ray | 590,922 | 576,209 | 1.0255 |
 | mozilla | 652,104 | 635,440 | 1.0262 |
 | samba | 301,653 | 282,533 | 1.0675 |
-| sao | 728,703 | 674,615 | 1.0802 |
+| sao | 721,932 | 674,615 | 1.0701 |
 | mr | 295,511 | 271,989 | 1.0865 |
 | webster | 262,209 | 239,314 | 1.0956 |
 | osdb | 344,511 | 312,387 | 1.1028 |
 | ooffice | 542,886 | 488,479 | 1.1114 |
 | dickens | 341,020 | 305,265 | 1.1172 |
 | reymont | 260,088 | 228,207 | 1.1396 |
-| nci | 84,867 | 65,459 | 1.2965 |
+| nci | 84,396 | 65,459 | 1.2893 |
 
-nci is the worst row: Vort emits 3,187 implicit + 4,241 short distances against
-the reference's 9,882 + 4,095, and 17,959 regular distances against 9,026. The
+nci is the worst row: Vort emits 3,666 implicit + 5,127 short distances against
+the reference's 9,882 + 4,095, and 17,365 regular distances against 9,026. The
 1 MiB gap is therefore dominated by repcode share and distance/context block
-typing, the same structural items as the 64 KiB binary rows.
+typing, the same structural items as the 64 KiB binary rows. The sao and nci
+values above include the later distance-parameter split re-encoding and
+repcode-frequency bonus epochs.
 
 A repcode-first greedy parser was implemented and rejected. It probes the four
 cached distances before the hash chain, keeps the longest match and breaks ties
@@ -1086,3 +1088,21 @@ rejected. It leaves x-ray q11 at 39,317 bytes, sao at 46,617 bytes and nci
 1 MiB at 84,867 bytes. The lazy seed's distance histogram does not describe the
 optimal path's match opportunities, so the extra parse only adds latency.
 Reverted.
+
+## Repcode-frequency distance bonus, 2026-11-05
+
+The backward optimal DP cannot track Brotli's four-entry recent-distance
+cache. For inputs above 64 KiB, the entropy model now also gets a bounded
+repcode-frequency bonus: a distance that was used as a repcode in the seed
+plan costs up to two bits less, capped by its observed frequency. The normal
+model candidate and its modeled pass remain in the candidate set, so 64 KiB
+rows and other 1 MiB rows keep their previous wires; complete-wire arbitration
+only accepts the bonus result when it is smaller.
+
+nci 1 MiB falls from 84,867 to 84,396 bytes (size ratio 1.2893 versus
+libbrotli 1.0.9), with implicit distances rising 3,187 -> 3,666, short
+distances 4,241 -> 5,127 and regular distances 17,959 -> 17,365. sao 1 MiB
+stays 721,932 and x-ray 1 MiB stays 590,922. Applying the bonus only to the
+first model, or only to the second modeled pass, is weaker; the accepted wire
+comes from the bonus model built over the modeled commands. The extra large
+input pass is a latency cost and remains a target for later performance work.

@@ -5698,6 +5698,39 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
             );
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate2);
         }
+        var bonus_model2 = try entropy_feedback.buildWithRepcodeBonus(
+            allocator,
+            input,
+            modeled_commands.commands,
+            search_window,
+        );
+        defer bonus_model2.deinit(allocator);
+        const bonus_modeled2 = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = budget.max_chain,
+            .nice_len = budget.nice_len,
+            .max_candidates = budget.max_candidates,
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+            .dictionary = dictionary_provider,
+            .dictionary_cost = quality_dictionary_cost_q8,
+        }, bonus_model2.lz77Model());
+        defer bonus_modeled2.deinit(allocator);
+        if (bonus_modeled2.stats.matches != 0) {
+            const bonus_commands2 = try command_plan.buildAlloc(allocator, input, bonus_modeled2.tokens);
+            defer bonus_commands2.deinit(allocator);
+            var bonus_stats2: encoder_stats.PlannedEncodeStats = .{};
+            const bonus_candidate2 = try encodeLazyCommandPlanAllocRecorded(
+                trace_enabled,
+                trace,
+                allocator,
+                input,
+                bonus_commands2.commands,
+                &bonus_stats2,
+                wire_options,
+            );
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, bonus_candidate2);
+        }
     }
 
     const command_state_budget = if (extend_command_state) blk: {

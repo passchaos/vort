@@ -66,6 +66,26 @@ pub fn buildWithStartingDistances(
     window_len: usize,
     starting_last_distances: [4]usize,
 ) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
+    return buildInternal(allocator, input, commands, window_len, starting_last_distances, false);
+}
+
+pub fn buildWithRepcodeBonus(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_len: usize,
+) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
+    return buildInternal(allocator, input, commands, window_len, .{ 16, 15, 11, 4 }, true);
+}
+
+fn buildInternal(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_len: usize,
+    starting_last_distances: [4]usize,
+    repcode_bonus: bool,
+) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
     if (input.len == 0 or window_len == 0 or window_len > lz77.default_window_len)
         return error.InvalidBlockPlan;
     for (starting_last_distances) |value|
@@ -78,6 +98,9 @@ pub fn buildWithStartingDistances(
     var wire_distances: DistanceHistogram = .{};
     var command_symbols: CommandHistogram = .{};
     var last_distances = starting_last_distances;
+    var repcode_distance_frequencies: std.AutoHashMap(usize, u32) = undefined;
+    if (repcode_bonus) repcode_distance_frequencies = std.AutoHashMap(usize, u32).init(allocator);
+    defer if (repcode_bonus) repcode_distance_frequencies.deinit();
     var cursor: usize = 0;
     var match_count: usize = 0;
     for (commands) |command| {
@@ -131,6 +154,12 @@ pub fn buildWithStartingDistances(
         copy_codes.add(copy_code) catch return error.InvalidBlockPlan;
         regular_distances.add(encoded_distance.symbol) catch return error.InvalidBlockPlan;
         const recent_symbol = distance_history.symbolForDistance(command.distance, &last_distances);
+        if (repcode_bonus) if (recent_symbol != null) {
+            const entry = try repcode_distance_frequencies.getOrPut(command.distance);
+            if (!entry.found_existing) entry.value_ptr.* = 0;
+            entry.value_ptr.* = std.math.add(u32, entry.value_ptr.*, 1) catch
+                return error.InvalidBlockPlan;
+        };
         const command_encoding_value = command_encoding.forLengths(
             command.insert_len,
             command.copy_len,
@@ -204,6 +233,21 @@ pub fn buildWithStartingDistances(
             distance_model.symbol_costs_q8[encoded.symbol],
             encoded.extra_bits,
         );
+    }
+    // Distances that were repcodes in the seed plan are cheaper to repeat.
+    // The backward optimal DP cannot track the four-entry cache, so a bounded
+    // frequency bonus is the only state-free way to expose that saving.
+    if (repcode_bonus) {
+        var repcode_iterator = repcode_distance_frequencies.iterator();
+        while (repcode_iterator.next()) |entry| {
+            const match_distance = entry.key_ptr.*;
+            if (match_distance == 0 or match_distance >= result.distance.len) continue;
+            const bonus: u16 = @intCast(@min(
+                @as(u64, 2) * q8,
+                @as(u64, entry.value_ptr.*) * q8 / 2,
+            ));
+            result.distance[match_distance] = result.distance[match_distance] -| bonus;
+        }
     }
     return result;
 }
