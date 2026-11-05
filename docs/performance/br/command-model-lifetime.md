@@ -1135,3 +1135,9 @@ dickens regresses by 75/159 bytes. The eight-type plan remains the best
 single-candidate compromise. Running both eight- and sixteen-type candidates
 would capture both results but doubles the split search; it is deferred until
 the large-input latency budget is addressed.
+
+Clamping learned short-distance symbol costs to four bits was also measured
+and rejected. It leaves x-ray 64 KiB at 39,317 bytes and nci 1 MiB at 84,382
+bytes, so the optimal parser's distance choices are not limited by unseen
+short-symbol prices. The remaining repcode gap needs state-aware parsing or
+different block/distance parameters, not a cheaper short-symbol prior.
