@@ -80,9 +80,11 @@ Two additional models learned from the previous modeled result lower the full
 1 MiB matrix to 0.9987–1.0118 times libdeflate 1.26 level 12, with sao smaller
 than the reference; full-file sao is 5,247,683 versus 5,250,751 and full-file
 x-ray is 5,745,701 versus 5,743,947. The largest remaining rows are mr
-(1.0118), samba (1.0107) and nci (1.0085). The encode time is roughly 90–110
-times the reference on full files, so performance recovery is now the main
-Deflate gap after those ratio rows.
+(1.0118), samba (1.0107) and nci (1.0085). With the ReleaseFast CLI the measured full-file encode time is about 10–12
+times the reference (sao 4.15 s versus 0.41 s, x-ray 3.67 s versus 0.30 s),
+and 1 MiB nci is 1.72 s versus 0.2256 s. Earlier Debug-CLI timings overstated
+this gap. Performance recovery is still the main Deflate gap after the ratio
+rows.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

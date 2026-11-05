@@ -52,12 +52,15 @@ Full-file checks:
 
 | Input | Bytes | Vort | libdeflate 12 | Ratio | Vort time | Reference time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| sao | 7,251,944 | 5,247,683 | 5,250,751 | 0.9994 | 37.84 s | 0.41 s |
-| x-ray | 8,474,240 | 5,745,701 | 5,743,947 | 1.0003 | 34.06 s | 0.30 s |
+| sao | 7,251,944 | 5,247,683 | 5,250,751 | 0.9994 | 4.15 s | 0.41 s |
+| x-ray | 8,474,240 | 5,745,701 | 5,743,947 | 1.0003 | 3.67 s | 0.30 s |
 
-The ratio is now at or near libdeflate 12, but the encode time is roughly
-90–110 times larger on these full files. That latency is the next performance
-target after the remaining ratio rows.
+The ratio is now at or near libdeflate 12. With the ReleaseFast CLI the full
+files encode in 4.15 s (sao) and 3.67 s (x-ray), about 10–12 times the
+reference. The 1 MiB nci encode is 1.72 s versus 0.2256 s for libdeflate
+(about 7.6 times). Earlier Debug-CLI timings overstated this gap and are not
+used for the performance conclusion. Latency is still the next target after
+the remaining ratio rows.
 
 A fourth modeled iteration was measured and rejected. It lowers nci by 30
 bytes and mr by 324 bytes, but raises samba by 35 bytes; the per-model cost
