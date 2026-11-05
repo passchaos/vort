@@ -71,10 +71,13 @@ cross a block boundary; the one-shot path sees the whole input and already
 finds them. The writer now plans on `previous_history + chunk`, trims the
 prefix tokens and retains only the chunk-relative suffix, with a dedicated
 straddling-match contract test. The split scoring functions now use the same
-history-aware planning, but the measured 1 MiB nci/sao/x-ray wires remain
-unchanged (99,589 / 770,151 / 698,511): the splitter still prefers the unsplit
-horizon on these inputs. The remaining Deflate gap here is the global optimal
-plan and entropy model, not missing cross-block history.
+history-aware planning, but the splitter still prefers the unsplit horizon on
+these inputs. A subsequent [refined history chunk](deflate/refined-history-chunks.md)
+candidate plans 32 KiB chunks over 32 KiB of history, runs the modeled BT solve
+and wraps the result into raw/zlib/gzip. The same 1 MiB zlib wires fall to
+94,389 / 764,150 / 680,965 bytes for nci/sao/x-ray (-5.22% / -0.78% / -2.51%).
+The remaining Deflate gap here is broader multi-block entropy modeling, not
+cross-block history.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

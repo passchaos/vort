@@ -1076,6 +1076,69 @@ fn tokenSlicesEqual(a: []const lz77.Token, b: []const lz77.Token) bool {
     return true;
 }
 
+fn planRefinedHistoryChunkAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    chunk_start: usize,
+    chunk_len: usize,
+    options: CompressionOptions,
+) ![]lz77.Token {
+    if (chunk_start > input.len or chunk_len > input.len - chunk_start)
+        return error.InvalidBlockPlan;
+    const history_len = @min(chunk_start, options.lz77_options.window_len);
+    const combined = input[chunk_start - history_len ..][0 .. history_len + chunk_len];
+    var prepared = try bt_optimal.Prepared.init(allocator, combined, options.lz77_options);
+    defer prepared.deinit(allocator);
+    var seed = try prepared.planFixedAlloc(allocator);
+    defer seed.deinit(allocator);
+    const seed_trimmed = try trimPlanToSuffixAlloc(allocator, combined, seed.tokens, history_len);
+    defer allocator.free(seed_trimmed);
+    const seed_coding = try DynamicCodingPlan.init(seed_trimmed);
+    var model = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &seed_coding.lit_lengths_full,
+        &seed_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model.deinit(allocator);
+    const seed_cost = try dynamic_optimal.tokenCost(&model, seed_trimmed);
+    const candidate = try prepared.planModeledAlloc(allocator, model.lz77Model());
+    defer candidate.deinit(allocator);
+    const candidate_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate.tokens, history_len);
+    defer allocator.free(candidate_trimmed);
+    const candidate_cost = try dynamic_optimal.tokenCost(&model, candidate_trimmed);
+    const selected = if (candidate_cost < seed_cost) candidate_trimmed else seed_trimmed;
+    return allocator.dupe(lz77.Token, selected);
+}
+
+fn encodeRefinedHistoryChunksAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: CompressionOptions,
+) !?[]u8 {
+    if (input.len <= dynamic_refinement_max_input_len) return null;
+    const chunk_len: usize = 32 * 1024;
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(chunk_len, input.len - offset);
+        const tokens = planRefinedHistoryChunkAlloc(allocator, input, offset, n, options) catch {
+            writer.deinit(allocator);
+            return null;
+        };
+        defer allocator.free(tokens);
+        const final = offset + n == input.len;
+        writeBestTokensBlock(allocator, &writer, input[offset..][0..n], tokens, final, options) catch {
+            writer.deinit(allocator);
+            return null;
+        };
+        offset += n;
+    }
+    return try writer.toOwnedSlice(allocator);
+}
+
 const OneShotTokenPlan = struct {
     tokens: lz77.GreedyPlan,
     dynamic: OneShotDynamicStats,
@@ -1214,8 +1277,19 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
         return @call(.never_inline, encodeRawBestRefinedAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeRawBestTokensAlloc(allocator, input, plan.tokens, options);
+    var encoded = try encodeRawBestTokensAlloc(allocator, input, plan.tokens, options);
     errdefer allocator.free(encoded);
+    if (input.len > dynamic_refinement_max_input_len and
+        options.parser == .optimal and options.strategy == .default and
+        options.block_selection == .stored_fixed_dynamic)
+    {
+        if (try encodeRefinedHistoryChunksAlloc(allocator, input, options)) |candidate| {
+            if (candidate.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate;
+            } else allocator.free(candidate);
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeRawBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
@@ -7419,8 +7493,21 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         return @call(.never_inline, encodeZlibBestRefinedAlloc, .{ allocator, input, options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
+    var encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
     errdefer allocator.free(encoded);
+    if (input.len > dynamic_refinement_max_input_len and
+        options.parser == .optimal and options.strategy == .default and
+        options.block_selection == .stored_fixed_dynamic)
+    {
+        if (try encodeRefinedHistoryChunksAlloc(allocator, input, options)) |raw| {
+            defer allocator.free(raw);
+            const candidate = try encodeZlibRawAlloc(allocator, input, raw, null);
+            if (candidate.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate;
+            } else allocator.free(candidate);
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeZlibBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
@@ -16249,8 +16336,21 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
         return @call(.never_inline, encodeGzipBestRefinedWithHeaderAlloc, .{ allocator, input, options, header_options });
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
+    var encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
     errdefer allocator.free(encoded);
+    if (input.len > dynamic_refinement_max_input_len and
+        options.parser == .optimal and options.strategy == .default and
+        options.block_selection == .stored_fixed_dynamic)
+    {
+        if (try encodeRefinedHistoryChunksAlloc(allocator, input, options)) |raw| {
+            defer allocator.free(raw);
+            const candidate = try encodeGzipRawWithHeaderAlloc(allocator, input, raw, header_options);
+            if (candidate.len < encoded.len) {
+                allocator.free(encoded);
+                encoded = candidate;
+            } else allocator.free(candidate);
+        }
+    }
     for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeGzipBestWithHeaderAlloc(allocator, input, fallback_options, header_options);
         errdefer allocator.free(fallback);
@@ -16403,6 +16503,19 @@ fn writeGzipPrefixWithOptions(allocator: std.mem.Allocator, writer: *bitstream.B
     const written = try writeGzipHeader(header, header_options);
     std.debug.assert(written == header_len);
     return header_len;
+}
+
+fn encodeGzipRawWithHeaderAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    raw: []const u8,
+    header_options: GzipHeaderOptions,
+) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
+    try writer.bytes.appendSlice(allocator, raw);
+    return finishGzipFrame(allocator, &writer, input);
 }
 
 fn finishGzipFrame(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8) ![]u8 {
