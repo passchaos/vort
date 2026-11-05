@@ -73,5 +73,9 @@ reymont -56, dickens -32, mozilla -22, osdb -19, ooffice -7, sao -2. The
 fourth pass is retained. A fifth pass, accepted by the same actual-wire test,
 adds further reductions: nci -36, mr -191, samba -12, x-ray -130, XML -71,
 dickens -85, webster -78, reymont -24, sao -15, mozilla -10, osdb -5 and
-ooffice 0. Early-exit convergence checks were also measured and left the wires
-unchanged with only about 0.3% timing change, so they were not kept.
+ooffice 0. A sixth pass was measured and rejected: it saves only nci 7, mr 96, XML 20,
+dickens 7, webster 7, reymont 2 and mozilla 1 bytes, with samba, sao, ooffice
+and osdb unchanged. The extra BT solve is not justified by those gains; the
+fifth pass remains the retained configuration. Early-exit convergence checks
+were also measured and left the wires unchanged with only about 0.3% timing
+change, so they were not kept.
