@@ -13,6 +13,19 @@ pub fn encodeAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
 ) ![]u8 {
+    return encodeAllocWithChecksum(allocator, input, checksum.adler32(input));
+}
+
+/// Same stream as `encodeAlloc`, but with the caller-provided Adler-32 of
+/// `input`. Callers that already hash the bytes while producing them (for
+/// example, a PNG row filter writing its own output) avoid a second full pass
+/// over the payload. The value must equal `adler32(input)`; the encoder does
+/// not recompute it.
+pub fn encodeAllocWithChecksum(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    adler: u32,
+) ![]u8 {
     var writer = try ReservoirWriter.init(allocator, input.len);
     errdefer writer.deinit(allocator);
     try writeInput(allocator, &writer, input, true);
@@ -24,7 +37,7 @@ pub fn encodeAlloc(
     std.mem.writeInt(
         u32,
         writer.bytes.items[footer_offset..][0..4],
-        checksum.adler32(input),
+        adler,
         .big,
     );
     return writer.toOwnedSlice(allocator);
@@ -720,5 +733,29 @@ test "PNG ultrafast output matches fdeflate 0.3.7 goldens" {
         defer std.testing.allocator.free(expected);
         _ = try std.fmt.hexToBytes(expected, case.hex);
         try std.testing.expectEqualSlices(u8, expected, encoded);
+    }
+}
+
+test "caller-supplied checksum matches recomputed ultrafast bytes" {
+    var mixed: [73]u8 = undefined;
+    for (&mixed, 0..) |*byte, i| {
+        byte.* = if (i % 7 < 3) 0 else @truncate(i * 37);
+    }
+    const inputs = [_][]const u8{
+        "",
+        "hello, world",
+        &([_]u8{0} ** 900),
+        &mixed,
+    };
+    for (inputs) |input| {
+        const expected = try encodeAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(expected);
+        const actual = try encodeAllocWithChecksum(
+            std.testing.allocator,
+            input,
+            checksum.adler32(input),
+        );
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
     }
 }

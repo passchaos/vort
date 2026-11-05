@@ -7641,6 +7641,17 @@ pub fn encodeZlibPngUltraFastAlloc(
     return png_ultrafast.encodeAlloc(allocator, input);
 }
 
+/// Ultra-fast PNG zlib stream with a caller-supplied Adler-32 of `input`.
+/// Produces byte-identical output to `encodeZlibPngUltraFastAlloc` and lets
+/// callers that hash while writing skip a second pass over the payload.
+pub fn encodeZlibPngUltraFastAllocWithChecksum(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    adler: u32,
+) ![]u8 {
+    return png_ultrafast.encodeAllocWithChecksum(allocator, input, adler);
+}
+
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
