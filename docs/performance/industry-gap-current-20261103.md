@@ -76,13 +76,13 @@ these inputs. A subsequent [refined history chunk](deflate/refined-history-chunk
 candidate plans 32 KiB chunks over 32 KiB of history, runs the modeled BT solve
 and wraps the result into raw/zlib/gzip. The same 1 MiB zlib wires fall to
 94,389 / 764,150 / 680,965 bytes for nci/sao/x-ray (-5.22% / -0.78% / -2.51%).
-A second model learned from the first modeled result lowers the full 1 MiB
-matrix to 0.9990–1.0157 times libdeflate 1.26 level 12, with sao smaller than
-the reference; full-file sao is 5,249,244 versus 5,250,751 and full-file x-ray
-is 5,751,886 versus 5,743,947. The largest remaining rows are mr (1.0157),
-samba (1.0111) and nci (1.0095). The encode time is roughly 80–100 times the
-reference on full files, so performance recovery is now the main Deflate gap
-after those ratio rows.
+Two additional models learned from the previous modeled result lower the full
+1 MiB matrix to 0.9987–1.0118 times libdeflate 1.26 level 12, with sao smaller
+than the reference; full-file sao is 5,247,683 versus 5,250,751 and full-file
+x-ray is 5,745,701 versus 5,743,947. The largest remaining rows are mr
+(1.0118), samba (1.0107) and nci (1.0085). The encode time is roughly 90–110
+times the reference on full files, so performance recovery is now the main
+Deflate gap after those ratio rows.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

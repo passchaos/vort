@@ -1129,7 +1129,23 @@ fn planRefinedHistoryChunkAlloc(
     const candidate2_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate2.tokens, history_len);
     defer allocator.free(candidate2_trimmed);
     const candidate2_cost = try dynamic_optimal.tokenCost(&model2, candidate2_trimmed);
-    const final_selected = if (candidate2_cost < candidate_in_model2) candidate2_trimmed else selected;
+    const selected2 = if (candidate2_cost < candidate_in_model2) candidate2_trimmed else selected;
+    const candidate2_coding = try DynamicCodingPlan.init(candidate2_trimmed);
+    var model3 = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &candidate2_coding.lit_lengths_full,
+        &candidate2_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model3.deinit(allocator);
+    const candidate2_in_model3 = try dynamic_optimal.tokenCost(&model3, candidate2_trimmed);
+    const candidate3 = try prepared.planModeledAlloc(allocator, model3.lz77Model());
+    defer candidate3.deinit(allocator);
+    const candidate3_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate3.tokens, history_len);
+    defer allocator.free(candidate3_trimmed);
+    const candidate3_cost = try dynamic_optimal.tokenCost(&model3, candidate3_trimmed);
+    const final_selected = if (candidate3_cost < candidate2_in_model3) candidate3_trimmed else selected2;
     return allocator.dupe(lz77.Token, final_selected);
 }
 
