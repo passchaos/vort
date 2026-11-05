@@ -1155,3 +1155,18 @@ with four copy-length contexts needs a new header path plus context-partitioned
 distance histograms; the current adaptive split frequency collection is
 temporal, not context-based. This is the next structural Brotli q11 binary
 target.
+
+Implementation sketch:
+
+- add a `distance_context_plan` option carrying four distance
+  alphabets/lengths and an identity 4-entry context map;
+- partition distance-symbol frequencies by `distanceContext(copy_len)` instead
+  of by temporal block type;
+- write NBLTYPESD=1 with no block-switch codes, NTREESD=4 and the identity
+  context map in the planned header;
+- select the distance encoder per command by copy-length context;
+- add the candidate to the q10/q11 quality arbitration and keep the complete
+  wire only when it is smaller.
+
+The current adaptive distance split path cannot be reused unchanged because it
+requires at least two temporal block types and one histogram per type.
