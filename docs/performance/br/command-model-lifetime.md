@@ -1141,3 +1141,8 @@ and rejected. It leaves x-ray 64 KiB at 39,317 bytes and nci 1 MiB at 84,382
 bytes, so the optimal parser's distance choices are not limited by unseen
 short-symbol prices. The remaining repcode gap needs state-aware parsing or
 different block/distance parameters, not a cheaper short-symbol prior.
+
+An explicit 32-tree literal context candidate between the existing `up_to_16`
+and `full` proposals was also measured and rejected. It leaves x-ray (39,317),
+mr (15,314) and nci (3,916) unchanged at 64 KiB; the extra clustering work
+does not produce a smaller complete wire.
