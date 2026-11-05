@@ -1170,3 +1170,10 @@ Implementation sketch:
 
 The current adaptive distance split path cannot be reused unchanged because it
 requires at least two temporal block types and one histogram per type.
+
+The implementation must also update the `counting_writer` cost path and the
+prepared command/distance cache, not only the emitted header/payload. Both
+currently assume one distance alphabet and encoder; leaving them unchanged
+would make counted candidate costs diverge from the real wire. The cache either
+needs a four-tree variant or the candidate must bypass the shared prepared
+path.
