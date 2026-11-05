@@ -1575,6 +1575,34 @@ fn trimPlanToSuffixAlloc(
     return out.toOwnedSlice(allocator);
 }
 
+fn planHistoryChunkAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    chunk_start: usize,
+    chunk_len: usize,
+    options: CompressionOptions,
+) !lz77.GreedyPlan {
+    if (chunk_start > input.len or chunk_len > input.len - chunk_start)
+        return error.InvalidBlockPlan;
+    const history_len = @min(chunk_start, options.lz77_options.window_len);
+    if (history_len == 0)
+        return planTokensAlloc(allocator, input[chunk_start..][0..chunk_len], options);
+    const combined = input[chunk_start - history_len ..][0 .. history_len + chunk_len];
+    const plan = try planTokensAlloc(allocator, combined, options);
+    defer plan.deinit(allocator);
+    const trimmed = try trimPlanToSuffixAlloc(allocator, combined, plan.tokens, history_len);
+    errdefer allocator.free(trimmed);
+    var stats: lz77.PlanStats = .{};
+    for (trimmed) |token| switch (token) {
+        .literal => stats.literals += 1,
+        .match => |match| {
+            stats.matches += 1;
+            stats.matched_bytes += match.length;
+        },
+    };
+    return .{ .tokens = trimmed, .stats = stats };
+}
+
 pub const AdaptiveSplitOptions = struct {
     min_block_len: usize = 16 * 1024,
     max_block_len: usize = max_stored_block_len,
@@ -1628,9 +1656,9 @@ fn writeBestAdaptiveSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream
     while (offset < input.len) {
         const remaining = input.len - offset;
         const n = if (dictionary == null)
-            try chooseDriftAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, writer.bit_index, options)
+            try chooseDriftAdaptiveBlockLen(allocator, input, offset, min_block_len, max_block_len, split_options.sample_len, split_options.search_step, writer.bit_index, options)
         else
-            try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
+            try chooseCostedAdaptiveBlockLen(allocator, input, offset, min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
         const chunk_len = @min(n, remaining);
         const chunk = input[offset..][0..chunk_len];
         const final = offset + chunk_len == input.len;
@@ -1668,10 +1696,12 @@ fn shouldSkipAdaptiveSplitSearch(input_len: usize, split_options: AdaptiveSplitO
         input_len <= max_stored_block_len * 2;
 }
 
-fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
-    const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
-    if (input.len <= min_block_len) return heuristic;
-    const horizon = @min(input.len, max_block_len);
+fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, horizon_start: usize, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
+    if (horizon_start > input.len) return error.InvalidBlockPlan;
+    const remaining = input.len - horizon_start;
+    const heuristic = chooseAdaptiveBlockLen(input[horizon_start..], min_block_len, max_block_len, sample_len);
+    if (remaining <= min_block_len) return heuristic;
+    const horizon = @min(remaining, max_block_len);
     const step = adaptiveSplitSearchStep(horizon, min_block_len, search_step);
     // Compare every split over the same plaintext horizon. Prefix-only sizes
     // are not comparable: a shorter prefix is almost always fewer bytes even
@@ -1681,6 +1711,7 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
     var best_score = try scoreAdaptiveSplitAt(
         allocator,
         input,
+        horizon_start,
         horizon,
         horizon,
         options,
@@ -1690,6 +1721,7 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
         const score = try scoreAdaptiveSplitAt(
             allocator,
             input,
+            horizon_start,
             horizon,
             candidate,
             options,
@@ -1711,6 +1743,7 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
         const score = try scoreAdaptiveSplitAt(
             allocator,
             input,
+            horizon_start,
             horizon,
             heuristic,
             options,
@@ -1723,6 +1756,7 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
 fn chooseDriftAdaptiveBlockLen(
     allocator: std.mem.Allocator,
     input: []const u8,
+    horizon_start: usize,
     min_block_len: usize,
     max_block_len: usize,
     sample_len: usize,
@@ -1730,11 +1764,13 @@ fn chooseDriftAdaptiveBlockLen(
     initial_bit_index: u3,
     options: CompressionOptions,
 ) !usize {
-    const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
-    if (input.len <= min_block_len) return heuristic;
-    const horizon = @min(input.len, max_block_len);
+    if (horizon_start > input.len) return error.InvalidBlockPlan;
+    const remaining = input.len - horizon_start;
+    const heuristic = chooseAdaptiveBlockLen(input[horizon_start..], min_block_len, max_block_len, sample_len);
+    if (remaining <= min_block_len) return heuristic;
+    const horizon = @min(remaining, max_block_len);
     const evidence = blk: {
-        const plan = try planTokensAlloc(allocator, input[0..horizon], options);
+        const plan = try planHistoryChunkAlloc(allocator, input, horizon_start, horizon, options);
         defer plan.deinit(allocator);
         const scored = try scoreTokenPlanFromBitState(
             horizon,
@@ -1769,6 +1805,7 @@ fn chooseDriftAdaptiveBlockLen(
         const score = try scoreAdaptiveSplitAtBitState(
             allocator,
             input,
+            horizon_start,
             horizon,
             aligned_proposal,
             initial_bit_index,
@@ -1789,6 +1826,7 @@ fn chooseDriftAdaptiveBlockLen(
                 const score = try scoreAdaptiveSplitAtBitState(
                     allocator,
                     input,
+                    horizon_start,
                     horizon,
                     fallback_proposal,
                     initial_bit_index,
@@ -1816,6 +1854,7 @@ fn chooseDriftAdaptiveBlockLen(
         const score = try scoreAdaptiveSplitAtBitState(
             allocator,
             input,
+            horizon_start,
             horizon,
             heuristic,
             initial_bit_index,
@@ -1830,6 +1869,7 @@ fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: [
     return chooseCostedAdaptiveBlockLen(
         allocator,
         input,
+        0,
         @min(options.split_options.min_block_len, input.len),
         @min(options.split_options.max_block_len, input.len),
         options.split_options.sample_len,
@@ -1841,17 +1881,20 @@ fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: [
 fn scoreAdaptiveSplitAt(
     allocator: std.mem.Allocator,
     input: []const u8,
+    horizon_start: usize,
     horizon: usize,
     candidate: usize,
     options: CompressionOptions,
 ) !usize {
-    if (horizon == 0 or horizon > input.len or candidate == 0 or candidate > horizon)
+    if (horizon == 0 or horizon_start > input.len or horizon > input.len - horizon_start or
+        candidate == 0 or candidate > horizon)
         return error.InvalidBlockPlan;
-    const first = try scoreSplitCandidate(allocator, input[0..horizon], candidate, options);
+    const first = try scoreSplitCandidate(allocator, input, horizon_start, candidate, options);
     if (candidate == horizon) return first;
     const second = try scoreSplitCandidate(
         allocator,
-        input[candidate..horizon],
+        input,
+        horizon_start + candidate,
         horizon - candidate,
         options,
     );
@@ -1886,14 +1929,16 @@ const AdaptivePredictedBlock = struct {
 fn scoreAdaptiveSplitAtBitState(
     allocator: std.mem.Allocator,
     input: []const u8,
+    horizon_start: usize,
     horizon: usize,
     candidate: usize,
     initial_bit_index: u3,
     options: CompressionOptions,
 ) !usize {
-    if (horizon == 0 or horizon > input.len or candidate == 0 or candidate > horizon)
+    if (horizon == 0 or horizon_start > input.len or horizon > input.len - horizon_start or
+        candidate == 0 or candidate > horizon)
         return error.InvalidBlockPlan;
-    const first_plan = try planTokensAlloc(allocator, input[0..candidate], options);
+    const first_plan = try planHistoryChunkAlloc(allocator, input, horizon_start, candidate, options);
     defer first_plan.deinit(allocator);
     const first = try scoreTokenPlanFromBitState(
         candidate,
@@ -1903,9 +1948,11 @@ fn scoreAdaptiveSplitAtBitState(
     );
     if (candidate == horizon) return first.state.added_bits;
 
-    const second_plan = try planTokensAlloc(
+    const second_plan = try planHistoryChunkAlloc(
         allocator,
-        input[candidate..horizon],
+        input,
+        horizon_start + candidate,
+        horizon - candidate,
         options,
     );
     defer second_plan.deinit(allocator);
@@ -2099,11 +2146,12 @@ fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const
     return target;
 }
 
-fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidate_len: usize, options: CompressionOptions) !usize {
-    const len = @min(candidate_len, input.len);
-    const plan = try planTokensAlloc(allocator, input[0..len], options);
+fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, chunk_start: usize, chunk_len: usize, options: CompressionOptions) !usize {
+    if (chunk_start > input.len or chunk_len > input.len - chunk_start)
+        return error.InvalidBlockPlan;
+    const plan = try planHistoryChunkAlloc(allocator, input, chunk_start, chunk_len, options);
     defer plan.deinit(allocator);
-    return scoreTokenPlan(len, plan.tokens, options);
+    return scoreTokenPlan(chunk_len, plan.tokens, options);
 }
 
 fn scoreTokenPlan(len: usize, tokens: []const lz77.Token, options: CompressionOptions) !usize {

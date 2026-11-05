@@ -70,9 +70,11 @@ each chunk without a history prefix, so it could not recover matches that
 cross a block boundary; the one-shot path sees the whole input and already
 finds them. The writer now plans on `previous_history + chunk`, trims the
 prefix tokens and retains only the chunk-relative suffix, with a dedicated
-straddling-match contract test. The adaptive splitter's scoring functions
-still evaluate chunks without history, so the measured 1 MiB wires remain
-unchanged; history-aware scoring is the next functional step.
+straddling-match contract test. The split scoring functions now use the same
+history-aware planning, but the measured 1 MiB nci/sao/x-ray wires remain
+unchanged (99,589 / 770,151 / 698,511): the splitter still prefers the unsplit
+horizon on these inputs. The remaining Deflate gap here is the global optimal
+plan and entropy model, not missing cross-block history.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

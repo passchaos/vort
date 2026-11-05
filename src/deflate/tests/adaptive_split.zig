@@ -12,20 +12,20 @@ fn selection(comptime C: type) !void {
     const input = ("aaaaaaaaaaaaaaaa" ** 4) ++ "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
     const options = C.options(.default);
     const horizon: usize = 128;
-    const chosen = try C.choose(std.testing.allocator, input, 16, horizon, 8, 16, options);
+    const chosen = try C.choose(std.testing.allocator, input, 0, 16, horizon, 8, 16, options);
     const heuristic = C.heuristic(input, 16, horizon, 8);
     var expected_len = horizon;
-    var expected_score = try C.scoreAt(std.testing.allocator, input, horizon, horizon, options);
+    var expected_score = try C.scoreAt(std.testing.allocator, input, 0, horizon, horizon, options);
     var candidate: usize = 16;
     while (candidate < horizon) : (candidate += 16) {
-        const score = try C.scoreAt(std.testing.allocator, input, horizon, candidate, options);
+        const score = try C.scoreAt(std.testing.allocator, input, 0, horizon, candidate, options);
         if (score < expected_score or (score == expected_score and candidate > expected_len)) {
             expected_len = candidate;
             expected_score = score;
         }
     }
     if (heuristic < horizon and (heuristic - 16) % 16 != 0) {
-        const score = try C.scoreAt(std.testing.allocator, input, horizon, heuristic, options);
+        const score = try C.scoreAt(std.testing.allocator, input, 0, horizon, heuristic, options);
         if (score < expected_score or (score == expected_score and heuristic > expected_len))
             expected_len = heuristic;
     }
@@ -34,10 +34,10 @@ fn selection(comptime C: type) !void {
     // The old incomparable-prefix objective selects the shortest candidate on
     // this same transition fixture; complete-horizon scoring must reject it.
     var prefix_best_len: usize = 16;
-    var prefix_best_score = try C.score(std.testing.allocator, input, 16, options);
+    var prefix_best_score = try C.score(std.testing.allocator, input, 0, 16, options);
     candidate = 32;
     while (candidate <= horizon) : (candidate += 16) {
-        const prefix_score = try C.score(std.testing.allocator, input, candidate, options);
+        const prefix_score = try C.score(std.testing.allocator, input, 0, candidate, options);
         if (prefix_score < prefix_best_score) {
             prefix_best_score = prefix_score;
             prefix_best_len = candidate;
@@ -64,6 +64,7 @@ fn uniform(comptime C: type) !void {
     const chosen = try C.choose(
         std.testing.allocator,
         input,
+        0,
         1024,
         input.len,
         512,
