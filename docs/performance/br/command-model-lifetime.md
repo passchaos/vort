@@ -1069,3 +1069,20 @@ bytes. The measured q8/q11 `x-ray`, `nci`, `mr`, `webster`, `XML`, `dickens`,
 42,503 bytes. The serialized-dictionary fixture updates its baseline frame
 from 3,513 to 3,512 bytes and total savings from 705 to 704 bytes; these are
 the same complete-wire improvements observed through the public encoder.
+
+Combining the winning joint literal plan with the adaptive distance plan was
+also measured and rejected. On q10 x-ray the combined candidate runs, but the
+complete wire stays 39,317 bytes; the adaptive distance plan saves only about
+146 bytes on the lazy plan, far less than the literal split's contribution.
+Pairing the joint literal plan with an adaptive command plan is rejected by the
+current writer validation, so no complete wire exists for that combination yet.
+The next attempt should either add writer support for joint literal plus
+adaptive command types or move the repcode/distance-cost work into the optimal
+parser, rather than layering more split candidates on the lazy plan.
+
+Building the entropy model from the lazy seed plan (which probes the recent
+distance cache) and re-planning the optimal parse with that model was also
+rejected. It leaves x-ray q11 at 39,317 bytes, sao at 46,617 bytes and nci
+1 MiB at 84,867 bytes. The lazy seed's distance histogram does not describe the
+optimal path's match opportunities, so the extra parse only adds latency.
+Reverted.
