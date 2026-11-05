@@ -958,13 +958,13 @@ matrix versus libbrotli 1.0.9 is:
 | File | Vort bytes | Reference bytes | Size ratio |
 | --- | ---: | ---: | ---: |
 | x-ray | 590,922 | 576,209 | 1.0255 |
-| mozilla | 652,104 | 635,440 | 1.0262 |
+| mozilla | 651,928 | 635,440 | 1.0260 |
 | samba | 301,653 | 282,533 | 1.0675 |
 | sao | 721,932 | 674,615 | 1.0701 |
 | mr | 295,511 | 271,989 | 1.0865 |
+| osdb | 340,934 | 312,387 | 1.0914 |
 | webster | 262,209 | 239,314 | 1.0956 |
-| osdb | 344,511 | 312,387 | 1.1028 |
-| ooffice | 542,886 | 488,479 | 1.1114 |
+| ooffice | 542,854 | 488,479 | 1.1113 |
 | dickens | 341,020 | 305,265 | 1.1172 |
 | reymont | 260,088 | 228,207 | 1.1396 |
 | nci | 84,382 | 65,459 | 1.2891 |
@@ -972,9 +972,10 @@ matrix versus libbrotli 1.0.9 is:
 nci is the worst row: Vort emits 3,885 implicit + 5,527 short distances against
 the reference's 9,882 + 4,095, and 17,191 regular distances against 9,026. The
 1 MiB gap is therefore dominated by repcode share and distance/context block
-typing, the same structural items as the 64 KiB binary rows. The sao and nci
-values above include the later distance-parameter split re-encoding and
-repcode-frequency bonus epochs.
+typing, the same structural items as the 64 KiB binary rows. The sao, nci,
+osdb, ooffice and mozilla values above include the later distance-parameter
+split re-encoding and repcode-frequency bonus epochs; the other rows remain at
+their earlier measured wires.
 
 A repcode-first greedy parser was implemented and rejected. It probes the four
 cached distances before the hash chain, keeps the longest match and breaks ties
