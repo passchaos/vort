@@ -1150,30 +1150,36 @@ does not produce a smaller complete wire.
 The remaining x-ray binary gap is now a writer feature: the reference wire has
 one distance block type but three distance context trees, while Vort emits one
 distance tree because `adaptive_distance_split` only writes a distance context
-map when at least two distance block types exist. A single-block-type candidate
-with four copy-length contexts needs a new header path plus context-partitioned
-distance histograms; the current adaptive split frequency collection is
-temporal, not context-based. This is the next structural Brotli q11 binary
-target.
+map when at least two distance block types exist.
 
-Implementation sketch:
+## Single-block-type distance context trees, 2026-11-05
 
-- add a `distance_context_plan` option carrying four distance
-  alphabets/lengths and an identity 4-entry context map;
-- partition distance-symbol frequencies by `distanceContext(copy_len)` instead
-  of by temporal block type;
-- write NBLTYPESD=1 with no block-switch codes, NTREESD=4 and the identity
-  context map in the planned header;
-- select the distance encoder per command by copy-length context;
-- add the candidate to the q10/q11 quality arbitration and keep the complete
-  wire only when it is smaller.
+The planned writer now emits an unsplit compressed meta-block with one distance
+block type, four distance context trees and an identity four-entry context map.
+Explicit distance symbols are partitioned by `distanceContext(copy_len)` into
+four histograms, and the distance encoder is selected per command by copy-length
+context. The candidate is fully encoded and compared with the baseline wire, so
+the counting and prepared-command caches are bypassed rather than taught a
+four-tree shape. It runs only for q10/q11, standard windows, empty metadata and
+no command or distance block split.
 
-The current adaptive distance split path cannot be reused unchanged because it
-requires at least two temporal block types and one histogram per type.
+Measured on frozen 64 KiB Silesia prefixes with ReleaseFast, one codec thread,
+`run-br-planned-encode-bench --limit 65536 --planned-quality 11 --iterations 1`,
+A/B with the candidate gate disabled:
 
-The implementation must also update the `counting_writer` cost path and the
-prepared command/distance cache, not only the emitted header/payload. Both
-currently assume one distance alphabet and encoder; leaving them unchanged
-would make counted candidate costs diverge from the real wire. The cache either
-needs a four-tree variant or the candidate must bypass the shared prepared
-path.
+| File | Before | After |
+| --- | ---: | ---: |
+| sao | 46,617 | 46,583 |
+| dickens | 22,381 | 22,377 |
+| x-ray / nci / mozilla / ooffice / webster / mr / osdb / samba / XML | unchanged | unchanged |
+
+The win is small because the complete-wire arbitration already keeps the joint
+literal/context candidate on most inputs. Combining the four distance context
+trees with that joint literal plan was also measured and rejected: it grows
+x-ray from 39,431 to 39,455 bytes and from 39,317 to 39,340 bytes. A dynamic
+two- or three-tree context map is the next refinement, but the current result
+does not justify paying for a second joint-literal encode.
+
+The candidate adds one full encode on unsplit q10/q11 plans. Observed encode
+times rose by roughly 2-4% on the eleven 64 KiB rows, within single-iteration
+noise; the larger q10/q11 latency budget remains a separate performance task.

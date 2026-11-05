@@ -26253,3 +26253,18 @@ reuse, so production keeps the simpler independently owned plans.
   pass. [Evidence](performance/br/primary-count.md). Adaptive literal counting,
   tree scoring and parser/model tradeoffs remain work; the full three-codec
   industry-best objective stays active.
+
+- 2026-11-05: Brotli q10/q11 now arbitrate a single-distance-block-type wire
+  with four copy-length distance context trees. Explicit distance symbols are
+  partitioned by `distanceContext(copy_len)`; the planned header writes
+  NTREESD=4 plus an identity four-entry context map, and the payload selects
+  the distance tree per command. The candidate is fully encoded so the counted
+  and prepared-command caches keep their one-tree contracts; it is limited to
+  standard windows, empty metadata and no command/distance split. On frozen
+  64 KiB Silesia prefixes the complete wire shrinks sao 46,617 -> 46,583 and
+  dickens 22,381 -> 22,377, leaving the other nine rows unchanged. Combining
+  the trees with the joint literal/context candidate grows x-ray, so it was
+  not added. Two direct round-trip tests cover all four contexts and unused
+  single-symbol trees. [Evidence](performance/br/command-model-lifetime.md).
+  A dynamic two-/three-tree context map and the remaining literal-modeling gap
+  stay active; the three-codec industry-best objective remains open.
