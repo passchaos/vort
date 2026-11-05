@@ -82,10 +82,10 @@ sao is 5,247,306 versus 5,250,751 and full-file x-ray is 5,742,132 versus
 5,743,947, so both are now smaller than the reference. The largest remaining
 rows are samba (1.0106), mr (1.0101) and nci (1.0076). The fourth and fifth
 passes are accepted only when their actual dynamic coding cost is lower;
-model-cost acceptance regressed samba. The starred ReleaseFast timings in the
-detailed note are from an earlier three-pass build; the two extra passes add
-BT solves and have not been re-timed. Performance recovery remains the main
-Deflate gap.
+model-cost acceptance regressed samba. The ReleaseFast CLI measures
+4.87 s for full sao and 4.42 s for full x-ray (about 11.8 and 14.5 times the
+reference), and 2.01 s for 1 MiB nci (about 8.9 times). Performance recovery
+remains the main Deflate gap.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

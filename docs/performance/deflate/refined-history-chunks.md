@@ -55,8 +55,8 @@ Full-file checks:
 
 | Input | Bytes | Vort | libdeflate 12 | Ratio | Vort time | Reference time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| sao | 7,251,944 | 5,247,306 | 5,250,751 | 0.9993 | 4.15 s* | 0.41 s |
-| x-ray | 8,474,240 | 5,742,132 | 5,743,947 | 0.9997 | 3.67 s* | 0.30 s |
+| sao | 7,251,944 | 5,247,306 | 5,250,751 | 0.9993 | 4.87 s | 0.41 s |
+| x-ray | 8,474,240 | 5,742,132 | 5,743,947 | 0.9997 | 4.42 s | 0.30 s |
 
 The ratio is now at or near libdeflate 12, and both full sao and full x-ray are
 smaller than the reference. The starred ReleaseFast timings are from the
