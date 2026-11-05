@@ -293,3 +293,44 @@ test "incremental PNG ultrafast repeated empty sync flush drains without ending 
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqual(@as(usize, 0), decoded.len);
 }
+
+test "oneshot framing matches the full-slice ultrafast stream" {
+    const one_shot = @import("../../../../png_ultrafast.zig");
+    var mixed: [73]u8 = undefined;
+    for (&mixed, 0..) |*byte, i| {
+        byte.* = if (i % 7 < 3) 0 else @truncate(i * 37);
+    }
+    const inputs = [_][]const u8{
+        "",
+        "hello, world",
+        &([_]u8{0} ** 900),
+        &mixed,
+        &([_]u8{ 1, 0, 0, 0, 2, 3, 0, 4, 0, 0, 5 } ** 113),
+    };
+    for (inputs) |input| {
+        const expected = try one_shot.encodeAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(expected);
+        var encoder = Encoder.initWithOptions(std.testing.allocator, .{
+            .oneshot_framing = true,
+        });
+        const output = try std.testing.allocator.alloc(u8, input.len * 2 + 64);
+        defer std.testing.allocator.free(output);
+        var produced: usize = 0;
+        var offset: usize = 0;
+        while (true) {
+            const step = try encoder.step(input[offset..], output[produced..]);
+            offset += step.progress.input_read;
+            produced += step.progress.output_written;
+            if (step.status == .need_input) break;
+            if (step.status == .done) return error.TestUnexpectedResult;
+        }
+        encoder.finish();
+        while (true) {
+            const step = try encoder.step(&.{}, output[produced..]);
+            produced += step.progress.output_written;
+            if (step.status == .done) break;
+            if (step.status == .need_input) return error.TestUnexpectedResult;
+        }
+        try std.testing.expectEqualSlices(u8, expected, output[0..produced]);
+    }
+}
