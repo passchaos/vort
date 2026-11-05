@@ -1146,3 +1146,12 @@ An explicit 32-tree literal context candidate between the existing `up_to_16`
 and `full` proposals was also measured and rejected. It leaves x-ray (39,317),
 mr (15,314) and nci (3,916) unchanged at 64 KiB; the extra clustering work
 does not produce a smaller complete wire.
+
+The remaining x-ray binary gap is now a writer feature: the reference wire has
+one distance block type but three distance context trees, while Vort emits one
+distance tree because `adaptive_distance_split` only writes a distance context
+map when at least two distance block types exist. A single-block-type candidate
+with four copy-length contexts needs a new header path plus context-partitioned
+distance histograms; the current adaptive split frequency collection is
+temporal, not context-based. This is the next structural Brotli q11 binary
+target.
