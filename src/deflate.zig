@@ -1501,17 +1501,78 @@ fn writeBestSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         const n = @min(effective_block_len, input.len - offset);
         const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = if (dictionary) |dict|
-            if (offset == 0)
+        if (offset == 0) {
+            const plan = if (dictionary) |dict|
                 try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
             else
-                try planTokensAlloc(allocator, chunk, options)
-        else
-            try planTokensAlloc(allocator, chunk, options);
-        defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
+                try planTokensAlloc(allocator, chunk, options);
+            defer plan.deinit(allocator);
+            try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
+        } else {
+            // Plan over the previous history plus the chunk, then retain only
+            // the chunk-relative suffix. The decoder keeps the previous block's
+            // output, so matches that start in the history are legal even
+            // though this is a new DEFLATE block.
+            const history_len = @min(offset, options.lz77_options.window_len);
+            const combined = input[offset - history_len .. offset + n];
+            const plan = try planTokensAlloc(allocator, combined, options);
+            defer plan.deinit(allocator);
+            const trimmed = try trimPlanToSuffixAlloc(allocator, combined, plan.tokens, history_len);
+            defer allocator.free(trimmed);
+            try writeBestTokensBlock(allocator, writer, chunk, trimmed, final, options);
+        }
         offset += n;
     }
+}
+
+fn trimPlanToSuffixAlloc(
+    allocator: std.mem.Allocator,
+    combined: []const u8,
+    tokens: []const lz77.Token,
+    skip: usize,
+) ![]lz77.Token {
+    var out: std.ArrayList(lz77.Token) = .empty;
+    errdefer out.deinit(allocator);
+    var consumed: usize = 0;
+    var started = false;
+    for (tokens) |token| {
+        const token_len: usize = switch (token) {
+            .literal => 1,
+            .match => |match| match.length,
+        };
+        if (!started) {
+            if (consumed + token_len <= skip) {
+                consumed += token_len;
+                continue;
+            }
+            if (consumed < skip) {
+                switch (token) {
+                    .literal => return error.InvalidBlockPlan,
+                    .match => |match| {
+                        const offset_into = skip - consumed;
+                        const remaining = token_len - offset_into;
+                        if (remaining >= 3) {
+                            try out.append(allocator, .{ .match = .{
+                                .length = @intCast(remaining),
+                                .distance = match.distance,
+                            } });
+                        } else {
+                            for (combined[skip .. consumed + token_len]) |byte|
+                                try out.append(allocator, .{ .literal = byte });
+                        }
+                        consumed += token_len;
+                        started = true;
+                        continue;
+                    },
+                }
+            }
+            started = true;
+        }
+        try out.append(allocator, token);
+        consumed += token_len;
+    }
+    if (!started or consumed != combined.len) return error.InvalidBlockPlan;
+    return out.toOwnedSlice(allocator);
 }
 
 pub const AdaptiveSplitOptions = struct {
@@ -23354,6 +23415,41 @@ const DynamicOptimalTestAdapter = struct {
 
 test "dynamic optimal refinement complete-wire and resource contracts" {
     try @import("deflate/tests/dynamic_optimal.zig").contracts(DynamicOptimalTestAdapter);
+}
+
+test "split plan suffix trimming preserves straddling matches" {
+    const combined = "abcdabcdabcd";
+    const tokens = [_]lz77.Token{
+        .{ .literal = 'a' },
+        .{ .literal = 'b' },
+        .{ .literal = 'c' },
+        .{ .literal = 'd' },
+        .{ .match = .{ .length = 8, .distance = 4 } },
+    };
+    for ([_]usize{ 4, 6, 11 }) |skip| {
+        const trimmed = try trimPlanToSuffixAlloc(std.testing.allocator, combined, &tokens, skip);
+        defer std.testing.allocator.free(trimmed);
+        var position: usize = 0;
+        for (trimmed) |token| switch (token) {
+            .literal => |byte| {
+                try std.testing.expect(position < combined.len - skip);
+                try std.testing.expectEqual(combined[skip + position], byte);
+                position += 1;
+            },
+            .match => |match| {
+                try std.testing.expect(match.length >= 3);
+                try std.testing.expect(match.distance <= skip + position);
+                for (0..match.length) |offset| {
+                    try std.testing.expectEqual(
+                        combined[skip + position + offset - match.distance],
+                        combined[skip + position + offset],
+                    );
+                }
+                position += match.length;
+            },
+        };
+        try std.testing.expectEqual(combined.len - skip, position);
+    }
 }
 
 test "adaptive split falls back to one-shot when smaller" {
