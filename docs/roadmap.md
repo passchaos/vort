@@ -26255,16 +26255,18 @@ reuse, so production keeps the simpler independently owned plans.
   industry-best objective stays active.
 
 - 2026-11-05: Brotli q10/q11 now arbitrate a single-distance-block-type wire
-  with four copy-length distance context trees. Explicit distance symbols are
-  partitioned by `distanceContext(copy_len)`; the planned header writes
-  NTREESD=4 plus an identity four-entry context map, and the payload selects
-  the distance tree per command. The candidate is fully encoded so the counted
-  and prepared-command caches keep their one-tree contracts; it is limited to
-  standard windows, empty metadata and no command/distance split. On frozen
-  64 KiB Silesia prefixes the complete wire shrinks sao 46,617 -> 46,583 and
-  dickens 22,381 -> 22,377, leaving the other nine rows unchanged. Combining
-  the trees with the joint literal/context candidate grows x-ray, so it was
-  not added. Two direct round-trip tests cover all four contexts and unused
-  single-symbol trees. [Evidence](performance/br/command-model-lifetime.md).
-  A dynamic two-/three-tree context map and the remaining literal-modeling gap
-  stay active; the three-codec industry-best objective remains open.
+  with one to four copy-length distance context trees. Explicit distance
+  symbols are partitioned by `distanceContext(copy_len)`, and a restricted
+  growth string search evaluates every partition of the four contexts before
+  the planned header writes NTREESD, the selected context map and the trees.
+  The payload selects the distance tree per command through that map. The
+  candidate is fully encoded so the counted and prepared-command caches keep
+  their one-tree contracts; it is limited to standard windows, empty metadata
+  and no command/distance split. On frozen 64 KiB Silesia prefixes the complete
+  wire shrinks sao 46,617 -> 46,581, dickens 22,381 -> 22,373 and samba
+  18,738 -> 18,734, leaving the other eight rows unchanged. Combining the trees
+  with the joint literal/context candidate grows x-ray, so it was not added.
+  Three direct tests cover all four contexts, unused single-symbol trees and
+  the two-tree merge decision. [Evidence](performance/br/command-model-lifetime.md).
+  The remaining literal-modeling gap stays active; the three-codec
+  industry-best objective remains open.

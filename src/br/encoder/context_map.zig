@@ -27,7 +27,14 @@ pub const Plan = struct {
 };
 
 pub fn choose(allocator: std.mem.Allocator, context_map: *const [map_len]u8, tree_count: usize) !Plan {
-    if (tree_count < 2 or tree_count > max_tree_count) return error.InvalidBlockPlan;
+    return chooseSlice(allocator, context_map, tree_count);
+}
+
+/// Choose a plan for a context map shorter than the literal 64-entry map.
+/// Distance context maps have four entries per distance block type.
+pub fn chooseSlice(allocator: std.mem.Allocator, context_map: []const u8, tree_count: usize) !Plan {
+    if (tree_count < 2 or tree_count > max_tree_count or context_map.len == 0 or context_map.len > map_len)
+        return error.InvalidBlockPlan;
     for (context_map) |tree| if (tree >= tree_count) return error.InvalidBlockPlan;
 
     var best = try build(allocator, context_map, tree_count, false, 0);
@@ -75,19 +82,21 @@ fn writePrefix(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usi
 
 fn build(
     allocator: std.mem.Allocator,
-    context_map: *const [map_len]u8,
+    context_map: []const u8,
     tree_count: usize,
     use_mtf: bool,
     rle_prefix: u3,
 ) !Plan {
-    var symbols = context_map.*;
-    if (use_mtf) applyMoveToFront(&symbols, tree_count);
+    var symbols: [map_len]u8 = undefined;
+    @memcpy(symbols[0..context_map.len], context_map);
+    const symbol_count = context_map.len;
+    if (use_mtf) applyMoveToFront(symbols[0..symbol_count], tree_count);
 
     var tokens: [map_len]Token = undefined;
     var token_count: usize = 0;
     var extra_bits: u64 = 0;
     var index: usize = 0;
-    while (index < symbols.len) {
+    while (index < symbol_count) {
         if (symbols[index] != 0 or rle_prefix == 0) {
             const symbol = if (symbols[index] == 0)
                 0
@@ -100,7 +109,7 @@ fn build(
         }
 
         var run_len: usize = 1;
-        while (index + run_len < symbols.len and symbols[index + run_len] == 0) : (run_len += 1) {}
+        while (index + run_len < symbol_count and symbols[index + run_len] == 0) : (run_len += 1) {}
         var remaining = run_len;
         while (remaining >= 2) {
             const floor: usize = std.math.log2_int(usize, remaining);
@@ -157,7 +166,7 @@ fn build(
     };
 }
 
-fn applyMoveToFront(values: *[map_len]u8, tree_count: usize) void {
+fn applyMoveToFront(values: []u8, tree_count: usize) void {
     var mtf: [max_tree_count]u8 = undefined;
     for (mtf[0..tree_count], 0..) |*tree, index| tree.* = @intCast(index);
     for (values) |*value| {

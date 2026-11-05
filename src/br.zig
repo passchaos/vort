@@ -7309,29 +7309,64 @@ test "Brotli encode counters reject plaintext overflow before stream publication
 
 test "Brotli distance context trees round trip across copy-length contexts" {
     const allocator = std.testing.allocator;
-    const payload = "abcdefgh" ++ "ab" ++ "abc" ++ "abcd" ++ "abcde" ++ "abcdefg";
-    const commands = [_]command_plan.Command{
-        .{ .insert_start = 0, .insert_len = 8, .copy_len = 2, .distance = 8, .has_copy = true },
-        .{ .insert_start = 10, .insert_len = 0, .copy_len = 3, .distance = 10, .has_copy = true },
-        .{ .insert_start = 13, .insert_len = 0, .copy_len = 4, .distance = 13, .has_copy = true },
-        .{ .insert_start = 17, .insert_len = 0, .copy_len = 5, .distance = 17, .has_copy = true },
-        .{ .insert_start = 22, .insert_len = 0, .copy_len = 7, .distance = 22, .has_copy = true },
-    };
+    const literal_len = 256;
+    const samples_per_context = 32;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    try payload.ensureTotalCapacity(allocator, literal_len + 4 * samples_per_context * 5);
+    for (0..literal_len) |value| try payload.append(allocator, @intCast(value));
+    var commands: std.ArrayList(command_plan.Command) = .empty;
+    defer commands.deinit(allocator);
+    // A Brotli command always carries a copy length; the opening command both
+    // inserts the base literals and starts the first context.
+    try payload.append(allocator, payload.items[literal_len - 1]);
+    try payload.append(allocator, payload.items[literal_len]);
+    try commands.append(allocator, .{
+        .insert_start = 0,
+        .insert_len = literal_len,
+        .copy_len = 2,
+        .distance = 1,
+        .has_copy = true,
+    });
+    var used: [4]usize = @splat(0);
+    for (0..4 * samples_per_context) |sample| {
+        const context = sample % 4;
+        const copy_len: usize = switch (context) {
+            0 => 2,
+            1 => 3,
+            2 => 4,
+            else => 5,
+        };
+        const distance = 1 + context * samples_per_context + (used[context] % samples_per_context);
+        used[context] += 1;
+        const start = payload.items.len - distance;
+        for (0..copy_len) |index| try payload.append(allocator, payload.items[start + index]);
+        try commands.append(allocator, .{
+            .insert_start = payload.items.len - copy_len,
+            .insert_len = 0,
+            .copy_len = copy_len,
+            .distance = distance,
+            .has_copy = true,
+        });
+    }
     var plain_stats: encoder_stats.PlannedEncodeStats = .{};
-    const plain = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &plain_stats, .{});
+    const plain = try encodeCommandPlanWithOptionsAlloc(allocator, payload.items, commands.items, null, &plain_stats, .{});
     defer allocator.free(plain);
     const plain_decoded = try decodeStreamAlloc(allocator, plain);
     defer allocator.free(plain_decoded);
-    try std.testing.expectEqualStrings(payload, plain_decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, plain_decoded);
     var context_stats: encoder_stats.PlannedEncodeStats = .{};
-    const contextual = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &context_stats, .{
+    const contextual = try encodeCommandPlanWithOptionsAlloc(allocator, payload.items, commands.items, null, &context_stats, .{
         .distance_context_trees = true,
     });
     defer allocator.free(contextual);
+    // Disjoint distance ranges per copy-length context make the partitioned
+    // trees smaller than one shared tree, so a context plan must be emitted.
     try std.testing.expect(!std.mem.eql(u8, plain, contextual));
+    try std.testing.expect(contextual.len <= plain.len);
     const decoded = try decodeStreamAlloc(allocator, contextual);
     defer allocator.free(decoded);
-    try std.testing.expectEqualStrings(payload, decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
 test "Brotli distance context trees emit single-symbol trees for unused contexts" {
@@ -7350,6 +7385,34 @@ test "Brotli distance context trees emit single-symbol trees for unused contexts
     const decoded = try decodeStreamAlloc(allocator, contextual);
     defer allocator.free(decoded);
     try std.testing.expectEqualStrings(payload, decoded);
+}
+
+test "Brotli distance context planner merges identical contexts" {
+    const capacity = planned_distance_alphabet_size;
+    var frequencies: [4][capacity]u32 = @splat(@splat(0));
+    // Contexts 0/2 share one distribution and 1/3 share another, so the
+    // partition search should keep two trees rather than four.
+    for (0..8) |symbol| {
+        const weight: u32 = @intCast(symbol);
+        frequencies[0][symbol] = 10 + weight;
+        frequencies[2][symbol] = 10 + weight;
+        frequencies[1][64 + symbol] = 7 + weight;
+        frequencies[3][64 + symbol] = 7 + weight;
+    }
+    var state: DistanceContextTreesState(capacity) = .{};
+    const plan = try chooseDistanceContextPlan(
+        capacity,
+        std.testing.allocator,
+        &frequencies,
+        encoder_distance.Parameters.init(0, 15),
+        .standard,
+        16 + 15 + 48,
+        &state,
+    );
+    try std.testing.expectEqual(@as(usize, 2), plan.tree_count);
+    try std.testing.expectEqual(plan.map[0], plan.map[2]);
+    try std.testing.expectEqual(plan.map[1], plan.map[3]);
+    try std.testing.expect(plan.map[0] != plan.map[1]);
 }
 const PlannedWireContext = struct {
     large_window: bool = false,
@@ -12748,10 +12811,120 @@ fn commandsHaveExactEncoding(commands: []const command_plan.Command) bool {
 fn DistanceContextTreesState(comptime distance_capacity: usize) type {
     return struct {
         frequencies: [4][distance_capacity]u32 = @splat(@splat(0)),
+        /// Scratch histograms used while scoring context partitions.
+        merged: [4][distance_capacity]u32 = @splat(@splat(0)),
         alphabets: [4]command_plan.PrefixAlphabetFor(distance_capacity) = undefined,
         lengths: [4][distance_capacity]u4 = undefined,
         encoders: [4]huffman.HuffmanTable(distance_capacity).Encoder = undefined,
+        tree_count: usize = 0,
+        map: [4]u8 = .{ 0, 1, 2, 3 },
     };
+}
+
+const DistanceContextPlan = struct {
+    tree_count: usize,
+    map: [4]u8,
+};
+
+/// Enumerate every partition of the four copy-length contexts and keep the
+/// plan with the lowest estimated map-plus-tree cost. Restricted growth
+/// strings visit each partition once; the identity four-tree plan is included.
+fn chooseDistanceContextPlan(
+    comptime distance_capacity: usize,
+    allocator: std.mem.Allocator,
+    frequencies: *const [4][distance_capacity]u32,
+    parameters: encoder_distance.Parameters,
+    format: encoder_distance.Format,
+    wire_size: usize,
+    state: *DistanceContextTreesState(distance_capacity),
+) Error!DistanceContextPlan {
+    const active_size = parameters.activeAlphabetSize(format);
+    var best_cost: u64 = std.math.maxInt(u64);
+    var best_map: [4]u8 = .{ 0, 0, 0, 0 };
+    var best_tree_count: usize = 0;
+    var assignment: [4]u8 = undefined;
+    var a1: u8 = 0;
+    while (a1 <= 1) : (a1 += 1) {
+        assignment[0] = 0;
+        assignment[1] = a1;
+        var a2: u8 = 0;
+        while (a2 <= a1 + 1) : (a2 += 1) {
+            assignment[2] = a2;
+            const max2 = @max(a1, a2);
+            var a3: u8 = 0;
+            while (a3 <= max2 + 1) : (a3 += 1) {
+                assignment[3] = a3;
+                const tree_count: usize = @max(max2, a3) + 1;
+                var cost: u64 = 0;
+                if (tree_count >= 2) {
+                    var map_context: [4]u8 = assignment;
+                    const map_plan = try context_map_encoder.chooseSlice(allocator, &map_context, tree_count);
+                    cost = map_plan.bit_cost;
+                }
+                @memset(&state.merged, @splat(0));
+                for (0..4) |context| {
+                    const tree = assignment[context];
+                    for (0..distance_capacity) |symbol|
+                        state.merged[tree][symbol] += frequencies[context][symbol];
+                }
+                for (0..tree_count) |tree| {
+                    if (allZeroFrequencies(distance_capacity, &state.merged[tree]))
+                        state.merged[tree][0] = 1;
+                    var alphabet: command_plan.PrefixAlphabetFor(distance_capacity) = undefined;
+                    try command_plan.alphabetFromFrequenciesInto(distance_capacity, &alphabet, &state.merged[tree]);
+                    const lengths = try alphabet.codeLengths(&state.merged[tree]);
+                    const tree_cost = try prefixTreePlanBitCost(
+                        distance_capacity,
+                        allocator,
+                        active_size,
+                        wire_size,
+                        &state.merged[tree],
+                        &alphabet,
+                        &lengths,
+                    );
+                    cost = std.math.add(u64, cost, tree_cost) catch return error.IntegerOverflow;
+                }
+                if (cost < best_cost) {
+                    best_cost = cost;
+                    best_map = assignment;
+                    best_tree_count = tree_count;
+                }
+            }
+        }
+    }
+    if (best_tree_count == 0) return error.InvalidBlockPlan;
+
+    @memset(&state.merged, @splat(0));
+    for (0..4) |context| {
+        const tree = best_map[context];
+        for (0..distance_capacity) |symbol|
+            state.merged[tree][symbol] += frequencies[context][symbol];
+    }
+    for (0..best_tree_count) |tree| {
+        if (allZeroFrequencies(distance_capacity, &state.merged[tree]))
+            state.merged[tree][0] = 1;
+        try command_plan.alphabetFromFrequenciesInto(
+            distance_capacity,
+            &state.alphabets[tree],
+            &state.merged[tree],
+        );
+        state.lengths[tree] = if (state.alphabets[tree].len <= 4)
+            @splat(0)
+        else
+            try state.alphabets[tree].codeLengths(&state.merged[tree]);
+        state.encoders[tree] = if (state.alphabets[tree].len <= 4)
+            .{}
+        else if (state.alphabets[tree].len <= 64)
+            try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(
+                &state.lengths[tree],
+                state.alphabets[tree].symbols[0..state.alphabets[tree].len],
+            )
+        else
+            try huffman.HuffmanTable(distance_capacity).Encoder.init(&state.lengths[tree]);
+    }
+    state.tree_count = best_tree_count;
+    state.map = best_map;
+    return .{ .tree_count = best_tree_count, .map = best_map };
 }
 
 inline fn encodeCommandPlanWithOptionsWriteInternal(
@@ -12854,6 +13027,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         }
     }
     const distance_format: encoder_distance.Format = if (options.large_window) .large_window else .standard;
+    const distance_alphabet_size = options.distance_parameters.wireAlphabetSize(distance_format);
     if (options.distance_parameters.activeAlphabetSize(distance_format) > distance_capacity)
         return error.InvalidBlockPlan;
     if (comptime distance_capacity == planned_wide_distance_alphabet_size) {
@@ -13262,28 +13436,15 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     } else if (!has_same_last_candidate)
         try command_plan.alphabetFromFrequenciesInto(distance_capacity, &distance_alphabet, &distance_frequencies);
     if (distance_context_state) |state| {
-        for (0..4) |context| {
-            if (allZeroFrequencies(distance_capacity, &state.frequencies[context]))
-                state.frequencies[context][0] = 1;
-            try command_plan.alphabetFromFrequenciesInto(
-                distance_capacity,
-                &state.alphabets[context],
-                &state.frequencies[context],
-            );
-            state.lengths[context] = if (state.alphabets[context].len <= 4)
-                @splat(0)
-            else
-                try state.alphabets[context].codeLengths(&state.frequencies[context]);
-            state.encoders[context] = if (state.alphabets[context].len <= 4)
-                .{}
-            else if (state.alphabets[context].len <= 64)
-                try huffman.HuffmanTable(distance_capacity).Encoder.initSparseTrusted(
-                    &state.lengths[context],
-                    state.alphabets[context].symbols[0..state.alphabets[context].len],
-                )
-            else
-                try huffman.HuffmanTable(distance_capacity).Encoder.init(&state.lengths[context]);
-        }
+        _ = try chooseDistanceContextPlan(
+            distance_capacity,
+            allocator,
+            &state.frequencies,
+            options.distance_parameters,
+            distance_format,
+            distance_alphabet_size,
+            state,
+        );
     }
     stats.literal_symbol_count = if (options.literal_split) |split| blk: {
         var symbol_count: usize = 0;
@@ -13321,7 +13482,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         break :blk symbol_count;
     } else if (distance_context_state) |state| blk: {
         var symbol_count: usize = 0;
-        for (state.alphabets) |alphabet| symbol_count += alphabet.len;
+        for (state.alphabets[0..state.tree_count]) |alphabet| symbol_count += alphabet.len;
         break :blk symbol_count;
     } else distance_alphabet.len;
     if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
@@ -13337,7 +13498,6 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
     } else if (options.metadata.len != 0) return error.InvalidBlockPlan;
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
-    const distance_alphabet_size = options.distance_parameters.wireAlphabetSize(distance_format);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = if (options.literal_split == null and adaptive_literal_split == null)
         try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
@@ -13592,6 +13752,8 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             &command_lengths,
             &state.alphabets,
             &state.lengths,
+            state.tree_count,
+            &state.map,
             options.distance_parameters,
             distance_alphabet_size,
         );
@@ -13920,12 +14082,13 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 }
             }
             const distance_context = if (options.distance_context_trees) distanceContext(command.copy_len) else 0;
+            const distance_tree = if (distance_context_state) |state| state.map[distance_context] else 0;
             const active_distance_alphabet = if (options.distance_split) |split|
                 &distance_block_alphabets[split.blockIndex(distance_index)]
             else if (adaptive_distance_split) |split|
                 &adaptive_distance_block_alphabets.?[split.types[adaptive_distance_block_index]]
             else if (options.distance_context_trees)
-                &(distance_context_state orelse return error.InvalidBlockPlan).alphabets[distance_context]
+                &(distance_context_state orelse return error.InvalidBlockPlan).alphabets[distance_tree]
             else
                 &distance_alphabet;
             const active_distance_encoder = if (options.distance_split) |split|
@@ -13933,7 +14096,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             else if (adaptive_distance_split) |split|
                 &adaptive_distance_block_encoders.?[split.types[adaptive_distance_block_index]]
             else if (options.distance_context_trees)
-                &(distance_context_state orelse return error.InvalidBlockPlan).encoders[distance_context]
+                &(distance_context_state orelse return error.InvalidBlockPlan).encoders[distance_tree]
             else
                 &distance_encoder;
             if (options.distance_split) |split| {
@@ -40853,12 +41016,18 @@ fn writePlannedCompressedHeaderAdaptiveLiteralBlocks(
     );
 }
 
-fn writeDistanceContextTreeCount(allocator: std.mem.Allocator, writer: anytype) Error!void {
-    try writeBlockTypeCount(allocator, writer, 4);
-    // One distance block type contributes exactly four context-map entries;
-    // the identity map assigns copy-length context N to tree N.
-    const map_plan = try identity_context_map.Plan.init(allocator, 4, 1);
-    try map_plan.write(allocator, writer);
+fn writeDistanceContextHeader(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    tree_count: usize,
+    context_map: *const [4]u8,
+) Error!void {
+    if (tree_count == 0 or tree_count > 4) return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, @intCast(tree_count));
+    if (tree_count < 2) return;
+    // One distance block type contributes exactly four context-map entries.
+    const map_plan = try context_map_encoder.chooseSlice(allocator, context_map, tree_count);
+    try context_map_encoder.write(allocator, writer, &map_plan);
 }
 
 fn writeDistanceContextTrees(
@@ -40867,12 +41036,14 @@ fn writeDistanceContextTrees(
     writer: anytype,
     parameters: encoder_distance.Parameters,
     distance_alphabet_size: usize,
+    tree_count: usize,
     alphabets: *const [4]command_plan.PrefixAlphabetFor(distance_capacity),
     lengths: *const [4][distance_capacity]u4,
 ) Error!void {
+    if (tree_count == 0 or tree_count > 4) return error.InvalidBlockPlan;
     const format: encoder_distance.Format = if (distance_capacity == large_max_distance_alphabet_size) .large_window else .standard;
     const active_size = parameters.activeAlphabetSize(format);
-    for (alphabets, lengths) |*alphabet, *tree_lengths|
+    for (alphabets[0..tree_count], lengths[0..tree_count]) |*alphabet, *tree_lengths|
         try writePrefixSymbolsWithAlphabetSizes(allocator, writer, active_size, distance_alphabet_size, alphabet, tree_lengths);
 }
 
@@ -41148,6 +41319,8 @@ fn writePlannedCompressedHeaderDistanceContext(
     command_lengths: *const [704]u4,
     distance_alphabets: *const [4]command_plan.PrefixAlphabetFor(distance_capacity),
     distance_lengths: *const [4][distance_capacity]u4,
+    distance_tree_count: usize,
+    distance_context_map: *const [4]u8,
     parameters: encoder_distance.Parameters,
     distance_alphabet_size: usize,
 ) Error!void {
@@ -41165,7 +41338,7 @@ fn writePlannedCompressedHeaderDistanceContext(
         if (literal_alphabets.len != 1) return error.InvalidBlockPlan;
         try writeBlockTypeCount(allocator, writer, 1);
     }
-    try writeDistanceContextTreeCount(allocator, writer);
+    try writeDistanceContextHeader(allocator, writer, distance_tree_count, distance_context_map);
     for (literal_alphabets, literal_lengths) |*alphabet, *lengths|
         try writePrefixSymbolsWithLengths(allocator, writer, 256, alphabet, lengths);
     try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
@@ -41175,6 +41348,7 @@ fn writePlannedCompressedHeaderDistanceContext(
         writer,
         parameters,
         distance_alphabet_size,
+        distance_tree_count,
         distance_alphabets,
         distance_lengths,
     );

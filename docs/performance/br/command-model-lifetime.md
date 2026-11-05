@@ -1155,13 +1155,16 @@ map when at least two distance block types exist.
 ## Single-block-type distance context trees, 2026-11-05
 
 The planned writer now emits an unsplit compressed meta-block with one distance
-block type, four distance context trees and an identity four-entry context map.
-Explicit distance symbols are partitioned by `distanceContext(copy_len)` into
-four histograms, and the distance encoder is selected per command by copy-length
-context. The candidate is fully encoded and compared with the baseline wire, so
-the counting and prepared-command caches are bypassed rather than taught a
-four-tree shape. It runs only for q10/q11, standard windows, empty metadata and
-no command or distance block split.
+block type and one to four distance context trees. Explicit distance symbols
+are partitioned by `distanceContext(copy_len)` into four histograms, then a
+restricted-growth-string search evaluates every partition of those contexts
+and keeps the plan with the lowest estimated map-plus-tree cost. The identity
+four-tree plan is one of the candidates. The chosen context map is written only
+when more than one tree remains, and the distance encoder is selected per
+command through that map. The candidate is fully encoded and compared with the
+baseline wire, so the counting and prepared-command caches are bypassed rather
+than taught a multi-tree shape. It runs only for q10/q11, standard windows,
+empty metadata and no command or distance block split.
 
 Measured on frozen 64 KiB Silesia prefixes with ReleaseFast, one codec thread,
 `run-br-planned-encode-bench --limit 65536 --planned-quality 11 --iterations 1`,
@@ -1169,16 +1172,18 @@ A/B with the candidate gate disabled:
 
 | File | Before | After |
 | --- | ---: | ---: |
-| sao | 46,617 | 46,583 |
-| dickens | 22,381 | 22,377 |
-| x-ray / nci / mozilla / ooffice / webster / mr / osdb / samba / XML | unchanged | unchanged |
+| sao | 46,617 | 46,581 |
+| dickens | 22,381 | 22,373 |
+| samba | 18,738 | 18,734 |
+| x-ray / nci / mozilla / ooffice / webster / mr / osdb / XML | unchanged | unchanged |
 
-The win is small because the complete-wire arbitration already keeps the joint
-literal/context candidate on most inputs. Combining the four distance context
-trees with that joint literal plan was also measured and rejected: it grows
-x-ray from 39,431 to 39,455 bytes and from 39,317 to 39,340 bytes. A dynamic
-two- or three-tree context map is the next refinement, but the current result
-does not justify paying for a second joint-literal encode.
+The dynamic partition search saves a further 2 bytes on sao and 4 on dickens
+over the identity four-tree plan, and adds samba to the winning set. The win is
+small because the complete-wire arbitration already keeps the joint
+literal/context candidate on most inputs. Combining distance context trees with
+that joint literal plan was also measured and rejected: it grows x-ray from
+39,431 to 39,455 bytes and from 39,317 to 39,340 bytes. The remaining x-ray gap
+is literal modeling, not distance context typing.
 
 The candidate adds one full encode on unsplit q10/q11 plans. Observed encode
 times rose by roughly 2-4% on the eleven 64 KiB rows, within single-iteration
