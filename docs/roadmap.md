@@ -26299,7 +26299,11 @@ reuse, so production keeps the simpler independently owned plans.
   32 KiB the wide beam also uses a repcode-bonus model learned from the modeled
   plan, cutting XML 32 KiB 2,397 -> 2,375, nci 32 KiB 2,389 -> 2,370, XML
   64 KiB 4,040 -> 4,021 and nci 64 KiB 3,868 -> 3,852; 8/16 KiB keep the
-  plain model because the bonus prior is not monotone there.
+  plain model because the bonus prior is not monotone there. Raising the
+  command-state candidate budget from eight to 32 near-chain distances then
+  cuts XML 64 KiB 4,021 -> 4,001 and nci 3,852 -> 3,816, with matching gains
+  at 32/16/8 KiB; 64 candidates add only 4-5 further bytes at a higher time
+  cost, so 32 is retained. One 4 KiB synthetic fixture loses one byte.
   [Evidence](performance/br/command-model-lifetime.md). The larger
   copy-coverage gap on binary blocks remains the main q11 ratio target. The larger copy-coverage
   gap on binary blocks remains the main q11 ratio target.

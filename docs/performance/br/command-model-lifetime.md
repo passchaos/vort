@@ -1247,6 +1247,28 @@ prior is a measured win at 32/64 KiB and not monotone below it, so inputs of
 | XML 64 KiB | 4,040 | 4,021 |
 | nci 64 KiB | 3,868 | 3,852 |
 
+The command-state parser's candidate budget rose from eight to 32
+near-chain distances. Eight candidates were the binding limit on repetitive
+text, not the beam width:
+
+| Input | 8 candidates | 32 candidates |
+| --- | ---: | ---: |
+| XML 8 KiB | 1,088 | 1,085 |
+| nci 8 KiB | 827 | 824 |
+| XML 16 KiB | 1,550 | 1,544 |
+| nci 16 KiB | 1,365 | 1,361 |
+| XML 32 KiB | 2,375 | 2,369 |
+| nci 32 KiB | 2,370 | 2,360 |
+| XML 64 KiB | 4,021 | 4,001 |
+| nci 64 KiB | 3,852 | 3,816 |
+
+Other text and binary rows are unchanged. Sixty-four candidates measured
+another 4-5 bytes on the two 64 KiB rows but raised nci time further, so 32 is
+retained. Encode time on the affected 64 KiB rows is about 2% higher for XML
+and 10% for nci. One 4 KiB synthetic fixture loses a single byte because the
+wide-beam plan ties instead of winning there; the real-text gains above are
+kept only through complete-wire arbitration.
+
 The beam's worst-slot cache that drives pruning previously compared only slots
 zero and one, which was correct solely for a two-wide beam. It now scans the
 whole retained set; beam two keeps identical behavior. The wide candidate also
