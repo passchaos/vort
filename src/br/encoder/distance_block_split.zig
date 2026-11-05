@@ -8,6 +8,9 @@ const distance = @import("distance.zig");
 const alphabet_size: usize = 79;
 const min_block_symbols: usize = 512;
 const max_split_symbols: usize = 32 * 1024;
+// The adaptive Viterbi path uses u32 histograms and can cover a complete
+// 1 MiB distance stream, unlike the legacy fixed-grid proposal search.
+const max_adaptive_split_symbols: usize = 256 * 1024;
 const candidate_count: usize = 5;
 pub const max_regions: usize = candidate_count + 1;
 const min_estimated_savings_bits: u64 = 2200;
@@ -141,6 +144,10 @@ test "Br general large window adaptive distance discovery accepts the whole acti
 
 pub fn eligible(symbol_count: usize) bool {
     return symbol_count >= 2 * min_block_symbols and symbol_count <= max_split_symbols;
+}
+
+pub fn adaptiveEligible(symbol_count: usize) bool {
+    return symbol_count >= 2 * min_block_symbols and symbol_count <= max_adaptive_split_symbols;
 }
 
 pub fn choose(symbols: []const u16) ?Result {

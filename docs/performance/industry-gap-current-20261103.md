@@ -135,9 +135,11 @@ distance parameter set through the lazy/split path. It lowers q11 `sao` from
 721,932 bytes at 1 MiB (1.0701), and q9 `x-ray` at 64 KiB from 42,475 to
 41,180 bytes. A subsequent large-input repcode-frequency bonus lowers nci
 1 MiB from 84,867 to 84,382 bytes (1.2891), osdb from 344,511 to 340,934
-(1.0914), ooffice from 542,886 to 542,854 (1.1113) and mozilla from 652,104 to
-651,928 (1.0260); sao, x-ray, webster, dickens, reymont, samba and mr 1 MiB
-keep their previous wires. This closes part of
+(1.0914) and mozilla from 652,104 to 651,928 (1.0260). Extending the adaptive
+block splitter to 256 KiB symbols then lowers mr from 295,511 to 291,417
+(1.0714), ooffice to 542,522 (1.1106), dickens to 340,861 (1.1166) and
+webster to 262,153 (1.0954); sao, x-ray, reymont and samba 1 MiB keep their
+previous wires. This closes part of
 the binary distance/block-typing gap but does not yet match the reference's
 repcode share or command/distance block-type counts.
 

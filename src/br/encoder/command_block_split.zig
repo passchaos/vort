@@ -6,6 +6,9 @@ const block_split_plan = @import("block_split_plan.zig");
 const alphabet_size: usize = 704;
 const min_block_commands: usize = 1024;
 const max_split_commands: usize = 32 * 1024;
+// The adaptive Viterbi path uses u32 histograms and can cover a complete
+// 1 MiB command stream, unlike the u16 legacy fixed-grid accumulator.
+const max_adaptive_split_commands: usize = 256 * 1024;
 const candidate_count: usize = 5;
 pub const max_regions: usize = candidate_count + 1;
 const min_estimated_savings_bits: u64 = 2048;
@@ -143,6 +146,10 @@ pub const Accumulator = struct {
 
 pub fn eligible(command_count: usize) bool {
     return command_count >= 2 * min_block_commands and command_count <= max_split_commands;
+}
+
+pub fn adaptiveEligible(command_count: usize) bool {
+    return command_count >= 2 * min_block_commands and command_count <= max_adaptive_split_commands;
 }
 
 pub fn choose(symbols: []const u16) ?Result {

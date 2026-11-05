@@ -11983,11 +11983,13 @@ fn chooseCommandAndDistanceSplitsAlloc(
     wire_context: PlannedWireContext,
 ) Error!EntropySymbolSplits {
     var command_accumulator = if (try_command_split) command_block_split.Accumulator.init(commands.len) else null;
-    const collect_adaptive_commands = try_adaptive_command_split and command_block_split.eligible(commands.len);
+    const collect_adaptive_commands = try_adaptive_command_split and command_block_split.adaptiveEligible(commands.len);
     const collect_commands = command_accumulator != null or collect_adaptive_commands;
     // There cannot be more explicit distance symbols than commands, so short
     // plans cannot qualify. Keep candidate discovery bounded on large plans.
-    const collect_distances = (try_distance_split or try_adaptive_distance_split) and distance_block_split.eligible(commands.len);
+    const collect_legacy_distances = try_distance_split and distance_block_split.eligible(commands.len);
+    const collect_adaptive_distances = try_adaptive_distance_split and distance_block_split.adaptiveEligible(commands.len);
+    const collect_distances = collect_legacy_distances or collect_adaptive_distances;
     if (!collect_commands and !collect_distances) return .{};
     const command_symbols = if (collect_commands) try allocator.alloc(u16, commands.len) else null;
     defer if (command_symbols) |symbols| allocator.free(symbols);
@@ -12022,8 +12024,8 @@ fn chooseCommandAndDistanceSplitsAlloc(
             .type_count = 8,
             .iterations = 1,
             .min_symbols = 2 * 1024,
-            .max_symbols = 32 * 1024,
-            .scratch_budget_bytes = 2 * 1024 * 1024,
+            .max_symbols = 256 * 1024,
+            .scratch_budget_bytes = 16 * 1024 * 1024,
         },
     ) catch |err| switch (err) {
         error.InvalidOptions, error.InvalidSymbol, error.InputTooLarge, error.ScratchBudgetExceeded => return error.InvalidBlockPlan,
@@ -12032,15 +12034,15 @@ fn chooseCommandAndDistanceSplitsAlloc(
         error.OutOfMemory => return error.OutOfMemory,
     } else null;
     errdefer if (adaptive_command) |plan| plan.deinit(allocator);
-    const adaptive_distance = if (try_adaptive_distance_split and distance_symbol_count >= 2 * 1024 and distance_symbol_count <= 32 * 1024) distance_block_split.chooseAdaptiveAllocWithFormat(
+    const adaptive_distance = if (try_adaptive_distance_split and distance_symbol_count >= 2 * 1024 and distance_symbol_count <= 256 * 1024) distance_block_split.chooseAdaptiveAllocWithFormat(
         allocator,
         distance_symbols.?[0..distance_symbol_count],
         .{
             .type_count = 8,
             .iterations = 1,
             .min_symbols = 2 * 1024,
-            .max_symbols = 32 * 1024,
-            .scratch_budget_bytes = 2 * 1024 * 1024,
+            .max_symbols = 256 * 1024,
+            .scratch_budget_bytes = 16 * 1024 * 1024,
         },
         encoder_window_format.format(wire_context.large_window),
     ) catch |err| switch (err) {

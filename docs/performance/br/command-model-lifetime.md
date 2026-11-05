@@ -961,11 +961,11 @@ matrix versus libbrotli 1.0.9 is:
 | mozilla | 651,928 | 635,440 | 1.0260 |
 | samba | 301,653 | 282,533 | 1.0675 |
 | sao | 721,932 | 674,615 | 1.0701 |
-| mr | 295,511 | 271,989 | 1.0865 |
+| mr | 291,417 | 271,989 | 1.0714 |
 | osdb | 340,934 | 312,387 | 1.0914 |
-| webster | 262,209 | 239,314 | 1.0956 |
-| ooffice | 542,854 | 488,479 | 1.1113 |
-| dickens | 341,020 | 305,265 | 1.1172 |
+| webster | 262,153 | 239,314 | 1.0954 |
+| ooffice | 542,522 | 488,479 | 1.1106 |
+| dickens | 340,861 | 305,265 | 1.1166 |
 | reymont | 260,088 | 228,207 | 1.1396 |
 | nci | 84,382 | 65,459 | 1.2891 |
 
@@ -974,8 +974,9 @@ the reference's 9,882 + 4,095, and 17,191 regular distances against 9,026. The
 1 MiB gap is therefore dominated by repcode share and distance/context block
 typing, the same structural items as the 64 KiB binary rows. The sao, nci,
 osdb, ooffice and mozilla values above include the later distance-parameter
-split re-encoding and repcode-frequency bonus epochs; the other rows remain at
-their earlier measured wires.
+split re-encoding and repcode-frequency bonus epochs; mr, webster, ooffice and
+dickens also include the large-input adaptive block split epoch. The remaining
+rows stay at their earlier measured wires.
 
 A repcode-first greedy parser was implemented and rejected. It probes the four
 cached distances before the hash chain, keeps the longest match and breaks ties
@@ -1107,3 +1108,23 @@ stays 721,932 and x-ray 1 MiB stays 590,922. Applying the bonus only to the
 first model, or only to the second modeled pass, is weaker; the accepted wire
 comes from the bonus model built over the modeled commands. The extra large
 input pass is a latency cost and remains a target for later performance work.
+
+## Large-input adaptive block splits, 2026-11-05
+
+The adaptive Viterbi splitter was capped at 32 KiB symbols, so 1 MiB optimal
+plans with 80,000-143,000 commands never reached command or distance block
+typing. The adaptive path now accepts up to 256 KiB symbols with a 16 MiB
+scratch budget; the legacy fixed-grid proposal search keeps its 32 KiB u16
+limit. Complete-wire arbitration still chooses the smaller result.
+
+| File | Before | After | Size ratio |
+| --- | ---: | ---: | ---: |
+| mr 1 MiB | 295,511 | 291,417 | 1.0865 -> 1.0714 |
+| ooffice 1 MiB | 542,854 | 542,522 | 1.1113 -> 1.1106 |
+| dickens 1 MiB | 341,020 | 340,861 | 1.1172 -> 1.1166 |
+| webster 1 MiB | 262,209 | 262,153 | 1.0956 -> 1.0954 |
+
+nci, sao, osdb, mozilla, samba, x-ray and reymont 1 MiB keep their previous
+wires. mr is the largest gain: it now emits eight command and eight distance
+block types where the previous wire kept one. The larger split search adds
+latency on 1 MiB inputs and is a later performance target.
