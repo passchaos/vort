@@ -62,7 +62,12 @@ remaining full candidate emission and parser/model work. Higher qualities
 also need better compressed size. Native Zstd needs persistent matcher/index
 lifetime across blocks, larger-input search policies and better entropy
 pricing. Deflate needs entropy-aware parsing and split planning across
-streaming, dictionaries and larger multi-block inputs.
+streaming, dictionaries and larger multi-block inputs. A 2026-11-05 probe on
+1 MiB nci/sao/x-ray prefixes found `encodeZlibBestAlloc` and
+`encodeZlibBestAdaptiveSplitAlloc` produce identical sizes (99,589, 770,151 and
+698,511 bytes). The current adaptive splitter finds no profitable boundary on
+this scope, so the remaining Deflate gap here is parsing and entropy modeling,
+not split planning.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated
