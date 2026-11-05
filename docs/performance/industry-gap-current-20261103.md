@@ -65,9 +65,13 @@ pricing. Deflate needs entropy-aware parsing and split planning across
 streaming, dictionaries and larger multi-block inputs. A 2026-11-05 probe on
 1 MiB nci/sao/x-ray prefixes found `encodeZlibBestAlloc` and
 `encodeZlibBestAdaptiveSplitAlloc` produce identical sizes (99,589, 770,151 and
-698,511 bytes). The current adaptive splitter finds no profitable boundary on
-this scope, so the remaining Deflate gap here is parsing and entropy modeling,
-not split planning.
+698,511 bytes). The split path's `writeBestSplitBlocks` re-plans each chunk
+without a history prefix, so it cannot recover matches that cross a block
+boundary; the one-shot path sees the whole input and already finds them. The
+parity therefore exposes a functional gap in history-aware split planning, not
+proof that no boundary is profitable. The next Deflate split attempt should
+plan on `previous_history + chunk`, discard the prefix tokens and retain only
+the chunk-relative suffix before emission.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated
