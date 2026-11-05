@@ -1190,6 +1190,9 @@ fn encodeRefinedHistoryChunksAlloc(
     history_cap: usize,
     options: CompressionOptions,
 ) !?[]u8 {
+    if (chunk_len == 0 or chunk_len > dynamic_refinement_max_input_len or
+        history_cap > dynamic_refinement_max_input_len - chunk_len)
+        return error.InvalidBlockPlan;
     if (input.len <= dynamic_refinement_max_input_len) return null;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -23683,6 +23686,21 @@ test "split plan suffix trimming preserves straddling matches" {
         };
         try std.testing.expectEqual(combined.len - skip, position);
     }
+}
+
+test "refined history chunk configuration stays within BT input limit" {
+    const options = optionsForLevel(.best);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodeRefinedHistoryChunksAlloc(std.testing.allocator, "abc", 0, 0, options),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodeRefinedHistoryChunksAlloc(std.testing.allocator, "abc", 32 * 1024, 48 * 1024, options),
+    );
+    try std.testing.expect(
+        (try encodeRefinedHistoryChunksAlloc(std.testing.allocator, "abc", 32 * 1024, 32 * 1024, options)) == null,
+    );
 }
 
 test "adaptive split falls back to one-shot when smaller" {
