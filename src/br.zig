@@ -122,6 +122,7 @@ var test_q2_dynamic_tree_hits: usize = 0;
 var test_q3_trivial_writer_hits: usize = 0;
 var test_hq_command_candidate_attempts: usize = 0;
 var test_hq_command_candidate_selections: usize = 0;
+var test_hq_wide_command_candidate_selections: usize = 0;
 var test_hq_command_pre_bytes: usize = 0;
 var test_hq_command_bytes: usize = 0;
 var test_stream_hq_command_candidate_attempts: usize = 0;
@@ -5812,6 +5813,44 @@ noinline fn selectQualityCommandStateCandidate(
     compact_owned = false;
     retainSmallerOwnedWire(allocator, best, compact);
     retainSmallerOwnedWire(allocator, best, hq_candidate);
+
+    // A wider beam lowers the modeled cost but does not always lower the real
+    // wire, so it is a separate complete candidate rather than a replacement.
+    const wide = try hq_command_parser.planAllocWide(allocator, input, .{
+        .window_len = search_window,
+        .max_chain = @min(budget.max_chain, 64),
+        .nice_len = budget.nice_len,
+        .max_candidates = @min(budget.max_candidates, 8),
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    }, model);
+    defer wide.deinit(allocator);
+    if (wide.lz.stats.matches == 0) return;
+    const wide_commands = try command_plan.buildAlloc(allocator, input, wide.lz.tokens);
+    defer wide_commands.deinit(allocator);
+    var wide_compact_stats: encoder_stats.PlannedEncodeStats = .{};
+    const wide_compact = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        wide_commands.commands,
+        null,
+        &wide_compact_stats,
+        commandStateCompactEncodeOptions(wire_options),
+    );
+    retainSmallerOwnedWire(allocator, best, wide_compact);
+    var wide_stats: encoder_stats.PlannedEncodeStats = .{};
+    const wide_candidate = try encodeLazyCommandPlanAlloc(
+        allocator,
+        input,
+        wide_commands.commands,
+        &wide_stats,
+        wire_options,
+    );
+    if (builtin.is_test)
+        test_hq_wide_command_candidate_selections += @intFromBool(
+            wide_candidate.len < best.*.len,
+        );
+    retainSmallerOwnedWire(allocator, best, wide_candidate);
 }
 
 /// Profile one q10/q11 command-state proposal in isolation. The production
@@ -28568,9 +28607,12 @@ test "br q10 command-state candidate improves complete wire" {
     defer std.testing.allocator.free(encoded);
     try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
     try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_selections);
+    // Frozen after adding the wide-beam command-state candidate: the narrow
+    // beam still supplies the recorded candidate wire (231 bytes), while the
+    // wide beam's complete wire wins at 230 bytes.
     try std.testing.expectEqual(@as(usize, 233), test_hq_command_pre_bytes);
     try std.testing.expectEqual(@as(usize, 231), test_hq_command_bytes);
-    try std.testing.expectEqual(@as(usize, 231), encoded.len);
+    try std.testing.expectEqual(@as(usize, 230), encoded.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);

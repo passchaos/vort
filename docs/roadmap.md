@@ -26282,3 +26282,20 @@ reuse, so production keeps the simpler independently owned plans.
   for q10/q11 only. [Evidence](performance/br/command-model-lifetime.md). The
   larger x-ray copy-coverage gap (reference 6,304 copies / 23,336 bytes versus
   Vort 2,997 / 14,509) remains the main q11 binary target.
+
+- 2026-11-06: Brotli q10/q11's repcode-aware command-state candidate now runs
+  both a two-state and a four-state beam as complete candidates, arbitrated by
+  final wire size. A wider beam is not monotone in wire size (a synthetic
+  16 KiB XML fixture loses 27 bytes at four states), so the narrow plan stays.
+  The beam's worst-slot cache now scans all retained states instead of only
+  slots zero and one, which was correct solely for the old two-wide beam.
+  On frozen prefixes q11 XML falls 4,082 -> 4,040 and nci 3,916 -> 3,868 at
+  64 KiB, with matching gains at 32/16/8 KiB (XML 2,418 -> 2,397, nci
+  2,415 -> 2,389; XML 1,558 -> 1,550, nci 1,376 -> 1,365; XML 1,091 -> 1,088,
+  nci 837 -> 827). q10 emits the same 64 KiB wires because q11 inherits its
+  winner; binary rows and 1 MiB inputs are unchanged. The wide state array is
+  `(len + 1) * 4 * 72` bytes, about 19 MiB at the 64 KiB gate, and affected
+  encode times rise about 45% because the command-state parse doubles.
+  [Evidence](performance/br/command-model-lifetime.md). The larger
+  copy-coverage gap on binary blocks remains the main q11 ratio target. The larger copy-coverage
+  gap on binary blocks remains the main q11 ratio target.

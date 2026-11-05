@@ -1209,3 +1209,42 @@ not distance context typing or symbol block typing.
 The candidate adds one full encode on unsplit q10/q11 plans. Observed encode
 times rose by roughly 2-4% on the eleven 64 KiB rows, within single-iteration
 noise; the larger q10/q11 latency budget remains a separate performance task.
+
+## Repcode command-state beam widths, 2026-11-06
+
+The repcode-aware command-state candidate retained two forward states per input
+position. A four-state plan recovers measurable text bytes, but a wider beam is
+not monotone in real wire size: on a synthetic 16 KiB XML fixture the four-state
+plan ties the pre-candidate wire while the two-state plan wins by 27 bytes.
+The four-state plan is therefore a second complete candidate, and both plans are
+encoded and arbitrated against the baseline wire instead of replacing the narrow
+one.
+
+| Input | Narrow only | Narrow + wide |
+| --- | ---: | ---: |
+| XML 8 KiB | 1,091 | 1,088 |
+| nci 8 KiB | 837 | 827 |
+| XML 16 KiB | 1,558 | 1,550 |
+| nci 16 KiB | 1,376 | 1,365 |
+| XML 32 KiB | 2,418 | 2,397 |
+| nci 32 KiB | 2,415 | 2,389 |
+| XML 64 KiB | 4,082 | 4,040 |
+| nci 64 KiB | 3,916 | 3,868 |
+
+q10 produces the same 64 KiB numbers because q11 inherits the complete q10
+winner below 64 KiB. Binary rows and 1 MiB inputs are unchanged, since the
+command-state candidate is gated to text-like blocks up to 64 KiB.
+
+The beam's worst-slot cache that drives pruning previously compared only slots
+zero and one, which was correct solely for a two-wide beam. It now scans the
+whole retained set; beam two keeps identical behavior. The wide candidate also
+encodes its compact and complete wires, matching the narrow candidate's two
+wire forms.
+
+The cost is transient memory and time: each state is 72 bytes, so the wide
+array is `(input_len + 1) * 4 * 72` bytes, about 19 MiB at the 64 KiB gate
+(narrow is 9.4 MiB, and the two plans do not overlap). Both parses run
+sequentially, so peak memory is unchanged from the wide-only experiment.
+Encode time on the affected 64 KiB rows rises about 45% (XML 412 -> 615 ms,
+nci 380 -> 546 ms) because the command-state parse roughly doubles. The full
+Brotli suite and the exact requested-heap contracts pass unchanged.

@@ -6,7 +6,13 @@ const distance_history = @import("../decoder/distance_history.zig");
 const entropy_feedback = @import("entropy_feedback.zig");
 const length = @import("../length.zig");
 
-const beam_width = 2;
+/// Retained forward states per input position for the repcode-aware q10/q11
+/// candidate. The narrow beam is the cheap default; the wide beam is a second
+/// complete candidate because the modeled optimum does not always equal the
+/// smallest wire. Each state is 72 bytes, so the 64 KiB gate keeps the wide
+/// transient array at about 19 MiB.
+pub const narrow_beam = 2;
+pub const wide_beam = 4;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const q8: u64 = 256;
 
@@ -111,11 +117,33 @@ pub fn planAllocWithStartingDistances(
 ) !Plan {
     return planAllocInternal(
         false,
+        narrow_beam,
         allocator,
         input,
         options,
         model,
         starting_last_distances,
+        undefined,
+    );
+}
+
+/// Wide-beam variant of `planAlloc`. Callers must arbitrate its complete wire
+/// against the narrow-beam result because a lower modeled cost is not always a
+/// smaller wire.
+pub fn planAllocWide(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+) !Plan {
+    return planAllocInternal(
+        false,
+        wide_beam,
+        allocator,
+        input,
+        options,
+        model,
+        initial_last_distances,
         undefined,
     );
 }
@@ -130,6 +158,7 @@ pub fn planAllocProfiledWithStartingDistances(
 ) !Plan {
     return planAllocInternal(
         true,
+        narrow_beam,
         allocator,
         input,
         options,
@@ -141,6 +170,7 @@ pub fn planAllocProfiledWithStartingDistances(
 
 fn planAllocInternal(
     comptime profiled: bool,
+    comptime beam: usize,
     allocator: std.mem.Allocator,
     input: []const u8,
     options: lz77.GreedyOptions,
@@ -171,7 +201,7 @@ fn planAllocInternal(
 
     const position_count = std.math.add(usize, input.len, 1) catch
         return error.IntegerOverflow;
-    const state_count = std.math.mul(usize, position_count, beam_width) catch
+    const state_count = std.math.mul(usize, position_count, beam) catch
         return error.IntegerOverflow;
     const states = try allocator.alloc(State, state_count);
     defer allocator.free(states);
@@ -216,10 +246,10 @@ fn planAllocInternal(
             std.math.maxInt(u16),
         );
         stats.match_candidates += candidate_count;
-        const current = states[position * beam_width ..][0..lengths[position]];
+        const current = states[position * beam ..][0..lengths[position]];
         for (current, 0..) |*state, slot| {
             stats.states_visited += 1;
-            insertState(states, lengths, worst_slots, position + 1, .{
+            insertState(beam, states, lengths, worst_slots, position + 1, .{
                 .cost = addCost(state.cost, model.literal[input[position]]),
                 .last_distances = state.last_distances,
                 .pending_insert = state.pending_insert + 1,
@@ -262,8 +292,9 @@ fn planAllocInternal(
                 stats.match_transitions += 1;
                 if (comptime profiled) stats.general_match_transitions += 1;
                 if (comptime profiled) stats.full_target_transitions +=
-                    @intFromBool(lengths[position + copy_len] == beam_width);
+                    @intFromBool(lengths[position + copy_len] == beam);
                 if (!canBeatBeamCost(
+                    beam,
                     states,
                     lengths,
                     worst_slots,
@@ -284,6 +315,7 @@ fn planAllocInternal(
                     null,
                 ) orelse continue;
                 if (!canBeatBeamCost(
+                    beam,
                     states,
                     lengths,
                     worst_slots,
@@ -293,7 +325,7 @@ fn planAllocInternal(
                     if (comptime profiled) stats.cost_bound_rejections += 1;
                     continue;
                 }
-                insertState(states, lengths, worst_slots, position + copy_len, .{
+                insertState(beam, states, lengths, worst_slots, position + copy_len, .{
                     .cost = transition.cost,
                     .last_distances = transitionLastDistances(
                         state,
@@ -325,8 +357,9 @@ fn planAllocInternal(
                 stats.match_transitions += 1;
                 if (comptime profiled) stats.recent_match_transitions += 1;
                 if (comptime profiled) stats.full_target_transitions +=
-                    @intFromBool(lengths[position + copy_len] == beam_width);
+                    @intFromBool(lengths[position + copy_len] == beam);
                 if (!canBeatBeamCost(
+                    beam,
                     states,
                     lengths,
                     worst_slots,
@@ -347,6 +380,7 @@ fn planAllocInternal(
                     null,
                 ) orelse continue;
                 if (!canBeatBeamCost(
+                    beam,
                     states,
                     lengths,
                     worst_slots,
@@ -356,7 +390,7 @@ fn planAllocInternal(
                     if (comptime profiled) stats.cost_bound_rejections += 1;
                     continue;
                 }
-                insertState(states, lengths, worst_slots, position + copy_len, .{
+                insertState(beam, states, lengths, worst_slots, position + copy_len, .{
                     .cost = transition.cost,
                     .last_distances = transitionLastDistances(
                         state,
@@ -377,7 +411,7 @@ fn planAllocInternal(
 
     if (comptime profiled) stats.search_ns = elapsedNs(search_start, io);
     const reconstruct_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
-    const final_states = states[input.len * beam_width ..][0..lengths[input.len]];
+    const final_states = states[input.len * beam ..][0..lengths[input.len]];
     var best_slot: ?usize = null;
     var best_cost: u64 = std.math.maxInt(u64);
     for (final_states, 0..) |state, slot| {
@@ -394,7 +428,7 @@ fn planAllocInternal(
     var position = input.len;
     var slot = best_slot orelse return error.InvalidBlockPlan;
     while (position != 0) {
-        const state = states[position * beam_width + slot];
+        const state = states[position * beam + slot];
         try reversed.append(allocator, state.token);
         position = state.previous_position;
         slot = state.previous_slot;
@@ -474,6 +508,7 @@ fn transitionCost(
 }
 
 fn canBeatBeamCost(
+    comptime beam: usize,
     states: []const State,
     lengths: []const u8,
     worst_slots: []const u8,
@@ -481,8 +516,8 @@ fn canBeatBeamCost(
     cost: u64,
 ) bool {
     const len = lengths[position];
-    if (len < beam_width) return true;
-    return cost < states[position * beam_width + worst_slots[position]].cost;
+    if (len < beam) return true;
+    return cost < states[position * beam + worst_slots[position]].cost;
 }
 
 fn transitionLastDistances(
@@ -505,6 +540,7 @@ fn terminalCost(model: *const entropy_feedback.Model, state: State) ?u64 {
 }
 
 fn insertState(
+    comptime beam: usize,
     states: []State,
     lengths: []u8,
     worst_slots: []u8,
@@ -512,7 +548,7 @@ fn insertState(
     candidate: State,
     stats: *Stats,
 ) void {
-    const slots = states[position * beam_width ..][0..beam_width];
+    const slots = states[position * beam ..][0..beam];
     const len = lengths[position];
     for (slots[0..len]) |*state| {
         if (state.pending_insert == candidate.pending_insert and
@@ -520,16 +556,16 @@ fn insertState(
         {
             if (candidate.cost < state.cost) {
                 state.* = candidate;
-                if (len == beam_width) updateWorstSlot(slots, worst_slots, position);
+                if (len == beam) updateWorstSlot(beam, slots, worst_slots, position);
             }
             return;
         }
     }
-    if (len < beam_width) {
+    if (len < beam) {
         slots[len] = candidate;
         lengths[position] += 1;
-        if (lengths[position] == beam_width)
-            updateWorstSlot(slots, worst_slots, position);
+        if (lengths[position] == beam)
+            updateWorstSlot(beam, slots, worst_slots, position);
         return;
     }
     var worst: usize = 0;
@@ -539,13 +575,17 @@ fn insertState(
     if (candidate.cost < slots[worst].cost) {
         slots[worst] = candidate;
         stats.beam_replacements += 1;
-        updateWorstSlot(slots, worst_slots, position);
+        updateWorstSlot(beam, slots, worst_slots, position);
     }
 }
 
-fn updateWorstSlot(slots: []const State, worst_slots: []u8, position: usize) void {
-    std.debug.assert(slots.len == beam_width);
-    worst_slots[position] = @intFromBool(slots[1].cost > slots[0].cost);
+fn updateWorstSlot(comptime beam: usize, slots: []const State, worst_slots: []u8, position: usize) void {
+    std.debug.assert(slots.len == beam);
+    var worst: usize = 0;
+    for (slots[1..], 1..) |state, slot| {
+        if (state.cost > slots[worst].cost) worst = slot;
+    }
+    worst_slots[position] = @intCast(worst);
 }
 
 fn addCost(left: u64, right: anytype) u64 {
@@ -617,17 +657,17 @@ test "HQ command parser round trips and visits stateful matches" {
 }
 
 test "beam cost bound rejects only candidates that cannot enter" {
-    var states: [beam_width]State = undefined;
+    var states: [wide_beam]State = undefined;
     states[0].cost = 100;
     states[1].cost = 200;
-    var lengths = [_]u8{beam_width};
+    var lengths = [_]u8{wide_beam};
     var worst_slots = [_]u8{1};
-    try std.testing.expect(canBeatBeamCost(&states, &lengths, &worst_slots, 0, 199));
-    try std.testing.expect(!canBeatBeamCost(&states, &lengths, &worst_slots, 0, 200));
-    try std.testing.expect(!canBeatBeamCost(&states, &lengths, &worst_slots, 0, 300));
+    try std.testing.expect(canBeatBeamCost(wide_beam, &states, &lengths, &worst_slots, 0, 199));
+    try std.testing.expect(!canBeatBeamCost(wide_beam, &states, &lengths, &worst_slots, 0, 200));
+    try std.testing.expect(!canBeatBeamCost(wide_beam, &states, &lengths, &worst_slots, 0, 300));
     lengths[0] = 1;
     worst_slots[0] = undefined;
-    try std.testing.expect(canBeatBeamCost(&states, &lengths, &worst_slots, 0, 300));
+    try std.testing.expect(canBeatBeamCost(wide_beam, &states, &lengths, &worst_slots, 0, 300));
 }
 
 test "beam worst slot cache tracks updates and replacements" {
@@ -643,18 +683,22 @@ test "beam worst slot cache tracks updates and replacements" {
             };
         }
     }.make;
-    var states: [beam_width]State = undefined;
+    var states: [wide_beam]State = undefined;
     var lengths = [_]u8{0};
     var worst_slots: [1]u8 = undefined;
     var stats: Stats = .{};
-    insertState(&states, &lengths, &worst_slots, 0, makeState(100, 4), &stats);
-    insertState(&states, &lengths, &worst_slots, 0, makeState(200, 5), &stats);
-    try std.testing.expectEqual(@as(u8, 1), worst_slots[0]);
-    insertState(&states, &lengths, &worst_slots, 0, makeState(50, 5), &stats);
-    try std.testing.expectEqual(@as(u8, 0), worst_slots[0]);
-    insertState(&states, &lengths, &worst_slots, 0, makeState(90, 6), &stats);
-    try std.testing.expectEqual(@as(u8, 0), worst_slots[0]);
-    try std.testing.expectEqual(@as(u64, 90), states[worst_slots[0]].cost);
+    // Fill the beam with ascending costs; the last insert is the worst state.
+    for (0..wide_beam) |index|
+        insertState(wide_beam, &states, &lengths, &worst_slots, 0, makeState(100 + index * 10, 4 + index), &stats);
+    const second_worst: u64 = 100 + (wide_beam - 2) * 10;
+    try std.testing.expectEqual(@as(u8, @intCast(wide_beam - 1)), worst_slots[0]);
+    try std.testing.expectEqual(@as(u64, 100 + (wide_beam - 1) * 10), states[worst_slots[0]].cost);
+    // A cheaper state replaces the current worst one.
+    insertState(wide_beam, &states, &lengths, &worst_slots, 0, makeState(50, 100), &stats);
+    try std.testing.expectEqual(second_worst, states[worst_slots[0]].cost);
+    // A state above the new worst does not displace it.
+    insertState(wide_beam, &states, &lengths, &worst_slots, 0, makeState(130, 200), &stats);
+    try std.testing.expectEqual(second_worst, states[worst_slots[0]].cost);
 }
 
 test "recent candidate table preserves first-symbol RFC mapping" {
