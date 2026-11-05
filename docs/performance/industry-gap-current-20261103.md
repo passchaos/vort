@@ -133,8 +133,10 @@ A later 2026-11-05 distance-parameter split re-encoding re-encodes the winning
 distance parameter set through the lazy/split path. It lowers q11 `sao` from
 47,096 to 46,617 bytes at 64 KiB (size ratio 1.0404) and from 728,703 to
 721,932 bytes at 1 MiB (1.0701), and q9 `x-ray` at 64 KiB from 42,475 to
-41,180 bytes. The other measured q8/q11 rows are unchanged. This closes part
-of the binary distance/block-typing gap but does not yet match the reference's
+41,180 bytes. A subsequent large-input repcode-frequency bonus lowers nci
+1 MiB from 84,867 to 84,382 bytes (1.2891) while leaving sao and x-ray 1 MiB
+unchanged. The other measured q8/q11 rows are unchanged. This closes part of
+the binary distance/block-typing gap but does not yet match the reference's
 repcode share or command/distance block-type counts.
 
 ## Decompression

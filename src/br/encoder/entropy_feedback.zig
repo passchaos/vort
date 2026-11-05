@@ -243,8 +243,8 @@ fn buildInternal(
             const match_distance = entry.key_ptr.*;
             if (match_distance == 0 or match_distance >= result.distance.len) continue;
             const bonus: u16 = @intCast(@min(
-                @as(u64, 2) * q8,
-                @as(u64, entry.value_ptr.*) * q8 / 2,
+                @as(u64, 3) * q8,
+                @as(u64, entry.value_ptr.*) * q8,
             ));
             result.distance[match_distance] = result.distance[match_distance] -| bonus;
         }
