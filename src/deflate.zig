@@ -1163,7 +1163,23 @@ fn planRefinedHistoryChunkAlloc(
     defer allocator.free(candidate4_trimmed);
     const candidate4_bits = try dynamicTokenBitCost(candidate4_trimmed);
     const selected3_bits = try dynamicTokenBitCost(selected3);
-    const final_selected = if (candidate4_bits < selected3_bits) candidate4_trimmed else selected3;
+    const selected4 = if (candidate4_bits < selected3_bits) candidate4_trimmed else selected3;
+    const selected4_bits = @min(candidate4_bits, selected3_bits);
+    const candidate4_coding = try DynamicCodingPlan.init(candidate4_trimmed);
+    var model5 = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &candidate4_coding.lit_lengths_full,
+        &candidate4_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model5.deinit(allocator);
+    const candidate5 = try prepared.planModeledAlloc(allocator, model5.lz77Model());
+    defer candidate5.deinit(allocator);
+    const candidate5_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate5.tokens, history_len);
+    defer allocator.free(candidate5_trimmed);
+    const candidate5_bits = try dynamicTokenBitCost(candidate5_trimmed);
+    const final_selected = if (candidate5_bits < selected4_bits) candidate5_trimmed else selected4;
     return allocator.dupe(lz77.Token, final_selected);
 }
 
