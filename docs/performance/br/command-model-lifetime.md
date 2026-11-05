@@ -1339,10 +1339,13 @@ ooffice's win but loses x-ray's and most of mr's, and does not lower the
 latency materially.
 
 The default therefore keeps the text-only gate, and the binary behaviour is
-exposed as the explicit `PlannedEncodeOptions.binary_command_state` opt-in for
-quality 10/11 inputs up to 64 KiB. It runs only the wide beam, always encodes
-its complete wire, and still arbitrates against every other candidate, so the
-selected stream can never grow. A public-API test covers a 64 KiB binary
-payload, the wide-beam attempt, the no-growth contract and rejection outside
-quality 10/11. The option remains off by default because the latency cost is
-real on rows where it does not win.
+exposed as the explicit `PlannedEncodeOptions.binary_command_state` opt-in
+(mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up to
+64 KiB. It runs only the wide beam, always encodes its complete wire, and still
+arbitrates against every other candidate, so the selected stream can never
+grow. In the chunked/incremental path the option also extends the default
+8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
+(including zero) is respected. Public-API tests cover a 64 KiB binary payload
+for both one-shot and chunks, the wide-beam attempt, the no-growth contract and
+rejection outside quality 10/11. The option remains off by default because the
+latency cost is real on rows where it does not win.

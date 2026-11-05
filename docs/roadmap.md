@@ -26315,6 +26315,9 @@ reuse, so production keeps the simpler independently owned plans.
   never grow. It recovers x-ray 39,279 -> 39,217, ooffice 30,674 -> 30,568 and
   mr 15,314 -> 15,274 at 64 KiB q11, but costs 13-47% encode time on binary
   rows, including rows where it does not win; the default stays text-only.
-  The option is rejected outside quality 10/11 and above 64 KiB. A public-API
-  test covers the attempt, no-growth and rejection contracts.
+  The chunks/incremental path exposes the same option and extends its default
+  8 KiB ceiling to 64 KiB per block, respecting an explicit caller ceiling.
+  The option is rejected outside quality 10/11 and above 64 KiB. Public-API
+  tests cover the one-shot and chunks attempts, no-growth and rejection
+  contracts.
   [Evidence](performance/br/command-model-lifetime.md).

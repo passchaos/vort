@@ -127,6 +127,27 @@ pub fn planAllocWithStartingDistances(
     );
 }
 
+/// Wide-beam variant of `planAllocWithStartingDistances`. Used by the
+/// incremental/chunked encoder when the binary command-state opt-in is set.
+pub fn planAllocWideWithStartingDistances(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+    starting_last_distances: [4]usize,
+) !Plan {
+    return planAllocInternal(
+        false,
+        wide_beam,
+        allocator,
+        input,
+        options,
+        model,
+        starting_last_distances,
+        undefined,
+    );
+}
+
 /// Wide-beam variant of `planAlloc`. Callers must arbitrate its complete wire
 /// against the narrow-beam result because a lower modeled cost is not always a
 /// smaller wire.

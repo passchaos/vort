@@ -128,6 +128,7 @@ var test_hq_command_pre_bytes: usize = 0;
 var test_hq_command_bytes: usize = 0;
 var test_stream_hq_command_candidate_attempts: usize = 0;
 var test_stream_hq_command_candidate_selections: usize = 0;
+var test_stream_hq_wide_command_attempts: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
@@ -1715,6 +1716,7 @@ const IncrementalPlannedEncoderCodec = struct {
         mode: PlannedMode = .generic,
         adaptive_blocks: bool = false,
         command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+        binary_command_state: bool = false,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
@@ -1771,6 +1773,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.mode = .generic;
         state.adaptive_blocks = false;
         state.command_state_max_input_kib = command_state_default_max_input_kib;
+        state.binary_command_state = false;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
         state.history.clearRetainingCapacity();
@@ -1921,6 +1924,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.mode = options.mode;
         state.adaptive_blocks = adaptive_blocks;
         state.command_state_max_input_kib = options.command_state_max_input_kib;
+        state.binary_command_state = options.binary_command_state;
     }
 
     pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
@@ -3641,6 +3645,9 @@ pub const PlannedStreamChunksOptions = struct {
     /// Same q10/q11 command-state work override, in KiB, as
     /// `PlannedEncodeOptions`.
     command_state_max_input_kib: u8 = command_state_default_max_input_kib,
+    /// Same binary command-state opt-in as `PlannedEncodeOptions`. Applies per
+    /// block up to 64 KiB and only for quality 10/11.
+    binary_command_state: bool = false,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     shared_dictionary: SharedDictionary = .{},
@@ -3654,6 +3661,8 @@ fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error
         return error.InvalidBlockPlan;
     if (options.quality != null) {
         if (options.level != .fast) return error.InvalidBlockPlan;
+        if (options.binary_command_state and options.quality.? < 10)
+            return error.InvalidBlockPlan;
         const schedule = try resolvedStreamQualitySchedule(options);
         if (!options.large_window) {
             _ = schedule.window.resolve(options.window_bits) catch
@@ -3661,7 +3670,9 @@ fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error
         }
     } else if (options.mode != .generic) {
         return error.InvalidBlockPlan;
-    } else if (options.command_state_max_input_kib != command_state_default_max_input_kib) {
+    } else if (options.command_state_max_input_kib != command_state_default_max_input_kib or
+        options.binary_command_state)
+    {
         return error.InvalidBlockPlan;
     }
     const max_block_len = if (options.hq != null) hq_options.max_block_len else planned_chunk_max_input_len;
@@ -5063,6 +5074,7 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
         .window_bits = try resolvedPlannedWindowBits(options),
         .metadata = options.metadata,
         .command_state_max_input_kib = options.command_state_max_input_kib,
+        .binary_command_state = options.binary_command_state,
         .shared_dictionary = options.shared_dictionary,
     };
 }
@@ -9282,23 +9294,52 @@ noinline fn considerPlannedMetaBlockCommandState(
     best: *?PlannedMetaBlockCandidate,
     model: *const entropy_feedback.Model,
 ) linksection(command_state_text_section) Error!void {
+    const parser_options: lz77.GreedyOptions = .{
+        .window_len = search_window,
+        .max_chain = @min(policy.optimal.max_chain, 64),
+        .nice_len = policy.optimal.nice_len,
+        .max_candidates = @min(policy.optimal.max_candidates, 8),
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    };
     const hq = try hq_command_parser.planAllocWithStartingDistances(
         allocator,
         input,
-        .{
-            .window_len = search_window,
-            .max_chain = @min(policy.optimal.max_chain, 64),
-            .nice_len = policy.optimal.nice_len,
-            .max_candidates = @min(policy.optimal.max_candidates, 8),
-            .min_match = 4,
-            .max_match = lz77.max_match_len,
-        },
+        parser_options,
         model,
         state.wire_state.last_distances,
     );
     defer hq.deinit(allocator);
-    if (hq.lz.stats.matches == 0) return;
-    const commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+    if (hq.lz.stats.matches != 0)
+        try considerCommandStateTokens(allocator, state, input, policy, start_byte, start_bit_index, best, hq.lz.tokens);
+    if (state.binary_command_state and state.quality != null and state.quality.? >= 10 and
+        input.len <= 64 * 1024)
+    {
+        if (builtin.is_test) test_stream_hq_wide_command_attempts += 1;
+        const wide = try hq_command_parser.planAllocWideWithStartingDistances(
+            allocator,
+            input,
+            parser_options,
+            model,
+            state.wire_state.last_distances,
+        );
+        defer wide.deinit(allocator);
+        if (wide.lz.stats.matches != 0)
+            try considerCommandStateTokens(allocator, state, input, policy, start_byte, start_bit_index, best, wide.lz.tokens);
+    }
+}
+
+fn considerCommandStateTokens(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    policy: PlannedMetaBlockPolicy,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+    tokens: []const lz77.Token,
+) linksection(command_state_text_section) Error!void {
+    const commands = try command_plan.buildAlloc(allocator, input, tokens);
     defer commands.deinit(allocator);
     const before_bits = if (best.*) |candidate| candidate.bit_count else std.math.maxInt(usize);
     const compact = try encodePlannedMetaBlockCandidate(
@@ -9640,11 +9681,19 @@ fn writePlannedStreamMetaBlock(
     if (state.quality) |quality| {
         var schedule = quality_schedule.getInt(quality, state.mode) catch
             return error.InvalidBlockPlan;
-        try applyCommandStateLimit(&schedule, state.command_state_max_input_kib);
+        // The binary opt-in extends the default 8 KiB ceiling to 64 KiB; an
+        // explicit caller limit (including zero, which disables the candidate)
+        // is respected.
+        const requested_command_state_kib: u8 = if (state.binary_command_state and
+            state.command_state_max_input_kib == command_state_default_max_input_kib)
+            64
+        else
+            state.command_state_max_input_kib;
+        try applyCommandStateLimit(&schedule, requested_command_state_kib);
         retain_match_history = schedule.fragment_parser == null;
         if (schedule.quality == .q11) {
             var q10 = quality_schedule.get(.q10, schedule.mode);
-            try applyCommandStateLimit(&q10, state.command_state_max_input_kib);
+            try applyCommandStateLimit(&q10, requested_command_state_kib);
             try considerPlannedMetaBlockPolicy(
                 allocator,
                 state,
@@ -43608,6 +43657,45 @@ test "Brotli q11 text gate extends command-state without the opt-in" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, gated);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "Brotli q11 chunks binary command-state opt-in runs the wide beam and never grows the wire" {
+    var payload: [64 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 64, 127, 257, 512 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 7 == 0) {
+            const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 13));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate(state >> 24);
+            position += 1;
+        }
+    }
+    const chunks = [_][]const u8{&payload};
+    const base: PlannedStreamChunksOptions = .{ .quality = 11, .block_len = payload.len };
+    const plain = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, base);
+    defer std.testing.allocator.free(plain);
+    var opted_options = base;
+    opted_options.binary_command_state = true;
+    test_stream_hq_wide_command_attempts = 0;
+    const opted = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, opted_options);
+    defer std.testing.allocator.free(opted);
+    try std.testing.expect(test_stream_hq_wide_command_attempts != 0);
+    try std.testing.expect(opted.len <= plain.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, opted, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 9, .block_len = payload.len, .binary_command_state = true },
+    ));
 }
 
 test "Brotli q11 binary command-state opt-in runs the wide beam and never grows the wire" {
