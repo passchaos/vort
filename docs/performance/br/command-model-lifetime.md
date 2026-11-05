@@ -1300,3 +1300,18 @@ and the parse prefers worse far matches over the nearer ones it used before.
 Widening the window therefore needs a better far-match index (a binary tree or
 a separate long-distance pass), not a larger chain bound. The experiment was
 reverted; the 32 KiB cap remains until such an index is available.
+
+The bounded alternative was also measured and rejected. A mid-distance
+augmentation reuses the long-distance pass with a band starting just above the
+shared 32 KiB window (32,769...65,520) and inserts its matches into literal
+runs of the modeled plan, with complete-wire arbitration. At minimum matches of
+16, 8 and 4 bytes it changed no wire on x-ray, sao, dickens, nci or XML at
+64 KiB. The missing bytes on x-ray are therefore not reachable mid-distance
+copies alone; they need a repcode-aware parse, not another far-match pass.
+
+A wider functional limit was also confirmed: a 200 KiB unique block followed by
+an exact copy (400 KiB input) encodes to 409,605 bytes with Vort and 204,855
+with libbrotli. The shared LZ77 layer stores distances in 16 bits, so nothing
+beyond 65,535 bytes is reachable even though Brotli can advertise a larger
+window. Lifting that needs a wider command-distance representation, which is
+separate work from the window experiment above.
