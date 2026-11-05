@@ -5743,6 +5743,25 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     if (command_state_budget.command_state_max_input_len != 0 and
         input.len <= command_state_budget.command_state_max_input_len)
     {
+        // The wide beam prices repcode reuse from the modeled plan above
+        // 32 KiB, where that prior is a measured win. Smaller inputs keep the
+        // seed model because the bonus prior is not monotone there.
+        var wide_model: ?*entropy_feedback.Model = null;
+        defer if (wide_model) |active| {
+            active.deinit(allocator);
+            allocator.destroy(active);
+        };
+        if (input.len >= 32 * 1024) {
+            const storage = try allocator.create(entropy_feedback.Model);
+            errdefer allocator.destroy(storage);
+            storage.* = try entropy_feedback.buildWithRepcodeBonus(
+                allocator,
+                input,
+                modeled_commands.commands,
+                search_window,
+            );
+            wide_model = storage;
+        }
         try selectQualityCommandStateCandidate(
             allocator,
             input,
@@ -5750,6 +5769,7 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
             search_window,
             wire_options,
             &model,
+            if (wide_model) |active| active else &model,
             &best,
         );
     }
@@ -5763,6 +5783,7 @@ noinline fn selectQualityCommandStateCandidate(
     search_window: usize,
     wire_options: LazyWireOptions,
     model: *const entropy_feedback.Model,
+    wide_model: *const entropy_feedback.Model,
     best: *[]u8,
 ) linksection(command_state_text_section) Error!void {
     const hq = try hq_command_parser.planAlloc(allocator, input, .{
@@ -5823,7 +5844,7 @@ noinline fn selectQualityCommandStateCandidate(
         .max_candidates = @min(budget.max_candidates, 8),
         .min_match = 4,
         .max_match = lz77.max_match_len,
-    }, model);
+    }, wide_model);
     defer wide.deinit(allocator);
     if (wide.lz.stats.matches == 0) return;
     const wide_commands = try command_plan.buildAlloc(allocator, input, wide.lz.tokens);

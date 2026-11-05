@@ -1235,6 +1235,18 @@ q10 produces the same 64 KiB numbers because q11 inherits the complete q10
 winner below 64 KiB. Binary rows and 1 MiB inputs are unchanged, since the
 command-state candidate is gated to text-like blocks up to 64 KiB.
 
+Above 32 KiB the wide beam also prices repcode reuse from a bonus model
+learned from the modeled plan, while the narrow beam keeps the seed model. That
+prior is a measured win at 32/64 KiB and not monotone below it, so inputs of
+8/16 KiB keep the plain model for both beams. The gated bonus model adds:
+
+| Input | Plain wide | Bonus wide |
+| --- | ---: | ---: |
+| XML 32 KiB | 2,397 | 2,375 |
+| nci 32 KiB | 2,389 | 2,370 |
+| XML 64 KiB | 4,040 | 4,021 |
+| nci 64 KiB | 3,868 | 3,852 |
+
 The beam's worst-slot cache that drives pruning previously compared only slots
 zero and one, which was correct solely for a two-wide beam. It now scans the
 whole retained set; beam two keeps identical behavior. The wide candidate also

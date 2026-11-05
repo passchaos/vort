@@ -26295,7 +26295,11 @@ reuse, so production keeps the simpler independently owned plans.
   nci 837 -> 827). q10 emits the same 64 KiB wires because q11 inherits its
   winner; binary rows and 1 MiB inputs are unchanged. The wide state array is
   `(len + 1) * 4 * 72` bytes, about 19 MiB at the 64 KiB gate, and affected
-  encode times rise about 45% because the command-state parse doubles.
+  encode times rise about 42% because the command-state parse doubles. Above
+  32 KiB the wide beam also uses a repcode-bonus model learned from the modeled
+  plan, cutting XML 32 KiB 2,397 -> 2,375, nci 32 KiB 2,389 -> 2,370, XML
+  64 KiB 4,040 -> 4,021 and nci 64 KiB 3,868 -> 3,852; 8/16 KiB keep the
+  plain model because the bonus prior is not monotone there.
   [Evidence](performance/br/command-model-lifetime.md). The larger
   copy-coverage gap on binary blocks remains the main q11 ratio target. The larger copy-coverage
   gap on binary blocks remains the main q11 ratio target.
