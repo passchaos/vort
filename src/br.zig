@@ -5382,7 +5382,9 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 best = candidate;
             }
         } else {
-            const distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAllocRecorded(
+            // Keep the established parameter-only candidate as a floor: it is
+            // the winner on some q8 rows where split re-encoding is larger.
+            const legacy_distance_candidate = try encodeCommandPlanWithDistanceParameterSearchAllocRecorded(
                 trace_enabled,
                 trace.withOrigin(.lazy),
                 allocator,
@@ -5392,8 +5394,21 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 &distance_stats,
                 distance_options,
             );
-            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
+            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, legacy_distance_candidate);
         }
+        // Both the legacy and prepared-pair parameter paths must see the same
+        // split-aware candidate so their complete wires stay comparable.
+        const distance_candidate = try encodeDistanceParameterSearchWithSplitsAllocRecorded(
+            trace_enabled,
+            trace.withOrigin(.lazy),
+            allocator,
+            input,
+            command_stream.commands,
+            &distance_stats,
+            wire_options,
+            distance_options,
+        );
+        retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, distance_candidate);
     }
 
     // The repcode-aware command-state candidate is the quality win on
@@ -5404,8 +5419,9 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     // Skip the second deeper parse there; it only pays off above 64 KiB.
     const q11_covered_by_q10 = schedule.quality == .q11 and input.len <= 64 * 1024;
     if (!q11_covered_by_q10 and schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
-        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, schedule.dictionary)) |candidate|
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, schedule.dictionary)) |candidate| {
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
+        }
     }
 
     if (schedule.quality.int() >= 10 and window_bits >= default_window_bits and
@@ -6606,6 +6622,74 @@ fn encodeCommandPlanWithDistanceParameterSearchAllocRecorded(comptime trace_enab
         alternative_options,
     );
     if (trace.prefer(alternative, baseline)) {
+        freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+        stats.* = alternative_stats;
+        return alternative;
+    }
+    freeQualityRecorded(trace_enabled, trace, allocator, alternative);
+    stats.* = baseline_stats;
+    return baseline;
+}
+
+/// Distance-parameter selection is a separate candidate family from the
+/// entropy splitter. Re-encode the winning parameter set through the lazy
+/// command path so command/distance/literal block types are also available to
+/// the candidate that actually wins on binary blocks.
+fn encodeDistanceParameterSearchWithSplitsAllocRecorded(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    stats: *encoder_stats.PlannedEncodeStats,
+    wire_options: LazyWireOptions,
+    distance_options: CommandPlanEncodeOptions,
+) Error![]u8 {
+    var baseline_options = wire_options;
+    baseline_options.distance_parameters = distance_options.distance_parameters;
+    baseline_options.optimize_same_last_distance = distance_options.optimize_same_last_distance;
+    baseline_options.force_recent_distances = true;
+    var baseline_stats = stats.*;
+    const baseline = try encodeLazyCommandPlanAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        &baseline_stats,
+        baseline_options,
+    );
+    errdefer freeQualityRecorded(trace_enabled, trace, allocator, baseline);
+
+    const alternative_parameters = try chooseDistanceParameterAlternativeAlloc(
+        allocator,
+        commands,
+        distance_options,
+    ) orelse {
+        stats.* = baseline_stats;
+        return baseline;
+    };
+    var alternative_options = wire_options;
+    alternative_options.distance_parameters = alternative_parameters;
+    alternative_options.optimize_same_last_distance = false;
+    alternative_options.force_recent_distances = true;
+    var alternative_stats = stats.*;
+    const alternative = encodeLazyCommandPlanAllocRecorded(
+        trace_enabled,
+        trace,
+        allocator,
+        input,
+        commands,
+        &alternative_stats,
+        alternative_options,
+    ) catch |err| switch (err) {
+        error.InvalidBlockPlan => {
+            stats.* = baseline_stats;
+            return baseline;
+        },
+        else => return err,
+    };
+    if (alternative.len < baseline.len) {
         freeQualityRecorded(trace_enabled, trace, allocator, baseline);
         stats.* = alternative_stats;
         return alternative;
@@ -9656,6 +9740,13 @@ const LazyWireOptions = struct {
     compound_dictionary_size: usize = 0,
     initial_output_pos: Counter = 0,
     starting_last_distances: [4]usize = initial_last_distances,
+    /// Distance-code parameters selected by the distance-parameter search.
+    /// Splits must use the same parameters as the wire they refine.
+    distance_parameters: encoder_distance.Parameters = encoder_distance.Parameters.init(0, 15),
+    optimize_same_last_distance: bool = true,
+    /// The distance-parameter search already established that the recent
+    /// distance path is profitable; do not re-gate it on the lazy count.
+    force_recent_distances: bool = false,
 };
 
 fn commandStateCompactEncodeOptions(options: LazyWireOptions) CommandPlanEncodeOptions {
@@ -9677,6 +9768,8 @@ fn commandStateCompactEncodeOptions(options: LazyWireOptions) CommandPlanEncodeO
         .compound_dictionary_size = options.compound_dictionary_size,
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
+        .distance_parameters = options.distance_parameters,
+        .optimize_same_last_distance = options.optimize_same_last_distance,
     };
 }
 
@@ -10782,7 +10875,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
 
     // Additional full wire candidates are worthwhile only on ratio-sized plans
     // already paying for recent-distance analysis.
-    const use_recent_distances = if (options.try_recent_distances) blk: {
+    const use_recent_distances = if (options.force_recent_distances) true else if (options.try_recent_distances) blk: {
         var timer = trace.begin(.recent_distance_scan, input.len, commands.len);
         defer timer.finish();
         errdefer |err| timer.failure(err);
@@ -10812,6 +10905,8 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         .compound_dictionary_size = options.compound_dictionary_size,
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
+        .distance_parameters = options.distance_parameters,
+        .optimize_same_last_distance = options.optimize_same_last_distance,
     };
     var prepared_common: prepared_command_distance.Prepared = undefined;
     if (input.len >= 8 * 1024 and try_literal_contexts and options.try_clustered_literal_contexts and use_recent_distances and !options.large_window) {
@@ -10871,6 +10966,8 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
                     .compound_dictionary_size = options.compound_dictionary_size,
                     .initial_output_pos = options.initial_output_pos,
                     .starting_last_distances = options.starting_last_distances,
+                    .distance_parameters = options.distance_parameters,
+                    .optimize_same_last_distance = options.optimize_same_last_distance,
                 });
                 if (trace.prefer(adaptive, selected)) {
                     freeQualityRecorded(trace_enabled, trace, allocator, selected);
@@ -10933,6 +11030,8 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         .compound_dictionary_size = options.compound_dictionary_size,
         .initial_output_pos = options.initial_output_pos,
         .starting_last_distances = options.starting_last_distances,
+        .distance_parameters = options.distance_parameters,
+        .optimize_same_last_distance = options.optimize_same_last_distance,
     });
     if (trace.prefer(selected, baseline)) {
         freeQualityRecorded(trace_enabled, trace, allocator, baseline);
@@ -10977,7 +11076,7 @@ const PreparedContextGroupStrategy = struct {
         return try literal_context_split.chooseProposals(allocator, input, commands);
     }
     pub fn plain(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *Stats, options: UserOptions) @This().Error![]u8 {
-        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances });
+        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });
     }
 };
 
@@ -39142,10 +39241,10 @@ test "br serialized dictionary trainer learns UTF-8 shift transforms" {
     defer repeated.deinit(std.testing.allocator);
     try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
     try std.testing.expectEqual(trained.id, repeated.id);
-    try std.testing.expectEqual(@as(usize, 3_513), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 3_512), trained.baseline_frame_bytes);
     try std.testing.expectEqual(@as(usize, 2_624), trained.trained_frame_bytes);
     try std.testing.expectEqual(@as(usize, 184), trained.charged_dictionary_bytes);
-    try std.testing.expectEqual(@as(usize, 705), trained.total_savings_bytes);
+    try std.testing.expectEqual(@as(usize, 704), trained.total_savings_bytes);
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.shift,
         trained.transform_profile,

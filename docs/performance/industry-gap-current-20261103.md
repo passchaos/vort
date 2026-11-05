@@ -129,6 +129,14 @@ larger than Vort's: x-ray is 1.0868/1.0754 at q10/q11 while q9 is 0.9016, and
 XML q10/q11 is 0.9803/1.0384 while q9 is 0.9705. Closing q10/q11 is therefore
 about matching the reference's high-quality parser, not the lower presets.
 
+A later 2026-11-05 distance-parameter split re-encoding re-encodes the winning
+distance parameter set through the lazy/split path. It lowers q11 `sao` from
+47,096 to 46,617 bytes at 64 KiB (size ratio 1.0404) and from 728,703 to
+721,932 bytes at 1 MiB (1.0701), and q9 `x-ray` at 64 KiB from 42,475 to
+41,180 bytes. The other measured q8/q11 rows are unchanged. This closes part
+of the binary distance/block-typing gap but does not yet match the reference's
+repcode share or command/distance block-type counts.
+
 ## Decompression
 
 The newer [preload-before-refill epoch](industry-decode-current-20261101.md)

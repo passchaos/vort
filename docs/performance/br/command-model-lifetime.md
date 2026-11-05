@@ -1049,3 +1049,23 @@ inferred a narrow integer, so `window * bro_beam_width` wrapped to zero and the
 final state was read from slot zero. Any future windowed parser should annotate
 the window as `usize` explicitly rather than relying on `@min` peer
 resolution.
+
+## Distance-parameter split re-encoding, 2026-11-05
+
+The distance-parameter search selected a profitable `NPOSTFIX`/`NDIRECT`
+alternative, but encoded it through the unsplit command path. The entropy
+splitter therefore never saw the parameter set that actually won on binary
+blocks. The search now re-encodes the winning parameter set through the lazy
+command path with forced recent-distance state, so command, distance and
+literal block types are evaluated against the same wire. The established
+parameter-only candidate remains as a floor, and complete-wire arbitration
+still chooses the smallest result.
+
+On the Silesia binary rows this lowers q11 `sao` from 47,096 to 46,617 bytes at
+64 KiB (size ratio 1.0404 versus libbrotli 1.0.9) and from 728,703 to 721,932
+bytes at 1 MiB (1.0701). q9 `x-ray` at 64 KiB falls from 42,475 to 41,180
+bytes. The measured q8/q11 `x-ray`, `nci`, `mr`, `webster`, `XML`, `dickens`,
+`mozilla` and `ooffice` rows are unchanged, and the q8 `x-ray` floor remains
+42,503 bytes. The serialized-dictionary fixture updates its baseline frame
+from 3,513 to 3,512 bytes and total savings from 705 to 704 bytes; these are
+the same complete-wire improvements observed through the public encoder.
