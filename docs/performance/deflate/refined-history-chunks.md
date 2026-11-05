@@ -5,8 +5,9 @@ the encoder now plans 32 KiB chunks over `previous_history + chunk`, using up
 to 32 KiB of history so the combined BT input stays within the 64 KiB matcher
 limit. The dynamic model is built from the seed tokens after trimming the
 history prefix, the modeled BT solve is trimmed again, and the selected tokens
-are emitted as the chunk's DEFLATE block. Complete-wire arbitration keeps the
-original one-shot plan when it is smaller.
+are emitted as the chunk's DEFLATE block. A second model learned from the first
+modeled result is also solved and kept when its cost is lower. Complete-wire
+arbitration keeps the original one-shot plan when it is smaller.
 
 The same candidate is wrapped into zlib and gzip; raw, zlib and gzip outputs
 were independently decoded with Python's `zlib`, `gzip` and raw-deflate
@@ -30,28 +31,29 @@ compressor on the same 1 MiB prefixes.
 
 | Input | Vort | libdeflate 12 | Ratio |
 | --- | ---: | ---: | ---: |
-| dickens | 373,468 | 370,978 | 1.0067 |
-| mozilla | 658,237 | 656,989 | 1.0019 |
-| mr | 330,056 | 322,364 | 1.0239 |
-| nci | 94,389 | 92,971 | 1.0153 |
-| ooffice | 567,752 | 566,256 | 1.0026 |
-| osdb | 380,918 | 378,009 | 1.0077 |
-| reymont | 268,218 | 265,496 | 1.0103 |
-| samba | 318,964 | 315,240 | 1.0118 |
-| sao | 764,150 | 764,752 | 0.9992 |
-| webster | 291,846 | 289,510 | 1.0081 |
-| XML | 141,491 | 140,027 | 1.0105 |
-| x-ray | 680,965 | 677,435 | 1.0052 |
+| dickens | 373,080 | 370,978 | 1.0057 |
+| mozilla | 658,122 | 656,989 | 1.0017 |
+| mr | 327,414 | 322,364 | 1.0157 |
+| nci | 93,858 | 92,971 | 1.0095 |
+| ooffice | 567,471 | 566,256 | 1.0021 |
+| osdb | 380,319 | 378,009 | 1.0061 |
+| reymont | 266,929 | 265,496 | 1.0054 |
+| samba | 318,738 | 315,240 | 1.0111 |
+| sao | 763,983 | 764,752 | 0.9990 |
+| webster | 291,355 | 289,510 | 1.0064 |
+| XML | 141,194 | 140,027 | 1.0083 |
+| x-ray | 679,216 | 677,435 | 1.0026 |
 
-Vort is now within 0.2–2.4% of libdeflate 12 on these 1 MiB prefixes and is
-smaller on sao. The largest remaining rows are mr (1.0239) and nci (1.0153).
+Vort is now within 0.2–1.6% of libdeflate 12 on these 1 MiB prefixes and is
+smaller on sao. The largest remaining rows are mr (1.0157), samba (1.0111)
+and nci (1.0095).
 
 Full-file checks:
 
 | Input | Bytes | Vort | libdeflate 12 | Ratio | Vort time | Reference time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| sao | 7,251,944 | 5,250,700 | 5,250,751 | 0.99999 | 33.91 s | 0.41 s |
-| x-ray | 8,474,240 | 5,793,349 | 5,743,947 | 1.0086 | 30.13 s | 0.30 s |
+| sao | 7,251,944 | 5,249,244 | 5,250,751 | 0.9997 | 35.79 s | 0.41 s |
+| x-ray | 8,474,240 | 5,751,886 | 5,743,947 | 1.0014 | 31.91 s | 0.30 s |
 
 The ratio is now at or near libdeflate 12, but the encode time is roughly
 80–100 times larger on these full files. That latency is the next performance
