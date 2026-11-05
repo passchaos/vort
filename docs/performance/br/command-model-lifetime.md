@@ -1315,3 +1315,26 @@ with libbrotli. The shared LZ77 layer stores distances in 16 bits, so nothing
 beyond 65,535 bytes is reachable even though Brotli can advertise a larger
 window. Lifting that needs a wider command-distance representation, which is
 separate work from the window experiment above.
+
+## Binary command-state wide beam, 2026-11-06
+
+The command-state candidate is gated to text-like blocks, so binary rows never
+see the wide beam. Removing that gate (running only the wide beam on binary
+blocks, always encoding its complete wire) does win on three 64 KiB q11 rows:
+
+| File | Gated (current) | Wide beam on binary |
+| --- | ---: | ---: |
+| x-ray | 39,279 | 39,217 |
+| ooffice | 30,674 | 30,568 |
+| mr | 15,314 | 15,274 |
+
+sao, mozilla, dickens, webster, osdb, samba, nci, XML and reymont keep their
+wires. The cost is large: encode time rises 13-47% on binary rows (mozilla
+680 -> 1,002 ms, sao 920 -> 1,061 ms), including rows with no size gain. The
+compact wire is a poor predictor for binary (x-ray's compact is 49,680 while
+its complete wire wins), and the measured short-distance share does not
+separate winners from losers (ooffice wins at 26% short distances while sao
+loses at 0.08%). Reducing the binary candidate budget from 32 to 8 keeps
+ooffice's win but loses x-ray's and most of mr's, and does not lower the
+latency materially. The default therefore keeps the text-only gate; a binary
+opt-in needs a cheaper predictor or a faster rep-aware parse.
