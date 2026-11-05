@@ -5670,7 +5670,7 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
     );
     retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
     try considerStaticDictionaryCandidate(trace_enabled, trace, allocator, input, modeled_commands.commands, dictionary, wire_options, &best);
-    if (input.len > 64 * 1024) {
+    if (input.len >= 64 * 1024) {
         var model2 = try entropy_feedback.build(allocator, input, modeled_commands.commands, search_window);
         defer model2.deinit(allocator);
         const modeled2 = try lz77.optimalPlanAllocWithCostModel(allocator, input, .{

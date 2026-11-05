@@ -26270,3 +26270,15 @@ reuse, so production keeps the simpler independently owned plans.
   the two-tree merge decision. [Evidence](performance/br/command-model-lifetime.md).
   The remaining literal-modeling gap stays active; the three-codec
   industry-best objective remains open.
+
+- 2026-11-05: Brotli q10/q11 now run the second modeled and repcode-bonus
+  entropy-feedback parses at exactly 64 KiB, not only above it. Both candidates
+  remain complete-wire arbitrated. On frozen 64 KiB Silesia prefixes the wires
+  shrink x-ray 39,317 -> 39,279, dickens 22,373 -> 22,363, webster 19,548 ->
+  19,540, osdb 25,433 -> 25,428 and samba 18,734 -> 18,725; the other six rows
+  are unchanged. Isolating the passes shows the bonus model supplies x-ray
+  while model2 supplies the text rows, so both are retained. Encode time rises
+  about 18-23% on the eleven q11 rows, a deliberate ratio-over-latency trade
+  for q10/q11 only. [Evidence](performance/br/command-model-lifetime.md). The
+  larger x-ray copy-coverage gap (reference 6,304 copies / 23,336 bytes versus
+  Vort 2,997 / 14,509) remains the main q11 binary target.

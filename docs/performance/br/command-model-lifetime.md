@@ -896,9 +896,9 @@ tuning of the current matcher or price tables.
 ## Second modeled pass for large inputs, 2026-11-05
 
 Large one-shot inputs now run the entropy-feedback parse a second time, with
-the model rebuilt from the first modeled plan. The extra candidate is kept only
-when the complete wire is smaller, and it is limited to inputs above 64 KiB, so
-the 64 KiB ladder is unchanged. On 1 MiB prefixes:
+the model rebuilt from the first modeled plan, plus a repcode-bonus model built
+from the same plan. The extra candidates are kept only when the complete wire
+is smaller. On 1 MiB prefixes:
 
 | File | Before | After | Size ratio |
 | --- | ---: | ---: | ---: |
@@ -908,6 +908,24 @@ the 64 KiB ladder is unchanged. On 1 MiB prefixes:
 
 The gain is 0.18-0.27%, paid for by a third parse on large inputs. The 1 MiB
 gap remains dominated by distance coding and block/context typing.
+
+The same two candidates now also run for inputs of exactly 64 KiB. The
+model2 pass supplies most of the text gains and the repcode-bonus pass supplies
+x-ray:
+
+| File | Before | After |
+| --- | ---: | ---: |
+| x-ray | 39,317 | 39,279 |
+| dickens | 22,373 | 22,363 |
+| webster | 19,548 | 19,540 |
+| osdb | 25,433 | 25,428 |
+| samba | 18,734 | 18,725 |
+
+nci, sao, mozilla, ooffice, mr and XML keep their previous wires. Running only
+the bonus pass leaves dickens/webster/osdb/samba unchanged; running only model2
+leaves x-ray at 39,316. Both passes therefore stay. Encode time rises about
+18-23% on the eleven 64 KiB q11 rows, which is the price of two additional
+optimal parses at the 64 KiB boundary.
 
 Raising the joint literal/context splitter to 16 block types and four
 iterations (the call site previously used its 8-type, three-iteration default)
