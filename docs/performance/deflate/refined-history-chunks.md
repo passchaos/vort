@@ -56,5 +56,12 @@ Full-file checks:
 | x-ray | 8,474,240 | 5,745,701 | 5,743,947 | 1.0003 | 34.06 s | 0.30 s |
 
 The ratio is now at or near libdeflate 12, but the encode time is roughly
-80–100 times larger on these full files. That latency is the next performance
+90–110 times larger on these full files. That latency is the next performance
 target after the remaining ratio rows.
+
+A fourth modeled iteration was measured and rejected. It lowers nci by 30
+bytes and mr by 324 bytes, but raises samba by 35 bytes; the per-model cost
+estimate does not always predict the final wire. The third iteration remains
+the retained configuration. Early-exit convergence checks were also measured
+and left the wires unchanged with only about 0.3% timing change, so they were
+not kept.
