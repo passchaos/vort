@@ -1128,3 +1128,10 @@ nci, sao, osdb, mozilla, samba, x-ray and reymont 1 MiB keep their previous
 wires. mr is the largest gain: it now emits eight command and eight distance
 block types where the previous wire kept one. The larger split search adds
 latency on 1 MiB inputs and is a later performance target.
+
+Raising the adaptive type count from eight to twelve or sixteen was measured
+and rejected as a single candidate: ooffice improves by 4/134 bytes, but
+dickens regresses by 75/159 bytes. The eight-type plan remains the best
+single-candidate compromise. Running both eight- and sixteen-type candidates
+would capture both results but doubles the split search; it is deferred until
+the large-input latency budget is addressed.
