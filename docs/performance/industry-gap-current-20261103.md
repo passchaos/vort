@@ -76,15 +76,15 @@ these inputs. A subsequent [refined history chunk](deflate/refined-history-chunk
 candidate plans 32 KiB chunks over 32 KiB of history, runs the modeled BT solve
 and wraps the result into raw/zlib/gzip. The same 1 MiB zlib wires fall to
 94,389 / 764,150 / 680,965 bytes for nci/sao/x-ray (-5.22% / -0.78% / -2.51%).
-Two additional models learned from the previous modeled result lower the full
-1 MiB matrix to 0.9987–1.0118 times libdeflate 1.26 level 12, with sao smaller
-than the reference; full-file sao is 5,247,683 versus 5,250,751 and full-file
-x-ray is 5,745,701 versus 5,743,947. The largest remaining rows are mr
-(1.0118), samba (1.0107) and nci (1.0085). With the ReleaseFast CLI the measured full-file encode time is about 10–12
-times the reference (sao 4.15 s versus 0.41 s, x-ray 3.67 s versus 0.30 s),
-and 1 MiB nci is 1.72 s versus 0.2256 s. Earlier Debug-CLI timings overstated
-this gap. Performance recovery is still the main Deflate gap after the ratio
-rows.
+Three additional modeled passes lower the full 1 MiB matrix to 0.9987–1.0107
+times libdeflate 1.26 level 12, with sao smaller than the reference. Full-file
+sao is 5,247,502 versus 5,250,751 and full-file x-ray is 5,743,403 versus
+5,743,947, so both are now smaller than the reference. The largest remaining
+rows are mr (1.0107), samba (1.0107) and nci (1.0080). The fourth pass is
+accepted only when its actual dynamic coding cost is lower; model-cost
+acceptance regressed samba. The starred ReleaseFast timings in the detailed
+note are from the three-pass build; the fourth pass adds one BT solve and has
+not been re-timed. Performance recovery remains the main Deflate gap.
 
 A later 2026-11-04 Brotli quality epoch supersedes the q10/q11 size ratios for
 the measured prefixes. Dictionary-aware optimal parsing, a gated

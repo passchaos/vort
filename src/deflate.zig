@@ -1145,7 +1145,25 @@ fn planRefinedHistoryChunkAlloc(
     const candidate3_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate3.tokens, history_len);
     defer allocator.free(candidate3_trimmed);
     const candidate3_cost = try dynamic_optimal.tokenCost(&model3, candidate3_trimmed);
-    const final_selected = if (candidate3_cost < candidate2_in_model3) candidate3_trimmed else selected2;
+    const selected3 = if (candidate3_cost < candidate2_in_model3) candidate3_trimmed else selected2;
+    // A fourth pass is only accepted when its actual dynamic coding cost is
+    // lower; the model cost alone does not reliably predict the final wire.
+    const candidate3_coding = try DynamicCodingPlan.init(candidate3_trimmed);
+    var model4 = try dynamic_optimal.Model.init(
+        DeflateDynamicOptimalStrategy,
+        allocator,
+        &candidate3_coding.lit_lengths_full,
+        &candidate3_coding.dist_lengths_full,
+        options.lz77_options.window_len,
+    );
+    defer model4.deinit(allocator);
+    const candidate4 = try prepared.planModeledAlloc(allocator, model4.lz77Model());
+    defer candidate4.deinit(allocator);
+    const candidate4_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate4.tokens, history_len);
+    defer allocator.free(candidate4_trimmed);
+    const candidate4_bits = try dynamicTokenBitCost(candidate4_trimmed);
+    const selected3_bits = try dynamicTokenBitCost(selected3);
+    const final_selected = if (candidate4_bits < selected3_bits) candidate4_trimmed else selected3;
     return allocator.dupe(lz77.Token, final_selected);
 }
 

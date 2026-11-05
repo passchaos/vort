@@ -6,7 +6,10 @@ to 32 KiB of history so the combined BT input stays within the 64 KiB matcher
 limit. The dynamic model is built from the seed tokens after trimming the
 history prefix, the modeled BT solve is trimmed again, and the selected tokens
 are emitted as the chunk's DEFLATE block. A second and third model learned from the
-previous modeled result are also solved and kept when their cost is lower. Complete-wire
+previous modeled result are also solved and kept when their cost is lower.
+A fourth modeled pass is accepted only when its actual dynamic coding cost is
+lower than the third result; the model cost alone was not a reliable
+predictor and regressed samba. Complete-wire
 arbitration keeps the original one-shot plan when it is smaller.
 
 The same candidate is wrapped into zlib and gzip; raw, zlib and gzip outputs
@@ -31,40 +34,42 @@ compressor on the same 1 MiB prefixes.
 
 | Input | Vort | libdeflate 12 | Ratio |
 | --- | ---: | ---: | ---: |
-| dickens | 372,806 | 370,978 | 1.0049 |
-| mozilla | 658,077 | 656,989 | 1.0017 |
-| mr | 326,167 | 322,364 | 1.0118 |
-| nci | 93,758 | 92,971 | 1.0085 |
-| ooffice | 567,459 | 566,256 | 1.0021 |
-| osdb | 380,282 | 378,009 | 1.0060 |
-| reymont | 266,737 | 265,496 | 1.0047 |
-| samba | 318,628 | 315,240 | 1.0107 |
-| sao | 763,794 | 764,752 | 0.9987 |
-| webster | 291,046 | 289,510 | 1.0053 |
-| XML | 141,040 | 140,027 | 1.0072 |
-| x-ray | 679,006 | 677,435 | 1.0023 |
+| dickens | 372,774 | 370,978 | 1.0048 |
+| mozilla | 658,055 | 656,989 | 1.0016 |
+| mr | 325,818 | 322,364 | 1.0107 |
+| nci | 93,711 | 92,971 | 1.0080 |
+| ooffice | 567,452 | 566,256 | 1.0021 |
+| osdb | 380,263 | 378,009 | 1.0060 |
+| reymont | 266,681 | 265,496 | 1.0045 |
+| samba | 318,608 | 315,240 | 1.0107 |
+| sao | 763,792 | 764,752 | 0.9987 |
+| webster | 290,984 | 289,510 | 1.0051 |
+| XML | 140,965 | 140,027 | 1.0067 |
+| x-ray | 678,777 | 677,435 | 1.0020 |
 
-Vort is now within 0.13–1.18% of libdeflate 12 on these 1 MiB prefixes and is
-smaller on sao. The largest remaining rows are mr (1.0118), samba (1.0107)
-and nci (1.0085).
+Vort is now within 0.13–1.07% of libdeflate 12 on these 1 MiB prefixes and is
+smaller on sao. The largest remaining rows are mr (1.0107), samba (1.0107)
+and nci (1.0080).
 
 Full-file checks:
 
 | Input | Bytes | Vort | libdeflate 12 | Ratio | Vort time | Reference time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| sao | 7,251,944 | 5,247,683 | 5,250,751 | 0.9994 | 4.15 s | 0.41 s |
-| x-ray | 8,474,240 | 5,745,701 | 5,743,947 | 1.0003 | 3.67 s | 0.30 s |
+| sao | 7,251,944 | 5,247,502 | 5,250,751 | 0.9994 | 4.15 s* | 0.41 s |
+| x-ray | 8,474,240 | 5,743,403 | 5,743,947 | 0.9999 | 3.67 s* | 0.30 s |
 
-The ratio is now at or near libdeflate 12. With the ReleaseFast CLI the full
-files encode in 4.15 s (sao) and 3.67 s (x-ray), about 10–12 times the
-reference. The 1 MiB nci encode is 1.72 s versus 0.2256 s for libdeflate
-(about 7.6 times). Earlier Debug-CLI timings overstated this gap and are not
-used for the performance conclusion. Latency is still the next target after
-the remaining ratio rows.
+The ratio is now at or near libdeflate 12, and both full sao and full x-ray are
+smaller than the reference. The starred ReleaseFast timings are from the
+three-pass build; the accepted fourth pass adds one more BT solve and has not
+been re-timed. Earlier Debug-CLI timings overstated the gap and are not used
+for the performance conclusion. Latency is still the next target after the
+remaining ratio rows.
 
-A fourth modeled iteration was measured and rejected. It lowers nci by 30
-bytes and mr by 324 bytes, but raises samba by 35 bytes; the per-model cost
-estimate does not always predict the final wire. The third iteration remains
-the retained configuration. Early-exit convergence checks were also measured
-and left the wires unchanged with only about 0.3% timing change, so they were
-not kept.
+The earlier model-cost fourth iteration was rejected because it raised samba
+by 35 bytes even while lowering nci and mr. Replacing that acceptance test
+with the actual dynamic coding cost makes the fourth pass profitable on every
+measured row: nci -47, mr -349, samba -20, x-ray -229, XML -75, webster -62,
+reymont -56, dickens -32, mozilla -22, osdb -19, ooffice -7, sao -2. The
+fourth pass is retained. Early-exit convergence checks were also measured and
+left the wires unchanged with only about 0.3% timing change, so they were not
+kept.
