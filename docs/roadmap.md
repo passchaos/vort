@@ -67,10 +67,18 @@ long-stream oracle cover the widened paths. Full native/x86 Deflate suites pass
 660 tests each; all three wide encoder gates pass 10 tests each. The 18-case
 real long-stream matrix accepts 4,294,967,313 bytes per case, checks every byte
 against libz, and preserves identical native/x86 wire hashes.
-The next functional gaps are Brotli static-dictionary chunk admission and the
-Brotli/Zstd decoded-size and summary APIs: they still accumulate logical input
-or output in `usize` even when no full plaintext buffer is needed. Extend those
-paths with checked wide totals before broad throughput work.
+The [Brotli/Zstd wide size increment](formats/br-zstd-wide-size.md) closes those
+remaining logical-size paths: static-dictionary chunks use wide admission;
+decoded-size/summary/query APIs preserve logical totals and limits independently
+of physical output allocation. Native/x86/WASI contracts cover the shared public
+surface, and system-library streams verify actual outputs above 4 GiB. The ZIP
+Deflate/Zstd writer also preserves wide pledges and input caps, with real native
+and x86 ZIP64 round trips. Empty transformed dictionary references at absolute
+distance <=120 now fail consistently with experimental Brotli 1.2.0, preventing
+zero-bit and zero-output loops while retaining valid larger-distance references.
+Next functional gaps include ZIP one-shot metadata's decoded-length narrowing
+and the Deflate64 encoder's cumulative input domain; broader throughput work
+follows the compatibility and resource-boundary audit.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated
