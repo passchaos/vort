@@ -25,6 +25,7 @@ const bt_optimal = @import("deflate/bt_optimal.zig");
 const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
+const member_prefix = @import("deflate/incremental/decoder/member_prefix.zig");
 const sync = @import("deflate/sync.zig");
 const split_history = @import("deflate/encoder/split_history.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
@@ -428,6 +429,9 @@ const IncrementalZlibDecoderCodec = struct {
     pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
     pub const Adler32 = checksum.Adler32;
     pub const DictionarySet = deflate.ZlibDictionarySet;
+    pub fn validateFooter(footer: [4]u8, actual: u32, ignore_adler: bool) deflate.Error!void {
+        try validateZlibFooterPartialWithOptions(&footer, 0, actual, .{ .ignore_adler = ignore_adler });
+    }
 };
 
 pub const ZlibIncrementalDecoder = incremental_zlib_decoder.Decoder(IncrementalZlibDecoderCodec);
@@ -436,9 +440,24 @@ const IncrementalGzipDecoderCodec = struct {
     pub const Error = deflate.Error;
     pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
     pub const Crc32 = checksum.Crc32Best;
+    pub fn validateFooter(footer: [8]u8, actual: u32, output_len: usize, ignore_crc32: bool, ignore_isize: bool) deflate.Error!void {
+        try validateGzipFooterPartialWithOptions(&footer, 0, actual, output_len, .{ .ignore_crc32 = ignore_crc32, .ignore_isize = ignore_isize });
+    }
 };
 
 pub const GzipIncrementalDecoder = incremental_gzip_decoder.Decoder(IncrementalGzipDecoderCodec);
+
+test "zlib incremental relaxed footer and member boundary contracts" {
+    try @import("deflate/incremental/tests/relaxed/zlib_contracts.zig").contracts(@This());
+}
+
+test "gzip incremental relaxed footer and member boundary contracts" {
+    try @import("deflate/incremental/tests/relaxed/gzip_contracts.zig").contracts(@This());
+}
+
+test "relaxed concatenated wrapper commitment and tail probe contracts" {
+    try @import("deflate/incremental/tests/relaxed/whole_input.zig").contracts(@This());
+}
 
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
@@ -838,13 +857,19 @@ pub const ZlibStreamInfo = struct {
 };
 
 pub const ZlibDecodeOptions = struct {
+    /// Skip the Adler comparison while still requiring all four footer bytes.
     ignore_adler: bool = false,
+    /// Stop after a complete stream or an unrecognized concatenated suffix.
+    /// A valid CMF/FLG prefix commits the next member, including its DICTID.
     allow_trailing_data: bool = false,
 };
 
 pub const GzipDecodeOptions = struct {
+    /// Skip only the payload CRC comparison; gzip FHCRC remains strict.
     ignore_crc32: bool = false,
     ignore_isize: bool = false,
+    /// In concatenated mode, complete gzip magic commits the next member.
+    /// Header, payload and required-footer errors remain errors afterward.
     allow_trailing_data: bool = false,
 };
 
@@ -10505,12 +10530,18 @@ fn withProbeMemberCount(result: DecodeProbeResult, summary: ?ProbeMemberSummary)
     return with_summary;
 }
 
+/// Once a real member prefix is recognized, its remaining header and body
+/// errors belong to that member. Only an unrecognized suffix is trailing data.
+fn isUnrecognizedWrapperTail(kind: member_prefix.Kind, input: []const u8, offset: usize, allow_trailing: bool) bool {
+    return allow_trailing and offset != 0 and !member_prefix.recognizes(kind, input[offset..]);
+}
+
 fn zlibProbeFailureMemberIndex(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?ProbeMemberLocation {
     var offset: usize = 0;
     var member_index: usize = 0;
     while (offset < input.len) : (member_index += 1) {
         const header = parseZlibHeader(input[offset..], dictionary) catch {
-            if (options.allow_trailing_data and offset != 0) return null;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) return null;
             return .{ .index = member_index, .offset = offset };
         };
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -10531,11 +10562,11 @@ fn zlibProbeMemberCount(input: []const u8, dictionary: ?[]const u8, scratch: []u
     var count: usize = 0;
     var last_offset: usize = 0;
     while (offset < input.len) : (count += 1) {
-        last_offset = offset;
         const header = parseZlibHeader(input[offset..], dictionary) catch {
-            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
             return null;
         };
+        last_offset = offset;
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
         const raw_offset = offset + header.data_offset;
         const raw_input = input[raw_offset..];
@@ -10554,7 +10585,7 @@ fn gzipProbeFailureMemberIndex(input: []const u8, scratch: []u8, options: GzipDe
     var member_index: usize = 0;
     while (offset < input.len) : (member_index += 1) {
         const data_offset = parseGzipHeader(input[offset..]) catch {
-            if (options.allow_trailing_data and offset != 0) return null;
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) return null;
             return .{ .index = member_index, .offset = offset };
         };
         const raw_offset = offset + data_offset;
@@ -10575,11 +10606,11 @@ fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOpt
     var count: usize = 0;
     var last_offset: usize = 0;
     while (offset < input.len) : (count += 1) {
-        last_offset = offset;
         const data_offset = parseGzipHeader(input[offset..]) catch {
-            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
             return null;
         };
+        last_offset = offset;
         const raw_offset = offset + data_offset;
         const raw_input = input[raw_offset..];
         if (raw_input.len == 0) return null;
@@ -15497,7 +15528,7 @@ fn decodeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, out
     var out_offset: usize = 0;
     while (offset < input.len) {
         const header = parseZlibHeader(input[offset..], dictionary) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -15545,7 +15576,7 @@ pub fn decodeZlibConcatenatedWithDictionarySetAndOptions(input: []const u8, outp
     var out_offset: usize = 0;
     while (offset < input.len) {
         const info = parseZlibHeaderInfo(input[offset..]) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const dictionary = if (info.dictionary_id) |id| dictionaries.find(id) orelse return error.NeedDictionary else "";
@@ -15753,7 +15784,7 @@ fn precheckZlibConcatenatedStoredExact(input: []const u8, dictionary: ?[]const u
     var output_len: usize = 0;
     while (offset < input.len) {
         const header = parseZlibHeader(input[offset..], dictionary) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_offset = offset + header.data_offset;
@@ -15907,7 +15938,7 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
     var offset: usize = 0;
     while (offset < input.len) {
         const header = parseZlibHeader(input[offset..], dictionary) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -15950,7 +15981,7 @@ fn decodeZlibConcatenatedAppendLimitedInternal(allocator: std.mem.Allocator, out
     var offset: usize = 0;
     while (offset < input.len) {
         const header = parseZlibHeader(input[offset..], dictionary) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.zlib, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -17312,7 +17343,7 @@ fn precheckGzipConcatenatedStoredExact(input: []const u8, options: GzipDecodeOpt
     var output_len: usize = 0;
     while (offset < input.len) {
         const data_offset = parseGzipHeader(input[offset..]) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_offset = offset + data_offset;
@@ -17343,7 +17374,7 @@ pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, option
     var out_offset: usize = 0;
     while (offset < input.len) {
         const data_offset = parseGzipHeader(input[offset..]) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_offset = offset + data_offset;
@@ -17458,7 +17489,7 @@ fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allo
     var offset: usize = 0;
     while (offset < input.len) {
         const data_offset = parseGzipHeader(input[offset..]) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_offset = offset + data_offset;
@@ -17498,7 +17529,7 @@ fn decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator: std.mem.All
     var offset: usize = 0;
     while (offset < input.len) {
         const data_offset = parseGzipHeader(input[offset..]) catch |err| {
-            if (options.allow_trailing_data and offset != 0) break;
+            if (isUnrecognizedWrapperTail(.gzip, input, offset, options.allow_trailing_data)) break;
             return err;
         };
         const raw_offset = offset + data_offset;

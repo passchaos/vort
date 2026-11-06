@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const member_prefix = @import("member_prefix.zig");
 
 /// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
 /// raw decoder stops at the final DEFLATE block and leaves the Adler footer
@@ -29,6 +30,8 @@ pub fn Decoder(comptime Codec: type) type {
         stream_output: usize = 0,
         stream_count: usize = 0,
         stream_offset: usize = 0,
+        member_end_offset: ?usize = null,
+        next_member_prefix: member_prefix.Prefix = member_prefix.Prefix.init(),
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
         last_error_stream_index: ?usize = null,
@@ -43,6 +46,12 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
             allow_concatenated: bool = false,
+            /// Ignore the Adler comparison while still reading a full footer
+            /// and maintaining the checksum of all produced bytes.
+            ignore_adler: bool = false,
+            /// Leave a nonmember suffix unconsumed. With concatenation, commit
+            /// to the next member after its complete CMF/FLG pair is valid.
+            allow_trailing_data: bool = false,
         };
         pub const Phase = enum { header, dictid, raw, footer, between_streams, done };
         pub const Snapshot = struct {
@@ -54,6 +63,8 @@ pub fn Decoder(comptime Codec: type) type {
             stream_index: usize,
             stream_offset: usize,
             stream_input: usize,
+            member_end_offset: ?usize,
+            trailing_prefix_len: usize,
             header_received: usize,
             dictid_received: usize,
             footer_received: usize,
@@ -120,6 +131,8 @@ pub fn Decoder(comptime Codec: type) type {
             self.stream_output = 0;
             self.stream_count = 0;
             self.stream_offset = 0;
+            self.member_end_offset = null;
+            self.next_member_prefix.reset();
             self.configureRawForStream();
             self.clearError();
             self.last_step_progress = .{};
@@ -131,6 +144,21 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn requiredDictionaryId(self: *const Self) ?u32 {
             if (self.phase != .dictid or self.dictid_received != self.dictid.len) return null;
             return self.required_dictionary_id;
+        }
+
+        /// End of the last complete member whose footer passed the configured
+        /// validation. Accepted bytes probing a suffix are excluded.
+        pub fn memberEndOffset(self: *const Self) ?usize {
+            return self.member_end_offset;
+        }
+
+        /// A possible next header accepted on an earlier step becomes trailing
+        /// data only after the probe rejects the suffix or `finish` declares EOF.
+        /// Prepend these borrowed bytes to the caller's unconsumed input suffix
+        /// to recover all trailing data.
+        pub fn trailingPrefix(self: *const Self) []const u8 {
+            if (self.phase != .done) return &.{};
+            return self.next_member_prefix.bytes[0..self.next_member_prefix.received];
         }
 
         /// Borrow bytes only during this call, verify their Adler-32 ID, and
@@ -153,7 +181,9 @@ pub fn Decoder(comptime Codec: type) type {
                 .stream_count = self.stream_count,
                 .stream_index = self.diagnosticStreamIndex(self.phase),
                 .stream_offset = self.stream_offset,
-                .stream_input = self.total_input - self.stream_offset,
+                .stream_input = self.streamInput(),
+                .member_end_offset = self.member_end_offset,
+                .trailing_prefix_len = self.trailingPrefix().len,
                 .header_received = self.header_received,
                 .dictid_received = self.dictid_received,
                 .footer_received = self.footer_received,
@@ -321,17 +351,38 @@ pub fn Decoder(comptime Codec: type) type {
                         self.total_input += n;
                     }
                     if (self.footer_received != self.footer.len) return result(input_read, output_written, .need_input);
-                    const expected = std.mem.readInt(u32, &self.footer, .big);
-                    if (expected != self.adler.digest()) return self.fail(.footer, error.ChecksumMismatch);
+                    try Codec.validateFooter(self.footer, self.adler.digest(), self.options.ignore_adler);
                     self.stream_count += 1;
+                    self.member_end_offset = self.total_input;
+                    self.next_member_prefix.reset();
                     self.phase = if (self.options.allow_concatenated) .between_streams else .done;
                 },
                 .between_streams => {
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    if (self.options.allow_trailing_data) {
+                        const probed = self.next_member_prefix.probe(.zlib, input[input_read..]);
+                        input_read += probed.accepted;
+                        self.total_input += probed.accepted;
+                        switch (probed.decision) {
+                            .need_input => return result(input_read, output_written, .need_input),
+                            .trailing => {
+                                self.phase = .done;
+                                return result(input_read, output_written, .done);
+                            },
+                            .member => {
+                                self.beginStream();
+                                self.stream_offset -= self.header.len;
+                                self.header = self.next_member_prefix.bytes;
+                                self.header_received = self.header.len;
+                                self.next_member_prefix.reset();
+                                continue;
+                            },
+                        }
+                    }
                     self.beginStream();
                 },
                 .done => {
-                    if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                    if (!self.options.allow_trailing_data and input_read != input.len) return self.fail(.done, error.TrailingData);
                     return result(input_read, output_written, .done);
                 },
             };
@@ -424,6 +475,13 @@ pub fn Decoder(comptime Codec: type) type {
         fn diagnosticStreamIndex(self: *const Self, phase: Phase) usize {
             if ((phase == .between_streams or phase == .done) and self.stream_count != 0) return self.stream_count - 1;
             return self.stream_count;
+        }
+        fn streamInput(self: *const Self) usize {
+            const end = if (self.phase == .between_streams or self.phase == .done)
+                self.member_end_offset orelse self.total_input
+            else
+                self.total_input;
+            return end - self.stream_offset;
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);

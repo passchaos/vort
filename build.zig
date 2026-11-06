@@ -69,6 +69,30 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const deflate_relaxed_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/deflate.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    const deflate_relaxed_wasm = b.addExecutable(.{
+        .name = "vort-deflate-incremental-relaxed-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/deflate/incremental/tests/relaxed/wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "codec", .module = deflate_relaxed_wasm_mod }},
+        }),
+    });
+    deflate_relaxed_wasm.entry = .disabled;
+    deflate_relaxed_wasm.rdynamic = true;
+    deflate_relaxed_wasm.stack_size = 8 * 1024 * 1024;
+    const deflate_relaxed_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/incremental_relaxed/wasm_gate.js" });
+    deflate_relaxed_wasm_run.addArtifactArg(deflate_relaxed_wasm);
+    deflate_relaxed_wasm_run.addArg("zig-out/deflate-incremental-relaxed-wasm.json");
+    b.step("test-deflate-incremental-relaxed-wasm", "Execute 32-bit relaxed wrapper, member tail and progress contracts")
+        .dependOn(&deflate_relaxed_wasm_run.step);
     const vail_wasm_dep = b.dependency("vail_archive_crypto", .{
         .target = wasm_target,
         .optimize = optimize,
@@ -1121,6 +1145,13 @@ pub fn build(b: *std.Build) void {
     const run_zlib_stream_tests = b.addRunArtifact(zlib_stream_tests);
     const zlib_stream_test_step = b.step("test-zlib-stream", "Run incremental zlib and dictionary recovery tests");
     zlib_stream_test_step.dependOn(&run_zlib_stream_tests.step);
+    const deflate_relaxed_tests = b.addTest(.{
+        .name = "vort-deflate-incremental-relaxed-tests",
+        .root_module = zlib_stream_tests.root_module,
+        .filters = &.{ "incremental relaxed", "relaxed concatenated wrapper", "wrapper member prefix" },
+    });
+    b.step("test-deflate-incremental-relaxed", "Run relaxed footer, member commitment, tail handoff and error progress contracts")
+        .dependOn(&b.addRunArtifact(deflate_relaxed_tests).step);
     const zstd_limits_tests = b.addTest(.{ .name = "vort-zstd-stream-contract-tests", .root_module = zstd_tests_mod, .filters = &.{"Zstd incremental limits"} });
     const lz4_limits_tests = b.addTest(.{ .name = "vort-lz4-stream-contract-tests", .root_module = lz4_tests.root_module, .filters = &.{"LZ4 incremental limits"} });
     const stream_contracts_test_step = b.step("test-stream-contracts", "Run cumulative stream quotas, allocation budgets and zlib recovery tests");
@@ -2063,6 +2094,29 @@ pub fn build(b: *std.Build) void {
         deflate_params_interop_exe.root_module.linkSystemLibrary("z", .{});
     }
     const zlib_compat_mod = zlib_translate.createModule();
+    const deflate_relaxed_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-incremental-relaxed-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/incremental_relaxed_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "codec", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }) },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+            },
+        }),
+    });
+    if (zlib_ng_root) |root| {
+        deflate_relaxed_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+    } else {
+        deflate_relaxed_interop_exe.root_module.linkSystemLibrary("z", .{});
+    }
+    b.step("run-deflate-incremental-relaxed-interop", "Validate tiny-buffer relaxed DEFLATE wrappers against libz frames and member errors")
+        .dependOn(&b.addRunArtifact(deflate_relaxed_interop_exe).step);
     const deflate_split_history_interop_exe = b.addExecutable(.{
         .name = "vort-deflate-split-history-interop",
         .root_module = b.createModule(.{
@@ -7775,6 +7829,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_incremental_decode_bench_exe.step);
     check_step.dependOn(&deflate_params_interop_exe.step);
     check_step.dependOn(&deflate_split_history_interop_exe.step);
+    check_step.dependOn(&deflate_relaxed_interop_exe.step);
+    check_step.dependOn(&deflate_relaxed_wasm.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);

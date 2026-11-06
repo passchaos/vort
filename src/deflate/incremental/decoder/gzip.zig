@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const member_prefix = @import("member_prefix.zig");
 
 /// Incremental gzip decoder with opt-in concatenated-member support. The raw
 /// decoder stops at the final DEFLATE block and leaves the footer unconsumed.
@@ -31,11 +32,15 @@ pub fn Decoder(comptime Codec: type) type {
         member_output: usize = 0,
         member_count: usize = 0,
         member_offset: usize = 0,
+        member_end_offset: ?usize = null,
+        prefix: member_prefix.Prefix = .{},
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
         last_error_member_index: ?usize = null,
         last_error_member_offset: ?usize = null,
         last_error_input_offset: ?usize = null,
+        last_error_output_offset: ?usize = null,
+        last_step_progress: core.Progress = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -43,9 +48,13 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
             max_header_metadata_len: usize = 1 << 20,
+            ignore_crc32: bool = false,
+            ignore_isize: bool = false,
             allow_concatenated: bool = false,
-            /// Stop after the first validated member and leave following
-            /// caller input unconsumed instead of reporting trailing data.
+            /// Leave a suffix unconsumed after a validated member. In
+            /// concatenated mode, a complete gzip magic commits to validating
+            /// the next member; a split candidate prefix can be recovered with
+            /// `trailingPrefix` after this decoder reaches done.
             allow_trailing_data: bool = false,
         };
         pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, between_members, done };
@@ -54,13 +63,15 @@ pub fn Decoder(comptime Codec: type) type {
             total_input: usize,
             total_output: usize,
             member_output: usize,
-            /// Number of members whose footer has been fully validated.
+            /// Number of complete footers accepted under the selected checks.
             member_count: usize,
             /// Zero-based active member, or the last validated member at EOF.
             member_index: usize,
             /// Compressed-stream offset of the active or last validated member.
             member_offset: usize,
             member_input: usize,
+            member_end_offset: ?usize,
+            trailing_prefix_len: usize,
             header_received: usize,
             footer_received: usize,
             last_error_name: []const u8,
@@ -69,6 +80,8 @@ pub fn Decoder(comptime Codec: type) type {
             last_error_member_offset: ?usize,
             /// Cumulative compressed offset at which the error was detected.
             last_error_input_offset: ?usize,
+            last_error_output_offset: ?usize,
+            last_step_progress: core.Progress,
             done: bool,
         };
 
@@ -99,12 +112,16 @@ pub fn Decoder(comptime Codec: type) type {
             self.member_output = 0;
             self.member_count = 0;
             self.member_offset = 0;
+            self.member_end_offset = null;
+            self.prefix.reset();
             self.configureRawForMember();
             self.last_error_name = "";
             self.last_error_phase = .header;
             self.last_error_member_index = null;
             self.last_error_member_offset = null;
             self.last_error_input_offset = null;
+            self.last_error_output_offset = null;
+            self.last_step_progress = .{};
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -115,7 +132,9 @@ pub fn Decoder(comptime Codec: type) type {
                 .member_count = self.member_count,
                 .member_index = self.diagnosticMemberIndex(self.phase),
                 .member_offset = self.member_offset,
-                .member_input = self.total_input - self.member_offset,
+                .member_input = self.memberInput(),
+                .member_end_offset = self.member_end_offset,
+                .trailing_prefix_len = self.prefix.received,
                 .header_received = self.header_received,
                 .footer_received = self.footer_received,
                 .last_error_name = self.last_error_name,
@@ -123,18 +142,24 @@ pub fn Decoder(comptime Codec: type) type {
                 .last_error_member_index = self.last_error_member_index,
                 .last_error_member_offset = self.last_error_member_offset,
                 .last_error_input_offset = self.last_error_input_offset,
+                .last_error_output_offset = self.last_error_output_offset,
+                .last_step_progress = self.last_step_progress,
                 .done = self.phase == .done,
             };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
             return .{
                 .phase_name = @tagName(self.phase),
+                .input_read = self.total_input,
                 .header_received = self.header_received,
                 .frame_input_read = self.total_input,
                 .output_written = self.total_output,
                 .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
+                .error_input_offset = core.stream_count.fromOptionalLocal(self.last_error_input_offset),
+                .error_output_offset = core.stream_count.fromOptionalLocal(self.last_error_output_offset),
+                .last_step_progress = self.last_step_progress,
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.BadGzipHeader))) "corrupt_header" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
         }
@@ -147,6 +172,20 @@ pub fn Decoder(comptime Codec: type) type {
             }
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
             try self.validateExpectedOutput();
+        }
+
+        /// Bytes accepted while probing a split next-member magic which
+        /// became trailing data. Prepend these to the caller's unconsumed
+        /// suffix to recover the complete tail. Valid members never leave a
+        /// prefix here, and reset clears it.
+        pub fn trailingPrefix(self: *const Self) []const u8 {
+            if (self.phase != .done) return &.{};
+            return self.prefix.bytes[0..self.prefix.received];
+        }
+        /// Compressed offset immediately after the last validated footer.
+        /// Unlike total_input this excludes an accepted trailing-data probe.
+        pub fn memberEndOffset(self: *const Self) ?usize {
+            return self.member_end_offset;
         }
 
         /// Advance through wrapper header/footer phases until the next
@@ -162,6 +201,20 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            self.last_step_progress = .{};
+            const before = core.Progress{ .input_read = self.total_input, .output_written = self.total_output };
+            const stepped = self.stepInternal(input, output) catch |err| {
+                self.last_step_progress = .{
+                    .input_read = self.total_input - before.input_read,
+                    .output_written = self.total_output - before.output_written,
+                };
+                return self.fail(self.phase, err);
+            };
+            self.last_step_progress = stepped.progress;
+            return stepped;
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.input_finished) {
                 if (input.len != 0) return self.fail(self.phase, error.TrailingData);
                 return .{ .status = if (self.phase == .done) .done else .need_input };
@@ -173,13 +226,13 @@ pub fn Decoder(comptime Codec: type) type {
                     const n = @min(self.header.len - self.header_received, input.len - input_read);
                     if (n != 0) {
                         @memcpy(self.header[self.header_received..][0..n], input[input_read..][0..n]);
+                        self.header_crc.update(input[input_read..][0..n]);
                         self.header_received += n;
                         input_read += n;
                         self.total_input += n;
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
-                    self.header_crc.update(&self.header);
                     self.flags = self.header[3];
                     self.advanceOptionalPhase();
                 },
@@ -224,7 +277,8 @@ pub fn Decoder(comptime Codec: type) type {
                             break;
                         }
                     }
-                    if (self.phase == .filename or self.phase == .comment) return result(input_read, output_written, .need_input);
+                    if (input_read == input.len and (self.phase == .filename or self.phase == .comment))
+                        return result(input_read, output_written, .need_input);
                 },
                 .header_crc => {
                     while (self.header_crc_received < 2) {
@@ -244,11 +298,7 @@ pub fn Decoder(comptime Codec: type) type {
                     // before supplying more bytes. The raw decoder stops at
                     // EOB and reports the exact prefix consumed, leaving this
                     // wrapper to own the footer that follows it.
-                    const drained = (if (self.pause_requested)
-                        self.raw.stepToBlockBoundary("", output[output_written..])
-                    else
-                        self.raw.step("", output[output_written..])) catch |err| return self.failRaw(err);
-                    self.recordRawProgress(drained, output, &input_read, &output_written);
+                    const drained = try self.stepRaw("", output, &input_read, &output_written);
                     if (drained.block_boundary) {
                         var paused = result(input_read, output_written, .need_input);
                         paused.block_boundary = true;
@@ -270,11 +320,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
 
-                    const supplied = (if (self.pause_requested)
-                        self.raw.stepToBlockBoundary(input[input_read..], output[output_written..])
-                    else
-                        self.raw.step(input[input_read..], output[output_written..])) catch |err| return self.failRaw(err);
-                    self.recordRawProgress(supplied, output, &input_read, &output_written);
+                    const supplied = try self.stepRaw(input[input_read..], output, &input_read, &output_written);
                     if (supplied.block_boundary) {
                         var paused = result(input_read, output_written, .need_input);
                         paused.block_boundary = true;
@@ -300,14 +346,36 @@ pub fn Decoder(comptime Codec: type) type {
                         self.total_input += n;
                     }
                     if (self.footer_received != self.footer.len) return result(input_read, output_written, .need_input);
-                    if (std.mem.readInt(u32, self.footer[0..4], .little) != self.crc.digest()) return self.fail(.footer, error.ChecksumMismatch);
-                    if (std.mem.readInt(u32, self.footer[4..8], .little) != @as(u32, @truncate(self.member_output))) return self.fail(.footer, error.SizeMismatch);
+                    Codec.validateFooter(self.footer, self.crc.digest(), self.member_output, self.options.ignore_crc32, self.options.ignore_isize) catch |err|
+                        return self.fail(.footer, err);
                     self.member_count += 1;
+                    self.member_end_offset = self.total_input;
+                    self.prefix.reset();
                     self.phase = if (self.options.allow_concatenated) .between_members else .done;
                 },
                 .between_members => {
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
-                    self.beginMember();
+                    if (!self.options.allow_trailing_data) {
+                        self.beginMember(self.total_input);
+                        continue;
+                    }
+                    const probed = self.prefix.probe(.gzip, input[input_read..]);
+                    input_read += probed.accepted;
+                    self.total_input += probed.accepted;
+                    switch (probed.decision) {
+                        .need_input => return result(input_read, output_written, .need_input),
+                        .trailing => {
+                            try self.validateExpectedOutput();
+                            self.phase = .done;
+                        },
+                        .member => {
+                            self.beginMember(self.total_input - 2);
+                            @memcpy(self.header[0..2], &self.prefix.bytes);
+                            self.header_received = 2;
+                            self.header_crc.update(self.header[0..2]);
+                            self.prefix.reset();
+                        },
+                    }
                 },
                 .done => {
                     if (input_read != input.len and !self.options.allow_trailing_data)
@@ -334,7 +402,7 @@ pub fn Decoder(comptime Codec: type) type {
                 self.phase = .raw;
             }
         }
-        fn beginMember(self: *Self) void {
+        fn beginMember(self: *Self, offset: usize) void {
             // RFC 1952 members are independent streams: a later member cannot
             // reference the prior member's DEFLATE window. Only wrapper-wide
             // byte accounting and limits survive this reset.
@@ -350,7 +418,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.footer_received = 0;
             self.crc = Codec.Crc32.init();
             self.member_output = 0;
-            self.member_offset = self.total_input;
+            self.member_offset = offset;
         }
         fn configureRawForMember(self: *Self) void {
             self.raw.options.max_output_len = self.remainingRawLimit();
@@ -373,6 +441,21 @@ pub fn Decoder(comptime Codec: type) type {
                 if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
             }
         }
+        fn stepRaw(self: *Self, input: []const u8, output: []u8, input_read: *usize, output_written: *usize) Error!core.StepResult {
+            const before = core.Progress{ .input_read = self.raw.total_input, .output_written = self.raw.total_output };
+            const stepped = (if (self.pause_requested)
+                self.raw.stepToBlockBoundary(input, output[output_written.*..])
+            else
+                self.raw.step(input, output[output_written.*..])) catch |err| {
+                self.recordRawProgress(.{ .progress = .{
+                    .input_read = self.raw.total_input - before.input_read,
+                    .output_written = self.raw.total_output - before.output_written,
+                } }, output, input_read, output_written);
+                return self.failRaw(err);
+            };
+            self.recordRawProgress(stepped, output, input_read, output_written);
+            return stepped;
+        }
         fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) void {
             input_read.* += raw_result.progress.input_read;
             self.total_input += raw_result.progress.input_read;
@@ -393,12 +476,20 @@ pub fn Decoder(comptime Codec: type) type {
                 return self.member_count - 1;
             return self.member_count;
         }
+        fn memberInput(self: *const Self) usize {
+            const end = if (self.phase == .between_members or self.phase == .done)
+                self.member_end_offset orelse self.total_input
+            else
+                self.total_input;
+            return end - self.member_offset;
+        }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
             self.last_error_member_index = self.diagnosticMemberIndex(phase);
             self.last_error_member_offset = self.member_offset;
             self.last_error_input_offset = self.total_input;
+            self.last_error_output_offset = self.total_output;
             return err;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {

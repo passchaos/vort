@@ -41,6 +41,22 @@ budget boundaries, ownership handoff, refusal/retry and zero-heap size queries.
 Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
 before treating performance comparisons as the only remaining work.
 
+The [incremental Deflate wrapper increment](formats/deflate-incremental-relaxed.md)
+adds independent Adler/CRC/ISIZE comparison controls while retaining complete
+footers, strict header and dictionary checks, and cumulative output limits.
+Concatenated readers recognize the next member before committing it and expose
+an accepted tail prefix plus the validated member end, so small input chunks
+do not lose trailing bytes. Whole-input concat prechecks/facades/probes use the
+same recognition rule, preserving errors from damaged recognized members.
+Gzip also closes error-progress accounting and continues optional metadata
+without an unnecessary input wait. A permanent libz gate validates 593 cases
+and the WASI consumer exercises 32-bit boundary and recovery behavior.
+The next functional portability gap is Deflate's absolute incremental byte
+counts and limits: several decoder/encoder totals and rolling-match positions
+still use `usize`, which caps logical streams on 32-bit targets. Move those
+absolute coordinates to the shared wide counter while retaining bounded
+buffer, history and semantic-generation indices as `usize`.
+
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated
 history movement. Its direct final/pristine matrix lowers whole-input
