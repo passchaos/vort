@@ -110,6 +110,16 @@ within 0.5% on nci, sao and reymont. Vort q11 currently reuses the q10 wire up
 to 64 KiB, while libbrotli's q11 gains 2.1-5.3% over its q10, so the q11
 priority is a stronger parse/cost model rather than more search depth.
 
+The [default binary command-state increment](performance/br/command-model-lifetime.md#default-binary-command-state-2026-11-06)
+runs the repcode-aware wide beam on q10/q11 binary blocks of 8-64 KiB without
+an opt-in. It lowers 64 KiB q11 x-ray 39,279 -> 39,217, ooffice 30,674 ->
+30,542, osdb 25,428 -> 25,388 and mr 15,314 -> 15,140; all other measured rows
+keep their wires. Non-winning binary rows pay 15-31% encode time, so the zero
+`command_state_max_input_kib` ceiling remains the explicit opt-out and the
+latency cost is a later performance target. The chunked path uses the same
+64 KiB ceiling and the 256-distance near chain. The full Brotli suite passes
+1548 with one platform skip and no frozen-wire or memory re-freeze.
+
 This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.

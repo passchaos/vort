@@ -363,14 +363,16 @@ pub const PlannedEncodeOptions = struct {
     /// true also enables it for the general bounded optimal candidate.
     distance_parameter_search: ?bool = null,
     /// Override q10/q11's bounded command-state work ceiling. The default
-    /// sentinel uses the evidence-backed 8 KiB policy limit, zero disables
-    /// the candidate, and a non-zero KiB value may extend it up to 64 KiB for
-    /// either quality. The command-state candidate uses its own bounded
-    /// parser, so this ceiling is independent of the optimal-input cap.
+    /// sentinel extends text-like blocks and binary blocks above 8 KiB to
+    /// 64 KiB, zero disables the candidate, and a non-zero KiB value may
+    /// extend it up to 64 KiB for either quality. The command-state candidate
+    /// uses its own bounded parser, so this ceiling is independent of the
+    /// optimal-input cap.
     command_state_max_input_kib: u8 = command_state_default_max_input_kib,
-    /// Opt into the repcode-aware command-state wide beam on non-text blocks
-    /// up to 64 KiB. It wins on some binary rows but raises encode time
-    /// materially, so it stays off by default. Valid only for quality 10/11.
+    /// Force the repcode-aware command-state wide beam on binary blocks at or
+    /// below the 8 KiB default floor. Binary blocks above 8 KiB already run
+    /// it, so use `command_state_max_input_kib = 0` to opt out for latency.
+    /// Valid only for quality 10/11.
     binary_command_state: bool = false,
     /// Borrowed RAW shared-prefix attachments used by the Brotli compound
     /// dictionary. The descriptor and bytes must remain alive for the call.
@@ -5533,12 +5535,12 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
 }
 
 /// Cheap content gate for extending the repcode-aware command-state parser to
-/// a whole quality meta-block. Text-like inputs (low unique-4-gram density)
-/// are where the extended candidate wins; binary inputs keep the 8 KiB policy
-/// unless `PlannedEncodeOptions.binary_command_state` opts in.
+/// a whole quality meta-block. Blocks above 8 KiB use the full 64 KiB ceiling:
+/// text-like inputs run the narrow and wide beams, and other inputs run the
+/// wide beam, which is the candidate that wins on binary rows.
 fn qualityCommandStateGate(input: []const u8) bool {
     if (comptime builtin.is_test) if (test_disable_quality_command_state_gate) return false;
-    return commandStateTextLike(input);
+    return input.len > 8 * 1024;
 }
 
 /// Content classification for the command-state beam policy. It ignores the
@@ -5819,11 +5821,13 @@ noinline fn selectQualityCommandStateCandidate(
     best: *[]u8,
 ) linksection(command_state_text_section) Error!void {
     const text_like = commandStateTextLike(input);
-    // Non-text blocks are only reached through the explicit opt-in. They use
-    // just the wide beam, which is the one that competes there, and always
-    // encode its complete wire because the compact form is a poor proxy.
+    // Non-text blocks use just the wide beam, which is the one that competes
+    // there, and always encode its complete wire because the compact form is
+    // a poor proxy.
     if (!text_like) {
-        if (!allow_binary) return;
+        // Binary blocks above the 8 KiB floor use the wide beam by default;
+        // the explicit opt-in also covers smaller binary blocks.
+        if (!allow_binary and input.len <= 8 * 1024) return;
         try selectWideCommandStateCandidate(
             allocator,
             input,
@@ -9396,14 +9400,29 @@ noinline fn considerPlannedMetaBlockCommandState(
     defer hq.deinit(allocator);
     if (hq.lz.stats.matches != 0)
         try considerCommandStateTokens(allocator, state, input, policy, start_byte, start_bit_index, best, hq.lz.tokens);
-    if (state.binary_command_state and state.quality != null and state.quality.? >= 10 and
-        input.len <= 64 * 1024)
+    const text_like = commandStateTextLike(input);
+    if ((state.binary_command_state or !text_like) and
+        state.quality != null and state.quality.? >= 10 and
+        input.len > 8 * 1024 and input.len <= 64 * 1024)
     {
         if (builtin.is_test) test_stream_hq_wide_command_attempts += 1;
+        // Binary rows need the wider near-chain budget to reach the ooffice
+        // and mr wins; text keeps the cheaper 64-distance chain.
+        const wide_options: lz77.GreedyOptions = if (!text_like)
+            .{
+                .window_len = search_window,
+                .max_chain = @min(policy.optimal.max_chain, 256),
+                .nice_len = policy.optimal.nice_len,
+                .max_candidates = @min(policy.optimal.max_candidates, 32),
+                .min_match = 4,
+                .max_match = lz77.max_match_len,
+            }
+        else
+            parser_options;
         const wide = try hq_command_parser.planAllocWideWithStartingDistances(
             allocator,
             input,
-            parser_options,
+            wide_options,
             model,
             state.wire_state.last_distances,
         );
@@ -9765,10 +9784,14 @@ fn writePlannedStreamMetaBlock(
     if (state.quality) |quality| {
         var schedule = quality_schedule.getInt(quality, state.mode) catch
             return error.InvalidBlockPlan;
-        // The binary opt-in extends the default 8 KiB ceiling to 64 KiB; an
-        // explicit caller limit (including zero, which disables the candidate)
-        // is respected.
-        const requested_command_state_kib: u8 = if (state.binary_command_state and
+        // Binary blocks above the 8 KiB floor extend to 64 KiB by default, as
+        // in the one-shot path; the explicit flag also covers smaller binary
+        // blocks. Text blocks keep the 8 KiB default unless the caller
+        // requests a larger ceiling. An explicit caller limit (including zero,
+        // which disables the candidate) is always respected.
+        const extend_binary = state.binary_command_state or
+            (quality >= 10 and block.len > 8 * 1024 and !commandStateTextLike(block));
+        const requested_command_state_kib: u8 = if (extend_binary and
             state.command_state_max_input_kib == command_state_default_max_input_kib)
             64
         else
@@ -43744,7 +43767,7 @@ test "Brotli q11 text gate extends command-state without the opt-in" {
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
-test "Brotli q11 chunks binary command-state opt-in runs the wide beam and never grows the wire" {
+test "Brotli q11 chunks binary command-state runs the wide beam by default and never grows the wire" {
     var payload: [64 * 1024]u8 = undefined;
     var state: u32 = 0x9e37_79b9;
     var position: usize = 0;
@@ -43762,19 +43785,28 @@ test "Brotli q11 chunks binary command-state opt-in runs the wide beam and never
         }
     }
     const chunks = [_][]const u8{&payload};
-    const base: PlannedStreamChunksOptions = .{ .quality = 11, .block_len = payload.len };
-    const plain = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, base);
+    const plain = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, .{
+        .quality = 11,
+        .block_len = payload.len,
+        .command_state_max_input_kib = 0,
+    });
     defer std.testing.allocator.free(plain);
-    var opted_options = base;
-    opted_options.binary_command_state = true;
+    const base: PlannedStreamChunksOptions = .{ .quality = 11, .block_len = payload.len };
     test_stream_hq_wide_command_attempts = 0;
-    const opted = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, opted_options);
-    defer std.testing.allocator.free(opted);
+    const automatic = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, base);
+    defer std.testing.allocator.free(automatic);
     try std.testing.expect(test_stream_hq_wide_command_attempts != 0);
-    try std.testing.expect(opted.len <= plain.len);
-    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, opted, payload.len);
+    try std.testing.expect(automatic.len <= plain.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, automatic, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    // The explicit flag remains accepted and cannot grow the wire.
+    var opted_options = base;
+    opted_options.binary_command_state = true;
+    const opted = try encodePlannedStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, opted_options);
+    defer std.testing.allocator.free(opted);
+    try std.testing.expect(opted.len <= plain.len);
 
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamChunksWithOptionsAlloc(
         std.testing.allocator,
@@ -43823,7 +43855,7 @@ test "Brotli q11 explicit command-state limits are respected on text" {
     try std.testing.expectEqualSlices(u8, &payload, decoded_limited);
 }
 
-test "Brotli q11 binary command-state opt-in runs the wide beam and never grows the wire" {
+test "Brotli q11 binary command-state runs the wide beam by default and never grows the wire" {
     var payload: [64 * 1024]u8 = undefined;
     var state: u32 = 0x9e37_79b9;
     var position: usize = 0;
@@ -43840,9 +43872,62 @@ test "Brotli q11 binary command-state opt-in runs the wide beam and never grows 
             position += 1;
         }
     }
+    // The zero ceiling is the explicit opt-out and produces the pre-default
+    // wire that the automatic candidate must never exceed.
+    const plain = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 11,
+        .window_bits = 16,
+        .command_state_max_input_kib = 0,
+    });
+    defer std.testing.allocator.free(plain);
     const base: PlannedEncodeOptions = .{ .quality = 11, .window_bits = 16 };
+    test_hq_wide_command_candidate_attempts = 0;
+    const automatic = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, base);
+    defer std.testing.allocator.free(automatic);
+    try std.testing.expect(test_hq_wide_command_candidate_attempts != 0);
+    try std.testing.expect(automatic.len <= plain.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, automatic, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    // The explicit flag remains accepted on this row.
+    var opted_options = base;
+    opted_options.binary_command_state = true;
+    const opted = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, opted_options);
+    defer std.testing.allocator.free(opted);
+    try std.testing.expect(opted.len <= plain.len);
+
+    // The option is rejected outside quality 10/11.
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .level = .ratio, .binary_command_state = true },
+    ));
+}
+
+test "Brotli q11 small binary blocks need the explicit command-state opt-in" {
+    var payload: [4 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 3 != 0) {
+            const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate((state >> 24) & 31);
+            position += 1;
+        }
+    }
+    const base: PlannedEncodeOptions = .{ .quality = 11, .window_bits = 12 };
+    test_hq_wide_command_candidate_attempts = 0;
     const plain = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, base);
     defer std.testing.allocator.free(plain);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_wide_command_candidate_attempts);
+
     var opted_options = base;
     opted_options.binary_command_state = true;
     test_hq_wide_command_candidate_attempts = 0;
@@ -43853,13 +43938,6 @@ test "Brotli q11 binary command-state opt-in runs the wide beam and never grows 
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, opted, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
-
-    // The option is rejected outside quality 10/11.
-    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamWithOptionsAlloc(
-        std.testing.allocator,
-        &payload,
-        .{ .level = .ratio, .binary_command_state = true },
-    ));
 }
 
 test "Brotli q11 chunks command-state opt-in lowers synthetic XML wire" {

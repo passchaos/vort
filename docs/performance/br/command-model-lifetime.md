@@ -1381,23 +1381,58 @@ latency materially.
 
 The binary opt-in also raises its near-chain budget from 64 to 256 distances;
 the wider chain is what recovers the ooffice and mr bytes, while x-ray saturates
-earlier. The default therefore keeps the text-only gate, and the binary
-behaviour is exposed as the explicit `PlannedEncodeOptions.binary_command_state`
-opt-in (mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up
-to 64 KiB. Removing the gate entirely was also measured: the same binary wins
-appear plus osdb 25,428 -> 25,358, but encode time rises 13-100% on rows that
-do not win (mozilla 680 -> 1,254 ms). Enabling it as the default also changes
-every q10/q11 binary wire and the exact requested-heap contracts, so the full
-suite needs a dedicated re-freeze epoch (dozens of frozen-wire and memory
-assertions). The quality-first tradeoff therefore remains a caller decision
-rather than a silent default change. Lowering the command-state parser's
-minimum match from four to three was also tried and rejected: the candidate
-returned `InvalidBlockPlan`, so the current plan/writer path does not yet
-accept that shape. It runs only the wide beam, always encodes its complete wire, and still
-arbitrates against every other candidate, so the selected stream can never
-grow. In the chunked/incremental path the option also extends the default
-8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
-(including zero) is respected. Public-API tests cover a 64 KiB binary payload
-for both one-shot and chunks, the wide-beam attempt, the no-growth contract and
-rejection outside quality 10/11. The option remains off by default because the
-latency cost is real on rows where it does not win.
+earlier. At the time of that measurement the default kept the text-only gate,
+and the binary behaviour was exposed as the explicit
+`PlannedEncodeOptions.binary_command_state` opt-in (mirrored by
+`PlannedStreamChunksOptions`) for quality 10/11 blocks up to 64 KiB. Removing
+the gate entirely was also measured: the same binary wins appear plus osdb
+25,428 -> 25,358, but encode time rises 13-100% on rows that do not win
+(mozilla 680 -> 1,254 ms). The later increment below enables this behaviour by
+default above the 8 KiB floor.
+
+Lowering the command-state parser's minimum match from four to three was also
+tried and rejected on ratio, not on a plan/writer failure: the candidate
+encodes correctly (the 4 KiB synthetic binary fixture falls 231 -> 230 bytes)
+but loses 9 bytes on nci (3,784 -> 3,793) and ties the other measured 64 KiB
+rows. Allowing three-byte matches only at cached recent distances still leaves
+nci at 3,789, so the short-copy model lacks the observations needed to price
+that shape. The four-byte minimum remains.
+
+## Default binary command-state, 2026-11-06
+
+The repcode-aware command-state candidate now runs for q10/q11 blocks of 8 KiB
+to 64 KiB regardless of content. Text-like blocks keep the narrow plus wide
+beams; other blocks run only the wide beam with the 256-distance near chain.
+The candidate still arbitrates its complete wire against every other
+candidate, so the selected stream can never grow. The chunked path uses the
+same ceiling and the same 256-distance chain for binary blocks.
+
+| File (64 KiB q11) | Before | Default binary | libbrotli 1.0.9 |
+| --- | ---: | ---: | ---: |
+| x-ray | 39,279 | 39,217 | 52,196 |
+| ooffice | 30,674 | 30,542 | 33,883 |
+| osdb | 25,428 | 25,388 | 27,614 |
+| mr | 15,314 | 15,140 | 16,919 |
+| sao | 46,581 | 46,581 | 52,928 |
+| dickens | 22,363 | 22,363 | 27,052 |
+| samba | 18,725 | 18,725 | 23,224 |
+| webster | 19,540 | 19,540 | 24,045 |
+| reymont | 17,072 | 17,072 | 20,555 |
+| mozilla | 13,906 | 13,906 | 15,745 |
+| nci | 3,784 | 3,784 | 5,017 |
+| XML | 3,971 | 3,971 | 6,524 |
+
+q10 produces the same four winning wires because q11 inherits the complete q10
+winner below 64 KiB. Non-winning binary rows pay 15-31% encode time for the
+attempt (sao 0.93 -> 1.09 s, samba 0.72 -> 0.94 s); text rows and nci are
+unchanged. The zero `command_state_max_input_kib` ceiling remains the explicit
+opt-out, and `binary_command_state` now only forces the wide beam on binary
+blocks at or below the 8 KiB floor.
+
+The earlier "dozens of frozen assertions" estimate did not hold at the current
+revision: no existing frozen wire or requested-heap expectation changed, and
+the full Brotli suite passes 1548 with one platform skip. Public-API tests
+cover the automatic one-shot and chunked wide-beam attempts, the no-growth
+contract, the small-block force flag, the zero opt-out and rejection outside
+quality 10/11. The binary attempt remains a later latency target on rows where
+it does not win.
