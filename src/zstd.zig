@@ -50,7 +50,12 @@ test "Zstd decoded counts FCS metadata and truncation" {
 test "Zstd decoded counts physical consumers narrow before heap admission" {
     try @import("tests/zstd_decoded_count/consumers.zig").contracts(@This());
 }
+
+test "Zstd ignore content checksum public contracts" {
+    try @import("tests/zstd_ignore_checksum/main.zig").contracts(@This());
+}
 const frame_format = @import("zstd/frame/format.zig");
+const frame_checksum = @import("zstd/frame/checksum.zig");
 const formatted_decode = @import("zstd/frame/formatted_decode.zig");
 const decode_budget = @import("zstd/decode/budget.zig");
 const decode_operation = @import("zstd/decode/operation.zig");
@@ -152,6 +157,9 @@ pub const FrameDecodeOptions = struct {
     /// and the heap quota. StreamCount remains usize on 64-bit targets.
     max_output_len: Count = std.math.maxInt(Count),
     expected_output_len: ?Count = null,
+    /// Accept a mismatched content checksum while still consuming its full
+    /// four-byte footer. Frame structure, sizes and memory limits stay strict.
+    ignore_content_checksum: bool = false,
     /// Maximum live requested heap during the complete decoding operation.
     /// Includes result staging, append destination capacity and growth, and
     /// reusable control/scratch/workspace. Borrowed frames, dictionaries,
@@ -170,7 +178,7 @@ pub const FrameDecodeOptions = struct {
     fn isDefault(self: FrameDecodeOptions) bool {
         return self.format == .standard and self.dictionary == null and self.dictionary_set == null and
             self.max_output_len == std.math.maxInt(Count) and self.expected_output_len == null and
-            self.max_total_working_memory == null and self.memory_profile == null;
+            self.max_total_working_memory == null and self.memory_profile == null and !self.ignore_content_checksum;
     }
 };
 
@@ -4411,7 +4419,7 @@ fn decodeRawOrRleFrameAllocWithDictionaryInternal(
         const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
         offset += 4;
         if (magic == frame_magic_u32) {
-            try decodeRawOrRleZstandardFrameInto(allocator, &out, frame, &offset, dictionary);
+            try decodeRawOrRleZstandardFrameInto(allocator, &out, frame, &offset, dictionary, false);
         } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
@@ -4604,11 +4612,20 @@ fn decodeRawOrRleFrameAppendLimitedWithDictionaryInternal(
     max_output_len: usize,
     dictionary: ?NativeDictionary,
 ) Error!usize {
-    const decoded_len = try stream_count.toLocal(try rawOrRleDecodedSizeLimitedWithDictionary(frame, max_output_len, dictionary));
+    return decodeRawOrRleFrameAppendLimitedWithOptionsInternal(allocator, out, frame, .{ .max_output_len = max_output_len, .dictionary = dictionary });
+}
+
+fn decodeRawOrRleFrameAppendLimitedWithOptionsInternal(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    frame: []const u8,
+    options: FrameDecodeOptions,
+) Error!usize {
+    const decoded_len = try stream_count.toLocal(try FormattedFrameDecoder.size(frame, options));
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
-    const written = decodeRawOrRleFrameIntoWithDictionaryInternal(frame, slot, dictionary) catch |err| switch (err) {
+    const written = decodeRawOrRleFrameIntoWithOptionsInternal(frame, slot, options) catch |err| switch (err) {
         error.OutputTooSmall => {
             out.items.len = start;
             return error.OutputLimitExceeded;
@@ -4985,7 +5002,7 @@ fn decodeRawOrRleFrameIntoWithOptionsInternal(
                 const header = try parseRawOrRleFrameHeaderWithOptions(frame, &header_offset, true);
                 break :blk try resolveFrameDecodeDictionary(header, options);
             } else options.dictionary;
-            try decodeRawOrRleZstandardFrameIntoBuffer(frame, &offset, output, &written, dictionary);
+            try decodeRawOrRleZstandardFrameIntoBuffer(frame, &offset, output, &written, dictionary, options.ignore_content_checksum);
         } else {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
@@ -5252,6 +5269,9 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub const Options = struct {
         format: FrameFormat = .standard,
+        /// Skip only content-checksum comparison; a complete checksum footer
+        /// remains required for each checksummed frame.
+        ignore_content_checksum: bool = false,
         /// Default block streaming bounds retained input and emits blocks before
         /// the complete frame arrives. `prevalidated_frame` retains complete
         /// frames for preflight when they fit the compressed-input limit.
@@ -6339,10 +6359,10 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 self.consumeBlockStreamInput(n);
                             }
                             const expected = std.mem.readInt(u32, &self.block_stream_checksum, .little);
-                            if (@as(u32, @truncate(self.block_stream_content_hasher.final())) != expected) {
-                                self.recordError(.block_stream, error.ChecksumMismatch);
-                                return error.ChecksumMismatch;
-                            }
+                            frame_checksum.validate(expected, @truncate(self.block_stream_content_hasher.final()), self.options.ignore_content_checksum) catch |err| {
+                                self.recordError(.block_stream, err);
+                                return err;
+                            };
                             self.block_stream_stage = .finished;
                         },
                         .finished => {
@@ -6780,10 +6800,10 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn validateDirectContentChecksum(self: *NativeIncrementalFrameDecoder) Error!void {
         if (!self.direct_content_checksum) return;
-        if (@as(u32, @truncate(self.direct_content_hasher.final())) != self.direct_expected_content_checksum) {
-            self.recordError(.direct_output, error.ChecksumMismatch);
-            return error.ChecksumMismatch;
-        }
+        frame_checksum.validate(self.direct_expected_content_checksum, @truncate(self.direct_content_hasher.final()), self.options.ignore_content_checksum) catch |err| {
+            self.recordError(.direct_output, err);
+            return err;
+        };
     }
 
     fn appendInputWithinCompressedLimit(self: *NativeIncrementalFrameDecoder, input: []const u8, input_read: *usize) Error!void {
@@ -6897,6 +6917,16 @@ pub const NativeIncrementalFrameDecoder = struct {
                 .dictionary = if (self.frame_dictionary) |dictionary| dictionary else if (self.dictionary_set == null) self.dictionary else null,
                 .dictionary_set = if (self.frame_dictionary == null) self.dictionary_set else null,
                 .max_output_len = frame_limit,
+                .ignore_content_checksum = self.options.ignore_content_checksum,
+            });
+            return;
+        }
+        if (self.options.ignore_content_checksum) {
+            _ = try decodeRawOrRleFrameAppendLimitedWithOptionsInternal(self.budget.allocator(), &self.decoded_scratch, frame, .{
+                .dictionary = if (self.frame_dictionary) |dictionary| dictionary else if (self.dictionary_set == null) self.dictionary else null,
+                .dictionary_set = if (self.frame_dictionary == null) self.dictionary_set else null,
+                .max_output_len = frame_limit,
+                .ignore_content_checksum = true,
             });
             return;
         }
@@ -7025,10 +7055,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (header.has_checksum) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
-            if (!any_block_compressed and @as(u32, @truncate(content_hasher.final())) != expected) {
-                self.recordError(.frame, error.ChecksumMismatch);
-                return error.ChecksumMismatch;
-            }
+            if (!any_block_compressed) frame_checksum.validate(expected, @truncate(content_hasher.final()), self.options.ignore_content_checksum) catch |err| {
+                self.recordError(.frame, err);
+                return err;
+            };
             offset += 4;
         }
         if (offset != frame_end) return false;
@@ -10417,6 +10447,7 @@ fn decodeRawOrRleZstandardFrameInto(
     frame: []const u8,
     offset: *usize,
     dictionary: ?NativeDictionary,
+    ignore_content_checksum: bool,
 ) Error!void {
     const header = try parseRawOrRleFrameHeaderWithOptions(frame, offset, true);
     const dictionary_history = try validateNativeDictionary(header, dictionary);
@@ -10461,13 +10492,7 @@ fn decodeRawOrRleZstandardFrameInto(
         if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
     }
 
-    if (header.has_checksum) {
-        if (frame.len - offset.* < 4) return error.TruncatedFrame;
-        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
-        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
-        if (actual != expected) return error.ChecksumMismatch;
-        offset.* += 4;
-    }
+    if (header.has_checksum) try frame_checksum.consumeFooter(frame, offset, decoded, ignore_content_checksum);
 }
 
 fn decodeRawOrRleZstandardFrameIntoBuffer(
@@ -10476,6 +10501,7 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
     output: []u8,
     written: *usize,
     dictionary: ?NativeDictionary,
+    ignore_content_checksum: bool,
 ) Error!void {
     const header = try parseRawOrRleFrameHeaderWithOptions(frame, offset, true);
     const dictionary_history = try validateNativeDictionary(header, dictionary);
@@ -10547,13 +10573,7 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
         if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
     }
 
-    if (header.has_checksum) {
-        if (frame.len - offset.* < 4) return error.TruncatedFrame;
-        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
-        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
-        if (actual != expected) return error.ChecksumMismatch;
-        offset.* += 4;
-    }
+    if (header.has_checksum) try frame_checksum.consumeFooter(frame, offset, decoded, ignore_content_checksum);
 }
 
 noinline fn decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
@@ -10651,13 +10671,7 @@ noinline fn decodeRawOrRleZstandardFrameIntoBufferWithSequenceWorkspace(
     if (header.content_size) |size| {
         if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
     }
-    if (header.has_checksum) {
-        if (frame.len - offset.* < 4) return error.TruncatedFrame;
-        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
-        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
-        if (actual != expected) return error.ChecksumMismatch;
-        offset.* += 4;
-    }
+    if (header.has_checksum) try frame_checksum.consumeFooter(frame, offset, decoded, decoder.options.ignore_content_checksum);
 }
 
 fn decodeLiteralOnlyCompressedBlockInto(
@@ -12521,7 +12535,7 @@ const SequenceDecodeWorkspace = struct {
 comptime {
     const option_fields = @sizeOf(FrameFormat) + @sizeOf(?NativeDictionary) +
         @sizeOf(?NativeDictionarySet) + @sizeOf(Count) + @sizeOf(?Count) +
-        @sizeOf(?usize) + @sizeOf(?*DecodeMemoryProfile);
+        @sizeOf(?usize) + @sizeOf(?*DecodeMemoryProfile) + @sizeOf(bool);
     std.debug.assert(@sizeOf(FrameDecodeOptions) <= std.mem.alignForward(usize, option_fields, @alignOf(FrameDecodeOptions)));
     // Keep the original 64-byte handle budget, plus only the actual inline
     // public options size on this target. Large coding tables remain external.
