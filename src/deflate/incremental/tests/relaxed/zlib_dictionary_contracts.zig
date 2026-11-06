@@ -1,4 +1,5 @@
 //! A recognized zlib member keeps dictionary and payload failures visible.
+const Count = @import("../../../../core.zig").StreamCount;
 const std = @import("std");
 const checksum = @import("../../../../checksum.zig");
 const allocator = std.testing.allocator;
@@ -12,8 +13,8 @@ fn expectErrorProgress(decoder: anytype, before: anytype) !void {
     const after = decoder.snapshot();
     try std.testing.expectEqual(after.total_input - before.total_input, after.last_step_progress.input_read);
     try std.testing.expectEqual(after.total_output - before.total_output, after.last_step_progress.output_written);
-    try std.testing.expectEqual(@as(?usize, after.total_input), after.last_error_input_offset);
-    try std.testing.expectEqual(@as(?usize, after.total_output), after.last_error_output_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(after.total_input), after.total_input), after.last_error_input_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(after.total_output), after.total_output), after.last_error_output_offset);
     try std.testing.expectEqualDeep(after.last_step_progress, decoder.diagnostics().last_step_progress.?);
 }
 
@@ -37,7 +38,7 @@ fn committedHeaderErrors(comptime D: type) !void {
         try std.testing.expectEqual(header_bytes - 2, decoder.snapshot().dictid_received);
         try std.testing.expectEqual(first.len, decoder.snapshot().stream_offset);
         try std.testing.expectEqual(header_bytes, decoder.snapshot().stream_input);
-        try std.testing.expectEqual(@as(?usize, first.len), decoder.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, first.len), decoder.memberEndOffset());
         try std.testing.expectError(error.TruncatedFrame, decoder.finish());
         try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
     }
@@ -56,7 +57,7 @@ fn committedHeaderErrors(comptime D: type) !void {
             try expectErrorProgress(&decoder, before);
             try std.testing.expectEqual(.raw, decoder.phase);
         }
-        try std.testing.expectEqual(@as(?usize, first.len), decoder.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, first.len), decoder.memberEndOffset());
     }
 }
 
@@ -94,6 +95,6 @@ fn dictionaryRecovery(comptime D: type) !void {
     try std.testing.expectEqual(second.len - 6, resumed.progress.input_read);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().stream_count);
-    try std.testing.expectEqual(@as(?usize, joined.len), decoder.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, joined.len), decoder.memberEndOffset());
     try decoder.finish();
 }

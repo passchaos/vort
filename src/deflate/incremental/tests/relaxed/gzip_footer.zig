@@ -1,3 +1,4 @@
+const Count = @import("../../../../core.zig").StreamCount;
 const std = @import("std");
 const checksum = @import("../../../../checksum.zig");
 const helpers = @import("gzip_helpers.zig");
@@ -46,7 +47,7 @@ fn footerSplits(comptime D: type) !void {
                     if (split < 8) {
                         try std.testing.expectEqual(.need_input, partial.status);
                         try std.testing.expectEqual(split, decoder.snapshot().footer_received);
-                        try std.testing.expectEqual(@as(?usize, null), decoder.memberEndOffset());
+                        try std.testing.expectEqual(@as(?Count, null), decoder.memberEndOffset());
                         if (expected_error) |err| {
                             try helpers.stepError(err, &decoder, encoded[footer_offset + split ..], &.{});
                         } else {
@@ -60,7 +61,7 @@ fn footerSplits(comptime D: type) !void {
                 try std.testing.expectEqual(@as(usize, @intFromBool(expected_error == null)), decoder.snapshot().member_count);
                 if (expected_error == null) {
                     try decoder.finish();
-                    try std.testing.expectEqual(@as(?usize, encoded.len), decoder.memberEndOffset());
+                    try std.testing.expectEqual(@as(?Count, encoded.len), decoder.memberEndOffset());
                 }
             }
             // Relaxation must still require every footer byte at EOF.
@@ -73,7 +74,7 @@ fn footerSplits(comptime D: type) !void {
                 try std.testing.expectError(error.TruncatedFrame, short.finish());
                 try std.testing.expectEqual(received, short.snapshot().footer_received);
                 try std.testing.expectEqual(@as(usize, 0), short.snapshot().member_count);
-                try std.testing.expectEqual(@as(?usize, null), short.memberEndOffset());
+                try std.testing.expectEqual(@as(?Count, null), short.memberEndOffset());
                 try helpers.stepError(error.TrailingData, &short, encoded[footer_offset + received ..], &.{});
             }
         }

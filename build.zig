@@ -88,6 +88,16 @@ pub fn build(b: *std.Build) void {
     deflate_relaxed_wasm.entry = .disabled;
     deflate_relaxed_wasm.rdynamic = true;
     deflate_relaxed_wasm.stack_size = 8 * 1024 * 1024;
+    const deflate_wide_wasm_tests = b.addTest(.{
+        .name = "vort-deflate-wide-decode-wasm-tests",
+        .root_module = deflate_relaxed_wasm_mod,
+        .filters = &.{"Deflate wide decode"},
+    });
+    deflate_wide_wasm_tests.stack_size = 8 * 1024 * 1024;
+    const deflate_wide_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/wide_decode/wasm_gate.js" });
+    deflate_wide_wasm_run.addArtifactArg(deflate_wide_wasm_tests);
+    b.step("test-deflate-wide-decode-wasm", "Execute wide decode counters, history and overflow transactions on 32-bit WASI")
+        .dependOn(&deflate_wide_wasm_run.step);
     const deflate_relaxed_wasm_run = b.addSystemCommand(&.{ "node", "tools/deflate/incremental_relaxed/wasm_gate.js" });
     deflate_relaxed_wasm_run.addArtifactArg(deflate_relaxed_wasm);
     deflate_relaxed_wasm_run.addArg("zig-out/deflate-incremental-relaxed-wasm.json");
@@ -1145,6 +1155,53 @@ pub fn build(b: *std.Build) void {
     const run_zlib_stream_tests = b.addRunArtifact(zlib_stream_tests);
     const zlib_stream_test_step = b.step("test-zlib-stream", "Run incremental zlib and dictionary recovery tests");
     zlib_stream_test_step.dependOn(&run_zlib_stream_tests.step);
+    const deflate_wide_tests = b.addTest(.{
+        .name = "vort-deflate-wide-decode-tests",
+        .root_module = zlib_stream_tests.root_module,
+        .filters = &.{"Deflate wide decode"},
+    });
+    b.step("test-deflate-wide-decode", "Run wide raw/zlib/gzip/Deflate64 decode counters and overflow contracts")
+        .dependOn(&b.addRunArtifact(deflate_wide_tests).step);
+    const deflate_wide_probe = b.addExecutable(.{
+        .name = "vort-deflate-wide-decode-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/wide_decode/probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "codec", .module = b.createModule(.{
+                .root_source_file = b.path("src/deflate.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+            }) }},
+        }),
+    });
+    const deflate_wide_probe_x86 = b.addExecutable(.{
+        .name = "vort-deflate-wide-decode-probe-x86",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate/wide_decode/probe.zig"),
+            .target = b.resolveTargetQuery(.{ .cpu_arch = .x86, .os_tag = .linux }),
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "codec", .module = b.createModule(.{
+                .root_source_file = b.path("src/deflate.zig"),
+                .target = b.resolveTargetQuery(.{ .cpu_arch = .x86, .os_tag = .linux }),
+                .optimize = .ReleaseFast,
+            }) }},
+        }),
+    });
+    const deflate_wide_diff = b.addSystemCommand(&.{ "python3", "tools/deflate/wide_decode/driver.py", "--probe-native" });
+    deflate_wide_diff.addArtifactArg(deflate_wide_probe);
+    deflate_wide_diff.addArg("--probe-x86");
+    deflate_wide_diff.addArtifactArg(deflate_wide_probe_x86);
+    deflate_wide_diff.addArgs(&.{ "--output-dir", "zig-out/deflate-wide-decode-smoke" });
+    b.step("run-deflate-wide-decode-diff", "Validate actual bounded Deflate streams with native and 32-bit probes")
+        .dependOn(&deflate_wide_diff.step);
+    const deflate_wide_long_diff = b.addSystemCommand(&.{ "python3", "tools/deflate/wide_decode/driver.py", "--long", "--probe-native" });
+    deflate_wide_long_diff.addArtifactArg(deflate_wide_probe);
+    deflate_wide_long_diff.addArg("--probe-x86");
+    deflate_wide_long_diff.addArtifactArg(deflate_wide_probe_x86);
+    deflate_wide_long_diff.addArgs(&.{ "--output-dir", "zig-out/deflate-wide-decode-long" });
+    b.step("run-deflate-wide-decode-long-diff", "Decode real greater-than-4-GiB streams on native and 32-bit targets against libz")
+        .dependOn(&deflate_wide_long_diff.step);
     const deflate_relaxed_tests = b.addTest(.{
         .name = "vort-deflate-incremental-relaxed-tests",
         .root_module = zlib_stream_tests.root_module,
@@ -7831,6 +7888,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_split_history_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_interop_exe.step);
     check_step.dependOn(&deflate_relaxed_wasm.step);
+    check_step.dependOn(&deflate_wide_probe.step);
+    check_step.dependOn(&deflate_wide_probe_x86.step);
+    check_step.dependOn(&deflate_wide_wasm_tests.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);

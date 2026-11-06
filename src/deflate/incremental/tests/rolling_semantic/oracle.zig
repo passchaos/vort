@@ -72,12 +72,12 @@ pub const Rig = struct {
         std.debug.assert(output_capacity <= 4096);
         var outputs: [4][4098]u8 = @splat(@splat(0x72));
         var outcomes: [4]Outcome = undefined;
-        const before_output = self.linear.total_output;
+        const before_output = try core.stream_count.toLocal(self.linear.total_output);
         inline for (members, 0..) |member, index| {
             outcomes[index] = capture(&@field(self, member[0]), input, outputs[index][1 .. 1 + output_capacity]);
             if (index != 0) try std.testing.expectEqualDeep(outcomes[0], outcomes[index]);
         }
-        const written = self.linear.total_output - before_output;
+        const written = try core.stream_count.toLocal(self.linear.total_output - before_output);
         try std.testing.expect(written <= output_capacity);
         try std.testing.expect(before_output + written <= payload.len);
         inline for (members, 0..) |member, index| {
@@ -122,7 +122,7 @@ pub const Rig = struct {
                 if (index != 0) try expectLogical(&@field(self, member[0]), 0, current.semantic_scratch[0..initialized]);
             }
             const published = current.semantic_delivered - current.semantic_prefix_len;
-            const generation_start = current.total_output - published;
+            const generation_start = try core.stream_count.toLocal(current.total_output - published);
             var prefix: [window]u8 = undefined;
             historyBytes(prefix[0..current.semantic_prefix_len], dictionary, payload, generation_start);
             inline for (members) |member| {
@@ -138,7 +138,7 @@ pub const Rig = struct {
         else
             current.history_len;
         var latest: [window]u8 = undefined;
-        historyBytes(latest[0..retained], dictionary, payload, current.total_output);
+        historyBytes(latest[0..retained], dictionary, payload, try core.stream_count.toLocal(current.total_output));
         inline for (members) |member| {
             const candidate = &@field(self, member[0]);
             if (candidate.phase == .fast_dynamic_block) {

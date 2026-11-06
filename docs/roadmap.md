@@ -51,11 +51,14 @@ same recognition rule, preserving errors from damaged recognized members.
 Gzip also closes error-progress accounting and continues optional metadata
 without an unnecessary input wait. A permanent libz gate validates 593 cases
 and the WASI consumer exercises 32-bit boundary and recovery behavior.
-The next functional portability gap is Deflate's absolute incremental byte
-counts and limits: several decoder/encoder totals and rolling-match positions
-still use `usize`, which caps logical streams on 32-bit targets. Move those
-absolute coordinates to the shared wide counter while retaining bounded
-buffer, history and semantic-generation indices as `usize`.
+The [wide Deflate decoder increment](formats/deflate-wide-decode.md) moves raw,
+zlib/gzip and shared Deflate64 cumulative counts, limits and absolute offsets
+to `StreamCount`, retaining bounded buffer/history/semantic positions as
+`usize`. Native/x86/WASI contracts verify boundary and overflow transactions;
+a real twelve-case native/x86 campaign decodes 4,294,967,313 bytes per case
+against libz, with stored input also exceeding 4 GiB. Complete native and x86
+Deflate suites pass 654 tests each. Incremental encoder totals, rolling-match
+positions and PNG zero-run lengths remain the next wide-counter scope.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated

@@ -1,6 +1,9 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const count = core.stream_count;
+const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
+const wrapper_count = @import("wrapper_count.zig");
 
 /// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
 /// raw decoder stops at the final DEFLATE block and leaves the Adler footer
@@ -25,26 +28,26 @@ pub fn Decoder(comptime Codec: type) type {
         dictionaries: ?Codec.DictionarySet = null,
         adler: Codec.Adler32 = Codec.Adler32.init(),
         input_finished: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
-        stream_output: usize = 0,
-        stream_count: usize = 0,
-        stream_offset: usize = 0,
-        member_end_offset: ?usize = null,
+        total_input: Count = 0,
+        total_output: Count = 0,
+        stream_output: Count = 0,
+        stream_count: Count = 0,
+        stream_offset: Count = 0,
+        member_end_offset: ?Count = null,
         next_member_prefix: member_prefix.Prefix = member_prefix.Prefix.init(),
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
-        last_error_stream_index: ?usize = null,
-        last_error_stream_offset: ?usize = null,
-        last_error_input_offset: ?usize = null,
-        last_error_output_offset: ?usize = null,
+        last_error_stream_index: ?Count = null,
+        last_error_stream_offset: ?Count = null,
+        last_error_input_offset: ?Count = null,
+        last_error_output_offset: ?Count = null,
         last_step_progress: core.Progress = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Options = struct {
-            max_output_len: usize = std.math.maxInt(usize),
-            expected_output_len: ?usize = null,
+            max_output_len: Count = std.math.maxInt(Count),
+            expected_output_len: ?Count = null,
             allow_concatenated: bool = false,
             /// Ignore the Adler comparison while still reading a full footer
             /// and maintaining the checksum of all produced bytes.
@@ -56,24 +59,24 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Phase = enum { header, dictid, raw, footer, between_streams, done };
         pub const Snapshot = struct {
             phase: Phase,
-            total_input: usize,
-            total_output: usize,
-            stream_output: usize,
-            stream_count: usize,
-            stream_index: usize,
-            stream_offset: usize,
-            stream_input: usize,
-            member_end_offset: ?usize,
+            total_input: Count,
+            total_output: Count,
+            stream_output: Count,
+            stream_count: Count,
+            stream_index: Count,
+            stream_offset: Count,
+            stream_input: Count,
+            member_end_offset: ?Count,
             trailing_prefix_len: usize,
             header_received: usize,
             dictid_received: usize,
             footer_received: usize,
             last_error_name: []const u8,
             last_error_phase: ?Phase,
-            last_error_stream_index: ?usize,
-            last_error_stream_offset: ?usize,
-            last_error_input_offset: ?usize,
-            last_error_output_offset: ?usize,
+            last_error_stream_index: ?Count,
+            last_error_stream_offset: ?Count,
+            last_error_input_offset: ?Count,
+            last_error_output_offset: ?Count,
             last_step_progress: core.Progress,
             done: bool,
         };
@@ -148,7 +151,7 @@ pub fn Decoder(comptime Codec: type) type {
 
         /// End of the last complete member whose footer passed the configured
         /// validation. Accepted bytes probing a suffix are excluded.
-        pub fn memberEndOffset(self: *const Self) ?usize {
+        pub fn memberEndOffset(self: *const Self) ?Count {
             return self.member_end_offset;
         }
 
@@ -204,11 +207,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .header_received = self.header_received,
                 .frame_input_read = self.total_input,
                 .output_written = self.total_output,
-                .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
+                .expected_output_len = self.options.expected_output_len,
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
-                .error_input_offset = core.stream_count.fromOptionalLocal(self.last_error_input_offset),
-                .error_output_offset = core.stream_count.fromOptionalLocal(self.last_error_output_offset),
+                .error_input_offset = self.last_error_input_offset,
+                .error_output_offset = self.last_error_output_offset,
                 .last_step_progress = self.last_step_progress,
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.NeedDictionary)) or std.mem.eql(u8, self.last_error_name, @errorName(error.DictionaryMismatch))) "retry_with_dictionary" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
@@ -232,12 +235,9 @@ pub fn Decoder(comptime Codec: type) type {
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             self.last_step_progress = .{};
-            const before = core.Progress{ .input_read = self.total_input, .output_written = self.total_output };
+            const before = wrapper_count.Before.init(self.total_input, self.total_output);
             const stepped = self.stepInternal(input, output) catch |err| {
-                self.last_step_progress = .{
-                    .input_read = self.total_input - before.input_read,
-                    .output_written = self.total_output - before.output_written,
-                };
+                self.last_step_progress = try before.progress(self.total_input, self.total_output);
                 return self.fail(self.phase, err);
             };
             self.last_step_progress = stepped.progress;
@@ -268,10 +268,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .header => {
                     const n = @min(self.header.len - self.header_received, input.len - input_read);
                     if (n != 0) {
+                        const next_input = try count.addLocal(self.total_input, n);
                         @memcpy(self.header[self.header_received..][0..n], input[input_read..][0..n]);
                         self.header_received += n;
                         input_read += n;
-                        self.total_input += n;
+                        self.total_input = next_input;
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
@@ -280,10 +281,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .dictid => {
                     const n = @min(self.dictid.len - self.dictid_received, input.len - input_read);
                     if (n != 0) {
+                        const next_input = try count.addLocal(self.total_input, n);
                         @memcpy(self.dictid[self.dictid_received..][0..n], input[input_read..][0..n]);
                         self.dictid_received += n;
                         input_read += n;
-                        self.total_input += n;
+                        self.total_input = next_input;
                     }
                     if (self.dictid_received != self.dictid.len) return result(input_read, output_written, .need_input);
                     const id = std.mem.readInt(u32, &self.dictid, .big);
@@ -345,14 +347,15 @@ pub fn Decoder(comptime Codec: type) type {
                 .footer => {
                     const n = @min(self.footer.len - self.footer_received, input.len - input_read);
                     if (n != 0) {
+                        const next_input = try count.addLocal(self.total_input, n);
                         @memcpy(self.footer[self.footer_received..][0..n], input[input_read..][0..n]);
                         self.footer_received += n;
                         input_read += n;
-                        self.total_input += n;
+                        self.total_input = next_input;
                     }
                     if (self.footer_received != self.footer.len) return result(input_read, output_written, .need_input);
                     try Codec.validateFooter(self.footer, self.adler.digest(), self.options.ignore_adler);
-                    self.stream_count += 1;
+                    try count.advance(&self.stream_count, 1);
                     self.member_end_offset = self.total_input;
                     self.next_member_prefix.reset();
                     self.phase = if (self.options.allow_concatenated) .between_streams else .done;
@@ -360,9 +363,8 @@ pub fn Decoder(comptime Codec: type) type {
                 .between_streams => {
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
                     if (self.options.allow_trailing_data) {
-                        const probed = self.next_member_prefix.probe(.zlib, input[input_read..]);
+                        const probed = try wrapper_count.probe(&self.next_member_prefix, .zlib, &self.total_input, input[input_read..]);
                         input_read += probed.accepted;
-                        self.total_input += probed.accepted;
                         switch (probed.decision) {
                             .need_input => return result(input_read, output_written, .need_input),
                             .trailing => {
@@ -371,7 +373,7 @@ pub fn Decoder(comptime Codec: type) type {
                             },
                             .member => {
                                 self.beginStream();
-                                self.stream_offset -= self.header.len;
+                                self.stream_offset = self.total_input - count.fromLocal(self.header.len);
                                 self.header = self.next_member_prefix.bytes;
                                 self.header_received = self.header.len;
                                 self.next_member_prefix.reset();
@@ -411,7 +413,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.raw.options.max_output_len = self.remainingRawLimit();
             self.raw.options.expected_output_len = if (self.options.allow_concatenated) null else self.options.expected_output_len;
         }
-        fn remainingRawLimit(self: *const Self) usize {
+        fn remainingRawLimit(self: *const Self) Count {
             return rawLimit(self.options, self.total_output);
         }
         fn validateExpectedOutput(self: *Self) Error!void {
@@ -433,30 +435,42 @@ pub fn Decoder(comptime Codec: type) type {
             self.last_error_output_offset = null;
         }
         fn stepRaw(self: *Self, input: []const u8, output: []u8, input_read: *usize, output_written: *usize) Error!core.StepResult {
-            const before = core.Progress{ .input_read = self.raw.total_input, .output_written = self.raw.total_output };
+            // Raw decoding may consume input or write output before returning
+            // an error. Bound both windows before handing them to the raw state.
+            const supplied = wrapper_count.inputWindow(self.total_input, input);
+            const available_output = output[output_written.*..];
+            const destination = wrapper_count.outputWindow(self.total_output, self.stream_output, available_output);
+            const before = wrapper_count.Before.init(self.raw.total_input, self.raw.total_output);
             const stepped = (if (self.pause_requested)
-                self.raw.stepToBlockBoundary(input, output[output_written.*..])
+                self.raw.stepToBlockBoundary(supplied, destination)
             else
-                self.raw.step(input, output[output_written.*..])) catch |err| {
-                const partial: core.StepResult = .{ .progress = .{
-                    .input_read = self.raw.total_input - before.input_read,
-                    .output_written = self.raw.total_output - before.output_written,
-                } };
-                self.recordRawProgress(partial, output, input_read, output_written);
+                self.raw.step(supplied, destination)) catch |err| {
+                const partial: core.StepResult = .{ .progress = try before.progress(self.raw.total_input, self.raw.total_output) };
+                try self.recordRawProgress(partial, output, input_read, output_written);
                 return self.failRaw(err);
             };
-            self.recordRawProgress(stepped, output, input_read, output_written);
+            try self.recordRawProgress(stepped, output, input_read, output_written);
+            if (stepped.status == .need_input and supplied.len < input.len and stepped.progress.input_read == supplied.len)
+                return error.IntegerOverflow;
+            // Re-enter once after a nonempty copy so a buffered EOB can still
+            // complete a stream whose last byte filled the counter exactly.
+            if (stepped.status == .need_output and stepped.progress.output_written == 0 and
+                (self.total_output == std.math.maxInt(Count) or self.stream_output == std.math.maxInt(Count)))
+                return error.IntegerOverflow;
             return stepped;
         }
-        fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) void {
+        fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) Error!void {
+            const next_input = try count.addLocal(self.total_input, raw_result.progress.input_read);
+            const next_output = try count.addLocal(self.total_output, raw_result.progress.output_written);
+            const next_member_output = try count.addLocal(self.stream_output, raw_result.progress.output_written);
             input_read.* += raw_result.progress.input_read;
-            self.total_input += raw_result.progress.input_read;
+            self.total_input = next_input;
             if (raw_result.progress.output_written == 0) return;
             const produced = output[output_written.*..][0..raw_result.progress.output_written];
             self.adler.update(produced);
             output_written.* += produced.len;
-            self.total_output += produced.len;
-            self.stream_output += produced.len;
+            self.total_output = next_output;
+            self.stream_output = next_member_output;
         }
         fn cumulativeLimitError(self: *const Self) Error {
             if (self.options.expected_output_len) |expected| {
@@ -472,11 +486,11 @@ pub fn Decoder(comptime Codec: type) type {
                 return self.fail(.raw, self.cumulativeLimitError());
             return self.fail(.raw, err);
         }
-        fn diagnosticStreamIndex(self: *const Self, phase: Phase) usize {
+        fn diagnosticStreamIndex(self: *const Self, phase: Phase) Count {
             if ((phase == .between_streams or phase == .done) and self.stream_count != 0) return self.stream_count - 1;
             return self.stream_count;
         }
-        fn streamInput(self: *const Self) usize {
+        fn streamInput(self: *const Self) Count {
             const end = if (self.phase == .between_streams or self.phase == .done)
                 self.member_end_offset orelse self.total_input
             else
@@ -498,11 +512,11 @@ pub fn Decoder(comptime Codec: type) type {
     };
 }
 
-fn initialRawLimit(options: anytype) usize {
+fn initialRawLimit(options: anytype) Count {
     return rawLimit(options, 0);
 }
 
-fn rawLimit(options: anytype, total_output: usize) usize {
+fn rawLimit(options: anytype, total_output: Count) Count {
     const max_remaining = if (total_output < options.max_output_len) options.max_output_len - total_output else 0;
     if (!options.allow_concatenated) return max_remaining;
     if (options.expected_output_len) |expected| {

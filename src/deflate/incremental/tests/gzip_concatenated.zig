@@ -1,3 +1,4 @@
+const Count = @import("../../../core.zig").StreamCount;
 const std = @import("std");
 const deflate = @import("../../../deflate.zig");
 
@@ -114,9 +115,9 @@ test "gzip incremental concatenation diagnoses corrupt and truncated later membe
     try std.testing.expectEqual(@as(usize, 1), corrupt_snapshot.member_count);
     try std.testing.expectEqual(@as(usize, 1), corrupt_snapshot.member_index);
     try std.testing.expectEqual(second_offset, corrupt_snapshot.member_offset);
-    try std.testing.expectEqual(@as(?usize, 1), corrupt_snapshot.last_error_member_index);
-    try std.testing.expectEqual(@as(?usize, second_offset), corrupt_snapshot.last_error_member_offset);
-    try std.testing.expectEqual(@as(?usize, stream.items.len), corrupt_snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?Count, 1), corrupt_snapshot.last_error_member_index);
+    try std.testing.expectEqual(@as(?Count, second_offset), corrupt_snapshot.last_error_member_offset);
+    try std.testing.expectEqual(@as(?Count, stream.items.len), corrupt_snapshot.last_error_input_offset);
     try std.testing.expectEqual(@as(?deflate.GzipIncrementalDecoder.Phase, .footer), corrupt_snapshot.last_error_phase);
     stream.items[stream.items.len - 8] ^= 1;
 
@@ -124,9 +125,9 @@ test "gzip incremental concatenation diagnoses corrupt and truncated later membe
     stream.items[second_offset] ^= 1;
     try std.testing.expectError(error.BadGzipHeader, bad_header.step(stream.items, &output));
     const bad_header_snapshot = bad_header.snapshot();
-    try std.testing.expectEqual(@as(?usize, 1), bad_header_snapshot.last_error_member_index);
-    try std.testing.expectEqual(@as(?usize, second_offset), bad_header_snapshot.last_error_member_offset);
-    try std.testing.expectEqual(@as(?usize, second_offset + 10), bad_header_snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?Count, 1), bad_header_snapshot.last_error_member_index);
+    try std.testing.expectEqual(@as(?Count, second_offset), bad_header_snapshot.last_error_member_offset);
+    try std.testing.expectEqual(@as(?Count, second_offset + 10), bad_header_snapshot.last_error_input_offset);
     try std.testing.expectEqual(@as(?deflate.GzipIncrementalDecoder.Phase, .header), bad_header_snapshot.last_error_phase);
     stream.items[second_offset] ^= 1;
 
@@ -135,9 +136,9 @@ test "gzip incremental concatenation diagnoses corrupt and truncated later membe
     try std.testing.expectError(error.TruncatedFrame, short_header.finish());
     const short_header_snapshot = short_header.snapshot();
     try std.testing.expectEqual(@as(usize, 1), short_header_snapshot.member_count);
-    try std.testing.expectEqual(@as(?usize, 1), short_header_snapshot.last_error_member_index);
-    try std.testing.expectEqual(@as(?usize, second_offset), short_header_snapshot.last_error_member_offset);
-    try std.testing.expectEqual(@as(?usize, second_offset + 4), short_header_snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?Count, 1), short_header_snapshot.last_error_member_index);
+    try std.testing.expectEqual(@as(?Count, second_offset), short_header_snapshot.last_error_member_offset);
+    try std.testing.expectEqual(@as(?Count, second_offset + 4), short_header_snapshot.last_error_input_offset);
     try std.testing.expectEqual(@as(?deflate.GzipIncrementalDecoder.Phase, .header), short_header_snapshot.last_error_phase);
 
     var short_footer = try deflate.GzipIncrementalDecoder.init(.{ .allow_concatenated = true }, &history);
@@ -145,9 +146,9 @@ test "gzip incremental concatenation diagnoses corrupt and truncated later membe
     try std.testing.expectError(error.TruncatedFrame, short_footer.finish());
     const short_footer_snapshot = short_footer.snapshot();
     try std.testing.expectEqual(@as(usize, 1), short_footer_snapshot.member_count);
-    try std.testing.expectEqual(@as(?usize, 1), short_footer_snapshot.last_error_member_index);
-    try std.testing.expectEqual(@as(?usize, second_offset), short_footer_snapshot.last_error_member_offset);
-    try std.testing.expectEqual(@as(?usize, stream.items.len - 1), short_footer_snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?Count, 1), short_footer_snapshot.last_error_member_index);
+    try std.testing.expectEqual(@as(?Count, second_offset), short_footer_snapshot.last_error_member_offset);
+    try std.testing.expectEqual(@as(?Count, stream.items.len - 1), short_footer_snapshot.last_error_input_offset);
     try std.testing.expectEqual(@as(?deflate.GzipIncrementalDecoder.Phase, .footer), short_footer_snapshot.last_error_phase);
 }
 
@@ -182,5 +183,5 @@ test "gzip incremental concatenation snapshots member boundaries and reset" {
     try std.testing.expectEqual(@as(usize, 0), reset.member_index);
     try std.testing.expectEqual(@as(usize, 0), reset.member_offset);
     try std.testing.expectEqual(@as(usize, 0), reset.member_input);
-    try std.testing.expectEqual(@as(?usize, null), reset.last_error_member_index);
+    try std.testing.expectEqual(@as(?Count, null), reset.last_error_member_index);
 }

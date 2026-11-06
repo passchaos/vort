@@ -20,8 +20,8 @@ pub fn stepError(expected: anyerror, decoder: anytype, input: []const u8, output
     try std.testing.expectError(expected, decoder.step(input, output));
     const snapshot = decoder.snapshot();
     try progress(decoder, before, snapshot.last_step_progress);
-    try std.testing.expectEqual(@as(?usize, snapshot.total_input), snapshot.last_error_input_offset);
-    try std.testing.expectEqual(@as(?usize, snapshot.total_output), snapshot.last_error_output_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(snapshot.total_input), snapshot.total_input), snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(snapshot.total_output), snapshot.total_output), snapshot.last_error_output_offset);
     const diagnostics = decoder.diagnostics();
     try std.testing.expectEqual(@as(?core.StreamCount, snapshot.total_input), diagnostics.error_input_offset);
     try std.testing.expectEqual(@as(?core.StreamCount, snapshot.total_output), diagnostics.error_output_offset);

@@ -18,7 +18,7 @@ const Termination = struct {
 fn drive(rig: *oracle.Rig, input: []const u8, payload: []const u8, dictionary: []const u8, schedule: Schedule) !Termination {
     var calls: usize = 0;
     while (calls < 10000) : (calls += 1) {
-        const offset = rig.linear.total_input;
+        const offset = try core.stream_count.toLocal(rig.linear.total_input);
         try std.testing.expect(offset <= input.len);
         const input_len = @min(input.len - offset, schedule.input_chunks[calls % schedule.input_chunks.len]);
         const output_len = schedule.output_chunks[calls % schedule.output_chunks.len];
@@ -49,7 +49,7 @@ fn expectDone(rig: *oracle.Rig, fixture: fixtures.Fixture, schedule: Schedule, d
     try std.testing.expectEqual(core.StepResult.Status.done, terminal.status);
     try std.testing.expectEqual(fixture.body_len, rig.linear.total_input);
     try std.testing.expectEqual(fixture.payload.len, rig.linear.total_output);
-    try std.testing.expectEqualSlices(u8, &fixtures.suffix, fixture.encoded[rig.linear.total_input..]);
+    try std.testing.expectEqualSlices(u8, &fixtures.suffix, fixture.encoded[(try core.stream_count.toLocal(rig.linear.total_input))..]);
 }
 
 test "rolling semantic four routes preserve every step across multiple private windows" {
@@ -233,7 +233,7 @@ test "rolling semantic invalid singleton distance preserves advanced committed p
             @memcpy(snapshot[0..first], rig.rolling.semantic_scratch[source..][0..first]);
             @memcpy(snapshot[first..], rig.rolling.semantic_scratch[0 .. snapshot.len - first]);
         }
-        const outcome = try rig.invoke(fixture.encoded[rig.linear.total_input..], n, &.{}, fixture.payload);
+        const outcome = try rig.invoke(fixture.encoded[(try core.stream_count.toLocal(rig.linear.total_input))..], n, &.{}, fixture.payload);
         try std.testing.expectEqual(core.StepResult.Status.need_output, outcome.step.status);
         const work = rig.observed_rolling.semanticWork();
         if (work.discarded_bytes > previous_work.discarded_bytes) {

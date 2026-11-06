@@ -1,5 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const Count = core.StreamCount;
+const stream_count = core.stream_count;
 const huffman = @import("../../../huffman.zig");
 const bitstream = @import("../../../bitstream.zig");
 const semantic = @import("../../semantic/decoder.zig");
@@ -97,8 +99,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         semantic_generated_end: usize = 0,
         semantic_delivered: usize = 0,
         semantic_end_of_block: bool = false,
-        semantic_blocks_started: usize = 0,
-        semantic_blocks_completed: usize = 0,
+        semantic_blocks_started: Count = 0,
+        semantic_blocks_completed: Count = 0,
         dynamic_length_pos: usize = 0,
         dynamic_previous_length: u4 = 0,
         dynamic_repeat_symbol: u5 = 0,
@@ -106,8 +108,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         dynamic_code_bits: u4 = 0,
         dynamic_block: bool = false,
         input_finished: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
+        total_input: Count = 0,
+        total_output: Count = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .block_header,
 
@@ -122,8 +124,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         else
             format.window_len;
         pub const Options = struct {
-            max_output_len: usize = std.math.maxInt(usize),
-            expected_output_len: ?usize = null,
+            max_output_len: Count = std.math.maxInt(Count),
+            expected_output_len: ?Count = null,
             /// Stop at the first final block and leave any suffix unconsumed.
             /// Format wrappers use this to retain ownership of their footer.
             allow_trailing_data: bool = false,
@@ -220,8 +222,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         /// scanner consumed `skipped_input` bytes. Cumulative input/output counters
         /// and output limits remain attached to this logical recovery session.
         pub fn resumeAfterSync(self: *Self, skipped_input: usize) Error!void {
-            const resumed_input = std.math.add(usize, self.total_input, skipped_input) catch
-                return error.IntegerOverflow;
+            const resumed_input = try stream_count.addLocal(self.total_input, skipped_input);
             const produced = self.total_output;
             self.reset();
             self.total_input = resumed_input;
@@ -243,7 +244,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 .phase_name = @tagName(self.phase),
                 .frame_input_read = self.total_input,
                 .output_written = self.total_output,
-                .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
+                .expected_output_len = self.options.expected_output_len,
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.UnsupportedDeflateFeature))) "unsupported_feature" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
@@ -252,10 +253,10 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         pub fn semanticWork(self: *const Self) SemanticWork {
             return if (observed) self.semantic_work else .{};
         }
-        pub fn semanticBlocksStarted(self: *const Self) usize {
+        pub fn semanticBlocksStarted(self: *const Self) Count {
             return self.semantic_blocks_started;
         }
-        pub fn semanticBlocksCompleted(self: *const Self) usize {
+        pub fn semanticBlocksCompleted(self: *const Self) Count {
             return self.semantic_blocks_completed;
         }
         /// Advance until the next compressed-block boundary, an input/output
@@ -278,8 +279,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
 
         pub fn step(self: *Self, input: []const u8, provided_output: []u8) Error!core.StepResult {
-            const output = if (self.options.stop_at_output_limit)
-                provided_output[0..@min(provided_output.len, self.options.max_output_len -| self.total_output)]
+            const output = if (self.options.stop_at_output_limit and self.options.max_output_len != std.math.maxInt(Count))
+                provided_output[0..stream_count.bounded(self.options.max_output_len -| self.total_output, provided_output.len)]
             else
                 provided_output;
             if (self.input_finished) {
@@ -295,6 +296,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     self.recordStepOutput(output[history_record_start..output_written]);
             }
             while (!self.options.stop_at_output_limit or
+                self.options.max_output_len == std.math.maxInt(Count) or
                 self.total_output < self.options.max_output_len or
                 self.phase == .fast_dynamic_block)
             {
@@ -307,7 +309,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 }
                 switch (self.phase) {
                     .block_header => {
-                        const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
+                        const header = (try self.readBits(input, &input_read, 3)) orelse return result(input_read, output_written, .need_input);
                         self.final_block = (header & 1) != 0;
                         const block_type = (header >> 1) & 0x3;
                         switch (block_type) {
@@ -328,14 +330,18 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     },
                     .stored_lengths => {
                         while (self.stored_length_received < self.stored_lengths.len) {
-                            const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                            const byte = (try self.readBits(input, &input_read, 8)) orelse return result(input_read, output_written, .need_input);
                             self.stored_lengths[self.stored_length_received] = @intCast(byte);
                             self.stored_length_received += 1;
                         }
                         const len = std.mem.readInt(u16, self.stored_lengths[0..2], .little);
                         const nlen = std.mem.readInt(u16, self.stored_lengths[2..4], .little);
                         if (nlen != ~len) return self.fail(.stored_lengths, error.StoredLengthMismatch);
-                        if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output)) return self.fail(.stored_lengths, error.OutputLimitExceeded);
+                        if (!self.options.stop_at_output_limit or self.options.max_output_len == std.math.maxInt(Count))
+                            _ = try self.nextOutput(self.total_output, len, .stored_lengths);
+                        if (!self.options.stop_at_output_limit and
+                            (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output))
+                            return self.fail(.stored_lengths, error.OutputLimitExceeded);
                         if (self.options.expected_output_len) |expected| {
                             if (self.total_output > expected or len > expected - self.total_output) return self.fail(.stored_lengths, error.SizeMismatch);
                         }
@@ -351,26 +357,36 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                             output_written < output.len and
                             self.bit_count >= 8)
                         {
-                            const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                            const next_output = try self.nextOutput(self.total_output, 1, .stored_payload);
+                            const byte = (try self.readBits(input, &input_read, 8)) orelse return result(input_read, output_written, .need_input);
                             output[output_written] = @intCast(byte);
                             output_written += 1;
-                            self.total_output += 1;
+                            self.total_output = next_output;
                             self.stored_remaining -= 1;
                         }
                         if (self.stored_remaining != 0 and
                             output_written < output.len and
                             self.bit_count == 0)
                         {
-                            const n = @min(
+                            const available = @min(
                                 self.stored_remaining,
                                 @min(input.len - input_read, output.len - output_written),
                             );
+                            const n = stream_count.bounded(
+                                @min(std.math.maxInt(Count) - self.total_input, std.math.maxInt(Count) - self.total_output),
+                                available,
+                            );
+                            if (available != 0 and n == 0)
+                                return self.fail(.stored_payload, error.IntegerOverflow);
                             if (n != 0) {
+                                const next_input = stream_count.addLocal(self.total_input, n) catch |err|
+                                    return self.fail(.stored_payload, err);
+                                const next_output = try self.nextOutput(self.total_output, n, .stored_payload);
                                 const produced = output[output_written..][0..n];
                                 @memcpy(produced, input[input_read..][0..n]);
-                                self.total_output += n;
+                                self.total_output = next_output;
                                 input_read += n;
-                                self.total_input += n;
+                                self.total_input = next_input;
                                 output_written += n;
                                 self.stored_remaining -= n;
                             }
@@ -378,7 +394,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         if (self.stored_remaining == 0) self.completeBlock();
                     },
                     .dynamic_counts => {
-                        const counts = self.readBits(input, &input_read, 14) orelse return result(input_read, output_written, .need_input);
+                        const counts = (try self.readBits(input, &input_read, 14)) orelse return result(input_read, output_written, .need_input);
                         self.dynamic_hlit = (counts & 0x1f) + 257;
                         self.dynamic_hdist = ((counts >> 5) & 0x1f) + 1;
                         self.dynamic_hclen = ((counts >> 10) & 0x0f) + 4;
@@ -389,7 +405,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     },
                     .dynamic_code_lengths => {
                         while (self.dynamic_code_length_index < self.dynamic_hclen) {
-                            const length = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
+                            const length = (try self.readBits(input, &input_read, 3)) orelse return result(input_read, output_written, .need_input);
                             self.dynamic_code_lengths[code_length_order[self.dynamic_code_length_index]] = @intCast(length);
                             self.dynamic_code_length_index += 1;
                         }
@@ -410,7 +426,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                                     self.recordStepOutput(output[history_record_start..output_written]);
                                     history_record_start = output_written;
                                 }
-                                self.beginSemanticBlock();
+                                try self.beginSemanticBlock();
                                 self.phase = .fast_dynamic_block;
                                 continue;
                             }
@@ -439,7 +455,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                             18 => 7,
                             else => unreachable,
                         };
-                        const extra = self.readBits(input, &input_read, extra_bits) orelse return result(input_read, output_written, .need_input);
+                        const extra = (try self.readBits(input, &input_read, extra_bits)) orelse return result(input_read, output_written, .need_input);
                         const repeat_base: usize = switch (self.dynamic_repeat_symbol) {
                             16, 17 => 3,
                             18 => 11,
@@ -472,6 +488,13 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                             // compact fallback so it cannot count that prefix both
                             // as retained history and as fresh step output.
                             .fallback => return result(input_read, output_written, .need_output),
+                            .counter_fallback => {
+                                // With no fresh output the normalized history
+                                // can enter compact decoding in this same step,
+                                // including an EOB at the counter boundary.
+                                if (output_written == 0) continue;
+                                return result(input_read, output_written, .need_output);
+                            },
                             // End the raw step at the semantic block boundary. Its
                             // delivered bytes are already the retained history;
                             // starting a compact block with the same step-local
@@ -492,7 +515,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         }
                     },
                     .length_extra => {
-                        const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                        const extra = (try self.readBits(input, &input_read, self.length_extra_bits)) orelse return result(input_read, output_written, .need_input);
                         self.match_len = self.length_base + extra;
                         self.phase = .distance_symbol;
                     },
@@ -506,7 +529,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         if (self.phase == .match_copy) try self.beginMatchAt(output_written);
                     },
                     .distance_extra => {
-                        const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                        const extra = (try self.readBits(input, &input_read, self.length_extra_bits)) orelse return result(input_read, output_written, .need_input);
                         self.match_distance += extra;
                         try self.beginMatchAt(output_written);
                         self.phase = .match_copy;
@@ -522,7 +545,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                             continue;
                         }
                         if (output_written == output.len) return result(input_read, output_written, .need_output);
-                        const n = @min(self.match_remaining, output.len - output_written);
+                        const n = stream_count.bounded(std.math.maxInt(Count) - self.total_output, @min(self.match_remaining, output.len - output_written));
+                        if (n == 0) return self.fail(.match_copy, error.IntegerOverflow);
+                        const next_output = try self.nextOutput(self.total_output, n, .match_copy);
                         self.copyMatchSpanAt(
                             output,
                             output_written,
@@ -533,7 +558,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                             self.match_distance,
                         );
                         output_written += n;
-                        self.total_output += n;
+                        self.total_output = next_output;
                         self.match_remaining -= n;
                         if (self.match_remaining == 0) {
                             self.match_len = 0;
@@ -545,6 +570,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         // staged by the same input call have already been accounted for.
                         if (input_read != input.len and !self.options.allow_trailing_data)
                             return self.fail(.done, error.TrailingData);
+                        if (self.options.expected_output_len) |expected| {
+                            if (self.total_output != expected) return self.fail(.done, error.SizeMismatch);
+                        }
                         return result(input_read, output_written, .done);
                     },
                 }
@@ -552,7 +580,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             return result(input_read, output_written, .need_output);
         }
 
-        const SemanticRunStatus = enum { need_input, need_output, fallback, block_end, done };
+        const SemanticRunStatus = enum { need_input, need_output, fallback, counter_fallback, block_end, done };
 
         /// Dynamic header work is paid once per block. Keep canonical tree
         /// preparation outside the symbol-heavy step so table building and
@@ -569,6 +597,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     !self.options.stop_at_output_limit and
                     self.options.max_distance == format.window_len and
                     contiguous_input_len >= semantic_min_contiguous_input and
+                    stream_count.bounded(std.math.maxInt(Count) - self.total_input, contiguous_input_len) == contiguous_input_len and
+                    std.math.maxInt(Count) - self.total_output >= format.window_len and
                     self.semantic_scratch.len >= recommended_history_len and
                     self.semantic_decoder.?.init(
                         &self.dynamic_literal_table,
@@ -593,10 +623,11 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
 
         /// Begin one private generation from compact history. History geometry
         /// is isolated from the controller's input/output transaction.
-        fn beginSemanticBlock(self: *Self) void {
+        fn beginSemanticBlock(self: *Self) Error!void {
             std.debug.assert(supports_semantic_window);
             std.debug.assert(self.semantic_scratch.len >= recommended_history_len);
-            semantic_state.begin(mode, observed, self);
+            semantic_state.begin(mode, observed, self) catch |err|
+                return self.fail(.dynamic_lengths, err);
         }
 
         fn stepSemanticBlock(
@@ -611,8 +642,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             while (true) {
                 if (self.semantic_delivered != self.semantic_generated_end) {
                     const pending = self.semantic_generated_end - self.semantic_delivered;
-                    const n = @min(pending, output.len - output_written.*);
+                    const available = @min(pending, output.len - output_written.*);
+                    const n = stream_count.bounded(std.math.maxInt(Count) - self.total_output, available);
+                    if (available != 0 and n == 0)
+                        return self.fail(.fast_dynamic_block, error.IntegerOverflow);
                     if (n != 0) {
+                        const next_output = try self.nextOutput(self.total_output, n, .fast_dynamic_block);
                         const window = semantic_state.window(self, self.semantic_generated_end);
                         if (observed) {
                             self.semantic_work.delivered_bytes +|= @intCast(n);
@@ -622,12 +657,13 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         window.drain(self.semantic_delivered, output[output_written.*..][0..n]);
                         self.semantic_delivered += n;
                         output_written.* += n;
-                        self.total_output += n;
+                        self.total_output = next_output;
                         // These bytes already live in the semantic history
                         // window; the ordinary step-end ring recorder must not
                         // append them a second time.
                         history_record_start.* = output_written.*;
                     }
+                    if (n != available) return self.fail(.fast_dynamic_block, error.IntegerOverflow);
                     if (self.semantic_delivered != self.semantic_generated_end)
                         return .need_output;
                 }
@@ -637,10 +673,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         if (self.final_block and self.total_output != expected)
                             return self.fail(.fast_dynamic_block, error.SizeMismatch);
                     }
+                    const completed = stream_count.addLocal(self.semantic_blocks_completed, 1) catch |err|
+                        return self.fail(.fast_dynamic_block, err);
                     self.retainSemanticTail();
                     semantic_state.normalize(mode, observed, self);
                     self.semantic_end_of_block = false;
-                    self.semantic_blocks_completed += 1;
+                    self.semantic_blocks_completed = completed;
                     self.phase = if (self.final_block) .done else .block_header;
                     return if (self.phase == .done) .done else .block_end;
                 }
@@ -649,6 +687,19 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 // last RFC window before producing the next one.
                 if (self.semantic_generated_end != self.semantic_prefix_len)
                     self.retainSemanticTail();
+
+                // Semantic decoding stages input and whole private output
+                // generations. Near a counter boundary use the compact route
+                // so only required bytes and writable output are committed.
+                const available_input = input.len - input_read.*;
+                if (stream_count.bounded(std.math.maxInt(Count) - self.total_input, available_input) != available_input or
+                    std.math.maxInt(Count) - self.total_output < format.window_len)
+                {
+                    semantic_state.normalize(mode, observed, self);
+                    self.buildDynamicLookups();
+                    self.phase = .symbols;
+                    return .counter_fallback;
+                }
 
                 const remaining = self.semanticRemainingOutput();
                 const output_end = self.semantic_prefix_len + @min(format.window_len, remaining);
@@ -682,10 +733,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 };
 
                 rewindSemanticLookahead(&reader);
+                const next_input = stream_count.addLocal(self.total_input, reader.byte_index) catch |err|
+                    return self.fail(.fast_dynamic_block, err);
                 self.bit_buffer = reader.bit_buffer;
                 self.bit_count = @intCast(reader.bit_count);
                 input_read.* += reader.byte_index;
-                self.total_input += reader.byte_index;
+                self.total_input = next_input;
 
                 std.debug.assert(decoded.output_written >= self.semantic_prefix_len);
                 const generated = decoded.output_written - self.semantic_prefix_len;
@@ -714,7 +767,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             var remaining = self.options.max_output_len -| self.total_output;
             if (self.options.expected_output_len) |expected|
                 remaining = @min(remaining, expected -| self.total_output);
-            return remaining;
+            return stream_count.bounded(remaining, format.window_len);
         }
 
         fn retainSemanticTail(self: *Self) void {
@@ -753,6 +806,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             const history_pos = self.history_pos;
             const history_len = self.history_len;
             const start_input = input_read.*;
+            const input_before_step = self.total_input - stream_count.fromLocal(start_input);
+            // Constrain speculative bulk loads as well as byte-wise reads to
+            // input that can still be represented by the logical counter.
+            // Offered suffixes remain available to the controller after EOB.
+            const input_end = start_input + stream_count.bounded(std.math.maxInt(Count) - self.total_input, input.len - start_input);
+            const counted_input = input[0..input_end];
             defer {
                 self.total_output = total_output;
                 self.bit_buffer = bit_buffer;
@@ -763,7 +822,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 self.dynamic_code_bits = dynamic_code_bits;
                 self.distance_code = distance_code;
                 self.distance_code_bits = distance_code_bits;
-                self.total_input += input_read.* - start_input;
+                // A boundary may also return whole lookahead bytes staged by
+                // this step's header parser before the run began.
+                self.total_input = stream_count.addLocal(input_before_step, input_read.*) catch unreachable;
             }
 
             while (true) {
@@ -771,15 +832,15 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     return .need_output;
                 }
-                refillBitsBulk(input, input_read, &bit_buffer, &bit_count);
+                refillBitsBulk(counted_input, input_read, &bit_buffer, &bit_count);
                 const symbol = (try self.readLiteralSymbolRun(
-                    input,
+                    counted_input,
                     input_read,
                     &bit_buffer,
                     &bit_count,
                     &code,
                     &code_bits,
-                )) orelse return .need_input;
+                )) orelse return self.runNeedsInput(counted_input.len != input.len);
                 if (symbol < 256) {
                     if (output_written.* == output.len) {
                         // A decoded literal cannot be committed without caller
@@ -789,13 +850,14 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                         rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                         return .need_output;
                     }
+                    const next_output = try self.nextOutput(total_output, 1, .symbols);
                     if (total_output >= self.options.max_output_len) return self.fail(.symbols, error.OutputLimitExceeded);
                     if (self.options.expected_output_len) |expected| {
                         if (total_output >= expected) return self.fail(.symbols, error.SizeMismatch);
                     }
                     output[output_written.*] = @intCast(symbol);
                     output_written.* += 1;
-                    total_output += 1;
+                    total_output = next_output;
                     // Try one adjacent literal without re-entering the loop.
                     // This pays off on literal runs and costs only a table
                     // load plus a predictable miss on match-heavy streams.
@@ -814,11 +876,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                                 total_output < self.options.max_output_len and
                                 (self.options.expected_output_len == null or total_output < self.options.expected_output_len.?))
                             {
+                                const adjacent_output = try self.nextOutput(total_output, 1, .symbols);
                                 bit_buffer >>= next_bits;
                                 bit_count -= next_bits;
                                 output[output_written.*] = @intCast(next_symbol);
                                 output_written.* += 1;
-                                total_output += 1;
+                                total_output = adjacent_output;
                             }
                         }
                     }
@@ -843,14 +906,14 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 self.length_extra_bits = length_extra_bits;
                 self.match_len = length_base;
                 if (length_extra_bits != 0) {
-                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, length_extra_bits) orelse {
+                    const extra = readBitsLocal(counted_input, input_read, &bit_buffer, &bit_count, length_extra_bits) orelse {
                         self.phase = .length_extra;
-                        return .need_input;
+                        return self.runNeedsInput(counted_input.len != input.len);
                     };
                     self.match_len = length_base + extra;
                 }
                 const distance_symbol = (try self.readDistanceSymbolRun(
-                    input,
+                    counted_input,
                     input_read,
                     &bit_buffer,
                     &bit_count,
@@ -860,7 +923,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     &distance_code_bits,
                 )) orelse {
                     self.phase = .distance_symbol;
-                    return .need_input;
+                    return self.runNeedsInput(counted_input.len != input.len);
                 };
                 if (distance_symbol >= format.distance_symbol_count) return self.fail(.distance_symbol, error.InvalidHuffmanCode);
                 const distance_meta_entry = distance_meta[distance_symbol];
@@ -869,9 +932,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 self.match_distance = distance_base;
                 self.length_extra_bits = distance_extra_bits;
                 if (distance_extra_bits != 0) {
-                    const extra = readBitsLocal(input, input_read, &bit_buffer, &bit_count, distance_extra_bits) orelse {
+                    const extra = readBitsLocal(counted_input, input_read, &bit_buffer, &bit_count, distance_extra_bits) orelse {
                         self.phase = .distance_extra;
-                        return .need_input;
+                        return self.runNeedsInput(counted_input.len != input.len);
                     };
                     self.match_distance += extra;
                 }
@@ -881,7 +944,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
                     return .need_output;
                 }
-                const n = @min(self.match_remaining, output.len - output_written.*);
+                const n = stream_count.bounded(std.math.maxInt(Count) - total_output, @min(self.match_remaining, output.len - output_written.*));
+                if (n == 0) return self.fail(.match_copy, error.IntegerOverflow);
+                const next_output = try self.nextOutput(total_output, n, .match_copy);
                 self.copyMatchSpanAt(
                     output,
                     output_written.*,
@@ -892,15 +957,21 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                     self.match_distance,
                 );
                 output_written.* += n;
-                total_output += n;
+                total_output = next_output;
                 self.match_remaining -= n;
                 if (self.match_remaining != 0) {
                     rewindStagedLookahead(&bit_buffer, &bit_count, input_read);
+                    if (total_output == std.math.maxInt(Count) and output_written.* != output.len)
+                        return self.fail(.match_copy, error.IntegerOverflow);
                     return .need_output;
                 }
                 self.match_len = 0;
                 self.phase = .symbols;
             }
+        }
+
+        fn runNeedsInput(self: *Self, counter_bound: bool) Error!RunStatus {
+            return if (counter_bound) self.fail(self.phase, error.IntegerOverflow) else .need_input;
         }
 
         fn readLiteralSymbolRun(
@@ -997,12 +1068,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 return symbol;
             }
             if (self.code_bits == 0) {
-                if (self.readLookupSymbol(input, input_read, 11, &self.dynamic_literal_lookup)) |symbol|
+                if (try self.readLookupSymbol(input, input_read, 11, &self.dynamic_literal_lookup)) |symbol|
                     return symbol;
                 if (self.bit_count < 11 and input_read.* == input.len) return null;
             }
             while (self.code_bits < 15) {
-                const bit = self.readBits(input, input_read, 1) orelse return null;
+                const bit = (try self.readBits(input, input_read, 1)) orelse return null;
                 self.code |= @as(u16, @intCast(bit)) << self.code_bits;
                 self.code_bits += 1;
                 if (tableSymbol(286, &self.dynamic_literal_table, self.code, self.code_bits)) |symbol| {
@@ -1056,7 +1127,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         ) void {
             std.debug.assert(span_len != 0);
             std.debug.assert(match_distance != 0);
-            std.debug.assert(match_distance <= history_len + span_start);
+            std.debug.assert(match_distance <= span_start or match_distance - span_start <= history_len);
             const dest = step_output[span_start..][0..span_len];
             if (match_distance <= span_start) {
                 const source = span_start - match_distance;
@@ -1096,16 +1167,24 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             history_capacity: usize,
             history_len: usize,
             produced: usize,
-            total_output: usize,
+            total_output: Count,
         ) Error!void {
             if (history_capacity == 0) return self.fail(.match_copy, error.OutputTooSmall);
-            if (self.match_distance == 0 or self.match_distance > history_len + produced) return self.fail(.match_copy, error.InvalidMatch);
+            if (self.match_distance == 0 or (self.match_distance > produced and self.match_distance - produced > history_len)) return self.fail(.match_copy, error.InvalidMatch);
             if (self.match_distance > self.options.max_distance) return self.fail(.match_copy, error.InvalidMatch);
-            if (!self.options.stop_at_output_limit and (total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
+            if (!self.options.stop_at_output_limit or self.options.max_output_len == std.math.maxInt(Count))
+                _ = try self.nextOutput(total_output, self.match_len, .match_copy);
+            if (!self.options.stop_at_output_limit and
+                (total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - total_output))
+                return self.fail(.match_copy, error.OutputLimitExceeded);
             if (self.options.expected_output_len) |expected| {
                 if (total_output > expected or self.match_len > expected - total_output) return self.fail(.match_copy, error.SizeMismatch);
             }
             self.match_remaining = self.match_len;
+        }
+
+        fn nextOutput(self: *Self, current: Count, amount: usize, phase: Phase) Error!Count {
+            return stream_count.addLocal(current, amount) catch |err| self.fail(phase, err);
         }
 
         fn beginMatchAt(self: *Self, produced: usize) Error!void {
@@ -1125,9 +1204,9 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         fn completeBlock(self: *Self) void {
             self.phase = if (self.final_block) .done else .block_header;
         }
-        fn readFixedDistanceSymbol(self: *Self, input: []const u8, input_read: *usize) ?usize {
+        fn readFixedDistanceSymbol(self: *Self, input: []const u8, input_read: *usize) Error!?usize {
             while (self.distance_code_bits < 5) {
-                const bit = self.readBits(input, input_read, 1) orelse return null;
+                const bit = (try self.readBits(input, input_read, 1)) orelse return null;
                 self.distance_code |= @as(u16, @intCast(bit)) << self.distance_code_bits;
                 self.distance_code_bits += 1;
             }
@@ -1139,12 +1218,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         fn readDistanceSymbol(self: *Self, input: []const u8, input_read: *usize) Error!?usize {
             if (!self.dynamic_block) return self.readFixedDistanceSymbol(input, input_read);
             if (self.dynamic_code_bits == 0) {
-                if (self.readLookupSymbol(input, input_read, 10, &self.dynamic_distance_lookup)) |symbol|
+                if (try self.readLookupSymbol(input, input_read, 10, &self.dynamic_distance_lookup)) |symbol|
                     return symbol;
                 if (self.bit_count < 10 and input_read.* == input.len) return null;
             }
             while (self.dynamic_code_bits < 15) {
-                const bit = self.readBits(input, input_read, 1) orelse return null;
+                const bit = (try self.readBits(input, input_read, 1)) orelse return null;
                 self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
                 self.dynamic_code_bits += 1;
                 if (tableSymbol(format.distance_symbol_count, &self.dynamic_distance_table, self.dynamic_code, self.dynamic_code_bits)) |symbol| {
@@ -1157,12 +1236,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
         fn readCodeLengthSymbol(self: *Self, input: []const u8, input_read: *usize) Error!?u16 {
             if (self.dynamic_code_bits == 0) {
-                if (self.readLookupSymbol(input, input_read, 7, &self.dynamic_code_lookup)) |symbol|
+                if (try self.readLookupSymbol(input, input_read, 7, &self.dynamic_code_lookup)) |symbol|
                     return symbol;
                 if (self.bit_count < 7 and input_read.* == input.len) return null;
             }
             while (self.dynamic_code_bits < 7) {
-                const bit = self.readBits(input, input_read, 1) orelse return null;
+                const bit = (try self.readBits(input, input_read, 1)) orelse return null;
                 self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
                 self.dynamic_code_bits += 1;
                 if (canonicalSymbol(self.dynamic_code_lengths[0..], self.dynamic_code, self.dynamic_code_bits)) |symbol| {
@@ -1179,7 +1258,7 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
             input_read: *usize,
             comptime lookup_bits: u6,
             lookup: *const [@as(usize, 1) << lookup_bits]u16,
-        ) ?u16 {
+        ) Error!?u16 {
             const mask = (@as(u64, 1) << lookup_bits) - 1;
             while (true) {
                 const lookup_entry = lookup[@intCast(self.bit_buffer & mask)];
@@ -1193,10 +1272,12 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 }
                 if (self.bit_count >= lookup_bits or input_read.* == input.len)
                     return null;
+                const next_input = stream_count.addLocal(self.total_input, 1) catch |err|
+                    return self.fail(self.phase, err);
                 self.bit_buffer |= @as(u64, input[input_read.*]) << self.bit_count;
                 self.bit_count += 8;
                 input_read.* += 1;
-                self.total_input += 1;
+                self.total_input = next_input;
             }
         }
         fn setDynamicLength(self: *Self, value: u4) void {
@@ -1206,13 +1287,15 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
                 self.dynamic_distance_lengths[self.dynamic_length_pos - self.dynamic_hlit] = value;
             }
         }
-        fn readBits(self: *Self, input: []const u8, input_read: *usize, count: u6) ?usize {
+        fn readBits(self: *Self, input: []const u8, input_read: *usize, count: u6) Error!?usize {
             while (self.bit_count < count) {
                 if (input_read.* == input.len) return null;
+                const next_input = stream_count.addLocal(self.total_input, 1) catch |err|
+                    return self.fail(self.phase, err);
                 self.bit_buffer |= @as(u64, input[input_read.*]) << self.bit_count;
                 self.bit_count += 8;
                 input_read.* += 1;
-                self.total_input += 1;
+                self.total_input = next_input;
             }
             const mask = (@as(u64, 1) << count) - 1;
             const value: usize = @intCast(self.bit_buffer & mask);

@@ -1,3 +1,4 @@
+const Count = @import("../../../core.zig").StreamCount;
 const std = @import("std");
 const deflate = @import("../../../deflate.zig");
 
@@ -352,8 +353,8 @@ test "zlib incremental concatenation diagnoses corrupt later stream" {
     try std.testing.expectError(error.ChecksumMismatch, decoder.step(encoded.items, &output));
     try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_count);
     try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_index);
-    try std.testing.expectEqual(@as(?usize, 1), decoder.snapshot().last_error_stream_index);
-    try std.testing.expectEqual(@as(?usize, first.len), decoder.snapshot().last_error_stream_offset);
+    try std.testing.expectEqual(@as(?Count, 1), decoder.snapshot().last_error_stream_index);
+    try std.testing.expectEqual(@as(?Count, first.len), decoder.snapshot().last_error_stream_offset);
 }
 
 test "zlib incremental concatenation enforces cumulative sizes and reset" {
@@ -391,7 +392,7 @@ test "zlib incremental concatenation enforces cumulative sizes and reset" {
     too_long.reset();
     try std.testing.expectEqual(deflate.ZlibIncrementalDecoder.Phase.header, too_long.snapshot().phase);
     try std.testing.expectEqual(@as(usize, 0), too_long.snapshot().stream_count);
-    try std.testing.expectEqual(@as(?usize, null), too_long.snapshot().last_error_stream_index);
+    try std.testing.expectEqual(@as(?Count, null), too_long.snapshot().last_error_stream_index);
 }
 
 fn appendZlibBestStream(encoder: *deflate.ZlibIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {

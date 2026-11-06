@@ -56,7 +56,7 @@ pub const Deflate64State = struct {
             .history = history,
             .decoder = try deflate64.IncrementalDecoder.initWithHistory(.{
                 .max_output_len = entry_limit,
-                .expected_output_len = expected_uncompressed_size,
+                .expected_output_len = core.stream_count.fromOptionalLocal(expected_uncompressed_size),
                 .allow_trailing_data = true,
             }, history),
             .descriptor_layout = descriptor_layout,

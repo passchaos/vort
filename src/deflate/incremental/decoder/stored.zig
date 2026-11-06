@@ -1,5 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const count = core.stream_count;
+const Count = core.StreamCount;
 
 /// Byte-progressive raw-DEFLATE decoder for stored blocks. Headers may be split
 /// at any byte, payload bytes copy directly caller-to-caller, and no complete
@@ -15,21 +17,21 @@ pub const Decoder = struct {
     payload_remaining: usize = 0,
     final_block: bool = false,
     input_finished: bool = false,
-    total_input: usize = 0,
-    total_output: usize = 0,
+    total_input: Count = 0,
+    total_output: Count = 0,
     last_error_name: []const u8 = "",
     last_error_phase: Phase = .header,
 
     pub const Error = core.Error;
     pub const Options = struct {
-        max_output_len: usize = std.math.maxInt(usize),
-        expected_output_len: ?usize = null,
+        max_output_len: Count = std.math.maxInt(Count),
+        expected_output_len: ?Count = null,
     };
     pub const Phase = enum { header, payload, done };
     pub const Snapshot = struct {
         phase: Phase,
-        input_read: usize,
-        output_written: usize,
+        input_read: Count,
+        output_written: Count,
         header_received: usize,
         payload_remaining: usize,
         final_block: bool,
@@ -64,7 +66,7 @@ pub const Decoder = struct {
             .header_received = self.header_received,
             .frame_input_read = self.total_input,
             .output_written = self.total_output,
-            .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
+            .expected_output_len = self.options.expected_output_len,
             .payload_remaining = self.payload_remaining,
             .last_error_name = self.last_error_name,
             .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
@@ -99,10 +101,11 @@ pub const Decoder = struct {
                     const needed = self.header.len - self.header_received;
                     const n = @min(needed, input.len - input_read);
                     if (n != 0) {
+                        const next_input = count.addLocal(self.total_input, n) catch |err| return self.fail(.header, err);
                         @memcpy(self.header[self.header_received..][0..n], input[input_read..][0..n]);
                         self.header_received += n;
                         input_read += n;
-                        self.total_input += n;
+                        self.total_input = next_input;
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.parseHeader();
@@ -116,11 +119,13 @@ pub const Decoder = struct {
                     if (output_written == output.len) return result(input_read, output_written, .need_output);
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
                     const n = @min(self.payload_remaining, @min(input.len - input_read, output.len - output_written));
+                    const next_input = count.addLocal(self.total_input, n) catch |err| return self.fail(.payload, err);
+                    const next_output = count.addLocal(self.total_output, n) catch |err| return self.fail(.payload, err);
                     @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
                     input_read += n;
                     output_written += n;
-                    self.total_input += n;
-                    self.total_output += n;
+                    self.total_input = next_input;
+                    self.total_output = next_output;
                     self.payload_remaining -= n;
                     if (self.payload_remaining == 0) self.completeBlock();
                 },
@@ -151,9 +156,10 @@ pub const Decoder = struct {
         const len = std.mem.readInt(u16, self.header[1..3], .little);
         const nlen = std.mem.readInt(u16, self.header[3..5], .little);
         if (nlen != ~len) return self.fail(.header, error.StoredLengthMismatch);
-        if (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output) return self.fail(.header, error.OutputLimitExceeded);
+        const end_output = count.addLocal(self.total_output, len) catch |err| return self.fail(.header, err);
+        if (end_output > self.options.max_output_len) return self.fail(.header, error.OutputLimitExceeded);
         if (self.options.expected_output_len) |expected| {
-            if (self.total_output > expected or len > expected - self.total_output) return self.fail(.header, error.SizeMismatch);
+            if (end_output > expected) return self.fail(.header, error.SizeMismatch);
         }
         self.final_block = (self.header[0] & 1) != 0;
         self.payload_remaining = len;

@@ -39,10 +39,10 @@ fn expectFailureProgress(decoder: *const deflate.ZlibIncrementalDecoder, input: 
     try std.testing.expectEqual(input, snapshot.last_step_progress.input_read);
     try std.testing.expectEqual(output, snapshot.last_step_progress.output_written);
     try std.testing.expectEqualDeep(snapshot.last_step_progress, diagnostic.last_step_progress.?);
-    try std.testing.expectEqual(@as(?usize, snapshot.total_input), snapshot.last_error_input_offset);
-    try std.testing.expectEqual(@as(?usize, snapshot.total_output), snapshot.last_error_output_offset);
-    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snapshot.last_error_input_offset), diagnostic.error_input_offset);
-    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snapshot.last_error_output_offset), diagnostic.error_output_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, snapshot.total_input), snapshot.last_error_input_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, snapshot.total_output), snapshot.last_error_output_offset);
+    try std.testing.expectEqual(snapshot.last_error_input_offset, diagnostic.error_input_offset);
+    try std.testing.expectEqual(snapshot.last_error_output_offset, diagnostic.error_output_offset);
 }
 
 test "zlib incremental dictionary request waits for complete DICTID and resumes in place" {
@@ -265,8 +265,8 @@ test "zlib incremental dictionary concat request reports the prior member output
     try std.testing.expectError(error.NeedDictionary, decoder.step(joined.items, &output));
     try expectFailureProgress(&decoder, first.len + 6, first_payload.len);
     try std.testing.expectEqualSlices(u8, first_payload, output[0..first_payload.len]);
-    try std.testing.expectEqual(@as(?usize, 1), decoder.snapshot().last_error_stream_index);
-    try std.testing.expectEqual(@as(?usize, first.len), decoder.snapshot().last_error_stream_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, 1), decoder.snapshot().last_error_stream_index);
+    try std.testing.expectEqual(@as(?core.StreamCount, first.len), decoder.snapshot().last_error_stream_offset);
     const consumed = decoder.snapshot().last_step_progress.input_read;
     try decoder.provideDictionary(dictionary_bytes);
     try drain(&decoder, joined.items[consumed..], output[first_payload.len..]);

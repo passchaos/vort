@@ -1,4 +1,5 @@
 //! Relaxed validation and member checkpoint contracts for incremental zlib.
+const Count = @import("../../../../core.zig").StreamCount;
 const std = @import("std");
 const checksum = @import("../../../../checksum.zig");
 const core = @import("../../../../core.zig");
@@ -29,8 +30,8 @@ fn expectErrorProgress(decoder: anytype, before: anytype) !void {
     const after = decoder.snapshot();
     try std.testing.expectEqual(after.total_input - before.total_input, after.last_step_progress.input_read);
     try std.testing.expectEqual(after.total_output - before.total_output, after.last_step_progress.output_written);
-    try std.testing.expectEqual(@as(?usize, after.total_input), after.last_error_input_offset);
-    try std.testing.expectEqual(@as(?usize, after.total_output), after.last_error_output_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(after.total_input), after.total_input), after.last_error_input_offset);
+    try std.testing.expectEqual(@as(?@TypeOf(after.total_output), after.total_output), after.last_error_output_offset);
     try std.testing.expectEqualDeep(after.last_step_progress, decoder.diagnostics().last_step_progress.?);
 }
 
@@ -48,7 +49,7 @@ fn footerValidation(comptime D: type) !void {
         const before = strict.snapshot();
         try std.testing.expectError(error.ChecksumMismatch, strict.step(corrupt, &output));
         try expectErrorProgress(&strict, before);
-        try std.testing.expectEqual(@as(?usize, null), strict.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, null), strict.memberEndOffset());
         try std.testing.expectEqual(@as(usize, 0), strict.snapshot().stream_count);
 
         var relaxed = try D.ZlibIncrementalDecoder.init(.{
@@ -59,7 +60,7 @@ fn footerValidation(comptime D: type) !void {
         try std.testing.expectEqual(.done, done.status);
         try std.testing.expectEqualSlices(u8, payload, &output);
         try std.testing.expectEqual(checksum.Adler32.hash(payload), relaxed.adler.digest());
-        try std.testing.expectEqual(@as(?usize, encoded.len), relaxed.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, encoded.len), relaxed.memberEndOffset());
         try std.testing.expectEqual(payload.len, relaxed.total_output);
         try relaxed.finish();
     }
@@ -69,7 +70,7 @@ fn footerValidation(comptime D: type) !void {
         try std.testing.expectEqual(.need_input, partial.status);
         try std.testing.expectEqual(.footer, relaxed.phase);
         try std.testing.expectEqual(footer_bytes, relaxed.snapshot().footer_received);
-        try std.testing.expectEqual(@as(?usize, null), relaxed.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, null), relaxed.memberEndOffset());
         try std.testing.expectError(error.TruncatedFrame, relaxed.finish());
     }
 }
@@ -132,7 +133,7 @@ fn singleMemberTail(comptime D: type) !void {
     try std.testing.expectEqual(encoded.len, done.progress.input_read);
     try std.testing.expectEqualStrings("suffix", joined[done.progress.input_read..]);
     try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
-    try std.testing.expectEqual(@as(?usize, encoded.len), decoder.snapshot().member_end_offset);
+    try std.testing.expectEqual(@as(?Count, encoded.len), decoder.snapshot().member_end_offset);
     const repeat = try decoder.step("suffix", &.{});
     try std.testing.expectEqual(.done, repeat.status);
     try std.testing.expectEqual(@as(usize, 0), repeat.progress.input_read);
@@ -161,7 +162,7 @@ fn concatenatedFooters(comptime D: type) !void {
         const before = strict.snapshot();
         try std.testing.expectError(error.ChecksumMismatch, strict.step(joined, &output));
         try expectErrorProgress(&strict, before);
-        try std.testing.expectEqual(if (corrupt_offset < first.len) @as(?usize, null) else first.len, strict.memberEndOffset());
+        try std.testing.expectEqual(if (corrupt_offset < first.len) @as(?Count, null) else first.len, strict.memberEndOffset());
         var relaxed = try D.ZlibIncrementalDecoder.init(.{
             .allow_concatenated = true,
             .allow_trailing_data = true,
@@ -172,7 +173,7 @@ fn concatenatedFooters(comptime D: type) !void {
         try std.testing.expectEqual(@as(usize, 2), relaxed.snapshot().stream_count);
         try std.testing.expectEqual(second.len, relaxed.snapshot().stream_input);
         try std.testing.expectEqual(first.len, relaxed.snapshot().stream_offset);
-        try std.testing.expectEqual(@as(?usize, joined.len), relaxed.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, joined.len), relaxed.memberEndOffset());
         try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, &output);
         try relaxed.finish();
         joined[corrupt_offset] ^= 1;
@@ -218,7 +219,7 @@ fn trailingProbe(comptime D: type) !void {
     try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().trailing_prefix_len);
     try std.testing.expectEqual(encoded.len + 1, decoder.total_input);
     try std.testing.expectEqual(encoded.len, decoder.snapshot().stream_input);
-    try std.testing.expectEqual(@as(?usize, encoded.len), decoder.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, encoded.len), decoder.memberEndOffset());
     const recovered = try std.mem.concat(allocator, u8, &.{ decoder.trailingPrefix(), &.{ 0xff, 0x55 } });
     defer allocator.free(recovered);
     try std.testing.expectEqualSlices(u8, &.{ 0x78, 0xff, 0x55 }, recovered);
@@ -271,12 +272,12 @@ fn cumulativeLimitsAndReset(comptime D: type) !void {
     try std.testing.expectEqual(joined.len, stepped.progress.input_read);
     try std.testing.expectEqualSlices(u8, "abcdef", &output);
     try std.testing.expectEqual(@as(usize, 3), exact.snapshot().stream_count);
-    try std.testing.expectEqual(@as(?usize, joined.len - 1), exact.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, joined.len - 1), exact.memberEndOffset());
     try exact.finish();
     try std.testing.expectEqualSlices(u8, &.{0x78}, exact.trailingPrefix());
     exact.reset();
-    try std.testing.expectEqual(@as(?usize, null), exact.memberEndOffset());
-    try std.testing.expectEqual(@as(?usize, null), exact.snapshot().member_end_offset);
+    try std.testing.expectEqual(@as(?Count, null), exact.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, null), exact.snapshot().member_end_offset);
     try std.testing.expectEqual(@as(usize, 0), exact.snapshot().trailing_prefix_len);
     try std.testing.expectEqual(@as(usize, 0), exact.snapshot().stream_input);
     try std.testing.expectEqual(@as(usize, 0), exact.total_input);
@@ -297,7 +298,7 @@ fn cumulativeLimitsAndReset(comptime D: type) !void {
         try std.testing.expectError(if (pledged) error.SizeMismatch else error.OutputLimitExceeded, limited.step(joined, &output));
         try expectErrorProgress(&limited, before);
         try std.testing.expectEqual(@as(usize, 5), limited.total_output);
-        try std.testing.expectEqual(@as(?usize, first.len), limited.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, first.len), limited.memberEndOffset());
         try std.testing.expectEqual(@as(usize, 1), limited.snapshot().last_error_stream_index.?);
     }
     var too_long = try D.ZlibIncrementalDecoder.init(.{
@@ -345,7 +346,7 @@ fn blockBoundary(comptime D: type) !void {
     try std.testing.expectEqual(.done, done.status);
     try std.testing.expectEqualSlices(u8, "abcdef", &output);
     try std.testing.expectEqual(@as(usize, 22), decoder.total_input);
-    try std.testing.expectEqual(@as(?usize, 22), decoder.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, 22), decoder.memberEndOffset());
     try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
     try decoder.finish();
 }

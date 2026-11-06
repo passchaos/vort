@@ -1,6 +1,7 @@
 //! History geometry and optional work accounting for semantic transactions.
 //! The ordinary decoder has no work counters or per-token observation.
 const std = @import("std");
+const stream_count = @import("../../../core.zig").stream_count;
 const rolling = @import("../../semantic/rolling_window.zig");
 
 pub const Mode = enum { linear, rolling };
@@ -17,7 +18,8 @@ pub const Work = struct {
     normalization_wraps: u64 = 0,
 };
 
-pub fn begin(comptime mode: Mode, comptime observed: bool, self: anytype) void {
+pub fn begin(comptime mode: Mode, comptime observed: bool, self: anytype) stream_count.Error!void {
+    const started = try stream_count.addLocal(self.semantic_blocks_started, 1);
     const len = self.history_len;
     self.semantic_prefix_start = 0;
     // A partial compact ring, or a full ring whose cursor is zero, is already
@@ -43,7 +45,7 @@ pub fn begin(comptime mode: Mode, comptime observed: bool, self: anytype) void {
     self.semantic_generated_end = len;
     self.semantic_delivered = len;
     self.semantic_end_of_block = false;
-    self.semantic_blocks_started += 1;
+    self.semantic_blocks_started = started;
 }
 
 pub inline fn window(self: anytype, output_limit: usize) rolling.Window {

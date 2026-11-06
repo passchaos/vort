@@ -1,3 +1,4 @@
+const Count = @import("../../../../core.zig").StreamCount;
 const std = @import("std");
 const core = @import("../../../../core.zig");
 const checksum = @import("../../../../checksum.zig");
@@ -39,7 +40,7 @@ fn fragmented(comptime D: type) !void {
         try std.testing.expectEqualSlices(u8, payload, &output);
         try std.testing.expectEqual(checksum.Crc32.hash(payload), decoder.crc.digest());
         try std.testing.expectEqual(@as(usize, 8), decoder.snapshot().footer_received);
-        try std.testing.expectEqual(@as(?usize, encoded.len), decoder.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, encoded.len), decoder.memberEndOffset());
     }
     const empty = try D.encodeGzipFixedAlloc(std.testing.allocator, "");
     defer std.testing.allocator.free(empty);
@@ -96,14 +97,14 @@ fn partialError(comptime D: type) !void {
     try std.testing.expectEqual(checksum.Crc32.hash("abc"), decoder.crc.digest());
     try std.testing.expectEqual(D.GzipIncrementalDecoder.Phase.raw, snapshot.last_error_phase.?);
     try std.testing.expectEqualStrings("raw", decoder.diagnostics().last_error_phase_name);
-    try std.testing.expectEqual(@as(?usize, null), decoder.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, null), decoder.memberEndOffset());
     decoder.reset();
     const reset = decoder.snapshot();
     try std.testing.expectEqual(@as(usize, 0), reset.total_input);
     try std.testing.expectEqual(@as(usize, 0), reset.total_output);
     try std.testing.expectEqual(core.Progress{}, reset.last_step_progress);
-    try std.testing.expectEqual(@as(?usize, null), reset.last_error_input_offset);
-    try std.testing.expectEqual(@as(?usize, null), reset.last_error_output_offset);
+    try std.testing.expectEqual(@as(?Count, null), reset.last_error_input_offset);
+    try std.testing.expectEqual(@as(?Count, null), reset.last_error_output_offset);
     try std.testing.expectEqualStrings("", reset.last_error_name);
     try std.testing.expectEqual(@as(?core.StreamCount, null), decoder.diagnostics().error_input_offset);
     try std.testing.expectEqual(@as(?core.StreamCount, null), decoder.diagnostics().error_output_offset);

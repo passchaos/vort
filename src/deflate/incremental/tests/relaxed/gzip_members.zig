@@ -1,3 +1,4 @@
+const Count = @import("../../../../core.zig").StreamCount;
 const std = @import("std");
 const helpers = @import("gzip_helpers.zig");
 
@@ -34,7 +35,7 @@ fn tails(comptime D: type) !void {
         try std.testing.expectEqual(@as(usize, 3), decoder.snapshot().member_count);
         try std.testing.expectEqual(first.len + empty.len, decoder.snapshot().member_offset);
         try std.testing.expectEqual(second.len, decoder.snapshot().member_input);
-        try std.testing.expectEqual(@as(?usize, members.len), decoder.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, members.len), decoder.memberEndOffset());
         try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
         try decoder.finish();
     }
@@ -72,7 +73,7 @@ fn splitMagic(comptime D: type) !void {
     try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().trailing_prefix_len);
     try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
     try std.testing.expectEqual(first.len, decoder.snapshot().member_input);
-    try std.testing.expectEqual(@as(?usize, first.len), decoder.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, first.len), decoder.memberEndOffset());
     const suffix = [_]u8{ 0x00, 0x55, 0x66 };
     const stopped = try helpers.step(&decoder, &suffix, &.{});
     try std.testing.expectEqual(.done, stopped.status);
@@ -92,7 +93,7 @@ fn splitMagic(comptime D: type) !void {
     try std.testing.expectEqual(first.len, eof.snapshot().member_input);
     try std.testing.expectEqual(.done, (try helpers.step(&eof, "", &.{})).status);
     eof.reset();
-    try std.testing.expectEqual(@as(?usize, null), eof.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, null), eof.memberEndOffset());
     try std.testing.expectEqual(@as(usize, 0), eof.snapshot().trailing_prefix_len);
     try std.testing.expectEqual(@as(usize, 0), eof.trailingPrefix().len);
 
@@ -106,7 +107,7 @@ fn splitMagic(comptime D: type) !void {
     try std.testing.expectEqual(@as(usize, 2), valid.snapshot().member_count);
     try std.testing.expectEqual(first.len, valid.snapshot().member_offset);
     try std.testing.expectEqual(second.len, valid.snapshot().member_input);
-    try std.testing.expectEqual(@as(?usize, first.len + second.len), valid.memberEndOffset());
+    try std.testing.expectEqual(@as(?Count, first.len + second.len), valid.memberEndOffset());
     try std.testing.expectEqual(@as(usize, 0), valid.trailingPrefix().len);
 
     var exact = try D.GzipIncrementalDecoder.init(.{
@@ -151,9 +152,9 @@ fn committedMembers(comptime D: type) !void {
             error.SizeMismatch;
         try helpers.stepError(err, &decoder, joined, &output);
         try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().member_count);
-        try std.testing.expectEqual(@as(?usize, 1), decoder.snapshot().last_error_member_index);
-        try std.testing.expectEqual(@as(?usize, first.len), decoder.snapshot().last_error_member_offset);
-        try std.testing.expectEqual(@as(?usize, first.len), decoder.memberEndOffset());
+        try std.testing.expectEqual(@as(?Count, 1), decoder.snapshot().last_error_member_index);
+        try std.testing.expectEqual(@as(?Count, first.len), decoder.snapshot().last_error_member_offset);
+        try std.testing.expectEqual(@as(?Count, first.len), decoder.memberEndOffset());
         try std.testing.expectEqual(@as(usize, 0), decoder.trailingPrefix().len);
     }
     // Once the magic matches, even an incomplete fixed header is a strict
@@ -167,7 +168,7 @@ fn committedMembers(comptime D: type) !void {
         try std.testing.expectEqual(@min(received, 10), decoder.snapshot().header_received);
         try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().trailing_prefix_len);
         try std.testing.expectError(error.TruncatedFrame, decoder.finish());
-        try std.testing.expectEqual(@as(?usize, 1), decoder.snapshot().last_error_member_index);
-        try std.testing.expectEqual(@as(?usize, first.len + received), decoder.snapshot().last_error_input_offset);
+        try std.testing.expectEqual(@as(?Count, 1), decoder.snapshot().last_error_member_index);
+        try std.testing.expectEqual(@as(?Count, first.len + received), decoder.snapshot().last_error_input_offset);
     }
 }

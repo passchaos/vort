@@ -459,6 +459,10 @@ test "relaxed concatenated wrapper commitment and tail probe contracts" {
     try @import("deflate/incremental/tests/relaxed/whole_input.zig").contracts(@This());
 }
 
+test "Deflate wide decode stream counters and overflow transactions" {
+    try @import("deflate/incremental/tests/wide_decode/main.zig").contracts(@This());
+}
+
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
 }
