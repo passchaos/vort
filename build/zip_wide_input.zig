@@ -27,7 +27,8 @@ pub fn register(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
         const tests = b.addTest(.{
             .name = if (index == 0) "vort-zip-wide-input-tests" else "vort-zip-wide-input-x86-tests",
             .root_module = module(b, variant, optimize),
-            .filters = &.{"ZIP incremental writer wide input"},
+            // Load the owning discovery suite before selecting nested tests.
+            .filters = &.{ "ZIP incremental writer test suite", "ZIP incremental writer wide input" },
         });
         b.step(if (index == 0) "test-zip-wide-codec-input" else "test-zip-wide-codec-input-x86", "Validate wide codec pledges, caps and ZIP64 entry metadata")
             .dependOn(&b.addRunArtifact(tests).step);
