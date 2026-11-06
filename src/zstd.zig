@@ -8486,7 +8486,7 @@ fn encodeFrameWithLevelAndOptionsAllocImpl(
         precomputed_primary = null;
         return primary.frame;
     }
-    if (level > 0 and input.len > 8 * 1024) {
+    if (level > 0 and input.len > 8 * 1024 and comptime !builtin.single_threaded) {
         var locked_allocator = LockedAllocator{ .child = allocator };
         const parallel_allocator = locked_allocator.allocator();
         const block_sizes = adaptiveLevelBlockSizes(level);
