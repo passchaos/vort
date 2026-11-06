@@ -57,8 +57,20 @@ to `StreamCount`, retaining bounded buffer/history/semantic positions as
 `usize`. Native/x86/WASI contracts verify boundary and overflow transactions;
 a real twelve-case native/x86 campaign decodes 4,294,967,313 bytes per case
 against libz, with stored input also exceeding 4 GiB. Complete native and x86
-Deflate suites pass 654 tests each. Incremental encoder totals, rolling-match
-positions and PNG zero-run lengths remain the next wide-counter scope.
+Deflate suites pass 654 tests each.
+The [wide incremental encoder increment](formats/deflate-wide-encode.md) extends
+this contract to raw stored/fixed/best, zlib/gzip fixed/best and PNG ultrafast.
+Input/output totals, exact pledges, caps, wrapper members, parameter changes,
+rolling-match coordinates and PNG zero runs use `StreamCount`; physical buffers
+and per-step progress stay local. Native/x86/WASI contracts and a bounded libz
+long-stream oracle cover the widened paths. Full native/x86 Deflate suites pass
+660 tests each; all three wide encoder gates pass 10 tests each. The 18-case
+real long-stream matrix accepts 4,294,967,313 bytes per case, checks every byte
+against libz, and preserves identical native/x86 wire hashes.
+The next functional gaps are Brotli static-dictionary chunk admission and the
+Brotli/Zstd decoded-size and summary APIs: they still accumulate logical input
+or output in `usize` even when no full plaintext buffer is needed. Extend those
+paths with checked wide totals before broad throughput work.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated

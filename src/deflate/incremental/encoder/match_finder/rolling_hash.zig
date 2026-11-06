@@ -1,10 +1,13 @@
 const std = @import("std");
+const core = @import("../../../../core.zig");
 const lz77 = @import("../../../../lz77.zig");
 const hash = @import("hash.zig");
 const profitability = @import("profitability.zig");
 const dynamic_stats = @import("dynamic_stats.zig");
 
-const invalid_position = std.math.maxInt(usize);
+const Count = core.StreamCount;
+const count = core.stream_count;
+const invalid_position = std.math.maxInt(Count);
 
 /// Persistent 32 KiB hash-chain parser for incremental DEFLATE blocks.
 ///
@@ -13,24 +16,24 @@ const invalid_position = std.math.maxInt(usize);
 /// cannot be followed. The caller still owns the rolling history bytes; this
 /// type retains only the match index and parser progress.
 pub const Matcher = struct {
-    head: std.ArrayList(usize) = .empty,
+    head: std.ArrayList(Count) = .empty,
     head_epoch: std.ArrayList(u32) = .empty,
-    prev: std.ArrayList(usize) = .empty,
+    prev: std.ArrayList(Count) = .empty,
     // The returned plan borrows this histogram until the next plan/reset.
     // Keeping it with the matcher avoids copying its 316 counters through the
     // encoder call chain for every block.
     dynamic_stats: dynamic_stats.Stats = .{},
     epoch: u32 = 1,
-    absolute_position: usize = 0,
-    indexed_positions: usize = 0,
+    absolute_position: Count = 0,
+    indexed_positions: Count = 0,
     initialized: bool = false,
     anchor_len: u3 = 0,
     lazy_mode: bool = false,
 
     pub const Snapshot = struct {
         initialized: bool,
-        absolute_position: usize,
-        indexed_positions: usize,
+        absolute_position: Count,
+        indexed_positions: Count,
         table_entries: usize,
     };
 
@@ -51,9 +54,15 @@ pub const Matcher = struct {
     /// rolling parse will reseed from caller history at the correct logical
     /// stream position rather than following stale chains across skipped data.
     pub fn observeUnindexedBlock(self: *Matcher, block_len: usize, history_len: usize) !void {
+        const next = try count.addLocal(@max(self.absolute_position, count.fromLocal(history_len)), block_len);
         self.invalidateIndex();
-        const base = @max(self.absolute_position, history_len);
-        self.absolute_position = std.math.add(usize, base, block_len) catch return error.IntegerOverflow;
+        self.absolute_position = next;
+    }
+
+    /// Codec adapters call this before committing wire bytes for a block that
+    /// will subsequently be observed or planned by this matcher.
+    pub fn validateAdvance(self: *const Matcher, block_len: usize, history_len: usize) core.Error!void {
+        _ = try count.addLocal(@max(self.absolute_position, count.fromLocal(history_len)), block_len);
     }
 
     fn invalidateIndex(self: *Matcher) void {
@@ -88,20 +97,51 @@ pub const Matcher = struct {
     ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats, dynamic: *const dynamic_stats.Stats } {
         if (options.window_len == 0 or options.window_len > lz77.default_window_len or
             options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
-        try self.ensureTables(allocator);
         const anchor_len: usize = if (options.min_match >= 4) 4 else 3;
+        const reseed = !self.initialized or self.anchor_len != anchor_len or self.lazy_mode != lazy;
+        const base = if (reseed) @max(self.absolute_position, count.fromLocal(history.len)) else self.absolute_position;
+        if (base < count.fromLocal(history.len)) return error.InvalidMatch;
+        const block_end = try count.addLocal(base, block.len);
+        // Each eligible block anchor is inserted at most once. Reserve an
+        // exact counter's worst-case increase before changing tokens or chains;
+        // sparse parsing still records only the anchors actually inserted.
+        const seed_limit = if (reseed)
+            history.len -| ((anchor_len - 1) -| block.len)
+        else if (block.len == 0)
+            0
+        else
+            @min(history.len, anchor_len - 1) -| ((anchor_len - 1) -| block.len);
+        const indexed_base = if (reseed) 0 else self.indexed_positions;
+        const indexed_seeded = try count.addLocal(indexed_base, seed_limit);
+        _ = try count.addLocal(indexed_seeded, block.len -| (anchor_len - 1));
+
+        // Initial allocations precede logical changes. Preserve the bounded
+        // token reservation policy; if a later token growth fails, discard the
+        // partially updated index and reseed from unchanged caller history on
+        // retry. This keeps the logical position transactional without copying
+        // the whole persistent index for each block. Reseeding can choose
+        // different valid matches after OOM; no failed plan is published.
+        try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
+        try self.ensureTables(allocator);
+        const previous_absolute = self.absolute_position;
+        errdefer {
+            self.absolute_position = previous_absolute;
+            self.invalidateIndex();
+            self.dynamic_stats.reset();
+            tokens.clearRetainingCapacity();
+        }
         // Options are intentionally public on the encoder. If a caller changes
         // between three- and four-byte hash anchors between blocks, invalidate
         // the old bucket interpretation and reseed from current history.
         if (self.initialized and (self.anchor_len != anchor_len or self.lazy_mode != lazy)) self.invalidateIndex();
         if (!self.initialized) {
-            self.seedHistory(history, block, anchor_len, lazy);
+            self.absolute_position = base;
+            self.seedHistory(history, block, block_end, anchor_len, lazy);
         } else {
-            self.seedBoundary(history, block, anchor_len);
+            self.seedBoundary(history, block, block_end, anchor_len);
         }
 
         tokens.clearRetainingCapacity();
-        try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
         var stats: lz77.PlanStats = .{};
         self.dynamic_stats.reset();
         // These bounds depend only on the block's options. Hoist their nested
@@ -172,7 +212,7 @@ pub const Matcher = struct {
                     self.insertBlockPosition(history, block, pos, anchor_len);
             }
         }
-        self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
+        self.absolute_position = block_end;
         return .{ .tokens = tokens.items, .stats = stats, .dynamic = &self.dynamic_stats };
     }
 
@@ -186,23 +226,22 @@ pub const Matcher = struct {
         @memset(self.head_epoch.items, 0);
     }
 
-    fn seedHistory(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize, lazy: bool) void {
-        self.absolute_position = @max(self.absolute_position, history.len);
-        const history_start = self.absolute_position - history.len;
+    fn seedHistory(self: *Matcher, history: []const u8, block: []const u8, block_end: Count, anchor_len: usize, lazy: bool) void {
+        const history_start = self.absolute_position - count.fromLocal(history.len);
         var absolute = history_start;
-        while (absolute + anchor_len <= self.absolute_position + block.len and absolute < self.absolute_position) : (absolute += 1)
-            self.insertAbsolute(history, block, absolute, anchor_len);
+        while (absolute < self.absolute_position and block_end - absolute >= count.fromLocal(anchor_len)) : (count.advance(&absolute, 1) catch unreachable)
+            self.insertAbsolute(history, block, block_end, absolute, anchor_len);
         self.initialized = true;
         self.anchor_len = @intCast(anchor_len);
         self.lazy_mode = lazy;
     }
 
-    fn seedBoundary(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize) void {
+    fn seedBoundary(self: *Matcher, history: []const u8, block: []const u8, block_end: Count, anchor_len: usize) void {
         if (history.len == 0 or block.len == 0) return;
-        const history_start = self.absolute_position - history.len;
-        var absolute = @max(history_start, self.absolute_position -| (anchor_len - 1));
-        while (absolute < self.absolute_position) : (absolute += 1)
-            self.insertAbsolute(history, block, absolute, anchor_len);
+        const history_start = self.absolute_position - count.fromLocal(history.len);
+        var absolute = @max(history_start, self.absolute_position -| count.fromLocal(anchor_len - 1));
+        while (absolute < self.absolute_position) : (count.advance(&absolute, 1) catch unreachable)
+            self.insertAbsolute(history, block, block_end, absolute, anchor_len);
     }
 
     const Candidate = struct { length: usize = 0, distance: usize = 0 };
@@ -218,8 +257,10 @@ pub const Matcher = struct {
         maximum_match: usize,
         max_walks: usize,
     ) Candidate {
-        if (pos + anchor_len > block.len) return .{};
-        const current = self.absolute_position + pos;
+        if (block.len - pos < anchor_len) return .{};
+        // plan validated the complete block range before mutating the index.
+        const current = count.addLocal(self.absolute_position, pos) catch unreachable;
+        const history_start = self.absolute_position - count.fromLocal(history.len);
         const h = hash.block(block, pos, anchor_len);
         if (self.head_epoch.items[h] != self.epoch) return .{};
 
@@ -231,10 +272,13 @@ pub const Matcher = struct {
         const maximum = @min(maximum_match, block.len - pos);
         while (candidate != invalid_position and checked < options.max_chain and walked < max_walks) : (walked += 1) {
             if (candidate >= current) break;
-            const distance = current - candidate;
-            if (distance > options.window_len) break;
+            if (candidate < history_start) break;
+            const stream_distance = current - candidate;
+            if (stream_distance > count.fromLocal(options.window_len)) break;
+            const distance: usize = @intCast(stream_distance);
             const required = @max(best.length, minimum - 1);
-            if (byteAt(history, block, self.absolute_position, candidate + required) == block[pos + required]) {
+            const required_absolute = count.addLocal(candidate, required) catch unreachable;
+            if (byteAt(history, block, self.absolute_position, required_absolute) == block[pos + required]) {
                 checked += 1;
                 const length = matchLength(history, block, self.absolute_position, candidate, pos, maximum);
                 if (length > best.length) {
@@ -242,9 +286,11 @@ pub const Matcher = struct {
                     if (length >= options.nice_len or length == maximum) break;
                 }
             }
-            const next_candidate = self.prev.items[candidate & (lz77.default_window_len - 1)];
-            if (history_chain and next_candidate != invalid_position and next_candidate < self.absolute_position) {
-                const history_pos = next_candidate - (self.absolute_position - history.len);
+            const next_candidate = self.prev.items[count.ringIndex(candidate, lz77.default_window_len)];
+            if (history_chain and next_candidate != invalid_position and next_candidate >= history_start and
+                next_candidate < self.absolute_position and current - next_candidate <= count.fromLocal(options.window_len))
+            {
+                const history_pos: usize = @intCast(next_candidate - history_start);
                 @prefetch(history.ptr + history_pos, .{ .locality = 1 });
             }
             candidate = next_candidate;
@@ -254,23 +300,23 @@ pub const Matcher = struct {
 
     fn insertBlockPosition(self: *Matcher, history: []const u8, block: []const u8, pos: usize, anchor_len: usize) void {
         _ = history;
-        if (pos + anchor_len > block.len) return;
-        self.insertKnown(self.absolute_position + pos, hash.block(block, pos, anchor_len));
+        if (block.len - pos < anchor_len) return;
+        self.insertKnown(count.addLocal(self.absolute_position, pos) catch unreachable, hash.block(block, pos, anchor_len));
     }
 
-    fn insertAbsolute(self: *Matcher, history: []const u8, block: []const u8, absolute: usize, anchor_len: usize) void {
-        if (absolute + anchor_len > self.absolute_position + block.len) return;
+    fn insertAbsolute(self: *Matcher, history: []const u8, block: []const u8, block_end: Count, absolute: Count, anchor_len: usize) void {
+        if (absolute >= block_end or block_end - absolute < count.fromLocal(anchor_len)) return;
         const h = hashAt(history, block, self.absolute_position, absolute, anchor_len);
         self.insertKnown(absolute, h);
     }
 
-    fn insertKnown(self: *Matcher, absolute: usize, h: usize) void {
+    fn insertKnown(self: *Matcher, absolute: Count, h: usize) void {
         const previous = if (self.head_epoch.items[h] == self.epoch) self.head.items[h] else invalid_position;
-        const slot = absolute & (lz77.default_window_len - 1);
+        const slot = count.ringIndex(absolute, lz77.default_window_len);
         self.prev.items[slot] = previous;
         self.head.items[h] = absolute;
         self.head_epoch.items[h] = self.epoch;
-        self.indexed_positions += 1;
+        count.advance(&self.indexed_positions, 1) catch unreachable;
     }
 };
 
@@ -282,17 +328,28 @@ inline fn appendToken(tokens: *std.ArrayList(lz77.Token), allocator: std.mem.All
     }
 }
 
-fn byteAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize) u8 {
-    const history_absolute = block_absolute - history.len;
-    return if (absolute < block_absolute) history[absolute - history_absolute] else block[absolute - block_absolute];
+fn byteAt(history: []const u8, block: []const u8, block_absolute: Count, absolute: Count) ?u8 {
+    const history_absolute = block_absolute - count.fromLocal(history.len);
+    if (absolute < block_absolute) {
+        if (absolute < history_absolute) return null;
+        const history_pos: usize = @intCast(absolute - history_absolute);
+        return history[history_pos];
+    }
+    const block_pos = absolute - block_absolute;
+    if (block_pos >= count.fromLocal(block.len)) return null;
+    return block[@intCast(block_pos)];
 }
 
-fn matchLength(history: []const u8, block: []const u8, block_absolute: usize, candidate: usize, pos: usize, maximum: usize) usize {
-    if (candidate >= block_absolute)
-        return sliceMatchLength(block, candidate - block_absolute, pos, maximum);
+fn matchLength(history: []const u8, block: []const u8, block_absolute: Count, candidate: Count, pos: usize, maximum: usize) usize {
+    if (candidate >= block_absolute) {
+        const block_pos = candidate - block_absolute;
+        if (block_pos >= count.fromLocal(pos)) return 0;
+        return sliceMatchLength(block, @intCast(block_pos), pos, maximum);
+    }
 
-    const history_absolute = block_absolute - history.len;
-    const history_pos = candidate - history_absolute;
+    const history_absolute = block_absolute - count.fromLocal(history.len);
+    if (candidate < history_absolute) return 0;
+    const history_pos: usize = @intCast(candidate - history_absolute);
     const history_part = @min(maximum, history.len - history_pos);
     var length = crossSliceMatchLength(history, history_pos, block, pos, history_part);
     if (length != history_part or length == maximum) return length;
@@ -367,12 +424,21 @@ test "rolling matcher reuses and resets borrowed dynamic stats" {
     try std.testing.expectEqual(@as(u32, 1), second.dynamic.literal_frequencies['x']);
 }
 
-fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize, anchor_len: usize) usize {
-    if (absolute >= block_absolute) return hash.block(block, absolute - block_absolute, anchor_len);
-    const history_absolute = block_absolute - history.len;
-    return hash.joined(history, block, absolute - history_absolute, anchor_len);
+fn hashAt(history: []const u8, block: []const u8, block_absolute: Count, absolute: Count, anchor_len: usize) usize {
+    if (absolute >= block_absolute) {
+        const block_pos = absolute - block_absolute;
+        std.debug.assert(block_pos < count.fromLocal(block.len));
+        return hash.block(block, @intCast(block_pos), anchor_len);
+    }
+    const history_absolute = block_absolute - count.fromLocal(history.len);
+    std.debug.assert(absolute >= history_absolute);
+    return hash.joined(history, block, @intCast(absolute - history_absolute), anchor_len);
 }
 
 fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions, minimum: usize) bool {
     return profitability.accept(input, pos, length, distance, minimum, lz77.default_window_len, options.min_savings_bits);
+}
+
+test {
+    _ = @import("rolling_hash_counter_tests.zig");
 }

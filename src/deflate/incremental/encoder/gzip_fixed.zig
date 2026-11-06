@@ -1,5 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const counts = core.stream_count;
+const Count = core.StreamCount;
 
 /// Incremental gzip wrapper around the fixed-Huffman raw-DEFLATE stream core.
 /// Header metadata, CRC-32/ISIZE footer, flush and caller I/O accounting are
@@ -16,11 +18,11 @@ pub fn Encoder(comptime Codec: type) type {
         footer_written: bool = false,
         finishing: bool = false,
         done: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
-        stream_input: usize = 0,
-        stream_output: usize = 0,
-        member_count: usize = 0,
+        total_input: Count = 0,
+        total_output: Count = 0,
+        stream_input: Count = 0,
+        stream_output: Count = 0,
+        member_count: Count = 0,
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -28,20 +30,20 @@ pub fn Encoder(comptime Codec: type) type {
         pub const supports_runtime_params = Codec.RawEncoder.supports_runtime_params;
         pub const Options = struct { raw: Codec.RawOptions = .{}, header: Codec.HeaderOptions = .{} };
         pub const Snapshot = struct {
-            input_read: usize,
-            output_written: usize,
-            member_input: usize,
-            member_output: usize,
+            input_read: Count,
+            output_written: Count,
+            member_input: Count,
+            member_output: Count,
             pending_output: usize,
             pending_bits: u3,
             active_params: ?Codec.Params,
             requested_params: ?Codec.Params,
             params_boundary_pending: bool,
-            params_change_count: usize,
+            params_change_count: Count,
             stored_only: bool,
             flushing: bool,
-            member_count: usize,
-            member_index: usize,
+            member_count: Count,
+            member_index: Count,
             finishing: bool,
             done: bool,
         };
@@ -52,7 +54,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
             return .{ .allocator = allocator, .options = options, .raw = Codec.RawEncoder.initWithOptions(allocator, options.raw) };
         }
-        pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: usize) Self {
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: Count) Self {
             return .{ .allocator = allocator, .options = options, .raw = Codec.RawEncoder.initExactSize(allocator, options.raw, expected_input_len) };
         }
         pub fn deinit(self: *Self) void {
@@ -87,6 +89,7 @@ pub fn Encoder(comptime Codec: type) type {
         /// ISIZE, and header state reset because gzip members are independent.
         pub fn nextMember(self: *Self, header: Codec.HeaderOptions) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = try counts.addLocal(self.member_count, 1);
             self.options.header = header;
             self.resetMember();
         }
@@ -95,20 +98,23 @@ pub fn Encoder(comptime Codec: type) type {
         /// within one concatenated gzip stream.
         pub fn nextMemberWithOptions(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = try counts.addLocal(self.member_count, 1);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberWrapper();
         }
         /// Start a member with a new pledged uncompressed size. This is the
         /// multi-member counterpart of `initExactSize`.
-        pub fn nextMemberExactSize(self: *Self, header: Codec.HeaderOptions, expected_input_len: usize) Error!void {
+        pub fn nextMemberExactSize(self: *Self, header: Codec.HeaderOptions, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = try counts.addLocal(self.member_count, 1);
             self.options.header = header;
             self.resetMemberExactSize(expected_input_len);
         }
         /// Combine per-member raw/header options with a pledged input size.
-        pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: usize) Error!void {
+        pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = try counts.addLocal(self.member_count, 1);
             self.options = options;
             self.raw.resetWithOptions(options.raw);
             self.resetMemberExactSize(expected_input_len);
@@ -164,23 +170,36 @@ pub fn Encoder(comptime Codec: type) type {
             self.raw.finish();
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        pub fn step(self: *Self, input: []const u8, caller_output: []u8) Error!core.StepResult {
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
             if ((self.finishing or self.raw.snapshot().flushing) and input.len != 0) return error.TrailingData;
+            // Check the whole offered input before a header, checksum, history,
+            // or pending output can change. Per-step progress stays local.
+            _ = try counts.addLocal(self.total_input, input.len);
+            try self.raw.validateInput(input.len);
+            _ = try counts.addLocal(self.stream_input, input.len);
+            const completed_count = try counts.addLocal(self.member_count, 1);
+            const output_room = @min(std.math.maxInt(Count) - self.total_output, std.math.maxInt(Count) - self.stream_output);
+            const output = caller_output[0..counts.bounded(output_room, caller_output.len)];
+            if (caller_output.len != 0 and output.len == 0 and
+                (self.pending_offset != self.pending.items.len or !self.header_written or !self.footer_written))
+                return error.IntegerOverflow;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
                 if (self.pending_offset != self.pending.items.len) {
                     const remaining = self.pending.items[self.pending_offset..];
                     const n = @min(output.len - output_written, remaining.len);
+                    const next_total = try counts.addLocal(self.total_output, n);
+                    const next_stream = try counts.addLocal(self.stream_output, n);
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.pending_offset += n;
                     output_written += n;
-                    self.total_output += n;
-                    self.stream_output += n;
+                    self.total_output = next_total;
+                    self.stream_output = next_stream;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -199,8 +218,8 @@ pub fn Encoder(comptime Codec: type) type {
                     const accepted = input[input_read..][0..raw_result.progress.input_read];
                     self.crc.update(accepted);
                     input_read += accepted.len;
-                    self.total_input += accepted.len;
-                    self.stream_input += accepted.len;
+                    self.total_input = try counts.addLocal(self.total_input, accepted.len);
+                    self.stream_input = try counts.addLocal(self.stream_input, accepted.len);
                 }
                 if (raw_result.progress.output_written != 0) {
                     try self.pending.appendSlice(self.allocator, raw_scratch[0..raw_result.progress.output_written]);
@@ -213,7 +232,7 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (raw_result.status == .done) {
-                    self.member_count += 1;
+                    self.member_count = completed_count;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }
@@ -225,7 +244,7 @@ pub fn Encoder(comptime Codec: type) type {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
 
-        fn resetMemberExactSize(self: *Self, expected_input_len: usize) void {
+        fn resetMemberExactSize(self: *Self, expected_input_len: Count) void {
             self.raw.resetExactSize(expected_input_len);
             self.options.raw.compression = self.raw.options.compression;
             self.resetMemberWrapper();

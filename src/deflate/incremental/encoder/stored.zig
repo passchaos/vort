@@ -19,20 +19,20 @@ pub fn Encoder(comptime Codec: type) type {
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
-        expected_input_len: ?usize = null,
+        total_input: core.StreamCount = 0,
+        total_output: core.StreamCount = 0,
+        expected_input_len: ?core.StreamCount = null,
 
         const Self = @This();
         const FlushMode = enum { none, block, partial, sync, full };
         pub const Error = Codec.Error;
         pub const Options = struct {
-            max_input_len: usize = std.math.maxInt(usize),
+            max_input_len: core.StreamCount = std.math.maxInt(core.StreamCount),
             block_len: usize = Codec.max_block_len,
         };
         pub const Snapshot = struct {
-            input_read: usize,
-            output_written: usize,
+            input_read: core.StreamCount,
+            output_written: core.StreamCount,
             buffered_input: usize,
             pending_output: usize,
             pending_bits: u3,
@@ -47,7 +47,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
             return .{ .allocator = allocator, .options = options };
         }
-        pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: usize) Self {
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: core.StreamCount) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
         }
         pub fn deinit(self: *Self) void {
@@ -114,35 +114,52 @@ pub fn Encoder(comptime Codec: type) type {
                 return .{ .status = .done };
             }
             if ((self.finishing or self.flush_mode != .none) and input.len != 0) return error.TrailingData;
-            const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
+            const offered_total = try core.stream_count.addLocal(self.total_input, input.len);
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
+            if (self.expected_input_len) |expected| {
+                if (expected > self.options.max_input_len) return error.OutputLimitExceeded;
+                if (offered_total > expected or (self.finishing and offered_total != expected))
+                    return error.SizeMismatch;
+            }
+            // Keep every drain in this step within one countable caller
+            // window. A final countable prefix is returned normally; a later
+            // attempt to drain its retained suffix fails before copying.
+            const output_limit = core.stream_count.bounded(std.math.maxInt(core.StreamCount) - self.total_output, output.len);
+            if (output.len != 0 and output_limit == 0) {
+                const will_publish = input.len != 0 or (self.finishing and !self.final_written) or
+                    (self.flush_mode != .none and
+                        (self.plain.items.len != 0 or
+                            (self.flush_mode == .partial and !self.partial_boundary_written) or
+                            ((self.flush_mode == .sync or self.flush_mode == .full) and self.state.bit_index != 0)));
+                if (self.pending_offset != self.pending.items.len or will_publish)
+                    return error.IntegerOverflow;
+            }
 
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
                 if (self.pending_offset != self.pending.items.len) {
                     const remaining = self.pending.items[self.pending_offset..];
-                    const n = @min(output.len - output_written, remaining.len);
+                    const n = @min(output_limit - output_written, remaining.len);
+                    const total_output = try core.stream_count.addLocal(self.total_output, n);
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.pending_offset += n;
                     output_written += n;
-                    self.total_output += n;
+                    self.total_output = total_output;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
-                    if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
+                    if (output_written == output_limit and output.len != 0) return result(input_read, output_written, .need_output);
                 }
 
                 const room = self.options.block_len - self.plain.items.len;
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
+                    const total_input = try core.stream_count.addLocal(self.total_input, n);
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
                     self.partial_boundary_written = false;
                     input_read += n;
-                    self.total_input += n;
-                    if (self.expected_input_len) |expected| {
-                        if (self.total_input > expected) return error.SizeMismatch;
-                    }
+                    self.total_input = total_input;
                 }
                 if (self.plain.items.len == self.options.block_len and input_read < input.len) {
                     try self.writeBlock(false);

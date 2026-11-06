@@ -52,7 +52,8 @@ capacity; stores may overlap unused queue bytes, while only complete bytes are
 published. Adler is updated before those accepted source bytes can be affected
 by caller output writes. Already-proven all-zero batches use the equivalent
 recurrence `b += n*a (mod 65521)`; mixed batches use the existing checksum kernel.
-No context fields, heap allocation, pending capacity or input carry limits grow.
+The wide-count increment below preserves heap allocation, pending capacity and
+input carry limits.
 The frozen scalar state machine and independent fdeflate framing tests compare
 all output bytes, including identical explicit flush schedules. The full real
 benchmark under `tools/png_ultrafast_performance` uses an immutable 90,083,998-byte
@@ -63,8 +64,7 @@ caller output, complete bytes are emitted directly; small output and overlapping
 source/output use the same bounded queue. The token scan also computes Adler
 from its already-loaded words, using eight-byte u16 weighted folds and zero-span
 recurrence within the same4096-byte/NMAX bound. A native-lane conversion preserves
-byte order on big-endian targets. No fields, owned buffers or heap allocations
-are added. Frozen published52byte/schedule/snapshot controls and independent
+byte order on big-endian targets. The batch optimization adds no owned buffers or heap allocations. Frozen published52byte/schedule/snapshot controls and independent
 fdeflate/zlib tests cover this path alongside the original scalar reference.
 
 Zero-word prefixes now scan once up to the current 4096-byte Adler batch limit,
@@ -85,3 +85,13 @@ smallest case ratio is 1.009652x. This is the complete real-corpus fastest-strea
 scope, not a result for every compression level or platform. Frozen samples,
 source/binary hashes and original reference reports are retained under
 `/nav_env/Temp/imx-png-small-up/`; imx's evidence records default integration.
+
+Cumulative input/output, exact-size pledges, input caps, and zero/closing run
+lengths use `core.StreamCount`: `u64` on 32-bit targets and `usize` on 64-bit
+targets. Per-call `core.Progress`, carry and queue positions remain `usize`.
+The native 64-bit layout stays unchanged; the 32-bit encoder context grows from
+220 to 244 bytes. Run serialization bounds each length-code batch before
+narrowing, and checked input/output admission precedes checksum, carry, bit
+reservoir and caller-output changes. The complete encoder family's boundary
+contracts and real large-stream oracle are documented in
+[`deflate-wide-encode.md`](../../../../../docs/formats/deflate-wide-encode.md).

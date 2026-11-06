@@ -196,6 +196,7 @@ const IncrementalFixedEncoderCodec = struct {
         state.bit_index = 0;
     }
     pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
+        try matcher.validateAdvance(block.len, history.len);
         if (rollingParser(options)) |parser| {
             const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
             try writeFixedTokens(allocator, state, plan.tokens, final);
@@ -211,6 +212,7 @@ const IncrementalFixedEncoderCodec = struct {
         try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn writeStoredOnlyBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool) IncrementalFixedEncoderCodec.Error!void {
+        try matcher.validateAdvance(block.len, history.len);
         const additional = storedBlocksEncodedSizeFromState(state.*, block.len);
         const capacity = std.math.add(usize, state.bytes.items.len, additional) catch
             return error.IntegerOverflow;
@@ -264,6 +266,7 @@ const IncrementalBestEncoderCodec = struct {
         IncrementalFixedEncoderCodec.resetState(state);
     }
     pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+        try matcher.validateAdvance(block.len, history.len);
         if (usesStoredFastPath(block, options) and !sampledHistoryMatch(block, history)) {
             // Incompressible blocks should not pay for a match plan that the
             // stored/fixed/dynamic selector will immediately discard. A sparse
@@ -397,7 +400,7 @@ const IncrementalGzipFixedEncoderCodec = struct {
         const header = try out.addManyAsSlice(allocator, header_len);
         _ = try writeGzipHeader(header, options);
     }
-    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32, total_input: usize) IncrementalGzipFixedEncoderCodec.Error!void {
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32, total_input: core.StreamCount) IncrementalGzipFixedEncoderCodec.Error!void {
         var bytes: [8]u8 = undefined;
         std.mem.writeInt(u32, bytes[0..4], digest, .little);
         std.mem.writeInt(u32, bytes[4..8], @truncate(total_input), .little);
@@ -457,6 +460,10 @@ test "gzip incremental relaxed footer and member boundary contracts" {
 
 test "relaxed concatenated wrapper commitment and tail probe contracts" {
     try @import("deflate/incremental/tests/relaxed/whole_input.zig").contracts(@This());
+}
+
+test "Deflate wide encode stream counters and overflow transactions" {
+    try @import("deflate/incremental/tests/wide_encode/main.zig").contracts(@This());
 }
 
 test "Deflate wide decode stream counters and overflow transactions" {
@@ -558,6 +565,7 @@ pub const DeflateParams = struct {
 };
 
 pub const ParamsError = error{
+    IntegerOverflow,
     InvalidCompressionLevel,
     InvalidEncoderState,
     UnsupportedOperation,
@@ -6121,24 +6129,8 @@ const PngFilter0SemanticSink = struct {
     }
 };
 
-noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
-    noalias reader: *bitstream.BufferedBitReader,
-    noalias output: []u8,
-    initial_out_offset: usize,
-    noalias decoder: *const SemanticDynamicDecoder,
-) align(64) Error!usize {
-    return semantic_module.decodeDynamicBlockIntoLinearMode(
-        false,
-        false,
-        false,
-        false,
-        false,
-        reader,
-        output,
-        initial_out_offset,
-        decoder,
-    );
-}
+const decodeSemanticDynamicBlockIntoBufferedReader =
+    @import("deflate/semantic/linear_entry.zig").decodeBuffered;
 
 noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
     noalias reader: *bitstream.BufferedBitReader,

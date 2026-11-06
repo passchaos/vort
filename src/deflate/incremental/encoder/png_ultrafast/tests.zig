@@ -1,4 +1,5 @@
 const std = @import("std");
+const Count = @import("../../../../core.zig").StreamCount;
 const Encoder = @import("root.zig").Encoder;
 const deflate = @import("../../../../deflate.zig");
 const reference = @import("reference_cases.zig");
@@ -36,8 +37,10 @@ test "incremental PNG ultrafast v2 fused Adler matches scalar recurrences for wo
 
 test "incremental PNG ultrafast v2 direct and queued outputs preserve published52 bytes flush cuts resources and snapshots" {
     // The published v2 layout adds the one-shot framing flag to Options; the
-    // growth is exactly one usize on both 32-bit and 64-bit targets.
-    try std.testing.expectEqual(@sizeOf(BaselineV1) + @sizeOf(usize), @sizeOf(Encoder));
+    // growth is exactly one usize on 64-bit targets. Wide cumulative
+    // counters deliberately grow the 32-bit context.
+    if (@bitSizeOf(usize) == 64)
+        try std.testing.expectEqual(@sizeOf(BaselineV1) + @sizeOf(usize), @sizeOf(Encoder));
     var input: [12571]u8 = @splat(0);
     var random: u32 = 0x67ac814f;
     for (&input, 0..) |*byte, at| {
@@ -84,7 +87,8 @@ test "incremental PNG ultrafast accepted zero checksum recurrence matches portab
 }
 
 test "incremental PNG ultrafast batched words checksum and overlapping queue stores match frozen scalar for equal flush schedules" {
-    try std.testing.expectEqual(@sizeOf(Scalar), @sizeOf(Encoder));
+    if (@bitSizeOf(usize) == 64)
+        try std.testing.expectEqual(@sizeOf(Scalar), @sizeOf(Encoder));
     var input: [8219]u8 = @splat(0);
     var random: u32 = 0x914ab039;
     for (&input, 0..) |*byte, at| {
@@ -248,9 +252,9 @@ test "incremental PNG ultrafast zero output empty finish and limits return exact
     encoder.reset();
     encoder.options.max_input_len = 1;
     try std.testing.expectError(error.OutputLimitExceeded, encoder.step("12", &scratch));
-    encoder.options.max_input_len = std.math.maxInt(usize);
+    encoder.options.max_input_len = std.math.maxInt(Count);
     encoder.expected_input_len = null;
-    encoder.total_input = std.math.maxInt(usize);
+    encoder.total_input = std.math.maxInt(Count);
     try std.testing.expectError(error.IntegerOverflow, encoder.step("x", &scratch));
     encoder.reset();
     encoder.expected_input_len = 5;
@@ -259,7 +263,7 @@ test "incremental PNG ultrafast zero output empty finish and limits return exact
     try std.testing.expectEqual(@as(usize, 0), encoder.pending_len);
     encoder.reset();
     encoder.expected_input_len = null;
-    encoder.total_output = std.math.maxInt(usize);
+    encoder.total_output = std.math.maxInt(Count);
     try std.testing.expectError(error.IntegerOverflow, encoder.step(&.{}, &scratch));
     const empty = try encode("", 1, 1, null);
     defer std.testing.allocator.free(empty);

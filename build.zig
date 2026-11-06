@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    @import("build/deflate_wide_encode.zig").register(b, target, optimize);
     const vail_dep = b.dependency("vail_archive_crypto", .{
         .target = target,
         .optimize = optimize,
