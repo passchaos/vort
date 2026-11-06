@@ -5912,7 +5912,7 @@ fn selectWideCommandStateCandidate(
     if (builtin.is_test and always_full_wire) test_hq_wide_command_candidate_attempts += 1;
     const wide_options: lz77.GreedyOptions = .{
         .window_len = search_window,
-        .max_chain = @min(budget.max_chain, 64),
+        .max_chain = if (always_full_wire) @min(budget.max_chain, 256) else @min(budget.max_chain, 64),
         .nice_len = budget.nice_len,
         .max_candidates = @min(budget.max_candidates, 32),
         .min_match = 4,

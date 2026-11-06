@@ -26312,8 +26312,9 @@ reuse, so production keeps the simpler independently owned plans.
   as an opt-in for non-text inputs up to 64 KiB. When set, the repcode-aware
   command-state candidate runs only its wide beam, always encodes the complete
   wire and still arbitrates against every other candidate, so the stream can
-  never grow. It recovers x-ray 39,279 -> 39,217, ooffice 30,674 -> 30,568 and
-  mr 15,314 -> 15,274 at 64 KiB q11, but costs 13-47% encode time on binary
+  never grow. Its near-chain budget is 256 distances for this path (64 for
+  text), recovering x-ray 39,279 -> 39,217, ooffice 30,674 -> 30,542 and
+  mr 15,314 -> 15,140 at 64 KiB q11, but costs 13-47% encode time on binary
   rows, including rows where it does not win; the default stays text-only.
   The chunks/incremental path exposes the same option and extends its default
   8 KiB ceiling to 64 KiB per block, respecting an explicit caller ceiling.

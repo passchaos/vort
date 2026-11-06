@@ -1366,8 +1366,8 @@ blocks, always encoding its complete wire) does win on three 64 KiB q11 rows:
 | File | Gated (current) | Wide beam on binary |
 | --- | ---: | ---: |
 | x-ray | 39,279 | 39,217 |
-| ooffice | 30,674 | 30,568 |
-| mr | 15,314 | 15,274 |
+| ooffice | 30,674 | 30,542 |
+| mr | 15,314 | 15,140 |
 
 sao, mozilla, dickens, webster, osdb, samba, nci, XML and reymont keep their
 wires. The cost is large: encode time rises 13-47% on binary rows (mozilla
@@ -1379,10 +1379,12 @@ loses at 0.08%). Reducing the binary candidate budget from 32 to 8 keeps
 ooffice's win but loses x-ray's and most of mr's, and does not lower the
 latency materially.
 
-The default therefore keeps the text-only gate, and the binary behaviour is
-exposed as the explicit `PlannedEncodeOptions.binary_command_state` opt-in
-(mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up to
-64 KiB. It runs only the wide beam, always encodes its complete wire, and still
+The binary opt-in also raises its near-chain budget from 64 to 256 distances;
+the wider chain is what recovers the ooffice and mr bytes, while x-ray saturates
+earlier. The default therefore keeps the text-only gate, and the binary
+behaviour is exposed as the explicit `PlannedEncodeOptions.binary_command_state`
+opt-in (mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up
+to 64 KiB. It runs only the wide beam, always encodes its complete wire, and still
 arbitrates against every other candidate, so the selected stream can never
 grow. In the chunked/incremental path the option also extends the default
 8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
