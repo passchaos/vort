@@ -751,6 +751,8 @@ test "default-window far-copy window sizing helpers" {
     try std.testing.expectEqual(@as(u5, 18), windowBitsForInput(131_057, 20));
     try std.testing.expectEqual(@as(u5, 20), windowBitsForInput(1_048_576, 20));
     try std.testing.expectEqual(@as(u5, 20), windowBitsForInput(16 * 1024 * 1024, 20));
+    try std.testing.expectEqual(@as(u5, 22), windowBitsForInput(4 * 1024 * 1024, 22));
+    try std.testing.expectEqual(@as(u5, 22), windowBitsForInput(16 * 1024 * 1024, 22));
 
     try std.testing.expectEqual(@as(u5, 17), windowBitsForDistance(65_521));
     try std.testing.expectEqual(@as(u5, 18), windowBitsForDistance(131_057));

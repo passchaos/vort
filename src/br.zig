@@ -5222,6 +5222,63 @@ fn selectLargeWindowInputCandidatesRecorded(
     }
 }
 
+/// Add one default-window far-match candidate. The wire advertises only the
+/// smallest standard window the augmented plan actually uses, and the result
+/// must beat the incumbent by at least 64 bytes or 0.1%. Returns true when the
+/// candidate also saved at least 1% of the input, which is the probe signal for
+/// paying for the deeper literal and command proposals.
+fn considerDefaultWindowFarCandidate(
+    comptime trace_enabled: bool,
+    trace: quality_profile.Recorder(trace_enabled),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    proposal: []const command_plan.Command,
+    max_backward_distance: usize,
+    long_window_bits: u5,
+    chain: usize,
+    large_window: bool,
+    auto_window: bool,
+    wire_options: LazyWireOptions,
+    best: *[]u8,
+) Error!bool {
+    const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormatAndChain(
+        allocator,
+        input,
+        proposal,
+        max_backward_distance,
+        encoder_window_format.format(large_window),
+        chain,
+    ) orelse return false;
+    defer freeQualityRecorded(trace_enabled, trace, allocator, long_commands);
+    var candidate_options = wire_options;
+    if (auto_window) {
+        const farthest = long_distance.farthestLz77Distance(long_commands);
+        if (farthest <= (@as(usize, 1) << default_window_bits) - 16) return false;
+        candidate_options.window_bits = @min(
+            long_window_bits,
+            long_distance.windowBitsForDistance(farthest),
+        );
+    }
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate = try encodeLazyCommandPlanAllocRecorded(
+        trace_enabled,
+        trace.withOrigin(.lazy),
+        allocator,
+        input,
+        long_commands,
+        &stats,
+        candidate_options,
+    );
+    const margin = @max(@as(usize, 64), best.len / 1024);
+    if (candidate.len + margin >= best.len) {
+        freeQualityRecorded(trace_enabled, trace, allocator, candidate);
+        return false;
+    }
+    const material = candidate.len + input.len / 100 <= best.len;
+    retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, best, candidate);
+    return material;
+}
+
 fn encodePlannedStreamQualityWithOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -5319,15 +5376,13 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     );
 
     // Ratio presets already search far matches when the caller advertises a
-    // wider window. A default 16-bit one-shot stream also considers one
-    // bounded far-match candidate: the wire advertises only the smallest
-    // window its winning plan actually uses, and complete-wire arbitration
-    // keeps the original 16-bit stream whenever the far pass does not pay for
-    // itself. Work stays bounded to one MiB of input; larger inputs retain the
-    // explicit-window path.
+    // wider window. A default 16-bit one-shot stream also considers bounded
+    // far-match candidates: the wire advertises only the smallest window the
+    // winning plan actually uses, and complete-wire arbitration keeps the
+    // original 16-bit stream whenever the far pass does not pay for itself.
+    // The search window is capped at libbrotli's default 22 bits.
     const auto_long_window = window_bits == 16 and options.window_bits == null and
-        !options.large_window and input.len <= 1024 * 1024 and
-        input.len > long_distance.min_distance;
+        !options.large_window and input.len > long_distance.min_distance;
     if (schedule.family == .ratio and
         (window_bits >= 17 or auto_long_window) and
         input.len > long_distance.min_distance)
@@ -5335,65 +5390,106 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         const long_window_bits: u5 = if (window_bits >= 17)
             window_bits
         else
-            long_distance.windowBitsForInput(input.len, 20);
+            long_distance.windowBitsForInput(input.len, 22);
         const max_backward_distance = (@as(usize, 1) << long_window_bits) - 16;
         const literal_commands = [_]command_plan.Command{.{
             .insert_start = 0,
             .insert_len = input.len,
         }};
-        const proposal_count: usize = if (commandPlanHasCopy(command_stream.commands)) 2 else 1;
-        for (0..proposal_count) |proposal_index| {
-            const proposal = if (proposal_index == 0)
-                command_stream.commands
-            else
-                &literal_commands;
-            // The literal-only alternate ignores near matches, so it is the
-            // one that can recover a complete far copy interrupted by
-            // incidental short matches. Its broader search needs only a short
-            // chain on the same distance band; the command proposal keeps the
-            // deeper established search.
-            const long_chain: usize = if (auto_long_window)
-                (if (proposal_index == 0) 64 else 16)
-            else
-                long_distance.default_chain_limit;
-            const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormatAndChain(
-                allocator,
-                input,
-                proposal,
-                max_backward_distance,
-                encoder_window_format.format(options.large_window),
-                long_chain,
-            ) orelse continue;
-            defer freeQualityRecorded(trace_enabled, trace, allocator, long_commands);
-            var candidate_options = wire_options;
-            if (auto_long_window) {
-                const farthest = long_distance.farthestLz77Distance(long_commands);
-                if (farthest <= (@as(usize, 1) << default_window_bits) - 16) continue;
-                candidate_options.window_bits = @min(
-                    long_window_bits,
-                    long_distance.windowBitsForDistance(farthest),
-                );
-            }
-            var long_stats: encoder_stats.PlannedEncodeStats = .{};
-            const long_candidate = try encodeLazyCommandPlanAllocRecorded(
+        const has_copies = commandPlanHasCopy(command_stream.commands);
+        const literal_bytes = input.len -| lz_plan.stats.matched_bytes;
+        // Literal-heavy blocks can hide a complete far copy behind incidental
+        // near matches, so they probe the literal-only plan first. Text-like
+        // blocks already match most bytes; searching only their literal runs
+        // with a short chain keeps the default pass cheap.
+        const large_literal_share = literal_bytes >= input.len / 2;
+        if (auto_long_window and input.len > 1024 * 1024 and large_literal_share) {
+            // A short-chain probe only pays for the deeper literal and command
+            // proposals when it already found a material far win. An
+            // incompressible input stops after one bounded scan.
+            const material = try considerDefaultWindowFarCandidate(
                 trace_enabled,
-                trace.withOrigin(.lazy),
+                trace,
                 allocator,
                 input,
-                long_commands,
-                &long_stats,
-                candidate_options,
+                &literal_commands,
+                max_backward_distance,
+                long_window_bits,
+                16,
+                options.large_window,
+                true,
+                wire_options,
+                &best,
             );
-            // A wider decoder window must buy a measurable payload win rather
-            // than a one- or two-byte tie against the 16-bit incumbent.
-            if (auto_long_window) {
-                const margin = @max(@as(usize, 64), best.len / 1024);
-                if (long_candidate.len + margin >= best.len) {
-                    freeQualityRecorded(trace_enabled, trace, allocator, long_candidate);
-                    continue;
+            if (material) {
+                _ = try considerDefaultWindowFarCandidate(
+                    trace_enabled,
+                    trace,
+                    allocator,
+                    input,
+                    &literal_commands,
+                    max_backward_distance,
+                    long_window_bits,
+                    64,
+                    options.large_window,
+                    true,
+                    wire_options,
+                    &best,
+                );
+                if (has_copies) {
+                    _ = try considerDefaultWindowFarCandidate(
+                        trace_enabled,
+                        trace,
+                        allocator,
+                        input,
+                        command_stream.commands,
+                        max_backward_distance,
+                        long_window_bits,
+                        256,
+                        options.large_window,
+                        true,
+                        wire_options,
+                        &best,
+                    );
                 }
             }
-            retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, long_candidate);
+        } else {
+            // Text-like large blocks search only their literal runs; the
+            // all-literal alternate would rescan the complete input.
+            const proposal_count: usize = if (auto_long_window and input.len > 1024 * 1024 and !large_literal_share)
+                1
+            else if (has_copies)
+                2
+            else
+                1;
+            for (0..proposal_count) |proposal_index| {
+                const proposal = if (proposal_index == 0)
+                    command_stream.commands
+                else
+                    &literal_commands;
+                // The literal-only alternate ignores near matches, so it is
+                // the one that can recover a complete far copy interrupted by
+                // incidental short matches; it keeps a short chain. The command
+                // proposal keeps the deeper established search.
+                const long_chain: usize = if (auto_long_window)
+                    (if (proposal_index == 0) 64 else 16)
+                else
+                    long_distance.default_chain_limit;
+                _ = try considerDefaultWindowFarCandidate(
+                    trace_enabled,
+                    trace,
+                    allocator,
+                    input,
+                    proposal,
+                    max_backward_distance,
+                    long_window_bits,
+                    long_chain,
+                    options.large_window,
+                    auto_long_window,
+                    wire_options,
+                    &best,
+                );
+            }
         }
     }
 
