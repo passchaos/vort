@@ -26,6 +26,7 @@ const adaptive_split_proposal = @import("deflate/adaptive_split_proposal.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
 const sync = @import("deflate/sync.zig");
+const split_history = @import("deflate/encoder/split_history.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
@@ -1427,6 +1428,14 @@ pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
     return looksIncompressible(input);
 }
 
+fn usesStoredSplitFastPath(input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) bool {
+    // Sampling the first block cannot rule out matches against later blocks
+    // or a preset dictionary. Let those blocks make their own stored choice.
+    return (dictionary == null or dictionary.?.len == 0) and
+        input.len <= @min(block_len, max_stored_block_len) and
+        usesStoredFastPath(input, options);
+}
+
 fn looksIncompressible(input: []const u8) bool {
     const sample_len = @min(input.len, 1024);
     if (uniqueByteCount(input[0..sample_len]) < 240) return false;
@@ -1485,7 +1494,7 @@ fn sampledHistoryMatch(input: []const u8, history: []const u8) bool {
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
@@ -1623,7 +1632,7 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
 
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
+    if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeBestSplitBlocks(allocator, &writer, input, null, block_len, options);
@@ -1632,7 +1641,7 @@ pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 pub fn encodeRawBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
+    if (usesStoredSplitFastPath(input, dictionary, block_len, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeBestSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
@@ -1655,79 +1664,20 @@ fn writeBestSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         const n = @min(effective_block_len, input.len - offset);
         const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        if (offset == 0) {
-            const plan = if (dictionary) |dict|
-                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
-            else
-                try planTokensAlloc(allocator, chunk, options);
-            defer plan.deinit(allocator);
-            try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
-        } else {
-            // Plan over the previous history plus the chunk, then retain only
-            // the chunk-relative suffix. The decoder keeps the previous block's
-            // output, so matches that start in the history are legal even
-            // though this is a new DEFLATE block.
-            const history_len = @min(offset, options.lz77_options.window_len);
-            const combined = input[offset - history_len .. offset + n];
-            const plan = try planTokensAlloc(allocator, combined, options);
-            defer plan.deinit(allocator);
-            const trimmed = try trimPlanToSuffixAlloc(allocator, combined, plan.tokens, history_len);
-            defer allocator.free(trimmed);
-            try writeBestTokensBlock(allocator, writer, chunk, trimmed, final, options);
-        }
+        const plan = try planHistoryChunkWithDictionaryAlloc(allocator, input, dictionary, offset, n, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
         offset += n;
     }
 }
 
-fn trimPlanToSuffixAlloc(
-    allocator: std.mem.Allocator,
-    combined: []const u8,
-    tokens: []const lz77.Token,
-    skip: usize,
-) ![]lz77.Token {
-    var out: std.ArrayList(lz77.Token) = .empty;
-    errdefer out.deinit(allocator);
-    var consumed: usize = 0;
-    var started = false;
-    for (tokens) |token| {
-        const token_len: usize = switch (token) {
-            .literal => 1,
-            .match => |match| match.length,
-        };
-        if (!started) {
-            if (consumed + token_len <= skip) {
-                consumed += token_len;
-                continue;
-            }
-            if (consumed < skip) {
-                switch (token) {
-                    .literal => return error.InvalidBlockPlan,
-                    .match => |match| {
-                        const offset_into = skip - consumed;
-                        const remaining = token_len - offset_into;
-                        if (remaining >= 3) {
-                            try out.append(allocator, .{ .match = .{
-                                .length = @intCast(remaining),
-                                .distance = match.distance,
-                            } });
-                        } else {
-                            for (combined[skip .. consumed + token_len]) |byte|
-                                try out.append(allocator, .{ .literal = byte });
-                        }
-                        consumed += token_len;
-                        started = true;
-                        continue;
-                    },
-                }
-            }
-            started = true;
-        }
-        try out.append(allocator, token);
-        consumed += token_len;
-    }
-    if (!started or consumed != combined.len) return error.InvalidBlockPlan;
-    return out.toOwnedSlice(allocator);
-}
+const trimPlanToSuffixAlloc = split_history.trimPlanToSuffixAlloc;
+
+const SplitHistoryCodec = struct {
+    pub const Options = CompressionOptions;
+    pub const normalize = normalizeOptionsForStrategy;
+    pub const plan = planTokensAlloc;
+};
 
 fn planHistoryChunkAlloc(
     allocator: std.mem.Allocator,
@@ -1736,25 +1686,18 @@ fn planHistoryChunkAlloc(
     chunk_len: usize,
     options: CompressionOptions,
 ) !lz77.GreedyPlan {
-    if (chunk_start > input.len or chunk_len > input.len - chunk_start)
-        return error.InvalidBlockPlan;
-    const history_len = @min(chunk_start, options.lz77_options.window_len);
-    if (history_len == 0)
-        return planTokensAlloc(allocator, input[chunk_start..][0..chunk_len], options);
-    const combined = input[chunk_start - history_len ..][0 .. history_len + chunk_len];
-    const plan = try planTokensAlloc(allocator, combined, options);
-    defer plan.deinit(allocator);
-    const trimmed = try trimPlanToSuffixAlloc(allocator, combined, plan.tokens, history_len);
-    errdefer allocator.free(trimmed);
-    var stats: lz77.PlanStats = .{};
-    for (trimmed) |token| switch (token) {
-        .literal => stats.literals += 1,
-        .match => |match| {
-            stats.matches += 1;
-            stats.matched_bytes += match.length;
-        },
-    };
-    return .{ .tokens = trimmed, .stats = stats };
+    return planHistoryChunkWithDictionaryAlloc(allocator, input, null, chunk_start, chunk_len, options);
+}
+
+fn planHistoryChunkWithDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: ?[]const u8,
+    chunk_start: usize,
+    chunk_len: usize,
+    options: CompressionOptions,
+) !lz77.GreedyPlan {
+    return split_history.planChunkAlloc(SplitHistoryCodec, allocator, input, dictionary, chunk_start, chunk_len, options);
 }
 
 pub const AdaptiveSplitOptions = struct {
@@ -1772,7 +1715,7 @@ const adaptive_drift_proposal_limit: usize = 2;
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
     if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
@@ -1784,10 +1727,10 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
 
 pub fn encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    if (usesStoredSplitFastPath(input, dictionary, split_options.max_block_len, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
-    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
+    if (dictionary.len == 0 and shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     var writer = bitstream.BitWriter{};
     defer writer.deinit(allocator);
     try writeBestAdaptiveSplitBlocks(allocator, &writer, input, dictionary, options, split_options);
@@ -1809,20 +1752,14 @@ fn writeBestAdaptiveSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream
     var offset: usize = 0;
     while (offset < input.len) {
         const remaining = input.len - offset;
-        const n = if (dictionary == null)
+        const n = if (dictionary == null or dictionary.?.len == 0)
             try chooseDriftAdaptiveBlockLen(allocator, input, offset, min_block_len, max_block_len, split_options.sample_len, split_options.search_step, writer.bit_index, options)
         else
-            try chooseCostedAdaptiveBlockLen(allocator, input, offset, min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
+            try chooseCostedAdaptiveBlockLenWithDictionary(allocator, input, dictionary, offset, min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
         const chunk_len = @min(n, remaining);
         const chunk = input[offset..][0..chunk_len];
         const final = offset + chunk_len == input.len;
-        const plan = if (dictionary) |dict|
-            if (offset == 0)
-                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
-            else
-                try planTokensAlloc(allocator, chunk, options)
-        else
-            try planTokensAlloc(allocator, chunk, options);
+        const plan = try planHistoryChunkWithDictionaryAlloc(allocator, input, dictionary, offset, chunk_len, options);
         defer plan.deinit(allocator);
         try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
         offset += chunk_len;
@@ -1842,15 +1779,19 @@ fn smallerAdaptiveOrOneShot(allocator: std.mem.Allocator, writer: *bitstream.Bit
 
 fn shouldSkipAdaptiveSplitSearch(input_len: usize, split_options: AdaptiveSplitOptions) bool {
     // The production split presets use a full stored-block-sized max block.
-    // For one- or two-block inputs the adaptive search mostly redoes the
+    // For single-block inputs the adaptive search mostly redoes the
     // already-computed one-shot plan several times before falling back to that
     // one-shot frame. Keep small custom split experiments intact by only
     // short-circuiting full-window policies.
     return split_options.max_block_len >= max_stored_block_len and
-        input_len <= max_stored_block_len * 2;
+        input_len <= max_stored_block_len;
 }
 
 fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, horizon_start: usize, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
+    return chooseCostedAdaptiveBlockLenWithDictionary(allocator, input, null, horizon_start, min_block_len, max_block_len, sample_len, search_step, options);
+}
+
+fn chooseCostedAdaptiveBlockLenWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, horizon_start: usize, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
     if (horizon_start > input.len) return error.InvalidBlockPlan;
     const remaining = input.len - horizon_start;
     const heuristic = chooseAdaptiveBlockLen(input[horizon_start..], min_block_len, max_block_len, sample_len);
@@ -1862,9 +1803,10 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
     // when its extra block boundary makes the complete two-block plan worse.
     // Starting with the unsplit horizon also keeps exact ties unfragmented.
     var best_len = horizon;
-    var best_score = try scoreAdaptiveSplitAt(
+    var best_score = try scoreAdaptiveSplitAtWithDictionary(
         allocator,
         input,
+        dictionary,
         horizon_start,
         horizon,
         horizon,
@@ -1872,9 +1814,10 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
     );
     var candidate = min_block_len;
     while (candidate < horizon) {
-        const score = try scoreAdaptiveSplitAt(
+        const score = try scoreAdaptiveSplitAtWithDictionary(
             allocator,
             input,
+            dictionary,
             horizon_start,
             horizon,
             candidate,
@@ -1894,9 +1837,10 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
         step,
     );
     if (heuristic < horizon and !heuristic_on_grid) {
-        const score = try scoreAdaptiveSplitAt(
+        const score = try scoreAdaptiveSplitAtWithDictionary(
             allocator,
             input,
+            dictionary,
             horizon_start,
             horizon,
             heuristic,
@@ -2040,14 +1984,27 @@ fn scoreAdaptiveSplitAt(
     candidate: usize,
     options: CompressionOptions,
 ) !usize {
+    return scoreAdaptiveSplitAtWithDictionary(allocator, input, null, horizon_start, horizon, candidate, options);
+}
+
+fn scoreAdaptiveSplitAtWithDictionary(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: ?[]const u8,
+    horizon_start: usize,
+    horizon: usize,
+    candidate: usize,
+    options: CompressionOptions,
+) !usize {
     if (horizon == 0 or horizon_start > input.len or horizon > input.len - horizon_start or
         candidate == 0 or candidate > horizon)
         return error.InvalidBlockPlan;
-    const first = try scoreSplitCandidate(allocator, input, horizon_start, candidate, options);
+    const first = try scoreSplitCandidateWithDictionary(allocator, input, dictionary, horizon_start, candidate, options);
     if (candidate == horizon) return first;
-    const second = try scoreSplitCandidate(
+    const second = try scoreSplitCandidateWithDictionary(
         allocator,
         input,
+        dictionary,
         horizon_start + candidate,
         horizon - candidate,
         options,
@@ -2301,9 +2258,11 @@ fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const
 }
 
 fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, chunk_start: usize, chunk_len: usize, options: CompressionOptions) !usize {
-    if (chunk_start > input.len or chunk_len > input.len - chunk_start)
-        return error.InvalidBlockPlan;
-    const plan = try planHistoryChunkAlloc(allocator, input, chunk_start, chunk_len, options);
+    return scoreSplitCandidateWithDictionary(allocator, input, null, chunk_start, chunk_len, options);
+}
+
+fn scoreSplitCandidateWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, chunk_start: usize, chunk_len: usize, options: CompressionOptions) !usize {
+    const plan = try planHistoryChunkWithDictionaryAlloc(allocator, input, dictionary, chunk_start, chunk_len, options);
     defer plan.deinit(allocator);
     return scoreTokenPlan(chunk_len, plan.tokens, options);
 }
@@ -2492,15 +2451,8 @@ fn writeFixedSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWri
     }
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
-        const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = if (dictionary) |dict|
-            if (offset == 0)
-                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
-            else
-                try planTokensAlloc(allocator, chunk, options)
-        else
-            try planTokensAlloc(allocator, chunk, options);
+        const plan = try planHistoryChunkWithDictionaryAlloc(allocator, input, dictionary, offset, n, options);
         defer plan.deinit(allocator);
         try writeFixedTokens(allocator, writer, plan.tokens, final);
         offset += n;
@@ -3202,15 +3154,8 @@ fn writeDynamicSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitW
     }
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
-        const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = if (dictionary) |dict|
-            if (offset == 0)
-                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
-            else
-                try planTokensAlloc(allocator, chunk, options)
-        else
-            try planTokensAlloc(allocator, chunk, options);
+        const plan = try planHistoryChunkWithDictionaryAlloc(allocator, input, dictionary, offset, n, options);
         defer plan.deinit(allocator);
         try writeDynamicTokens(allocator, writer, plan.tokens, final);
         offset += n;
@@ -7658,7 +7603,7 @@ pub fn encodeZlibPngUltraFastAllocWithChecksum(
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
+    if (dictionary.len == 0 and usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     const encoded = try encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
@@ -7686,18 +7631,18 @@ pub fn encodeZlibLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: [
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeZlibStoredSplitAlloc(allocator, input, block_len);
+    if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeZlibStoredSplitAlloc(allocator, input, block_len);
     return encodeZlibBestSplitDirectAlloc(allocator, input, null, block_len, options);
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeZlibStoredSplitWithDictionaryAlloc(allocator, input, dictionary, block_len);
+    if (usesStoredSplitFastPath(input, dictionary, block_len, options)) return encodeZlibStoredSplitWithDictionaryAlloc(allocator, input, dictionary, block_len);
     return encodeZlibBestSplitDirectAlloc(allocator, input, dictionary, block_len, options);
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
+    if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeZlibStoredAlloc(allocator, input);
     const one_shot = try encodeZlibBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
     if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
@@ -7706,10 +7651,10 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
+    if (usesStoredSplitFastPath(input, dictionary, split_options.max_block_len, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const one_shot = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
-    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
+    if (dictionary.len == 0 and shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     return encodeZlibBestAdaptiveSplitDirectAlloc(allocator, input, dictionary, options, split_options, one_shot);
 }
 
@@ -16504,7 +16449,7 @@ pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn encodeGzipBestSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, header_options);
+    if (usesStoredSplitFastPath(input, null, block_len, options)) return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, header_options);
     return encodeGzipBestSplitDirectWithHeaderAlloc(allocator, input, block_len, options, header_options);
 }
 
@@ -16514,7 +16459,7 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 
 pub fn encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
-    if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
+    if (usesStoredSplitFastPath(input, null, split_options.max_block_len, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     const one_shot = try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options);
     errdefer allocator.free(one_shot);
     if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
@@ -22364,7 +22309,10 @@ test "best encoder skips invalid single stored block for large inputs" {
     try std.testing.expectEqual(@as(usize, 2 + (input.len + 5 * 4) + 4), zlib_split.len);
     const zlib_adaptive = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
     defer std.testing.allocator.free(zlib_adaptive);
-    try std.testing.expectEqual(zlib_stored.len, zlib_adaptive.len);
+    try std.testing.expect(zlib_adaptive.len <= zlib_stored.len);
+    const zlib_adaptive_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_adaptive);
+    defer std.testing.allocator.free(zlib_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, &input, zlib_adaptive_decoded);
 
     const gzip_best = try encodeGzipBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(gzip_best);
@@ -22376,7 +22324,10 @@ test "best encoder skips invalid single stored block for large inputs" {
     try std.testing.expectEqual(@as(usize, gzip_header.len + (input.len + 5 * 4) + 8), gzip_split.len);
     const gzip_adaptive = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
     defer std.testing.allocator.free(gzip_adaptive);
-    try std.testing.expectEqual(gzip_stored.len, gzip_adaptive.len);
+    try std.testing.expect(gzip_adaptive.len <= gzip_stored.len);
+    const gzip_adaptive_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_adaptive);
+    defer std.testing.allocator.free(gzip_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, &input, gzip_adaptive_decoded);
 
     const dictionary = "preset dictionary that should not matter for high entropy";
     const raw_dict = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
@@ -22389,7 +22340,10 @@ test "best encoder skips invalid single stored block for large inputs" {
 
     const adaptive = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
     defer std.testing.allocator.free(adaptive);
-    try std.testing.expectEqual(stored.len, adaptive.len);
+    try std.testing.expect(adaptive.len <= stored.len);
+    const adaptive_decoded = try decodeRawAutoAlloc(std.testing.allocator, adaptive);
+    defer std.testing.allocator.free(adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, &input, adaptive_decoded);
 
     const default_encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.default));
     defer std.testing.allocator.free(default_encoded);
@@ -22405,7 +22359,10 @@ test "best encoder skips invalid single stored block for large inputs" {
     try std.testing.expectEqual(@as(usize, 6 + (input.len + 5 * 4) + 4), zlib_dict_split.len);
     const zlib_dict_adaptive = try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
     defer std.testing.allocator.free(zlib_dict_adaptive);
-    try std.testing.expectEqual(zlib_stored_dict.len, zlib_dict_adaptive.len);
+    try std.testing.expect(zlib_dict_adaptive.len <= zlib_stored_dict.len);
+    const zlib_dict_adaptive_decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, zlib_dict_adaptive, dictionary);
+    defer std.testing.allocator.free(zlib_dict_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, &input, zlib_dict_adaptive_decoded);
 }
 
 test "stored fast path does not mask repeated binary structure" {
@@ -23487,6 +23444,115 @@ const AdaptiveSplitTestAdapter = struct {
     pub const encode = encodeRawBestAdaptiveSplitAlloc;
     pub const decode = decodeRawAutoAlloc;
 };
+
+const SplitHistoryTestAdapter = struct {
+    pub const Options = CompressionOptions;
+    pub const options = optionsForLevel;
+    pub const plan = planHistoryChunkWithDictionaryAlloc;
+    pub const decode = decodeRawAutoAllocWithDictionary;
+    pub const score = scoreSplitCandidateWithDictionary;
+    pub const scoreAt = scoreAdaptiveSplitAtWithDictionary;
+    pub const choose = chooseCostedAdaptiveBlockLenWithDictionary;
+    pub const storedFastPath = usesStoredFastPath;
+
+    pub fn encodePublic(
+        allocator: std.mem.Allocator,
+        framing: @import("deflate/encoder/split_history_tests.zig").Framing,
+        mode: @import("deflate/encoder/split_history_tests.zig").BestMode,
+        input: []const u8,
+        dictionary: ?[]const u8,
+        block_len: usize,
+        config: CompressionOptions,
+    ) ![]u8 {
+        const split_options: AdaptiveSplitOptions = .{
+            .min_block_len = block_len,
+            .max_block_len = block_len,
+            .sample_len = 8,
+            .search_step = block_len,
+        };
+        if (dictionary) |dict| return switch (framing) {
+            .raw => switch (mode) {
+                .one_shot => encodeRawBestWithDictionaryAlloc(allocator, input, dict, config),
+                .split => encodeRawBestSplitWithDictionaryAlloc(allocator, input, dict, block_len, config),
+                .adaptive => encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dict, config, split_options),
+            },
+            .zlib => switch (mode) {
+                .one_shot => encodeZlibBestWithDictionaryAlloc(allocator, input, dict, config),
+                .split => encodeZlibBestSplitWithDictionaryAlloc(allocator, input, dict, block_len, config),
+                .adaptive => encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dict, config, split_options),
+            },
+            .gzip => unreachable,
+        };
+        return switch (framing) {
+            .raw => switch (mode) {
+                .one_shot => encodeRawBestAlloc(allocator, input, config),
+                .split => encodeRawBestSplitAlloc(allocator, input, block_len, config),
+                .adaptive => encodeRawBestAdaptiveSplitAlloc(allocator, input, config, split_options),
+            },
+            .zlib => switch (mode) {
+                .one_shot => encodeZlibBestAlloc(allocator, input, config),
+                .split => encodeZlibBestSplitAlloc(allocator, input, block_len, config),
+                .adaptive => encodeZlibBestAdaptiveSplitAlloc(allocator, input, config, split_options),
+            },
+            .gzip => switch (mode) {
+                .one_shot => encodeGzipBestAlloc(allocator, input, config),
+                .split => encodeGzipBestSplitAlloc(allocator, input, block_len, config),
+                .adaptive => encodeGzipBestAdaptiveSplitAlloc(allocator, input, config, split_options),
+            },
+        };
+    }
+
+    pub fn decodePublic(
+        allocator: std.mem.Allocator,
+        framing: @import("deflate/encoder/split_history_tests.zig").Framing,
+        input: []const u8,
+        dictionary: []const u8,
+    ) ![]u8 {
+        return switch (framing) {
+            .raw => decodeRawAutoAllocWithDictionary(allocator, input, dictionary),
+            .zlib => decodeZlibAllocWithDictionary(allocator, input, dictionary),
+            .gzip => decodeGzipAlloc(allocator, input),
+        };
+    }
+
+    pub fn encode(
+        allocator: std.mem.Allocator,
+        mode: @import("deflate/encoder/split_history_tests.zig").Mode,
+        input: []const u8,
+        dictionary: ?[]const u8,
+        block_len: usize,
+        config: CompressionOptions,
+    ) ![]u8 {
+        if (mode == .adaptive) {
+            // Exercise emitted blocks directly: the public convenience API
+            // can otherwise hide a broken split plan behind its one-shot result.
+            var writer = bitstream.BitWriter{};
+            errdefer writer.deinit(allocator);
+            try writeBestAdaptiveSplitBlocks(allocator, &writer, input, dictionary, config, .{
+                .min_block_len = block_len,
+                .max_block_len = block_len,
+                .sample_len = 8,
+                .search_step = block_len,
+            });
+            return writer.toOwnedSlice(allocator);
+        }
+        return if (dictionary) |dict| switch (mode) {
+            .fixed => encodeRawFixedSplitWithDictionaryAlloc(allocator, input, dict, block_len, config),
+            .dynamic => encodeRawDynamicSplitWithDictionaryAlloc(allocator, input, dict, block_len, config),
+            .best => encodeRawBestSplitWithDictionaryAlloc(allocator, input, dict, block_len, config),
+            .adaptive => unreachable,
+        } else switch (mode) {
+            .fixed => encodeRawFixedSplitAlloc(allocator, input, block_len, config),
+            .dynamic => encodeRawDynamicSplitAlloc(allocator, input, block_len, config),
+            .best => encodeRawBestSplitAlloc(allocator, input, block_len, config),
+            .adaptive => unreachable,
+        };
+    }
+};
+
+test "Deflate split effective history and ownership contracts" {
+    try @import("deflate/encoder/split_history_tests.zig").contracts(SplitHistoryTestAdapter);
+}
 
 const AdaptiveSplitProposalTestAdapter = struct {
     pub const Token = lz77.Token;

@@ -2038,6 +2038,29 @@ pub fn build(b: *std.Build) void {
         deflate_params_interop_exe.root_module.linkSystemLibrary("z", .{});
     }
     const zlib_compat_mod = zlib_translate.createModule();
+    const deflate_split_history_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-split-history-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_split_history_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "codec", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }) },
+                .{ .name = "zlib", .module = zlib_compat_mod },
+            },
+        }),
+    });
+    if (zlib_ng_root) |root| {
+        deflate_split_history_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+    } else {
+        deflate_split_history_interop_exe.root_module.linkSystemLibrary("z", .{});
+    }
+    b.step("run-deflate-split-history-interop", "Verify split DEFLATE rolling history and dictionaries with fragmented libz decoding")
+        .dependOn(&b.addRunArtifact(deflate_split_history_interop_exe).step);
     deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
     deflate_incremental_decode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
     deflate_params_interop_exe.root_module.addImport("zlib", zlib_compat_mod);
@@ -7726,6 +7749,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_incremental_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_decode_bench_exe.step);
     check_step.dependOn(&deflate_params_interop_exe.step);
+    check_step.dependOn(&deflate_split_history_interop_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);

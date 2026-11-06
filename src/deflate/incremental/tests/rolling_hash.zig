@@ -61,7 +61,7 @@ test "raw deflate incremental hash encoder retains preset dictionary index" {
     try std.testing.expectEqual(payload.len + dictionary.len, encoder.matchFinderSnapshot().absolute_position);
 }
 
-test "raw deflate incremental hash beats rebuilding split reference index" {
+test "raw deflate incremental hash and rebuilt split planner retain dictionary history" {
     const dictionary = "reference-dictionary-prefix-abcdefghijklmnopqrstuvwxyz";
     const payload = ("abcdefghijklmnopqrstuvwxyz-reference-payload-" ** 9) ++ "tail";
     const options = deflate.optionsForLevel(.fastest);
@@ -82,13 +82,19 @@ test "raw deflate incremental hash beats rebuilding split reference index" {
         options,
     );
     defer std.testing.allocator.free(reference);
-    // The one-shot split reference rebuilds its dictionary hash table for each
-    // block. Persistent heads can retain more useful recent candidates and
-    // therefore intentionally produce a different, no-larger stream.
-    try std.testing.expect(incremental.len <= reference.len);
-    const decoded = try deflate.decodeRawAutoAllocWithDictionary(std.testing.allocator, incremental, dictionary);
-    defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, payload, decoded);
+    // The split planner now has complete rolling history, including the
+    // dictionary suffix. Both parsers must use that history; their different
+    // candidate lifetimes do not impose a compressed-size ordering.
+    for ([_][]const u8{ incremental, reference }) |wire| {
+        try std.testing.expect(wire.len < payload.len / 2);
+        const decoded = try deflate.decodeRawAutoAllocWithDictionary(std.testing.allocator, wire, dictionary);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+    const used = encoder.matchFinderSnapshot();
+    try std.testing.expect(used.initialized);
+    try std.testing.expectEqual(payload.len + dictionary.len, used.absolute_position);
+    try std.testing.expect(used.indexed_positions > 0);
 }
 
 test "raw deflate incremental lazy encoder persists dense chains" {

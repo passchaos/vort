@@ -21,6 +21,21 @@ odd-distance copy that was stored before the ring-residue correction now reaches
 8 MiB incompressible worst case is down from +70% to +13% through sampled
 probes. Chunked/incremental inputs still require explicit windows.
 
+The [Deflate split-history increment](formats/deflate-split-history.md)
+unifies effective history for fixed-Huffman, dynamic-Huffman, best-block and
+adaptive split planning. Raw, zlib and gzip blocks retain prior input;
+dictionary-enabled paths also retain the still-valid dictionary suffix.
+Adaptive scoring uses the same history as emission, and sampled stored
+shortcuts no longer skip multiblock or dictionary search. An 8 KiB repeated
+random fixture falls from 8,232 to 4,179 raw bytes in best split mode; a
+4 KiB residual-dictionary fixture falls from 4,116 to 1,075. The independent
+system-zlib gate checks 56 streams with fragmented input/output. These
+functional results do not close the broader codec performance gaps.
+The next functional resource gap is Zstd one-shot and reusable decoding:
+output-length limits do not yet bound simultaneous result staging, append
+growth, retained scratch and entropy workspace. A shared whole-operation heap
+quota should cover those public paths and preserve their failure transactions.
+
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated
 history movement. Its direct final/pristine matrix lowers whole-input
