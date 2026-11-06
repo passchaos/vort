@@ -1307,6 +1307,11 @@ All other rows are unchanged. The extra states cost encode time: 64 KiB XML
 331 ms. The state array is `(input_len + 1) * 8 * 72` bytes, about 37 MiB at
 the 64 KiB gate. The full Brotli suite passes unchanged.
 
+A sixteen-state text beam was also measured and rejected as the default: XML
+64 KiB 3,971 -> 3,955 and nci 3,784 -> 3,754, but encode time rises to 1,100 /
+1,206 ms and the state array doubles to about 75 MiB. Eight states remain the
+ratio/latency balance.
+
 ## Rejected 64 KiB optimal search window, 2026-11-06
 
 The q10/q11 optimal seed and modeled passes cap their search window at the
