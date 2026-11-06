@@ -1453,10 +1453,10 @@ the literal-only alternate, then advertises only the smallest RFC window that
 the winning plan actually uses (17...22 bits). Complete-wire arbitration
 retains the original 16-bit stream whenever the far pass does not pay for
 itself, and an explicit `window_bits` request remains an exact opt-out.
-Literal-heavy blocks probe the literal-only plan with a 16-node chain and pay
-for the deeper literal (64-node) and command (256-node) proposals only after a
-material win (at least 1% of the input); text-like blocks search only their
-literal runs with a short chain.
+Literal-heavy blocks above one MiB probe the literal-only plan on a 32-position
+grid with a 16-node chain and pay for the deeper literal (64-node) and command
+(256-node) proposals only after a material win (at least 1% of the input);
+text-like blocks search only their literal runs with a short chain.
 
 | Input | Before | After | libbrotli 1.0.9 |
 | --- | ---: | ---: | ---: |
@@ -1465,6 +1465,7 @@ literal runs with a short chain.
 | 2 MiB far copy (1 MiB distance), q8 | 2,097,157 | 1,048,599 | 1,048,602 |
 | 4 MiB far copy (2 MiB distance), q8 | 4,194,309 | 2,122,387 | 2,097,182 |
 | 6 MiB far copy (3 MiB distance), q8 | 6,291,461 | 3,183,567 | 3,145,758 |
+| 6 MiB unaligned far copy (odd 3 MiB distance), q8 | 6,291,475 | 3,183,574 | 3,145,780 |
 | mr 1 MiB, q8 | 304,319 | 292,289 | - |
 | webster 1 MiB, q11 | 261,978 | 261,978 | 239,314 |
 | webster 1 MiB, q8 | 290,189 | 290,189 | 264,969 |
@@ -1472,26 +1473,31 @@ literal runs with a short chain.
 
 The far-copy wires advertise window 18, 20, 21, 22 and 22 respectively,
 matching the smallest RFC window their farthest copies need. A wider decoder
-window must
-buy more than a tie, so the auto candidate must beat the 16-bit incumbent by at
-least 64 bytes or 0.1%. Dickens' two-byte far win is therefore rejected; mr's
-12,030 bytes are kept. Webster keeps its 16-bit winner; the extra pass costs
-about 4-8% at q11 on four 1 MiB rows (webster 8.64 -> 9.36 s, x-ray 7.26 ->
-7.52 s, sao 7.73 -> 8.03 s, nci 5.49 -> 5.80 s) and about 25% at q8 on webster
-(0.68 -> 0.85 s). A single-proposal pass with a 32-node chain left 207,466
-bytes, so the literal-only proposal and its 16-node chain are retained.
+window must buy more than a tie, so the auto candidate must beat the 16-bit
+incumbent by at least 64 bytes or 0.1%. Dickens' two-byte far win is therefore
+rejected; mr's 12,030 bytes are kept. Webster keeps its 16-bit winner; the extra
+pass costs about 4-8% at q11 on four 1 MiB rows (webster 8.64 -> 9.36 s, x-ray
+7.26 -> 7.52 s, sao 7.73 -> 8.03 s, nci 5.49 -> 5.80 s) and about 25% at q8 on
+webster (0.68 -> 0.85 s). A single-proposal pass with a 32-node chain left
+207,466 bytes, so the literal-only proposal and its 16-node chain are retained.
 Two and eight MiB webster keep their q8 wires at 1.36 s and 3.05 -> 3.11 s
-respectively, but an eight MiB incompressible input pays 1.64 -> 2.79 s
-(+70%) because the 16-node probe scans every literal position before stopping;
-that worst case is the next performance target (a deeper far index or sampled
-search positions). The chunked/incremental APIs retain their explicit-window
-behavior. The candidate's predecessor ring is transient, allocator-owned and
-charged to any whole-operation memory lease (at most about 4 MiB at the
-22-bit cap).
+respectively. The eight MiB incompressible worst case pays 1.64 -> 1.85 s
+(+13%) after sampling; the first full-scan policy cost 2.79 s (+70%).
+
+The sampled probe keeps every offset below the predecessor-ring stride inside
+each 32-position window. Above 1 MiB the ring indexes every second position, so
+a probe that only kept offset zero would never see a far match whose distance
+flips the source alignment; the odd-distance row above was stored outright
+before this correction. Each probe match leaves at most a few dozen leading
+literal bytes, and the deep proposals recover them after a material win.
+Chunked/incremental APIs retain their explicit-window behavior. The candidate's
+predecessor ring is transient, allocator-owned and charged to any
+whole-operation memory lease (about 8 MiB at the 22-bit cap).
 
 `tools/br/planned_encode_bench.zig` now exposes `--window-bits`, so default and
 explicit-window paths can be compared directly. `long_distance` also exposes
-`windowBitsForInput`, `windowBitsForDistance`, `farthestLz77Distance` and a
-caller-selected chain budget for this candidate. A default q6 encode of a 128
-KiB repeated-random fixture asserts a wider wire and full round-trip, while an
-explicit 16-bit request keeps the narrow wire.
+`windowBitsForInput`, `windowBitsForDistance`, `farthestLz77Distance` and an
+`AugmentOptions` probe/chain budget for this candidate. A default q6 encode of a
+128 KiB repeated-random fixture asserts a wider wire and full round-trip, while
+an explicit 16-bit request keeps the narrow wire; a 2 MiB odd-distance fixture
+asserts that sampled probes still cover both ring alignments.

@@ -5236,18 +5236,22 @@ fn considerDefaultWindowFarCandidate(
     max_backward_distance: usize,
     long_window_bits: u5,
     chain: usize,
+    probe_stride: usize,
     large_window: bool,
     auto_window: bool,
     wire_options: LazyWireOptions,
     best: *[]u8,
 ) Error!bool {
-    const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormatAndChain(
+    const long_commands = try long_distance.augmentAllocWithOptions(
         allocator,
         input,
         proposal,
-        max_backward_distance,
-        encoder_window_format.format(large_window),
-        chain,
+        .{
+            .max_backward_distance = max_backward_distance,
+            .format = encoder_window_format.format(large_window),
+            .chain_limit = chain,
+            .probe_stride = probe_stride,
+        },
     ) orelse return false;
     defer freeQualityRecorded(trace_enabled, trace, allocator, long_commands);
     var candidate_options = wire_options;
@@ -5416,6 +5420,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 max_backward_distance,
                 long_window_bits,
                 16,
+                32,
                 options.large_window,
                 true,
                 wire_options,
@@ -5431,6 +5436,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                     max_backward_distance,
                     long_window_bits,
                     64,
+                    1,
                     options.large_window,
                     true,
                     wire_options,
@@ -5446,6 +5452,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                         max_backward_distance,
                         long_window_bits,
                         256,
+                        1,
                         options.large_window,
                         true,
                         wire_options,
@@ -5484,6 +5491,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                     max_backward_distance,
                     long_window_bits,
                     long_chain,
+                    1,
                     options.large_window,
                     auto_long_window,
                     wire_options,

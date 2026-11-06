@@ -15,10 +15,11 @@ adds bounded far-match candidates to default q6-q11 one-shot streams up to the
 16 MiB meta-block limit, advertising only the window each winning plan uses
 (17-22 bits). A 400 KiB far-copy fixture falls 409,605 -> 204,822 bytes (1.0000
 versus libbrotli 1.0.9); 2 MiB reaches 1,048,599 versus 1,048,602, 4 MiB is
-2,122,387 versus 2,097,182 and 6 MiB is 3,183,567 versus 3,145,758. Text rows
-keep their 16-bit wires at near-zero extra latency, while an 8 MiB
-incompressible input pays 1.64 -> 2.79 s; that worst case is the next
-performance target. Chunked/incremental inputs still require explicit windows.
+2,122,387 versus 2,097,182 and 6 MiB is 3,183,567 versus 3,145,758. A 6 MiB
+odd-distance copy that was stored before the ring-residue correction now reaches
+3,183,574. Text rows keep their 16-bit wires at near-zero extra latency, and the
+8 MiB incompressible worst case is down from +70% to +13% through sampled
+probes. Chunked/incremental inputs still require explicit windows.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated

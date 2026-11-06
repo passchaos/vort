@@ -46,7 +46,7 @@ pub fn farthestLz77Distance(commands: []const command_plan.Command) usize {
 /// LZ77 planner. Existing copies are preserved verbatim; rebuilding absolute
 /// insert offsets keeps the command stream independently verifiable.
 pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?[]command_plan.Command {
-    return augmentAllocWithStride(1, allocator, "", input, commands, max_distance, default_chain_limit);
+    return augmentAllocWithStride(1, allocator, "", input, commands, max_distance, default_chain_limit, 1);
 }
 
 /// Extend the shared 16-bit command plan with matches up to
@@ -73,6 +73,38 @@ pub fn augmentAllocWithMaxDistanceForFormat(allocator: std.mem.Allocator, input:
 /// stays cheap.
 pub fn augmentAllocWithMaxDistanceForFormatAndChain(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize, format: encoder_distance.Format, chain_limit: usize) !?[]command_plan.Command {
     return augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(allocator, "", input, commands, max_backward_distance, format, chain_limit);
+}
+
+pub const AugmentOptions = struct {
+    max_backward_distance: usize,
+    format: encoder_distance.Format = .standard,
+    chain_limit: usize = default_chain_limit,
+    /// Probe match starts only at positions whose offset within each
+    /// `probe_stride` window is below the active predecessor-ring stride. The
+    /// ring indexes every `stride`-th position, so covering all of those
+    /// residues keeps every ring alignment reachable; a complete far copy only
+    /// loses its leading unaligned bytes. Large literal-heavy blocks use this
+    /// to bound the probe cost of an unprofitable far pass.
+    probe_stride: usize = 1,
+};
+
+/// Block-local far-match augmentation with explicit work controls.
+pub fn augmentAllocWithOptions(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    options: AugmentOptions,
+) !?[]command_plan.Command {
+    return augmentAllocWithHistoryAndMaxDistanceForFormatAndChainProbe(
+        allocator,
+        "",
+        input,
+        commands,
+        options.max_backward_distance,
+        options.format,
+        options.chain_limit,
+        options.probe_stride,
+    );
 }
 
 /// Extend a block-local command plan with matches into retained bytes from the
@@ -121,7 +153,31 @@ pub fn augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(
     format: encoder_distance.Format,
     chain_limit: usize,
 ) !?[]command_plan.Command {
+    return augmentAllocWithHistoryAndMaxDistanceForFormatAndChainProbe(
+        allocator,
+        history,
+        input,
+        commands,
+        max_backward_distance,
+        format,
+        chain_limit,
+        1,
+    );
+}
+
+fn augmentAllocWithHistoryAndMaxDistanceForFormatAndChainProbe(
+    allocator: std.mem.Allocator,
+    history: []const u8,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    max_backward_distance: usize,
+    format: encoder_distance.Format,
+    chain_limit: usize,
+    probe_stride: usize,
+) !?[]command_plan.Command {
     if (chain_limit == 0 or chain_limit > default_chain_limit)
+        return error.InvalidBlockPlan;
+    if (probe_stride == 0 or !std.math.isPowerOfTwo(probe_stride))
         return error.InvalidBlockPlan;
     const limit = if (format == .standard) max_configurable_distance else encoder_distance.safe_max_distance;
     if (max_backward_distance < min_distance or max_backward_distance > limit)
@@ -141,14 +197,14 @@ pub fn augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(
         combined_len - min_match,
     );
     if (reachable_max_distance <= max_dense_distance)
-        return augmentAllocWithStride(1, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
+        return augmentAllocWithStride(1, allocator, active_history, input, commands, reachable_max_distance, chain_limit, probe_stride);
     if (reachable_max_distance <= (@as(usize, 1) << 21) - 16)
-        return augmentAllocWithStride(2, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
+        return augmentAllocWithStride(2, allocator, active_history, input, commands, reachable_max_distance, chain_limit, probe_stride);
     if (reachable_max_distance <= (@as(usize, 1) << 22) - 16)
-        return augmentAllocWithStride(4, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
+        return augmentAllocWithStride(4, allocator, active_history, input, commands, reachable_max_distance, chain_limit, probe_stride);
     if (reachable_max_distance <= (@as(usize, 1) << 23) - 16)
-        return augmentAllocWithStride(8, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
-    return augmentAllocWithStride(16, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
+        return augmentAllocWithStride(8, allocator, active_history, input, commands, reachable_max_distance, chain_limit, probe_stride);
+    return augmentAllocWithStride(16, allocator, active_history, input, commands, reachable_max_distance, chain_limit, probe_stride);
 }
 
 /// Non-HQ Large Window history augmentation. All retained bytes inside the
@@ -174,14 +230,14 @@ pub fn augmentLargeWindowHistoryAlloc(
     if (input.len < 3 or combined_len - 3 < min_distance or commands.len == 0) return null;
     const reachable = @min(max_backward_distance, combined_len - 3);
     if (reachable <= max_dense_distance)
-        return augmentWithStridePolicy(1, true, allocator, active_history, input, commands, reachable, default_chain_limit);
+        return augmentWithStridePolicy(1, true, allocator, active_history, input, commands, reachable, default_chain_limit, 1);
     if (reachable <= (@as(usize, 1) << 21) - 16)
-        return augmentWithStridePolicy(2, true, allocator, active_history, input, commands, reachable, default_chain_limit);
+        return augmentWithStridePolicy(2, true, allocator, active_history, input, commands, reachable, default_chain_limit, 1);
     if (reachable <= (@as(usize, 1) << 22) - 16)
-        return augmentWithStridePolicy(4, true, allocator, active_history, input, commands, reachable, default_chain_limit);
+        return augmentWithStridePolicy(4, true, allocator, active_history, input, commands, reachable, default_chain_limit, 1);
     if (reachable <= (@as(usize, 1) << 23) - 16)
-        return augmentWithStridePolicy(8, true, allocator, active_history, input, commands, reachable, default_chain_limit);
-    return augmentWithStridePolicy(16, true, allocator, active_history, input, commands, reachable, default_chain_limit);
+        return augmentWithStridePolicy(8, true, allocator, active_history, input, commands, reachable, default_chain_limit, 1);
+    return augmentWithStridePolicy(16, true, allocator, active_history, input, commands, reachable, default_chain_limit, 1);
 }
 
 fn validateLargeWindowCommands(history_len: usize, input_len: usize, commands: []const command_plan.Command, max_backward_distance: usize) !void {
@@ -210,8 +266,9 @@ fn augmentAllocWithStride(
     commands: []const command_plan.Command,
     max_backward_distance: usize,
     chain_limit: usize,
+    probe_stride: usize,
 ) !?[]command_plan.Command {
-    return augmentWithStridePolicy(stride, false, allocator, history, input, commands, max_backward_distance, chain_limit);
+    return augmentWithStridePolicy(stride, false, allocator, history, input, commands, max_backward_distance, chain_limit, probe_stride);
 }
 
 fn augmentWithStridePolicy(
@@ -223,6 +280,7 @@ fn augmentWithStridePolicy(
     commands: []const command_plan.Command,
     max_backward_distance: usize,
     chain_limit: usize,
+    probe_stride: usize,
 ) !?[]command_plan.Command {
     const minimum_match = if (large_history) 3 else min_match;
     const combined_len = std.math.add(usize, history.len, input.len) catch
@@ -262,19 +320,29 @@ fn augmentWithStridePolicy(
                 while (indexed_through <= absolute_position - min_distance) : (indexed_through += stride)
                     insertFor(stride, large_history, history, input, indexed_through, head, prev, prev_mask);
             }
-            const match = findFor(
-                stride,
-                large_history,
-                history,
-                input,
-                absolute_position,
-                literal_end - position,
-                head,
-                prev,
-                prev_mask,
-                max_backward_distance,
-                chain_limit,
-            );
+            // Sampled probes keep the scan bounded on large literal-heavy
+            // blocks. The ring indexes only positions aligned to `stride`, so
+            // the probe keeps every residue below `stride` inside each
+            // `probe_stride` window; otherwise a match whose distance changes
+            // the source alignment could never be found. A complete far copy
+            // only loses its leading unaligned bytes.
+            const match = if (probe_stride == 1 or
+                (position & (probe_stride - 1)) < stride)
+                findFor(
+                    stride,
+                    large_history,
+                    history,
+                    input,
+                    absolute_position,
+                    literal_end - position,
+                    head,
+                    prev,
+                    prev_mask,
+                    max_backward_distance,
+                    chain_limit,
+                )
+            else
+                Match{};
             if (match.length >= minimum_match) {
                 if (large_history)
                     try output.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len, .copy_len = match.length, .distance = match.distance, .has_copy = true })
@@ -764,4 +832,48 @@ test "default-window far-copy window sizing helpers" {
         .{ .insert_start = 12, .insert_len = 0, .copy_len = 8, .distance = 2_000_000, .has_copy = true, .source = .compound },
     };
     try std.testing.expectEqual(@as(usize, 70_000), farthestLz77Distance(&commands));
+}
+
+test "sampled far probes keep odd ring residues reachable" {
+    // The 2 MiB band uses a stride-2 predecessor ring, so only even positions
+    // are indexed. A copy whose source starts at an odd position is reachable
+    // only when the probe keeps both residues inside each sampled window.
+    const block_len = 1024 * 1024 + 1;
+    const input = try std.testing.allocator.alloc(u8, 1 + 2 * block_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x2468_ace1;
+    for (input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[1 .. 1 + block_len], input[1 + block_len ..][0..block_len]);
+    const original = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const augmented = try augmentAllocWithOptions(
+        std.testing.allocator,
+        input,
+        &original,
+        .{
+            .max_backward_distance = (@as(usize, 1) << 21) - 16,
+            .chain_limit = 64,
+            .probe_stride = 32,
+        },
+    ) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(augmented);
+    var copied: usize = 0;
+    for (augmented) |command| {
+        if (command.has_copy and command.source == .lz77 and command.distance == block_len)
+            copied += command.copy_len;
+    }
+    // The sampled probe only starts a copy on its residue grid, so it leaves
+    // at most a few dozen leading literal bytes per 258-byte match. The
+    // complete-wire deep proposals recover the rest when the probe reports a
+    // material win.
+    try std.testing.expect(copied * 5 >= block_len * 4);
+
+    try std.testing.expectError(error.InvalidBlockPlan, augmentAllocWithOptions(
+        std.testing.allocator,
+        input,
+        &original,
+        .{ .max_backward_distance = (@as(usize, 1) << 21) - 16, .probe_stride = 3 },
+    ));
 }
