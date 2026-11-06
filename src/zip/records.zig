@@ -1,4 +1,6 @@
 const std = @import("std");
+const core = @import("../core.zig");
+const Count = core.StreamCount;
 const checksum = @import("../checksum.zig");
 const types = @import("types.zig");
 const wire = @import("wire.zig");
@@ -395,11 +397,20 @@ fn validateLegacyU32(value: u32, actual: u64) Error!void {
 
 pub const CentralEntryValues = struct {
     compressed_size: usize,
-    uncompressed_size: usize,
+    uncompressed_size: Count,
     local_header_offset: usize,
     zip64: bool,
 };
 
+/// Logical ZIP64 values for readers that never retain the complete archive.
+pub const LogicalCentralEntryValues = struct {
+    compressed_size: Count,
+    uncompressed_size: Count,
+    local_header_offset: Count,
+    zip64: bool,
+};
+
+/// Physical compressed spans and offsets must fit a borrowed complete archive.
 pub fn resolveCentralEntry(
     extra: []const u8,
     compressed_size: u32,
@@ -407,6 +418,22 @@ pub fn resolveCentralEntry(
     local_header_offset: u32,
     disk_start: u16,
 ) Error!CentralEntryValues {
+    const logical = try resolveCentralEntryLogical(extra, compressed_size, uncompressed_size, local_header_offset, disk_start);
+    return .{
+        .compressed_size = try u64ToUsize(logical.compressed_size),
+        .uncompressed_size = logical.uncompressed_size,
+        .local_header_offset = try u64ToUsize(logical.local_header_offset),
+        .zip64 = logical.zip64,
+    };
+}
+
+pub fn resolveCentralEntryLogical(
+    extra: []const u8,
+    compressed_size: u32,
+    uncompressed_size: u32,
+    local_header_offset: u32,
+    disk_start: u16,
+) Error!LogicalCentralEntryValues {
     const needs_uncompressed = uncompressed_size == std.math.maxInt(u32);
     const needs_compressed = compressed_size == std.math.maxInt(u32);
     const needs_offset = local_header_offset == std.math.maxInt(u32);
@@ -442,19 +469,32 @@ pub fn resolveCentralEntry(
         disk_start;
     if (resolved_disk != 0) return error.UnsupportedZipFeature;
     return .{
-        .compressed_size = try u64ToUsize(resolved_compressed),
-        .uncompressed_size = try u64ToUsize(resolved_uncompressed),
-        .local_header_offset = try u64ToUsize(resolved_offset),
+        .compressed_size = resolved_compressed,
+        .uncompressed_size = resolved_uncompressed,
+        .local_header_offset = resolved_offset,
         .zip64 = true,
     };
 }
 
 pub const LocalSizes = struct {
     compressed_size: usize,
-    uncompressed_size: usize,
+    uncompressed_size: Count,
+};
+
+pub const LogicalLocalSizes = struct {
+    compressed_size: Count,
+    uncompressed_size: Count,
 };
 
 pub fn resolveLocalSizes(extra: []const u8, compressed_size: u32, uncompressed_size: u32) Error!LocalSizes {
+    const logical = try resolveLocalSizesLogical(extra, compressed_size, uncompressed_size);
+    return .{
+        .compressed_size = try u64ToUsize(logical.compressed_size),
+        .uncompressed_size = logical.uncompressed_size,
+    };
+}
+
+pub fn resolveLocalSizesLogical(extra: []const u8, compressed_size: u32, uncompressed_size: u32) Error!LogicalLocalSizes {
     const needs_uncompressed = uncompressed_size == std.math.maxInt(u32);
     const needs_compressed = compressed_size == std.math.maxInt(u32);
     if (!needs_uncompressed and !needs_compressed) return .{
@@ -473,8 +513,8 @@ pub fn resolveLocalSizes(extra: []const u8, compressed_size: u32, uncompressed_s
     else
         compressed_size;
     return .{
-        .compressed_size = try u64ToUsize(resolved_compressed),
-        .uncompressed_size = try u64ToUsize(resolved_uncompressed),
+        .compressed_size = resolved_compressed,
+        .uncompressed_size = resolved_uncompressed,
     };
 }
 

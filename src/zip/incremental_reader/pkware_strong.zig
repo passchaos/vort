@@ -1,6 +1,9 @@
 //! Fragmented PKWARE Strong decryption-header and CBC state for ZIP reading.
 
 const std = @import("std");
+const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const descriptor = @import("descriptor.zig");
 const types = @import("../types.zig");
 const strong_wire = @import("../pkware_strong.zig");
@@ -17,11 +20,11 @@ pub const State = struct {
     header_stage: HeaderStage = .iv_size,
     decryptor: ?strong_stream.Decryptor = null,
     info: ?types.PkwareStrongEncryptionInfo = null,
-    outer_compressed_size: ?usize,
+    outer_compressed_size: ?Count,
     descriptor_layout: ?descriptor.Layout,
-    ciphertext_remaining: ?usize = null,
-    ciphertext_consumed: usize = 0,
-    decrypted_size: usize = 0,
+    ciphertext_remaining: ?Count = null,
+    ciphertext_consumed: Count = 0,
+    decrypted_size: Count = 0,
     plaintext: [256]u8 = undefined,
     plaintext_pos: usize = 0,
     plaintext_len: usize = 0,
@@ -46,12 +49,12 @@ pub const State = struct {
 
     pub const CodecValidation = struct {
         crc32: u32,
-        compressed_size: usize,
-        uncompressed_size: usize,
+        compressed_size: Count,
+        uncompressed_size: Count,
     };
 
     pub fn init(
-        outer_compressed_size: ?usize,
+        outer_compressed_size: ?Count,
         descriptor_layout: ?descriptor.Layout,
     ) Self {
         return .{
@@ -76,7 +79,7 @@ pub const State = struct {
         max_header_size: usize,
         password: []const u8,
         crc32: ?u32,
-        uncompressed_size: ?usize,
+        uncompressed_size: ?Count,
     ) Error!usize {
         if (self.header_stage == .ready) return 0;
         var input_read: usize = 0;
@@ -150,11 +153,11 @@ pub const State = struct {
         return self.header.items.len;
     }
 
-    pub fn outerSize(self: *const Self) Error!usize {
-        return checkedAdd(self.headerLen(), self.ciphertext_consumed);
+    pub fn outerSize(self: *const Self) Error!Count {
+        return count.addLocal(self.ciphertext_consumed, self.headerLen());
     }
 
-    pub fn remainingKnownCiphertext(self: *const Self) Error!usize {
+    pub fn remainingKnownCiphertext(self: *const Self) Error!Count {
         return self.ciphertext_remaining orelse error.InvalidZipArchive;
     }
 

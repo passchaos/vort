@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const core = @import("../core.zig");
+const Count = core.StreamCount;
 const incremental_reader = @import("incremental_reader.zig");
 const split = @import("split.zig");
 
@@ -33,14 +34,14 @@ const InputStream = union(enum) {
         self.* = undefined;
     }
 
-    fn len(self: *const InputStream) usize {
+    fn len(self: *const InputStream) Count {
         return switch (self.*) {
             .slices => |*stream| stream.len(),
             .source => |*stream| stream.len(),
         };
     }
 
-    fn firstRecordOffset(self: *const InputStream) usize {
+    fn firstRecordOffset(self: *const InputStream) Count {
         return switch (self.*) {
             .slices => |*stream| stream.firstRecordOffset(),
             .source => |*stream| stream.firstRecordOffset(),
@@ -54,7 +55,7 @@ const InputStream = union(enum) {
         };
     }
 
-    fn readAt(self: *const InputStream, offset: usize, output: []u8) Error!usize {
+    fn readAt(self: *const InputStream, offset: Count, output: []u8) Error!usize {
         return switch (self.*) {
             .slices => |*stream| stream.readAt(offset, output),
             .source => |*stream| stream.readAt(offset, output),
@@ -72,7 +73,8 @@ pub const Reader = struct {
     input: []u8,
     input_pos: usize = 0,
     input_len: usize = 0,
-    source_offset: usize,
+    source_offset: Count,
+    last_step_progress: core.Progress = .{},
 
     const Self = @This();
 
@@ -159,10 +161,12 @@ pub const Reader = struct {
     }
 
     pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
-        return self.inner.diagnostics();
+        var value = self.inner.diagnostics();
+        value.last_step_progress = self.last_step_progress;
+        return value;
     }
 
-    pub fn normalizedLength(self: *const Self) usize {
+    pub fn normalizedLength(self: *const Self) Count {
         return self.stream.len();
     }
 
@@ -179,25 +183,31 @@ pub const Reader = struct {
     pub fn step(self: *Self, output: []u8) Error!StepResult {
         var input_read: usize = 0;
         var output_written: usize = 0;
+        defer self.last_step_progress = .{ .input_read = input_read, .output_written = output_written };
         while (true) {
+            const input_room = std.math.maxInt(usize) - input_read;
+            if (input_room == 0) return makeResult(input_read, output_written, .need_input);
             if (self.input_pos == self.input_len) {
                 self.input_pos = 0;
                 self.input_len = 0;
                 if (self.source_offset != self.stream.len()) {
                     self.input_len = try self.stream.readAt(self.source_offset, self.input);
                     if (self.input_len == 0) return error.InvalidZipArchive;
-                    self.source_offset = std.math.add(
-                        usize,
-                        self.source_offset,
-                        self.input_len,
-                    ) catch return error.IntegerOverflow;
+                    self.source_offset = try core.stream_count.addLocal(self.source_offset, self.input_len);
                 }
             }
 
-            const result = try self.inner.step(
-                self.input[self.input_pos..self.input_len],
+            const available = @min(input_room, self.input_len - self.input_pos);
+            const result = self.inner.step(
+                self.input[self.input_pos..][0..available],
                 output[output_written..],
-            );
+            ) catch |err| {
+                const partial = self.inner.last_step_progress;
+                self.input_pos += partial.input_read;
+                input_read += partial.input_read;
+                output_written += partial.output_written;
+                return err;
+            };
             self.input_pos += result.progress.input_read;
             input_read = std.math.add(
                 usize,
@@ -224,8 +234,10 @@ pub const Reader = struct {
                     .need_output,
                 ),
                 .need_input => {
-                    if (self.input_pos != self.input_len)
+                    if (self.input_pos != self.input_len) {
+                        if (input_read == std.math.maxInt(usize)) return makeResult(input_read, output_written, .need_input);
                         return error.InvalidZipArchive;
+                    }
                     if (self.source_offset == self.stream.len()) {
                         try self.inner.finish();
                         return error.InvalidZipArchive;

@@ -1,6 +1,9 @@
 //! Per-entry encryption states for the incremental ZIP reader.
 
 const std = @import("std");
+const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const descriptor = @import("descriptor.zig");
 const reader_pkware_strong = @import("pkware_strong.zig");
 const types = @import("../types.zig");
@@ -52,7 +55,7 @@ pub const State = union(enum) {
     }
 
     pub fn initPkwareStrong(
-        outer_compressed_size: ?usize,
+        outer_compressed_size: ?Count,
         descriptor_layout: ?descriptor.Layout,
     ) State {
         return .{ .pkware_strong = reader_pkware_strong.State.init(

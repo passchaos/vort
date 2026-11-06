@@ -1,6 +1,8 @@
 const std = @import("std");
 const checksum = @import("../../checksum.zig");
 const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const wire = @import("../wire.zig");
 
 pub const Layout = enum {
@@ -50,7 +52,7 @@ pub const StoredScanner = struct {
     const max_trailer_len: usize = 10;
 
     layout: Layout,
-    max_output_len: usize,
+    max_output_len: Count,
     compressed_size_prefix: usize,
     authentication_code_len: usize,
     verify_crc32: bool,
@@ -58,7 +60,8 @@ pub const StoredScanner = struct {
     payload_buffer: [wire.zip64_data_descriptor_len + max_trailer_len]u8 = undefined,
     buffer_len: usize = 0,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
-    payload_size: usize = 0,
+    payload_size: Count = 0,
+    last_step_progress: core.Progress = .{},
     result_descriptor: ?Descriptor = null,
     next_prefix: [4]u8 = undefined,
     next_prefix_len: usize = 0,
@@ -66,13 +69,13 @@ pub const StoredScanner = struct {
 
     const Self = @This();
 
-    pub fn init(layout: Layout, max_output_len: usize) Self {
+    pub fn init(layout: Layout, max_output_len: Count) Self {
         return initWithCompressedSizePrefix(layout, max_output_len, 0);
     }
 
     pub fn initWithCompressedSizePrefix(
         layout: Layout,
-        max_output_len: usize,
+        max_output_len: Count,
         compressed_size_prefix: usize,
     ) Self {
         return initWithEncryption(
@@ -86,7 +89,7 @@ pub const StoredScanner = struct {
 
     pub fn initWithEncryption(
         layout: Layout,
-        max_output_len: usize,
+        max_output_len: Count,
         compressed_size_prefix: usize,
         authentication_code_len: usize,
         verify_crc32: bool,
@@ -101,7 +104,7 @@ pub const StoredScanner = struct {
         };
     }
 
-    pub fn reset(self: *Self, layout: Layout, max_output_len: usize) void {
+    pub fn reset(self: *Self, layout: Layout, max_output_len: Count) void {
         self.deinit();
         self.* = init(layout, max_output_len);
     }
@@ -122,7 +125,7 @@ pub const StoredScanner = struct {
         return self.result_authentication[0..self.authentication_code_len];
     }
 
-    pub fn outputWritten(self: *const Self) usize {
+    pub fn outputWritten(self: *const Self) Count {
         return self.payload_size;
     }
 
@@ -130,7 +133,7 @@ pub const StoredScanner = struct {
         if (self.result_descriptor == null) return error.TruncatedFrame;
     }
 
-    pub fn step(self: *Self, input: []const u8, output: []u8) error{OutputLimitExceeded}!StepResult {
+    pub fn step(self: *Self, input: []const u8, output: []u8) error{ OutputLimitExceeded, IntegerOverflow }!StepResult {
         return self.stepPaired(input, input, output);
     }
 
@@ -141,11 +144,12 @@ pub const StoredScanner = struct {
         raw_input: []const u8,
         payload_input: []const u8,
         output: []u8,
-    ) error{OutputLimitExceeded}!StepResult {
+    ) error{ OutputLimitExceeded, IntegerOverflow }!StepResult {
         std.debug.assert(raw_input.len == payload_input.len);
         if (self.result_descriptor != null) return .{ .status = .done };
         var input_read: usize = 0;
         var output_written: usize = 0;
+        defer self.last_step_progress = .{ .input_read = input_read, .output_written = output_written };
         const capacity = self.authentication_code_len + self.layout.signedLen();
 
         while (true) {
@@ -156,11 +160,12 @@ pub const StoredScanner = struct {
                     return result(input_read, output_written, .need_output);
                 if (self.payload_size == self.max_output_len)
                     return error.OutputLimitExceeded;
+                const next_size = try count.addLocal(self.payload_size, 1);
                 const byte = self.payload_buffer[0];
                 output[output_written] = byte;
                 output_written += 1;
                 self.crc.update(self.payload_buffer[0..1]);
-                self.payload_size += 1;
+                self.payload_size = next_size;
                 std.mem.copyForwards(u8, self.buffer[0 .. capacity - 1], self.buffer[1..capacity]);
                 std.mem.copyForwards(
                     u8,
@@ -226,11 +231,7 @@ pub const StoredScanner = struct {
     }
 
     fn matches(self: *const Self, candidate: Descriptor) bool {
-        const compressed_size = std.math.add(
-            usize,
-            self.payload_size,
-            self.compressed_size_prefix,
-        ) catch return false;
+        const compressed_size = count.addLocal(self.payload_size, self.compressed_size_prefix) catch return false;
         return (!self.verify_crc32 or candidate.crc32 == self.crc.digest()) and
             candidate.compressed_size == compressed_size and
             candidate.uncompressed_size == self.payload_size;
@@ -268,8 +269,8 @@ pub const Parser = struct {
     layout: Layout = .zip32,
     expected_crc32: u32 = 0,
     verify_crc32: bool = true,
-    expected_compressed_size: usize = 0,
-    expected_uncompressed_size: usize = 0,
+    expected_compressed_size: Count = 0,
+    expected_uncompressed_size: Count = 0,
 
     const Self = @This();
 
@@ -281,8 +282,8 @@ pub const Parser = struct {
         self: *Self,
         layout: Layout,
         crc32: u32,
-        compressed_size: usize,
-        uncompressed_size: usize,
+        compressed_size: Count,
+        uncompressed_size: Count,
         buffered_suffix: []const u8,
         verify_crc32: bool,
     ) error{InvalidZipArchive}!void {

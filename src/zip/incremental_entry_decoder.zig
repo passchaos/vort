@@ -1,6 +1,9 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
+const progress_counts = @import("incremental_reader/progress_counts.zig");
 const deflate = @import("../deflate.zig");
 const reader_api = @import("incremental_reader/api.zig");
 const reader_codecs = @import("incremental_reader/codecs.zig");
@@ -23,7 +26,7 @@ pub const Error = deflate.Error || reader_codecs.Error || reader_encryption.Erro
 };
 
 pub const Options = struct {
-    max_output_len: usize = std.math.maxInt(usize),
+    max_output_len: Count = std.math.maxInt(Count),
     verify_crc32: bool = true,
     password: ?[]const u8 = null,
     codec_limits: reader_api.Options = .{},
@@ -50,28 +53,29 @@ pub const Decoder = struct {
     raw: ?deflate.RawDeflateIncrementalFixedLiteralDecoder,
     phase: Phase = .data,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
-    total_input: usize = 0,
-    total_output: usize = 0,
+    total_input: Count = 0,
+    total_output: Count = 0,
     last_error_name: []const u8 = "",
+    last_step_progress: core.Progress = .{},
 
     pub const required_history_len: usize = 32 * 1024;
 
     const Self = @This();
-    const EntryMetadata = struct {
+    pub const EntryMetadata = struct {
         method: CompressionMethod,
         crc32: u32,
-        compressed_size: usize,
-        uncompressed_size: usize,
+        compressed_size: Count,
+        uncompressed_size: Count,
         pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo,
     };
 
     pub const Snapshot = struct {
         phase: Phase,
         method: CompressionMethod,
-        input_read: usize,
-        output_written: usize,
-        expected_input_len: usize,
-        expected_output_len: usize,
+        input_read: Count,
+        output_written: Count,
+        expected_input_len: Count,
+        expected_output_len: Count,
         current_crc32: u32,
         expected_crc32: u32,
         last_error_name: []const u8,
@@ -83,6 +87,18 @@ pub const Decoder = struct {
 
     pub fn initWithOptions(entry: Entry, history: []u8, options: Options) Error!Self {
         try validateEntry(entry, history, options);
+        return initWithMetadata(metadata(entry), history, options);
+    }
+
+    /// Composition entry point for sequential readers whose logical member
+    /// sizes need not fit a complete addressable archive slice.
+    pub fn initWithMetadata(entry: EntryMetadata, history: []u8, options: Options) Error!Self {
+        if (entry.uncompressed_size > options.max_output_len) return error.OutputLimitExceeded;
+        switch (entry.method) {
+            .stored => if (entry.compressed_size != entry.uncompressed_size) return error.InvalidZipArchive,
+            .deflate => if (history.len < required_history_len) return error.OutputTooSmall,
+            else => return error.UnsupportedZipCompressionMethod,
+        }
         const raw = if (entry.method == .deflate)
             try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{
                 .max_output_len = options.max_output_len,
@@ -92,7 +108,7 @@ pub const Decoder = struct {
         else
             null;
         return .{
-            .entry = metadata(entry),
+            .entry = entry,
             .options = options,
             .history = history,
             .raw = raw,
@@ -131,10 +147,11 @@ pub const Decoder = struct {
             .frame_input_read = self.total_input,
             .output_written = self.total_output,
             .expected_output_len = self.entry.uncompressed_size,
-            .payload_remaining = self.entry.compressed_size -| self.total_input,
+            .payload_remaining = count.bounded(self.entry.compressed_size -| self.total_input, std.math.maxInt(usize)),
             .last_error_name = self.last_error_name,
             .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.phase),
             .recoverability_hint_name = if (self.phase == .failed) "entry_corrupt" else "none",
+            .last_step_progress = self.last_step_progress,
         };
     }
 
@@ -144,11 +161,25 @@ pub const Decoder = struct {
             if (input.len != 0) return error.TrailingData;
             return .{ .status = .done };
         }
-        return self.stepData(input, output) catch |err| {
+        self.last_step_progress = .{};
+        const before = progress_counts.Before.init(self.total_input, self.total_output);
+        const supplied = progress_counts.inputWindow(self.total_input, input);
+        const destination = progress_counts.outputWindow(self.total_output, output);
+        const stepped = self.stepData(supplied, destination) catch |err| {
+            self.last_step_progress = try before.progress(self.total_input, self.total_output);
             self.phase = .failed;
             self.last_error_name = @errorName(err);
             return err;
         };
+        self.last_step_progress = stepped.progress;
+        if ((stepped.status == .need_input and supplied.len < input.len and stepped.progress.input_read == supplied.len) or
+            (stepped.status == .need_output and destination.len < output.len and stepped.progress.output_written == destination.len))
+        {
+            self.phase = .failed;
+            self.last_error_name = @errorName(error.IntegerOverflow);
+            return error.IntegerOverflow;
+        }
+        return stepped;
     }
 
     /// Signals that no more compressed payload bytes are available. A short
@@ -180,12 +211,14 @@ pub const Decoder = struct {
         if (output.len == 0) return .{ .status = .need_output };
 
         const remaining = self.entry.compressed_size - self.total_input;
-        const take = @min(remaining, @min(input.len, output.len));
+        const take = count.bounded(remaining, @min(input.len, output.len));
+        const next_input = try count.addLocal(self.total_input, take);
+        const next_output = try count.addLocal(self.total_output, take);
         const produced = output[0..take];
         @memcpy(produced, input[0..take]);
         self.crc.update(produced);
-        self.total_input += take;
-        self.total_output += take;
+        self.total_input = next_input;
+        self.total_output = next_output;
 
         if (self.total_input == self.entry.compressed_size) {
             try self.complete();
@@ -196,19 +229,18 @@ pub const Decoder = struct {
 
     fn stepDeflate(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
         const remaining = self.entry.compressed_size - self.total_input;
-        const offered = input[0..@min(input.len, remaining)];
-        const decoded = try self.raw.?.step(offered, output);
+        const offered = input[0..count.bounded(remaining, input.len)];
+        const destination = progress_counts.outputWindow(self.total_output, output);
+        const before = progress_counts.Before.init(self.raw.?.total_input, self.raw.?.total_output);
+        const decoded = self.raw.?.step(offered, destination) catch |err| {
+            try self.accountRaw(try before.progress(self.raw.?.total_input, self.raw.?.total_output), output);
+            return err;
+        };
+        try self.accountRaw(decoded.progress, output);
         const consumed = decoded.progress.input_read;
         const written = decoded.progress.output_written;
-        self.total_input = std.math.add(usize, self.total_input, consumed) catch
-            return error.IntegerOverflow;
-        self.total_output = std.math.add(usize, self.total_output, written) catch
-            return error.IntegerOverflow;
-        self.crc.update(output[0..written]);
-
         if (decoded.status == .done) {
-            if (self.total_input != self.entry.compressed_size)
-                return error.InvalidZipArchive;
+            if (self.total_input != self.entry.compressed_size) return error.InvalidZipArchive;
             try self.complete();
             return result(consumed, written, .done);
         }
@@ -217,6 +249,14 @@ pub const Decoder = struct {
             return error.InvalidZipArchive;
         }
         return result(consumed, written, decoded.status);
+    }
+
+    fn accountRaw(self: *Self, progress: core.Progress, output: []const u8) Error!void {
+        const next_input = try count.addLocal(self.total_input, progress.input_read);
+        const next_output = try count.addLocal(self.total_output, progress.output_written);
+        self.crc.update(output[0..progress.output_written]);
+        self.total_input = next_input;
+        self.total_output = next_output;
     }
 
     fn finishData(self: *Self) Error!void {
@@ -280,16 +320,17 @@ pub const OwnedDecoder = struct {
     allocator: std.mem.Allocator,
     history: []u8,
     entry: Decoder.EntryMetadata,
-    codec_expected_size: ?usize,
+    codec_expected_size: ?Count,
     options: Options,
     state: State,
     encryption: ?reader_encryption.State = null,
     phase: Phase = .data,
-    total_input: usize = 0,
-    codec_input: usize = 0,
-    total_output: usize = 0,
+    total_input: Count = 0,
+    codec_input: Count = 0,
+    total_output: Count = 0,
     codec_done: bool = false,
     last_error_name: []const u8 = "",
+    last_step_progress: core.Progress = .{},
 
     const Self = @This();
 
@@ -330,14 +371,20 @@ pub const OwnedDecoder = struct {
             };
         }
 
-        fn actualCompressedSize(self: *const State) Error!usize {
+        fn lastProgress(self: *const State) core.Progress {
+            return switch (self.*) {
+                inline else => |*state| state.last_step_progress,
+            };
+        }
+
+        fn actualCompressedSize(self: *const State) Error!Count {
             return switch (self.*) {
                 .simple => |*state| state.snapshot().input_read,
                 inline else => |*state| state.actualCompressedSize(),
             };
         }
 
-        fn outputSize(self: *const State) usize {
+        fn outputSize(self: *const State) Count {
             return switch (self.*) {
                 .simple => |*state| state.snapshot().output_written,
                 inline else => |*state| state.outputSize(),
@@ -351,7 +398,7 @@ pub const OwnedDecoder = struct {
             };
         }
 
-        fn setExpectedCompressedSize(self: *State, size: usize) void {
+        fn setExpectedCompressedSize(self: *State, size: Count) void {
             switch (self.*) {
                 .simple => {},
                 .deflate => {},
@@ -371,7 +418,7 @@ pub const OwnedDecoder = struct {
 
     const Prepared = struct {
         codec_entry: Entry,
-        codec_expected_size: ?usize,
+        codec_expected_size: ?Count,
         options: Options,
         encryption: ?reader_encryption.State = null,
     };
@@ -394,7 +441,7 @@ pub const OwnedDecoder = struct {
                 entry.uncompressed_size
             else
                 null;
-            codec_entry.compressed_size = expected_size orelse 0;
+            codec_entry.compressed_size = if (expected_size) |size| try count.toLocal(size) else 0;
             try validateOwnedMetadata(codec_entry, prepared_options);
             return .{
                 .codec_entry = codec_entry,
@@ -506,6 +553,7 @@ pub const OwnedDecoder = struct {
         self.total_output = 0;
         self.codec_done = false;
         self.last_error_name = "";
+        self.last_step_progress = .{};
     }
 
     pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -514,11 +562,25 @@ pub const OwnedDecoder = struct {
             if (input.len != 0) return error.TrailingData;
             return .{ .status = .done };
         }
-        return self.stepData(input, output) catch |err| {
+        self.last_step_progress = .{};
+        const before = progress_counts.Before.init(self.total_input, self.total_output);
+        const supplied = progress_counts.inputWindow(self.total_input, input);
+        const destination = progress_counts.outputWindow(self.total_output, output);
+        const stepped = self.stepData(supplied, destination) catch |err| {
+            self.last_step_progress = try before.progress(self.total_input, self.total_output);
             self.phase = .failed;
             self.last_error_name = @errorName(err);
             return err;
         };
+        self.last_step_progress = stepped.progress;
+        if ((stepped.status == .need_input and supplied.len < input.len and stepped.progress.input_read == supplied.len) or
+            (stepped.status == .need_output and destination.len < output.len and stepped.progress.output_written == destination.len))
+        {
+            self.phase = .failed;
+            self.last_error_name = @errorName(error.IntegerOverflow);
+            return error.IntegerOverflow;
+        }
+        return stepped;
     }
 
     pub fn finish(self: *Self) Error!void {
@@ -554,10 +616,11 @@ pub const OwnedDecoder = struct {
             .frame_input_read = self.total_input,
             .output_written = self.total_output,
             .expected_output_len = self.entry.uncompressed_size,
-            .payload_remaining = self.entry.compressed_size -| self.total_input,
+            .payload_remaining = count.bounded(self.entry.compressed_size -| self.total_input, std.math.maxInt(usize)),
             .last_error_name = self.last_error_name,
             .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.phase),
             .recoverability_hint_name = if (self.phase == .failed) "entry_corrupt" else "none",
+            .last_step_progress = self.last_step_progress,
         };
     }
 
@@ -568,9 +631,12 @@ pub const OwnedDecoder = struct {
                 .winzip_aes => |*state| self.stepWinZipAes(state, input, output),
                 .pkware_strong => |*state| self.stepPkwareStrong(state, input, output),
             };
-        const decoded = try self.stepCodec(input, output);
-        self.total_input = std.math.add(usize, self.total_input, decoded.progress.input_read) catch
-            return error.IntegerOverflow;
+        const before_input = self.codec_input;
+        const decoded = self.stepCodec(input, output) catch |err| {
+            try count.advance(&self.total_input, try count.toLocal(self.codec_input - before_input));
+            return err;
+        };
+        try count.advance(&self.total_input, decoded.progress.input_read);
         if (self.codec_done) {
             try self.complete();
             return .{ .progress = decoded.progress, .status = .done };
@@ -578,20 +644,34 @@ pub const OwnedDecoder = struct {
         return decoded;
     }
 
+    fn stepState(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        const destination = progress_counts.outputWindow(self.total_output, output);
+        const stepped = self.state.step(input, destination) catch |err| {
+            try self.accountState(self.state.lastProgress(), input.len, destination.len);
+            return err;
+        };
+        try self.accountState(stepped.progress, input.len, destination.len);
+        return stepped;
+    }
+
+    fn accountState(self: *Self, progress: core.Progress, input_len: usize, output_len: usize) Error!void {
+        if (progress.input_read > input_len or progress.output_written > output_len) return error.InvalidZipArchive;
+        const next_input = try count.addLocal(self.codec_input, progress.input_read);
+        const next_output = try count.addLocal(self.total_output, progress.output_written);
+        self.codec_input = next_input;
+        self.total_output = next_output;
+    }
+
     fn stepCodec(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
         const remaining = if (self.codec_expected_size) |expected|
             expected - self.codec_input
         else
             input.len;
-        const offered = input[0..@min(input.len, remaining)];
-        const decoded = try self.state.step(offered, output);
+        const offered = input[0..count.bounded(remaining, input.len)];
+        const decoded = try self.stepState(offered, output);
         if (decoded.progress.input_read > offered.len or
             decoded.progress.output_written > output.len)
             return error.InvalidZipArchive;
-        self.codec_input = std.math.add(usize, self.codec_input, decoded.progress.input_read) catch
-            return error.IntegerOverflow;
-        self.total_output = std.math.add(usize, self.total_output, decoded.progress.output_written) catch
-            return error.IntegerOverflow;
         if (decoded.status == .done) {
             self.codec_done = true;
             return .{ .progress = decoded.progress, .status = .done };
@@ -600,15 +680,10 @@ pub const OwnedDecoder = struct {
             self.codec_input == self.codec_expected_size.? and
             decoded.status == .need_input)
         {
-            const drained = try self.state.step(&.{}, output[decoded.progress.output_written..]);
+            const drained = try self.stepState(&.{}, output[decoded.progress.output_written..]);
             if (drained.progress.input_read != 0 or
                 drained.progress.output_written > output.len - decoded.progress.output_written)
                 return error.InvalidZipArchive;
-            self.total_output = std.math.add(
-                usize,
-                self.total_output,
-                drained.progress.output_written,
-            ) catch return error.IntegerOverflow;
             var progress = decoded.progress;
             progress.output_written += drained.progress.output_written;
             if (drained.status == .done) {
@@ -636,7 +711,7 @@ pub const OwnedDecoder = struct {
             encryption.header[encryption.header_len] = encryption.cipher.decryptByte(input[input_read]);
             encryption.header_len += 1;
             input_read += 1;
-            self.total_input = std.math.add(usize, self.total_input, 1) catch
+            self.total_input = count.addLocal(self.total_input, 1) catch
                 return error.IntegerOverflow;
         }
         if (encryption.header_len != traditional_encryption.header_len)
@@ -656,7 +731,7 @@ pub const OwnedDecoder = struct {
                 return result(input_read, output_written, .need_input);
             const take = @min(
                 @as(usize, 256),
-                @min(input.len - input_read, codec_expected_size - self.codec_input),
+                count.bounded(codec_expected_size - self.codec_input, input.len - input_read),
             );
             const raw = input[input_read..][0..take];
             var plain: [256]u8 = undefined;
@@ -664,17 +739,19 @@ pub const OwnedDecoder = struct {
             var trial = encryption.cipher;
             defer trial.deinit();
             trial.decrypt(raw, plain[0..take]);
-            const decoded = try self.stepCodec(plain[0..take], output[output_written..]);
+            const before_codec_input = self.codec_input;
+            const decoded_or_error = self.stepCodec(plain[0..take], output[output_written..]);
+            const accepted = try count.toLocal(self.codec_input - before_codec_input);
             var committed = encryption.cipher;
             defer committed.deinit();
             var discarded: [256]u8 = undefined;
             defer std.crypto.secureZero(u8, &discarded);
-            committed.decrypt(raw[0..decoded.progress.input_read], discarded[0..decoded.progress.input_read]);
+            committed.decrypt(raw[0..accepted], discarded[0..accepted]);
             encryption.cipher.deinit();
             encryption.cipher = committed;
-            input_read += decoded.progress.input_read;
-            self.total_input = std.math.add(usize, self.total_input, decoded.progress.input_read) catch
-                return error.IntegerOverflow;
+            input_read += accepted;
+            try count.advance(&self.total_input, accepted);
+            const decoded = try decoded_or_error;
             output_written += decoded.progress.output_written;
             if (decoded.status == .need_output)
                 return result(input_read, output_written, .need_output);
@@ -703,7 +780,7 @@ pub const OwnedDecoder = struct {
             encryption.header[encryption.header_len] = input[input_read];
             encryption.header_len += 1;
             input_read += 1;
-            self.total_input = std.math.add(usize, self.total_input, 1) catch
+            self.total_input = count.addLocal(self.total_input, 1) catch
                 return error.IntegerOverflow;
         }
         if (encryption.header_len != header_len)
@@ -733,7 +810,7 @@ pub const OwnedDecoder = struct {
                 return result(input_read, output_written, .need_input);
             const take = @min(
                 @as(usize, 256),
-                @min(input.len - input_read, codec_expected_size - self.codec_input),
+                count.bounded(codec_expected_size - self.codec_input, input.len - input_read),
             );
             const raw = input[input_read..][0..take];
             var plain: [256]u8 = undefined;
@@ -741,17 +818,19 @@ pub const OwnedDecoder = struct {
             var trial = encryption.cipher.?;
             defer trial.deinit();
             trial.decrypt(raw, plain[0..take]);
-            const decoded = try self.stepCodec(plain[0..take], output[output_written..]);
+            const before_codec_input = self.codec_input;
+            const decoded_or_error = self.stepCodec(plain[0..take], output[output_written..]);
+            const accepted = try count.toLocal(self.codec_input - before_codec_input);
             var committed = encryption.cipher.?;
             defer committed.deinit();
             var discarded: [256]u8 = undefined;
             defer std.crypto.secureZero(u8, &discarded);
-            committed.decrypt(raw[0..decoded.progress.input_read], discarded[0..decoded.progress.input_read]);
+            committed.decrypt(raw[0..accepted], discarded[0..accepted]);
             encryption.cipher.?.deinit();
             encryption.cipher = committed;
-            input_read += decoded.progress.input_read;
-            self.total_input = std.math.add(usize, self.total_input, decoded.progress.input_read) catch
-                return error.IntegerOverflow;
+            input_read += accepted;
+            try count.advance(&self.total_input, accepted);
+            const decoded = try decoded_or_error;
             output_written += decoded.progress.output_written;
             if (decoded.status == .need_output)
                 return result(input_read, output_written, .need_output);
@@ -765,7 +844,7 @@ pub const OwnedDecoder = struct {
             encryption.authentication[encryption.authentication_len] = input[input_read];
             encryption.authentication_len += 1;
             input_read += 1;
-            self.total_input = std.math.add(usize, self.total_input, 1) catch
+            self.total_input = count.addLocal(self.total_input, 1) catch
                 return error.IntegerOverflow;
         }
         if (encryption.authentication_len != winzip_aes.authentication_code_len)
@@ -796,7 +875,7 @@ pub const OwnedDecoder = struct {
                 self.entry.uncompressed_size,
             );
             input_read += consumed;
-            self.total_input = std.math.add(usize, self.total_input, consumed) catch
+            self.total_input = count.addLocal(self.total_input, consumed) catch
                 return error.IntegerOverflow;
             if (!encryption.ready()) return result(input_read, output_written, .need_input);
             if (self.entry.pkware_strong_encryption) |expected|
@@ -861,19 +940,16 @@ pub const OwnedDecoder = struct {
                     decrypted.output_written > encryption.plaintext.len)
                     return error.InvalidZipArchive;
                 input_read += decrypted.input_read;
-                self.total_input = std.math.add(
-                    usize,
+                self.total_input = count.addLocal(
                     self.total_input,
                     decrypted.input_read,
                 ) catch return error.IntegerOverflow;
-                encryption.ciphertext_consumed = std.math.add(
-                    usize,
+                encryption.ciphertext_consumed = count.addLocal(
                     encryption.ciphertext_consumed,
                     decrypted.input_read,
                 ) catch return error.IntegerOverflow;
                 encryption.ciphertext_remaining.? -= decrypted.input_read;
-                encryption.decrypted_size = std.math.add(
-                    usize,
+                encryption.decrypted_size = count.addLocal(
                     encryption.decrypted_size,
                     decrypted.output_written,
                 ) catch return error.IntegerOverflow;
@@ -888,8 +964,7 @@ pub const OwnedDecoder = struct {
             if (decrypted.input_read != 0 or
                 decrypted.output_written > encryption.plaintext.len)
                 return error.InvalidZipArchive;
-            encryption.decrypted_size = std.math.add(
-                usize,
+            encryption.decrypted_size = count.addLocal(
                 encryption.decrypted_size,
                 decrypted.output_written,
             ) catch return error.IntegerOverflow;
@@ -915,7 +990,7 @@ pub const OwnedDecoder = struct {
     fn initState(
         allocator: std.mem.Allocator,
         entry: Entry,
-        expected_compressed_size: ?usize,
+        expected_compressed_size: ?Count,
         history: []u8,
         options: Options,
     ) Error!State {
@@ -971,13 +1046,13 @@ pub const OwnedDecoder = struct {
                 entry.uncompressed_size,
                 null,
             ) },
-            .dcl_implode => .{ .dcl_implode = reader_codecs.DclImplodeState.init(
+            .dcl_implode => .{ .dcl_implode = try reader_codecs.DclImplodeState.init(
                 limit,
                 expected_compressed_size,
                 entry.uncompressed_size,
                 null,
             ) },
-            .bzip2 => .{ .bzip2 = reader_codecs.Bzip2State.init(
+            .bzip2 => .{ .bzip2 = try reader_codecs.Bzip2State.init(
                 allocator,
                 reader_options,
                 limit,
@@ -1002,7 +1077,7 @@ pub const OwnedDecoder = struct {
                 entry.uncompressed_size,
                 null,
             ) },
-            .xz => .{ .xz = reader_codecs.XzState.init(
+            .xz => .{ .xz = try reader_codecs.XzState.init(
                 allocator,
                 reader_options,
                 limit,

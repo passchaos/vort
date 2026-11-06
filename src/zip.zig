@@ -189,8 +189,12 @@ test "ZIP PKWARE Strong Encryption crypto suite" {
     _ = pkware_strong_tests;
 }
 
+test "ZIP64 logical metadata queries and physical output boundaries" {
+    try @import("zip/wide_metadata_tests.zig").contracts(@This());
+}
+
 pub const DecodeOptions = struct {
-    max_output_len: usize = std.math.maxInt(usize),
+    max_output_len: core.StreamCount = std.math.maxInt(core.StreamCount),
     max_dictionary_size: usize = 64 * 1024 * 1024,
     password: ?[]const u8 = null,
     /// Borrowed preset history for Zstandard methods 20 and 93.
@@ -303,9 +307,11 @@ pub const Archive = struct {
     ) !usize {
         const parsed = try parseCentralEntry(self, entry.central_header_offset);
         const canonical = parsed.entry;
+        if (!sameEntry(entry, canonical)) return error.InvalidZipArchive;
         if (canonical.uncompressed_size > options.max_output_len)
             return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
+        const target_len = try core.stream_count.toLocal(canonical.uncompressed_size);
         if (canonical.isEncrypted() and allocator == null)
             return error.EncryptedZipEntry;
         const local_payload = try localPayloadData(self, canonical, true);
@@ -334,7 +340,7 @@ pub const Archive = struct {
                     password,
                     strong.strength,
                     canonical.crc32,
-                    canonical.uncompressed_size,
+                    target_len,
                 )
             else traditional: {
                 if (canonical.flags & (1 << 6) != 0) return error.UnsupportedZipFeature;
@@ -352,7 +358,7 @@ pub const Archive = struct {
             decrypted = bytes;
             break :encrypted bytes;
         } else local_payload.data;
-        const target = output[0..canonical.uncompressed_size];
+        const target = output[0..target_len];
         switch (canonical.method) {
             .stored => {
                 if (compressed.len != canonical.uncompressed_size) return error.InvalidZipArchive;
@@ -428,10 +434,10 @@ pub const Archive = struct {
     }
 
     pub fn extractAlloc(self: Archive, allocator: std.mem.Allocator, entry: Entry) ![]u8 {
-        return self.extractAllocLimited(allocator, entry, std.math.maxInt(usize));
+        return self.extractAllocLimited(allocator, entry, std.math.maxInt(core.StreamCount));
     }
 
-    pub fn extractAllocLimited(self: Archive, allocator: std.mem.Allocator, entry: Entry, max_output_len: usize) ![]u8 {
+    pub fn extractAllocLimited(self: Archive, allocator: std.mem.Allocator, entry: Entry, max_output_len: core.StreamCount) ![]u8 {
         return self.extractAllocWithOptions(allocator, entry, .{ .max_output_len = max_output_len });
     }
 
@@ -441,8 +447,10 @@ pub const Archive = struct {
         entry: Entry,
         options: DecodeOptions,
     ) ![]u8 {
-        if (entry.uncompressed_size > options.max_output_len) return error.OutputLimitExceeded;
-        const output = try allocator.alloc(u8, entry.uncompressed_size);
+        const canonical = (try parseCentralEntry(self, entry.central_header_offset)).entry;
+        if (!sameEntry(entry, canonical)) return error.InvalidZipArchive;
+        if (canonical.uncompressed_size > options.max_output_len) return error.OutputLimitExceeded;
+        const output = try allocator.alloc(u8, try core.stream_count.toLocal(canonical.uncompressed_size));
         errdefer allocator.free(output);
         const written = try self.extractIntoWithOptions(allocator, entry, output, options);
         if (written != output.len) return error.SizeMismatch;
@@ -450,10 +458,10 @@ pub const Archive = struct {
     }
 
     pub fn extractByNameAlloc(self: Archive, allocator: std.mem.Allocator, name: []const u8) ![]u8 {
-        return self.extractByNameAllocLimited(allocator, name, std.math.maxInt(usize));
+        return self.extractByNameAllocLimited(allocator, name, std.math.maxInt(core.StreamCount));
     }
 
-    pub fn extractByNameAllocLimited(self: Archive, allocator: std.mem.Allocator, name: []const u8, max_output_len: usize) ![]u8 {
+    pub fn extractByNameAllocLimited(self: Archive, allocator: std.mem.Allocator, name: []const u8, max_output_len: core.StreamCount) ![]u8 {
         const entry = (try self.find(name)) orelse return error.ZipEntryNotFound;
         return self.extractAllocLimited(allocator, entry, max_output_len);
     }
@@ -557,7 +565,7 @@ pub fn extractEntryAlloc(allocator: std.mem.Allocator, bytes: []const u8, index:
     return archive.extractAlloc(allocator, try archive.entryAt(index));
 }
 
-pub fn extractEntryAllocLimited(allocator: std.mem.Allocator, bytes: []const u8, index: usize, max_output_len: usize) ![]u8 {
+pub fn extractEntryAllocLimited(allocator: std.mem.Allocator, bytes: []const u8, index: usize, max_output_len: core.StreamCount) ![]u8 {
     const archive = try parse(bytes);
     return archive.extractAllocLimited(allocator, try archive.entryAt(index), max_output_len);
 }
@@ -576,7 +584,7 @@ pub fn extractByNameAlloc(allocator: std.mem.Allocator, bytes: []const u8, name:
     return (try parse(bytes)).extractByNameAlloc(allocator, name);
 }
 
-pub fn extractByNameAllocLimited(allocator: std.mem.Allocator, bytes: []const u8, name: []const u8, max_output_len: usize) ![]u8 {
+pub fn extractByNameAllocLimited(allocator: std.mem.Allocator, bytes: []const u8, name: []const u8, max_output_len: core.StreamCount) ![]u8 {
     return (try parse(bytes)).extractByNameAllocLimited(allocator, name, max_output_len);
 }
 
@@ -1927,7 +1935,7 @@ const SplitPartSourceContext = struct {
     fn readAt(
         context: *anyopaque,
         disk: usize,
-        offset: usize,
+        offset: core.StreamCount,
         output: []u8,
     ) error{PartSourceReadFailed}!usize {
         const self: *SplitPartSourceContext = @ptrCast(@alignCast(context));
@@ -1941,11 +1949,12 @@ const SplitPartSourceContext = struct {
             self.active_disk = disk;
             self.switches += 1;
         }
+        const local_offset = std.math.cast(usize, offset) orelse return error.PartSourceReadFailed;
         const amount = @min(
             output.len,
-            @min(self.max_read, self.parts[disk].len - offset),
+            @min(self.max_read, self.parts[disk].len - local_offset),
         );
-        @memcpy(output[0..amount], self.parts[disk][offset..][0..amount]);
+        @memcpy(output[0..amount], self.parts[disk][local_offset..][0..amount]);
         return amount;
     }
 };
@@ -2470,7 +2479,7 @@ test "ZIP split incremental reader streams WinZip AES and ZipCrypto entries" {
         drainSplitIncrementalReader(&wrong_password),
     );
 
-    var part_lengths = [_]usize{
+    var part_lengths = [_]core.StreamCount{
         fixture.parts[0].len,
         fixture.parts[1].len,
         fixture.parts[2].len,
@@ -2542,7 +2551,7 @@ test "ZIP split source reader loads parts on demand and propagates failures" {
     defer allocator.free(source);
     var fixture = try makeSplitTestFixture(allocator, source, .central_directory);
     defer fixture.deinit();
-    var part_lengths = [_]usize{
+    var part_lengths = [_]core.StreamCount{
         fixture.parts[0].len,
         fixture.parts[1].len,
         fixture.parts[2].len,

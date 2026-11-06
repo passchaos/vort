@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("../core.zig");
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const pkware_strong = @import("vail_archive_crypto").pkware_strong;
 
@@ -202,7 +203,7 @@ pub const Entry = struct {
     flags: u16,
     crc32: u32,
     compressed_size: usize,
-    uncompressed_size: usize,
+    uncompressed_size: core.StreamCount,
     local_header_offset: usize,
     central_header_offset: usize,
     zip64: bool,

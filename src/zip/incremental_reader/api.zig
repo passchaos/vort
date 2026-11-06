@@ -1,5 +1,7 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
 
@@ -14,16 +16,16 @@ pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
 pub const Options = struct {
     /// Absolute file offset represented by the first byte passed to `step`.
     /// Use this when the caller has already skipped an SFX prefix.
-    initial_offset: usize = 0,
+    initial_offset: Count = 0,
     max_entries: usize = std.math.maxInt(usize),
     /// Retained local names, central entry comments, and archive comment.
     max_metadata_size: usize = 64 * 1024 * 1024,
     /// Encoded central-directory bytes processed before the archive ending.
-    max_central_directory_size: usize = std.math.maxInt(usize),
+    max_central_directory_size: Count = std.math.maxInt(Count),
     max_archive_extra_data_size: usize = 64 * 1024 * 1024,
     max_control_record_size: usize = 256 * 1024,
-    max_entry_output_len: usize = std.math.maxInt(usize),
-    max_total_output_len: usize = std.math.maxInt(usize),
+    max_entry_output_len: Count = std.math.maxInt(Count),
+    max_total_output_len: Count = std.math.maxInt(Count),
     max_bzip2_compressed_block_len: usize = 4 * 1024 * 1024,
     max_bzip2_decoded_block_len: usize = 64 * 1024 * 1024,
     max_zstd_compressed_buffer_len: usize = 1024 * 1024,
@@ -89,7 +91,7 @@ pub const EntryInfo = struct {
     unicode_comment: ?[]const u8 = null,
     method: CompressionMethod,
     flags: u16,
-    local_header_offset: usize,
+    local_header_offset: Count,
     uses_descriptor: bool,
     zip64_local: bool,
     modified: DosTimestamp,
@@ -101,8 +103,8 @@ pub const EntryInfo = struct {
     winzip_aes: ?types.WinZipAesInfo = null,
     pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
     crc32: ?u32,
-    compressed_size: ?usize,
-    uncompressed_size: ?usize,
+    compressed_size: ?Count,
+    uncompressed_size: ?Count,
 
     pub fn creatorSystem(self: EntryInfo) ?CreatorSystem {
         const made_by = self.version_made_by orelse return null;

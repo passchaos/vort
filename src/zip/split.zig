@@ -6,6 +6,7 @@
 //! borrowed `Archive` parser.
 
 const std = @import("std");
+const core = @import("../core.zig");
 const normalized_stream = @import("split/normalized_stream.zig");
 
 pub const Error = normalized_stream.Error;
@@ -21,7 +22,7 @@ pub fn normalizeAlloc(
 ) (Error || std.mem.Allocator.Error)![]u8 {
     var stream = try NormalizedStream.initAlloc(allocator, parts, options);
     defer stream.deinit();
-    const output = try allocator.alloc(u8, stream.len());
+    const output = try allocator.alloc(u8, try core.stream_count.toLocal(stream.len()));
     errdefer allocator.free(output);
     if (try stream.readAt(0, output) != output.len)
         return error.InvalidZipArchive;

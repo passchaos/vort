@@ -1,3 +1,5 @@
+const std = @import("std");
+const core = @import("../../core.zig");
 const reduce = @import("../reduce.zig");
 const terminal = @import("terminal_byte_codec.zig");
 
@@ -13,12 +15,12 @@ const Codec = struct {
     pub fn initDecoder(
         workspace: *Workspace,
         factor: Config,
-        entry_limit: usize,
-        expected_output_len: ?usize,
-    ) Decoder {
+        entry_limit: core.StreamCount,
+        expected_output_len: ?core.StreamCount,
+    ) @This().Error!Decoder {
         return Decoder.initWithOptions(workspace, factor, .{
-            .max_output_len = entry_limit,
-            .expected_output_len = expected_output_len,
+            .max_output_len = core.stream_count.bounded(entry_limit, std.math.maxInt(usize)),
+            .expected_output_len = try terminal.toOptionalLocal(expected_output_len),
         });
     }
 

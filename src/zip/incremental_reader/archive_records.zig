@@ -1,4 +1,7 @@
 const std = @import("std");
+const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const descriptor = @import("descriptor.zig");
 const records = @import("../records.zig");
 const types = @import("../types.zig");
@@ -20,8 +23,8 @@ pub const LocalHeader = struct {
     extra: []const u8,
     descriptor_layout: ?descriptor.Layout,
     crc32: ?u32,
-    compressed_size: ?usize,
-    uncompressed_size: ?usize,
+    compressed_size: ?Count,
+    uncompressed_size: ?Count,
     zip64: bool,
     winzip_aes: ?types.WinZipAesInfo,
     pkware_strong: bool,
@@ -81,7 +84,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
 
     if (uses_descriptor) {
         if (has_zip64_sentinel)
-            _ = try records.resolveLocalSizes(extra, compressed_u32, uncompressed_u32);
+            _ = try records.resolveLocalSizesLogical(extra, compressed_u32, uncompressed_u32);
         return .{
             .version_needed = version_needed,
             .flags = flags,
@@ -106,7 +109,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         };
     }
 
-    const sizes = try records.resolveLocalSizes(extra, compressed_u32, uncompressed_u32);
+    const sizes = try records.resolveLocalSizesLogical(extra, compressed_u32, uncompressed_u32);
     return .{
         .version_needed = version_needed,
         .flags = flags,
@@ -146,9 +149,9 @@ pub const CentralHeader = struct {
     internal_attributes: u16,
     external_attributes: u32,
     crc32: u32,
-    compressed_size: usize,
-    uncompressed_size: usize,
-    local_header_offset: usize,
+    compressed_size: Count,
+    uncompressed_size: Count,
+    local_header_offset: Count,
     zip64: bool,
     winzip_aes: ?types.WinZipAesInfo,
     pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo,
@@ -190,7 +193,7 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
     const comment_end = extra_end + comment_len;
     const name = bytes[wire.central_file_header_len..name_end];
     const comment = bytes[extra_end..comment_end];
-    const values = try records.resolveCentralEntry(
+    const values = try records.resolveCentralEntryLogical(
         bytes[name_end..extra_end],
         compressed_u32,
         uncompressed_u32,

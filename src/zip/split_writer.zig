@@ -5,6 +5,7 @@
 //! the layouts emitted by Info-ZIP.
 
 const std = @import("std");
+const core = @import("../core.zig");
 const archive_records = @import("incremental_reader/archive_records.zig");
 const records = @import("records.zig");
 const wire = @import("wire.zig");
@@ -207,21 +208,23 @@ fn parseLayouts(
         const central = try archive_records.parseCentral(bytes[central_offset..central_end]);
         if (central.local_header_offset != expected_local)
             return error.InvalidZipArchive;
+        const local_offset = try core.stream_count.toLocal(central.local_header_offset);
+        const compressed_size = try core.stream_count.toLocal(central.compressed_size);
         _ = try checkedEnd(
-            central.local_header_offset,
+            local_offset,
             wire.local_file_header_len,
             central_offset,
         );
         const local_fixed: *const [wire.local_file_header_len]u8 =
-            bytes[central.local_header_offset..][0..wire.local_file_header_len];
+            bytes[local_offset..][0..wire.local_file_header_len];
         const local_len = try archive_records.localEncodedLen(local_fixed);
         const data_offset = try checkedEnd(
-            central.local_header_offset,
+            local_offset,
             local_len,
             central_offset,
         );
         const local = try archive_records.parseLocal(
-            bytes[central.local_header_offset..data_offset],
+            bytes[local_offset..data_offset],
         );
         if (!std.mem.eql(u8, local.name, central.name) or
             local.method != central.method or
@@ -230,7 +233,7 @@ fn parseLayouts(
             return error.InvalidZipArchive;
         const payload_end = try checkedEnd(
             data_offset,
-            central.compressed_size,
+            compressed_size,
             central_offset,
         );
         const descriptor_len: usize = if (central.flags & wire.descriptor_flag == 0)
@@ -241,7 +244,7 @@ fn parseLayouts(
             wire.data_descriptor_len;
         const record_end = try checkedEnd(payload_end, descriptor_len, central_offset);
         layout.* = .{
-            .local_offset = central.local_header_offset,
+            .local_offset = local_offset,
             .data_offset = data_offset,
             .payload_end = payload_end,
             .record_end = record_end,

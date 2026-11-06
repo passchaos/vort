@@ -1,4 +1,7 @@
 const std = @import("std");
+const core = @import("../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const api = @import("api.zig");
 const archive_records = @import("archive_records.zig");
 const records = @import("../records.zig");
@@ -11,9 +14,9 @@ pub const Record = struct {
     method: api.CompressionMethod,
     flags: u16,
     crc32: u32 = 0,
-    compressed_size: usize = 0,
-    uncompressed_size: usize = 0,
-    local_header_offset: usize,
+    compressed_size: Count = 0,
+    uncompressed_size: Count = 0,
+    local_header_offset: Count,
     zip64_local: bool,
     uses_descriptor: bool,
     modified: api.DosTimestamp,
@@ -58,12 +61,12 @@ pub const Record = struct {
 pub const State = struct {
     records: std.ArrayList(Record) = .empty,
     retained_metadata_size: usize = 0,
-    completed_entries: usize = 0,
+    completed_entries: Count = 0,
     central_started: bool = false,
     central_ended: bool = false,
-    central_offset: usize = 0,
-    central_size: usize = 0,
-    central_entries: usize = 0,
+    central_offset: Count = 0,
+    central_size: Count = 0,
+    central_entries: Count = 0,
 
     const Self = @This();
 
@@ -93,12 +96,12 @@ pub const State = struct {
     pub fn complete(self: *Self, index: usize) error{ InvalidZipArchive, IntegerOverflow }!void {
         if (index >= self.records.items.len or self.records.items[index].complete)
             return error.InvalidZipArchive;
+        const completed = try count.addLocal(self.completed_entries, 1);
         self.records.items[index].complete = true;
-        self.completed_entries = std.math.add(usize, self.completed_entries, 1) catch
-            return error.IntegerOverflow;
+        self.completed_entries = completed;
     }
 
-    pub fn beginCentral(self: *Self, record_offset: usize) error{InvalidZipArchive}!void {
+    pub fn beginCentral(self: *Self, record_offset: Count) error{InvalidZipArchive}!void {
         if (self.central_started or self.central_ended or
             self.completed_entries != self.records.items.len)
         {
@@ -113,8 +116,8 @@ pub const State = struct {
         self: *Self,
         allocator: std.mem.Allocator,
         central: archive_records.CentralHeader,
-        absolute_end: usize,
-        max_central_size: usize,
+        absolute_end: Count,
+        max_central_size: Count,
         max_metadata_size: usize,
     ) (std.mem.Allocator.Error || error{ InvalidZipArchive, OutputLimitExceeded, IntegerOverflow })!void {
         var matched: ?*Record = null;
@@ -149,8 +152,7 @@ pub const State = struct {
             !std.meta.eql(local.winzip_aes, central.winzip_aes) or
             !std.meta.eql(local.pkware_strong_encryption, central.pkware_strong_encryption))
             return error.InvalidZipArchive;
-        const central_entries = std.math.add(usize, self.central_entries, 1) catch
-            return error.IntegerOverflow;
+        const central_entries = try count.addLocal(self.central_entries, 1);
         const central_size = absolute_end - self.central_offset;
         if (central_size > max_central_size) return error.OutputLimitExceeded;
         const unicode_name_to_copy = if (local.unicode_name == null)
@@ -204,8 +206,8 @@ pub const State = struct {
 
     pub fn beginEnding(
         self: *Self,
-        record_offset: usize,
-        max_central_size: usize,
+        record_offset: Count,
+        max_central_size: Count,
     ) error{ InvalidZipArchive, OutputLimitExceeded }!void {
         if (!self.central_ended) {
             if (!self.central_started) {
@@ -243,15 +245,21 @@ pub const State = struct {
         zip64_end: ?archive_records.Zip64End,
         zip64_locator_seen: bool,
     ) error{ InvalidZipArchive, UnsupportedZipFeature }!void {
-        if (parsed.disk != 0 or parsed.central_disk != 0)
-            return error.UnsupportedZipFeature;
         if (zip64_end) |zip64| {
             if (!zip64_locator_seen) return error.InvalidZipArchive;
+            if (zip64.disk != 0 or zip64.central_disk != 0 or
+                (parsed.disk != 0 and parsed.disk != std.math.maxInt(u16)) or
+                (parsed.central_disk != 0 and parsed.central_disk != std.math.maxInt(u16)))
+                return error.UnsupportedZipFeature;
+            try validateLegacyU16(parsed.disk, zip64.disk);
+            try validateLegacyU16(parsed.central_disk, zip64.central_disk);
             try validateLegacyU16(parsed.entries_on_disk, zip64.entries_on_disk);
             try validateLegacyU16(parsed.entry_count, zip64.entry_count);
             try validateLegacyU32(parsed.central_size, zip64.central_size);
             try validateLegacyU32(parsed.central_offset, zip64.central_offset);
         } else {
+            if (parsed.disk != 0 or parsed.central_disk != 0)
+                return error.UnsupportedZipFeature;
             if (parsed.entries_on_disk != parsed.entry_count or
                 parsed.entry_count != self.records.items.len or
                 parsed.central_size != self.central_size or
