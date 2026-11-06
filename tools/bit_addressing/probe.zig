@@ -22,6 +22,7 @@ pub fn main(init: std.process.Init) !void {
     var profile: ?br.CompressedHeaderProfile = null;
     var storage: [80]u8 = @splat(0xa5);
     var written: usize = 0;
+    var logical_count: vort.StreamCount = 0;
     const output = storage[8..72];
     if (std.mem.eql(u8, api, "alloc")) {
         const decoded = try br.decodeStreamAlloc(init.gpa, mapping);
@@ -32,16 +33,18 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, api, "into")) {
         written = try br.decodeStreamInto(mapping, output);
     } else if (std.mem.eql(u8, api, "size")) {
-        written = try br.decodedStreamSize(mapping);
+        logical_count = try br.decodedStreamSize(mapping);
     } else if (std.mem.eql(u8, api, "summary")) {
         summary = try br.summarizeStream(mapping);
-        written = summary.?.decoded_bytes;
+        logical_count = summary.?.decoded_bytes;
     } else if (std.mem.eql(u8, api, "headers")) {
         profile = try br.profileCompressedHeaders(init.io, init.gpa, mapping, 1);
         if (profile.?.compressed_meta_block_count != 1 or profile.?.input_bits == 0) return error.InvalidHighOffsetHeaderProfile;
         written = expected;
     } else return error.InvalidProbeApi;
-    if (written != expected) return error.UnexpectedDecodedSize;
+    if (!std.mem.eql(u8, api, "size") and !std.mem.eql(u8, api, "summary"))
+        logical_count = vort.core.stream_count.fromLocal(written);
+    if (logical_count != expected) return error.UnexpectedDecodedSize;
     for (storage[0..8]) |byte| if (byte != 0xa5) return error.CallerGuardModified;
     for (storage[72..]) |byte| if (byte != 0xa5) return error.CallerGuardModified;
     const decodes = std.mem.eql(u8, api, "alloc") or std.mem.eql(u8, api, "into");
@@ -58,7 +61,7 @@ pub fn main(init: std.process.Init) !void {
         .actual_input_bits = @as(vort.BitCount, mapping.len) * 8,
         .bit_count_type_bits = @bitSizeOf(vort.BitCount),
         .usize_bits = @bitSizeOf(usize),
-        .output_bytes = written,
+        .output_bytes = logical_count,
         .output_sha256 = if (decodes) std.fmt.bytesToHex(output_digest, .lower) else null,
         .guards_verified = true,
         .summary = summary,

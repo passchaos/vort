@@ -1,0 +1,82 @@
+const std = @import("std");
+const Count = @import("../../core.zig").StreamCount;
+const h = @import("helpers.zig");
+
+pub fn contracts(comptime Z: type) !void {
+    const expected = h.boundary + 3;
+    const dictionary = Z.NativeDictionary.init(42, "abcd");
+    const other = Z.NativeDictionary.init(43, "wxyz");
+    const set = try Z.NativeDictionarySet.initChecked(&.{ dictionary, other });
+    const empty = Z.NativeDictionarySet.init(&.{});
+    const wire = try h.wideAlloc(.compressed, expected, 42);
+    defer h.a.free(wire);
+    try std.testing.expectError(error.NeedDictionary, Z.decodedNativeFrameSize(wire));
+    try std.testing.expectError(error.NeedDictionary, Z.decodedNativeFrameSizeWithDictionary(wire, other));
+    try std.testing.expectError(error.NeedDictionary, Z.decodedNativeFrameSizeWithDictionarySet(wire, empty));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeWithDictionary(wire, dictionary));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameSizeWithDictionary(wire, dictionary));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeLimitedWithDictionary(wire, dictionary, expected));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameSizeLimitedWithDictionary(wire, expected, dictionary));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeWithDictionarySet(wire, set));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameSizeWithDictionarySet(wire, set));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeLimitedWithDictionarySet(wire, set, expected));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameSizeLimitedWithDictionarySet(wire, expected, set));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeWithOptions(wire, .{ .dictionary = dictionary }));
+    try std.testing.expectEqual(expected, try Z.decodedFrameSizeWithOptions(wire[4..], .{ .format = .magicless, .dictionary_set = set, .expected_output_len = expected }));
+    try std.testing.expectError(error.OutputLimitExceeded, Z.decodedNativeFrameSizeLimitedWithDictionary(wire, expected - 1, dictionary));
+    try std.testing.expectError(error.OutputLimitExceeded, Z.decodedFrameSizeLimitedWithDictionarySet(wire, set, expected - 1));
+    var denied = std.testing.FailingAllocator.init(h.a, .{ .fail_index = 0 });
+    var decoder = Z.NativeFrameDecoder.init(denied.allocator());
+    defer decoder.deinit();
+    try std.testing.expectEqual(expected, try decoder.decodedSizeLimitedWithDictionary(wire, expected, dictionary));
+    try std.testing.expectEqual(expected, try decoder.decodedSizeLimitedWithDictionarySet(wire, expected, set));
+    const chunks = [_][]const u8{ wire[0..9], wire[9..] };
+    const scratch = try h.a.alloc(u8, wire.len);
+    defer h.a.free(scratch);
+    try std.testing.expectEqual(expected, try Z.decodedFrameChunksSizeWithDictionary(&chunks, scratch, dictionary));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameChunksSizeLimitedWithDictionary(&chunks, scratch, expected, dictionary));
+    try std.testing.expectEqual(expected, try Z.decodedFrameChunksSizeWithDictionarySet(&chunks, scratch, set));
+    try std.testing.expectEqual(expected, try Z.decodedNativeFrameChunksSizeLimitedWithDictionarySet(&chunks, scratch, expected, set));
+    try std.testing.expectEqual(expected, try decoder.decodedChunksSizeLimitedWithDictionary(&chunks, scratch, expected, dictionary));
+    try std.testing.expectEqual(expected, try decoder.decodedChunksSizeLimitedWithDictionarySet(&chunks, scratch, expected, set));
+    const small = try h.smallAlloc(43);
+    defer h.a.free(small);
+    var concat: std.ArrayList(u8) = .empty;
+    defer concat.deinit(h.a);
+    try concat.appendSlice(h.a, wire);
+    try concat.appendSlice(h.a, small);
+    const total = expected + 3;
+    try std.testing.expectEqual(total, try Z.decodedNativeConcatenatedFrameSizeWithDictionarySet(concat.items, set));
+    try std.testing.expectEqual(total, try Z.decodedConcatenatedFrameSizeLimitedWithDictionarySet(concat.items, total, set));
+    try std.testing.expectEqual(total, try decoder.decodedConcatenatedSizeLimitedWithDictionarySet(concat.items, total, set));
+    const concat_chunks = [_][]const u8{ wire, small };
+    const joined = try h.a.alloc(u8, concat.items.len);
+    defer h.a.free(joined);
+    try std.testing.expectEqual(total, try Z.decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet(&concat_chunks, joined, total, set));
+    try std.testing.expectEqual(total, try decoder.decodedConcatenatedChunksSizeLimitedWithDictionarySet(&concat_chunks, joined, total, set));
+    try std.testing.expectError(error.OutputLimitExceeded, Z.decodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(concat.items, total - 1, set));
+    try std.testing.expectEqual(@as(usize, 0), denied.alloc_index);
+    try std.testing.expect(Count == @TypeOf(try decoder.decodedConcatenatedSizeWithDictionarySet(concat.items, set)));
+}
+
+pub fn metadata(comptime Z: type) !void {
+    const expected = h.boundary + 3;
+    const wrong = try h.wideAlloc(.raw, expected - 1, null);
+    defer h.a.free(wrong);
+    try std.testing.expectError(error.SizeMismatch, Z.decodedFrameSize(wrong));
+    const maximum = try h.wideAlloc(.compressed, std.math.maxInt(Count), null);
+    defer h.a.free(maximum);
+    try std.testing.expectError(error.SizeMismatch, Z.decodedNativeFrameSize(maximum));
+    const ordinary = try h.wideAlloc(.raw, expected, null);
+    defer h.a.free(ordinary);
+    try std.testing.expectError(error.TruncatedFrame, Z.decodedFrameSize(ordinary[0 .. ordinary.len - 1]));
+    const single = try h.a.alloc(u8, ordinary.len - 1);
+    defer h.a.free(single);
+    @memcpy(single[0..5], ordinary[0..5]);
+    single[4] |= 0x20;
+    @memcpy(single[5..], ordinary[6..]);
+    try std.testing.expectEqual(expected, try Z.decodedFrameSize(single));
+    try std.testing.expectEqual(expected, (try Z.inspectNativeFrameHeader(single)).content_size.?);
+    ordinary[5] = 0x30; // 64 KiB window cannot hold a 128 KiB RLE block.
+    try std.testing.expectError(error.CorruptFrame, Z.decodedFrameSize(ordinary));
+}

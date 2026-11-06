@@ -3,6 +3,7 @@ const core = @import("../../core.zig");
 const stream_count = core.stream_count;
 const progressive_bits = @import("bit_reader.zig");
 const shared_dictionary = @import("../shared_dictionary.zig");
+const empty_reference = @import("../summary/empty_reference.zig");
 
 /// Progressive decoder for compressed Brotli streams with explicit distances.
 /// History is caller-owned, which makes memory use visible and lets overlapping
@@ -908,6 +909,8 @@ pub fn Decoder(comptime Codec: type) type {
                         else => return self.fail(.dictionary, error.InvalidMatch),
                     };
                     if (word.len > remaining or word.len > self.dictionary_scratch.len) return self.fail(.dictionary, error.CorruptFrame);
+                    empty_reference.validate(self.copy_distance, word.len) catch |err|
+                        return self.fail(.dictionary, err);
                     if (word.ptr != self.dictionary_scratch[0..].ptr) @memcpy(self.dictionary_scratch[0..word.len], word);
                     self.update_distance_ring = false;
                     self.dictionary_offset = 0;

@@ -137,7 +137,7 @@ fn commandSet(commands: []plan.Command) void {
     for (commands, 0..) |*command, index| {
         const extra = 1 + index / 16;
         const selector = (index / 8) % 2;
-        const value = 89 + ((2 + selector) << @as(u6, @intCast(extra + 3))) + index % 8;
+        const value = 89 + ((2 + selector) << @as(std.math.Log2Int(usize), @intCast(extra + 3))) + index % 8;
         command.* = .{ .insert_start = position, .insert_len = 1 + index % 8, .copy_len = 7, .distance = value, .has_copy = true };
         position += command.insert_len + command.copy_len;
     }

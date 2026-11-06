@@ -31,7 +31,8 @@ pub fn main(init: std.process.Init) !void {
     const standard = try zstd.NativeDictionary.initFromStandardDictionary(dictionary_bytes);
     var prepared = try zstd.PreparedDecodeDictionary.init(standard.dictionary);
     const size = try zstd.decodedFrameSizeWithDictionary(frame, standard.dictionary);
-    const output = try init.gpa.alloc(u8, size);
+    const output_size = std.math.cast(usize, size) orelse return error.IntegerOverflow;
+    const output = try init.gpa.alloc(u8, output_size);
     defer init.gpa.free(output);
 
     const ordinary_written = try zstd.decodeFrameIntoWithDictionary(frame, output, standard.dictionary);

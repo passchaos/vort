@@ -1,11 +1,12 @@
 const std = @import("std");
 const budget = @import("../decode/budget.zig");
+const stream_count = @import("../../core.zig").stream_count;
 
 /// Publication helpers receive the codec's full size and entropy decoders.
 /// Only decoded bytes are staged: compressed frames and dictionaries remain
 /// borrowed, which also makes input/output aliasing safe during publication.
 pub fn owned(comptime Codec: type, allocator: std.mem.Allocator, frame: []const u8, options: Codec.Options) Codec.Error![]u8 {
-    const size = try Codec.size(frame, options);
+    const size = try stream_count.toLocal(try Codec.size(frame, options));
     var entry = try budget.Entry.init(allocator, options);
     defer entry.deinit();
     const decoded = ownedSized(Codec, entry.allocator(), frame, entry.forward(options), size) catch |err|
@@ -26,7 +27,7 @@ pub fn ownedSized(comptime Codec: type, allocator: std.mem.Allocator, frame: []c
 }
 
 pub fn into(comptime Codec: type, allocator: std.mem.Allocator, frame: []const u8, output: []u8, options: Codec.Options) Codec.Error!usize {
-    const size = try Codec.size(frame, options);
+    const size = try stream_count.toLocal(try Codec.size(frame, options));
     if (output.len < size) return error.OutputTooSmall;
     var entry = try budget.Entry.init(allocator, options);
     defer entry.deinit();
@@ -38,7 +39,7 @@ pub fn into(comptime Codec: type, allocator: std.mem.Allocator, frame: []const u
 }
 
 pub fn append(comptime Codec: type, allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, options: Codec.Options) Codec.Error!usize {
-    const size = try Codec.size(frame, options);
+    const size = try stream_count.toLocal(try Codec.size(frame, options));
     var entry = try budget.Entry.initExisting(allocator, options, out.capacity);
     defer entry.deinit();
     var publication = try budget.AppendScope.initCharged(entry.lease, allocator, out);

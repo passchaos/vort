@@ -6339,7 +6339,7 @@ test "root zstd frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     const bound = try zstdDecodedFrameSize(encoded);
     try std.testing.expect(bound >= payload.len);
-    const into_buffer = try std.testing.allocator.alloc(u8, bound);
+    const into_buffer = try std.testing.allocator.alloc(u8, try core.stream_count.toLocal(bound));
     defer std.testing.allocator.free(into_buffer);
     const written = try zstdDecodeFrameInto(encoded, into_buffer);
     try std.testing.expectEqual(decoded.len, written);

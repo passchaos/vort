@@ -2,6 +2,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const zstd = @import("zstd");
+const Count = @FieldType(zstd.FrameDecodeOptions, "max_output_len");
 
 const Api = enum { one_shot, into, append, reuse, size, incremental };
 const DictionaryKind = enum { none, raw, full };
@@ -38,7 +39,7 @@ const State = struct {
     decoder_snapshot: ?zstd.NativeIncrementalFrameDecoder.Snapshot = null,
     encoded_bound: ?usize = null,
     dictionary_resumes: usize = 0,
-    measured_size: ?usize = null,
+    measured_size: ?Count = null,
     reusable_repeated: bool = false,
     self_decode_verified: bool = false,
     caller_guards_verified: bool = true,
@@ -116,7 +117,7 @@ fn encodeOptions(c: Config) zstd.NativeFrameOptions {
     return .{ .format = c.format, .selection = c.selection, .content_checksum = c.checksum, .include_content_size = c.content_size, .block_size_max = c.block_size, .strategy = c.strategy, .hq = if (c.hq) .{ .search_depth = 8, .nice_len = 32, .min_match = 3 } else null };
 }
 fn decodeOptions(c: Config, dictionary: ?zstd.NativeDictionary, set: zstd.NativeDictionarySet) zstd.FrameDecodeOptions {
-    return .{ .format = c.format, .dictionary = if (c.use_dictionary_set) null else dictionary, .dictionary_set = if (c.use_dictionary_set) set else null, .max_output_len = c.max_output_len, .expected_output_len = c.expected_output_len };
+    return .{ .format = c.format, .dictionary = if (c.use_dictionary_set) null else dictionary, .dictionary_set = if (c.use_dictionary_set) set else null, .max_output_len = c.max_output_len, .expected_output_len = if (c.expected_output_len) |length| @as(Count, length) else null };
 }
 fn operation(a: std.mem.Allocator, input: []const u8, c: Config, dictionary: ?zstd.NativeDictionary, set: zstd.NativeDictionarySet, state: *State) ![]u8 {
     if (c.operation == .decode) return decode(a, input, c, dictionary, set, state);

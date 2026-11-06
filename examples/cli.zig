@@ -1184,7 +1184,7 @@ pub fn main(init: std.process.Init) !void {
         });
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try parseOptionalLimit(args.next());
+        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded_len = if (max_output_len) |limit|
@@ -1630,7 +1630,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "size-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
-        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
+        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
         const decoded_len = if (max_output_len) |limit|
@@ -1640,7 +1640,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "size-zstd-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
-        const max_output_len = try zstd_controls_cli.localLimit(try zstd_controls_cli.parseLogicalLimit(args.next()));
+        const max_output_len = try zstd_controls_cli.parseLogicalLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const decoded_len = if (max_output_len) |limit|

@@ -3799,119 +3799,22 @@ test "Brotli wide bit addressing writer positions and public encoding bounds cro
     try std.testing.expectError(error.InvalidBlockPlan, encodedStoredStreamBoundWithOptions(std.math.maxInt(usize), .{ .window_bits = 9 }));
 }
 
-pub const StreamSummary = struct {
-    window_bits: u5,
-    /// True only when the stream used the non-RFC Large Window marker. This
-    /// remains distinct from `window_bits`, because the extension can encode
-    /// values that also exist in RFC 7932.
-    large_window: bool = false,
-    input_bytes: usize,
-    decoded_bytes: usize = 0,
-    meta_block_count: usize = 0,
-    empty_meta_block_count: usize = 0,
-    metadata_meta_block_count: usize = 0,
-    uncompressed_meta_block_count: usize = 0,
-    compressed_meta_block_count: usize = 0,
-    metadata_bytes: usize = 0,
-    uses_metadata: bool = false,
-    uses_uncompressed_meta_blocks: bool = false,
-    uses_compressed_meta_blocks: bool = false,
-    uses_static_dictionary: bool = false,
-    static_dictionary_copy_count: usize = 0,
-    static_dictionary_bytes: usize = 0,
-    uses_shared_dictionary: bool = false,
-    shared_dictionary_copy_count: usize = 0,
-    shared_dictionary_bytes: usize = 0,
-    /// Commands decoded from compressed meta-block payloads. This includes a
-    /// final command whose insert reaches the end before its copy is applied.
-    command_count: usize = 0,
-    zero_insert_command_count: usize = 0,
-    single_literal_insert_command_count: usize = 0,
-    implicit_distance_command_count: usize = 0,
-    /// Applied copy commands grouped by the distance coding path. Implicit
-    /// commands consume no distance symbol; short covers explicit symbols
-    /// 0--15, direct covers the NDIRECT range, and regular covers the remaining
-    /// postfix-coded alphabet.
-    implicit_distance_copy_count: usize = 0,
-    short_distance_copy_count: usize = 0,
-    direct_distance_copy_count: usize = 0,
-    regular_distance_copy_count: usize = 0,
-    /// Copy-length command shape indexed by floor(log2(copy length)); the last
-    /// bucket includes every copy length greater than or equal to 256.
-    copy_length_log2_histogram: [9]usize = @splat(0),
-    lz77_copy_count: usize = 0,
-    lz77_copy_bytes: usize = 0,
-    max_lz77_distance: usize = 0,
-    non_overlapping_lz77_copy_count: usize = 0,
-    non_overlapping_lz77_copy_bytes: usize = 0,
-    short_non_overlapping_lz77_copy_count: usize = 0,
-    short_non_overlapping_lz77_copy_bytes: usize = 0,
-    literal_context_mode_bytes: [4]usize = @splat(0),
-    max_literal_block_types: usize = 0,
-    max_literal_context_trees: usize = 0,
-    max_command_block_types: usize = 0,
-    max_distance_block_types: usize = 0,
-    max_distance_context_trees: usize = 0,
-    max_distance_postfix_bits: u2 = 0,
-    max_direct_distance_codes: u16 = 0,
-    stored_only: bool = true,
-};
+const summary_types = @import("br/summary/types.zig");
+const summary_stats = @import("br/summary/stats.zig");
+const empty_reference = @import("br/summary/empty_reference.zig");
+pub const StreamSummary = summary_types.StreamSummary;
+pub const StreamSummaryErrorPhase = summary_types.StreamSummaryErrorPhase;
+pub const StreamSummaryDiagnostics = summary_types.StreamSummaryDiagnostics;
+pub const StreamProbeResult = summary_types.StreamProbeResult;
+const StreamSummaryMetaBlockStats = summary_types.MetaBlockStats;
 
-pub const StreamSummaryErrorPhase = enum {
-    stream,
-    window_bits,
-    meta_block_header,
-    metadata_meta_block,
-    uncompressed_meta_block,
-    compressed_meta_block,
-    padding,
-    output_size,
-};
+test "Brotli wide count-only summary contracts" {
+    try @import("br/summary/wide_size_tests.zig").contracts(@This());
+}
 
-pub const StreamSummaryDiagnostics = struct {
-    phase: StreamSummaryErrorPhase = .stream,
-    offset: usize = 0,
-    meta_block_index: usize = 0,
-};
-
-pub const StreamProbeResult = struct {
-    ok: bool,
-    summary: ?StreamSummary = null,
-    diagnostics: StreamSummaryDiagnostics = .{},
-    error_name: []const u8 = "",
-};
-
-const StreamSummaryMetaBlockStats = struct {
-    max_wire_distance: usize = 0,
-    static_dictionary_copy_count: usize = 0,
-    static_dictionary_bytes: usize = 0,
-    shared_dictionary_copy_count: usize = 0,
-    shared_dictionary_bytes: usize = 0,
-    command_count: usize = 0,
-    zero_insert_command_count: usize = 0,
-    single_literal_insert_command_count: usize = 0,
-    implicit_distance_command_count: usize = 0,
-    implicit_distance_copy_count: usize = 0,
-    short_distance_copy_count: usize = 0,
-    direct_distance_copy_count: usize = 0,
-    regular_distance_copy_count: usize = 0,
-    copy_length_log2_histogram: [9]usize = @splat(0),
-    lz77_copy_count: usize = 0,
-    lz77_copy_bytes: usize = 0,
-    max_lz77_distance: usize = 0,
-    non_overlapping_lz77_copy_count: usize = 0,
-    non_overlapping_lz77_copy_bytes: usize = 0,
-    short_non_overlapping_lz77_copy_count: usize = 0,
-    short_non_overlapping_lz77_copy_bytes: usize = 0,
-    literal_context_mode_bytes: [4]usize = @splat(0),
-    max_literal_block_types: usize = 0,
-    max_literal_context_trees: usize = 0,
-    max_command_block_types: usize = 0,
-    max_distance_block_types: usize = 0,
-    max_distance_context_trees: usize = 0,
-    max_distance_postfix_bits: u2 = 0,
-    max_direct_distance_codes: u16 = 0,
-};
+test "Brotli wide count-only summary empty transform contracts" {
+    try @import("br/summary/progress_tests.zig").contracts(@This());
+}
 
 const BitWriter = @import("br/encoder/bit_writer.zig").Writer;
 
@@ -4174,8 +4077,8 @@ pub const CompressedSupportLimits = struct {
     max_distance_alphabet_size: usize,
 };
 
-fn maxBackwardDistanceForWindow(window_bits: u5, output_len: usize) usize {
-    return @min(output_len, (@as(usize, 1) << window_bits) - 16);
+fn maxBackwardDistanceForWindow(window_bits: u5, output_len: Counter) usize {
+    return stream_count.bounded(output_len, (@as(usize, 1) << window_bits) - 16);
 }
 
 const WindowInfo = struct {
@@ -4340,7 +4243,14 @@ const LiteralHistory = struct {
         // seed in scratch then expands short periodic matches in logarithmically
         // many contiguous copies rather than one ring operation per output byte.
         var scratch: [256]u8 = undefined;
-        var remaining = len;
+        const capacity = self.storage().len;
+        // All bytes before the retained suffix are invisible to future
+        // context and backreference decisions. Skip complete copy periods;
+        // the final chronological window and its last two bytes stay exact.
+        var remaining = if (len > capacity)
+            capacity + (len - capacity) % distance
+        else
+            len;
         while (remaining != 0) {
             const batch_len = @min(remaining, scratch.len);
             const seed_len = @min(distance, batch_len);
@@ -15110,7 +15020,7 @@ pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 }
 
 pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSizeAllocLimited(allocator, stream, max_output_len);
+    const decoded_len = try stream_count.toLocal(try decodedStreamSizeAllocLimited(allocator, stream, max_output_len));
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
@@ -15132,7 +15042,7 @@ pub fn decodeStreamAppendWithOptions(allocator: std.mem.Allocator, out: *std.Arr
 
 pub fn decodeStreamAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
     if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
-    const decoded_len = try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, options);
+    const decoded_len = try stream_count.toLocal(try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, options));
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
@@ -15407,7 +15317,7 @@ noinline fn decodeLargeStreamIntoWithOptions(stream: []const u8, output: []u8, o
 }
 
 pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSizeLimited(stream, max_output_len);
+    const decoded_len = try stream_count.toLocal(try decodedStreamSizeLimited(stream, max_output_len));
     if (output.len < decoded_len) return error.OutputTooSmall;
     const written = decodeStreamInto(stream, output[0..decoded_len]) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
@@ -15422,7 +15332,7 @@ pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_
     // Match the allocator-returning and append limited APIs: perform the full
     // Brotli preflight first so callers see `OutputLimitExceeded` before any
     // mutation when the stream's declared/decoded size is outside policy.
-    const decoded_len = try decodedStreamSizeLimitedWithOptions(stream, max_output_len, options);
+    const decoded_len = try stream_count.toLocal(try decodedStreamSizeLimitedWithOptions(stream, max_output_len, options));
     if (output.len < decoded_len) return error.OutputTooSmall;
     const written = decodeStreamIntoWithOptions(stream, output[0..decoded_len], options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
@@ -15453,60 +15363,60 @@ pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, ex
     return written;
 }
 
-pub fn decodedStreamSize(stream: []const u8) Error!usize {
-    return try decodedStreamSizeLimited(stream, std.math.maxInt(usize));
+pub fn decodedStreamSize(stream: []const u8) Error!Counter {
+    return try decodedStreamSizeLimited(stream, std.math.maxInt(Counter));
 }
 
-pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error!usize {
+pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: Counter) Error!Counter {
     return (try summarizeStreamLimited(stream, max_output_len)).decoded_bytes;
 }
 
-pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!usize {
+pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!Counter {
     if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSize(stream);
-    return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(usize), options);
+    return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
-pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
     if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSizeLimited(stream, max_output_len);
     return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
 }
 
 pub fn summarizeStream(stream: []const u8) Error!StreamSummary {
-    return try summarizeStreamLimited(stream, std.math.maxInt(usize));
+    return try summarizeStreamLimited(stream, std.math.maxInt(Counter));
 }
 
-pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!StreamSummary {
+pub fn summarizeStreamLimited(stream: []const u8, max_output_len: Counter) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamLimitedWithDiagnostics(stream, max_output_len, &diagnostics);
 }
 
 pub fn summarizeStreamWithOptions(stream: []const u8, options: DecodeOptions) Error!StreamSummary {
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStream(stream);
-    return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
+    return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
-pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimited(stream, max_output_len);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamLimitedWithDiagnostics(stream, std.math.maxInt(usize), diagnostics);
+    return try summarizeStreamLimitedWithDiagnostics(stream, std.math.maxInt(Counter), diagnostics);
 }
 
 pub fn summarizeStreamWithOptionsAndDiagnostics(stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(usize), options, diagnostics);
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(Counter), options, diagnostics);
 }
 
-pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, .{}, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
     };
 }
 
-pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
@@ -15522,32 +15432,32 @@ pub fn summarizeStreamWithHistory(stream: []const u8, history: []u8) Error!Strea
     return summarizeStreamWithHistoryAndOptions(stream, history, .{});
 }
 
-pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_output_len: Counter) Error!StreamSummary {
     return summarizeStreamLimitedWithHistoryAndOptions(stream, history, max_output_len, .{});
 }
 
 pub fn summarizeStreamWithHistoryAndOptions(stream: []const u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
-    return summarizeStreamLimitedWithHistoryAndOptions(stream, history, std.math.maxInt(usize), options);
+    return summarizeStreamLimitedWithHistoryAndOptions(stream, history, std.math.maxInt(Counter), options);
 }
 
-pub fn summarizeStreamLimitedWithHistoryAndOptions(stream: []const u8, history: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithHistoryAndOptions(stream: []const u8, history: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
     return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamWithHistoryAndDiagnostics(stream: []const u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, std.math.maxInt(usize), diagnostics);
+    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, std.math.maxInt(Counter), diagnostics);
 }
 
 pub fn summarizeStreamWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, std.math.maxInt(usize), options, diagnostics);
+    return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, std.math.maxInt(Counter), options, diagnostics);
 }
 
-pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, history: []u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream, history, max_output_len, .{}, diagnostics);
 }
 
-pub fn summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamLimitedWithHistoryAndOptionsAndDiagnostics(stream: []const u8, history: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
@@ -15562,32 +15472,32 @@ pub fn summarizeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Er
     return try summarizeStreamAllocWithOptions(allocator, stream, .{});
 }
 
-pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!StreamSummary {
+pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter) Error!StreamSummary {
     return try summarizeStreamAllocLimitedWithOptions(allocator, stream, max_output_len, .{});
 }
 
 pub fn summarizeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error!StreamSummary {
-    return try summarizeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
+    return try summarizeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(Counter), options);
 }
 
-pub fn summarizeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+pub fn summarizeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(usize), .{}, diagnostics);
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(Counter), .{}, diagnostics);
 }
 
-pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, max_output_len, .{}, diagnostics);
 }
 
 pub fn summarizeStreamAllocWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(usize), options, diagnostics);
+    return try summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator, stream, std.math.maxInt(Counter), options, diagnostics);
 }
 
-pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     if (allocatingSummaryHistoryHint(stream, max_output_len, options)) |history_len| {
         const history = allocator.alloc(u8, history_len) catch |alloc_err| {
             // The header-only hint is deliberately speculative. Preserve the
@@ -15622,7 +15532,7 @@ pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.A
         diagnostics.* = .{ .phase = .window_bits };
         return err;
     }).bits;
-    const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
+    const history_len = stream_count.bounded(max_output_len, (@as(usize, 1) << window_bits) - 16);
     const history = try allocator.alloc(u8, history_len);
     defer allocator.free(history);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, history) catch |err| switch (err) {
@@ -15636,7 +15546,7 @@ pub fn summarizeStreamAllocLimitedWithOptionsAndDiagnostics(allocator: std.mem.A
 
 const eager_summary_history_decoded_len_max = 2 * 1024 * 1024;
 
-fn allocatingSummaryHistoryHint(stream: []const u8, max_output_len: usize, options: DecodeOptions) ?usize {
+fn allocatingSummaryHistoryHint(stream: []const u8, max_output_len: Counter, options: DecodeOptions) ?usize {
     if (stream.len < large_stream_decode_threshold) return null;
     var reader = bitstream.BitReader.init(stream);
     const window_bits = (readWindowInfo(&reader, options) catch return null).bits;
@@ -15704,7 +15614,7 @@ test "br allocating summary history hint is bounded and conservative" {
     try std.testing.expectEqual(stored.len, (try summarizeStreamAlloc(std.testing.failing_allocator, stored_stream)).decoded_bytes);
 }
 
-fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     const window = readWindowInfo(&reader, options) catch |err| {
@@ -15741,8 +15651,8 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
                     recordSummaryError(diagnostics, .padding, reader, meta_block_index);
                     return err;
                 };
-                summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
-                summary.empty_meta_block_count = std.math.add(usize, summary.empty_meta_block_count, 1) catch return error.IntegerOverflow;
+                summary.meta_block_count = std.math.add(Counter, summary.meta_block_count, 1) catch return error.IntegerOverflow;
+                summary.empty_meta_block_count = std.math.add(Counter, summary.empty_meta_block_count, 1) catch return error.IntegerOverflow;
                 return summary;
             }
         }
@@ -15762,9 +15672,9 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
                 recordSummaryError(diagnostics, .metadata_meta_block, reader, meta_block_index);
                 return err;
             };
-            summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
-            summary.metadata_meta_block_count = std.math.add(usize, summary.metadata_meta_block_count, 1) catch return error.IntegerOverflow;
-            summary.metadata_bytes = std.math.add(usize, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
+            summary.meta_block_count = std.math.add(Counter, summary.meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.metadata_meta_block_count = std.math.add(Counter, summary.metadata_meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.metadata_bytes = std.math.add(Counter, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
             summary.uses_metadata = true;
             summary.stored_only = false;
             continue;
@@ -15779,14 +15689,13 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
         }
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
         const meta_block_start = summary.decoded_bytes;
-        summary.decoded_bytes = std.math.add(usize, summary.decoded_bytes, meta_block_len) catch return error.IntegerOverflow;
-        if (summary.decoded_bytes > max_output_len) {
+        summary.decoded_bytes = summary_stats.addDecoded(summary.decoded_bytes, meta_block_len, max_output_len) catch |err| {
             recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
-            return error.OutputLimitExceeded;
-        }
-        summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
+            return err;
+        };
+        summary.meta_block_count = std.math.add(Counter, summary.meta_block_count, 1) catch return error.IntegerOverflow;
         if (is_last) {
-            summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.compressed_meta_block_count = std.math.add(Counter, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
@@ -15807,7 +15716,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
         };
         const is_uncompressed = is_uncompressed_bit == 1;
         if (!is_uncompressed) {
-            summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.compressed_meta_block_count = std.math.add(Counter, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
@@ -15818,7 +15727,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             try applySummaryMetaBlockStats(&summary, block_stats);
             continue;
         }
-        summary.uncompressed_meta_block_count = std.math.add(usize, summary.uncompressed_meta_block_count, 1) catch return error.IntegerOverflow;
+        summary.uncompressed_meta_block_count = std.math.add(Counter, summary.uncompressed_meta_block_count, 1) catch return error.IntegerOverflow;
         summary.uses_uncompressed_meta_blocks = true;
         consumeZeroPaddingToByte(&reader) catch |err| {
             recordSummaryError(diagnostics, .uncompressed_meta_block, reader, meta_block_index);
@@ -15833,11 +15742,11 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
     }
 }
 
-fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!usize {
+fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter) Error!Counter {
     return try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, .{});
 }
 
-fn decodedStreamSizeAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+fn decodedStreamSizeAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
     return (try summarizeStreamAllocLimitedWithOptions(allocator, stream, max_output_len, options)).decoded_bytes;
 }
 
@@ -15922,20 +15831,20 @@ pub fn decodeStreamChunksIntoExactSizeWithOptions(chunks: []const []const u8, co
     return try decodeStreamIntoExactSizeWithOptions(joined, output, expected_output_len, options);
 }
 
-pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!Counter {
     return decodedStreamChunksSizeWithOptions(chunks, compressed_scratch, .{});
 }
 
-pub fn decodedStreamChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!usize {
+pub fn decodedStreamChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) Error!Counter {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedStreamSizeWithOptions(joined, options);
 }
 
-pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter) Error!Counter {
     return decodedStreamChunksSizeLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
 }
 
-pub fn decodedStreamChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
+pub fn decodedStreamChunksSizeLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!Counter {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedStreamSizeLimitedWithOptions(joined, max_output_len, options);
 }
@@ -15949,11 +15858,11 @@ pub fn summarizeStreamChunksWithOptions(chunks: []const []const u8, compressed_s
     return try summarizeStreamWithOptions(joined, options);
 }
 
-pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!StreamSummary {
+pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter) Error!StreamSummary {
     return summarizeStreamChunksLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
 }
 
-pub fn summarizeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try summarizeStreamLimitedWithOptions(joined, max_output_len, options);
 }
@@ -15967,14 +15876,14 @@ pub fn summarizeStreamChunksWithOptionsAndDiagnostics(chunks: []const []const u8
         diagnostics.* = .{};
         return err;
     };
-    return try summarizeStreamLimitedWithOptionsAndDiagnostics(joined, std.math.maxInt(usize), options, diagnostics);
+    return try summarizeStreamLimitedWithOptionsAndDiagnostics(joined, std.math.maxInt(Counter), options, diagnostics);
 }
 
-pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks, compressed_scratch, max_output_len, .{}, diagnostics);
 }
 
-pub fn summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     const joined = joinChunks(chunks, compressed_scratch) catch |err| {
         diagnostics.* = .{};
         return err;
@@ -15986,32 +15895,32 @@ pub fn summarizeStreamChunksWithHistory(chunks: []const []const u8, compressed_s
     return summarizeStreamChunksWithHistoryAndOptions(chunks, compressed_scratch, history, .{});
 }
 
-pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter) Error!StreamSummary {
     return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, max_output_len, .{});
 }
 
 pub fn summarizeStreamChunksWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions) Error!StreamSummary {
-    return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, std.math.maxInt(usize), options);
+    return summarizeStreamChunksLimitedWithHistoryAndOptions(chunks, compressed_scratch, history, std.math.maxInt(Counter), options);
 }
 
-pub fn summarizeStreamChunksLimitedWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithHistoryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter, options: DecodeOptions) Error!StreamSummary {
     var diagnostics: StreamSummaryDiagnostics = .{};
     return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, max_output_len, options, &diagnostics);
 }
 
 pub fn summarizeStreamChunksWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), diagnostics);
+    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(Counter), diagnostics);
 }
 
 pub fn summarizeStreamChunksWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), options, diagnostics);
+    return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(Counter), options, diagnostics);
 }
 
-pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     return summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks, compressed_scratch, history, max_output_len, .{}, diagnostics);
 }
 
-pub fn summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+pub fn summarizeStreamChunksLimitedWithHistoryAndOptionsAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: Counter, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
     const joined = joinChunks(chunks, compressed_scratch) catch |err| {
         diagnostics.* = .{};
         return err;
@@ -16023,15 +15932,15 @@ pub fn probeStream(stream: []const u8) StreamProbeResult {
     return probeStreamWithOptions(stream, .{});
 }
 
-pub fn probeStreamLimited(stream: []const u8, max_output_len: usize) StreamProbeResult {
+pub fn probeStreamLimited(stream: []const u8, max_output_len: Counter) StreamProbeResult {
     return probeStreamLimitedWithOptions(stream, max_output_len, .{});
 }
 
 pub fn probeStreamWithOptions(stream: []const u8, options: DecodeOptions) StreamProbeResult {
-    return probeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
+    return probeStreamLimitedWithOptions(stream, std.math.maxInt(Counter), options);
 }
 
-pub fn probeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) StreamProbeResult {
+pub fn probeStreamLimitedWithOptions(stream: []const u8, max_output_len: Counter, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics) catch |err| {
         return .{
@@ -16047,13 +15956,13 @@ pub fn probeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, 
     };
 }
 
-pub fn probeStreamExactSize(stream: []const u8, expected_output_len: usize) StreamProbeResult {
+pub fn probeStreamExactSize(stream: []const u8, expected_output_len: Counter) StreamProbeResult {
     return probeStreamExactSizeWithOptions(stream, expected_output_len, .{});
 }
 
-pub fn probeStreamExactSizeWithOptions(stream: []const u8, expected_output_len: usize, options: DecodeOptions) StreamProbeResult {
+pub fn probeStreamExactSizeWithOptions(stream: []const u8, expected_output_len: Counter, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
-    const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(usize), options, &diagnostics) catch |err| {
+    const summary = summarizeStreamLimitedWithOptionsAndDiagnostics(stream, std.math.maxInt(Counter), options, &diagnostics) catch |err| {
         return .{
             .ok = false,
             .diagnostics = diagnostics,
@@ -16079,15 +15988,15 @@ pub fn probeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) S
     return probeStreamChunksWithOptions(chunks, compressed_scratch, .{});
 }
 
-pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) StreamProbeResult {
+pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter) StreamProbeResult {
     return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, max_output_len, .{});
 }
 
 pub fn probeStreamChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, options: DecodeOptions) StreamProbeResult {
-    return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, std.math.maxInt(usize), options);
+    return probeStreamChunksLimitedWithOptions(chunks, compressed_scratch, std.math.maxInt(Counter), options);
 }
 
-pub fn probeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, options: DecodeOptions) StreamProbeResult {
+pub fn probeStreamChunksLimitedWithOptions(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: Counter, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamChunksLimitedWithOptionsAndDiagnostics(chunks, compressed_scratch, max_output_len, options, &diagnostics) catch |err| {
         return .{
@@ -16103,11 +16012,11 @@ pub fn probeStreamChunksLimitedWithOptions(chunks: []const []const u8, compresse
     };
 }
 
-pub fn probeStreamChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) StreamProbeResult {
+pub fn probeStreamChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: Counter) StreamProbeResult {
     return probeStreamChunksExactSizeWithOptions(chunks, compressed_scratch, expected_output_len, .{});
 }
 
-pub fn probeStreamChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize, options: DecodeOptions) StreamProbeResult {
+pub fn probeStreamChunksExactSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: Counter, options: DecodeOptions) StreamProbeResult {
     var diagnostics: StreamSummaryDiagnostics = .{};
     const summary = summarizeStreamChunksWithOptionsAndDiagnostics(chunks, compressed_scratch, options, &diagnostics) catch |err| {
         return .{
@@ -16131,7 +16040,7 @@ pub fn probeStreamChunksExactSizeWithOptions(chunks: []const []const u8, compres
     };
 }
 
-fn recordSummaryError(diagnostics: *StreamSummaryDiagnostics, phase: StreamSummaryErrorPhase, reader: bitstream.BitReader, meta_block_index: usize) void {
+fn recordSummaryError(diagnostics: *StreamSummaryDiagnostics, phase: StreamSummaryErrorPhase, reader: bitstream.BitReader, meta_block_index: Counter) void {
     diagnostics.* = .{
         .phase = phase,
         .offset = reader.byteOffset(),
@@ -16140,42 +16049,7 @@ fn recordSummaryError(diagnostics: *StreamSummaryDiagnostics, phase: StreamSumma
 }
 
 fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaBlockStats) Error!void {
-    if (stats.static_dictionary_copy_count != 0) {
-        summary.uses_static_dictionary = true;
-        summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
-        summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
-    }
-    if (stats.shared_dictionary_copy_count != 0) {
-        summary.uses_shared_dictionary = true;
-        summary.shared_dictionary_copy_count = std.math.add(usize, summary.shared_dictionary_copy_count, stats.shared_dictionary_copy_count) catch return error.IntegerOverflow;
-        summary.shared_dictionary_bytes = std.math.add(usize, summary.shared_dictionary_bytes, stats.shared_dictionary_bytes) catch return error.IntegerOverflow;
-    }
-    summary.command_count = std.math.add(usize, summary.command_count, stats.command_count) catch return error.IntegerOverflow;
-    summary.zero_insert_command_count = std.math.add(usize, summary.zero_insert_command_count, stats.zero_insert_command_count) catch return error.IntegerOverflow;
-    summary.single_literal_insert_command_count = std.math.add(usize, summary.single_literal_insert_command_count, stats.single_literal_insert_command_count) catch return error.IntegerOverflow;
-    summary.implicit_distance_command_count = std.math.add(usize, summary.implicit_distance_command_count, stats.implicit_distance_command_count) catch return error.IntegerOverflow;
-    summary.implicit_distance_copy_count = std.math.add(usize, summary.implicit_distance_copy_count, stats.implicit_distance_copy_count) catch return error.IntegerOverflow;
-    summary.short_distance_copy_count = std.math.add(usize, summary.short_distance_copy_count, stats.short_distance_copy_count) catch return error.IntegerOverflow;
-    summary.direct_distance_copy_count = std.math.add(usize, summary.direct_distance_copy_count, stats.direct_distance_copy_count) catch return error.IntegerOverflow;
-    summary.regular_distance_copy_count = std.math.add(usize, summary.regular_distance_copy_count, stats.regular_distance_copy_count) catch return error.IntegerOverflow;
-    for (&summary.copy_length_log2_histogram, stats.copy_length_log2_histogram) |*total, count|
-        total.* = std.math.add(usize, total.*, count) catch return error.IntegerOverflow;
-    summary.lz77_copy_count = std.math.add(usize, summary.lz77_copy_count, stats.lz77_copy_count) catch return error.IntegerOverflow;
-    summary.lz77_copy_bytes = std.math.add(usize, summary.lz77_copy_bytes, stats.lz77_copy_bytes) catch return error.IntegerOverflow;
-    summary.max_lz77_distance = @max(summary.max_lz77_distance, stats.max_lz77_distance);
-    summary.non_overlapping_lz77_copy_count = std.math.add(usize, summary.non_overlapping_lz77_copy_count, stats.non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
-    summary.non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.non_overlapping_lz77_copy_bytes, stats.non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
-    summary.short_non_overlapping_lz77_copy_count = std.math.add(usize, summary.short_non_overlapping_lz77_copy_count, stats.short_non_overlapping_lz77_copy_count) catch return error.IntegerOverflow;
-    summary.short_non_overlapping_lz77_copy_bytes = std.math.add(usize, summary.short_non_overlapping_lz77_copy_bytes, stats.short_non_overlapping_lz77_copy_bytes) catch return error.IntegerOverflow;
-    for (&summary.literal_context_mode_bytes, stats.literal_context_mode_bytes) |*total, count|
-        total.* = std.math.add(usize, total.*, count) catch return error.IntegerOverflow;
-    summary.max_literal_block_types = @max(summary.max_literal_block_types, stats.max_literal_block_types);
-    summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
-    summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
-    summary.max_distance_block_types = @max(summary.max_distance_block_types, stats.max_distance_block_types);
-    summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
-    summary.max_distance_postfix_bits = @max(summary.max_distance_postfix_bits, stats.max_distance_postfix_bits);
-    summary.max_direct_distance_codes = @max(summary.max_direct_distance_codes, stats.max_direct_distance_codes);
+    return summary_stats.apply(summary, stats);
 }
 
 test "br stream summary aggregates command and LZ77 copy shapes" {
@@ -16216,7 +16090,7 @@ test "br stream summary aggregates command and LZ77 copy shapes" {
     try std.testing.expectEqual(@as(usize, 2), summary.short_distance_copy_count);
     try std.testing.expectEqual(@as(usize, 1), summary.direct_distance_copy_count);
     try std.testing.expectEqual(@as(usize, 1), summary.regular_distance_copy_count);
-    try std.testing.expectEqual([_]usize{ 0, 3, 3, 1, 0, 1, 1, 0, 1 }, summary.copy_length_log2_histogram);
+    try std.testing.expectEqual([_]Counter{ 0, 3, 3, 1, 0, 1, 1, 0, 1 }, summary.copy_length_log2_histogram);
     try std.testing.expectEqual(@as(usize, 7), summary.lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 91), summary.lz77_copy_bytes);
     try std.testing.expectEqual(@as(usize, 4097), summary.max_lz77_distance);
@@ -16224,7 +16098,7 @@ test "br stream summary aggregates command and LZ77 copy shapes" {
     try std.testing.expectEqual(@as(usize, 63), summary.non_overlapping_lz77_copy_bytes);
     try std.testing.expectEqual(@as(usize, 3), summary.short_non_overlapping_lz77_copy_count);
     try std.testing.expectEqual(@as(usize, 27), summary.short_non_overlapping_lz77_copy_bytes);
-    try std.testing.expectEqual([_]usize{ 4, 3, 2, 1 }, summary.literal_context_mode_bytes);
+    try std.testing.expectEqual([_]Counter{ 4, 3, 2, 1 }, summary.literal_context_mode_bytes);
     try std.testing.expectEqual(@as(u2, 2), summary.max_distance_postfix_bits);
     try std.testing.expectEqual(@as(u16, 12), summary.max_direct_distance_codes);
 }
@@ -16246,18 +16120,18 @@ test "br stream summary classifies distance coding paths" {
 fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCopyLengths) SummaryError!void {
     const s = stats orelse return;
     if (lengths.copy_len == 0) return error.CorruptFrame;
-    s.command_count = std.math.add(usize, s.command_count, 1) catch return error.IntegerOverflow;
+    s.command_count = std.math.add(Counter, s.command_count, 1) catch return error.IntegerOverflow;
     if (lengths.insert_len == 0)
-        s.zero_insert_command_count = std.math.add(usize, s.zero_insert_command_count, 1) catch return error.IntegerOverflow;
+        s.zero_insert_command_count = std.math.add(Counter, s.zero_insert_command_count, 1) catch return error.IntegerOverflow;
     if (lengths.insert_len == 1)
         s.single_literal_insert_command_count = std.math.add(usize, s.single_literal_insert_command_count, 1) catch return error.IntegerOverflow;
     if (lengths.distance_symbol_zero)
-        s.implicit_distance_command_count = std.math.add(usize, s.implicit_distance_command_count, 1) catch return error.IntegerOverflow;
+        s.implicit_distance_command_count = std.math.add(Counter, s.implicit_distance_command_count, 1) catch return error.IntegerOverflow;
     const copy_length_bucket = @min(
         s.copy_length_log2_histogram.len - 1,
         @as(usize, std.math.log2_int(usize, lengths.copy_len)),
     );
-    s.copy_length_log2_histogram[copy_length_bucket] = std.math.add(usize, s.copy_length_log2_histogram[copy_length_bucket], 1) catch return error.IntegerOverflow;
+    s.copy_length_log2_histogram[copy_length_bucket] = std.math.add(Counter, s.copy_length_log2_histogram[copy_length_bucket], 1) catch return error.IntegerOverflow;
 }
 
 pub const StoredStreamEncoder = struct {
@@ -16478,7 +16352,11 @@ pub const StreamDecoder = struct {
     }
 
     pub fn resetLimitedWithOptions(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, max_output_len: usize, options: DecodeOptions) Error!void {
-        const decoded_len = decodedStreamSizeLimitedWithOptions(stream, max_output_len, options) catch |err| {
+        const decoded_count = decodedStreamSizeLimitedWithOptions(stream, max_output_len, options) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        const decoded_len = stream_count.toLocal(decoded_count) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -19504,7 +19382,7 @@ noinline fn processTailLookupCompressedPayloadLargeWindow(
 
 fn skipMinimalCompressedMetaBlock(
     reader: *bitstream.BitReader,
-    start_written: usize,
+    start_written: Counter,
     meta_block_len: usize,
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
@@ -19512,7 +19390,7 @@ fn skipMinimalCompressedMetaBlock(
     window: WindowInfo,
     dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
-    const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
+    const meta_block_end = stream_count.addLocal(start_written, meta_block_len) catch return error.IntegerOverflow;
     if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits, dictionary);
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
@@ -19536,7 +19414,7 @@ fn skipMinimalCompressedMetaBlock(
 
 noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     reader: *bitstream.BitReader,
-    start_written: usize,
+    start_written: Counter,
     meta_block_len: usize,
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
@@ -19544,7 +19422,7 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     window_bits: u5,
     dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
-    const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
+    const meta_block_end = stream_count.addLocal(start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: LargeWindowCompressedHeader = undefined;
     try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
     if (stats) |s| {
@@ -19569,8 +19447,8 @@ noinline fn skipDecodedCompressedPayload(
     comptime literal_tail_lookup: bool,
     comptime auxiliary_tail_lookups: bool,
     reader: *bitstream.BitReader,
-    start_written: usize,
-    meta_block_end: usize,
+    start_written: Counter,
+    meta_block_end: Counter,
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
@@ -19599,7 +19477,7 @@ noinline fn skipDecodedCompressedPayload(
             const literal = if (literal_tail_lookup) try tree.decodeTailLookup(reader) else try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             literal_history.push(@intCast(literal));
-            written += 1;
+            try stream_count.advance(&written, 1);
             if (stats) |s| s.literal_context_mode_bytes[literal_mode] = std.math.add(usize, s.literal_context_mode_bytes[literal_mode], 1) catch return error.IntegerOverflow;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
@@ -19636,10 +19514,10 @@ noinline fn skipDecodedCompressedPayload(
                 distance,
                 lengths.copy_len,
                 max_distance,
-                meta_block_end - written,
+                try stream_count.toLocal(meta_block_end - written),
                 &transformed_dictionary_word,
             );
-            written += replayed.output_len;
+            try stream_count.advance(&written, replayed.output_len);
             if (replayed.kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
             continue;
@@ -19660,7 +19538,7 @@ noinline fn skipDecodedCompressedPayload(
             }
         }
         literal_history.copy(distance, lengths.copy_len);
-        written += lengths.copy_len;
+        try stream_count.advance(&written, lengths.copy_len);
     }
 }
 
@@ -19668,8 +19546,8 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
     comptime literal_tail_lookup: bool,
     comptime auxiliary_tail_lookups: bool,
     reader: *bitstream.BitReader,
-    start_written: usize,
-    meta_block_end: usize,
+    start_written: Counter,
+    meta_block_end: Counter,
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
@@ -19698,7 +19576,7 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
             const literal = if (literal_tail_lookup) try tree.decodeTailLookup(reader) else try tree.decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             literal_history.push(@intCast(literal));
-            written += 1;
+            try stream_count.advance(&written, 1);
             if (stats) |s| s.literal_context_mode_bytes[literal_mode] = std.math.add(usize, s.literal_context_mode_bytes[literal_mode], 1) catch return error.IntegerOverflow;
             if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
         }
@@ -19733,10 +19611,10 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
                 distance,
                 lengths.copy_len,
                 max_distance,
-                meta_block_end - written,
+                try stream_count.toLocal(meta_block_end - written),
                 &transformed_dictionary_word,
             );
-            written += replayed.output_len;
+            try stream_count.advance(&written, replayed.output_len);
             if (replayed.kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
             continue;
@@ -19749,7 +19627,7 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
             s.max_lz77_distance = @max(s.max_lz77_distance, distance);
         }
         literal_history.copy(distance, lengths.copy_len);
-        written += lengths.copy_len;
+        try stream_count.advance(&written, lengths.copy_len);
     }
 }
 
@@ -22490,7 +22368,9 @@ fn minimalStaticDictionaryWord(
     if (distance <= max_backward_distance) return error.InvalidMatch;
     const address = distance - max_backward_distance - 1;
 
-    return minimalStaticDictionaryWordAtAddress(address, copy_len, transformed_scratch);
+    const word = try minimalStaticDictionaryWordAtAddress(address, copy_len, transformed_scratch);
+    try empty_reference.validate(distance, word.len);
+    return word;
 }
 
 fn minimalStaticDictionaryWordAtAddress(
@@ -22525,8 +22405,8 @@ fn resolveOutOfWindowReference(
     const compound_size = if (dictionary) |active| active.total_size else 0;
     const target = shared_dictionary.classifyDistance(distance, max_history, compound_size) catch
         return error.InvalidMatch;
-    return switch (target) {
-        .history => error.InvalidMatch,
+    const resolved: ResolvedDictionaryReference = switch (target) {
+        .history => return error.InvalidMatch,
         .compound => |address| .{ .compound = (dictionary orelse return error.InvalidMatch).dictionary.cursor(address, copy_len) catch |err| switch (err) {
             error.IntegerOverflow => return error.IntegerOverflow,
             else => return error.InvalidMatch,
@@ -22554,6 +22434,11 @@ fn resolveOutOfWindowReference(
             static_scratch,
         ) },
     };
+    switch (resolved) {
+        .compound => {},
+        .static, .contextual_static => |word| try empty_reference.validate(distance, word.len),
+    }
+    return resolved;
 }
 
 const DictionaryReferenceKind = enum { compound, static, contextual_static };
@@ -22634,7 +22519,7 @@ fn replayOutOfWindowReference(
                 literal_history.pushSlice(scratch[0..copied]);
             }
             if (stats) |s| {
-                s.shared_dictionary_copy_count = std.math.add(usize, s.shared_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.shared_dictionary_copy_count = std.math.add(Counter, s.shared_dictionary_copy_count, 1) catch return error.IntegerOverflow;
                 s.shared_dictionary_bytes = std.math.add(usize, s.shared_dictionary_bytes, copy_len) catch return error.IntegerOverflow;
             }
             return .{ .kind = .compound, .output_len = copy_len };
@@ -22643,7 +22528,7 @@ fn replayOutOfWindowReference(
             if (word.len > remaining_output) return error.CorruptFrame;
             literal_history.pushSlice(word);
             if (stats) |s| {
-                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.static_dictionary_copy_count = std.math.add(Counter, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
                 s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
             }
             return .{ .kind = .static, .output_len = word.len };
@@ -22653,7 +22538,7 @@ fn replayOutOfWindowReference(
             literal_history.pushSlice(word);
             if (stats) |s| {
                 s.shared_dictionary_copy_count = std.math.add(
-                    usize,
+                    Counter,
                     s.shared_dictionary_copy_count,
                     1,
                 ) catch return error.IntegerOverflow;
@@ -22995,7 +22880,7 @@ fn recordSummaryDistanceCode(
         &s.direct_distance_copy_count
     else
         &s.regular_distance_copy_count;
-    count.* = std.math.add(usize, count.*, 1) catch return error.IntegerOverflow;
+    count.* = std.math.add(Counter, count.*, 1) catch return error.IntegerOverflow;
 }
 
 fn readSummaryMinimalDistance(
