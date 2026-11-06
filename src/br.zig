@@ -5318,10 +5318,25 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
         &best,
     );
 
-    if (schedule.family == .ratio and window_bits >= 17 and
+    // Ratio presets already search far matches when the caller advertises a
+    // wider window. A default 16-bit one-shot stream also considers one
+    // bounded far-match candidate: the wire advertises only the smallest
+    // window its winning plan actually uses, and complete-wire arbitration
+    // keeps the original 16-bit stream whenever the far pass does not pay for
+    // itself. Work stays bounded to one MiB of input; larger inputs retain the
+    // explicit-window path.
+    const auto_long_window = window_bits == 16 and options.window_bits == null and
+        !options.large_window and input.len <= 1024 * 1024 and
+        input.len > long_distance.min_distance;
+    if (schedule.family == .ratio and
+        (window_bits >= 17 or auto_long_window) and
         input.len > long_distance.min_distance)
     {
-        const max_backward_distance = (@as(usize, 1) << window_bits) - 16;
+        const long_window_bits: u5 = if (window_bits >= 17)
+            window_bits
+        else
+            long_distance.windowBitsForInput(input.len, 20);
+        const max_backward_distance = (@as(usize, 1) << long_window_bits) - 16;
         const literal_commands = [_]command_plan.Command{.{
             .insert_start = 0,
             .insert_len = input.len,
@@ -5332,14 +5347,33 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 command_stream.commands
             else
                 &literal_commands;
-            const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormat(
+            // The literal-only alternate ignores near matches, so it is the
+            // one that can recover a complete far copy interrupted by
+            // incidental short matches. Its broader search needs only a short
+            // chain on the same distance band; the command proposal keeps the
+            // deeper established search.
+            const long_chain: usize = if (auto_long_window)
+                (if (proposal_index == 0) 64 else 16)
+            else
+                long_distance.default_chain_limit;
+            const long_commands = try long_distance.augmentAllocWithMaxDistanceForFormatAndChain(
                 allocator,
                 input,
                 proposal,
                 max_backward_distance,
                 encoder_window_format.format(options.large_window),
+                long_chain,
             ) orelse continue;
             defer freeQualityRecorded(trace_enabled, trace, allocator, long_commands);
+            var candidate_options = wire_options;
+            if (auto_long_window) {
+                const farthest = long_distance.farthestLz77Distance(long_commands);
+                if (farthest <= (@as(usize, 1) << default_window_bits) - 16) continue;
+                candidate_options.window_bits = @min(
+                    long_window_bits,
+                    long_distance.windowBitsForDistance(farthest),
+                );
+            }
             var long_stats: encoder_stats.PlannedEncodeStats = .{};
             const long_candidate = try encodeLazyCommandPlanAllocRecorded(
                 trace_enabled,
@@ -5348,8 +5382,17 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
                 input,
                 long_commands,
                 &long_stats,
-                wire_options,
+                candidate_options,
             );
+            // A wider decoder window must buy a measurable payload win rather
+            // than a one- or two-byte tie against the 16-bit incumbent.
+            if (auto_long_window) {
+                const margin = @max(@as(usize, 64), best.len / 1024);
+                if (long_candidate.len + margin >= best.len) {
+                    freeQualityRecorded(trace_enabled, trace, allocator, long_candidate);
+                    continue;
+                }
+            }
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, long_candidate);
         }
     }
@@ -25334,6 +25377,31 @@ test "br stable planner levels honor explicit 10 through 16 bit windows" {
     const ratio_17_summary = try summarizeStream(ratio_17_stored);
     try std.testing.expectEqual(@as(u5, 17), ratio_17_summary.window_bits);
     try std.testing.expect(ratio_17_summary.stored_only);
+}
+
+test "br default ratio window reaches a far copy beyond the 16-bit window" {
+    const block_len = 64 * 1024;
+    var input: [2 * block_len]u8 = undefined;
+    var state: u32 = 0x1357_9bdf;
+    for (input[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..block_len]);
+
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{ .quality = 6 });
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expect(summary.window_bits > 16);
+    try std.testing.expect(encoded.len < input.len / 2 + 4096);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, input.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
+
+    const explicit = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &input, .{ .quality = 6, .window_bits = 16 });
+    defer std.testing.allocator.free(explicit);
+    try std.testing.expectEqual(@as(u5, 16), (try summarizeStream(explicit)).window_bits);
+    try std.testing.expect(explicit.len > input.len * 3 / 4);
 }
 
 test "br omitted planned window preserves legacy level wires" {

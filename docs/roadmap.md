@@ -10,6 +10,14 @@ priorities. Full-file, dictionary, streaming, memory and platform comparisons
 must accompany narrower wins. Preserve malformed-input safety, candidate
 ordering, incremental progress and allocator ownership throughout this work.
 
+The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
+adds a bounded far-match candidate to default q6-q11 one-shot streams through
+1 MiB. A 400 KiB far-copy fixture falls 409,605 -> 204,822 bytes (1.0000 versus
+libbrotli 1.0.9) by advertising only the 18-bit window it uses; webster keeps
+its 261,978-byte q11 wire and pays about 8% latency, and explicit 16-bit
+requests remain exact. Chunked/incremental and >1 MiB inputs still require
+explicit windows.
+
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated
 history movement. Its direct final/pristine matrix lowers whole-input

@@ -42,6 +42,7 @@ const Options = struct {
     adaptive_distance_split: ?bool = null,
     distance_parameter_search: ?bool = null,
     command_state_max_input_kib: ?u8 = null,
+    window_bits: ?u5 = null,
     hq: ?br.HqOptions = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
@@ -148,6 +149,7 @@ pub fn main(init: std.process.Init) !void {
             .quality = options.planned_quality,
             .mode = options.planned_mode,
             .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
+            .window_bits = options.window_bits,
         });
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeWithOptionsAlloc(init.gpa, case.payload, reference_settings);
@@ -339,6 +341,7 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
         .quality = options.planned_quality,
         .mode = options.planned_mode,
         .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
+        .window_bits = options.window_bits,
         .hq = options.hq,
     };
     const warmup = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
@@ -469,6 +472,14 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
         }
         if (std.mem.startsWith(u8, arg, "--planned-mode=")) {
             options.planned_mode = try parsePlannedMode(arg["--planned-mode=".len..]);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--window-bits")) {
+            options.window_bits = try std.fmt.parseInt(u5, args.next() orelse return error.MissingLimit, 10);
+            continue;
+        }
+        if (std.mem.startsWith(u8, arg, "--window-bits=")) {
+            options.window_bits = try std.fmt.parseInt(u5, arg["--window-bits=".len..], 10);
             continue;
         }
         if (std.mem.eql(u8, arg, "--command-state-max-input-kib")) {

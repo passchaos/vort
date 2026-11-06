@@ -6,10 +6,38 @@ pub const min_distance: usize = (@as(usize, 1) << 16) - 16 + 1;
 pub const max_distance: usize = (@as(usize, 1) << 17) - 16;
 const max_dense_distance: usize = (@as(usize, 1) << 20) - 16;
 pub const max_configurable_distance: usize = (@as(usize, 1) << 24) - 16;
-const chain_limit = 512;
+pub const default_chain_limit: usize = 512;
 const min_match = 16;
 const max_match = 258;
 const hash_size = 1 << 15;
+
+/// Smallest standard RFC 7932 window that can reach the complete input block,
+/// clamped to `[17, max_bits]`. A default 16-bit stream uses this to advertise
+/// only the decoder window its far matches actually need.
+pub fn windowBitsForInput(input_len: usize, max_bits: u5) u5 {
+    var bits: u5 = 17;
+    while (bits < max_bits and (@as(usize, 1) << bits) - 16 < input_len) bits += 1;
+    return bits;
+}
+
+/// Smallest standard window that can address one concrete backward distance.
+pub fn windowBitsForDistance(distance: usize) u5 {
+    var bits: u5 = 17;
+    while (bits < 24 and (@as(usize, 1) << bits) - 16 < distance) bits += 1;
+    return bits;
+}
+
+/// Farthest ordinary LZ77 distance used by a command plan. Dictionary and
+/// compound copies keep logical addresses, not backward distances.
+pub fn farthestLz77Distance(commands: []const command_plan.Command) usize {
+    var farthest: usize = 0;
+    for (commands) |command| {
+        if (command.has_copy and command.source == .lz77)
+            farthest = @max(farthest, command.distance);
+    }
+    return farthest;
+}
+
 // Delaying each hash insertion until it reaches min_distance lets the
 // predecessor ring cover only the requested long-distance band rather than the
 // complete Brotli window.
@@ -18,7 +46,7 @@ const hash_size = 1 << 15;
 /// LZ77 planner. Existing copies are preserved verbatim; rebuilding absolute
 /// insert offsets keeps the command stream independently verifiable.
 pub fn augmentAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?[]command_plan.Command {
-    return augmentAllocWithStride(1, allocator, "", input, commands, max_distance);
+    return augmentAllocWithStride(1, allocator, "", input, commands, max_distance, default_chain_limit);
 }
 
 /// Extend the shared 16-bit command plan with matches up to
@@ -37,6 +65,14 @@ pub fn augmentAllocWithMaxDistance(allocator: std.mem.Allocator, input: []const 
 
 pub fn augmentAllocWithMaxDistanceForFormat(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize, format: encoder_distance.Format) !?[]command_plan.Command {
     return augmentAllocWithHistoryAndMaxDistanceForFormat(allocator, "", input, commands, max_backward_distance, format);
+}
+
+/// Same as `augmentAllocWithMaxDistanceForFormat` with a caller-selected
+/// predecessor-chain budget. Default-window quality encoders use a smaller
+/// budget than the established 512-node search so an unprofitable far pass
+/// stays cheap.
+pub fn augmentAllocWithMaxDistanceForFormatAndChain(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_backward_distance: usize, format: encoder_distance.Format, chain_limit: usize) !?[]command_plan.Command {
+    return augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(allocator, "", input, commands, max_backward_distance, format, chain_limit);
 }
 
 /// Extend a block-local command plan with matches into retained bytes from the
@@ -65,6 +101,28 @@ pub fn augmentAllocWithHistoryAndMaxDistanceForFormat(
     max_backward_distance: usize,
     format: encoder_distance.Format,
 ) !?[]command_plan.Command {
+    return augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(
+        allocator,
+        history,
+        input,
+        commands,
+        max_backward_distance,
+        format,
+        default_chain_limit,
+    );
+}
+
+pub fn augmentAllocWithHistoryAndMaxDistanceForFormatAndChain(
+    allocator: std.mem.Allocator,
+    history: []const u8,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    max_backward_distance: usize,
+    format: encoder_distance.Format,
+    chain_limit: usize,
+) !?[]command_plan.Command {
+    if (chain_limit == 0 or chain_limit > default_chain_limit)
+        return error.InvalidBlockPlan;
     const limit = if (format == .standard) max_configurable_distance else encoder_distance.safe_max_distance;
     if (max_backward_distance < min_distance or max_backward_distance > limit)
         return error.InvalidBlockPlan;
@@ -83,14 +141,14 @@ pub fn augmentAllocWithHistoryAndMaxDistanceForFormat(
         combined_len - min_match,
     );
     if (reachable_max_distance <= max_dense_distance)
-        return augmentAllocWithStride(1, allocator, active_history, input, commands, reachable_max_distance);
+        return augmentAllocWithStride(1, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
     if (reachable_max_distance <= (@as(usize, 1) << 21) - 16)
-        return augmentAllocWithStride(2, allocator, active_history, input, commands, reachable_max_distance);
+        return augmentAllocWithStride(2, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
     if (reachable_max_distance <= (@as(usize, 1) << 22) - 16)
-        return augmentAllocWithStride(4, allocator, active_history, input, commands, reachable_max_distance);
+        return augmentAllocWithStride(4, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
     if (reachable_max_distance <= (@as(usize, 1) << 23) - 16)
-        return augmentAllocWithStride(8, allocator, active_history, input, commands, reachable_max_distance);
-    return augmentAllocWithStride(16, allocator, active_history, input, commands, reachable_max_distance);
+        return augmentAllocWithStride(8, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
+    return augmentAllocWithStride(16, allocator, active_history, input, commands, reachable_max_distance, chain_limit);
 }
 
 /// Non-HQ Large Window history augmentation. All retained bytes inside the
@@ -116,14 +174,14 @@ pub fn augmentLargeWindowHistoryAlloc(
     if (input.len < 3 or combined_len - 3 < min_distance or commands.len == 0) return null;
     const reachable = @min(max_backward_distance, combined_len - 3);
     if (reachable <= max_dense_distance)
-        return augmentWithStridePolicy(1, true, allocator, active_history, input, commands, reachable);
+        return augmentWithStridePolicy(1, true, allocator, active_history, input, commands, reachable, default_chain_limit);
     if (reachable <= (@as(usize, 1) << 21) - 16)
-        return augmentWithStridePolicy(2, true, allocator, active_history, input, commands, reachable);
+        return augmentWithStridePolicy(2, true, allocator, active_history, input, commands, reachable, default_chain_limit);
     if (reachable <= (@as(usize, 1) << 22) - 16)
-        return augmentWithStridePolicy(4, true, allocator, active_history, input, commands, reachable);
+        return augmentWithStridePolicy(4, true, allocator, active_history, input, commands, reachable, default_chain_limit);
     if (reachable <= (@as(usize, 1) << 23) - 16)
-        return augmentWithStridePolicy(8, true, allocator, active_history, input, commands, reachable);
-    return augmentWithStridePolicy(16, true, allocator, active_history, input, commands, reachable);
+        return augmentWithStridePolicy(8, true, allocator, active_history, input, commands, reachable, default_chain_limit);
+    return augmentWithStridePolicy(16, true, allocator, active_history, input, commands, reachable, default_chain_limit);
 }
 
 fn validateLargeWindowCommands(history_len: usize, input_len: usize, commands: []const command_plan.Command, max_backward_distance: usize) !void {
@@ -151,8 +209,9 @@ fn augmentAllocWithStride(
     input: []const u8,
     commands: []const command_plan.Command,
     max_backward_distance: usize,
+    chain_limit: usize,
 ) !?[]command_plan.Command {
-    return augmentWithStridePolicy(stride, false, allocator, history, input, commands, max_backward_distance);
+    return augmentWithStridePolicy(stride, false, allocator, history, input, commands, max_backward_distance, chain_limit);
 }
 
 fn augmentWithStridePolicy(
@@ -163,6 +222,7 @@ fn augmentWithStridePolicy(
     input: []const u8,
     commands: []const command_plan.Command,
     max_backward_distance: usize,
+    chain_limit: usize,
 ) !?[]command_plan.Command {
     const minimum_match = if (large_history) 3 else min_match;
     const combined_len = std.math.add(usize, history.len, input.len) catch
@@ -213,6 +273,7 @@ fn augmentWithStridePolicy(
                 prev,
                 prev_mask,
                 max_backward_distance,
+                chain_limit,
             );
             if (match.length >= minimum_match) {
                 if (large_history)
@@ -265,6 +326,7 @@ fn findFor(
     prev: []const i32,
     prev_mask: usize,
     max_backward_distance: usize,
+    chain_limit: usize,
 ) Match {
     const hash_bytes = if (large_history) 3 else 4;
     const minimum_match = if (large_history) 3 else min_match;
@@ -681,4 +743,23 @@ fn expectConfigurableDistanceMatch(match_position: usize, max_backward_distance:
             found = true;
         };
     try std.testing.expect(found);
+}
+
+test "default-window far-copy window sizing helpers" {
+    try std.testing.expectEqual(@as(u5, 17), windowBitsForInput(65_521, 20));
+    try std.testing.expectEqual(@as(u5, 17), windowBitsForInput(131_056, 20));
+    try std.testing.expectEqual(@as(u5, 18), windowBitsForInput(131_057, 20));
+    try std.testing.expectEqual(@as(u5, 20), windowBitsForInput(1_048_576, 20));
+    try std.testing.expectEqual(@as(u5, 20), windowBitsForInput(16 * 1024 * 1024, 20));
+
+    try std.testing.expectEqual(@as(u5, 17), windowBitsForDistance(65_521));
+    try std.testing.expectEqual(@as(u5, 18), windowBitsForDistance(131_057));
+    try std.testing.expectEqual(@as(u5, 24), windowBitsForDistance(max_configurable_distance));
+
+    const commands = [_]command_plan.Command{
+        .{ .insert_start = 0, .insert_len = 4 },
+        .{ .insert_start = 4, .insert_len = 0, .copy_len = 8, .distance = 70_000, .has_copy = true },
+        .{ .insert_start = 12, .insert_len = 0, .copy_len = 8, .distance = 2_000_000, .has_copy = true, .source = .compound },
+    };
+    try std.testing.expectEqual(@as(usize, 70_000), farthestLz77Distance(&commands));
 }

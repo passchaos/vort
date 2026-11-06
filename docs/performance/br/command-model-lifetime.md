@@ -1436,3 +1436,51 @@ cover the automatic one-shot and chunked wide-beam attempts, the no-growth
 contract, the small-block force flag, the zero opt-out and rejection outside
 quality 10/11. The binary attempt remains a later latency target on rows where
 it does not win.
+
+## Default-window far-copy reach, 2026-11-06
+
+Default quality schedules advertise a 16-bit window, and the shared near
+matcher caps at 65,520 bytes. The quality path's long-distance pass previously
+ran only for explicit 17...24-bit windows, so default q6...q11 one-shot streams
+could not reach copies beyond the near window at all. A 200 KiB unique block
+followed by its exact copy (400 KiB input) therefore encoded to 409,605 bytes
+at q11 while libbrotli 1.0.9 produced 204,822.
+
+The default q6...q11 one-shot path now runs one bounded far-match candidate for
+inputs through 1 MiB. It augments the lazy command plan and the literal-only
+alternate, then advertises only the smallest RFC window that the winning plan
+actually uses (17...20 bits). Complete-wire arbitration retains the original
+16-bit stream whenever the far pass does not pay for itself, and an explicit
+`window_bits` request remains an exact opt-out. The command proposal keeps a
+64-node predecessor chain; the literal-only proposal uses 16 nodes because it
+only needs to recover a complete far copy across incidental near matches.
+
+| Input | Before | After | libbrotli 1.0.9 |
+| --- | ---: | ---: | ---: |
+| 400 KiB far copy (200 KiB distance), q11 | 409,605 | 204,822 | 204,822 |
+| 1 MiB far copy (512 KiB distance), q8 | 1,048,581 | 526,444 | 524,310 |
+| mr 1 MiB, q8 | 304,319 | 292,289 | - |
+| webster 1 MiB, q11 | 261,978 | 261,978 | 239,314 |
+| webster 1 MiB, q8 | 290,189 | 290,189 | 264,969 |
+| dickens 1 MiB, q8 | 372,410 | 372,410 | - |
+
+The far-copy wires advertise window 18 and 20 respectively, matching the
+smallest RFC window their farthest copies need. A wider decoder window must
+buy more than a tie, so the auto candidate must beat the 16-bit incumbent by at
+least 64 bytes or 0.1%. Dickens' two-byte far win is therefore rejected; mr's 12,030
+bytes are kept. Webster keeps its 16-bit winner; the extra pass costs about
+4-8% at q11 on four 1 MiB rows (webster 8.64 -> 9.36 s, x-ray 7.26 -> 7.52 s,
+sao 7.73 -> 8.03 s, nci 5.49 -> 5.80 s) and about 25% at q8 on webster
+(0.68 -> 0.85 s). A single-proposal pass with a 32-node chain left 207,466
+bytes, so the literal-only proposal and its 16-node chain are retained.
+Work is bounded to one MiB; larger inputs and the chunked/incremental APIs
+retain their explicit-window behavior. The candidate's predecessor ring is
+transient, allocator-owned and charged to any whole-operation memory lease
+(at most about 4 MiB at the 1 MiB gate).
+
+`tools/br/planned_encode_bench.zig` now exposes `--window-bits`, so default and
+explicit-window paths can be compared directly. `long_distance` also exposes
+`windowBitsForInput`, `windowBitsForDistance`, `farthestLz77Distance` and a
+caller-selected chain budget for this candidate. A default q6 encode of a 128
+KiB repeated-random fixture asserts a wider wire and full round-trip, while an
+explicit 16-bit request keeps the narrow wire.
