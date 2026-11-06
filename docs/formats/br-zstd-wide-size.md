@@ -105,3 +105,11 @@ source/output totals, ABI widths, library versions/hashes, probe hashes, heap
 requests and release after deinit. No full plaintext is retained; dictionary
 wire is streamed directly through a pipe. Evidence is written to
 `zig-out/br-zstd-wide-size-{smoke,long}/report.json`.
+
+The real eight-case wide-size matrix validates 4,294,967,313 decoded bytes in
+each native/x86 case. Reference-produced Zstd wire is 131,103 bytes and Brotli
+wire is 1,376,291 bytes. All four complete static-dictionary alloc/append cases
+accept and independently decode the same full source length; encoded wire is
+830,605,084 bytes, peak encoder requests are at most 847,123,606 bytes, and
+live requested bytes return to zero. The complete-output API necessarily retains
+that wire; source and reference sink buffers remain bounded to 1 MiB/64 KiB.
