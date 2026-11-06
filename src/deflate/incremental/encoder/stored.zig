@@ -26,6 +26,7 @@ pub fn Encoder(comptime Codec: type) type {
         const Self = @This();
         const FlushMode = enum { none, block, partial, sync, full };
         pub const Error = Codec.Error;
+        pub const CloneError = std.mem.Allocator.Error;
         pub const Options = struct {
             max_input_len: core.StreamCount = std.math.maxInt(core.StreamCount),
             block_len: usize = Codec.max_block_len,
@@ -49,6 +50,22 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: core.StreamCount) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
+        }
+        /// Copy the complete stream state and retained buffer capacities into
+        /// `allocator`. The copy can continue, reset and deinit independently;
+        /// allocation failure leaves the source unchanged.
+        pub fn clone(self: *const Self, allocator: std.mem.Allocator) CloneError!Self {
+            var cloned = self.*;
+            cloned.allocator = allocator;
+            cloned.state.bytes = .empty;
+            cloned.plain = .empty;
+            cloned.pending = .empty;
+            errdefer cloned.deinit();
+
+            cloned.state.bytes = try self.state.bytes.clone(allocator);
+            cloned.plain = try self.plain.clone(allocator);
+            cloned.pending = try self.pending.clone(allocator);
+            return cloned;
         }
         pub fn deinit(self: *Self) void {
             Codec.deinitState(&self.state, self.allocator);

@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const clone_storage = @import("../clone_storage.zig");
 const Count = core.StreamCount;
 const stream_count = core.stream_count;
 const huffman = @import("../../../huffman.zig");
@@ -114,6 +115,11 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         last_error_phase: Phase = .block_header,
 
         pub const Error = core.Error;
+        pub const CloneError = clone_storage.Error;
+        pub const CloneStorage = struct {
+            history: []u8 = &.{},
+            semantic_workspace: ?*SemanticWorkspace = null,
+        };
         pub const required_history_len: usize = format.window_len;
         pub const SemanticWorkspace = SemanticDecoder;
         /// Supplying this much history provides the two-window scratch used by
@@ -156,6 +162,8 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         /// selected; otherwise decoding keeps the compact fallback footprint.
         /// The workspace must remain alive until detached or until the decoder
         /// itself is discarded. Reset deliberately preserves the attachment.
+        /// Keep the decoder at a stable address once decoding starts with this
+        /// attachment; use cloneInto to copy its resumable state safely.
         pub fn attachSemanticWorkspace(self: *Self, workspace: *SemanticWorkspace) Error!void {
             if (self.phase == .fast_dynamic_block) return error.InvalidStreamState;
             if (comptime !supports_semantic_window) return error.UnsupportedDeflateFeature;
@@ -172,6 +180,82 @@ pub fn DecoderWithMode(comptime format: Format, comptime mode: SemanticMode, com
         }
         pub fn initWithOptions(options: Options) Self {
             return .{ .options = options };
+        }
+        /// Bytes required to preserve this decoder's current history geometry.
+        /// An attached workspace also needs an independent SemanticWorkspace.
+        pub fn cloneHistoryLen(self: *const Self) usize {
+            return @max(self.history.len, self.semantic_scratch.len);
+        }
+
+        /// Copy complete resumable state into a stable destination. The copied
+        /// history/workspace must remain alive and the destination must not move
+        /// while its workspace is attached. Validation makes no writes on error.
+        pub fn cloneInto(self: *const Self, destination: *Self, storage: CloneStorage) CloneError!void {
+            try self.validateCloneStorage(destination, storage);
+            const required = self.cloneHistoryLen();
+            const history = storage.history[0..required];
+            if (required != 0)
+                @memcpy(history, if (self.semantic_scratch.len != 0) self.semantic_scratch else self.history);
+            destination.* = self.*;
+            destination.history = history[0..self.history.len];
+            destination.semantic_scratch = history[0..self.semantic_scratch.len];
+            destination.semantic_decoder = storage.semantic_workspace;
+            if (self.semantic_decoder) |source_workspace|
+                storage.semantic_workspace.?.* = source_workspace.*;
+            clone_storage.rebindRaw(destination);
+        }
+
+        fn validateCloneStorage(self: *const Self, destination: *Self, storage: CloneStorage) CloneError!void {
+            if ((self.history.len != 0 and self.history.len != required_history_len) or
+                (!supports_semantic_window and self.semantic_decoder != null) or
+                self.history_len > self.history.len or
+                (self.history.len == 0 and self.history_pos != 0) or
+                (self.history.len != 0 and self.history_pos >= self.history.len) or
+                storage.history.len < self.cloneHistoryLen() or
+                (self.semantic_decoder == null) != (storage.semantic_workspace == null))
+                return error.InvalidCloneStorage;
+            if (self.semantic_scratch.len != 0 and
+                (!supports_semantic_window or self.semantic_scratch.len != recommended_history_len or
+                    self.history.ptr != self.semantic_scratch.ptr))
+                return error.InvalidCloneStorage;
+            if (self.phase == .fast_dynamic_block) {
+                if (comptime !supports_semantic_window) return error.InvalidCloneStorage;
+                const workspace = self.semantic_decoder orelse return error.InvalidCloneStorage;
+                if (self.semantic_scratch.len != recommended_history_len or
+                    self.semantic_prefix_start >= recommended_history_len or
+                    self.semantic_prefix_len > format.window_len or
+                    self.semantic_generated_end < self.semantic_prefix_len or
+                    self.semantic_generated_end > self.semantic_prefix_len + format.window_len or
+                    self.semantic_delivered < self.semantic_prefix_len or
+                    self.semantic_delivered > self.semantic_generated_end or
+                    workspace.compact_literal != &self.dynamic_literal_table or
+                    workspace.compact_distance != &self.dynamic_distance_table)
+                    return error.InvalidCloneStorage;
+            }
+            const source_bytes = std.mem.asBytes(self);
+            const destination_bytes = std.mem.asBytes(destination);
+            const source_history = if (self.semantic_scratch.len != 0) self.semantic_scratch else self.history;
+            try clone_storage.disjoint(source_bytes, destination_bytes);
+            try clone_storage.disjoint(source_bytes, source_history);
+            try clone_storage.disjoint(source_bytes, storage.history);
+            try clone_storage.disjoint(destination_bytes, source_history);
+            try clone_storage.disjoint(destination_bytes, storage.history);
+            try clone_storage.disjoint(source_history, storage.history);
+            if (self.semantic_decoder) |workspace| {
+                const bytes = std.mem.asBytes(workspace);
+                try clone_storage.disjoint(source_bytes, bytes);
+                try clone_storage.disjoint(destination_bytes, bytes);
+                try clone_storage.disjoint(source_history, bytes);
+                try clone_storage.disjoint(storage.history, bytes);
+                try clone_storage.disjoint(bytes, std.mem.asBytes(storage.semantic_workspace.?));
+            }
+            if (storage.semantic_workspace) |workspace| {
+                const bytes = std.mem.asBytes(workspace);
+                try clone_storage.disjoint(source_bytes, bytes);
+                try clone_storage.disjoint(destination_bytes, bytes);
+                try clone_storage.disjoint(source_history, bytes);
+                try clone_storage.disjoint(storage.history, bytes);
+            }
         }
         pub fn reset(self: *Self) void {
             // Lookup tables are rebuilt before their next dynamic block is decoded.

@@ -4,6 +4,7 @@ const count = core.stream_count;
 const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
+const clone_storage = @import("../clone_storage.zig");
 
 /// Incremental gzip decoder with opt-in concatenated-member support. The raw
 /// decoder stops at the final DEFLATE block and leaves the footer unconsumed.
@@ -47,6 +48,8 @@ pub fn Decoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const CloneError = Codec.RawDecoder.CloneError;
+        pub const CloneStorage = Codec.RawDecoder.CloneStorage;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
@@ -97,6 +100,21 @@ pub fn Decoder(comptime Codec: type) type {
                     .allow_trailing_data = true,
                 }, history),
             };
+        }
+        pub fn cloneHistoryLen(self: *const Self) usize {
+            return self.raw.cloneHistoryLen();
+        }
+        /// Copy complete wrapper and raw state, including partial optional
+        /// headers, footer/checksum progress and concatenated-member counters.
+        /// Destination, history and attached workspace must stay at stable,
+        /// independent addresses. Failure leaves all caller storage unchanged.
+        pub fn cloneInto(self: *const Self, destination: *Self, storage: CloneStorage) CloneError!void {
+            try clone_storage.validateWrapper(self, destination, storage);
+            var raw_copy: Codec.RawDecoder = undefined;
+            try self.raw.cloneInto(&raw_copy, storage);
+            destination.* = self.*;
+            destination.raw = raw_copy;
+            clone_storage.rebindRaw(&destination.raw);
         }
         pub fn reset(self: *Self) void {
             self.raw.reset();

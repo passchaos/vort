@@ -37,6 +37,24 @@ pub const Matcher = struct {
         table_entries: usize,
     };
 
+    pub const CloneError = std.mem.Allocator.Error;
+
+    /// Copy the index, retained capacity, histogram and parser progress. Plans
+    /// returned by `plan` borrow their originating matcher; no plan pointer is
+    /// retained here, so the copy has no reference to the source matcher.
+    pub fn clone(self: *const Matcher, allocator: std.mem.Allocator) CloneError!Matcher {
+        var cloned = self.*;
+        cloned.head = .empty;
+        cloned.head_epoch = .empty;
+        cloned.prev = .empty;
+        errdefer cloned.deinit(allocator);
+
+        cloned.head = try self.head.clone(allocator);
+        cloned.head_epoch = try self.head_epoch.clone(allocator);
+        cloned.prev = try self.prev.clone(allocator);
+        return cloned;
+    }
+
     pub fn deinit(self: *Matcher, allocator: std.mem.Allocator) void {
         self.head.deinit(allocator);
         self.head_epoch.deinit(allocator);

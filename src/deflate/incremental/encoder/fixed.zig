@@ -45,6 +45,7 @@ pub fn Encoder(comptime Codec: type) type {
         const FlushMode = enum { none, block, partial, sync, full };
         const FlushBoundary = enum { none, partial, sync };
         pub const Error = Codec.Error;
+        pub const CloneError = std.mem.Allocator.Error;
         pub const ParamsError = Codec.ParamsError || error{IntegerOverflow};
         pub const supports_runtime_params = Codec.supports_params;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
@@ -96,6 +97,30 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: core.StreamCount, dictionary: []const u8) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary = dictionary };
+        }
+        /// Copy the complete stream state, match index and retained buffer
+        /// capacities into `allocator`. The copy can continue, reset and deinit
+        /// independently; allocation failure leaves the source unchanged.
+        /// The immutable dictionary remains borrowed: its storage must remain
+        /// valid until each encoder replaces it or is deinitialized.
+        pub fn clone(self: *const Self, allocator: std.mem.Allocator) CloneError!Self {
+            var cloned = self.*;
+            cloned.allocator = allocator;
+            cloned.state.bytes = .empty;
+            cloned.match_finder = .{};
+            cloned.plan_tokens = .empty;
+            cloned.plain = .empty;
+            cloned.history = .empty;
+            cloned.pending = .empty;
+            errdefer cloned.deinit();
+
+            cloned.state.bytes = try self.state.bytes.clone(allocator);
+            cloned.match_finder = try self.match_finder.clone(allocator);
+            cloned.plan_tokens = try self.plan_tokens.clone(allocator);
+            cloned.plain = try self.plain.clone(allocator);
+            cloned.history = try self.history.clone(allocator);
+            cloned.pending = try self.pending.clone(allocator);
+            return cloned;
         }
         /// Bind a format's distance cap after its side-effect-free admission
         /// checks. Reset and public compression-option changes retain this cap.

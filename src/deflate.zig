@@ -75,6 +75,11 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+/// Copy failures are local to Deflate ownership APIs, separate from codecs.
+pub const CloneError = std.mem.Allocator.Error || @import("deflate/incremental/clone_storage.zig").Error;
+/// Internal copy-contract surface for standalone native and WASI validation.
+/// The package root does not re-export this test oracle.
+pub const CloneTestOracle = @import("tests/deflate_clone/contracts.zig");
 pub const ZlibEncodeError = Error || zlib_window.Error;
 pub const ZlibEncodeMode = zlib_frame_encoder.Mode;
 pub const ZlibEncodeOptions = zlib_frame_encoder.Options(@This());
@@ -507,6 +512,10 @@ test "Deflate wide encode stream counters and overflow transactions" {
 
 test "Deflate wide decode stream counters and overflow transactions" {
     try @import("deflate/incremental/tests/wide_decode/main.zig").contracts(@This());
+}
+
+test "Deflate clone safe copy contracts" {
+    try CloneTestOracle.contracts(@This(), std.testing.allocator);
 }
 
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {

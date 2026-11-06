@@ -29,6 +29,7 @@ pub fn Encoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error || window.Error;
+        pub const CloneError = Codec.RawEncoder.CloneError || std.mem.Allocator.Error;
         pub const ParamsError = Codec.ParamsError || window.Error;
         pub const supports_runtime_params = Codec.RawEncoder.supports_runtime_params;
         pub const Options = struct {
@@ -70,6 +71,22 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: Count, dictionary: []const u8) Self {
             return .{ .allocator = allocator, .options = options, .raw = Codec.RawEncoder.initExactSizeWithDictionary(allocator, options.raw, expected_input_len, dictionary), .dictionary = dictionary };
+        }
+        /// Copy the raw encoder, pending wrapper bytes, checksum and stream
+        /// progress into `allocator`, preserving every retained capacity.
+        /// The source and copy can continue, reset and deinit independently;
+        /// allocation failure leaves the source unchanged. Their immutable
+        /// dictionary remains borrowed and must stay valid until each encoder
+        /// replaces it or is deinitialized.
+        pub fn clone(self: *const Self, allocator: std.mem.Allocator) CloneError!Self {
+            var raw = try self.raw.clone(allocator);
+            errdefer raw.deinit();
+            const pending = try self.pending.clone(allocator);
+            var cloned = self.*;
+            cloned.allocator = allocator;
+            cloned.raw = raw;
+            cloned.pending = pending;
+            return cloned;
         }
         pub fn deinit(self: *Self) void {
             self.raw.deinit();

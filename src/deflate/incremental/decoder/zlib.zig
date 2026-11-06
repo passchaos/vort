@@ -4,6 +4,7 @@ const count = core.stream_count;
 const Count = core.StreamCount;
 const member_prefix = @import("member_prefix.zig");
 const wrapper_count = @import("wrapper_count.zig");
+const clone_storage = @import("../clone_storage.zig");
 
 /// Incremental zlib wrapper around the raw stored/fixed/dynamic decoder. The
 /// raw decoder stops at the final DEFLATE block and leaves the Adler footer
@@ -45,6 +46,8 @@ pub fn Decoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const CloneError = Codec.RawDecoder.CloneError;
+        pub const CloneStorage = Codec.RawDecoder.CloneStorage;
         pub const Options = struct {
             max_output_len: Count = std.math.maxInt(Count),
             expected_output_len: ?Count = null,
@@ -90,6 +93,28 @@ pub fn Decoder(comptime Codec: type) type {
                     .allow_trailing_data = true,
                 }, history),
             };
+        }
+        pub fn cloneHistoryLen(self: *const Self) usize {
+            return self.raw.cloneHistoryLen();
+        }
+        /// Preserve header/DICTID/footer progress and checksum state. Configured
+        /// dictionaries and set entries remain immutable borrows shared by both
+        /// copies until neither copy will decode or reset with that configuration.
+        /// Destination, history and attached workspace must stay at stable,
+        /// independent addresses. Failure leaves all caller storage unchanged.
+        pub fn cloneInto(self: *const Self, destination: *Self, storage: CloneStorage) CloneError!void {
+            try clone_storage.validateWrapper(self, destination, storage);
+            try clone_storage.rejectDestinationOverlap(destination, storage, self.dictionary);
+            if (self.dictionaries) |dictionaries| {
+                try clone_storage.rejectDestinationOverlap(destination, storage, std.mem.sliceAsBytes(dictionaries.entries));
+                for (dictionaries.entries) |entry|
+                    try clone_storage.rejectDestinationOverlap(destination, storage, entry.bytes);
+            }
+            var raw_copy: Codec.RawDecoder = undefined;
+            try self.raw.cloneInto(&raw_copy, storage);
+            destination.* = self.*;
+            destination.raw = raw_copy;
+            clone_storage.rebindRaw(&destination.raw);
         }
         /// Keep the configured dictionary borrowed for DICTID validation on
         /// this stream, reset, and later concatenated members. After a member

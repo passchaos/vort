@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const clone_storage = @import("../clone_storage.zig");
 const count = core.stream_count;
 const Count = core.StreamCount;
 
@@ -23,6 +24,7 @@ pub const Decoder = struct {
     last_error_phase: Phase = .header,
 
     pub const Error = core.Error;
+    pub const CloneError = clone_storage.Error;
     pub const Options = struct {
         max_output_len: Count = std.math.maxInt(Count),
         expected_output_len: ?Count = null,
@@ -44,6 +46,11 @@ pub const Decoder = struct {
     }
     pub fn initWithOptions(options: Options) Decoder {
         return .{ .options = options };
+    }
+    /// This decoder retains only inline state and needs no external storage.
+    pub fn cloneInto(self: *const Decoder, destination: *Decoder) CloneError!void {
+        try clone_storage.disjoint(std.mem.asBytes(self), std.mem.asBytes(destination));
+        destination.* = self.*;
     }
     pub fn reset(self: *Decoder) void {
         self.* = .{ .options = self.options };
