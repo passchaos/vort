@@ -18,6 +18,14 @@ while preserving footer consumption, structure, sizes, dictionaries and memory
 limits. Native, x86 and WASI contracts and independent reference tooling cover
 these options before the next performance increment.
 
+The [codec state and dictionary controls](formats/codec-state-controls.md)
+add independent Deflate stream copies with caller-owned decoder storage,
+Brotli's explicit literal context policy and Zstd's optional frame dictionary
+ID. These close practical state-management and format-control gaps while
+preserving matching, dictionary entropy/history and default output policies.
+One-frame prefix lifetime and caller-owned stable-output decoding remain
+separate Zstd functional targets.
+
 The [default-window far-copy reach](performance/br/command-model-lifetime.md#default-window-far-copy-reach-2026-11-06)
 adds bounded far-match candidates to default q6-q11 one-shot streams up to the
 16 MiB meta-block limit, advertising only the window each winning plan uses

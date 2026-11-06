@@ -776,6 +776,7 @@ pub fn build(b: *std.Build) void {
     @import("build/zip_wide_input.zig").register(b, target, optimize);
     @import("build/zip_wide_read.zig").register(b, target, optimize, vort_mod_releasefast);
     @import("build/codec_controls.zig").register(b, target, optimize, vort_mod_releasefast);
+    @import("build/codec_state_controls.zig").register(b, target, optimize, vort_mod_releasefast);
     const zstd_test_filter = b.option(
         []const u8,
         "zstd-test-filter",

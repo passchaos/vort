@@ -3081,6 +3081,21 @@ pub const zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet =
 pub const Error = core.Error;
 pub const CompressedInputPolicy = core.CompressedInputPolicy;
 pub const DeflateError = deflate.Error;
+pub const DeflateCloneError = deflate.CloneError;
+
+test "root Deflate clone public controls" {
+    try @import("tests/codec_state_controls_root.zig").deflateContracts(@This());
+}
+
+test "root Brotli literal context control" {
+    try @import("tests/codec_state_controls_root.zig").brotliContracts(@This());
+}
+
+test "root Zstd dictionary ID control" {
+    try @import("tests/codec_state_controls_root.zig").zstdContracts(@This());
+    try @import("tests/zstd_dictionary_id_control/main.zig").zipContracts(zip, zstd);
+}
+
 pub const Deflate64Error = deflate64.Error;
 pub const Deflate64DecodeResult = deflate64.DecodeResult;
 pub const Deflate64EncodeOptions = deflate64.EncodeOptions;
