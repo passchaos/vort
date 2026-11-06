@@ -1092,9 +1092,14 @@ fn planRefinedHistoryChunkAlloc(
     const combined = input[chunk_start - history_len ..][0 .. history_len + chunk_len];
     var prepared = try bt_optimal.Prepared.init(allocator, combined, options.lz77_options);
     defer prepared.deinit(allocator);
-    var seed = try prepared.planFixedAlloc(allocator);
+    // A match can span at most 258 bytes, so planning can start 258 bytes
+    // before the chunk boundary. Earlier history positions cannot influence
+    // the suffix plan; skipping them keeps the exact same wire at roughly half
+    // the DP work.
+    const plan_start = history_len - @min(history_len, lz77.max_match_len);
+    var seed = try prepared.planFixedAllocFrom(allocator, plan_start);
     defer seed.deinit(allocator);
-    const seed_trimmed = try trimPlanToSuffixAlloc(allocator, combined, seed.tokens, history_len);
+    const seed_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], seed.tokens, history_len - plan_start);
     defer allocator.free(seed_trimmed);
     const seed_coding = try DynamicCodingPlan.init(seed_trimmed);
     var model = try dynamic_optimal.Model.init(
@@ -1106,9 +1111,9 @@ fn planRefinedHistoryChunkAlloc(
     );
     defer model.deinit(allocator);
     const seed_cost = try dynamic_optimal.tokenCost(&model, seed_trimmed);
-    const candidate = try prepared.planModeledAlloc(allocator, model.lz77Model());
+    const candidate = try prepared.planModeledAllocFrom(allocator, plan_start, model.lz77Model());
     defer candidate.deinit(allocator);
-    const candidate_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate.tokens, history_len);
+    const candidate_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], candidate.tokens, history_len - plan_start);
     defer allocator.free(candidate_trimmed);
     const candidate_cost = try dynamic_optimal.tokenCost(&model, candidate_trimmed);
     const selected = if (candidate_cost < seed_cost) candidate_trimmed else seed_trimmed;
@@ -1124,9 +1129,9 @@ fn planRefinedHistoryChunkAlloc(
     );
     defer model2.deinit(allocator);
     const candidate_in_model2 = try dynamic_optimal.tokenCost(&model2, candidate_trimmed);
-    const candidate2 = try prepared.planModeledAlloc(allocator, model2.lz77Model());
+    const candidate2 = try prepared.planModeledAllocFrom(allocator, plan_start, model2.lz77Model());
     defer candidate2.deinit(allocator);
-    const candidate2_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate2.tokens, history_len);
+    const candidate2_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], candidate2.tokens, history_len - plan_start);
     defer allocator.free(candidate2_trimmed);
     const candidate2_cost = try dynamic_optimal.tokenCost(&model2, candidate2_trimmed);
     const selected2 = if (candidate2_cost < candidate_in_model2) candidate2_trimmed else selected;
@@ -1140,9 +1145,9 @@ fn planRefinedHistoryChunkAlloc(
     );
     defer model3.deinit(allocator);
     const candidate2_in_model3 = try dynamic_optimal.tokenCost(&model3, candidate2_trimmed);
-    const candidate3 = try prepared.planModeledAlloc(allocator, model3.lz77Model());
+    const candidate3 = try prepared.planModeledAllocFrom(allocator, plan_start, model3.lz77Model());
     defer candidate3.deinit(allocator);
-    const candidate3_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate3.tokens, history_len);
+    const candidate3_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], candidate3.tokens, history_len - plan_start);
     defer allocator.free(candidate3_trimmed);
     const candidate3_cost = try dynamic_optimal.tokenCost(&model3, candidate3_trimmed);
     const selected3 = if (candidate3_cost < candidate2_in_model3) candidate3_trimmed else selected2;
@@ -1157,9 +1162,9 @@ fn planRefinedHistoryChunkAlloc(
         options.lz77_options.window_len,
     );
     defer model4.deinit(allocator);
-    const candidate4 = try prepared.planModeledAlloc(allocator, model4.lz77Model());
+    const candidate4 = try prepared.planModeledAllocFrom(allocator, plan_start, model4.lz77Model());
     defer candidate4.deinit(allocator);
-    const candidate4_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate4.tokens, history_len);
+    const candidate4_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], candidate4.tokens, history_len - plan_start);
     defer allocator.free(candidate4_trimmed);
     const candidate4_bits = try dynamicTokenBitCost(candidate4_trimmed);
     const selected3_bits = try dynamicTokenBitCost(selected3);
@@ -1174,9 +1179,9 @@ fn planRefinedHistoryChunkAlloc(
         options.lz77_options.window_len,
     );
     defer model5.deinit(allocator);
-    const candidate5 = try prepared.planModeledAlloc(allocator, model5.lz77Model());
+    const candidate5 = try prepared.planModeledAllocFrom(allocator, plan_start, model5.lz77Model());
     defer candidate5.deinit(allocator);
-    const candidate5_trimmed = try trimPlanToSuffixAlloc(allocator, combined, candidate5.tokens, history_len);
+    const candidate5_trimmed = try trimPlanToSuffixAlloc(allocator, combined[plan_start..], candidate5.tokens, history_len - plan_start);
     defer allocator.free(candidate5_trimmed);
     const candidate5_bits = try dynamicTokenBitCost(candidate5_trimmed);
     const final_selected = if (candidate5_bits < selected4_bits) candidate5_trimmed else selected4;

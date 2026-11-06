@@ -81,3 +81,32 @@ pass improves by at most one bit lost 9–17 bytes per tested row with no
 measurable time win, so it was also not kept. Early-exit convergence checks
 were also measured and left the wires unchanged with only about 0.3% timing
 change, so they were not kept.
+
+## Suffix-only planning, 2026-11-06
+
+The chunk planner ran every BT solve over the full 64 KiB combined view even
+though only the chunk suffix is emitted. A match can span at most 258 bytes, so
+planning can start 258 bytes before the chunk boundary: earlier history
+positions cannot influence the suffix plan, and no token starting before that
+point can cross the boundary. The solve now takes a `start` position, and the
+chunk planner starts all six solves at `history_len - 258`.
+
+The complete wire is byte-identical. `encodeZlibBestAlloc` with `.best` options
+produced the same SHA-256 on 1 MiB nci
+(`e19f0aaeb5f834b2901d987d0bd56c08e4eaa6878e0c4aceb73ca3a6544c130a`) and
+samba (`105b91617b02e285fff5bf670fdd109acb33223dee48c1366c852d55900a0835`)
+with and without the change, and the 587-test deflate filter passes.
+
+ReleaseFast `.best` 1 MiB encode times:
+
+| Input | Before | After |
+| --- | ---: | ---: |
+| nci | 1.99 s | 1.64 s |
+| sao | 0.71 s | 0.60 s |
+| x-ray | 0.58 s | 0.49 s |
+| mr | 1.77 s | 1.62 s |
+| samba | 1.12 s | 0.93 s |
+| dickens | 1.20 s | 0.99 s |
+
+The saving is 8-18% per input because the DP work is roughly halved; the
+one-time BT evidence build is unchanged.

@@ -26337,3 +26337,11 @@ reuse, so production keeps the simpler independently owned plans.
   match the window-17 sizes and every wire round-trips through the Vort decoder.
   Two tests cover the large command-plan header path and a 64 KiB quality wire.
   [Evidence](performance/br/command-model-lifetime.md).
+
+- 2026-11-06: Deflate refined chunk planning now starts every BT solve 258
+  bytes before the chunk boundary instead of at the beginning of the 32 KiB
+  history. No token can cross the boundary from earlier than that, so the
+  complete wire is byte-identical (verified by matching SHA-256 on 1 MiB nci
+  and samba and the 587-test deflate filter), while ReleaseFast `.best` 1 MiB
+  encode time falls 8-18% (nci 1.99 -> 1.64 s, samba 1.12 -> 0.93 s).
+  [Evidence](performance/deflate/refined-history-chunks.md).

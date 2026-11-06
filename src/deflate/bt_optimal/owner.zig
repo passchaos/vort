@@ -79,12 +79,31 @@ pub const Prepared = struct {
     }
 
     pub fn planFixedAlloc(self: *Prepared, allocator: std.mem.Allocator) !lz77.GreedyPlan {
-        return self.solve(allocator, false, undefined);
+        return self.solve(allocator, false, undefined, 0);
     }
 
     pub fn planModeledAlloc(self: *Prepared, allocator: std.mem.Allocator, model: lz77.OptimalCostModel) !lz77.GreedyPlan {
         try self.validateModel(model);
-        return self.solve(allocator, true, model);
+        return self.solve(allocator, true, model, 0);
+    }
+
+    /// Plan only the suffix starting at `start`. Earlier bytes stay available
+    /// as match sources through the prepared evidence but are not DP positions.
+    /// Used by history-prefixed chunk planning, where the prefix is context.
+    pub fn planFixedAllocFrom(self: *Prepared, allocator: std.mem.Allocator, start: usize) !lz77.GreedyPlan {
+        if (start > self.input.len) return error.InvalidBlockPlan;
+        return self.solve(allocator, false, undefined, start);
+    }
+
+    pub fn planModeledAllocFrom(
+        self: *Prepared,
+        allocator: std.mem.Allocator,
+        start: usize,
+        model: lz77.OptimalCostModel,
+    ) !lz77.GreedyPlan {
+        if (start > self.input.len) return error.InvalidBlockPlan;
+        try self.validateModel(model);
+        return self.solve(allocator, true, model, start);
     }
 
     fn validateModel(self: *const Prepared, model: lz77.OptimalCostModel) !void {
@@ -116,7 +135,7 @@ pub const Prepared = struct {
         _ = std.math.add(u32, suffix_bound, edge_bound) catch return error.InvalidBlockPlan;
     }
 
-    fn solve(self: *Prepared, allocator: std.mem.Allocator, comptime modeled: bool, model: if (modeled) lz77.OptimalCostModel else void) !lz77.GreedyPlan {
+    fn solve(self: *Prepared, allocator: std.mem.Allocator, comptime modeled: bool, model: if (modeled) lz77.OptimalCostModel else void, start: usize) !lz77.GreedyPlan {
         const input = self.input;
         const minimum = @max(3, @min(@max(3, @min(258, self.options.max_match)), self.options.min_match));
         var best_costs: [259]u32 = undefined;
@@ -124,7 +143,7 @@ pub const Prepared = struct {
         self.costs[input.len] = 0;
         var position = input.len;
         var cursor = self.records.items.len;
-        while (position > 0) {
+        while (position > start) {
             position -= 1;
             const literal_cost: u32 = if (modeled) model.literal[input[position]] else if (input[position] < 144) 8 else 9;
             self.costs[position] = literal_cost + self.costs[position + 1];
@@ -159,7 +178,7 @@ pub const Prepared = struct {
         var tokens: std.ArrayList(lz77.Token) = .empty;
         errdefer tokens.deinit(allocator);
         var stats: lz77.PlanStats = .{};
-        position = 0;
+        position = start;
         while (position < input.len) {
             const token = self.steps[position];
             try tokens.append(allocator, token);
