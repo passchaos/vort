@@ -1859,3 +1859,7 @@ fn encodeIncrementalInto(encoder: anytype, input: []const u8, output: []u8) !usi
         if (result.status == .done) return output_offset;
     }
 }
+
+test "static dictionary chunk wide admission preserves public limits and reusable state" {
+    try @import("static_dictionary_chunk_counts.zig").contracts(br);
+}

@@ -1,10 +1,11 @@
 const std = @import("std");
+const core = @import("../../core.zig");
 const allocator_dispatch = @import("../allocator_dispatch.zig");
 const window_format = @import("window_format.zig");
 const metadata_header = @import("metadata_header.zig");
 
 const ChunksInfo = struct {
-    input_len: usize,
+    input_len: core.StreamCount,
     last_non_empty: ?usize,
 };
 
@@ -119,8 +120,7 @@ fn preflightChunks(
     _ = try metadata_header.plan(options.stream.metadata.len);
     var info: ChunksInfo = .{ .input_len = 0, .last_non_empty = null };
     for (chunks, 0..) |chunk, index| {
-        info.input_len = std.math.add(usize, info.input_len, chunk.len) catch
-            return error.IntegerOverflow;
+        info.input_len = try core.stream_count.addLocal(info.input_len, chunk.len);
         if (chunk.len != 0) info.last_non_empty = index;
     }
     if (info.input_len > options.max_input_len) return error.OutputLimitExceeded;
