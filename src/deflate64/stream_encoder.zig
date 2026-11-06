@@ -8,6 +8,8 @@ const core = @import("../core.zig");
 const matching = @import("stream_match.zig");
 const blocks = @import("stream_blocks.zig");
 const choice = @import("block_choice.zig");
+const count = core.stream_count;
+const Count = core.StreamCount;
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const max_block_len: usize = 128 * 1024;
@@ -29,17 +31,17 @@ pub const Encoder = struct {
     finishing: bool = false,
     final_written: bool = false,
     done: bool = false,
-    total_input: usize = 0,
-    total_output: usize = 0,
-    expected_input_len: ?usize = null,
+    total_input: Count = 0,
+    total_output: Count = 0,
+    expected_input_len: ?Count = null,
     fatal_error: ?stream_encoder.Error = null,
     failure_progress: ?core.Progress = null,
     last_step_progress: core.Progress = .{},
-    block_count: usize = 0,
-    fixed_block_count: usize = 0,
-    dynamic_block_count: usize = 0,
-    stored_block_count: usize = 0,
-    match_count: usize = 0,
+    block_count: Count = 0,
+    fixed_block_count: Count = 0,
+    dynamic_block_count: Count = 0,
+    stored_block_count: Count = 0,
+    match_count: Count = 0,
     max_match_length: usize = 0,
     max_match_distance: usize = 0,
 
@@ -50,7 +52,7 @@ pub const Encoder = struct {
     pub const Compression = stream_encoder.Compression;
     pub const Options = struct {
         block_len: usize = max_block_len,
-        max_input_len: usize = std.math.maxInt(usize),
+        max_input_len: Count = std.math.maxInt(Count),
         /// Limit complete bytes retained for one emission event. The final
         /// partial byte is included on finish; a non-final bit tail is <=7 bits.
         max_pending_output_len: usize = std.math.maxInt(usize),
@@ -59,17 +61,17 @@ pub const Encoder = struct {
         nice_length: u32 = max_match_len,
     };
     pub const Snapshot = struct {
-        input_read: usize,
-        output_written: usize,
+        input_read: Count,
+        output_written: Count,
         buffered_input: usize,
         pending_output: usize,
         pending_bits: u3,
         history_len: usize,
-        block_count: usize,
-        fixed_block_count: usize,
-        dynamic_block_count: usize,
-        stored_block_count: usize,
-        match_count: usize,
+        block_count: Count,
+        fixed_block_count: Count,
+        dynamic_block_count: Count,
+        stored_block_count: Count,
+        match_count: Count,
         max_match_length: usize,
         max_match_distance: usize,
         retained_input_capacity: usize,
@@ -88,7 +90,7 @@ pub const Encoder = struct {
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
         return .{ .allocator = allocator, .options = options };
     }
-    pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: usize) Self {
+    pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: Count) Self {
         return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
     }
     pub fn validateOptions(options: Options) stream_encoder.Error!void {
@@ -122,7 +124,7 @@ pub const Encoder = struct {
         self.options = options;
         self.reset();
     }
-    pub fn resetExactSize(self: *Self, expected_input_len: usize) void {
+    pub fn resetExactSize(self: *Self, expected_input_len: Count) void {
         self.expected_input_len = expected_input_len;
         self.reset();
     }
@@ -204,14 +206,29 @@ pub const Encoder = struct {
             return self.result(.done);
         }
         if ((self.finishing or self.flush_mode != .none) and input.len != 0) return error.TrailingData;
-        const offered = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
-        if (self.expected_input_len) |expected| if (offered > expected) return error.SizeMismatch;
+        const offered = try count.addLocal(self.total_input, input.len);
+        if (self.expected_input_len) |expected| {
+            if (offered > expected or (self.finishing and offered != expected)) return error.SizeMismatch;
+        }
         if (offered > self.options.max_input_len) return error.OutputLimitExceeded;
+        if (self.expected_input_len) |expected| if (expected > self.options.max_input_len) return error.OutputLimitExceeded;
+        // One window bounds every drain in this call. Return its final
+        // countable prefix normally instead of failing after an earlier copy.
+        const output_limit = count.bounded(std.math.maxInt(Count) - self.total_output, output.len);
+        if (output.len != 0 and output_limit == 0) {
+            const will_publish = input.len != 0 or (self.finishing and !self.final_written) or
+                (self.flush_mode != .none and
+                    (self.plain.items.len != 0 or
+                        (self.flush_mode == .partial and self.flush_boundary == .none) or
+                        ((self.flush_mode == .sync or self.flush_mode == .full) and self.flush_boundary != .sync)));
+            if (self.pending_offset != self.pending.items.len or will_publish)
+                return error.IntegerOverflow;
+        }
 
         while (true) {
             if (self.pending_offset != self.pending.items.len) {
-                const take = @min(output.len - self.last_step_progress.output_written, self.pending.items.len - self.pending_offset);
-                const total = std.math.add(usize, self.total_output, take) catch return error.IntegerOverflow;
+                const take = @min(output_limit - self.last_step_progress.output_written, self.pending.items.len - self.pending_offset);
+                const total = try count.addLocal(self.total_output, take);
                 @memcpy(output[self.last_step_progress.output_written..][0..take], self.pending.items[self.pending_offset..][0..take]);
                 self.pending_offset += take;
                 self.total_output = total;
@@ -219,15 +236,16 @@ pub const Encoder = struct {
                 if (self.pending_offset != self.pending.items.len) return self.result(.need_output);
                 self.pending.clearRetainingCapacity();
                 self.pending_offset = 0;
-                if (self.last_step_progress.output_written == output.len and output.len != 0) return self.result(.need_output);
+                if (self.last_step_progress.output_written == output_limit and output.len != 0) return self.result(.need_output);
             }
 
             const room = self.options.block_len - self.plain.items.len;
             const take = @min(room, input.len - self.last_step_progress.input_read);
             if (take != 0) {
+                const total_input = try count.addLocal(self.total_input, take);
                 try self.plain.ensureTotalCapacityPrecise(self.allocator, self.options.block_len);
                 self.plain.appendSliceAssumeCapacity(input[self.last_step_progress.input_read..][0..take]);
-                self.total_input += take; // Offered admission proves this sum.
+                self.total_input = total_input;
                 self.last_step_progress.input_read += take;
                 self.flush_boundary = .none;
             }
@@ -288,7 +306,20 @@ pub const Encoder = struct {
         try self.pending.ensureTotalCapacityPrecise(self.allocator, required);
     }
     fn writeDataBlock(self: *Self, final: bool) stream_encoder.Error!void {
+        // Every plan/emission pass rebuilds local coordinates. Clear borrowed
+        // views on rejected admission too; no stream counter enters this index.
+        defer self.matcher.reset();
         const block = self.plain.items;
+        // These increments are known without rebuilding the matcher. Refuse
+        // deterministic counter overflow before even preparing a local pass.
+        const known_blocks = if (self.options.compression == .stored) blocks.storedBlockCount(block.len) else 1;
+        _ = try count.addLocal(self.block_count, known_blocks);
+        switch (self.options.compression) {
+            .stored => _ = try count.addLocal(self.stored_block_count, known_blocks),
+            .fixed => _ = try count.addLocal(self.fixed_block_count, 1),
+            .dynamic => _ = try count.addLocal(self.dynamic_block_count, 1),
+            .adaptive => {},
+        }
         const stored_bits = blocks.storedBits(self.state, block.len);
         var fixed: blocks.Plan = .{ .bits = 10, .stats = .{} };
         var dynamic: ?blocks.DynamicPlan = null;
@@ -311,11 +342,11 @@ pub const Encoder = struct {
         };
         const use_compressed = selected != .stored;
         const emitted_blocks = if (use_compressed) 1 else blocks.storedBlockCount(block.len);
-        const next_blocks = std.math.add(usize, self.block_count, emitted_blocks) catch return error.IntegerOverflow;
-        const next_fixed = std.math.add(usize, self.fixed_block_count, @intFromBool(selected == .fixed)) catch return error.IntegerOverflow;
-        const next_dynamic = std.math.add(usize, self.dynamic_block_count, @intFromBool(selected == .dynamic)) catch return error.IntegerOverflow;
-        const next_stored = std.math.add(usize, self.stored_block_count, if (use_compressed) 0 else emitted_blocks) catch return error.IntegerOverflow;
-        const next_matches = std.math.add(usize, self.match_count, if (use_compressed) fixed.stats.match_count else 0) catch return error.IntegerOverflow;
+        const next_blocks = try count.addLocal(self.block_count, emitted_blocks);
+        const next_fixed = try count.addLocal(self.fixed_block_count, @intFromBool(selected == .fixed));
+        const next_dynamic = try count.addLocal(self.dynamic_block_count, @intFromBool(selected == .dynamic));
+        const next_stored = try count.addLocal(self.stored_block_count, if (use_compressed) 0 else emitted_blocks);
+        const next_matches = try count.addLocal(self.match_count, if (use_compressed) fixed.stats.match_count else 0);
         const selected_bits = switch (selected) {
             .stored => stored_bits,
             .fixed => fixed.bits,
@@ -345,7 +376,6 @@ pub const Encoder = struct {
             self.max_match_distance = @max(self.max_match_distance, fixed.stats.max_match_distance);
         }
         self.retainHistory(block);
-        self.matcher.reset();
         self.plain.clearRetainingCapacity();
     }
     fn writeBoundary(self: *Self, partial: bool) stream_encoder.Error!void {
@@ -353,9 +383,9 @@ pub const Encoder = struct {
             blocks.pendingBytes(self.state, 10, false)
         else
             blocks.pendingBytes(self.state, blocks.storedBits(self.state, 0), false);
-        const next_blocks = std.math.add(usize, self.block_count, 1) catch return error.IntegerOverflow;
-        const next_fixed = std.math.add(usize, self.fixed_block_count, @intFromBool(partial)) catch return error.IntegerOverflow;
-        const next_stored = std.math.add(usize, self.stored_block_count, @intFromBool(!partial)) catch return error.IntegerOverflow;
+        const next_blocks = try count.addLocal(self.block_count, 1);
+        const next_fixed = try count.addLocal(self.fixed_block_count, @intFromBool(partial));
+        const next_stored = try count.addLocal(self.stored_block_count, @intFromBool(!partial));
         try self.preparePending(required);
         var writer: blocks.Writer = .{ .state = self.state, .output = self.pending.allocatedSlice()[0..required] };
         if (partial) blocks.writePartial(&writer) else blocks.writeStored(&writer, "", false);
@@ -386,4 +416,8 @@ const stream_encoder = @This();
 
 test "Deflate64 incremental compressed encoder complete contracts" {
     try @import("stream_encoder_tests.zig").contracts(@This());
+}
+
+test "Deflate64 incremental wide encoder contracts" {
+    try @import("stream_encoder_wide_tests.zig").contracts(@import("../deflate64.zig"));
 }

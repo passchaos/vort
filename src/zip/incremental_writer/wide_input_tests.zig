@@ -15,9 +15,10 @@ fn options() zip.IncrementalWriterOptions {
 }
 
 test "ZIP incremental writer wide input pledges publish ZIP64 headers and accept bounded prefixes" {
-    inline for (.{ zip.CompressionMethod.deflate, .zstandard_legacy, .zstandard }) |method| {
+    inline for (.{ zip.CompressionMethod.deflate, .deflate64, .zstandard_legacy, .zstandard }) |method| {
         var settings = options();
         settings.deflate_options.max_input_len = wide_size;
+        settings.deflate64_options.max_input_len = wide_size;
         var writer = try zip.IncrementalWriter.initWithOptions(std.testing.allocator, settings);
         defer writer.deinit();
         try writer.beginEntry(.{ .name = name, .method = method, .expected_size = wide_size });
@@ -80,7 +81,7 @@ test "ZIP incremental writer wide input codec and archive caps reject pledges be
         try std.testing.expectError(error.OutputLimitExceeded, writer.beginEntry(.{ .name = name, .method = .deflate, .expected_size = wide_size }));
         try std.testing.expectEqualDeep(before, writer.snapshot());
     }
-    inline for (.{ zip.CompressionMethod.deflate, .zstandard_legacy, .zstandard }) |method| {
+    inline for (.{ zip.CompressionMethod.deflate, .deflate64, .zstandard_legacy, .zstandard }) |method| {
         var settings = options();
         settings.max_uncompressed_size = wide_size - 1;
         var writer = try zip.IncrementalWriter.initWithOptions(std.testing.allocator, settings);
@@ -104,7 +105,7 @@ test "ZIP incremental writer wide input codec and archive caps reject pledges be
 }
 
 test "ZIP incremental writer wide input actual cap and pledge failures preserve accepted prefix and caller guard" {
-    inline for (.{ zip.CompressionMethod.deflate, .zstandard_legacy, .zstandard }) |method| {
+    inline for (.{ zip.CompressionMethod.deflate, .deflate64, .zstandard_legacy, .zstandard }) |method| {
         inline for (.{ false, true }) |pledged| {
             var settings = options();
             if (!pledged) {
@@ -141,7 +142,7 @@ test "ZIP incremental writer wide input actual cap and pledge failures preserve 
 }
 
 test "ZIP incremental writer wide input bridge completes bounded ZIP64 deflate and Zstandard archives" {
-    inline for (.{ zip.CompressionMethod.deflate, .zstandard_legacy, .zstandard }) |method| {
+    inline for (.{ zip.CompressionMethod.deflate, .deflate64, .zstandard_legacy, .zstandard }) |method| {
         var settings = options();
         settings.zip64 = .always;
         settings.deflate_options.max_input_len = wide_size;
