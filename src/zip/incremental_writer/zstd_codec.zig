@@ -24,9 +24,9 @@ pub fn validate(requested: Options, parallel: ?ParallelOptions, dictionary: ?zst
     if (parallel) |policy| {
         frame.include_content_size = expected != null;
         try zstd.NativeIncrementalParallelFrameEncoder.validateOptions(.{ .frame = frame, .parallel = policy }, expected, dictionary);
-    } else if (expected) |size| {
-        _ = std.math.cast(usize, size) orelse return error.OutputLimitExceeded;
     }
+    // Serial encoders retain bounded blocks; the pledge is a logical count,
+    // so it does not need to fit one physical input slice.
 }
 
 /// Both variants own their state. Moving this union transfers ownership; do

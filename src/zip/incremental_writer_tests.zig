@@ -1589,3 +1589,7 @@ fn readU32(bytes: []const u8, offset: usize) u32 {
 fn readU64(bytes: []const u8, offset: usize) u64 {
     return std.mem.readInt(u64, bytes[offset..][0..8], .little);
 }
+
+test {
+    _ = @import("incremental_writer/wide_input_tests.zig");
+}

@@ -312,14 +312,14 @@ pub fn validate(
     }
 }
 
-pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
+pub fn inputLimit(method: CompressionMethod, options: Options) ?core.StreamCount {
     return switch (method) {
         .deflate => options.deflate.max_input_len,
         .deflate64 => options.deflate64.max_input_len,
         .dcl_implode => options.dcl_implode.max_input_len,
         .implode => options.implode.max_input_len,
         .bzip2 => options.bzip2.max_input_len,
-        .zstandard_legacy, .zstandard => if (options.zstd_parallel == null) std.math.maxInt(usize) else null,
+        .zstandard_legacy, .zstandard => if (options.zstd_parallel == null) std.math.maxInt(core.StreamCount) else null,
         .lzma => options.lzma.max_input_len,
         .xz => options.xz.max_input_len,
         .ppmd => options.ppmd.max_input_len,
@@ -337,11 +337,9 @@ pub fn zipFlags(state: *const State) u16 {
     };
 }
 
-fn validateExpectedSize(expected_size: ?u64, max_input_len: usize) Error!void {
+fn validateExpectedSize(expected_size: ?u64, max_input_len: core.StreamCount) Error!void {
     if (expected_size) |expected| {
-        const expected_usize = std.math.cast(usize, expected) orelse
-            return error.OutputLimitExceeded;
-        if (expected_usize > max_input_len) return error.OutputLimitExceeded;
+        if (expected > max_input_len) return error.OutputLimitExceeded;
     }
 }
 

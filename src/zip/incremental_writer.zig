@@ -941,8 +941,7 @@ pub const Writer = struct {
             return error.IntegerOverflow;
         if (next_entry > self.options.max_uncompressed_size) return error.OutputLimitExceeded;
         if (codecs.inputLimit(entry.method, self.codecOptions())) |limit|
-            if (next_entry > std.math.maxInt(usize) or
-                next_entry > @as(u64, @intCast(limit)))
+            if (next_entry > limit)
                 return error.OutputLimitExceeded;
         if (entry.expected_size) |expected| if (next_entry > expected) return error.SizeMismatch;
     }
