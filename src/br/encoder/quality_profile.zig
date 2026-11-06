@@ -1,6 +1,7 @@
 //! Caller-owned diagnostics for the existing native q8 candidate pipeline.
 //! Storage is fixed and reporting truncation never changes codec selection.
 const std = @import("std");
+const literal_context_policy = @import("literal_context_policy.zig");
 const total = @import("total_budget.zig");
 const context_profile = @import("literal_context_profile.zig");
 pub const event_capacity = 512;
@@ -65,7 +66,8 @@ pub const Config = struct {
     joint_literal_tree_count: usize = 0,
     optimize_same_last_distance: bool = false,
 
-    pub fn from(options: anytype) Config {
+    pub fn from(requested_options: anytype) Config {
+        const options = literal_context_policy.command(requested_options);
         var result: Config = .{
             .window_bits = options.window_bits,
             .large_window = options.large_window,

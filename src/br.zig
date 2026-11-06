@@ -34,6 +34,7 @@ const fast_fragment = @import("br/encoder/fast_fragment.zig");
 const fast_fragment_one_pass = @import("br/encoder/fast_fragment_one_pass.zig");
 const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
+const literal_context_policy = @import("br/encoder/literal_context_policy.zig");
 const literal_context_split = @import("br/encoder/literal_context_split.zig");
 const literal_entropy_plan = @import("br/encoder/literal_entropy_plan.zig");
 const literal_joint_context_split = @import("br/encoder/literal_joint_context_split.zig");
@@ -319,6 +320,9 @@ pub const PlannedEncodeOptions = struct {
     /// preserves the historical three-level output exactly. These presets do
     /// not claim libbrotli algorithm, byte-output, or performance parity.
     quality: ?u4 = null,
+    /// Use one literal probability tree per literal block type. Dictionary
+    /// context selection and distance contexts remain enabled independently.
+    disable_literal_context_modeling: bool = false,
     /// Explicit standard-window HQ command parsing for quality 10 or 11.
     /// Null preserves the established quality policy and complete wire.
     hq: ?HqOptions = null,
@@ -378,6 +382,10 @@ pub const PlannedEncodeOptions = struct {
     /// dictionary. The descriptor and bytes must remain alive for the call.
     shared_dictionary: SharedDictionary = .{},
 };
+
+test "Brotli literal context control" {
+    try @import("tests/br_literal_context_control/root.zig").contracts(@This());
+}
 /// Search budget for the ratio-oriented planner. These knobs affect token
 /// selection only; the resulting stream still uses the same Brotli command
 /// and prefix-code writer as the stable `.balanced` level.
@@ -1713,6 +1721,7 @@ const IncrementalPlannedEncoderCodec = struct {
         large_window: bool = false,
         level: PlannedCompressionLevel = .fast,
         quality: ?u4 = null,
+        disable_literal_context_modeling: bool = false,
         hq: ?HqOptions = null,
         hq_state: @import("br/encoder/hq_codec.zig").State = .{},
         mode: PlannedMode = .generic,
@@ -1771,6 +1780,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.large_window = false;
         state.level = .fast;
         state.quality = null;
+        state.disable_literal_context_modeling = false;
         state.hq = null;
         state.mode = .generic;
         state.adaptive_blocks = false;
@@ -1851,7 +1861,8 @@ const IncrementalPlannedEncoderCodec = struct {
         return writePrefix(allocator, out, state, effective);
     }
 
-    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, requested_options: StreamOptions) br.Error!void {
+        const options = literal_context_policy.planned(requested_options);
         try validatePlannedStreamChunksOptions(options);
         const adaptive_blocks = try plannedStreamAdaptiveBlocks(options);
         const original_len = out.items.len;
@@ -1918,6 +1929,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.large_window = options.large_window;
         state.level = options.level;
         state.quality = options.quality;
+        state.disable_literal_context_modeling = literal_context_policy.disabled(options);
         state.hq = options.hq;
         if (new_alias_resources) {
             state.hq_state = next_hq_resources;
@@ -3630,6 +3642,8 @@ pub const PlannedStreamChunksOptions = struct {
     memory_profile: ?*EncodeMemoryProfile = null,
     level: PlannedCompressionLevel = .fast,
     quality: ?u4 = null,
+    /// Same literal-only probability control as PlannedEncodeOptions.
+    disable_literal_context_modeling: bool = false,
     /// Same opt-in HQ controls as `PlannedEncodeOptions`.
     hq: ?HqOptions = null,
     /// Same explicit Large Window format selection as one-shot options.
@@ -4509,7 +4523,8 @@ fn usesDedicatedQualityBlockCore(quality: ?u4) bool {
     return if (quality) |value| value <= 3 else false;
 }
 
-pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, requested_options: PlannedEncodeOptions) Error![]u8 {
+    const options = literal_context_policy.planned(requested_options);
     try validatePlannedEncodeOptions(input.len, options);
     if (@import("br/encoder/total_entry.zig").enabled(options))
         return @import("br/encoder/total_entry.zig").owned(allocator, input, options, encodePlannedStreamWithOptionsAlloc);
@@ -4665,6 +4680,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         qualityWireOptions(active, options, window_bits)
     else
         .{
+            .disable_literal_context_modeling = literal_context_policy.disabled(options),
             .try_recent_distances = options.level != .fast,
             .try_literal_contexts = options.level == .ratio,
             .try_literal_split = options.level == .ratio,
@@ -4681,6 +4697,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     lazy_options.compound_dictionary_size = compound_size;
     var best = (if (options.level == .fast and options.quality == null)
         encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
+            .disable_literal_context_modeling = literal_context_policy.disabled(options),
             .large_window = options.large_window,
             .window_bits = window_bits,
             .metadata = options.metadata,
@@ -4716,6 +4733,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
 
         const context_mode: u2 = @intCast(mode);
+        if (literal_context_policy.disabled(options)) continue;
         const proposals = try literal_context_split.chooseProposalsForMode(
             allocator,
             input,
@@ -4778,6 +4796,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             true,
             &distance_stats,
             .{
+                .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .use_recent_distances = true,
                 .distance_parameters = encoder_distance.Parameters.init(0, 0),
                 .large_window = options.large_window,
@@ -4980,6 +4999,7 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
         .memory_profile = options.memory_profile,
         .level = options.level,
         .quality = options.quality,
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .hq = options.hq,
         .large_window = options.large_window,
         .mode = options.mode,
@@ -4993,10 +5013,11 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
 
 fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncodeOptions, window_bits: u5) LazyWireOptions {
     return .{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .try_recent_distances = schedule.use_recent_distances,
-        .try_literal_contexts = schedule.context.literal_contexts,
-        .try_clustered_literal_contexts = schedule.context.cluster_contexts,
-        .try_joint_literal_contexts = schedule.context.joint_block_contexts,
+        .try_literal_contexts = literal_context_policy.allowed(options, schedule.context.literal_contexts),
+        .try_clustered_literal_contexts = literal_context_policy.allowed(options, schedule.context.cluster_contexts),
+        .try_joint_literal_contexts = literal_context_policy.allowed(options, schedule.context.joint_block_contexts),
         .preferred_literal_context_mode = null,
         .try_literal_split = schedule.split.literal,
         .try_adaptive_literal_split = schedule.split.adaptive_literal or options.adaptive_literal_split,
@@ -5521,6 +5542,7 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
             options.metadata,
             search_distance_parameters,
             &record_stats,
+            literal_context_policy.disabled(options),
         )) |record| retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, record);
     }
 
@@ -6214,7 +6236,8 @@ pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []co
     return encodePlannedStreamChunksWithOptionsAlloc(allocator, chunks, .{});
 }
 
-pub fn encodePlannedStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+pub fn encodePlannedStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, requested_options: PlannedStreamChunksOptions) Error![]u8 {
+    const options = literal_context_policy.planned(requested_options);
     try validatePlannedStreamChunksOptions(options);
     if (@import("br/encoder/total_entry.zig").enabled(options))
         return @import("br/encoder/total_entry.zig").owned(allocator, chunks, options, encodePlannedStreamChunksWithOptionsAlloc);
@@ -6272,7 +6295,7 @@ fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const
         .fast => encodePlannedStreamAllocForWindow(allocator, input, window_bits, options.large_window, window_len, options.metadata),
         .balanced => encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
             .window_len = window_len,
-        }, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
+        }, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options), .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata }),
         .ratio => unreachable,
     };
     var encoded = compressed catch |err| switch (err) {
@@ -6597,6 +6620,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
             &literal_commands,
             options,
             .{
+                .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .try_recent_distances = true,
                 .try_literal_split = true,
                 .try_command_split = true,
@@ -6613,6 +6637,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const wire_options: LazyWireOptions = .{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .try_recent_distances = true,
         .try_literal_split = true,
         .try_adaptive_literal_split = options.adaptive_literal_split,
@@ -6635,9 +6660,9 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     // memory/latency on the existing path.
     if (input.len >= 4 * 1024 and input.len <= 64 * 1024) {
         if (use_record_optimal)
-            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse true, &stats, &baseline)
+            try selectRecordOptimalRatioCandidate(allocator, input, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse true, &stats, &baseline, literal_context_policy.disabled(options))
         else
-            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse false, &stats, &baseline);
+            try selectOptimalRatioCandidates(allocator, input, parser_options, window_bits, options.large_window, options.metadata, options.distance_parameter_search orelse false, &stats, &baseline, literal_context_policy.disabled(options));
     }
     if (input.len <= ratio_static_dictionary_max_input_len) {
         baseline_owned = false;
@@ -6668,6 +6693,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     };
     defer allocator.free(commands);
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
         .large_window = options.large_window,
@@ -6687,7 +6713,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     return chooseStoredIfSmallerWithOptions(allocator, input, baseline, .{ .large_window = options.large_window, .window_bits = window_bits, .metadata = options.metadata });
 }
 
-fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8, disable_literal_context_modeling: bool) Error!void {
     // Four-byte matching avoids expensive one-off command/distance symbols on
     // the retained source corpus. The fixed-bit DP is only a proposal stage:
     // exact Brotli wire size decides whether the candidate survives.
@@ -6706,6 +6732,7 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
     defer optimal_commands.deinit(allocator);
     const candidate = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, optimal_commands.commands, search_distance_parameters, stats, .{
+        .disable_literal_context_modeling = disable_literal_context_modeling,
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
         .utf8_context_cutoff = 48,
@@ -6757,20 +6784,21 @@ fn recordOptimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) Error
     };
 }
 
-fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
-    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, large_window, metadata, search_distance_parameters, stats)) orelse return;
+fn selectRecordOptimalRatioCandidate(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8, disable_literal_context_modeling: bool) Error!void {
+    const record = (try encodeRecordOptimalCandidateWithOptionsAlloc(allocator, input, window_bits, large_window, metadata, search_distance_parameters, stats, disable_literal_context_modeling)) orelse return;
     if (record.len < baseline.*.len) {
         allocator.free(baseline.*);
         baseline.* = record;
     } else allocator.free(record);
 }
 
-fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats) Error!?[]u8 {
+fn encodeRecordOptimalCandidateWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, window_bits: u5, large_window: bool, metadata: []const u8, search_distance_parameters: bool, stats: *encoder_stats.PlannedEncodeStats, disable_literal_context_modeling: bool) Error!?[]u8 {
     const plan = (try recordOptimalPlanAlloc(allocator, input)) orelse return null;
     defer plan.deinit(allocator);
     const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
     defer commands.deinit(allocator);
     const encoded = try encodeCommandPlanWithDistanceParameterSearchAlloc(allocator, input, commands.commands, search_distance_parameters, stats, .{
+        .disable_literal_context_modeling = disable_literal_context_modeling,
         .use_recent_distances = true,
         // The record classifier already proves a stable field layout; one
         // literal tree is smaller across the audited record family.
@@ -7446,6 +7474,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 }
 
 const CommandPlanEncodeOptions = struct {
+    disable_literal_context_modeling: bool = false,
     prepared_common: ?*prepared_command_distance.Prepared = null,
     prepared_literal: ?*prepared_literal.State = null,
     large_window: bool = false,
@@ -7702,6 +7731,7 @@ const PlannedWireContext = struct {
 };
 
 const PlannedMetaBlockPolicy = struct {
+    disable_literal_context_modeling: bool = false,
     quality: ?quality_schedule.Quality = null,
     family: quality_schedule.LevelFamily,
     lazy: quality_schedule.LazyBudget,
@@ -7736,8 +7766,8 @@ const PlannedMetaBlockPolicy = struct {
     hash_candidates: usize = 1,
     fragment_variant: ?fast_fragment.Variant = null,
 
-    fn fromLevel(level: PlannedCompressionLevel) PlannedMetaBlockPolicy {
-        return switch (level) {
+    fn fromLevel(level: PlannedCompressionLevel, disable: bool) PlannedMetaBlockPolicy {
+        var result: PlannedMetaBlockPolicy = switch (level) {
             .fast => .{
                 .family = .fast,
                 .lazy = .{ .max_chain = 64, .nice_len = 64, .min_gain = 1 },
@@ -7771,15 +7801,19 @@ const PlannedMetaBlockPolicy = struct {
                 },
             },
         };
+        result.disable_literal_context_modeling = disable;
+        result.context = literal_context_policy.contextFlags(result.context, disable);
+        return result;
     }
 
-    fn fromSchedule(schedule: quality_schedule.Schedule) PlannedMetaBlockPolicy {
+    fn fromSchedule(schedule: quality_schedule.Schedule, disable: bool) PlannedMetaBlockPolicy {
         return .{
+            .disable_literal_context_modeling = disable,
             .quality = schedule.quality,
             .family = schedule.family,
             .lazy = schedule.lazy,
             .optimal = schedule.optimal,
-            .context = schedule.context,
+            .context = literal_context_policy.contextFlags(schedule.context, disable),
             .dictionary = schedule.dictionary,
             .split = schedule.split,
             .use_recent_distances = schedule.use_recent_distances,
@@ -8824,6 +8858,7 @@ fn considerPlannedMetaBlockCommands(
     );
     defer symbol_splits.deinit(allocator);
     const enhanced = CommandPlanEncodeOptions{
+        .disable_literal_context_modeling = policy.disable_literal_context_modeling,
         .use_recent_distances = policy.use_recent_distances,
         .literal_context_candidate = if (joint_literal == null) literal_context_candidate else null,
         .literal_split = if (adaptive_literal == null and joint_literal == null) literal_split else null,
@@ -8999,6 +9034,7 @@ fn considerSerializedMetaBlockCommands(
     best: *?PlannedMetaBlockCandidate,
     candidate_wire: *std.ArrayList(u8),
     best_wire: *std.ArrayList(u8),
+    disable_literal_context_modeling: bool,
 ) Error!void {
     const candidate = encodePlannedMetaBlockCandidate(
         allocator,
@@ -9009,6 +9045,7 @@ fn considerSerializedMetaBlockCommands(
         commands,
         wire_state,
         .{
+            .disable_literal_context_modeling = disable_literal_context_modeling,
             .large_window = large_window,
             .window_bits = window_bits,
             .compound_dictionary_size = compound_dictionary_size,
@@ -9027,6 +9064,7 @@ fn considerSerializedMetaBlockCommands(
         candidate,
     );
 
+    if (disable_literal_context_modeling) return;
     const proposals = try literal_context_split.chooseProposalsForModeWithPrefix(
         allocator,
         input,
@@ -9268,6 +9306,7 @@ fn considerPlannedMetaBlockPolicy(
                         best,
                         &state.candidate_wire,
                         &state.best_wire,
+                        state.disable_literal_context_modeling,
                     );
             }
         }
@@ -9511,6 +9550,7 @@ fn considerCommandStateTokens(
         commands.commands,
         state.wire_state,
         commandStateCompactEncodeOptions(.{
+            .disable_literal_context_modeling = state.disable_literal_context_modeling,
             .try_recent_distances = policy.use_recent_distances,
             .try_literal_contexts = policy.context.literal_contexts,
             .large_window = state.large_window,
@@ -9862,7 +9902,7 @@ fn writePlannedStreamMetaBlock(
                 allocator,
                 state,
                 block,
-                PlannedMetaBlockPolicy.fromSchedule(q10),
+                PlannedMetaBlockPolicy.fromSchedule(q10, state.disable_literal_context_modeling),
                 start_byte,
                 start_bit_index,
                 &best,
@@ -9872,7 +9912,7 @@ fn writePlannedStreamMetaBlock(
             allocator,
             state,
             block,
-            PlannedMetaBlockPolicy.fromSchedule(schedule),
+            PlannedMetaBlockPolicy.fromSchedule(schedule, state.disable_literal_context_modeling),
             start_byte,
             start_bit_index,
             &best,
@@ -9882,7 +9922,7 @@ fn writePlannedStreamMetaBlock(
             allocator,
             state,
             block,
-            PlannedMetaBlockPolicy.fromLevel(state.level),
+            PlannedMetaBlockPolicy.fromLevel(state.level, state.disable_literal_context_modeling),
             start_byte,
             start_bit_index,
             &best,
@@ -9951,6 +9991,7 @@ fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayLi
     state.hq_state.prepareMatcher(source, resolved, raw.profile) catch |err| return hqWorkingError(err, state.hq_state.budget.?);
     const a = state.hq_state.budget.?.allocator();
     const context: hq_codec.wire.Context = .{
+        .disable_literal_context_modeling = state.disable_literal_context_modeling,
         .start_byte = if (out.items.len == 0) 0 else out.items[out.items.len - 1],
         .start_bit_index = state.bit_index,
         .window_bits = state.window_bits,
@@ -10199,6 +10240,7 @@ const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
 const command_state_full_wire_slack_bytes: usize = 128;
 const LazyWireOptions = struct {
+    disable_literal_context_modeling: bool = false,
     /// Borrowed only within command_candidate_group for immutable commands.
     shared_common: ?*prepared_command_distance.Prepared = null,
     large_window: bool = false,
@@ -10235,9 +10277,10 @@ const LazyWireOptions = struct {
 };
 
 fn commandStateCompactEncodeOptions(options: LazyWireOptions) CommandPlanEncodeOptions {
-    const use_contexts = options.try_literal_contexts orelse
-        options.try_recent_distances;
+    const use_contexts = literal_context_policy.allowed(options, options.try_literal_contexts orelse
+        options.try_recent_distances);
     return .{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .use_recent_distances = options.try_recent_distances,
         .literal_context_candidate = if (use_contexts)
             literal_context_split.Candidate.suffix(
@@ -10383,7 +10426,7 @@ var test_shared_adaptive_distance_models: usize = 0;
 
 fn sharedCommandCandidateGroupSupported(input: []const u8, commands: []const command_plan.Command, options: LazyWireOptions) bool {
     if (comptime builtin.is_test) if (test_disable_shared_command_candidate_group) return false;
-    return input.len >= 8 * 1024 and input.len <= 64 * 1024 and commands.len <= 64 * 1024 and
+    return !literal_context_policy.disabled(options) and input.len >= 8 * 1024 and input.len <= 64 * 1024 and commands.len <= 64 * 1024 and
         !options.large_window and options.window_bits >= 10 and options.window_bits <= 24 and
         options.metadata.len == 0 and options.try_recent_distances and options.try_clustered_literal_contexts and
         (options.try_literal_contexts orelse options.try_recent_distances) and
@@ -10821,7 +10864,7 @@ pub const PlannedStreamEncoder = struct {
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         const compressed = if (options.level == .balanced)
-            try encodeLazyCommandPlanAlloc(allocator, input, self.commands.items, &stats_out, .{})
+            try encodeLazyCommandPlanAlloc(allocator, input, self.commands.items, &stats_out, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options) })
         else
             try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
         return chooseStoredIfSmaller(allocator, input, compressed);
@@ -10975,11 +11018,11 @@ pub const PlannedStreamEncoder = struct {
             ((self.commands.items.len == 2 and self.commands.items[0].has_copy and self.commands.items[0].isLz77() and self.commands.items[0].copy_len == 3) or
                 short_match_candidates.collect(self.commands.items).len != 0);
         if (balanced_alternatives) {
-            const encoded = try encodeLazyCommandPlanAlloc(self.allocator, input, self.commands.items, &stats_out, .{});
+            const encoded = try encodeLazyCommandPlanAlloc(self.allocator, input, self.commands.items, &stats_out, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options) });
             defer self.allocator.free(encoded);
             try self.output.appendSlice(self.allocator, encoded);
         } else {
-            try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
+            try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options) });
         }
         const stored_len = try encodedStoredStreamBound(input.len);
         if (self.output.items.len > stored_len) {
@@ -11374,14 +11417,15 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
         if (comptime builtin.is_test) test_context_primary_recent_max = @max(test_context_primary_recent_max, count);
         break :blk count >= min_recent_distance_candidate_count;
     } else false;
-    const try_literal_contexts = options.try_literal_contexts orelse options.try_recent_distances;
-    const explicit_literal_contexts = options.try_literal_contexts orelse false;
-    const primary_context_enabled = explicit_literal_contexts or use_recent_distances;
+    const try_literal_contexts = literal_context_policy.allowed(options, options.try_literal_contexts orelse options.try_recent_distances);
+    const explicit_literal_contexts = literal_context_policy.allowed(options, options.try_literal_contexts orelse false);
+    const primary_context_enabled = literal_context_policy.allowed(options, explicit_literal_contexts or use_recent_distances);
     const primary_context: ?literal_context_split.Candidate = if (primary_context_enabled)
         literal_context_split.Candidate.suffix(options.preferred_literal_context_mode orelse literal_context.mode_utf8, 56, 0)
     else
         null;
     var primary_options = CommandPlanEncodeOptions{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .use_recent_distances = use_recent_distances,
         .literal_context_candidate = primary_context,
         .large_window = options.large_window,
@@ -11444,6 +11488,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
                 const adaptive = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &adaptive_stats, .{
                     .prepared_common = primary_options.prepared_common,
                     .use_recent_distances = use_recent_distances,
+                    .disable_literal_context_modeling = literal_context_policy.disabled(options),
                     .literal_context_candidate = adaptive_context,
                     .large_window = options.large_window,
                     .window_bits = options.window_bits,
@@ -11509,6 +11554,7 @@ fn encodePreferredCommandPlanAllocRecorded(comptime trace_enabled: bool, trace: 
     }
     var baseline_stats = initial_stats;
     const baseline = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, io, &baseline_stats, .{
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .large_window = options.large_window,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
@@ -11561,7 +11607,7 @@ const PreparedContextGroupStrategy = struct {
         return try literal_context_split.chooseProposals(allocator, input, commands);
     }
     pub fn plain(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *Stats, options: UserOptions) @This().Error![]u8 {
-        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });
+        return encodeCommandPlanWithOptionsAllocRecorded(traced, trace, allocator, input, commands, io, stats, .{ .disable_literal_context_modeling = literal_context_policy.disabled(options), .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances, .distance_parameters = options.distance_parameters, .optimize_same_last_distance = options.optimize_same_last_distance });
     }
 };
 
@@ -11589,7 +11635,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     else
         null;
     defer if (adaptive_literal) |plan| plan.deinit(allocator);
-    var joint_literal = if (adaptive_literal != null and options.try_joint_literal_contexts)
+    var joint_literal = if (adaptive_literal != null and literal_context_policy.allowed(options, options.try_joint_literal_contexts))
         literal_joint_context_split.chooseAlloc(allocator, input, commands, adaptive_literal.?, .{}) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
             error.IntegerOverflow => return error.IntegerOverflow,
@@ -11680,6 +11726,7 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
             &distance_context_stats,
             .{
                 .use_recent_distances = baseline.use_recent_distances,
+                .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .literal_context_candidate = baseline.literal_context_candidate,
                 .large_window = options.large_window,
                 .window_bits = options.window_bits,
@@ -12118,7 +12165,7 @@ fn sharedCommandModelMatches(common: *const prepared_command_distance.Prepared, 
 }
 
 fn encodeCountedAdaptiveLiteralCandidateRecorded(comptime traced: bool, trace: quality_profile.Recorder(traced), allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, split: *const block_split_plan.Plan, incumbent: []const u8) Error!?[]u8 {
-    const wire_options: CommandPlanEncodeOptions = .{ .use_recent_distances = baseline.use_recent_distances, .adaptive_literal_split = split, .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances };
+    const wire_options: CommandPlanEncodeOptions = .{ .disable_literal_context_modeling = literal_context_policy.disabled(options), .use_recent_distances = baseline.use_recent_distances, .adaptive_literal_split = split, .large_window = options.large_window, .window_bits = options.window_bits, .metadata = options.metadata, .compound_dictionary_size = options.compound_dictionary_size, .initial_output_pos = options.initial_output_pos, .starting_last_distances = options.starting_last_distances };
     const materialized = if (comptime builtin.is_test) test_materialize_adaptive_literal else false;
     if (materialized or !countedAdaptiveLiteralSupported(input, commands, wire_options))
         return try encodeEntropyAdaptiveLiteralSplitWireCandidateAllocRecorded(traced, trace, allocator, input, commands, stats, options, baseline, split);
@@ -12351,6 +12398,7 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
         // Literal block splitting disables context trees, while command and
         // distance splitting retain the winning context candidate.
         .use_recent_distances = baseline.use_recent_distances,
+        .disable_literal_context_modeling = literal_context_policy.disabled(options),
         .literal_context_candidate = if (literal_split == null and adaptive_literal_split == null) baseline.literal_context_candidate else null,
         .literal_split = literal_split,
         .adaptive_literal_split = adaptive_literal_split,
@@ -12381,6 +12429,7 @@ fn encodeEntropySplitWireCandidateInternalAllocRecorded(comptime trace_enabled: 
             var alternate_stats = initial_stats;
             const alternate = try encodeCommandPlanWithOptionsAllocRecorded(trace_enabled, trace, allocator, input, commands, null, &alternate_stats, .{
                 .use_recent_distances = baseline.use_recent_distances,
+                .disable_literal_context_modeling = literal_context_policy.disabled(options),
                 .literal_context_candidate = alternate_context,
                 .command_split = command_split,
                 .adaptive_command_split = adaptive_command_split,
@@ -12763,10 +12812,11 @@ fn prepareCountedAdaptiveDistanceLiteralRecorded(
     input: []const u8,
     commands: []const command_plan.Command,
     stats: *encoder_stats.PlannedEncodeStats,
-    options: CommandPlanEncodeOptions,
+    requested_options: CommandPlanEncodeOptions,
     common: *const prepared_adaptive_distance.Prepared,
     state: *prepared_literal.State,
 ) Error!quality_profile.CandidateRef {
+    const options = literal_context_policy.command(requested_options);
     if (comptime builtin.is_test) test_adaptive_distance_shared_counters.literal_counts += 1;
     var scope = trace.begin(.evaluate, input.len, commands.len);
     defer scope.finish();
@@ -13272,8 +13322,9 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     commands: []const command_plan.Command,
     io: ?std.Io,
     stats: *encoder_stats.PlannedEncodeStats,
-    options: CommandPlanEncodeOptions,
+    requested_options: CommandPlanEncodeOptions,
 ) Error!void {
+    const options = literal_context_policy.command(requested_options);
     comptime {
         if (distance_capacity != planned_distance_alphabet_size and
             distance_capacity != planned_wide_distance_alphabet_size and
@@ -14555,6 +14606,7 @@ fn encodeHqCommandsCandidate(allocator: std.mem.Allocator, source: hq_types.Sour
     var final_state: PlannedWireState = .{};
     var stats: PlannedEncodeStats = .{};
     try encodeCommandPlanWithOptionsWrite(allocator, &writer, source.input, commands, null, &stats, .{
+        .disable_literal_context_modeling = context.disable_literal_context_modeling,
         .large_window = context.format == .large_window,
         .hq_model_output = actual_model,
         .use_recent_distances = true,

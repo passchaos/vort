@@ -9,6 +9,7 @@ pub const Context = struct {
     window_bits: u5,
     format: distance.Format = .standard,
     literal_mode: u2,
+    disable_literal_context_modeling: bool = false,
     previous: [2]u8 = .{ 0, 0 },
     distance_parameters: distance.Parameters,
     compound_dictionary_size: usize = 0,

@@ -20,6 +20,7 @@ pub const Resolved = struct {
     format: distance.Format = .standard,
     parse_mode: ParseMode = .bounded,
     copy_lengths: CopyLengthPolicy = .sampled,
+    disable_literal_context_modeling: bool = false,
     max_price_evaluations: ?u64 = null,
 };
 
@@ -155,6 +156,8 @@ pub const HqOptions = struct {
     profile: ?*HqProfile = null,
     parse_mode: ParseMode = .bounded,
     copy_lengths: CopyLengthPolicy = .sampled,
+    /// Emit one literal context model without changing dictionary contexts.
+    disable_literal_context_modeling: bool = false,
     /// Per actual single parser plan, counts admitted exact copy-command edge
     /// price evaluations. Literal/tree/IO work and terminal auxiliary prices
     /// are excluded. This is not a whole-operation
@@ -185,6 +188,7 @@ pub const HqOptions = struct {
             .parse_mode = self.parse_mode,
             .copy_lengths = self.copy_lengths,
             .max_price_evaluations = self.max_price_evaluations,
+            .disable_literal_context_modeling = self.disable_literal_context_modeling,
         };
     }
 };
@@ -192,4 +196,5 @@ pub const HqOptions = struct {
 test {
     _ = @import("hq_parser/whole_options_tests.zig");
     _ = @import("hq_parser/length_options_tests.zig");
+    _ = @import("hq_parser/literal_context_options_tests.zig");
 }

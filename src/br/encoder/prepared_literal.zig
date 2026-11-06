@@ -5,6 +5,7 @@ const core = @import("../../core.zig");
 const bit_count = @import("../../io/bit_count.zig");
 const command_plan = @import("command_plan.zig");
 const context = @import("literal_context_split.zig");
+const literal_context_policy = @import("literal_context_policy.zig");
 
 pub const max_trees = context.max_trees;
 pub const Alphabet = command_plan.PrefixAlphabetFor(256);
@@ -18,7 +19,8 @@ pub const Key = struct {
     mode: u2,
     optimize_wire: bool,
 
-    pub fn init(input: []const u8, options: anytype) Key {
+    pub fn init(input: []const u8, requested_options: anytype) Key {
+        const options = literal_context_policy.command(requested_options);
         return .{ .input_ptr = input.ptr, .input_len = input.len, .initial_previous = options.initial_previous, .raw_context = options.literal_context_candidate, .utf8 = options.use_utf8_text_contexts, .cutoff = options.utf8_context_cutoff, .mode = options.literal_context_mode, .optimize_wire = options.optimize_literal_tree_wire };
     }
     pub fn matches(self: *const Key, input: []const u8, options: anytype) bool {
