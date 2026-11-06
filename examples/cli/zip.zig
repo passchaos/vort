@@ -55,9 +55,9 @@ const OwnedParts = struct {
 const FilePartSource = struct {
     init: std.process.Init,
     paths: []const []const u8,
-    part_lengths: []usize,
+    part_lengths: []vort.StreamCount,
     active_disk: ?usize = null,
-    active_bytes: ?[]u8 = null,
+    active_file: ?std.Io.File = null,
     switches: usize = 0,
     releases: usize = 0,
 
@@ -67,21 +67,19 @@ const FilePartSource = struct {
     ) !FilePartSource {
         var paths: std.ArrayList([]const u8) = .empty;
         errdefer paths.deinit(init.gpa);
-        var lengths: std.ArrayList(usize) = .empty;
+        var lengths: std.ArrayList(vort.StreamCount) = .empty;
         errdefer lengths.deinit(init.gpa);
-        var total_len: usize = 0;
+        var total_len: vort.StreamCount = 0;
         while (args.next()) |path| {
-            const bytes = try std.Io.Dir.cwd().readFileAlloc(
-                init.io,
-                path,
-                init.gpa,
-                .limited(max_archive_size),
-            );
-            const part_len = bytes.len;
-            init.gpa.free(bytes);
+            const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+            const size = (file.stat(init.io) catch |err| {
+                file.close(init.io);
+                return err;
+            }).size;
+            file.close(init.io);
+            const part_len: vort.StreamCount = size;
             if (part_len == 0) return error.InvalidZipArchive;
-            total_len = std.math.add(usize, total_len, part_len) catch
-                return error.IntegerOverflow;
+            total_len = try vort.core.stream_count.add(total_len, part_len);
             if (total_len > max_archive_size) return error.OutputLimitExceeded;
             try paths.append(init.gpa, path);
             try lengths.append(init.gpa, part_len);
@@ -98,7 +96,7 @@ const FilePartSource = struct {
     }
 
     fn deinit(self: *FilePartSource) void {
-        if (self.active_bytes) |bytes| self.init.gpa.free(bytes);
+        if (self.active_file) |file| file.close(self.init.io);
         self.init.gpa.free(self.paths);
         self.init.gpa.free(self.part_lengths);
         self.* = undefined;
@@ -107,37 +105,33 @@ const FilePartSource = struct {
     fn readAt(
         context: *anyopaque,
         disk: usize,
-        offset: usize,
+        offset: vort.StreamCount,
         output: []u8,
     ) error{PartSourceReadFailed}!usize {
         const self: *FilePartSource = @ptrCast(@alignCast(context));
-        if (disk >= self.paths.len) return error.PartSourceReadFailed;
+        if (disk >= self.paths.len or offset > self.part_lengths[disk]) return error.PartSourceReadFailed;
         if (self.active_disk != disk) {
-            if (self.active_bytes) |bytes| {
-                self.init.gpa.free(bytes);
-                self.active_bytes = null;
+            if (self.active_file) |file| {
+                file.close(self.init.io);
+                self.active_file = null;
                 self.active_disk = null;
                 self.releases += 1;
             }
-            const bytes = std.Io.Dir.cwd().readFileAlloc(
-                self.init.io,
-                self.paths[disk],
-                self.init.gpa,
-                .limited(max_archive_size),
-            ) catch return error.PartSourceReadFailed;
-            if (bytes.len != self.part_lengths[disk]) {
-                self.init.gpa.free(bytes);
+            const file = std.Io.Dir.cwd().openFile(self.init.io, self.paths[disk], .{}) catch return error.PartSourceReadFailed;
+            const size = (file.stat(self.init.io) catch {
+                file.close(self.init.io);
+                return error.PartSourceReadFailed;
+            }).size;
+            if (size != self.part_lengths[disk]) {
+                file.close(self.init.io);
                 return error.PartSourceReadFailed;
             }
-            self.active_bytes = bytes;
+            self.active_file = file;
             self.active_disk = disk;
             self.switches += 1;
         }
-        const bytes = self.active_bytes.?;
-        if (offset > bytes.len) return error.PartSourceReadFailed;
-        const amount = @min(output.len, bytes.len - offset);
-        @memcpy(output[0..amount], bytes[offset..][0..amount]);
-        return amount;
+        const amount = vort.core.stream_count.bounded(self.part_lengths[disk] - offset, output.len);
+        return self.active_file.?.readPositionalAll(self.init.io, output[0..amount], offset) catch error.PartSourceReadFailed;
     }
 };
 
