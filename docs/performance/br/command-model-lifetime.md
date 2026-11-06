@@ -1222,8 +1222,6 @@ one.
 
 | Input | Narrow only | Narrow + wide |
 | --- | ---: | ---: |
-| XML 8 KiB | 1,091 | 1,088 |
-| nci 8 KiB | 837 | 827 |
 | XML 16 KiB | 1,558 | 1,550 |
 | nci 16 KiB | 1,376 | 1,365 |
 | XML 32 KiB | 2,418 | 2,397 |
@@ -1233,7 +1231,8 @@ one.
 
 q10 produces the same 64 KiB numbers because q11 inherits the complete q10
 winner below 64 KiB. Binary rows and 1 MiB inputs are unchanged, since the
-command-state candidate is gated to text-like blocks up to 64 KiB.
+command-state candidate is gated to text-like blocks up to 64 KiB. The gate
+skips inputs of exactly 8 KiB and below, so those sizes are unaffected.
 
 Above 32 KiB the wide beam also prices repcode reuse from a bonus model
 learned from the modeled plan, while the narrow beam keeps the seed model. That
@@ -1253,8 +1252,6 @@ text, not the beam width:
 
 | Input | 8 candidates | 32 candidates |
 | --- | ---: | ---: |
-| XML 8 KiB | 1,088 | 1,085 |
-| nci 8 KiB | 827 | 824 |
 | XML 16 KiB | 1,550 | 1,544 |
 | nci 16 KiB | 1,365 | 1,361 |
 | XML 32 KiB | 2,375 | 2,369 |
@@ -1282,6 +1279,26 @@ sequentially, so peak memory is unchanged from the wide-only experiment.
 Encode time on the affected 64 KiB rows rises about 45% (XML 412 -> 615 ms,
 nci 380 -> 546 ms) because the command-state parse roughly doubles. The full
 Brotli suite and the exact requested-heap contracts pass unchanged.
+
+## Eight-state text beam, 2026-11-06
+
+Text blocks of at least 32 KiB now use an eight-state wide beam; smaller text
+blocks keep four states because their gain does not pay for the extra parse.
+The binary opt-in keeps four states: its measured binary wins used that width,
+and an eight-state plan lost the smallest synthetic fixture outright.
+
+| Input | Four states | Eight states |
+| --- | ---: | ---: |
+| XML 16 KiB | 1,544 | 1,544 |
+| XML 32 KiB | 2,369 | 2,368 |
+| nci 32 KiB | 2,360 | 2,345 |
+| XML 64 KiB | 4,001 | 3,971 |
+| nci 64 KiB | 3,816 | 3,784 |
+
+All other rows are unchanged. The extra states cost encode time: 64 KiB XML
+596 -> 725 ms and nci 594 -> 754 ms; 32 KiB XML 190 -> 278 ms and nci 208 ->
+331 ms. The state array is `(input_len + 1) * 8 * 72` bytes, about 37 MiB at
+the 64 KiB gate. The full Brotli suite passes unchanged.
 
 ## Rejected 64 KiB optimal search window, 2026-11-06
 

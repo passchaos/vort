@@ -5905,14 +5905,21 @@ fn selectWideCommandStateCandidate(
     always_full_wire: bool,
 ) linksection(command_state_text_section) Error!void {
     if (builtin.is_test and always_full_wire) test_hq_wide_command_candidate_attempts += 1;
-    const wide = try hq_command_parser.planAllocWide(allocator, input, .{
+    const wide_options: lz77.GreedyOptions = .{
         .window_len = search_window,
         .max_chain = @min(budget.max_chain, 64),
         .nice_len = budget.nice_len,
         .max_candidates = @min(budget.max_candidates, 32),
         .min_match = 4,
         .max_match = lz77.max_match_len,
-    }, wide_model);
+    };
+    // Eight states are a measured ratio win for text from 32 KiB up. The
+    // binary opt-in keeps four states: the measured binary wins used that
+    // width, and a wider beam can lose the smallest fixtures outright.
+    const wide = if (!always_full_wire and input.len >= 32 * 1024)
+        try hq_command_parser.planAllocWide8(allocator, input, wide_options, wide_model)
+    else
+        try hq_command_parser.planAllocWide(allocator, input, wide_options, wide_model);
     defer wide.deinit(allocator);
     if (wide.lz.stats.matches == 0) return;
     const wide_commands = try command_plan.buildAlloc(allocator, input, wide.lz.tokens);

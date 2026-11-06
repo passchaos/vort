@@ -9,10 +9,11 @@ const length = @import("../length.zig");
 /// Retained forward states per input position for the repcode-aware q10/q11
 /// candidate. The narrow beam is the cheap default; the wide beam is a second
 /// complete candidate because the modeled optimum does not always equal the
-/// smallest wire. Each state is 72 bytes, so the 64 KiB gate keeps the wide
-/// transient array at about 19 MiB.
+/// smallest wire. Each state is 72 bytes, so at the 64 KiB gate the four-state
+/// array is about 19 MiB and the eight-state array about 37 MiB.
 pub const narrow_beam = 2;
 pub const wide_beam = 4;
+pub const wide_beam_8 = 8;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const q8: u64 = 256;
 
@@ -118,6 +119,45 @@ pub fn planAllocWithStartingDistances(
     return planAllocInternal(
         false,
         narrow_beam,
+        allocator,
+        input,
+        options,
+        model,
+        starting_last_distances,
+        undefined,
+    );
+}
+
+/// Eight-state wide beam. Used for ratio-focused text blocks and the binary
+/// opt-in, where the extra states measurably reduce the complete wire.
+pub fn planAllocWide8(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+) !Plan {
+    return planAllocInternal(
+        false,
+        wide_beam_8,
+        allocator,
+        input,
+        options,
+        model,
+        initial_last_distances,
+        undefined,
+    );
+}
+
+pub fn planAllocWide8WithStartingDistances(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+    starting_last_distances: [4]usize,
+) !Plan {
+    return planAllocInternal(
+        false,
+        wide_beam_8,
         allocator,
         input,
         options,

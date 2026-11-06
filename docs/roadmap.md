@@ -26319,5 +26319,9 @@ reuse, so production keeps the simpler independently owned plans.
   8 KiB ceiling to 64 KiB per block, respecting an explicit caller ceiling.
   The option is rejected outside quality 10/11 and above 64 KiB. Public-API
   tests cover the one-shot and chunks attempts, no-growth and rejection
-  contracts.
+  contracts. Text blocks of at least 32 KiB then move to an eight-state wide
+  beam: XML 64 KiB 4,001 -> 3,971 and nci 3,816 -> 3,784, XML 32 KiB
+  2,369 -> 2,368 and nci 2,360 -> 2,345, with 16 KiB unchanged. The extra
+  states raise 64 KiB encode time about 22-27% and use about 37 MiB at the
+  gate; the binary opt-in keeps four states.
   [Evidence](performance/br/command-model-lifetime.md).
