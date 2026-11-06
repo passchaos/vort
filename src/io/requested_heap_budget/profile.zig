@@ -1,4 +1,4 @@
-/// Requested heap bytes in one shared encoding ledger, not process RSS.
+/// Requested heap bytes in one shared codec ledger, not process RSS.
 /// Automatic stack storage, OS resources that bypass the supplied allocator,
 /// allocator bookkeeping and backing remap transients are excluded. Worker
 /// stacks/control requested through the supplied allocator are counted.

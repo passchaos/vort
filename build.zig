@@ -284,6 +284,24 @@ pub fn build(b: *std.Build) void {
         .single_threaded = true,
     });
     zstd_parallel_wasm_mod.addObject(wasm_zstd_huffman_x2_obj);
+    const zstd_decode_memory_wasm = b.addExecutable(.{
+        .name = "vort-zstd-decode-memory-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/zstd_decode_memory/wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "zstd", .module = zstd_parallel_wasm_mod }},
+        }),
+    });
+    zstd_decode_memory_wasm.entry = .disabled;
+    zstd_decode_memory_wasm.rdynamic = true;
+    zstd_decode_memory_wasm.stack_size = 8 * 1024 * 1024;
+    const zstd_decode_memory_wasm_run = b.addSystemCommand(&.{ "node", "tools/zstd/decode_memory/wasm_gate.js" });
+    zstd_decode_memory_wasm_run.addArtifactArg(zstd_decode_memory_wasm);
+    zstd_decode_memory_wasm_run.addArg("zig-out/zstd-decode-memory-wasm.json");
+    b.step("test-zstd-decode-memory-wasm", "Execute complete Zstd decode heap quota and publication contracts in WebAssembly")
+        .dependOn(&zstd_decode_memory_wasm_run.step);
     const zstd_parallel_frame_wasm = b.addExecutable(.{
         .name = "vort-zstd-parallel-frame-wasm",
         .root_module = b.createModule(.{
@@ -732,6 +750,13 @@ pub fn build(b: *std.Build) void {
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_decode_memory_tests = b.addTest(.{
+        .name = "vort-zstd-decode-memory-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd decode total memory", "Zstd decode budget", "Zstd decoder handle layout" },
+    });
+    b.step("test-zstd-decode-memory", "Run complete one-shot and reusable Zstd decode heap contracts")
+        .dependOn(&b.addRunArtifact(zstd_decode_memory_tests).step);
     const zstd_parallel_frame_tests = b.addTest(.{
         .name = "vort-zstd-parallel-frame-tests",
         .root_module = zstd_tests_mod,
@@ -7767,6 +7792,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_hq_probe.step);
     check_step.dependOn(&zstd_hq_search_probe.step);
     check_step.dependOn(&zstd_hq_search_wasm.step);
+    check_step.dependOn(&zstd_decode_memory_wasm.step);
     check_step.dependOn(&br_stored_memory_wasm.step);
     check_step.dependOn(&wide_bit_wasm.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);

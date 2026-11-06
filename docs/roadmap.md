@@ -31,10 +31,15 @@ random fixture falls from 8,232 to 4,179 raw bytes in best split mode; a
 4 KiB residual-dictionary fixture falls from 4,116 to 1,075. The independent
 system-zlib gate checks 56 streams with fragmented input/output. These
 functional results do not close the broader codec performance gaps.
-The next functional resource gap is Zstd one-shot and reusable decoding:
-output-length limits do not yet bound simultaneous result staging, append
-growth, retained scratch and entropy workspace. A shared whole-operation heap
-quota should cover those public paths and preserve their failure transactions.
+The [Zstd decode heap increment](formats/zstd-decode-memory.md) now extends
+`FrameDecodeOptions` with a shared whole-operation cap and memory profile.
+One-shot and reusable operations count simultaneous staging, append capacity
+and growth, retained scratch and entropy workspace; quota and backing OOM
+remain distinct and failed publication preserves caller state. Defaults retain
+their existing allocation paths. Actual wasm32-wasi consumers verify exact
+budget boundaries, ownership handoff, refusal/retry and zero-heap size queries.
+Continue auditing Deflate/Zstd/Brotli functionality and resource contracts
+before treating performance comparisons as the only remaining work.
 
 The [Deflate circular staging increment](performance/deflate/rolling-window.md)
 keeps private generation and caller-owned storage while avoiding repeated

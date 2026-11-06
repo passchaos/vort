@@ -2423,6 +2423,12 @@ pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 pub const ZstdError = zstd.Error;
 pub const ZstdFrameFormat = zstd.FrameFormat;
 pub const ZstdFrameDecodeOptions = zstd.FrameDecodeOptions;
+pub const ZstdDecodeMemoryProfile = zstd.DecodeMemoryProfile;
+pub const ZstdDecodeMemorySnapshot = zstd.DecodeMemorySnapshot;
+
+test "root exports Zstd decode memory quota and reusable snapshot" {
+    try @import("tests/zstd_decode_memory/root_exports.zig").contracts(@This());
+}
 pub const zstdDecodeFrameAllocWithOptions = zstd.decodeFrameAllocWithOptions;
 pub const zstdDecodeFrameIntoWithOptions = zstd.decodeFrameIntoWithOptions;
 pub const zstdDecodeFrameAppendWithOptions = zstd.decodeFrameAppendWithOptions;
