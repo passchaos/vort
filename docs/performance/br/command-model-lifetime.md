@@ -1312,6 +1312,18 @@ A sixteen-state text beam was also measured and rejected as the default: XML
 1,206 ms and the state array doubles to about 75 MiB. Eight states remain the
 ratio/latency balance.
 
+## Large-window distance context trees, 2026-11-06
+
+The distance-context candidate was limited to standard windows. It now also
+runs for opt-in Large Window q10/q11 wires through window 30, using the
+large-distance alphabet and header format. On 65,535-byte q11 prefixes with
+`large_window=true, window_bits=17` the complete-wire arbitration shrinks
+sao 46,619 -> 46,583 and dickens 22,384 -> 22,376; x-ray (39,415), nci (3,786)
+and XML (3,973) are unchanged. Windows 25 and 30 produce the same sizes as
+window 17 on these inputs, and every encoded wire round-trips through the
+Vort decoder with `allow_large_window`. Two direct tests cover the large
+command-plan header path and a 64 KiB quality wire.
+
 ## Rejected 64 KiB optimal search window, 2026-11-06
 
 The q10/q11 optimal seed and modeled passes cap their search window at the

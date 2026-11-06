@@ -26328,3 +26328,12 @@ reuse, so production keeps the simpler independently owned plans.
   of letting the text gate override it to 64 KiB; a public-API test covers
   zero and a 16 KiB ceiling on a 64 KiB text block.
   [Evidence](performance/br/command-model-lifetime.md).
+
+- 2026-11-06: Brotli's single-distance-block-type context-tree candidate now
+  also runs for opt-in Large Window q10/q11 wires through window 30, using the
+  large-distance alphabet and header format. On 65,535-byte q11 prefixes with
+  `large_window=true, window_bits=17`, sao shrinks 46,619 -> 46,583 and dickens
+  22,384 -> 22,376 while x-ray, nci and XML are unchanged; windows 25 and 30
+  match the window-17 sizes and every wire round-trips through the Vort decoder.
+  Two tests cover the large command-plan header path and a 64 KiB quality wire.
+  [Evidence](performance/br/command-model-lifetime.md).

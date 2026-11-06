@@ -7533,6 +7533,78 @@ test "Brotli distance context trees emit single-symbol trees for unused contexts
     try std.testing.expectEqualStrings(payload, decoded);
 }
 
+test "Brotli large-window distance context trees round trip" {
+    const allocator = std.testing.allocator;
+    const literal_len = 256;
+    const samples_per_context = 32;
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    try payload.ensureTotalCapacity(allocator, literal_len + 4 * samples_per_context * 5);
+    for (0..literal_len) |value| try payload.append(allocator, @intCast(value));
+    var commands: std.ArrayList(command_plan.Command) = .empty;
+    defer commands.deinit(allocator);
+    try payload.append(allocator, payload.items[literal_len - 1]);
+    try payload.append(allocator, payload.items[literal_len]);
+    try commands.append(allocator, .{
+        .insert_start = 0,
+        .insert_len = literal_len,
+        .copy_len = 2,
+        .distance = 1,
+        .has_copy = true,
+    });
+    var used: [4]usize = @splat(0);
+    for (0..4 * samples_per_context) |sample| {
+        const context = sample % 4;
+        const copy_len: usize = switch (context) {
+            0 => 2,
+            1 => 3,
+            2 => 4,
+            else => 5,
+        };
+        const distance = 1 + context * samples_per_context + (used[context] % samples_per_context);
+        used[context] += 1;
+        const start = payload.items.len - distance;
+        for (0..copy_len) |index| try payload.append(allocator, payload.items[start + index]);
+        try commands.append(allocator, .{
+            .insert_start = payload.items.len - copy_len,
+            .insert_len = 0,
+            .copy_len = copy_len,
+            .distance = distance,
+            .has_copy = true,
+        });
+    }
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const contextual = try encodeCommandPlanWithOptionsAlloc(allocator, payload.items, commands.items, null, &stats, .{
+        .large_window = true,
+        .window_bits = 17,
+        .distance_context_trees = true,
+    });
+    defer allocator.free(contextual);
+    const decoded = try decodeStreamAllocWithOptions(allocator, contextual, .{ .allow_large_window = true });
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "Brotli q11 large-window quality wire round trips with distance context trees" {
+    var payload: [64 * 1024]u8 = undefined;
+    const line = "the quick brown fox jumps over the lazy dog and the 0123456789 line repeats\n";
+    var written: usize = 0;
+    while (written < payload.len) {
+        const take = @min(line.len, payload.len - written);
+        @memcpy(payload[written..][0..take], line[0..take]);
+        written += take;
+    }
+    const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 11,
+        .large_window = true,
+        .window_bits = 17,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAllocWithOptions(std.testing.allocator, encoded, .{ .allow_large_window = true });
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
 test "Brotli distance context planner merges identical contexts" {
     const capacity = planned_distance_alphabet_size;
     var frequencies: [4][capacity]u32 = @splat(@splat(0));
@@ -11513,8 +11585,9 @@ fn encodeEntropySplitCandidateAllocRecorded(comptime trace_enabled: bool, trace:
     var selection = @import("br/encoder/entropy_wire_selection.zig").Owner(encoder_stats.PlannedEncodeStats).init(baseline.encoded, baseline_stats);
     errdefer selection.deinit(trace_enabled, trace, allocator, freeQualityRecorded);
     if (candidate) |wire| selection.consider(trace_enabled, trace, allocator, wire, candidate_stats, freeQualityRecorded);
-    if (options.try_distance_context_trees and !options.large_window and options.metadata.len == 0 and
-        options.window_bits >= 10 and options.window_bits <= 24)
+    if (options.try_distance_context_trees and options.metadata.len == 0 and
+        options.window_bits >= 10 and
+        options.window_bits <= @as(u5, if (options.large_window) 30 else 24))
     {
         var distance_context_stats = baseline_stats;
         const distance_context_candidate = try encodeCommandPlanWithOptionsAllocRecorded(
