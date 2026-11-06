@@ -1384,7 +1384,10 @@ the wider chain is what recovers the ooffice and mr bytes, while x-ray saturates
 earlier. The default therefore keeps the text-only gate, and the binary
 behaviour is exposed as the explicit `PlannedEncodeOptions.binary_command_state`
 opt-in (mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up
-to 64 KiB. It runs only the wide beam, always encodes its complete wire, and still
+to 64 KiB. Removing the gate entirely was also measured: the same binary wins
+appear plus osdb 25,428 -> 25,358, but encode time rises 13-100% on rows that
+do not win (mozilla 680 -> 1,254 ms), so the quality-first tradeoff remains a
+caller decision rather than a default. It runs only the wide beam, always encodes its complete wire, and still
 arbitrates against every other candidate, so the selected stream can never
 grow. In the chunked/incremental path the option also extends the default
 8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
