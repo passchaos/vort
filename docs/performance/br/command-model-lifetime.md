@@ -1386,8 +1386,11 @@ behaviour is exposed as the explicit `PlannedEncodeOptions.binary_command_state`
 opt-in (mirrored by `PlannedStreamChunksOptions`) for quality 10/11 blocks up
 to 64 KiB. Removing the gate entirely was also measured: the same binary wins
 appear plus osdb 25,428 -> 25,358, but encode time rises 13-100% on rows that
-do not win (mozilla 680 -> 1,254 ms), so the quality-first tradeoff remains a
-caller decision rather than a default. It runs only the wide beam, always encodes its complete wire, and still
+do not win (mozilla 680 -> 1,254 ms). Enabling it as the default also changes
+every q10/q11 binary wire and the exact requested-heap contracts, so the full
+suite needs a dedicated re-freeze epoch (dozens of frozen-wire and memory
+assertions). The quality-first tradeoff therefore remains a caller decision
+rather than a silent default change. It runs only the wide beam, always encodes its complete wire, and still
 arbitrates against every other candidate, so the selected stream can never
 grow. In the chunked/incremental path the option also extends the default
 8 KiB command-state ceiling to 64 KiB per block; an explicit caller ceiling
