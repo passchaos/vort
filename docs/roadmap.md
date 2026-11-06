@@ -26323,5 +26323,8 @@ reuse, so production keeps the simpler independently owned plans.
   beam: XML 64 KiB 4,001 -> 3,971 and nci 3,816 -> 3,784, XML 32 KiB
   2,369 -> 2,368 and nci 2,360 -> 2,345, with 16 KiB unchanged. The extra
   states raise 64 KiB encode time about 22-27% and use about 37 MiB at the
-  gate; the binary opt-in keeps four states.
+  gate; the binary opt-in keeps four states. The one-shot path also now
+  respects an explicit `command_state_max_input_kib` (including zero) instead
+  of letting the text gate override it to 64 KiB; a public-API test covers
+  zero and a 16 KiB ceiling on a 64 KiB text block.
   [Evidence](performance/br/command-model-lifetime.md).

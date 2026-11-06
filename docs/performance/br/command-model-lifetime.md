@@ -1272,6 +1272,13 @@ whole retained set; beam two keeps identical behavior. The wide candidate also
 encodes its compact and complete wires, matching the narrow candidate's two
 wire forms.
 
+The one-shot ceiling now follows the same rule as the chunked path: the default
+sentinel extends to 64 KiB for text-like blocks or the binary opt-in, while an
+explicit `command_state_max_input_kib` value (including zero, which disables
+the candidate) is respected. Previously the text gate silently overrode an
+explicit limit, so a 64 KiB text block with `0` still ran the candidate. A
+public-API test covers zero and a 16 KiB ceiling on a 64 KiB text block.
+
 The cost is transient memory and time: each state is 72 bytes, so the wide
 array is `(input_len + 1) * 4 * 72` bytes, about 19 MiB at the 64 KiB gate
 (narrow is 9.4 MiB, and the two plans do not overlap). Both parses run

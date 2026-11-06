@@ -5434,12 +5434,17 @@ fn encodePlannedStreamQualityWithOptionsAllocRecorded(comptime trace_enabled: bo
     // text-like blocks; gate it by content so binary blocks keep the 8 KiB
     // latency policy.
     const extend_command_state = schedule.quality.int() >= 10 and input.len <= 64 * 1024 and
+        options.command_state_max_input_kib != 0 and
         (qualityCommandStateGate(input) or options.binary_command_state);
     // q11 inherits the complete q10 winner for inputs q10 can already parse.
     // Skip the second deeper parse there; it only pays off above 64 KiB.
     const q11_covered_by_q10 = schedule.quality == .q11 and input.len <= 64 * 1024;
     if (!q11_covered_by_q10 and schedule.optimal.enabled and input.len >= 4 * 1024 and input.len <= schedule.optimal.max_input_len) {
-        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, extend_command_state, options.binary_command_state, schedule.dictionary)) |candidate| {
+        const command_state_ceiling: usize = if (options.command_state_max_input_kib == command_state_default_max_input_kib)
+            (if (extend_command_state) 64 * 1024 else schedule.optimal.command_state_max_input_len)
+        else
+            schedule.optimal.command_state_max_input_len;
+        if (try encodeQualityOptimalCandidateAllocRecorded(trace_enabled, trace.withOrigin(.optimal), allocator, input, schedule.optimal, wire_options, options.binary_command_state, command_state_ceiling, schedule.dictionary)) |candidate| {
             retainSmallerOwnedWireRecorded(trace_enabled, trace, allocator, &best, candidate);
         }
     }
@@ -5565,7 +5570,7 @@ fn encodeQualityOptimalCandidateAlloc(
     budget: quality_schedule.OptimalBudget,
     wire_options: LazyWireOptions,
 ) Error!?[]u8 {
-    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false, false, .{
+    return encodeQualityOptimalCandidateAllocRecorded(false, .{}, allocator, input, budget, wire_options, false, budget.command_state_max_input_len, .{
         .static_dictionary = false,
         .extended_search = false,
         .max_probes = 0,
@@ -5617,7 +5622,7 @@ const QualityDictionaryProbe = struct {
 const quality_dictionary_cost_bits: u16 = 22;
 const quality_dictionary_cost_q8: u16 = quality_dictionary_cost_bits * 256;
 
-fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, extend_command_state: bool, allow_binary_command_state: bool, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
+fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trace: quality_profile.Recorder(trace_enabled), allocator: std.mem.Allocator, input: []const u8, budget: quality_schedule.OptimalBudget, wire_options: LazyWireOptions, allow_binary_command_state: bool, command_state_ceiling: usize, dictionary: quality_schedule.DictionaryFlags) Error!?[]u8 {
     var profile_scope = trace.begin(.other, input.len, 0);
     defer profile_scope.finish();
     errdefer |err| profile_scope.failure(err);
@@ -5760,11 +5765,11 @@ fn encodeQualityOptimalCandidateAllocRecorded(comptime trace_enabled: bool, trac
         }
     }
 
-    const command_state_budget = if (extend_command_state) blk: {
-        var extended = budget;
-        extended.command_state_max_input_len = 64 * 1024;
-        break :blk extended;
-    } else budget;
+    // The caller resolves the ceiling: the default sentinel extends to 64 KiB
+    // for text or the binary opt-in, while an explicit caller limit (including
+    // zero, which disables the candidate) is respected.
+    var command_state_budget = budget;
+    command_state_budget.command_state_max_input_len = @intCast(command_state_ceiling);
     if (command_state_budget.command_state_max_input_len != 0 and
         input.len <= command_state_budget.command_state_max_input_len)
     {
@@ -28747,8 +28752,8 @@ test "br q10 command-state candidate improves complete wire" {
         &payload,
         schedule.optimal,
         wire_options,
-        false,
         true,
+        64 * 1024,
         .{ .static_dictionary = false, .extended_search = false, .max_probes = 0 },
     )).?;
     defer std.testing.allocator.free(encoded);
@@ -43703,6 +43708,46 @@ test "Brotli q11 chunks binary command-state opt-in runs the wide beam and never
         &chunks,
         .{ .quality = 9, .block_len = payload.len, .binary_command_state = true },
     ));
+}
+
+test "Brotli q11 explicit command-state limits are respected on text" {
+    var payload: [64 * 1024]u8 = undefined;
+    const line = "the quick brown fox jumps over the lazy dog and the 0123456789 line repeats\n";
+    var written: usize = 0;
+    while (written < payload.len) {
+        const take = @min(line.len, payload.len - written);
+        @memcpy(payload[written..][0..take], line[0..take]);
+        written += take;
+    }
+    test_hq_command_candidate_attempts = 0;
+    test_hq_wide_command_candidate_attempts = 0;
+    const disabled = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 11,
+        .window_bits = 16,
+        .command_state_max_input_kib = 0,
+    });
+    defer std.testing.allocator.free(disabled);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_wide_command_candidate_attempts);
+    const decoded_disabled = try decodeStreamAllocExactSize(std.testing.allocator, disabled, payload.len);
+    defer std.testing.allocator.free(decoded_disabled);
+    try std.testing.expectEqualSlices(u8, &payload, decoded_disabled);
+
+    // An explicit ceiling below the block size keeps the candidate out of this
+    // 64 KiB block instead of silently extending to 64 KiB.
+    test_hq_command_candidate_attempts = 0;
+    test_hq_wide_command_candidate_attempts = 0;
+    const limited = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .quality = 11,
+        .window_bits = 16,
+        .command_state_max_input_kib = 16,
+    });
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_wide_command_candidate_attempts);
+    const decoded_limited = try decodeStreamAllocExactSize(std.testing.allocator, limited, payload.len);
+    defer std.testing.allocator.free(decoded_limited);
+    try std.testing.expectEqualSlices(u8, &payload, decoded_limited);
 }
 
 test "Brotli q11 binary command-state opt-in runs the wide beam and never grows the wire" {
